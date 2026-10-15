@@ -23,6 +23,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.options import CircularDiagramOptions, CircularOutputOptions
 from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest
+from gbdraw.auto_sizes import determine_length_parameter
 from gbdraw.configurators.legend import LegendMeasurement
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.diagrams.circular.assemble import CircularAssemblyResult
@@ -34,6 +35,7 @@ from gbdraw.layout.composition import (
     CompositionPlan,
 )
 from gbdraw.layout.spatial import Aabb
+from gbdraw.render.group_content import GroupContent, GroupKey, GroupKind, place_content
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 from gbdraw.tracks import CircularTrackSlot
 
@@ -365,10 +367,12 @@ def _build_mock_circular_subcanvas(width: float, height: float, inset: float) ->
         viewBox=f"0 0 {width} {height}",
         debug=False,
     )
-    axis_group = canvas.g(id="Axis")
-    axis_group.translate(width * 0.5, height * 0.5)
+    # A record drawing holds placed contents only, as real record assembly does.
+    axis = canvas.g(id="Axis")
     radius = max(1.0, (width * 0.5) - float(inset))
-    axis_group.add(canvas.circle(center=(0, 0), r=radius, fill="none", stroke="gray"))
+    axis.add(canvas.circle(center=(0, 0), r=radius, fill="none", stroke="gray"))
+    axis_group = place_content(canvas, GroupContent.of(axis), GroupKey("record", GroupKind.AXIS_CIRCLE))
+    axis_group.translate(width * 0.5, height * 0.5)
     canvas.add(axis_group)
     return _with_mock_circular_result(
         canvas,
@@ -826,14 +830,12 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
     ]
     config_dict = _build_distinct_circular_style_config_dict()
     captured_styles: dict[str, dict[str, float]] = {}
-    captured_tick_channels: dict[str, str | None] = {}
 
     def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
         cfg = kwargs["cfg"]
         threshold = int(cfg.labels.length_threshold.circular)
         length_param = "short" if len(gb_record.seq) < threshold else "long"
         track_type = str(cfg.canvas.circular.track_type)
-        captured_tick_channels[gb_record.id] = kwargs.get("_tick_track_channel_override")
         captured_styles[gb_record.id] = {
             "feature_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][0]),
             "gc_width_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][1]),
@@ -870,7 +872,6 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
     )
 
     assert captured_styles["short_len"] == pytest.approx(captured_styles["long_len"], rel=1e-9)
-    assert captured_tick_channels == {"long_len": "long", "short_len": "long"}
     assert captured_styles["short_len"]["feature_ratio_factor"] == pytest.approx(0.33, rel=1e-9)
     assert captured_styles["short_len"]["gc_width_ratio_factor"] == pytest.approx(0.41, rel=1e-9)
     assert captured_styles["short_len"]["skew_width_ratio_factor"] == pytest.approx(0.31, rel=1e-9)
@@ -880,6 +881,53 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
     assert captured_styles["short_len"]["label_font_size"] == pytest.approx(9.0, rel=1e-9)
     assert captured_styles["short_len"]["gc_center_ratio"] == pytest.approx(0.74, rel=1e-9)
     assert captured_styles["short_len"]["skew_center_ratio"] == pytest.approx(0.59, rel=1e-9)
+
+
+@pytest.mark.circular
+def test_multi_record_canvas_draws_a_short_record_beside_a_long_one_as_long() -> None:
+    """OV-492: the readers of the size class (records, labels, tracks, ticks, legend) all draw the long class."""
+    long_first = [
+        _build_record("long_label", 30, length=120_000),
+        _build_record("short_label", 60, length=20_000),
+    ]
+
+    def render(records: list[SeqRecord], extra_overrides: dict[str, Any]) -> str:
+        return assemble_circular_diagram_from_records(
+            records,
+            selected_features_set=["CDS"],
+            legend="right",
+            cfg=apply_config_overrides(None, {"labels.circular.scope": "outer", **extra_overrides}),
+        ).tostring()
+
+    # With the boundary at 1 bp every record is long, whatever the canvas does with mixed classes.
+    # The legend is sized from the first record, so both record orders are compared.
+    for records in (long_first, long_first[::-1]):
+        assert render(records, {}) == render(records, {"labels.length_threshold.circular": 1})
+
+
+@pytest.mark.circular
+def test_multi_record_canvas_legend_does_not_depend_on_record_order() -> None:
+    """A canvas with both size classes drew the short legend sizes when its short record came first."""
+    records = [
+        _build_record("long_label", 30, length=120_000),
+        _build_record("short_label", 60, length=20_000),
+    ]
+
+    cfg = apply_config_overrides(None, None)
+
+    def legend_elements(ordered: list[SeqRecord]) -> list[tuple[str, tuple[tuple[str, str], ...]]]:
+        root = ET.fromstring(
+            assemble_circular_diagram_from_records(
+                ordered, selected_features_set=["CDS"], legend="right", cfg=cfg
+            ).tostring()
+        )
+        legend = next(element for element in root.iter() if element.attrib.get("id") == "legend")
+        return [(element.tag, tuple(sorted(element.attrib.items()))) for element in legend.iter() if element is not legend]
+
+    long_first = legend_elements(records)
+    font_sizes = {float(dict(attrib)["font-size"]) for tag, attrib in long_first if tag.endswith("}text")}
+    assert font_sizes == {float(cfg.objects.legends.font_size.long)}
+    assert legend_elements(records[::-1]) == long_first
 
 
 @pytest.mark.circular
@@ -923,14 +971,12 @@ def test_multi_record_all_short_keeps_short_feature_axis_style(
     ]
     config_dict = _build_distinct_circular_style_config_dict()
     captured_styles: dict[str, dict[str, float]] = {}
-    captured_tick_channels: dict[str, str | None] = {}
 
     def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
         cfg = kwargs["cfg"]
         threshold = int(cfg.labels.length_threshold.circular)
         length_param = "short" if len(gb_record.seq) < threshold else "long"
         track_type = str(cfg.canvas.circular.track_type)
-        captured_tick_channels[gb_record.id] = kwargs.get("_tick_track_channel_override")
         captured_styles[gb_record.id] = {
             "feature_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][0]),
             "gc_width_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][1]),
@@ -976,7 +1022,6 @@ def test_multi_record_all_short_keeps_short_feature_axis_style(
         assert style["label_font_size"] == pytest.approx(17.0, rel=1e-9)
         assert style["gc_center_ratio"] == pytest.approx(0.24, rel=1e-9)
         assert style["skew_center_ratio"] == pytest.approx(0.19, rel=1e-9)
-    assert captured_tick_channels == {"short_a": None, "short_b": None}
 
 
 @pytest.mark.circular
@@ -999,10 +1044,11 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         tick_width: float,
         track_type: str,
         strandedness: bool,
-        tick_track_channel_override: str | None = None,
         **_kwargs: Any,
     ) -> list[Any]:
-        captured_tick_path_channels[int(total_len)] = tick_track_channel_override
+        captured_tick_path_channels[int(total_len)] = determine_length_parameter(
+            int(total_len), int(_kwargs["length_threshold"])
+        )
         return []
 
     def fake_generate_tick_labels(
@@ -1018,10 +1064,11 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         track_type: str,
         strandedness: bool,
         dpi: int,
-        tick_track_channel_override: str | None = None,
         **kwargs: Any,
     ) -> list[Any]:
-        captured_tick_label_channels[int(total_len)] = tick_track_channel_override
+        captured_tick_label_channels[int(total_len)] = determine_length_parameter(
+            int(total_len), int(kwargs["length_threshold"])
+        )
         captured_tick_label_sides[int(total_len)] = kwargs.get("label_side")
         return []
 
@@ -1050,21 +1097,11 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
     assert captured_tick_label_sides[20_000] == "inside"
     assert captured_tick_label_sides[120_000] == "inside"
 
-    default_short_tick_bounds = get_circular_tick_path_ratio_bounds(
-        20_000,
-        "tuckin",
-        False,
-        length_threshold=50_000,
-    )
-    forced_long_tick_bounds = get_circular_tick_path_ratio_bounds(
-        20_000,
-        "tuckin",
-        False,
-        tick_track_channel_override="long",
-        length_threshold=50_000,
-    )
-    assert default_short_tick_bounds[1] >= 0.98
-    assert forced_long_tick_bounds[1] < 1.0
+    length_threshold = int(apply_config_overrides(None, None).labels.length_threshold.circular)
+    short_tick_bounds = get_circular_tick_path_ratio_bounds(20_000, "tuckin", False, length_threshold=length_threshold)
+    long_tick_bounds = get_circular_tick_path_ratio_bounds(20_000, "tuckin", False, length_threshold=0)
+    assert short_tick_bounds[1] >= 0.98
+    assert long_tick_bounds[1] < 1.0
 
 
 @pytest.mark.circular
@@ -1087,7 +1124,6 @@ def test_circular_tick_label_font_size_reaches_tick_label_generator(
         track_type: str,
         strandedness: bool,
         dpi: int,
-        tick_track_channel_override: str | None = None,
         **_kwargs: Any,
     ) -> list[Any]:
         captured_font_sizes[int(total_len)] = font_size
@@ -1713,7 +1749,7 @@ def test_multi_record_positions_group_rows_and_preserve_within_row_order(
         )
         marker = canvas.g(id=f"marker_{gb_record.id}")
         marker.add(canvas.circle(center=(10, 10), r=1))
-        canvas.add(marker)
+        canvas.add(place_content(canvas, GroupContent.of(marker), GroupKey("record", GroupKind.AXIS_CIRCLE)))
         return _with_mock_circular_result(canvas)
 
     monkeypatch.setattr(
@@ -1871,7 +1907,7 @@ def test_multi_record_positions_accept_record_id_selectors(
         )
         marker = canvas.g(id=f"marker_{gb_record.id}")
         marker.add(canvas.circle(center=(10, 10), r=1))
-        canvas.add(marker)
+        canvas.add(place_content(canvas, GroupContent.of(marker), GroupKey("record", GroupKind.AXIS_CIRCLE)))
         return _with_mock_circular_result(canvas)
 
     monkeypatch.setattr(
@@ -4315,3 +4351,56 @@ def test_multi_record_grid_layout_never_serializes_subcanvases(
         legend="none",
     )
     assert isinstance(canvas, Drawing)
+
+
+def test_the_record_merge_renames_ids_of_earlier_records_without_changing_the_contents() -> None:
+    """A record's merge takes the previous record's result: its ids are unique
+    against every earlier record (M9), and the stored contents are copied, not
+    changed."""
+
+    from gbdraw.api.diagram import merge_circular_record
+    from gbdraw.render.group_content import GroupContent
+    from gbdraw.svg.elements import Group, Path
+
+    def content() -> GroupContent:
+        group = Group(id="Axis")
+        group.add(Path(d="M0,0", id="shared", fill="url(#hatch)"))
+        pattern = Drawing().pattern(id="hatch")
+        return GroupContent.of(group, (pattern,))
+
+    first_content, second_content = content(), content()
+    placed_attributes = (("id", "Axis"), ("data-gbdraw-composition-role", "primary"))
+    first = merge_circular_record(
+        ((first_content, placed_attributes),),
+        ((0, 0),),
+        record_index=0,
+        record_id="A",
+        bind_record_identity=False,
+        previous=None,
+    )
+    second = merge_circular_record(
+        ((second_content, placed_attributes),),
+        ((0, 0),),
+        record_index=1,
+        record_id="A",
+        bind_record_identity=False,
+        previous=first,
+    )
+
+    assert first.content.attributes == {
+        "id": "record_0",
+        "data-gbdraw-record-id": "A",
+        "data-gbdraw-record-index": "0",
+    }
+    (second_axis,) = second.content.children
+    assert second_axis.attribs == {"id": "Axis_1"}
+    (second_path,) = second_axis.elements
+    assert second_path.attribs["id"] == "shared__record_2"
+    assert second_path.attribs["fill"] == "url(#hatch__record_2)"
+    assert second.content.definition_ids == ("hatch__record_2",)
+    assert {"record_0", "record_1", "Axis_0", "Axis_1", "shared", "hatch"} <= second.used_ids
+    # The stored contents keep their ids and roles.
+    for stored in (first_content, second_content):
+        (path,) = stored.children
+        assert path.attribs["id"] == "shared"
+        assert stored.definitions[0].attribs["id"] == "hatch"

@@ -1186,7 +1186,9 @@ for (const viewport of [
     await expect(drawer.getByRole('button', { name: /Features$/ })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(drawer.getByRole('button', { name: /Similarity groups$/ })).toBeFocused();
-    for (const name of ['Reset layout', 'Toggle layout edit mode', 'Toggle canvas padding controls', 'Zoom in', 'Reset zoom', 'Zoom out']) {
+    // Nothing has moved yet, so Reset layout is disabled and takes no focus.
+    await expect(page.getByRole('button', { name: 'Reset layout', exact: true })).toBeDisabled();
+    for (const name of ['Toggle layout edit mode', 'Toggle canvas padding controls', 'Zoom in', 'Reset zoom', 'Zoom out']) {
       const control = page.getByRole('button', { name, exact: true });
       await exposeControl(page, control);
       await control.focus();
@@ -1195,6 +1197,11 @@ for (const viewport of [
     await exposeControl(page, page.getByRole('button', { name: 'Zoom in', exact: true }));
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('110%');
+    // The zoom change enables Reset layout.
+    const resetLayout = page.getByRole('button', { name: 'Reset layout', exact: true });
+    await exposeControl(page, resetLayout);
+    await resetLayout.focus();
+    await expect(resetLayout).toBeFocused();
     await exposeControl(page, drawer.getByRole('button', { name: /Features$/ }));
     await drawer.getByRole('button', { name: /Features$/ }).click();
     const input = drawer.getByPlaceholder('Search by feature or annotation...');
@@ -1332,7 +1339,7 @@ test('compact Editor reconciles availability and restores its tab after failed S
     });
     return { status: result.status, error: result.error };
   });
-  expect(failure).toMatchObject({ status: 'error', error: { code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation' } });
+  expect(failure).toMatchObject({ status: 'error', error: { code: 'UNKNOWN', operation: 'session-load', stage: 'request-validation' } });
   expect(JSON.stringify(failure)).not.toContain('S05 Session rollback probe');
   expect(await page.evaluate(() => ({
     open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab

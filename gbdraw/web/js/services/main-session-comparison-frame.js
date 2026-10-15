@@ -7,15 +7,45 @@
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import { base64ToBytes, bytesToText, textToBase64, textToBytes } from './byte-utils.js';
 
+/** @import { SequenceRecord } from './record-discovery.js' */
+
+/** @typedef {{ kind: 'gffFasta', gffResourceId: string, fastaResourceId: string } | { kind: 'genbank', resourceId: string }} FrameSource */
+/** @typedef {{ kind: 'recordIndex', index: number } | { kind: 'recordId', value?: unknown, id?: unknown }} FrameSelector */
+/** @typedef {{ kind?: string, resourceId?: string, queryRecordIndex: number, subjectRecordIndex: number }} FrameComparison */
+/**
+ * The part of a committed request record the frame conversion reads.
+ * @typedef {{
+ *   source: FrameSource,
+ *   selector?: FrameSelector | null,
+ *   region?: { start: number, end: number, reverseComplement?: unknown } | null,
+ *   presentation?: { reverseComplement?: unknown } | null
+ * }} FrameRecord
+ */
+/** @typedef {{ data?: string, name?: string, type?: string, [field: string]: unknown }} FrameResource */
+/** @typedef {Record<string, FrameResource>} FrameResources A Session's encoded resources by id. */
+/** @typedef {{ version?: number, renderRequest?: { mode?: unknown, comparisons?: FrameComparison[], records?: FrameRecord[] } | null, resources: FrameResources }} FrameSession */
+/**
+ * The record discovery the conversion reads a record length from.
+ * @typedef {{
+ *   sequence: (options: { file: File, format: string }) => Promise<SequenceRecord[]>,
+ *   gffFasta: (options: { gffFile: File, fastaFile: File }) => Promise<SequenceRecord[]>
+ * }} RecordDiscovery
+ */
+
 export const MAIN_DISPLAY_FRAME_SESSION_VERSION = 42;
 
 // The app injects the Worker table conversion, like the configuration validator.
 /** @type {((request: Record<string, any>) => Promise<any>) | null} */
 let tableConverter = null;
+/** @param {typeof tableConverter} converter */
 export const setMainSessionComparisonFrameConverter = (converter) => {
   tableConverter = typeof converter === 'function' ? converter : null;
 };
 
+/**
+ * @param {FrameResources | undefined} resources
+ * @param {string} resourceId
+ */
 const resourceFile = (resources, resourceId) => {
   const entry = resources?.[resourceId];
   if (!entry || typeof entry.data !== 'string') {
@@ -26,6 +56,11 @@ const resourceFile = (resources, resourceId) => {
   });
 };
 
+/**
+ * @param {FrameRecord} record
+ * @param {FrameResources | undefined} resources
+ * @param {RecordDiscovery} discover
+ */
 const selectedRecordLength = async (record, resources, discover) => {
   const source = record?.source || {};
   const catalog = source.kind === 'gffFasta'
@@ -47,19 +82,29 @@ const selectedRecordLength = async (record, resources, discover) => {
   return length;
 };
 
+/**
+ * @param {FrameRecord | undefined} record
+ * @param {FrameResources | undefined} resources
+ * @param {RecordDiscovery} discover
+ */
 const endpointFrame = async (record, resources, discover) => {
   const reverse = Boolean(record?.region?.reverseComplement || record?.presentation?.reverseComplement);
   if (!reverse) return { length: 0, reverse: false };
   const region = record?.region;
   const length = region
     ? Number(region.end) - Number(region.start) + 1
-    : await selectedRecordLength(record, resources, discover);
+    // `reverse` is true only when `record` holds a reverse complement, so the record exists.
+    : await selectedRecordLength(/** @type {FrameRecord} */ (record), resources, discover);
   return { length, reverse: true };
 };
 
 /**
  * Return the Session with each stored nucleotide table of a reversed endpoint
  * in the search frame. Other Sessions are returned unchanged.
+ * @template {FrameSession} T
+ * @param {T} data
+ * @param {{ convertTable?: typeof tableConverter, discover?: RecordDiscovery }} [options]
+ * @returns {Promise<T>}
  */
 export const convertMainSessionComparisonFrames = async (
   data,
@@ -69,7 +114,8 @@ export const convertMainSessionComparisonFrames = async (
   } = {}
 ) => {
   const request = data?.renderRequest;
-  if (!Number.isInteger(data?.version) || data.version > MAIN_DISPLAY_FRAME_SESSION_VERSION
+  // `Number.isInteger` does not narrow `version`; the second operand runs only for an integer.
+  if (!Number.isInteger(data?.version) || /** @type {number} */ (data.version) > MAIN_DISPLAY_FRAME_SESSION_VERSION
     || request?.mode !== 'linear' || !Array.isArray(request.comparisons)) {
     return data;
   }

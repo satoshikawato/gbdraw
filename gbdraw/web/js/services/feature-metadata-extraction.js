@@ -4,8 +4,38 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { cloneJsonValue } from './json-clone.js';
 import { cloneFileBytesForTransfer } from './file-content-cache.js';
 
+/** @import { FileLike } from './session-resource-backing.js' */
+
+/**
+ * A feature as the Python extraction returns it: JSON keyed by field name.
+ * @typedef {Record<string, unknown>} ExtractedFeature
+ */
+/** @typedef {ExtractedFeature & { svg_id: string, stable_svg_id: string, stable_feature_id: string }} NormalizedFeature */
+
+/**
+ * What the Worker returns for one source, before the module checks it.
+ * @typedef {{
+ *   features?: ExtractedFeature[], biological_features?: ExtractedFeature[],
+ *   record_ids?: string[], error?: unknown
+ * }} FeatureExtractionPayload
+ */
+
+/**
+ * The fields of a Linear record slot (`LinearSeq` in `state.js`) that the
+ * region context reads, with the types `state.js` declares.
+ * @typedef {{
+ *   region_record_id?: string, region_start?: unknown, region_end?: unknown, region_reverse?: boolean
+ * }} LinearRegionSeq
+ */
+
+/** @typedef {{ cli: string, file: string, displayFile: string }} LinearRegionSpec */
+
+/** A drawn Linear record: its input and its record within that input. @typedef {{ fileIdx: number, recordIdx: number }} FeatureRecordInput */
+
 const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
+/** @type {WeakMap<FileLike, Map<string, FeatureExtractionPayload>>} */
 const featureExtractionCache = new WeakMap();
+/** @type {WeakMap<FileLike, number>} */
 const featureExtractionFileIds = new WeakMap();
 let nextFeatureExtractionFileId = 1;
 
@@ -13,6 +43,7 @@ let nextFeatureExtractionFileId = 1;
 const getNow = () => (/** @type {{ now?: () => number } | undefined} */ (globalThis.performance)?.now
   ? performance.now() : Date.now());
 
+/** @param {unknown} value */
 const normalizeRecordSelectorText = (value) => {
   const normalized = String(value ?? '').trim();
   if (!normalized || ['none', 'null', 'jsnull', 'undefined', 'jsundefined', '-'].includes(normalized.toLowerCase())) {
@@ -21,6 +52,7 @@ const normalizeRecordSelectorText = (value) => {
   return normalized;
 };
 
+/** @param {FileLike | null | undefined} file */
 const getFeatureExtractionFileId = (file) => {
   if (!file || (typeof file !== 'object' && typeof file !== 'function')) return '';
   if (!featureExtractionFileIds.has(file)) {
@@ -30,6 +62,7 @@ const getFeatureExtractionFileId = (file) => {
   return featureExtractionFileIds.get(file);
 };
 
+/** @param {FeatureExtractionPayload | null | undefined} data */
 export const cloneFeatureExtractionData = (data) => ({
   features: Array.isArray(data?.features)
     ? data.features.map((feature) => cloneJsonValue(
@@ -77,6 +110,7 @@ export const buildFeatureExtractionCacheKey = ({
     includeBiologicalFeatures: Boolean(includeBiologicalFeatures)
   });
 
+/** @param {FileLike | null | undefined} file @param {string} key */
 export const getCachedFeatureExtraction = (file, key) => {
   if (!file) return null;
   const byKey = featureExtractionCache.get(file);
@@ -84,6 +118,7 @@ export const getCachedFeatureExtraction = (file, key) => {
   return cached ? cloneFeatureExtractionData(cached) : null;
 };
 
+/** @param {FileLike | null | undefined} file @param {string} key @param {FeatureExtractionPayload} value */
 export const setCachedFeatureExtraction = (file, key, value) => {
   if (!file || value?.error) return;
   let byKey = featureExtractionCache.get(file);
@@ -115,7 +150,10 @@ export const setCachedFeatureExtraction = (file, key, value) => {
  * @property {(request: Record<string, any>) => Promise<any>} [runFeatureExtractionImpl]
  */
 
-/** @param {FeatureExtractionReadOptions} options */
+/**
+ * @param {FeatureExtractionReadOptions} options
+ * @returns {Promise<FeatureExtractionPayload>}
+ */
 export const readFeatureExtractionData = async ({
   path,
   file,
@@ -203,12 +241,14 @@ export const readFeatureExtractionData = async ({
 
 // Retained for compatibility with older callers. Source metadata must not use this
 // prediction; actual rendered IDs are read back from the generated SVG.
+/** @param {unknown} stableSvgId @param {unknown} recordIndex @param {unknown} recordCount */
 export const makeLinearRenderedFeatureId = (stableSvgId, recordIndex, recordCount) => {
   const svgId = String(stableSvgId || '').trim();
   if (!svgId || Number(recordCount) <= 1) return svgId;
   return `${svgId}_record_${Number(recordIndex) + 1}`;
 };
 
+/** @param {ExtractedFeature | null | undefined} feature */
 const stableFeatureId = (feature) => String(
   feature?.stable_feature_id ||
   feature?.stableFeatureId ||
@@ -219,6 +259,11 @@ const stableFeatureId = (feature) => String(
   ''
 ).trim();
 
+/**
+ * @param {ExtractedFeature} feature
+ * @param {Record<string, unknown>} [extra]
+ * @returns {NormalizedFeature}
+ */
 const normalizeBiologicalFeature = (feature, extra = {}) => {
   const stableId = stableFeatureId(feature);
   return {
@@ -230,6 +275,7 @@ const normalizeBiologicalFeature = (feature, extra = {}) => {
   };
 };
 
+/** @param {FeatureExtractionPayload | null | undefined} featData @returns {ExtractedFeature[]} */
 const biologicalFeaturesFromExtraction = (featData) => (
   Array.isArray(featData?.biological_features) && (
     featData.biological_features.length > 0 ||
@@ -240,12 +286,18 @@ const biologicalFeaturesFromExtraction = (featData) => (
     : (Array.isArray(featData?.features) ? featData.features : [])
 );
 
+/** @param {unknown} value */
 const hasRegionValue = (value) => value !== null && value !== undefined && value !== '';
 
-/** Linear card region endpoints: null when unset, else validated numbers. */
+/**
+ * Linear card region endpoints: null when unset, else validated numbers.
+ * @param {Pick<LinearRegionSeq, 'region_start' | 'region_end'>} seq
+ * @param {number} idx
+ */
 export const resolveLinearRegionBounds = (seq, idx) => {
   const hasStart = hasRegionValue(seq.region_start);
   const hasEnd = hasRegionValue(seq.region_end);
+  /** @param {string} reason */
   const invalid = (reason) => diagnosticError('REGION_INVALID', { inputOrdinal: idx + 1, reason });
   if (hasStart !== hasEnd) throw invalid('BOTH_ENDPOINTS');
   if (!hasStart) return null;
@@ -257,9 +309,16 @@ export const resolveLinearRegionBounds = (seq, idx) => {
   return { start, end };
 };
 
+/**
+ * @param {LinearRegionSeq[] | null} [linearSeqs]
+ * @param {string} [lInputType]
+ */
 export const buildLinearRegionExtractionContext = (linearSeqs = [], lInputType = 'gb') => {
+  /** @type {(LinearRegionSpec | null)[]} */
   const regionSpecs = [];
+  /** @type {string[]} */
   const recordSelectors = [];
+  /** @type {boolean[]} */
   const reverseFlags = [];
   const seqs = Array.isArray(linearSeqs) ? linearSeqs : [];
 
@@ -290,11 +349,14 @@ export const buildLinearRegionExtractionContext = (linearSeqs = [], lInputType =
   return { regionSpecs, recordSelectors, reverseFlags };
 };
 
+/** @param {RegionSpecInput | null | undefined} regionSpec */
 const extractionRegionSpec = (regionSpec) => {
   if (!regionSpec) return null;
   if (typeof regionSpec === 'string') return regionSpec || null;
   return regionSpec.displayFile || regionSpec.file || null;
 };
+
+/** @typedef {string | { cli?: string, file?: string, displayFile?: string }} RegionSpecInput */
 
 /**
  * @typedef {object} ExtractFeatureMetadataOptions
@@ -304,13 +366,13 @@ const extractionRegionSpec = (regionSpec) => {
  * @property {File | null} [circularFile]
  * @property {File | null} [circularFastaFile]
  * @property {Record<string, any>[]} [linearSeqs]
- * @property {Array<string | { cli?: string, file?: string, displayFile?: string } | null> | null} [regionSpecs]
+ * @property {Array<RegionSpecInput | null> | null} [regionSpecs]
  * @property {string[] | null} [recordSelectors]
  * @property {boolean[] | null} [reverseFlags]
  * @property {string | null} [featureVisibilityTablePath]
  * @property {string} [featureVisibilityTsv]
  * @property {string[] | null} [selectedFeatures]
- * @property {(feature: any, inputIndex?: number) => any} [enrichFeature]
+ * @property {(feature: ExtractedFeature, inputIndex?: number) => ExtractedFeature | null | undefined} [enrichFeature]
  * @property {typeof readFeatureExtractionData} [readFeatureExtractionDataImpl]
  * @property {{ label: string, ms: number, details: string }[]} [timingEntries]
  */
@@ -329,10 +391,11 @@ export const extractFeatureMetadataForPreview = async ({
   featureVisibilityTablePath = null,
   featureVisibilityTsv = '',
   selectedFeatures = null,
-  enrichFeature = /** @type {(feature: any, inputIndex?: number) => any} */ ((feature) => feature),
+  enrichFeature = /** @type {(feature: ExtractedFeature, inputIndex?: number) => ExtractedFeature | null | undefined} */ ((feature) => feature),
   readFeatureExtractionDataImpl = readFeatureExtractionData,
   timingEntries = []
 }) => {
+  /** @type {{ inputIndex: number, message: string }[]} */
   const errors = [];
 
   if (mode === 'circular' && ['gb', 'gff'].includes(cInputType)) {
@@ -389,8 +452,11 @@ export const extractFeatureMetadataForPreview = async ({
     const regionContext = regionSpecs && recordSelectors && reverseFlags
       ? { regionSpecs, recordSelectors, reverseFlags }
       : buildLinearRegionExtractionContext(linearSeqs, lInputType);
+    /** @type {NormalizedFeature[]} */
     let allFeatures = [];
+    /** @type {NormalizedFeature[]} */
     let allBiologicalFeatures = [];
+    /** @type {{ label: string, fileIdx: number, recordIdx: number }[]} */
     const allRecordLabels = [];
     for (let i = 0; i < linearSeqs.length; i += 1) {
       const seq = linearSeqs[i] || {};
@@ -421,6 +487,7 @@ export const extractFeatureMetadataForPreview = async ({
         continue;
       }
 
+      /** @param {ExtractedFeature} feature */
       const normalizeLinearFeature = (feature) => {
         const enriched = enrichFeature(feature, i) || feature;
         return normalizeBiologicalFeature(enriched, {
@@ -444,6 +511,8 @@ export const extractFeatureMetadataForPreview = async ({
       extractedFeatures: allFeatures,
       biologicalFeatures: allBiologicalFeatures,
       featureRecordIds: allRecordLabels.map((record) => record.label),
+      /** @type {FeatureRecordInput[]} The drawn records in order. */
+      featureRecordInputs: allRecordLabels.map(({ fileIdx, recordIdx }) => ({ fileIdx, recordIdx })),
       selectedFeatureRecordIdx: 0,
       errors
     };

@@ -29,6 +29,42 @@ const savedDocument = async title => {
   return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
 };
 
+// These files are refused before the Load dialog; a dialog would cancel the
+// Load and fail the check.
+const refuseLoadDialog = async () => false;
+
+test('OV-591: a settings-only Session 46 needs form and adv in the settings of its mode, as Python requires', async () => {
+  // gbdraw/session_io.py `_validate_settings_only_session`: "requires an active Web configuration and mode".
+  const fresh = await savedDocument('settings of its mode');
+  for (const [name, mutate] of [
+    ['config {}', d => { d.modes.circular.config = {}; }],
+    ['no form', d => { delete d.modes.circular.config.form; }],
+    ['no adv', d => { delete d.modes.circular.config.adv; }]
+  ]) {
+    const document = structuredClone(fresh);
+    mutate(document);
+    assert.throws(() => adoptCurrentSessionDocument(structuredClone(document), SESSION_VERSION), /settings of its mode/, name);
+    const loaded = await importSession({
+      target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
+    }, { confirmLoadRepairs: refuseLoadDialog });
+    assert.equal(loaded.status, 'error', name);
+  }
+  // The other mode's slice may hold less: Load fills it with that mode's defaults.
+  const other = structuredClone(fresh);
+  other.modes.linear.config = {};
+  assert.equal(adoptCurrentSessionDocument(other, SESSION_VERSION).canonical, null);
+});
+
+test('OV-612: a settings-only Session 46 names its mode slice by a string that is a key of modes', async () => {
+  // `modes[ui.mode]` converted `["circular"]` to the key "circular"; Python requires `ui.mode` to be a diagram mode.
+  const fresh = await savedDocument('mode key');
+  for (const mode of [['circular'], [['linear']], 'constructor', '__proto__', 0]) {
+    const document = structuredClone(fresh);
+    document.ui.mode = mode;
+    assert.throws(() => adoptCurrentSessionDocument(document, SESSION_VERSION), /settings of its mode/, JSON.stringify(mode));
+  }
+});
+
 test('source-free Save emits no render metadata and preserves valid raw scalar drafts', async () => {
   const freshConfig = buildConfigData(state.activeDrawing());
   const fresh = await savedDocument('fresh settings');
@@ -130,7 +166,7 @@ test('writer and current admission reject invalid scalar drafts without altering
     const invalidBefore = structuredClone(invalid);
     const loaded = await importSession({
       target: { files: [new Blob([JSON.stringify(invalid)], { type: 'application/json' })], value: 'selected' }
-    });
+    }, { confirmLoadRepairs: refuseLoadDialog });
     assert.equal(loaded.status, 'error', text);
     assert.deepEqual(invalid, invalidBefore);
     // A rejected Load leaves the drawing as it was.

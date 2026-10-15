@@ -9,7 +9,7 @@ from typing import Dict, Sequence, cast
 from pandas import DataFrame
 from gbdraw.svg.elements import Group, Path
 
-from ....canvas import LinearCanvasConfigurator
+from ....canvas.linear import LinearCanvasGeometry
 from ....layout.linear_coords import normalize_position_linear
 from ....core.color import (
     COLLINEAR_ORIENTATION_COLOR_KEYS,
@@ -106,7 +106,7 @@ class PairWiseMatchGroup:
     Handles the visualization of pairwise matches (comparisons) in a linear layout.
 
     Attributes:
-        canvas_config (LinearCanvasConfigurator): Configuration for the linear canvas.
+        canvas_config (LinearCanvasGeometry): The canvas values the ribbons are scaled by.
         sequence_length_dict (Dict[str, int]): Dictionary of sequence lengths.
         comparison_df (DataFrame): DataFrame containing comparison data.
         comparison_height (float): Height of the comparison track.
@@ -115,7 +115,7 @@ class PairWiseMatchGroup:
 
     def __init__(
         self,
-        canvas_config: LinearCanvasConfigurator,
+        canvas_config: LinearCanvasGeometry,
         sequence_length_dict: dict,
         comparison_df: DataFrame,
         actual_comparison_height: float,
@@ -131,18 +131,21 @@ class PairWiseMatchGroup:
         subject_y: float | None = None,
         feature_dom_index: LinearFeatureDomIndex | None = None,
         record_transforms: Sequence[RecordDisplayTransform] | None = None,
+        *,
+        align_center: bool,
     ) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
 
         Args:
-            canvas_config (LinearCanvasConfigurator): Configuration for the linear canvas.
+            canvas_config (LinearCanvasGeometry): The canvas values the ribbons are scaled by.
             sequence_length_dict (Dict[str, int]): Dictionary of sequence lengths.
             comparison_df (DataFrame): DataFrame containing comparison data.
             comparison_height (float): Height of the comparison track.
             comparison_count (int): Counter for the number of comparisons.
         """
-        self.canvas_config: LinearCanvasConfigurator = canvas_config
+        self.canvas_config: LinearCanvasGeometry = canvas_config
+        self.align_center = bool(align_center)
         self.sequence_length_dict: Dict[str, int] = sequence_length_dict
         self.comparison_df: DataFrame = comparison_df
         self.comparison_height: float = actual_comparison_height
@@ -209,7 +212,7 @@ class PairWiseMatchGroup:
             self.query_offset_x = 0
             self.subject_offset_x = 0
         else:
-            if self.canvas_config.align_center:
+            if self.align_center:
                 qlen = len(self.records[self.query_record_index].seq)
                 slen = len(self.records[self.subject_record_index].seq)
                 self.query_offset_x = (self.canvas_config.longest_genome - qlen) / 2

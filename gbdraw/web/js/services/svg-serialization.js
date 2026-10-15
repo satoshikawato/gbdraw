@@ -1,4 +1,39 @@
 // @ts-check
+/** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { FeatureOverrideDraft } from './feature-placement.js' */
+
+/**
+ * A Vue ref, or the `{ value }` cell that stands in for one (a Gallery
+ * Session's request state), as the export capture and the request writer
+ * unwrap it.
+ * @template T
+ * @typedef {{ value: T }} ExportRef
+ */
+
+/**
+ * One mode's drawing, as far as the interactive export reads its edits.
+ * @typedef {object} SvgExportDrawing
+ * @property {FeatureOverrideDraft} [featureOverrides]
+ * @property {Record<string, string>} labelTextBulkOverrides
+ * @property {Record<string, string>} orthogroupNameOverrides
+ * @property {Record<string, string>} orthogroupDescriptionOverrides
+ */
+
+/**
+ * What the export capture reads of the app state: the refs it unwraps and each mode's drawing.
+ * @typedef {object} SvgExportState
+ * @property {Record<'circular' | 'linear', SvgExportDrawing>} drawings
+ * @property {ExportRef<string>} [generatedMode]
+ * @property {ExportRef<number | string>} selectedResultIndex
+ * @property {ExportRef<ReadonlyArray<{ name?: string } | undefined> | null>} results
+ * @property {ExportRef<Element | null>} svgContainer
+ * @property {ExportRef<string | null>} svgContent
+ * @property {ExportRef<number | string>} downloadDpi
+ * @property {ExportRef<boolean>} [richFeaturePopup]
+ * @property {ExportRef<FeatureCatalog | null>} [featureCatalog]
+ * @property {ExportRef<ReadonlyArray<{ featureId: string, text: string, sourceText: string }>>} [editableLabels]
+ */
+
 const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
   'gbdraw-preview-layout-target',
   'gbdraw-preview-feature-search-match',
@@ -15,6 +50,11 @@ const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
   'feature-selection-status'
 ]);
 
+/**
+ * @param {Element | null | undefined} element
+ * @param {string} token
+ * @param {unknown} enabled
+ */
 export const setClassToken = (element, token, enabled) => {
   if (!element) return;
   if (element.classList?.toggle) {
@@ -32,6 +72,10 @@ export const setClassToken = (element, token, enabled) => {
   }
 };
 
+/**
+ * @param {Element | null | undefined} element
+ * @param {string} token
+ */
 const removeClassToken = (element, token) => {
   if (!element) return;
   if (element.classList?.remove) {
@@ -47,20 +91,29 @@ const removeClassToken = (element, token) => {
   }
 };
 
+// Also drops an inline style that Preview feedback (a cursor, a hover, a drag)
+// left empty when it was removed.
+/** @param {Element | null | undefined} svg */
 const stripEditorOnlyCursorStyles = (svg) => {
   if (!svg) return;
   svg.querySelectorAll('[style]').forEach((element) => {
-    const style = element.getAttribute('style');
-    if (!style || !/\bcursor\s*:/i.test(style)) return;
-    element.style.removeProperty('cursor');
+    if (/\bcursor\s*:/i.test(element.getAttribute('style') || '')) {
+      // `[style]` selects HTML and SVG elements, which carry inline styles.
+      /** @type {HTMLElement | SVGElement} */ (element).style.removeProperty('cursor');
+    }
     if (!element.getAttribute('style')?.trim()) {
       element.removeAttribute('style');
     }
   });
 };
 
+/**
+ * @param {Element | null | undefined} svg
+ * @param {{ stripCursor?: boolean }} [options]
+ */
 export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => {
   if (!svg) return;
+  /** @param {Element} element */
   const stripClasses = (element) => {
     TRANSIENT_PREVIEW_CLASSES.forEach((className) => removeClassToken(element, className));
   };
@@ -76,6 +129,9 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
         element.removeAttribute('tabindex');
         element.removeAttribute('aria-label');
       });
+    svg.querySelectorAll('[data-gbdraw-preview-item]').forEach((element) => {
+      ['data-gbdraw-preview-item', 'role', 'tabindex', 'aria-haspopup'].forEach((name) => element.removeAttribute(name));
+    });
   }
 };
 
@@ -93,6 +149,7 @@ export const PREVIEW_FEATURE_SEARCH_CLASSES = Object.freeze([
   PREVIEW_FEATURE_SEARCH_DIMMED_CLASS
 ]);
 
+/** @param {Element | null | undefined} svg */
 export const stripPreviewFeatureSearchClasses = (svg) => {
   if (!svg) return;
   setClassToken(svg, PREVIEW_FEATURE_SEARCH_ROOT_ACTIVE_CLASS, false);
@@ -104,9 +161,14 @@ export const stripPreviewFeatureSearchClasses = (svg) => {
   });
 };
 
+/**
+ * @param {Element | null | undefined} svg
+ * @param {{ stripCursor?: boolean }} [options]
+ */
 export const serializeCleanSvg = (svg, options = {}) => {
   if (!svg) return '';
-  const clone = svg.cloneNode(true);
+  // A deep clone of an element is an element.
+  const clone = /** @type {Element} */ (svg.cloneNode(true));
   stripTransientPreviewState(clone, options);
   if (!clone.getAttribute('xmlns')) {
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -121,11 +183,12 @@ export const serializeCleanSvg = (svg, options = {}) => {
 // edit of the drawing of the Result's mode (identity-keyed, design Q4 6.4, R2)
 // is projected onto the rendered IDs of the exported Result's catalog item.
 /**
- * @param {Record<string, any>} state
- * @param {Record<string, any>} drawing
+ * @param {SvgExportState} state
+ * @param {SvgExportDrawing} drawing
  * @param {number} resultIndex
  */
 const renderedLabelTextOverrides = (state, drawing, resultIndex) => {
+  /** @type {Record<string, string>} */
   const overrides = {};
   const textByFeature = new Map(Object.values(drawing.featureOverrides || {})
     .filter((row) => typeof row?.labelText === 'string' && row.labelText)
@@ -140,12 +203,17 @@ const renderedLabelTextOverrides = (state, drawing, resultIndex) => {
 
 // Capture the selected Result before any lazy export modules or libraries load.
 // Its popup settings and edits are those of the Result's mode: that mode's drawing.
+/**
+ * @param {SvgExportState} state
+ * @param {{ interactive?: boolean }} [options]
+ */
 export const captureSvgExport = (state, { interactive = false } = {}) => {
   const drawing = state.drawings[state.generatedMode?.value === 'linear' ? 'linear' : 'circular'];
   const resultIndex = Number(state.selectedResultIndex.value);
   const name = state.results.value?.[resultIndex]?.name || 'gbdraw.svg';
   return {
-    svg: state.svgContainer.value?.querySelector('svg')?.cloneNode(true) || null,
+    // A deep clone of the preview's <svg> element is an <svg> element.
+    svg: /** @type {SVGSVGElement | null} */ (state.svgContainer.value?.querySelector('svg')?.cloneNode(true) || null),
     svgContent: state.svgContent.value,
     name,
     dpi: state.downloadDpi.value,
@@ -166,6 +234,10 @@ export const captureSvgExport = (state, { interactive = false } = {}) => {
   };
 };
 
+/**
+ * @param {SVGSVGElement} svg
+ * @returns {SVGDefsElement}
+ */
 export const ensureSvgDefs = (svg) => {
   let defs = svg.querySelector('defs');
   if (!defs) {

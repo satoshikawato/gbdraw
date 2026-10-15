@@ -1,0 +1,150 @@
+{
+  "description": "THE naming rule of the Legend (PD-OI-042 scenario revision 2, PD-OI-095): the rows being drawn, in legend order (a legend draws its solid rows, then its gradient rows), each as its name and its swatch, and the name each is drawn with. Rows of one name and one swatch are one row and share a drawn name. A name left with two or more rows is drawn `name (1)`, `name (2)`, ... in legend order, and a number skips a drawn name another row already has; a name left with one row is drawn as written. A solid swatch is its fill and its stroke (color and width; a stroke of no width or no color is no stroke), a hatch being part of the fill; a gradient swatch is its two end colors; a named color equals its hex. Python's answer is gbdraw/legend/table.py::drawn_legend_names over ::legend_swatch (tests/test_legend_row_names.py); the Web app's is services/legend-row-names.js::drawnLegendNames over ::legendSwatch (tests/web/legend-row-names.test.mjs). Add a case, not a special case, when the two disagree.",
+  "cases": [
+    { "name": "a name drawn once has no number",
+      "rows": [
+        {"name": "CDS", "swatch": {"type": "solid", "fill": "#47b8f8", "stroke": "gray", "width": 1}},
+        {"name": "tRNA", "swatch": {"type": "solid", "fill": "#debc74", "stroke": "gray", "width": 1}}
+      ],
+      "drawn": ["CDS", "tRNA"] },
+    { "name": "one name with two colors (color-rule rows)",
+      "rows": [
+        {"name": "Packaging", "swatch": {"type": "solid", "fill": "#ffe700", "stroke": "gray", "width": 1}},
+        {"name": "Packaging", "swatch": {"type": "solid", "fill": "#f000ff", "stroke": "gray", "width": 1}},
+        {"name": "other proteins", "swatch": {"type": "solid", "fill": "#47b8f8", "stroke": "gray", "width": 1}}
+      ],
+      "drawn": ["Packaging (1)", "Packaging (2)", "other proteins"] },
+    { "name": "a rule named like a renderer row of another color",
+      "rows": [
+        {"name": "tRNA", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "gray", "width": 1}},
+        {"name": "CDS", "swatch": {"type": "solid", "fill": "#47b8f8", "stroke": "gray", "width": 1}},
+        {"name": "tRNA", "swatch": {"type": "solid", "fill": "#debc74", "stroke": "gray", "width": 1}}
+      ],
+      "drawn": ["tRNA (1)", "CDS", "tRNA (2)"] },
+    { "name": "the same name and swatch across kinds share one drawn name",
+      "rows": [
+        {"name": "tRNA", "swatch": {"type": "solid", "fill": "#debc74", "stroke": "gray", "width": 1}},
+        {"name": "CDS", "swatch": {"type": "solid", "fill": "#47b8f8", "stroke": "gray", "width": 1}},
+        {"name": "tRNA", "swatch": {"type": "solid", "fill": "#DEBC74", "stroke": "gray", "width": 1}}
+      ],
+      "drawn": ["tRNA", "CDS", "tRNA"] },
+    { "name": "two tracks with one label and one color",
+      "rows": [
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#808080", "stroke": "none", "width": 0}},
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#808080", "stroke": "none", "width": 0}}
+      ],
+      "drawn": ["GC content", "GC content"] },
+    { "name": "two tracks with one label and two colors",
+      "rows": [
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#808080", "stroke": "none", "width": 0}},
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#336699", "stroke": "none", "width": 0}}
+      ],
+      "drawn": ["GC content (1)", "GC content (2)"] },
+    { "name": "three sources of one label, two of one color",
+      "rows": [
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#808080", "stroke": "none", "width": 0}},
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#808080", "stroke": "none", "width": 0}},
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#336699", "stroke": "none", "width": 0}}
+      ],
+      "drawn": ["GC content (1)", "GC content (1)", "GC content (2)"] },
+    { "name": "three sources of one label in three colors, apart in the legend",
+      "rows": [
+        {"name": "Depth", "swatch": {"type": "solid", "fill": "#111111", "stroke": "none", "width": 0}},
+        {"name": "CDS", "swatch": {"type": "solid", "fill": "#47b8f8", "stroke": "gray", "width": 1}},
+        {"name": "Depth", "swatch": {"type": "solid", "fill": "#222222", "stroke": "none", "width": 0}},
+        {"name": "Depth", "swatch": {"type": "solid", "fill": "#333333", "stroke": "none", "width": 0}}
+      ],
+      "drawn": ["Depth (1)", "CDS", "Depth (2)", "Depth (3)"] },
+    { "name": "an annotation row with a hatch next to a row of its name",
+      "rows": [
+        {"name": "Island", "swatch": {"type": "solid", "fill": "url(#gbdraw-hatch-0123456789ab)", "stroke": "#334155", "width": 1}},
+        {"name": "Island", "swatch": {"type": "solid", "fill": "#94a3b8", "stroke": "#334155", "width": 1}}
+      ],
+      "drawn": ["Island (1)", "Island (2)"] },
+    { "name": "two annotation rows of one name and one hatch",
+      "rows": [
+        {"name": "Island", "swatch": {"type": "solid", "fill": "url(#gbdraw-hatch-0123456789ab)", "stroke": "#334155", "width": 1}},
+        {"name": "Island", "swatch": {"type": "solid", "fill": "url(#gbdraw-hatch-0123456789ab)", "stroke": "#334155", "width": 1}}
+      ],
+      "drawn": ["Island", "Island"] },
+    { "name": "a literal numbered name next to two rows of its base name",
+      "rows": [
+        {"name": "X", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "gray", "width": 1}},
+        {"name": "X (1)", "swatch": {"type": "solid", "fill": "#00ff00", "stroke": "gray", "width": 1}},
+        {"name": "X", "swatch": {"type": "solid", "fill": "#0000ff", "stroke": "gray", "width": 1}}
+      ],
+      "drawn": ["X (2)", "X (1)", "X (3)"] },
+    { "name": "a literal numbered name that is itself numbered frees its bare name",
+      "rows": [
+        {"name": "X", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "gray", "width": 1}},
+        {"name": "X (1)", "swatch": {"type": "solid", "fill": "#00ff00", "stroke": "gray", "width": 1}},
+        {"name": "X", "swatch": {"type": "solid", "fill": "#0000ff", "stroke": "gray", "width": 1}},
+        {"name": "X (1)", "swatch": {"type": "solid", "fill": "#123456", "stroke": "gray", "width": 1}}
+      ],
+      "drawn": ["X (1)", "X (1) (1)", "X (2)", "X (1) (2)"] },
+    { "name": "a name that returns to one row",
+      "rows": [
+        {"name": "Packaging", "swatch": {"type": "solid", "fill": "#f000ff", "stroke": "gray", "width": 1}},
+        {"name": "other proteins", "swatch": {"type": "solid", "fill": "#47b8f8", "stroke": "gray", "width": 1}}
+      ],
+      "drawn": ["Packaging", "other proteins"] },
+    { "name": "a gradient row against a solid row of its name",
+      "rows": [
+        {"name": "Identity", "swatch": {"type": "gradient", "min_color": "#ffffff", "max_color": "#000000"}},
+        {"name": "Identity", "swatch": {"type": "solid", "fill": "#000000", "stroke": "none", "width": 0}}
+      ],
+      "drawn": ["Identity (1)", "Identity (2)"] },
+    { "name": "a solid row and a gradient row of one name, in the order a legend draws them",
+      "rows": [
+        {"name": "CDS", "swatch": {"type": "solid", "fill": "#54bcf8", "stroke": "gray", "width": 2}},
+        {"name": "Pairwise match identity", "swatch": {"type": "solid", "fill": "#88aaff", "stroke": "#404040", "width": 1.5}},
+        {"name": "Pairwise match identity", "swatch": {"type": "gradient", "min_color": "#FFE7E7", "max_color": "#FF7272"}}
+      ],
+      "drawn": ["CDS", "Pairwise match identity (1)", "Pairwise match identity (2)"] },
+    { "name": "two gradient rows of one name: the end colors decide",
+      "rows": [
+        {"name": "Conservation", "swatch": {"type": "gradient", "min_color": "#ffffff", "max_color": "#ff0000"}},
+        {"name": "Conservation", "swatch": {"type": "gradient", "min_color": "#ffffff", "max_color": "red"}},
+        {"name": "Conservation", "swatch": {"type": "gradient", "min_color": "#ffffff", "max_color": "#0000ff"}}
+      ],
+      "drawn": ["Conservation (1)", "Conservation (1)", "Conservation (2)"] },
+    { "name": "a named color equals its hex",
+      "rows": [
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "red", "stroke": "gray", "width": 1}},
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "#FF0000", "stroke": "gray", "width": 1}},
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "#f00", "stroke": "gray", "width": 1}}
+      ],
+      "drawn": ["Shared", "Shared", "Shared"] },
+    { "name": "one fill with two stroke colors",
+      "rows": [
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "gray", "width": 1}},
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "black", "width": 1}}
+      ],
+      "drawn": ["Shared (1)", "Shared (2)"] },
+    { "name": "one fill with two stroke widths",
+      "rows": [
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "gray", "width": 1}},
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "gray", "width": 2}}
+      ],
+      "drawn": ["Shared (1)", "Shared (2)"] },
+    { "name": "a stroke of no width is no stroke",
+      "rows": [
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "gray", "width": 0}},
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "none", "width": 0}},
+        {"name": "Shared", "swatch": {"type": "solid", "fill": "#ff0000", "stroke": "none", "width": 3}}
+      ],
+      "drawn": ["Shared", "Shared", "Shared"] },
+    { "name": "names that differ in letter case are two names",
+      "rows": [
+        {"name": "Alpha", "swatch": {"type": "solid", "fill": "#112233", "stroke": "gray", "width": 1}},
+        {"name": "alpha", "swatch": {"type": "solid", "fill": "#445566", "stroke": "gray", "width": 1}}
+      ],
+      "drawn": ["Alpha", "alpha"] },
+    { "name": "a rule named like a track row, with the track's fill and another line",
+      "rows": [
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#808080", "stroke": "gray", "width": 1}},
+        {"name": "GC content", "swatch": {"type": "solid", "fill": "#808080", "stroke": "none", "width": 0}}
+      ],
+      "drawn": ["GC content (1)", "GC content (2)"] }
+  ]
+}

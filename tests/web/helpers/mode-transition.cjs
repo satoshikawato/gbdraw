@@ -23,8 +23,7 @@ const load = async (browser, file = seeds.circular, viewport = { width: 1600, he
       onSessionLifecycleEvent: event => window.__MODE_EVENTS__.push(event)
     };
   });
-  page.on('dialog', dialog => dialog.type() === 'confirm' && dialog.message().startsWith('Download ')
-    ? dialog.accept() : dialog.dismiss());
+  page.on('dialog', dialog => dialog.dismiss());
   await openApp(page);
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
@@ -72,10 +71,15 @@ const closeEditor = async page => {
 const download = async (page, button, path, health = {}) => {
   const control = button === 'Save Session' ? page.getByRole('banner') : page;
   const errorSignatureBefore = await readErrorSignature(page);
-  const [download] = await Promise.all([
-    page.waitForEvent('download'),
-    control.getByRole('button', { name: button, exact: true }).click()
-  ]);
+  const pending = page.waitForEvent('download');
+  await control.getByRole('button', { name: button, exact: true }).click();
+  // A large file asks first (`Download large ...?`), at any time before the
+  // download starts; the download action answers it.
+  const large = page.locator('[data-choice-prompt] [data-choice-prompt-action="download"]');
+  const asked = large.waitFor({ state: 'visible', timeout: 0 }).then(() => 'asked', () => null);
+  const first = await Promise.race([pending, asked]);
+  if (first === 'asked') await large.click();
+  const download = first === 'asked' ? await pending : first;
   await download.saveAs(path);
   if (button === 'Save Session') {
     await assertOperationHealth(page, { operation: 'Save Session', errorSignatureBefore, ...health });

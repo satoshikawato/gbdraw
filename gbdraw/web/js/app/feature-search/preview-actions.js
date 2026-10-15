@@ -20,8 +20,11 @@ import {
 } from './preview-svg.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
+import { ownEntry } from '../../utils/own-entry.js';
 /** @import { FeatureSearchIndex } from './search-core.js' */
+/** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { FeatureElementIndex } from './preview-svg.js' */
+/** @import { EditableLabelEntry } from '../feature-editor/label-actions.js' */
 
 /**
  * @typedef {object} PreviewFeatureSearchOptions
@@ -99,14 +102,16 @@ export const createPreviewFeatureSearch = ({
   // Search features searches the Features list of the displayed Result, so a
   // hidden feature is found too (R-5). A drawn feature is found by its
   // rendered ID; one the Result does not draw by its source identity.
+  /** @type {Map<string, FeatureLike>} */
   let featuresBySearchId = new Map();
   /** @param {DrawingState} drawing */
   const ensureSearchIndex = (drawing) => {
     if (!searchIndex) {
-      const labels = new Map((state.editableLabels?.value || []).map((entry) => [entry.featureId, entry]));
+      /** @type {Map<string, EditableLabelEntry>} */
+      const labels = new Map((state.editableLabels?.value || []).map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry]));
       featuresBySearchId = new Map();
       searchIndex = buildFeatureSearchIndex({
-        features: featureList.value.rows.map((feature) => {
+        features: featureList.value.rows.map((/** @type {FeatureLike} */ feature) => {
           const renderedId = featureListState(feature).renderedId;
           const searchId = renderedId || String(feature.id || '');
           featuresBySearchId.set(searchId, feature);
@@ -119,7 +124,10 @@ export const createPreviewFeatureSearch = ({
               feature.search_labels,
               entry?.text,
               featureOverrideValue(drawing.featureOverrides, feature, 'labelText'),
-              ...sources.map((source) => drawing.labelTextBulkOverrides?.[source])
+              // Only a non-empty text names a bulk override; a feature without that source reads none (OV-577).
+              ...sources.flatMap((source) => (
+                typeof source === 'string' && source !== '' ? [ownEntry(drawing.labelTextBulkOverrides, source)] : []
+              ))
             ]
           };
         }),
@@ -158,13 +166,14 @@ export const createPreviewFeatureSearch = ({
   ));
   const previewFeatureSearchStatusText = computed(() => {
     if (previewFeatureSearchError.value) return previewFeatureSearchError.value;
-    if (!String(previewFeatureSearchQuery.value || '').trim()) {
-      return `0 / ${previewFeatureSearchRenderedCount.value} features`;
-    }
+    // No count before a search; after one, the active match of all.
+    if (!String(previewFeatureSearchQuery.value || '').trim()) return '';
+    const total = previewFeatureSearchMatches.value.length;
+    if (!total) return 'No matches';
     const current = previewFeatureSearchActiveIndex.value >= 0
       ? previewFeatureSearchActiveIndex.value + 1
       : 0;
-    return `${current} / ${previewFeatureSearchMatches.value.length} features`;
+    return `${current} of ${total} ${total === 1 ? 'match' : 'matches'}`;
   });
   const previewFeatureSearchActiveDetail = computed(() => {
     const activeId = getActiveMatchId();
@@ -241,10 +250,12 @@ export const createPreviewFeatureSearch = ({
     });
   };
 
+  /** @param {unknown} value */
   const setQuery = (value) => {
     previewFeatureSearchInput.value = String(value || '');
   };
 
+  /** @param {unknown} field */
   const setField = (field) => {
     previewFeatureSearchField.value = normalizeFeatureSearchField(field, { popupMode: getPopupMode() });
   };
@@ -298,6 +309,10 @@ export const createPreviewFeatureSearch = ({
     });
   };
 
+  /**
+   * @param {unknown} index
+   * @param {{ center?: boolean }} [options]
+   */
   const goToMatch = (index, { center = true } = {}) => {
     const count = previewFeatureSearchMatches.value.length;
     if (!count) {
@@ -430,7 +445,7 @@ export const createPreviewFeatureSearch = ({
     invalidateFeatureElementIndex();
   });
   watch([
-    () => (state.editableLabels?.value || []).map((entry) => [entry.featureId, entry.sourceText, entry.text]),
+    () => (state.editableLabels?.value || []).map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry.sourceText, entry.text]),
     () => Object.values(state.activeDrawing().featureOverrides || {}).map((row) => [row.recordKey, row.biologicalFeatureId, row.labelText]),
     () => state.activeDrawing().labelTextBulkOverrides,
     () => state.activeDrawing().orthogroupNameOverrides,

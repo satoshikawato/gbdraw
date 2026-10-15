@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -11,6 +11,9 @@ const renamedLegendCaption = [
   'WP5 renamed browser composition legend entry with deliberately wide text',
   'that forces the live legend to be measured and reflowed'
 ].join(' ');
+// The key of the editor row the test adds; renamed, the row keeps its key
+// (D-25) and draws `renamedLegendCaption`.
+const addedLegendKey = 'WP5 legend entry';
 // A generated row deleted after the drags: another measured reflow that keeps
 // the manual composition deltas.
 const postDragDeletedCaption = 'rRNA';
@@ -112,8 +115,8 @@ const renderRealDiagram = async (
   }, legendSide, { timeout: 120000 });
 };
 
-const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
-  page.evaluate(async (expectedCaption) => {
+const inspectLiveComposition = async (page, key = addedLegendKey) => (
+  page.evaluate(async (expectedKey) => {
     const app = window.__GBDRAW_APP__;
     const composition = await import('./js/app/legend-layout/composition-actions.js');
     const svg = app.svgContainer?.querySelector?.('svg') || document.querySelector(
@@ -126,7 +129,7 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
     // Zero shift: the Legend's recorded local bounds are the bounds the Legend
     // layout owner gives its rows (Python's layout), not its painted box.
     const { createLegendLayoutActions } = await import('./js/app/legend/layout-actions.js');
-    const legendLayout = createLegendLayoutActions();
+    const legendLayout = createLegendLayoutActions({ readRegisteredFontFaces: () => [] });
     await legendLayout.prepareLegendLayout();
     const laidOut = svg.getElementById('legend')
       ? legendLayout.layOutLegend(new DOMParser().parseFromString(
@@ -257,7 +260,7 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
     const legendTarget = binding.legend.targets[0] || null;
     const entry = Array.from(
       legendTarget?.querySelectorAll('g[data-legend-key]') || []
-    ).find((group) => group.getAttribute('data-legend-key') === expectedCaption) || null;
+    ).find((group) => group.getAttribute('data-legend-key') === expectedKey) || null;
     const entryText = entry?.querySelector('text') || null;
     const entryFill = Array.from(entry?.querySelectorAll('path[fill]') || [])
       .map((path) => String(path.getAttribute('fill') || '').toLowerCase())
@@ -314,7 +317,7 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
       viewBoxContainmentError,
       safePreview: !svg.querySelector('script') && eventAttributes.length === 0
     };
-  }, caption)
+  }, key)
 );
 
 const deletePostDragLegendEntry = async (page) => {
@@ -333,7 +336,7 @@ const deletePostDragLegendEntry = async (page) => {
 };
 
 const loadAndRenameLegendEntry = async (page) => {
-  const addedCaption = 'WP5 legend entry';
+  const addedCaption = addedLegendKey;
   // An editor row from a Session (R15-2 retired Add legend item).
   await loadEditorLegendRows(page, [[addedCaption, legendColor]]);
   await page.waitForFunction((caption) => (
@@ -350,11 +353,11 @@ const loadAndRenameLegendEntry = async (page) => {
   await page.evaluate(async ({ index, caption }) => {
     await window.__GBDRAW_APP__.renameLegendEntry(index, caption);
   }, { index: addedIndex, caption: renamedLegendCaption });
-  await page.waitForFunction((caption) => (
+  await page.waitForFunction(({ key, caption }) => (
     window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === caption) &&
     Array.from(document.querySelectorAll('g[data-legend-key]'))
-      .some((entry) => entry.getAttribute('data-legend-key') === caption)
-  ), renamedLegendCaption, { timeout: 180000 });
+      .some((entry) => entry.getAttribute('data-legend-key') === key && entry.querySelector('text')?.textContent === caption)
+  ), { key: addedCaption, caption: renamedLegendCaption }, { timeout: 180000 });
   const renamed = await inspectLiveComposition(page);
 
   expect(added.entry).toMatchObject({
@@ -363,7 +366,7 @@ const loadAndRenameLegendEntry = async (page) => {
     text: addedCaption
   });
   expect(renamed.entry).toMatchObject({
-    caption: renamedLegendCaption,
+    caption: addedLegendKey,
     fill: legendColor,
     text: renamedLegendCaption
   });
@@ -476,11 +479,8 @@ const reloadSession = async (page, file, mode, legendSide) => {
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
   );
   await expect(sessionInput).toHaveCount(1);
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 180000 });
   await sessionInput.setInputFiles(file);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await page.waitForFunction(
     () => window.__GBDRAW_SESSION_IMPORT_COMPLETE__ !== null,
     null,
@@ -488,7 +488,7 @@ const reloadSession = async (page, file, mode, legendSide) => {
   );
   const importCompletion = await page.evaluate(() => window.__GBDRAW_SESSION_IMPORT_COMPLETE__);
   expect(importCompletion).toEqual({ status: 'ok', label: 'Loaded session' });
-  await page.waitForFunction(({ expectedMode, expectedLegendSide, caption }) => {
+  await page.waitForFunction(({ expectedMode, expectedLegendSide, key, caption }) => {
     const app = window.__GBDRAW_APP__;
     const svg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
     if (!svg) return false;
@@ -506,11 +506,12 @@ const reloadSession = async (page, file, mode, legendSide) => {
       liveMetadata.legendSide === expectedLegendSide &&
       resultMetadata?.legendSide === expectedLegendSide &&
       Array.from(document.querySelectorAll('g[data-legend-key]'))
-        .some((entry) => entry.getAttribute('data-legend-key') === caption)
+        .some((entry) => entry.getAttribute('data-legend-key') === key && entry.querySelector('text')?.textContent === caption)
     );
   }, {
     expectedMode: mode,
     expectedLegendSide: legendSide,
+    key: addedLegendKey,
     caption: renamedLegendCaption
   }, { timeout: 180000 });
 };
@@ -526,14 +527,14 @@ const downloadPlainSvg = async (page) => {
 };
 
 const inspectExportedComposition = async (page, svgText) => (
-  page.evaluate(async ({ source, caption }) => {
+  page.evaluate(async ({ source, key }) => {
     const composition = await import('./js/app/legend-layout/composition-actions.js');
     const documentNode = new DOMParser().parseFromString(source, 'image/svg+xml');
     const svg = documentNode.documentElement;
     if (documentNode.querySelector('parsererror')) return { error: 'Exported SVG parse error.' };
     const binding = composition.bindCompositionMetadata(svg);
     const entry = Array.from(svg.querySelectorAll('g[data-legend-key]'))
-      .find((group) => group.getAttribute('data-legend-key') === caption) || null;
+      .find((group) => group.getAttribute('data-legend-key') === key) || null;
     const fill = Array.from(entry?.querySelectorAll('path[fill]') || [])
       .map((path) => String(path.getAttribute('fill') || '').toLowerCase())
       .find((value) => value && value !== 'none' && !value.startsWith('url(')) || '';
@@ -545,12 +546,12 @@ const inspectExportedComposition = async (page, svgText) => (
       schema: svg.getAttribute(composition.COMPOSITION_SCHEMA_ATTRIBUTE),
       metadata: binding.metadata,
       deltas: composition.compositionUserDeltas(svg),
-      entry: entry ? { caption: entry.getAttribute('data-legend-key'), fill } : null,
+      entry: entry ? { caption: entry.getAttribute('data-legend-key'), text: entry.querySelector('text')?.textContent || '', fill } : null,
       hasScript: Boolean(svg.querySelector('script')),
       eventAttributeCount,
       viewBox: String(svg.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number)
     };
-  }, { source: svgText, caption: renamedLegendCaption })
+  }, { source: svgText, key: addedLegendKey })
 );
 
 const expectValidComposition = (
@@ -646,7 +647,7 @@ const expectZeroDeltas = (deltas) => {
 
 const expectRenamedEntry = (snapshot) => {
   expect(snapshot.entry).toMatchObject({
-    caption: renamedLegendCaption,
+    caption: addedLegendKey,
     fill: legendColor,
     text: renamedLegendCaption
   });
@@ -746,7 +747,7 @@ for (const mode of ['circular', 'linear']) {
     expect(exported.error || '').toBe('');
     expect(exported).toMatchObject({
       schema: '1',
-      entry: { caption: renamedLegendCaption, fill: legendColor },
+      entry: { caption: addedLegendKey, text: renamedLegendCaption, fill: legendColor },
       hasScript: false,
       eventAttributeCount: 0
     });

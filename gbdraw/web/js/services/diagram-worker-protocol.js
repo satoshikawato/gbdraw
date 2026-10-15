@@ -1,8 +1,11 @@
 // @ts-check
 export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   EVALUATE_RULES: 'evaluateRules',
-  READ_PDF_FONT: 'readPdfFont',
+  EMBED_FONTS: 'embedFonts',
+  PDF_FONTS: 'pdfFonts',
+  REGISTER_FONTS: 'registerFonts',
   BUILD_PROTEIN_LOSAT_CACHE_KEYS: 'buildProteinLosatCacheKeys',
+  COMPUTE_LABEL_FIT_ROW: 'computeLabelFitRow',
   CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD: 'convertLosatpPairsToGenomicPayload',
   CONVERT_MAIN_SESSION_COMPARISON_FRAME: 'convertMainSessionComparisonFrame',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',

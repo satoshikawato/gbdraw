@@ -121,7 +121,7 @@ export const templateRuleWriters = (html) => {
 const listModules = (url, prefix = '') => readdirSync(url, { withFileTypes: true }).flatMap((entry) => {
   const path = `${prefix}${entry.name}`;
   if (entry.isDirectory()) return listModules(new URL(`${entry.name}/`, url), `${path}/`);
-  return entry.name.endsWith('.js') && !path.endsWith('.generated.js') ? [path] : [];
+  return entry.name.endsWith('.js') ? [path] : [];
 });
 
 export const ruleWriterProblems = (writersByFile, owners = RULE_WRITERS) => {

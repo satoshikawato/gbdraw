@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, openApp } = require('../helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, expectSessionLoadedWithoutWarnings } = require('../helpers/app-lifecycle.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -63,11 +63,8 @@ const loadSessionThroughUi = async (page, sessionPath) => {
   const chooserPromise = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Load Session' }).click();
   const chooser = await chooserPromise;
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 180_000 });
   await chooser.setFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await expect.poll(() => page.evaluate(() => ({
     mode: window.__GBDRAW_APP__?.mode,
     processing: window.__GBDRAW_APP__?.processing,
@@ -96,6 +93,10 @@ const expectExplicitAtControls = async (page) => {
   await openCustomTrackSlots(page);
   const group = page.getByRole('group', { name: `Circular track slot ${AT_SLOT_ID}` });
   await expect(group).toBeVisible();
+  // The dinucleotide, legend label, and skew colors sit under the row's disclosure, which names the colors as custom.
+  const more = group.locator('[data-track-slot-more]');
+  await expect(more.locator(':scope > summary')).toContainText('custom colors');
+  await more.evaluate((details) => { details.open = true; });
   await expect(group.getByLabel('Track dinucleotide')).toHaveValue('AT');
   await expect(group.getByLabel('Track legend label')).toHaveValue('AT skew');
   await expect(group.locator('input[type="color"][title="Positive skew color"]'))

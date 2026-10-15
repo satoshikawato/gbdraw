@@ -167,7 +167,7 @@ test('Live palette and its History keep the scale draft out of the committed req
     // D-15: CDS #123456 is a user default color, so the switch asks first; the
     // select keeps the palette until a choice, and the choice is one step.
     const paletteDialog=page.getByRole('dialog',{name:'Change palette'});
-    await expect(paletteDialog).toContainText('You changed 1 default color');
+    await expect(paletteDialog).toContainText('Keep your 1 changed color from the "default" palette (CDS)?');
     await expect(paletteSelect).toHaveValue(previous);
     await paletteDialog.getByRole('button',{name:"Use the palette's colors"}).click();
     await expect(paletteDialog).toHaveCount(0);
@@ -255,9 +255,9 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBeGreaterThan(undoCount);
     await expectUnchangedResult(page, committed);
     expect((await snapshot(page)).request).toEqual(committedRequest);
-    await expect(page.getByText('Applies on Generate: Species and Strain.', { exact: true })).toBeVisible();
+    await expect(page.locator('[data-applies-on-generate="species-strain"]')).toBeVisible();
     await page.locator('summary[aria-label="Titles and Record Labels"]').press('Enter');
-    await expect(page.getByText('Applies on Generate: plot title and record-label settings.', { exact: true })).toBeVisible();
+    await expect(page.locator('[data-applies-on-generate="titles"]')).toBeVisible();
     const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', testInfo.outputPath('draft.gbdraw-session.json.gz'))));
     expect(hash(saved.results[0].content)).toBe(hash(committed));
     expect(saved.modes[saved.ui.mode].config.form.species).toBe('Mus musculus');
@@ -287,7 +287,7 @@ test('Global stroke settings apply on Generate and leave the Result unchanged be
       await width.fill(value);
       await expectUnchangedResult(page, committed);
     }
-    await expect(page.getByText('Applies on Generate: block and line stroke colors and widths.', { exact: true })).toBeVisible();
+    await expect(page.locator('[data-applies-on-generate="stroke"]')).toBeVisible();
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       state.activeDrawing().adv.scale_interval = 12345;

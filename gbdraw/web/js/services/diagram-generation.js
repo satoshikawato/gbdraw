@@ -14,6 +14,87 @@ import {
 } from './runtime-test-hooks.js';
 import { createDiagramResourceTransport } from './diagram-resource-staging.js';
 import { markCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
+import { normalizeLabelFitFailure } from './label-fit.js';
+/** @import { LabelFitFailure } from './label-fit.js' */
+import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
+
+/** @import { UserFacingOptions } from '../utils/error-normalization.js' */
+/** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { BoundedJsonValue } from './bounded-json-transport.js' */
+/** @import { WebFontEntry } from './font-store.js' */
+
+/**
+ * The fingerprint of the artifact a Generate returned.
+ * @typedef {object} GeneratedArtifactIdentity
+ * @property {1} schema
+ * @property {'SHA-256'} algorithm
+ * @property {string} fingerprint
+ * @property {number} retainedBytes
+ * @property {number} resultBytes
+ * @property {number} metadataBytes
+ */
+
+/**
+ * What the Worker's Generate message carries once decoded.
+ * @typedef {object} NormalizedGeneration
+ * @property {unknown} results The decoded Result entries, or the engine's error payload.
+ * @property {Record<string, unknown>} metadata
+ * @property {GeneratedArtifactIdentity | null} artifactIdentity
+ * @property {LabelFitFailure} [labelFit] With an engine error of labels that do not fit: Python's report and its row token.
+ */
+
+/** @typedef {NormalizedGeneration & { requestId: number }} GenerationResponse What a Generate request resolves with. */
+
+/**
+ * What the Worker sends in `results` of a Generate message, undecoded.
+ * @typedef {object} WorkerGenerationPayload
+ * @property {unknown} [error]
+ * @property {unknown} [results]
+ * @property {unknown} [metadata]
+ * @property {unknown} [labelFit] The JSON text of a label fit report, next to an error.
+ * @property {Partial<GeneratedArtifactIdentity> | null} [artifactIdentity]
+ */
+
+/**
+ * A Result entry as the Worker sends it: its `content` is text or UTF-8 bytes.
+ * @typedef {{ content?: unknown, [key: string]: unknown }} WorkerResultEntry
+ */
+
+/**
+ * A request for Generate: the canonical render request and the resources it names.
+ * @typedef {object} GenerationPayload
+ * @property {unknown} [request]
+ * @property {Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null} [resources]
+ */
+
+/**
+ * A staged file the Worker receives by transfer.
+ * @typedef {{ bytes?: unknown, [key: string]: unknown } | null | undefined} TransferFile
+ */
+
+/**
+ * The payload of a feature-extraction or helper request.
+ * @typedef {{ files?: TransferFile[], stagedResources?: TransferFile[], [key: string]: unknown }} AuxiliaryPayload
+ */
+
+/**
+ * @typedef {object} HelperPayload What a helper request may carry for resource staging; its other keys are the operation's own.
+ * @property {GenerationPayload['resources']} [resources]
+ * @property {unknown} [canonicalRequest]
+ * @property {{ canonicalRequest?: unknown } | null} [projection]
+ */
+
+/**
+ * A progress report of a request.
+ * @typedef {{ requestId: number, stage: string } & Partial<RuntimePreparationStep>} RequestProgress
+ */
+
+/**
+ * What a feature-extraction or helper request resolves with. The requests
+ * relay the Worker's JSON through a promise that stays untyped: each operation
+ * has its own result shape, which its callers read.
+ * @typedef {{ requestId: number, result: BoundedJsonValue }} AuxiliaryResponse
+ */
 
 export { DIAGRAM_HELPER_OPERATIONS } from './diagram-worker-protocol.js';
 
@@ -25,9 +106,14 @@ export class DiagramGenerationCanceledError extends Error {
   }
 }
 
+/** @param {{ canceled?: unknown, name?: unknown } | null | undefined} error */
 export const isDiagramGenerationCanceled = (error) =>
   Boolean(error?.canceled || error?.name === 'DiagramGenerationCanceledError');
 
+/**
+ * @param {WorkerResultEntry | string | number | boolean | null | undefined} result
+ * @param {number} resultIndex
+ */
 const decodeGenerationResultContent = (result, resultIndex) => {
   if (!result || typeof result !== 'object' || typeof result.content === 'string') {
     return result;
@@ -57,12 +143,17 @@ const decodeGenerationResultContent = (result, resultIndex) => {
   return { ...result, content };
 };
 
+/** @param {unknown} results */
 const decodeGenerationResults = (results) => (
   Array.isArray(results)
     ? results.map(decodeGenerationResultContent)
     : results
 );
 
+/**
+ * @param {unknown} metadata The Worker's metadata: an object, or its UTF-8 JSON bytes.
+ * @returns {unknown}
+ */
 const decodeGenerationMetadata = (metadata) => {
   const bytes = metadata instanceof ArrayBuffer
     ? new Uint8Array(metadata)
@@ -82,6 +173,10 @@ const decodeGenerationMetadata = (metadata) => {
   return decoded;
 };
 
+/**
+ * @param {Partial<GeneratedArtifactIdentity> | null | undefined} identity
+ * @returns {Readonly<GeneratedArtifactIdentity> | null} null for an identity that fails the schema.
+ */
 const normalizeGeneratedArtifactIdentity = (identity) => {
   const fingerprint = String(identity?.fingerprint || '').toLowerCase();
   if (
@@ -107,6 +202,10 @@ const normalizeGeneratedArtifactIdentity = (identity) => {
   });
 };
 
+/**
+ * @param {unknown[] | WorkerGenerationPayload | string | number | boolean | null | undefined} payload
+ * @returns {NormalizedGeneration}
+ */
 export const normalizeGenerationResponse = (payload) => {
   if (Array.isArray(payload)) {
     return markCurrentWorkerGenerationResponse({
@@ -123,10 +222,12 @@ export const normalizeGenerationResponse = (payload) => {
     });
   }
   if (payload.error) {
+    const labelFit = normalizeLabelFitFailure(payload.labelFit);
     return markCurrentWorkerGenerationResponse({
       results: payload,
       metadata: {},
-      artifactIdentity: null
+      artifactIdentity: null,
+      ...(labelFit ? { labelFit } : {})
     });
   }
   const results = Array.isArray(payload.results)
@@ -138,7 +239,8 @@ export const normalizeGenerationResponse = (payload) => {
     typeof decodedMetadata === 'object' &&
     !Array.isArray(decodedMetadata)
   )
-    ? decodedMetadata
+    // A non-array object, by the condition.
+    ? /** @type {Record<string, unknown>} */ (decodedMetadata)
     : {};
   return markCurrentWorkerGenerationResponse({
     results,
@@ -154,10 +256,13 @@ let worker = null;
 let workerInitialized = false;
 /** @type {ReturnType<typeof validateWebRuntimeCapabilities> | null} */
 let workerCapabilities = null;
+/** @typedef {Readonly<{ step: number, total: number, label: string }>} RuntimePreparationStep */
 /**
  * The pending Worker initialization: its promise, the reject that settles it,
- * and the listener cleanup. Null while no initialization is in flight.
- * @type {{ promise: Promise<Worker>, reject: (error: unknown) => void, cleanup: () => void } | null}
+ * the listener cleanup, and the preparation step listeners with the last
+ * step reported. Null while no initialization is in flight.
+ * @type {{ promise: Promise<Worker>, reject: (error: unknown) => void, cleanup: () => void,
+ *   lastStep: RuntimePreparationStep | null, stepListeners: Set<(step: RuntimePreparationStep) => void> } | null}
  */
 let initState = null;
 /**
@@ -165,7 +270,7 @@ let initState = null;
  * @property {number} requestId
  * @property {boolean} settled
  * @property {(() => void) | null} cleanup Null until its Worker listeners exist.
- * @property {(value: any) => void} resolve
+ * @property {(value: GenerationResponse) => void} resolve
  * @property {(error: unknown) => void} reject
  */
 /** @type {GenerateRequest | null} */
@@ -180,8 +285,8 @@ let activeRequest = null;
 /**
  * @typedef {object} PreparedResources What `resourceTransport.prepare` stages
  *   for the Worker.
- * @property {any[]} resourceManifest
- * @property {any[]} stagedResources
+ * @property {unknown[]} resourceManifest
+ * @property {TransferFile[]} stagedResources
  * @property {() => boolean} commit Acknowledges the staging; false when a reset
  *   or another acknowledged request superseded it.
  */
@@ -192,16 +297,68 @@ const activeHelperRequests = new Set();
 let nextRequestId = 1;
 const resourceTransport = createDiagramResourceTransport();
 
+/** @type {ReadonlySet<string>} */
 const diagramHelperOperationNames = new Set(DIAGRAM_HELPER_OPERATION_NAMES);
 
+/**
+ * A font the replay into a new Worker could not register (OV-686).
+ * @typedef {{ identity: string, label: string }} LostWorkerFont
+ */
+
+/**
+ * Where the Worker's fonts come from: the page's font store, and who is told
+ * of a font a new Worker could not register again.
+ * @typedef {object} DiagramWorkerFontSource
+ * @property {() => readonly WebFontEntry[]} readFonts
+ * @property {(lost: readonly LostWorkerFont[]) => void} onFontsLost
+ */
+
+/** @type {DiagramWorkerFontSource} */
+const NO_FONT_SOURCE = Object.freeze({ readFonts: () => [], onFontsLost: () => {} });
+/** @type {DiagramWorkerFontSource} */
+let workerFontSource = NO_FONT_SOURCE;
+
+/**
+ * Name the fonts registered in the page (the font store's), so a new Worker
+ * registers them all at start and a Generate names those its request uses.
+ * @param {DiagramWorkerFontSource | null} source Null when the app unmounts.
+ */
+export const setDiagramWorkerFontSource = (source) => {
+  workerFontSource = source || NO_FONT_SOURCE;
+};
+
+// The store's bytes: postMessage makes the one copy the Worker needs.
+/** @param {readonly WebFontEntry[]} fonts */
+const workerFontFiles = (fonts) => fonts.map((font) => ({ identity: font.identity, label: font.label, bytes: font.bytes }));
+
+/** @param {unknown} lost @returns {LostWorkerFont[]} */
+const lostWorkerFonts = (lost) => (Array.isArray(lost) ? lost : []).map((font) => ({
+  identity: String(font?.identity || ''), label: String(font?.label || '')
+}));
+
+/**
+ * The page's fonts a canonical request's text font names.
+ * @param {unknown} request
+ */
+const requestFontIdentities = (request) => {
+  const fontFamily = requestFontFamily(request);
+  return fontFamily ? webFontIdentitiesFor(workerFontSource.readFonts(), fontFamily) : [];
+};
+
+/** @param {string} id */
 const buildInitPayload = (id) => {
   return {
     type: 'init',
     id,
+    fonts: workerFontFiles(workerFontSource.readFonts()),
     ...buildPyodideAssetManifest()
   };
 };
 
+/**
+ * @param {string | Record<string, unknown> | null | undefined} serialized
+ * @param {UserFacingOptions} [options]
+ */
 export const deserializeWorkerError = (
   serialized,
   options = {}
@@ -227,6 +384,7 @@ const clearInitState = () => {
   initState = null;
 };
 
+/** @param {unknown} error */
 const rejectPendingInit = (error) => {
   if (!initState) return;
   const { reject } = initState;
@@ -257,14 +415,29 @@ const terminateWorker = (error = null) => {
   resourceTransport.reset();
 };
 
-const ensureWorkerInitialized = () => {
+/**
+ * @param {((step: RuntimePreparationStep) => void) | null} [onStep]
+ *   Each first-use preparation step as the Worker starts it; a caller that
+ *   joins a running initialization first receives the current step.
+ */
+const ensureWorkerInitialized = (onStep = null) => {
   const currentWorker = getWorker();
   if (workerInitialized) return Promise.resolve(currentWorker);
-  if (initState?.promise) return initState.promise;
+  if (initState?.promise) {
+    if (typeof onStep === 'function') {
+      initState.stepListeners.add(onStep);
+      if (initState.lastStep) onStep(initState.lastStep);
+    }
+    return initState.promise;
+  }
 
   const id = `diagram-init-${Date.now()}-${nextRequestId}`;
-  let resolveInit;
-  let rejectInit;
+  // The Promise executor runs synchronously and assigns both before anything reads them.
+  /** @type {(worker: Worker) => void} */
+  let resolveInit = () => {};
+  /** @type {(error: unknown) => void} */
+  let rejectInit = () => {};
+  /** @type {Promise<Worker>} */
   const promise = new Promise((resolve, reject) => {
     resolveInit = resolve;
     rejectInit = reject;
@@ -276,6 +449,7 @@ const ensureWorkerInitialized = () => {
     currentWorker.removeEventListener('messageerror', handleMessageError);
   };
 
+  /** @param {unknown} error */
   const fail = (error) => {
     cleanup();
     initState = null;
@@ -283,8 +457,15 @@ const ensureWorkerInitialized = () => {
     rejectInit(error);
   };
 
+  /** @param {MessageEvent} event */
   function handleMessage(event) {
     const data = event.data || {};
+    if (data.type === 'init-progress' && data.id === id && initState) {
+      const step = Object.freeze({ step: Number(data.step) || 0, total: Number(data.total) || 0, label: String(data.label || '') });
+      initState.lastStep = step;
+      initState.stepListeners.forEach((listener) => listener(step));
+      return;
+    }
     if (data.type !== 'init' || data.id !== id) return;
     cleanup();
     initState = null;
@@ -296,6 +477,8 @@ const ensureWorkerInitialized = () => {
         return;
       }
       workerInitialized = true;
+      const lost = lostWorkerFonts(data.lostFonts);
+      if (lost.length > 0) workerFontSource.onFontsLost(lost);
       resolveInit(currentWorker);
       return;
     }
@@ -313,7 +496,8 @@ const ensureWorkerInitialized = () => {
   currentWorker.addEventListener('message', handleMessage);
   currentWorker.addEventListener('error', handleError);
   currentWorker.addEventListener('messageerror', handleMessageError);
-  initState = { promise, reject: rejectInit, cleanup };
+  initState = { promise, reject: rejectInit, cleanup, lastStep: null,
+    stepListeners: new Set(typeof onStep === 'function' ? [onStep] : []) };
   recordStructuralMetric('workerInitializationCount');
   currentWorker.postMessage(buildInitPayload(id));
 
@@ -322,7 +506,9 @@ const ensureWorkerInitialized = () => {
 
 export const getDiagramGenerationWorkerCapabilities = () => workerCapabilities;
 
+/** @param {{ files?: TransferFile[], stagedResources?: TransferFile[] } | null | undefined} payload */
 const collectTransferList = (payload) => {
+  /** @type {Set<ArrayBuffer>} */
   const buffers = new Set();
   [
     ...(payload?.files || []),
@@ -335,6 +521,10 @@ const collectTransferList = (payload) => {
   return Array.from(buffers);
 };
 
+/**
+ * @param {GenerateRequest | null | undefined} request
+ * @param {() => void} callback
+ */
 const settleActiveRequest = (request, callback) => {
   if (!request || request.settled) return;
   request.settled = true;
@@ -344,8 +534,9 @@ const settleActiveRequest = (request, callback) => {
 };
 
 /**
- * @param {Record<string, any>} [payload]
- * @param {{ onProgress?: ((progress: any) => void) | null }} [options]
+ * @param {GenerationPayload} [payload]
+ * @param {{ onProgress?: ((progress: RequestProgress) => void) | null }} [options]
+ * @returns {Promise<GenerationResponse>}
  */
 export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) => {
   if (activeRequest) {
@@ -355,8 +546,12 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
   const requestId = nextRequestId;
   nextRequestId += 1;
 
-  let resolveRequest;
-  let rejectRequest;
+  // The Promise executor runs synchronously and assigns both before anything reads them.
+  /** @type {(value: GenerationResponse) => void} */
+  let resolveRequest = () => {};
+  /** @type {(error: unknown) => void} */
+  let rejectRequest = () => {};
+  /** @type {Promise<GenerationResponse>} */
   const promise = new Promise((resolve, reject) => {
     resolveRequest = resolve;
     rejectRequest = reject;
@@ -370,9 +565,10 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
     reject: rejectRequest
   };
   activeRequest = request;
-  const reportProgress = (stage) => {
+  /** @param {string} stage @param {RuntimePreparationStep | null} [step] */
+  const reportProgress = (stage, step = null) => {
     if (!request.settled && activeRequest === request && typeof onProgress === 'function') {
-      onProgress({ requestId, stage });
+      onProgress({ requestId, stage, ...(step || {}) });
     }
   };
 
@@ -382,7 +578,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
       const initializationWasWarm = workerInitialized;
       if (!initializationWasWarm) reportProgress('preparing-runtime');
       const initializationStartedAt = globalThis.performance?.now?.() ?? Date.now();
-      const currentWorker = await ensureWorkerInitialized();
+      const currentWorker = await ensureWorkerInitialized((step) => reportProgress('preparing-runtime', step));
       recordSessionLifecycleEvent('worker-initialization-resolved', {
         reused: initializationWasWarm,
         durationMs: initializationWasWarm
@@ -397,7 +593,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
       const workerPayload = {
         request: payload.request,
         resourceManifest: preparedResources.resourceManifest,
-        stagedResources: preparedResources.stagedResources
+        stagedResources: preparedResources.stagedResources,
+        fontIdentities: requestFontIdentities(payload.request)
       };
 
       const cleanup = () => {
@@ -406,15 +603,18 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
         currentWorker.removeEventListener('messageerror', handleMessageError);
       };
 
+      /** @param {unknown} error */
       const fail = (error) => {
         settleActiveRequest(request, () => rejectRequest(error));
       };
 
+      /** @param {unknown} error */
       const failWorker = (error) => {
         fail(error);
         if (worker === currentWorker) terminateWorker(error);
       };
 
+      /** @param {MessageEvent} event */
       async function handleMessage(event) {
         const data = event.data || {};
         if (data.type === 'test-lifecycle' && data.requestId === requestId) {
@@ -443,6 +643,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
             }
             if (request.settled || activeRequest !== request) return;
           }
+          /** @type {NormalizedGeneration} */
           let normalized;
           try {
             normalized = normalizeGenerationResponse(data.results);
@@ -494,6 +695,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
   return promise;
 };
 
+/** @param {AuxiliaryPayload} [payload] */
 export const runFeatureExtraction = (payload = {}) => {
   return runAuxiliaryWorkerRequest({
     type: 'feature-extraction',
@@ -506,11 +708,11 @@ export const runFeatureExtraction = (payload = {}) => {
 /**
  * @param {{
  *   type: string,
- *   payload: Record<string, any>,
+ *   payload: AuxiliaryPayload,
  *   operation?: string | null,
  *   activeRequests: Set<AuxiliaryRequest>,
  *   prepareResources?: (() => Promise<PreparedResources>) | null,
- *   onProgress?: ((progress: any) => void) | null
+ *   onProgress?: ((progress: RequestProgress) => void) | null
  * }} options
  */
 const runAuxiliaryWorkerRequest = ({
@@ -524,8 +726,11 @@ const runAuxiliaryWorkerRequest = ({
   const requestId = nextRequestId;
   nextRequestId += 1;
 
-  let resolveRequest;
-  let rejectRequest;
+  // The Promise executor runs synchronously and assigns both before anything reads them.
+  /** @type {(value: AuxiliaryResponse) => void} */
+  let resolveRequest = () => {};
+  /** @type {(error: unknown) => void} */
+  let rejectRequest = () => {};
   const promise = new Promise((resolve, reject) => {
     resolveRequest = resolve;
     rejectRequest = reject;
@@ -536,10 +741,10 @@ const runAuxiliaryWorkerRequest = ({
     let request = null;
     let failureStage = 'initialization';
     try {
-      if (!workerInitialized && typeof onProgress === 'function') {
-        onProgress({ requestId, stage: 'preparing-runtime' });
-      }
-      const currentWorker = await ensureWorkerInitialized();
+      const reportStep = typeof onProgress === 'function'
+        ? (/** @type {RuntimePreparationStep | null} */ step) => onProgress({ requestId, stage: 'preparing-runtime', ...(step || {}) }) : null;
+      if (!workerInitialized) reportStep?.(null);
+      const currentWorker = await ensureWorkerInitialized(reportStep);
       request = {
         requestId,
         cleanup: null,
@@ -560,12 +765,14 @@ const runAuxiliaryWorkerRequest = ({
       let preparedResources = null;
       let workerPayload = payload;
 
+      /** @param {unknown} error */
       const fail = (error) => {
         cleanup();
         rejectRequest(error);
       };
 
       const assembly = createBoundedJsonReceiver();
+      /** @param {MessageEvent} event */
       function handleMessage(event) {
         const data = event.data || {};
         if (data.type !== type || data.requestId !== requestId) return;
@@ -636,12 +843,12 @@ const runAuxiliaryWorkerRequest = ({
 
 /**
  * @param {unknown} operation
- * @param {Record<string, any>} [payload]
- * @param {{ onProgress?: ((progress: any) => void) | null }} [options]
+ * @param {AuxiliaryPayload & HelperPayload} [payload]
+ * @param {{ onProgress?: ((progress: RequestProgress) => void) | null }} [options]
  */
 export const runDiagramHelperOperation = (operation, payload = {}, { onProgress = null } = {}) => {
   const normalizedOperation = String(operation || '').trim();
-  if (!diagramHelperOperationNames.has(/** @type {any} */ (normalizedOperation))) {
+  if (!diagramHelperOperationNames.has(normalizedOperation)) {
     return Promise.reject(
       deserializeWorkerError({ code: 'HELPER_PROTOCOL', stage: 'request-validation' })
     );

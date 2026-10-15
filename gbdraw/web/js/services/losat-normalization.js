@@ -1,62 +1,78 @@
 // @ts-check
-export const normalizeCollinearAnchorMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  const aliases = {
-    all_hits: 'all',
-    raw: 'all',
-    top_n: 'all',
-    topn: 'all',
-    one2one: 'one_to_one',
-    one_to_ones: 'one_to_one',
-    mutual_best: 'one_to_one',
-    top1: 'one_to_one',
-    top_1: 'one_to_one',
-    reciprocal_best: 'rbh',
-    strict_rbh: 'rbh'
-  };
-  const resolved = aliases[normalized] || normalized;
-  return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+import { readSpelling } from '../utils/contract-shape.js';
+/** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
+/** @import { FieldReader } from '../utils/field-reading.js' */
+/** @import { LiteralShape, ObjectShape } from '../utils/contract-shape.js' */
+
+/**
+ * The five comparison settings whose other spellings Python reads
+ * (`read_spelling`); the Web reads them from the generated description, so it
+ * reads exactly what Python reads (OV-776).
+ * @typedef {'collinearityUnitMode' | 'collinearityAnchorMode' | 'collinearitySearchScope'
+ *   | 'collinearityColorMode' | 'orthogroupMembershipMode'} ComparisonSettingName
+ */
+const COMPARISON_SETTINGS = /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalProteinComparisonSettings).fields;
+/**
+ * Each of the five is a literal with spellings (tests/web/current-option-values.test.mjs).
+ * @param {ComparisonSettingName} name
+ */
+const settingShape = (name) => /** @type {LiteralShape} */ (COMPARISON_SETTINGS[name]);
+
+/**
+ * The name of setting `name` that `value` spells, or null.
+ * @template {ComparisonSettingName} K
+ * @param {K} name
+ * @param {unknown} value
+ * @returns {CanonicalProteinComparisonSettings[K] | null}
+ */
+export const readComparisonSetting = (name, value) => (
+  // `readSpelling` returns one of the setting's values, which its typedef lists.
+  /** @type {CanonicalProteinComparisonSettings[K] | null} */ (readSpelling(value, settingShape(name)))
+);
+
+/**
+ * The name of setting `name` that `value` spells; a value Python does not read
+ * is refused, naming the setting by `label`.
+ * @template {ComparisonSettingName} K
+ * @param {K} name
+ * @param {unknown} value
+ * @param {string} label
+ * @returns {CanonicalProteinComparisonSettings[K]}
+ */
+export const requireComparisonSetting = (name, value, label) => {
+  const read = readComparisonSetting(name, value);
+  if (read === null) throw new Error(`${label} must be one of: ${settingShape(name).values.join(', ')}.`);
+  return read;
 };
 
-export const normalizeOrthogroupMembershipMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  const aliases = {
-    legacy: 'anchor_core_v1',
-    rbh: 'anchor_core_v1',
-    rbh_only: 'anchor_core_v1',
-    merge: 'anchor_core_v1',
-    family: 'anchor_core_v1',
-    family_merge: 'anchor_core_v1',
-    local_split: 'anchor_core_v1',
-    density_split: 'anchor_core_v1',
-    outparalog_split: 'anchor_core_v1',
-    distribution_split: 'anchor_core_v1',
-    orthogroups: 'anchor_core_v1',
-    anchor_core: 'anchor_core_v1'
+/**
+ * Each reader also says whether the stored value was lost (BA-D25): a value
+ * Python does not read is the setting's default (its blank spelling).
+ * @template {ComparisonSettingName} K
+ * @param {K} name
+ * @returns {FieldReader<CanonicalProteinComparisonSettings[K]>}
+ */
+const comparisonSettingReader = (name) => {
+  // Each of the five has a blank spelling, so an unset value reads as a name.
+  const unset = /** @type {CanonicalProteinComparisonSettings[K]} */ (readComparisonSetting(name, null));
+  return (value) => {
+    const read = readComparisonSetting(name, value);
+    return read === null ? { value: unset, lost: true } : { value: read, lost: false };
   };
-  const resolved = aliases[normalized] || normalized;
-  return resolved === 'anchor_core_v1' ? resolved : 'anchor_core_v1';
 };
 
-export const normalizeCollinearSearchScope = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  const aliases = {
-    adjacent_pairs: 'adjacent',
-    adjacent_pair: 'adjacent',
-    neighbor_pairs: 'adjacent',
-    neighboring_pairs: 'adjacent',
-    all_records: 'all',
-    all_pairs: 'all',
-    all_record_pairs: 'all',
-    global: 'all'
-  };
-  const resolved = aliases[normalized] || normalized;
-  return ['adjacent', 'all'].includes(resolved) ? resolved : 'adjacent';
-};
+export const readCollinearUnitMode = comparisonSettingReader('collinearityUnitMode');
+export const readCollinearAnchorMode = comparisonSettingReader('collinearityAnchorMode');
+export const readCollinearSearchScope = comparisonSettingReader('collinearitySearchScope');
+export const readCollinearColorMode = comparisonSettingReader('collinearityColorMode');
+export const readOrthogroupMembershipMode = comparisonSettingReader('orthogroupMembershipMode');
 
+/** @param {unknown} value */
 export const collinearGroupScopeForEvidenceScope = (value) =>
-  normalizeCollinearSearchScope(value) === 'all' ? 'global_collinear' : 'adjacent_local';
+  readCollinearSearchScope(value).value === 'all' ? 'global_collinear' : 'adjacent_local';
 
+/** @param {unknown} value */
 export const normalizeGroupMetadataScope = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'global_collinear' || normalized === 'all_records') return 'global_collinear';
@@ -65,6 +81,7 @@ export const normalizeGroupMetadataScope = (value) => {
   return 'global';
 };
 
+/** @param {unknown} value */
 export const groupMetadataScopeLabel = (value) => {
   const scope = normalizeGroupMetadataScope(value);
   if (scope === 'global_collinear') return 'Collinearity-backed global evidence';

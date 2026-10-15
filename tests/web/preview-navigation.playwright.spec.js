@@ -94,7 +94,9 @@ test('background pan preserves screen displacement after text selection and zoom
   });
   const evidence = [];
   for (const zoom of [0.3, 1, 2.8]) {
-    await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
+    // Nothing has moved before the first round, so Reset layout starts disabled.
+    if (evidence.length === 0) await expect(page.getByRole('button', { name: 'Reset layout', exact: true })).toBeDisabled();
+    else await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
     const direction = zoom < 1 ? 'Zoom out' : 'Zoom in';
     for (let i = 0; i < Math.round(Math.abs(zoom - 1) * 10); i += 1) {
       await page.getByRole('button', { name: direction, exact: true }).click();
@@ -277,10 +279,16 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   await page.setViewportSize({ width: 1024, height: 740 });
   const beforeResize = await page.locator('[aria-label="Result Preview"]').evaluate((element) => element.clientWidth);
   const handle = await page.locator('.resize-handle').boundingBox();
+  await page.locator('#output-prefix').focus();
   await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
   await page.mouse.down();
+  // The press is default-prevented, so it must still take focus off the field (a pending edit commits on blur).
+  expect(await page.evaluate(() => document.activeElement?.id)).not.toBe('output-prefix');
   await page.mouse.move(handle.x + handle.width / 2 + 45, handle.y + handle.height / 2, { steps: 5 });
+  // OV-534: the drag resizes the pane and selects no page text on its way.
+  expect(await page.evaluate(() => String(getSelection()))).toBe('');
   await page.mouse.up();
+  expect(await page.evaluate(() => String(getSelection()))).toBe('');
   const afterResize = await page.locator('[aria-label="Result Preview"]').evaluate((element) => element.clientWidth);
   expect(beforeResize).toBeGreaterThan(640);
   expect(afterResize).toBeLessThanOrEqual(640);
@@ -320,7 +328,7 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   await search.fill('tRNA');
   await search.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(0);
-  await page.getByRole('checkbox', { name: /Regex/ }).check();
+  await page.getByRole('checkbox', { name: 'Regular expression', exact: true }).check();
   await search.fill('tRNA|rRNA');
   await search.press('Enter');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(1);

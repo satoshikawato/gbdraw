@@ -6,7 +6,7 @@ import {
   COMPOSITION_SCHEMA_ATTRIBUTE,
   compositionUserDeltas
 } from '../legend-layout/composition-actions.js';
-import { replaceLeadingTranslate } from '../../services/svg-transform.js';
+import { releasePressedTransform, replaceLeadingTranslate } from '../../services/svg-transform.js';
 
 /**
  * @typedef {object} LegendDragActionsOptions
@@ -42,11 +42,15 @@ export const createLegendDragActions = ({
   let pendingLegendPointer = null;
   /** @type {Promise<any> | null} */
   let legendDragTxPromise = null;
-  /** @type {{ binding: ReturnType<typeof bindCompositionMetadata>, svg: any } | null} */
+  /** @type {{ binding: ReturnType<typeof bindCompositionMetadata>, svg: any, pressedTransform: string | null } | null} */
   let legendDragContext = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
+  /**
+   * @param {{ style?: CSSStyleDeclaration } | null | undefined} element
+   * @param {string | null | undefined} cursor
+   */
   const setElementCursor = (element, cursor) => {
     if (!element?.style) return;
     if (cursor) {
@@ -63,6 +67,10 @@ export const createLegendDragActions = ({
     }
   };
 
+  /**
+   * @param {number} clientX
+   * @param {number} clientY
+   */
   const applyLegendDragPosition = (clientX, clientY) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -84,6 +92,7 @@ export const createLegendDragActions = ({
     legendCurrentOffset.y = newY - legendInitialTransform.value.y;
   };
 
+  /** @param {MouseEvent} e */
   const startLegendDrag = (e) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -101,7 +110,8 @@ export const createLegendDragActions = ({
 
     cancelLegendDragFrame();
     pendingLegendPointer = null;
-    legendDragContext = { binding, svg };
+    const pressedTransform = legendGroup.getAttribute('transform');
+    legendDragContext = { binding, svg, pressedTransform };
     // The drag gesture owns its transaction and settles a focused control's (N-18).
     legendDragTxPromise = beginHistoryTransaction
       ? beginHistoryTransaction('Move legend', { source: 'legend-drag', owner: Symbol('Move legend') })
@@ -110,12 +120,12 @@ export const createLegendDragActions = ({
     legendDragStart.x = e.clientX;
     legendDragStart.y = e.clientY;
 
-    const currentTransform = parseTransform(legendGroup.getAttribute('transform'));
-    legendOriginalTransform.value = { ...currentTransform };
+    legendOriginalTransform.value = { ...parseTransform(pressedTransform) };
     legendGroup.style.willChange = 'transform';
     setElementCursor(legendGroup, 'grabbing');
   };
 
+  /** @param {MouseEvent} e */
   const onLegendDrag = (e) => {
     if (!legendDragging.value) return;
     pendingLegendPointer = { x: e.clientX, y: e.clientY };
@@ -127,6 +137,7 @@ export const createLegendDragActions = ({
     });
   };
 
+  /** @param {MouseEvent} [e] */
   const endLegendDrag = async (e) => {
     if (!legendDragging.value) return;
     const finalPointer =
@@ -140,16 +151,19 @@ export const createLegendDragActions = ({
 
     const completedDragContext = legendDragContext;
     const completedLegendGroup = completedDragContext?.binding.legend.targets[0] || null;
-    if (completedLegendGroup) {
+    // Only a drag that moved the legend is an edit (PD-OI-053).
+    let moved = false;
+    if (completedDragContext && completedLegendGroup) {
       completedLegendGroup.style.willChange = '';
       setElementCursor(completedLegendGroup, isLayoutRepositionModeEnabled() ? 'grab' : 'help');
+      moved = releasePressedTransform(completedLegendGroup, completedDragContext.pressedTransform);
     }
 
     pendingLegendPointer = null;
     legendDragging.value = false;
     legendDragContext = null;
 
-    if (completedDragContext?.svg) commitActiveResultEdit?.('legend-drag');
+    if (moved) commitActiveResultEdit?.('legend-drag');
 
     const tx = legendDragTxPromise ? await legendDragTxPromise : null;
     legendDragTxPromise = null;

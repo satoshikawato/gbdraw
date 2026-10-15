@@ -20,10 +20,16 @@ export const DEFAULT_FEATURE_RENDERINGS = Object.freeze({
 
 const FEATURE_RENDERING_VALUE_SET = new Set(FEATURE_RENDERING_VALUES);
 
-export const defaultFeatureRendering = (featureType) => (
-  DEFAULT_FEATURE_RENDERINGS[String(featureType || '').trim()] || 'rectangle'
-);
+/** @param {unknown} featureType */
+export const defaultFeatureRendering = (featureType) => {
+  // The key is any feature type, not only the defaulted ones: read own keys only.
+  const key = String(featureType || '').trim();
+  return Object.hasOwn(DEFAULT_FEATURE_RENDERINGS, key)
+    ? /** @type {Readonly<Record<string, string>>} */ (DEFAULT_FEATURE_RENDERINGS)[key]
+    : 'rectangle';
+};
 
+/** @param {unknown} value */
 export const normalizeFeatureRendering = (value) => {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!FEATURE_RENDERING_VALUE_SET.has(normalized)) {
@@ -34,6 +40,7 @@ export const normalizeFeatureRendering = (value) => {
   return normalized;
 };
 
+/** @param {unknown} value */
 export const normalizeArrowHeadLengthRatio = (value) => {
   if (
     value === null ||
@@ -51,6 +58,7 @@ export const normalizeArrowHeadLengthRatio = (value) => {
   return value;
 };
 
+/** @param {unknown} value */
 export const normalizeArrowShaftWidthRatio = (value) => {
   if (
     value === null ||
@@ -70,16 +78,47 @@ export const normalizeArrowShaftWidthRatio = (value) => {
   return value;
 };
 
+/** @param {unknown} value */
 export const arrowHeadLengthRatioForState = (value) => {
   const normalized = normalizeArrowHeadLengthRatio(value);
   return normalized === DEFAULT_ARROW_HEAD_LENGTH_RATIO ? null : normalized;
 };
 
+/** @param {{ arrow_head_length_ratio?: unknown, arrow_shaft_width_ratio?: unknown } | null} [adv] */
+export const normalizedArrowGeometryState = (adv = {}) => ({
+  arrow_head_length_ratio: arrowHeadLengthRatioForState(
+    adv?.arrow_head_length_ratio
+  ),
+  arrow_shaft_width_ratio: normalizeArrowShaftWidthRatio(
+    adv?.arrow_shaft_width_ratio
+  )
+});
+
+/** A stored ratio saved as its text reads as its number. @param {unknown} value */
+const persistedArrowGeometryValue = (value) => {
+  if (typeof value !== 'string' || value.trim() === '') return value;
+  const numeric = Number(value.trim());
+  return Number.isFinite(numeric) ? numeric : value;
+};
+
+/** @param {{ arrow_head_length_ratio?: unknown, arrow_shaft_width_ratio?: unknown } | null} [adv] */
+export const normalizedPersistedArrowGeometryState = (adv = {}) =>
+  normalizedArrowGeometryState({
+    arrow_head_length_ratio: persistedArrowGeometryValue(
+      adv?.arrow_head_length_ratio
+    ),
+    arrow_shaft_width_ratio: persistedArrowGeometryValue(
+      adv?.arrow_shaft_width_ratio
+    )
+  });
+
+/** @param {unknown} source */
 export const normalizeFeatureRenderingMap = (source) => {
   if (source === null || source === undefined) return {};
   if (typeof source !== 'object' || Array.isArray(source)) {
     throw new Error('Feature renderings must be an object.');
   }
+  /** @type {Record<string, string>} */
   const normalized = {};
   Object.entries(source).forEach(([featureTypeRaw, rendering]) => {
     const featureType = String(featureTypeRaw || '').trim();

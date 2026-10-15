@@ -74,8 +74,8 @@ comparison ribbons.
 In **Comparison**, select **Run LOSAT** explicitly. Open **Settings** and choose
 the **LOSATP** button in **LOSAT Mode**, then choose **Similarity groups** from
 the **LOSATP mode** menu. Under **Comparison appearance**, set **Match style**
-to **Curve**, then enter the filter values and the deterministic **Runtime and
-reproducibility** values.
+to **Curve**, then enter the filter values and the deterministic
+**Performance** values.
 
 | Section | Control | Value |
 |---|---|---|
@@ -84,12 +84,12 @@ reproducibility** values.
 | Settings / Comparison appearance | Match style | Curve |
 | Settings / Result filters | Bitscore | `50` |
 | Settings / Result filters | E-value | `0.01` |
-| Settings / Result filters | Minimum identity | `30` |
-| Settings / Result filters | Minimum length | `0` |
-| Settings / Runtime and reproducibility | Execution | Serial |
-| Settings / Runtime and reproducibility | Total threads | `1` |
-| Settings / Runtime and reproducibility | Parallel runs | `1 run` |
-| Settings / Runtime and reproducibility | Threads per run | `1` |
+| Settings / Result filters | Min identity (%) | `30` |
+| Settings / Result filters | Min length | `0` |
+| Settings / Performance | Execution | Serial |
+| Settings / Performance | Total threads | `1` |
+| Settings / Performance | Parallel runs | `1 run` |
+| Settings / Performance | Threads per run | `1` |
 | Layout | Separate Strands | Off |
 | Basic | Output Prefix | `bgc_losatp_groups` |
 
@@ -98,8 +98,8 @@ Match the Interactive SVG Gallery presentation with these display settings:
 | Control | Value |
 |---|---|
 | Palette | Orange |
-| Override File (-d) | `BGC0000708-BGC0000713_default_colors.tsv` |
-| Specific Table (-t) | `BGC0000708-BGC0000713_specific_colors.tsv` |
+| Default colors file | `BGC0000708-BGC0000713_default_colors.tsv` |
+| Specific rules file | `BGC0000708-BGC0000713_specific_colors.tsv` |
 | Show Labels | First record |
 | Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |
 | Label Font Size | `18` |
@@ -144,16 +144,16 @@ an **Align…** action because the current result is in Similarity-groups mode.
 Select **Align…**. gbdraw regenerates the same 23-group comparison without
 rerunning LOSATP and shifts each record so its `og_1` member shares one
 x-coordinate. If ambiguity opens **Review alignment**, select the
-**Recommended** candidate in each card marked **Choose one**, leave **Keep as
+**Recommended** candidate in each card under **Choose a gene**, leave **Keep as
 is** selected and choose **Apply**. Inspect and accept a refreshed
 preview with another Apply if requested. This is the alignment used by the
 Interactive SVG Gallery.
 
 ![Five whole BGC records aligned to similarity group og_1](../images/t-gui-04/05-comparison-result.png)
 
-Open **Advanced comparison and layout** and find **Raw LOSAT results**. In the
-comparison between sequence 1 and sequence 2, set **Raw LOSAT filename** to
-`bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The file contains
+Open **Selected pairs**. In the comparison between sequence 1 and sequence 2,
+open **File name**, set **Raw LOSAT filename** to `bgc_losatp_groups.tsv`, and
+select **Save Raw LOSAT TSV**. The file contains
 232 twelve-column rows. Select **SVG** after alignment to save
 `bgc_losatp_groups.svg`.
 
@@ -172,7 +172,7 @@ seeds, group paths, and computed description.
 Use the same five records and presentation from Steps 1–5. Click the first
 record's left-facing `livA` CDS (`CAG38712.1`, group `og_18`) and choose
 **Review alignment options…**. Choose a
-candidate in each card marked **Choose one**. Start with **Keep as is**, then
+candidate in each card under **Choose a gene**. Start with **Keep as is**, then
 select **All right →**. The reference currently points left while the selected
 targets point right, so only the reference card shows **reversed**. Select **Apply**; if final validation updates
 the preview, inspect it and select **Apply** again. Features and labels reverse

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from collections.abc import Iterable, Mapping as MappingABC, Sequence as SequenceABC
-from dataclasses import asdict, fields, is_dataclass
+from dataclasses import asdict, fields, is_dataclass, replace
 from functools import lru_cache
 from numbers import Integral, Real
 from types import UnionType
@@ -16,6 +16,7 @@ from typing import Any, Literal, Mapping, Union, cast, get_args, get_origin, get
 from gbdraw.exceptions import ValidationError
 
 from .models import GbdrawConfig
+from .models.canvas import linear_axis_ruler_applies
 from .models.objects import circular_definition_interval_for_font
 from .models.root import validate_style_leaf
 
@@ -23,6 +24,9 @@ from .models.root import validate_style_leaf
 _UNSAFE_CONFIG_KEYS = frozenset({"__proto__", "constructor", "prototype"})
 _CIRCULAR_DEFINITION_FONT = "objects.definition.circular.font_size"
 _CIRCULAR_DEFINITION_INTERVAL = "objects.definition.circular.interval"
+_LINEAR_RULER_ON_AXIS = "canvas.linear.ruler_on_axis"
+_LINEAR_AXIS_COLOR = "objects.axis.linear.stroke_color"
+_AXIS_RULER_COLORS = ("objects.scale.stroke_color", "objects.scale.label_color")
 
 
 def _assert_safe_config_value(value: object, *, path: str) -> None:
@@ -115,6 +119,28 @@ def config_to_raw_dict(config: GbdrawConfig) -> dict[str, Any]:
     # fields separately, which is not the input shape expected by from_dict().
     raw["labels"]["filtering"] = deepcopy(config.labels.filtering.as_dict())
     return raw
+
+
+def with_config_overrides(
+    config: GbdrawConfig,
+    overrides: Mapping[str, object] | None,
+) -> GbdrawConfig:
+    """Return ``config`` with canonical dotted-path overrides applied."""
+
+    if not overrides:
+        return config
+    overridden = GbdrawConfig.from_dict(
+        _apply_validated_config_overrides(config_to_raw_dict(config), overrides)
+    )
+    if any(path.startswith("labels.filtering") for path, _ in validate_config_overrides(overrides)):
+        return overridden
+    # Untouched label filtering keeps its objects: its tables keep their prepared
+    # identity, so a render stage that takes them (label filter maps) stays
+    # keyable. Nothing writes into this mapping (M3).
+    return replace(
+        overridden,
+        labels=replace(overridden.labels, filtering=config.labels.filtering),
+    )
 
 
 def _literal_value_matches(value: object, candidate: object) -> bool:
@@ -358,7 +384,29 @@ def _apply_validated_config_overrides(
     validated.sort(key=lambda item: item[0] != "labels.filtering.raw")
     for path, value in validated:
         _set_raw_config_path(updated, path, value)
+
+    # Ruler ticks and labels drawn on the Linear axis follow the axis color
+    # unless the same overrides set them (the documented CLI contract). Like
+    # the interval above, this is the one rule for the CLI, API, and Web.
+    if dict(validated).get(_LINEAR_RULER_ON_AXIS) is True and linear_axis_ruler_applies(
+        show_scale=_raw_config_value(updated, "objects.scale.show"),
+        scale_style=_raw_config_value(updated, "objects.scale.style"),
+        track_layout=_raw_config_value(updated, "canvas.linear.track_layout"),
+    ):
+        axis_color = _raw_config_value(updated, _LINEAR_AXIS_COLOR)
+        for path in _AXIS_RULER_COLORS:
+            if path not in paths and axis_color is not None:
+                _set_raw_config_path(updated, path, axis_color)
     return updated
+
+
+def _raw_config_value(raw_config: Mapping[str, Any], path: str) -> object:
+    value: object = raw_config
+    for key in path.split("."):
+        if not isinstance(value, MappingABC):
+            return None
+        value = value.get(key)
+    return value
 
 
 def modify_config_dict(
@@ -401,4 +449,5 @@ __all__ = [
     "config_to_raw_dict",
     "modify_config_dict",
     "validate_config_overrides",
+    "with_config_overrides",
 ]

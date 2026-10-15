@@ -28,7 +28,9 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.record_planning import resolve_linear_options
 from gbdraw.exceptions import ComparisonIdentityError, ValidationError
-from gbdraw.io.comparisons import COMPARISON_COLUMNS, load_comparisons
+from gbdraw.diagrams.linear.assemble import _read_comparison_files
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     _decode_comparisons,
@@ -42,6 +44,7 @@ _VECTORS = json.loads(
     )
 )
 _PERMISSIVE = SimpleNamespace(evalue=10.0, bitscore=0.0, identity=0.0, alignment_length=0)
+_THRESHOLDS = ComparisonThresholds(evalue=10.0, bitscore=0.0, identity=0.0, alignment_length=0)
 
 
 def _table_text(lines: list[object]) -> str:
@@ -68,8 +71,8 @@ def _read_with_shared_reader(path: Path) -> pd.DataFrame:
     return read_comparison_table(path)
 
 
-def _read_with_load_comparisons(path: Path) -> pd.DataFrame:
-    return load_comparisons([str(path)], _PERMISSIVE)[0]
+def _read_with_blast_option(path: Path) -> pd.DataFrame:
+    return _read_comparison_files([str(path)], _THRESHOLDS)[0]
 
 
 def _read_with_canonical_codec(path: Path) -> pd.DataFrame:
@@ -110,7 +113,7 @@ def _read_with_conservation(path: Path) -> pd.DataFrame:
 
 _ENTRY_POINTS = {
     "shared-reader": _read_with_shared_reader,
-    "load_comparisons (-b)": _read_with_load_comparisons,
+    "-b (_read_comparison_files)": _read_with_blast_option,
     "canonical codec (Web)": _read_with_canonical_codec,
     "--comparisons_table": _read_with_comparisons_table,
     "conservation ring": _read_with_conservation,
@@ -170,7 +173,7 @@ def test_extra_columns_are_reported_in_an_info_log(
     path = _write_table(tmp_path / "pair.tsv", case["lines"])
 
     with caplog.at_level(logging.INFO, logger="gbdraw.io.comparisons"):
-        _read_with_load_comparisons(path)
+        _read_with_blast_option(path)
 
     assert "ignoring 2 extra column(s)" in caplog.text
 
@@ -222,26 +225,26 @@ def test_normalized_dataframe_failures_carry_a_comparison_diagnostic(value, cont
     assert "PRIVATE" not in json.dumps(payload)
 
 
-def test_load_comparisons_rejects_a_missing_file_instead_of_shifting_later_tables(
+def test_the_b_option_rejects_a_missing_file_instead_of_shifting_later_tables(
     tmp_path: Path,
 ) -> None:
     valid = _write_table(tmp_path / "SB_SC.tsv", _VECTORS["cases"][0]["lines"])
     missing = tmp_path / "SA_SB.tsv"
 
     with pytest.raises(ValidationError, match=r"SA_SB\.tsv: the comparison file does not exist") as caught:
-        load_comparisons([str(missing), str(valid)], _PERMISSIVE)
+        _read_comparison_files([str(missing), str(valid)], _THRESHOLDS)
     assert _web(caught.value)["code"] == "INPUT_UNREADABLE"
     assert _web(caught.value)["context"] == {"field": "comparison"}
 
 
-def test_load_comparisons_rejects_a_malformed_file_instead_of_shifting_later_tables(
+def test_the_b_option_rejects_a_malformed_file_instead_of_shifting_later_tables(
     tmp_path: Path,
 ) -> None:
     valid = _write_table(tmp_path / "SB_SC.tsv", _VECTORS["cases"][0]["lines"])
     malformed = _write_table(tmp_path / "SA_SB.tsv", [["SA", "SB", "95.0"]])
 
     with pytest.raises(ValidationError, match=r"SA_SB\.tsv: line 1: expected at least 12"):
-        load_comparisons([str(malformed), str(valid)], _PERMISSIVE)
+        _read_comparison_files([str(malformed), str(valid)], _THRESHOLDS)
 
 
 @pytest.fixture(scope="module")
@@ -519,6 +522,21 @@ def test_web_request_and_cli_reject_the_same_swapped_table(tmp_path: Path, gbdra
 
     assert returncode != 0
     assert str(web_error.value) in output
+
+
+def test_cli_logs_the_comparison_thresholds_and_files_it_reads(tmp_path: Path, gbdraw_runner) -> None:
+    records = _pair_records("SA", "SB")
+    gbk_files = [_write_genbank(tmp_path / f"{record.id}.gb", record) for record in records]
+    hits = _write_hits(tmp_path / "SA_SB.tsv", _hits("SA", "SB"))
+
+    returncode, output, _svg = gbdraw_runner.run(
+        "linear", gbk_files, "logged", tmp_path, blast_files=[hits], extra_args=["--evalue", "1e-5"]
+    )
+
+    assert returncode == 0, output
+    assert output.count("INFO: BLAST output visualization settings: e-value threshold: 1e-05;") == 1
+    assert output.count("INFO: Loading comparison file(s)...") == 1
+    assert output.count(f"INFO: Loading {hits}") == 1
 
 
 def test_cli_exits_non_zero_for_a_missing_comparison_file(tmp_path: Path, gbdraw_runner) -> None:

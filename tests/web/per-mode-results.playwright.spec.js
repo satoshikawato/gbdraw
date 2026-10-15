@@ -8,7 +8,7 @@ const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { answerChoicePrompt, evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
@@ -147,9 +147,11 @@ const history = async (page, step) => {
   await settleLive(page);
 };
 
-const save = async (page, path) => {
+// `again`: the page already downloaded this Session file name, so the Save asks first.
+const save = async (page, path, { again = false } = {}) => {
   const download = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
   await (await download).saveAs(path);
   return JSON.parse(gunzipSync(readFileSync(path)));
 };
@@ -162,6 +164,7 @@ const load = async (page, path) => {
   }
   await openApp(page);
   await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   await settleLive(page);
@@ -238,7 +241,8 @@ const LEGEND_EDITS = [
     name: 'a moved row',
     edit: (page) => page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
-      app.moveLegendEntryUp(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'));
+      const index = app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region');
+      app.moveLegendEntry(index, index - 1);
     }),
     byDefault: CIRCULAR_ROWS
   }
@@ -987,7 +991,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     await check(page, `Redo ${step + 1}`);
   }
   const bothFile = info.outputPath('both.gbdraw-session.json.gz');
-  await save(page, bothFile);
+  await save(page, bothFile, { again: true });
 
   const fresh = await freshPage(browser);
   try {

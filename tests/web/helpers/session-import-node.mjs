@@ -33,3 +33,12 @@ export class NodeSessionImportWorker {
 }
 
 export const installSessionImportWorker = () => { globalThis.Worker = NodeSessionImportWorker; };
+
+// A Session older than 40 reads its features again through the diagram
+// Worker. Node supplies none, so here its Load lists that recovery; in the
+// browser it loads without a row (OV-751). This Load port accepts only that
+// row: any other row cancels the Load, so a test still sees an unexpected
+// repair.
+export const acceptNodeFeatureRecoveryRow = async ({ items }) => items.every(
+  (line) => line.startsWith('Features: the feature information of the saved diagram could not be restored')
+);

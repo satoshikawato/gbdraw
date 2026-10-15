@@ -172,7 +172,7 @@ def test_h_gui_13_persists_real_edits_and_keeps_group_semantics_distinct() -> No
 
 def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None:
     source = INTERACTIVE_FLOW.read_text(encoding="utf-8")
-    assert CURRENT_SESSION_VERSION == 46
+    assert CURRENT_SESSION_VERSION == 47
     for value in (
         f"CURRENT_SESSION_VERSION = {CURRENT_SESSION_VERSION}",
         "CURRENT_RENDER_REQUEST_SCHEMA = 9",
@@ -184,7 +184,8 @@ def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None
         "FIRST_CIRCULAR_FIXTURE_SHA256",
         "first_capture.close()",
         "second_capture = open_browser_capture",
-        'dialog.message != "Session loaded successfully!"',
+        '"[data-app-notice]"',
+        'name="Reset all settings?", exact=True',
         "_assert_semantically_equivalent(source_report, restored_report)",
         "_assert_semantically_equivalent(source_report, exported)",
         "_stabilize_static_capture_surface(page)",

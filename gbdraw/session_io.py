@@ -22,19 +22,36 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn, Sequence, TextIO, cast
+from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn, Sequence, TextIO, TypedDict, cast
 
 from .analysis.protein_artifacts import (
     CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
     is_current_derived_protein_artifact,
     validate_current_derived_protein_artifacts,
 )
+from .analysis.protein_colinearity import (
+    PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    PROTEIN_LOSAT_CACHE_SCHEMA,
+)
+from .comparisons.losat_jobs import NUCLEOTIDE_LOSAT_CACHE_SCHEMA
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
-from .io.colors import named_color_hex
+from .io.colors import is_user_color, named_color_hex
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
+from .session_contract import (
+    FeatureOverrideDraftRow,
+    FlatDraftFields,
+    GbdrawSession,
+    LegacySessionFields,
+    SessionOtherModeEditorState,
+    SessionOtherModeLegend,
+    SessionOtherModeResult,
+    SessionOtherModeUi,
+    SessionRunMetadata,
+    keys_of,
+)
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
@@ -50,81 +67,49 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 46
+CURRENT_SESSION_VERSION = 47
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
-# ``modes`` (PD-OI-086) and keys per-feature edits by source identity.
+# ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
+# version 47 keys a slice's Legend color and stroke edits by the row key
+# (``originalCaption``) instead of the shown caption (PD-OI-061 revision 5)
+# and adds each slice's ``adv.font_family`` (PD-OI-098).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
+ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
+# From version 41 the record display and feature placement drafts of a flat draft are checked.
+DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
-PROTEIN_LOSAT_CACHE_SCHEMA = 4
-NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
 LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1
-PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
 FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
-FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {44: 4, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA}
-CURRENT_SESSION_TOP_LEVEL_FIELDS = frozenset(
-    {
-        "format",
-        "version",
-        "createdAt",
-        "title",
-        "renderRequest",
-        "resources",
-        "webFiles",
-        "config",
-        "ui",
-        "files",
-        "results",
-        "features",
-        "editorState",
-        "orthogroupState",
-        "losatCache",
-        "losatDerivedCache",
-        "proteinIdentityManifest",
-        "legacyArtifacts",
-        "runMetadata",
-        "cliInvocation",
-        "modes",
-        # Session 46: the CLI options a Session 27-44 draft kept in config.
-        "cliOptions",
-        # E1 (Q0): the other diagram mode's committed Result set.
-        "otherModeResult",
-    }
-)
+FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
+    44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
+}
+# The field sets below are the keys of the Session document's declaration
+# (gbdraw.session_contract).
+# Every top-level key a Session of a supported version may hold.
+CURRENT_SESSION_TOP_LEVEL_FIELDS = keys_of(GbdrawSession) | keys_of(LegacySessionFields)
 # The flat Web draft of Sessions 44 and older; Session 46 keeps it per mode in
 # ``modes`` (MODE_SCOPED_SETTINGS).
-FLAT_DRAFT_TOP_LEVEL_FIELDS = frozenset({"config", "features"})
+FLAT_DRAFT_TOP_LEVEL_FIELDS = keys_of(FlatDraftFields)
 # Session 46 keeps the other diagram mode's Result set in ``otherModeResult``:
 # the fields of one committed set, named as at the top level.
-OTHER_MODE_RESULT_FIELDS = frozenset(
-    {"renderRequest", "results", "editorState", "ui", "runMetadata", "cliInvocation"}
-)
+OTHER_MODE_RESULT_FIELDS = keys_of(SessionOtherModeResult)
 # The per-set part of the shared ``ui`` and ``editorState`` objects.
-OTHER_MODE_RESULT_UI_FIELDS = frozenset(
-    {
-        "selectedResultIndex",
-        "generatedLegendPosition",
-        "generatedMultiRecordCanvas",
-        "generatedCircularPlotTitlePosition",
-        "appliedPaletteName",
-        "appliedPaletteColors",
-    }
-)
-OTHER_MODE_RESULT_EDITOR_FIELDS = frozenset(
-    {"featureCatalog", "alignmentResetReceipt", "legend", "originalSvgStroke"}
-)
-OTHER_MODE_RESULT_LEGEND_FIELDS = frozenset({"originalOrder", "originalColors"})
+OTHER_MODE_RESULT_UI_FIELDS = keys_of(SessionOtherModeUi)
+OTHER_MODE_RESULT_EDITOR_FIELDS = keys_of(SessionOtherModeEditorState)
+OTHER_MODE_RESULT_LEGEND_FIELDS = keys_of(SessionOtherModeLegend)
+OTHER_MODE_RESULT_RUN_METADATA_FIELDS = keys_of(SessionRunMetadata)
 # The Web reader names an unusable ``otherModeResult`` as a Session field error.
 _OTHER_MODE_RESULT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
@@ -152,16 +137,7 @@ RETIRED_RENDERED_ID_FEATURE_FIELDS = frozenset(
 # row has no ``scope`` (Session 46).
 DRAFT_SCOPES = ("circular", "linear")
 # The fields of a per-feature edit draft row in a Session 46 mode slice.
-FEATURE_OVERRIDE_DRAFT_FIELDS = frozenset(
-    {
-        "recordKey",
-        "biologicalFeatureId",
-        "featureVisibility",
-        "labelVisibility",
-        "labelText",
-        "labelSourceText",
-    }
-)
+FEATURE_OVERRIDE_DRAFT_FIELDS = keys_of(FeatureOverrideDraftRow)
 # A Session 46 field that names an invalid shape is a Session field error.
 _SESSION_FIELDS_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
@@ -170,6 +146,9 @@ JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _DEPTH_COLUMNS = ("reference_name", "position", "depth")
 _SLOT_PART_RE = re.compile(r"([^\[\]]+)|\[(\d+)\]")
+# A Circular source record ``#N`` (N from 1, ASCII digits as the Web reads it,
+# OV-611): a record display draft's selector and a slice's OFF record key.
+_SOURCE_RECORD_SELECTOR = re.compile(r"#[1-9][0-9]*")
 
 
 @dataclass(frozen=True)
@@ -637,7 +616,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         )
     if version not in SUPPORTED_SESSION_VERSIONS:
         raise ValidationError(f"Unsupported session version: {version}.")
-    if "otherModeResult" in session and version < CURRENT_SESSION_VERSION:
+    if "otherModeResult" in session and version < MODE_SCOPED_SESSION_MIN_VERSION:
         raise ValidationError(
             f"Session version {version} cannot contain otherModeResult.", diagnostic=_OTHER_MODE_RESULT_INVALID
         )
@@ -688,7 +667,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         _validate_other_mode_result(session, version)
     if version >= MODE_SCOPED_SESSION_MIN_VERSION:
         _validate_mode_slices(session)
-    elif version >= 41:
+    elif version >= DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION:
         _validate_display_placement_drafts(session)
     if is_settings_only_session(session):
         _validate_settings_only_session(session)
@@ -696,7 +675,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") in (42, 44, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
+    return session.get("version") in (42, 44, 46, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -752,9 +731,9 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42, 44, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+    if current and (session.get("version") not in (41, 42, 44, 46, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
         raise ValidationError(
-            f"Web binding schema 2 requires session 41, 42, 44, or {CURRENT_SESSION_VERSION} and c_gb."
+            f"Web binding schema 2 requires session 41, 42, 44, 46, or {CURRENT_SESSION_VERSION} and c_gb."
         )
     resources = session.get("resources", {})
 
@@ -883,7 +862,7 @@ def _validate_display_placement_draft_config(
         if (scoped and row["scope"] not in {"circular", "linear"}) or any(
             not isinstance(row[name], str) or "\0" in row[name]
             for name in ("sourceUid", "selector", "recordId")
-        ) or not row["sourceUid"] or not re.fullmatch(r"#[1-9]\d*", row["selector"]):
+        ) or not row["sourceUid"] or not _SOURCE_RECORD_SELECTOR.fullmatch(row["selector"]):
             raise ValidationError("Record display drafts require a source UID and exact selector.")
         RecordDisplayOptions(row["topologyOverride"], None)
         RecordDisplayOptions(None, row["startCoordinate"])
@@ -1129,7 +1108,7 @@ def _validate_records_off(records_off: object, mode: str, bound_uids: set[object
             isinstance(key, str)
             and key
             and key == key.strip()
-            and (key in bound_uids if mode == "linear" else re.fullmatch(r"#[1-9][0-9]*", key) is not None)
+            and (key in bound_uids if mode == "linear" else _SOURCE_RECORD_SELECTOR.fullmatch(key) is not None)
             for key in records_off
         )
     ):
@@ -1511,9 +1490,6 @@ _COMPARISON_WARNING_FIELDS = frozenset(
 _FEATURE_IDENTITY_NOTICE_FIELDS = frozenset({"biologicalFeatureId", "kinds", "recordKey", "resultIndex", "status"})
 _FEATURE_IDENTITY_NOTICE_STATUSES = frozenset({"crop_excluded", "absent", "unresolved"})
 _FEATURE_IDENTITY_NOTICE_KINDS = frozenset({"placement", "feature_visibility", "label_visibility", "label_text"})
-OTHER_MODE_RESULT_RUN_METADATA_FIELDS = frozenset(
-    {"trackSlotGeometry", "annotationWarnings", "featureIdentityNotices", "comparisonWarnings"}
-)
 
 
 def _index(value: Any) -> bool:
@@ -3217,7 +3193,8 @@ def _stroke_override_map(source: object) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     if not isinstance(source, Mapping):
         return normalized
-    for key, value in source.items():
+    for key in _js_key_order(source):
+        value = source[key]
         name = _js_text(key)
         if not name or not isinstance(value, Mapping):
             continue
@@ -3244,7 +3221,8 @@ def _legend_color_overrides(source: object) -> dict[str, str]:
     normalized: dict[str, str] = {}
     if not isinstance(source, Mapping):
         return normalized
-    for key, value in source.items():
+    for key in _js_key_order(source):
+        value = source[key]
         caption = _js_text(key)
         color = _optional_hex_color(value)
         if caption and color:
@@ -3299,6 +3277,185 @@ def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any
             changed_stroke["width"] = _stroke_width(svg_stroke["width"])
         changed["originalSvgStroke"] = changed_stroke
     return {**draft, "editorState": changed}
+
+
+# How a Session 46 Legend edit is read in Session 47 (``legend_edits_by_row_key``):
+# ``moved`` to the key of the row whose caption it was stored under; kept under
+# its key as ``unmatched`` (no row shows or holds the key) or as ``unshown``
+# (the key of a renamed row that no row shows); or dropped as a ``collision``
+# (a later edit reached the same row, ``rowKey``).
+LegendEditRekeyOutcome = Literal["moved", "unmatched", "unshown", "collision"]
+LegendEditStore = Literal["colorOverrides", "strokeOverrides"]
+
+
+class _LegendEditRekeyRequired(TypedDict):
+    store: LegendEditStore
+    fromKey: str
+    toKey: str | None
+    outcome: LegendEditRekeyOutcome
+
+
+class LegendEditRekey(_LegendEditRekeyRequired, total=False):
+    """One Session 46 Legend edit that did not stay as it was; ``toKey`` is
+    ``None`` when it was dropped (a ``collision`` that keeps no stroke field). ``rowKey``: the row a ``collision`` reached;
+    ``slice``: the mode slice, or ``"draft"`` (``session_legend_edits_by_row_key``)."""
+
+    rowKey: str
+    slice: str
+
+
+def _js_key_order(record: Mapping[Any, Any]) -> list[Any]:
+    """The keys of a JSON object in the order JavaScript lists them: array
+    indexes ascending, then the other keys in insertion order."""
+
+    def is_index(key: object) -> bool:
+        return isinstance(key, str) and _JS_ARRAY_INDEX.fullmatch(key) is not None and int(key) < 2**32 - 1
+
+    indexes = sorted((key for key in record if is_index(key)), key=int)
+    return indexes + [key for key in record if not is_index(key)]
+
+
+def _session_46_legend_rows(legend: Mapping[str, Any]) -> tuple[dict[str, str], set[str]]:
+    """The rows a Session 46 Legend's edits reach, by the caption each shows,
+    and the keys of the renamed rows; the twin of ``session46LegendRows`` in
+    the Web ``services/mode-scoped-migration.js``.
+
+    As Session 46 Load read the rows (an entry with a caption and a usable
+    color, the first of each caption in its list) and as its compile found
+    them (``draftLegendRows`` at 9839de8e): a listed row before a dormant one
+    (the later dormant entry of a caption wins), and a deleted row as its
+    Restore shows it. A dormant entry that is not renamed, or whose key a
+    listed or deleted row holds, is no row.
+    """
+
+    def loaded(rows: str) -> list[tuple[str, str, bool]]:
+        entries = legend.get(rows)
+        captions: set[str] = set()
+        found: list[tuple[str, str, bool]] = []
+        for entry in entries if isinstance(entries, list) else ():
+            if not isinstance(entry, Mapping):
+                continue
+            caption = _js_text(entry.get("caption") or "")
+            if not caption or not is_user_color(_js_text(entry.get("color"))) or caption in captions:
+                continue
+            captions.add(caption)
+            key = _js_text(entry.get("originalCaption") or entry.get("caption") or "")
+            found.append((caption, key, entry.get("dormant") is True))
+        return found
+
+    entries = loaded("entries")
+    listed = [row for row in entries if not row[2]]
+    deleted = loaded("deletedEntries")
+    listed_keys = {key for _caption, key, _dormant in listed}
+    deleted_keys = {key for _caption, key, _dormant in deleted}
+    dormant = [
+        row for row in [*loaded("dormantEntries"), *(row for row in entries if row[2])]
+        if row[0] != row[1] and row[1] not in listed_keys and row[1] not in deleted_keys
+    ]
+    row_of = {caption: key for caption, key, _dormant in [*dormant, *listed]}
+    for caption, key, _dormant in deleted:
+        row_of.setdefault(caption, key)
+    renamed_keys = {key for caption, key, _dormant in [*listed, *dormant, *deleted] if caption != key}
+    return row_of, renamed_keys
+
+
+def legend_edits_by_row_key(legend: Mapping[str, Any]) -> tuple[dict[str, Any], list[LegendEditRekey]]:
+    """A Session 46 Legend (a slice's ``editorState.legend``) read as Session 47,
+    and what the reading did to each edit that did not stay as it was.
+
+    Session 46 stored the Legend color and stroke edits (``colorOverrides``,
+    ``strokeOverrides``) under the caption a row shows, Session 47 under the
+    row key (``originalCaption``, else the caption). Each row key gets the
+    value Session 46 applied to that row (the Web compile at 9839de8e,
+    ``app/candidate-render.js``):
+
+    - the stores are read as Session 46 Load read them
+      (:func:`_legend_color_overrides`, :func:`_stroke_override_map`);
+    - an edit reaches the row whose caption it is stored under
+      (:func:`_session_46_legend_rows`; ``moved`` when the key differs), else
+      the row of Python's key of that name: it stays under its key, as
+      ``unshown`` when that is the key of a renamed row that no row shows,
+      else as ``unmatched``;
+    - the color edits apply in their order, then the strokes in the order of
+      the color edits' keys and then their own; a later edit paints over an
+      earlier one on the same row (``collision``, ``rowKey``), a stroke field
+      by field (``strokeColor``, ``strokeWidth``).
+
+    Each outcome is ``{store, fromKey, toKey, outcome}`` (``toKey`` is
+    ``None`` when dropped). Other fields are kept as they are.
+
+    The twin of ``legendEditsByRowKey`` in the Web
+    ``services/mode-scoped-migration.js``;
+    ``tests/fixtures/sessions/legend-row-key-vectors.json`` pins both.
+    """
+
+    row_of, renamed_keys = _session_46_legend_rows(legend)
+    colors = _legend_color_overrides(legend.get("colorOverrides"))
+    strokes = _stroke_override_map(legend.get("strokeOverrides"))
+    changed = dict(legend)
+    outcomes: list[LegendEditRekey] = []
+
+    def key_by_row(store: LegendEditStore, edits: Mapping[str, Any], order: list[str], strokes_paint: bool) -> None:
+        if not isinstance(legend.get(store), Mapping):
+            return
+        last_of = {row_of.get(key) or key: key for key in order}
+
+        def fields_of(key: str) -> list[str]:
+            return list(edits[key]) if strokes_paint else ["color"]
+
+        field_last_of = {(row_of.get(key) or key, field): key for key in order for field in fields_of(key)}
+        keyed: dict[str, Any] = {}
+        for key in order:
+            row_key = row_of.get(key) or key
+            keyed[row_key] = {**keyed.get(row_key, {}), **edits[key]} if strokes_paint else edits[key]
+            if last_of[row_key] != key:
+                kept = any(field_last_of[(row_key, field)] == key for field in fields_of(key))
+                outcomes.append({"store": store, "fromKey": key, "toKey": row_key if kept else None,
+                                 "outcome": "collision", "rowKey": row_key})
+            elif row_key != key:
+                outcomes.append({"store": store, "fromKey": key, "toKey": row_key, "outcome": "moved"})
+            elif key not in row_of:
+                outcomes.append({"store": store, "fromKey": key, "toKey": key,
+                                 "outcome": "unshown" if key in renamed_keys else "unmatched"})
+        changed[store] = keyed
+
+    color_keys = _js_key_order(colors)
+    key_by_row("colorOverrides", colors, color_keys, False)
+    stroke_keys = _js_key_order(strokes)
+    key_by_row("strokeOverrides", strokes,
+               [key for key in color_keys if key in strokes] + [key for key in stroke_keys if key not in colors], True)
+    return changed, outcomes
+
+
+def session_legend_edits_by_row_key(
+    session: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[LegendEditRekey]]:
+    """The fields of a Session older than 47 with each Legend's edits keyed by
+    row key (:func:`legend_edits_by_row_key`): every mode slice's, and the flat
+    draft's of a Session before 46; and the outcomes, each naming its
+    ``slice`` (the mode, or ``"draft"``)."""
+
+    outcomes: list[LegendEditRekey] = []
+
+    def read(holder: Mapping[str, Any], slice_name: str) -> Mapping[str, Any]:
+        editor = holder.get("editorState")
+        legend = editor.get("legend") if isinstance(editor, Mapping) else None
+        if not isinstance(editor, Mapping) or not isinstance(legend, Mapping):
+            return holder
+        keyed, found = legend_edits_by_row_key(legend)
+        for outcome in found:
+            outcome["slice"] = slice_name
+        outcomes.extend(found)
+        return {**holder, "editorState": {**editor, "legend": keyed}}
+
+    changed = dict(read(session, "draft"))
+    modes = changed.get("modes")
+    if isinstance(modes, Mapping):
+        changed["modes"] = {
+            mode: read(value, str(mode)) if isinstance(value, Mapping) else value
+            for mode, value in modes.items()
+        }
+    return changed, outcomes
 
 
 def split_draft_into_modes(
@@ -5346,6 +5503,8 @@ def build_session_json(
             depth_sources=session_depth_source_widths(files_for_web),
             palette_colors=mode_split_palette_colors(payload.get("config")),
         )
+    if source_version is not None and source_version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
+        payload, _outcomes = session_legend_edits_by_row_key(payload)
     _attach_current_web_file_bindings(payload, files_for_web)
     payload.pop("files", None)
     normalize_current_session_artifacts(
@@ -6164,6 +6323,7 @@ def _append_common_gui_args(
         ("legend_box_size", "--legend_box_size"),
         ("legend_font_size", "--legend_font_size"),
         ("scale_interval", "--scale_interval"),
+        ("font_family", "--font_family"),
     ):
         value = adv.get(key)
         if value not in (None, "", False):
@@ -7051,6 +7211,7 @@ __all__ = [
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
     "MODE_SCOPED_SESSION_MIN_VERSION",
+    "ROW_KEYED_LEGEND_SESSION_MIN_VERSION",
     "SESSION_FORMAT",
     "SUPPORTED_SESSION_VERSIONS",
     "SessionBuildContext",
@@ -7077,7 +7238,9 @@ __all__ = [
     "migrate_session_feature_edits",
     "migrate_legacy_repeat_feature_shape_args",
     "normalize_current_session_artifacts",
+    "legend_edits_by_row_key",
     "safe_embedded_filename",
+    "session_legend_edits_by_row_key",
     "serialize_file_entry",
     "session_depth_source_widths",
     "session_mode",

@@ -216,6 +216,29 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
+// A Linear File card's header line is a native disclosure: its name is the same
+// folded and open, and the move buttons on it keep their own names (R12).
+test('linear File card header lines keep their names folded and open', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await loadMode(page, 'linear');
+  await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+  const folds = page.locator('[data-linear-source-fold]');
+  const names = () => folds.locator(':scope > summary')
+    .evaluateAll((headers) => headers.map((header) => header.getAttribute('aria-label')));
+  await expect.poll(names).toEqual(['File 1: HmmtDNA.gbk', 'File 2: No file']);
+  await reveal(folds.first().locator(':scope > summary'));
+  await folds.first().locator(':scope > summary').click();
+  await expect(folds.first()).toHaveJSProperty('open', false);
+  await expect(folds.last()).toHaveJSProperty('open', true);
+  expect(await names()).toEqual(['File 1: HmmtDNA.gbk', 'File 2: No file']);
+  const audit = await auditButtons(page);
+  expect(audit.problems, 'buttons without a stable author-provided name').toEqual([]);
+  await expect(page.getByRole('button', { name: 'Move File 1 down', exact: true })).toBeVisible();
+  expect(await auditStateNames(page), 'button names that change with state').toEqual([]);
+  expect((await auditPage(page)).danglingDescriptions, 'aria-describedby without a target').toEqual([]);
+});
+
 // Each Legend editor row names its caption field and its icon buttons by its
 // caption, so two rows never share a name (R12, gui-fix UI-04).
 test('Legend editor rows name their controls by the row caption', async ({ browser }) => {
@@ -229,8 +252,7 @@ test('Legend editor rows name their controls by the row caption', async ({ brows
     expect(captions).toHaveLength(2);
     const controls = [
       ['textbox', (caption) => `Legend entry ${caption} name`],
-      ['button', (caption) => `Move ${caption} up`],
-      ['button', (caption) => `Move ${caption} down`],
+      ['button', (caption) => `Reorder ${caption}`],
       ['button', (caption) => `Stroke options for ${caption}`],
       ['button', (caption) => `Remove ${caption}`]
     ];
@@ -256,6 +278,16 @@ test('Legend editor rows name their controls by the row caption', async ({ brows
     for (const caption of captions) {
       await expect(drawer.getByLabel(`Legend stroke color for ${caption}`, { exact: true })).toHaveCount(1);
     }
+    // The grip reorders by keyboard: Down arrow moves the row one place in one
+    // History step and keeps focus on its grip.
+    const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    const before = await undoCount();
+    await drawer.getByRole('button', { name: `Reorder ${captions[0]}`, exact: true }).focus();
+    await page.keyboard.press('ArrowDown');
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.slice(0, 2).map((entry) => entry.caption)))
+      .toEqual([captions[1], captions[0]]);
+    expect(await undoCount()).toBe(before + 1);
+    await expect(drawer.getByRole('button', { name: `Reorder ${captions[0]}`, exact: true })).toBeFocused();
   } finally { await page.context().close(); }
 });
 
@@ -420,13 +452,20 @@ for (const mode of ['circular', 'linear']) {
 }
 
 // UI-12 (Owner decision 2026-10-07): Generate Diagram is the last stop of the
-// settings panel in Tab order, and the bar stays fixed at the bottom.
+// settings panel in Tab order, and the bar stays fixed at the bottom, in the
+// stacked settings, in the icon rail with a docked section, and in the rail alone.
 test('the Generate bar is the last settings Tab stop in both modes and stays fixed', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApp(page);
-  for (const mode of ['circular', 'linear']) {
+  const DISPLAYS = [
+    ['stacked', async () => {}],
+    ['rail with a section', () => page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click()],
+    ['rail alone', () => page.getByRole('button', { name: 'Close section', exact: true }).click()]
+  ];
+  for (const mode of ['circular', 'linear']) for (const [display, show] of DISPLAYS) {
     await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+    await show();
     const order = await page.evaluate(() => {
       const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
       const stops = Array.from(document.querySelector('.settings-pane').querySelectorAll(
@@ -436,12 +475,39 @@ test('the Generate bar is the last settings Tab stop in both modes and stays fix
       const box = bar.getBoundingClientRect();
       return {
         last: stops.at(-1)?.getAttribute('aria-label') || '',
+        shown: visible(stops.at(-1)) && box.width > 0 && box.height > 0,
         position: getComputedStyle(bar).position,
         bottomGap: Math.round(innerHeight - box.bottom)
       };
     });
-    expect(order, mode).toEqual({ last: 'Generate Diagram', position: 'fixed', bottomGap: 32 });
+    expect(order, `${mode}, ${display}`).toEqual({ last: 'Generate Diagram', shown: true, position: 'fixed', bottomGap: 32 });
+    if (display === 'rail alone') await page.getByRole('button', { name: 'Expand settings', exact: true }).click();
   }
+});
+
+// The buttons the icon rail adds (its entries with short names, the two
+// switches, the close button, the compact Generate) pass the same name audits.
+test('the icon rail buttons have stable author-provided names', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  const problems = [];
+  const record = async (label) => {
+    const audit = await auditButtons(page);
+    problems.push(...audit.problems.map((problem) => `${label}: ${problem}`));
+    problems.push(...(await auditStateNames(page)).map((change) => `${label}: name changes with state: ${change}`));
+  };
+  await record('stacked');
+  await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
+  await record('rail with a section');
+  await page.getByRole('button', { name: 'Close section', exact: true }).click();
+  await record('rail alone');
+  expect(problems).toEqual([]);
+  // A rail entry shows a short name and is named for what it does.
+  const entries = page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button');
+  expect(await entries.evaluateAll((buttons) => buttons.every((button) => /^Go to \S/.test(button.getAttribute('aria-label'))
+    && button.textContent.trim() && !button.hasAttribute('title')))).toBe(true);
 });
 
 // UI-09: a control disabled for a reason the section does not show names it
@@ -482,7 +548,12 @@ const CHOICE_DIALOGS = [
   ['labelOnDialog', { reason: 'hidden', featureType: 'CDS' }, 'Feature Is Hidden'],
   ['featureStyleScopeDialog', { kind: 'fill' }, 'Color Change Scope'],
   ['legendRenameDialog', { mode: 'scope', oldCaption: 'CDS', newCaption: 'Coding', siblingCount: 1 }, 'Legend Name Scope'],
-  ['resetColorDialog', { siblingCount: 1, caption: 'CDS' }, 'Reset Fill Color']
+  ['resetColorDialog', { siblingCount: 1, caption: 'CDS' }, 'Reset Fill Color'],
+  // The app's prompt that replaced the native confirm() boxes.
+  ['choicePrompt', {
+    title: 'Add this color rule?', description: 'The pattern may be slow.',
+    actions: [{ id: 'add', label: 'Add rule', tone: 'primary' }], cancelLabel: 'Edit pattern'
+  }, 'Add this color rule?']
 ];
 
 // UI-02, UI-03, UI-04: each choice dialog is a named modal that takes focus,

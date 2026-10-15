@@ -2,6 +2,8 @@ import { sendBoundedJson } from '../services/bounded-json-transport.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
 import { DIAGRAM_HELPER_OPERATIONS } from '../services/diagram-worker-protocol.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { createWorkerFontRegistry } from './worker-font-registry.js';
 
 let runtimePromise = null;
 let runtime = null;
@@ -217,7 +219,14 @@ _json.dumps(_get_web_runtime_capabilities(), sort_keys=True)
   return JSON.parse(String(raw));
 };
 
+// The first-use preparation steps, reported as they start: a real step
+// count, not a time estimate.
+const RUNTIME_PREPARATION_STEPS = Object.freeze([
+  'loading Python', 'loading the package installer', 'checking packages', 'installing packages', 'starting gbdraw'
+]);
+
 const initializeRuntime = async ({
+  id = null,
   pyodideIndexUrl,
   pyodideModuleUrl,
   localWheelUrls = [],
@@ -232,23 +241,32 @@ const initializeRuntime = async ({
     throw new Error('Diagram generation worker requires the gbdraw wheel URL.');
   }
 
+  /** @param {number} index */
+  const reportStep = (index) => self.postMessage({
+    id, type: 'init-progress', step: index + 1, total: RUNTIME_PREPARATION_STEPS.length, label: RUNTIME_PREPARATION_STEPS[index]
+  });
   runtimePromise = (async () => {
+    reportStep(0);
     const { loadPyodide } = await import(pyodideModuleUrl);
     const pyodide = await loadPyodide({
       indexURL: pyodideIndexUrl,
       packageBaseUrl: pyodideIndexUrl
     });
+    reportStep(1);
     await pyodide.loadPackage('micropip');
     const micropip = pyodide.pyimport('micropip');
 
+    reportStep(2);
     await Promise.all(
       localWheelUrls.map((url, index) =>
         ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
       )
     );
     await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
+    reportStep(3);
     await micropip.install(localWheelUrls);
     await micropip.install(gbdrawWheelUrl);
+    reportStep(4);
     await pyodide.runPythonAsync(PYTHON_HELPERS);
 
     const capabilities = readRuntimeCapabilities(pyodide);
@@ -262,6 +280,18 @@ const initializeRuntime = async ({
     runtimePromise = null;
     throw error;
   }
+};
+
+// The fonts registered in this Worker's Python (workers/worker-font-registry.js).
+let fontRegistry = null;
+const fontRegistryFor = (pyodide) => {
+  if (!fontRegistry) {
+    fontRegistry = createWorkerFontRegistry({
+      fs: pyodide.FS,
+      registerInPython: (entries) => callJsonHelper(pyodide, 'register_web_fonts_json', [JSON.stringify(entries)])
+    });
+  }
+  return fontRegistry;
 };
 
 const HELPER_FILE_NAMES = Object.freeze({
@@ -548,10 +578,36 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       jsonArgument(payload.features, []), jsonArgument(payload.rules, []), String(payload.kind || 'color')
     ])
   },
-  [DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT]: {
-    keys: ['filename'],
+  // One row of the label fit dialog for a figure drawn with crossing leaders:
+  // Python searches it on the figure it kept (OD-F14); nothing here places labels.
+  [DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW]: {
+    keys: ['rowToken', 'kind'],
     fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(pyodide, 'read_pdf_font', [String(payload.filename || '')])
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'compute_label_fit_row_json', [
+      String(payload.rowToken || ''), String(payload.kind || '')
+    ])
+  },
+  [DIAGRAM_HELPER_OPERATIONS.REGISTER_FONTS]: {
+    keys: ['fonts'],
+    fileRoles: [],
+    run: (pyodide, payload) => fontRegistryFor(pyodide).register(payload.fonts)
+  },
+  // The fonts an export carries (custom fonts D-05, D-13): the embedded-font
+  // block of an SVG (`kind` svg or raster), and the TrueType faces of a PDF's
+  // text runs (fonts by file name).
+  [DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS]: {
+    keys: ['svg', 'kind'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'svg_font_embedding_json', [
+      String(payload.svg || ''), String(payload.kind || 'svg')
+    ])
+  },
+  [DIAGRAM_HELPER_OPERATIONS.PDF_FONTS]: {
+    keys: ['runs', 'known'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'pdf_fonts_json', [
+      jsonArgument(payload.runs, []), jsonArgument(payload.known, [])
+    ])
   },
   [DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES]: {
     keys: [
@@ -720,7 +776,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.collinearMaxConflictsInMergeGap ?? 1,
         payload.collinearMaxParalogLinksPerOrthogroup ?? 2,
         payload.collinearSearchScope ?? 'adjacent',
-        payload.orthogroupMembershipMode ?? 'anchor_core_v1',
+        payload.orthogroupMembershipMode ?? ORTHOGROUP_INFERENCE_VERSION,
         payload.orthogroupMemberMaxHits ?? null,
         payload.collinearMergeOrientation ?? 'either',
         payload.collinearInferOrthogroups ?? true,
@@ -858,6 +914,7 @@ const runGeneration = async ({
   request,
   resourceManifest,
   stagedResources,
+  fontIdentities = [],
   requestId,
   testLifecycleEnabled = false
 } = {}) => {
@@ -868,6 +925,11 @@ const runGeneration = async ({
     throw serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' });
   }
   const { pyodide } = runtime;
+  try {
+    fontRegistryFor(pyodide).requireRegistered(fontIdentities);
+  } catch (error) {
+    throw serializeError(error, { operation: 'generate', stage: 'request-validation' });
+  }
   const runWrapper = pyodide.globals.get('run_canonical_request_wrapper');
   const workspace = `/gbdraw-web-render-${Number(requestId) || 0}`;
   let result = null;
@@ -1134,11 +1196,16 @@ const handleWorkerMessage = async (data) => {
   try {
     if (type === 'init') {
       const initialized = await initializeRuntime(data);
+      // The replay of the page's fonts into a new Worker, font by font; the
+      // reply names each font it lost (OV-686), and a Generate that names one
+      // fails (FONT_NOT_LOADED).
+      const lostFonts = await fontRegistryFor(initialized.pyodide).replay(data.fonts);
       self.postMessage({
         id,
         type: 'init',
         ok: true,
-        capabilities: initialized.capabilities
+        capabilities: initialized.capabilities,
+        lostFonts
       });
       return;
     }

@@ -3,12 +3,30 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
 from svgwrite import Drawing
 
 from ..config.models import CircularRenderProfile
 from ..auto_sizes import determine_length_parameter
+
+
+@dataclass(frozen=True)
+class CircularCanvasGeometry:
+    """The canvas values the Circular group classes and radial plans read (design 2.1 rule 1).
+
+    It holds no position, no canvas size and no track ids (they follow the
+    GC, skew and depth switches; the preset context holds them), so a group
+    content keyed by it survives a change that only moves groups or toggles a
+    track. ``radius`` is the axis radius after the radial growth of the labels.
+    """
+
+    radius: float
+    track_ratio: float
+    dpi: int
+    length_param: str
+    track_ratio_factors: tuple[float, ...]
 
 
 class CircularCanvasConfigurator:
@@ -99,6 +117,16 @@ class CircularCanvasConfigurator:
     def resolve_overlaps(self) -> bool:
         return self._profile.resolve_overlaps
 
+    def geometry(self) -> CircularCanvasGeometry:
+        # The values as the configurator holds them: a type change would change the SVG text.
+        return CircularCanvasGeometry(
+            radius=self.radius,
+            track_ratio=self.track_ratio,
+            dpi=self.dpi,
+            length_param=self.length_param,
+            track_ratio_factors=tuple(self.track_ratio_factors),
+        )
+
     def calculate_dimensions(self) -> None:
         """
         Calculates the dimensions and offsets for the circular canvas based on the configuration.
@@ -151,4 +179,4 @@ class CircularCanvasConfigurator:
         if skew_track_id is not None:
             self.track_ids["skew_track"] = skew_track_id
 
-__all__ = ["CircularCanvasConfigurator"]
+__all__ = ["CircularCanvasConfigurator", "CircularCanvasGeometry"]

@@ -3,7 +3,7 @@
 
 from gbdraw.svg.elements import Circle, Group
 
-from ....canvas import CircularCanvasConfigurator
+from ....canvas import CircularCanvasGeometry
 from ....config.models import GbdrawConfig
 from ....svg.circular_tracks import draw_circle_path
 
@@ -16,14 +16,13 @@ class AxisGroup:
     def __init__(
         self,
         radius: float,
-        canvas_config: CircularCanvasConfigurator,
+        geometry: CircularCanvasGeometry,
         *,
         cfg: GbdrawConfig,
     ) -> None:
         self.radius: float = radius
         self.axis_group = Group(id="Axis")
-        self.canvas_config = canvas_config
-        self.length_param = self.canvas_config.length_param
+        self.length_param = geometry.length_param
         self.stroke_color = cfg.objects.axis.circular.stroke_color
         self.stroke_width = cfg.objects.axis.circular.stroke_width.for_length_param(self.length_param)
         self.add_elements_to_group()

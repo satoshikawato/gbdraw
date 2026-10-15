@@ -36,14 +36,23 @@ from Bio import SeqIO
 from pandas import DataFrame, read_csv
 
 from gbdraw.analysis.collinearity import (
+    COLLINEARITY_ANCHOR_MODE_SPELLINGS,
+    COLLINEARITY_ANCHOR_MODES,
+    COLLINEARITY_COLOR_MODE_SPELLINGS,
+    COLLINEARITY_COLOR_MODES,
+    COLLINEARITY_SEARCH_SCOPE_SPELLINGS,
+    COLLINEARITY_SEARCH_SCOPES,
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
     LosslessCollinearityParameters,
 )
+from gbdraw.analysis.collinearity_units import _COLLINEARITY_UNIT_MODES, COLLINEARITY_UNIT_MODE_SPELLINGS
 from gbdraw.analysis.conservation import _default_label as _default_conservation_label
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
 from gbdraw.analysis.protein_colinearity import (
+    ORTHOGROUP_MEMBERSHIP_MODE_SPELLINGS,
+    ORTHOGROUP_MEMBERSHIP_MODES,
     OrthogroupMember,
     OrthogroupNameCandidate,
     OrthogroupResult,
@@ -57,7 +66,11 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
-from gbdraw.features.placement import FeaturePlacementOverride
+from gbdraw.features.placement import (
+    _LANE_SIDES,
+    FeaturePlacementOverride,
+    FeaturePlacementTarget,
+)
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
@@ -71,8 +84,10 @@ from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
     _InternalCircularTrackSlot,
     _internal_circular_track_slot,
+    _normalize_renderer as _circular_renderer_name,
     parse_circular_track_slot,
 )
+from gbdraw.tracks.linear import _normalize_renderer as _linear_renderer_name
 from gbdraw.annotations import (
     AnnotationOptions,
     AnnotationSet,
@@ -86,6 +101,7 @@ from gbdraw.annotations import (
 )
 
 from .api.options import (
+    DEPTH_TRACK_POSITIVE_FIELDS,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     CircularOutputOptions,
@@ -100,6 +116,7 @@ from .api.options import (
     LOSATP_MODE_WIRE,
     LosatRuntimeOptions,
     LosatSearchOptions,
+    _invalid_input,
     losatp_analysis_mode,
 )
 from .comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
@@ -121,6 +138,7 @@ from .api.requests import (
     _with_legacy_similarity_alignment,
 )
 from .layout.similarity_alignment import (
+    SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
     AlignmentAnchorIdentity,
     AlignmentDecisionStatus,
     AlignmentRecordDecision,
@@ -444,6 +462,9 @@ _PROTEIN_SETTINGS_WIRE: tuple[tuple[str, str, str], ...] = (
         "collinear_max_paralog_links_per_orthogroup",
     ),
 )
+# From this schema a comparison mode setting holds one of its names; older
+# schemas hold any spelling the option's normalizer reads (OV-651).
+_SETTING_NAMES_SCHEMA = 9
 # Schemas 1-7 also stored the retired alignment target in the settings.
 _LEGACY_ALIGNMENT_SETTING = "alignOrthogroupFeature"
 _OPTIONAL_PROTEIN_SETTINGS = frozenset({"collinearInferOrthogroups"})
@@ -522,6 +543,14 @@ _DEPTH_COMPATIBILITY_FIELDS = frozenset(
     }
 )
 _ALL_DEPTH_INPUT_FIELDS = _DEPTH_COMPATIBILITY_FIELDS | {"depth_tracks"}
+# A comparison table path: encode_canonical_request refuses it (call
+# resolve_request first) and no request of any schema holds it (OV-324).
+# A request field of the wrong kind or name.
+_REQUEST_FIELDS_INVALID = _invalid_input("schema", "FIELDS")
+_TABLE_PATH_FIELDS = frozenset({"conservation_table_file", "comparison_table_file"})
+# Options that hold a name. Their constructors read null (and an empty array)
+# as the default; every writer wrote a name (OV-528, OV-596).
+_NAME_OPTIONS = frozenset({"conservation_reference", "pairwise_match_style"})
 
 _TYPED_TREE_CLASSES = {
     cls.__name__: cls
@@ -639,9 +668,9 @@ def _encode_canonical_request(
     if isinstance(request, CircularDiagramRequest):
         if request.output.resolve_prefix_from_first_record:
             unresolved_reasons.append("record-derived output prefix")
+    if isinstance(request, (CircularDiagramRequest, CircularBatchRequest)):
         if request.options.conservation_table_file is not None:
             unresolved_reasons.append("Circular comparison table")
-    if isinstance(request, (CircularDiagramRequest, CircularBatchRequest)):
         ring_search = request.options.losat_search
         if ring_search is not None:
             unresolved_reasons.append(f"{ring_search.program} ring search")
@@ -732,10 +761,17 @@ def decode_canonical_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
 ) -> DiagramRequest:
-    """Decode every supported canonical schema and normalize validation failures."""
+    """Decode every supported canonical schema and normalize validation failures.
+
+    A current-schema request must also match its description
+    (:func:`describe_canonical_request`): it is checked before the typed
+    constructors convert any value, and refused after the decoder's own
+    checks, whose messages are more specific.
+    """
 
     try:
-        return _decode_canonical_request(
+        problems = _undescribed_parts(payload)
+        request = _decode_canonical_request(
             payload,
             resource_paths=resource_paths,
             output_directory=output_directory,
@@ -746,6 +782,13 @@ def decode_canonical_request(
         raise CanonicalRequestDecodingError(
             f"Canonical request could not be converted: {exc}"
         ) from exc
+    if problems:
+        shown = "; ".join(problems[:5]) + (f"; and {len(problems) - 5} more" if len(problems) > 5 else "")
+        raise CanonicalRequestDecodingError(
+            f"The schema {CANONICAL_REQUEST_SCHEMA} request does not match its description: {shown}.",
+            diagnostic=_REQUEST_FIELDS_INVALID,
+        )
+    return request
 
 
 def _decode_canonical_request(
@@ -1187,24 +1230,28 @@ def _encode_record(
     else:  # pragma: no cover - RecordInput validates its source union.
         raise CanonicalRequestEncodingError(f"Unsupported record source at index {index}.")
 
-    presentation = record.presentation
     return {
         "recordKey": record.record_key or f"record-{index}",
         "cardinality": record.cardinality.value,
-        "display": {
-            "isCircular": record.display.is_circular,
-            "startCoordinate": record.display.start_coordinate,
-        },
+        "display": _encode_record_display(record.display),
         "source": source_payload,
         "selector": _encode_selector(selector),
         "region": _encode_region(record.region),
-        "presentation": {
-            "label": presentation.label,
-            "subtitle": presentation.subtitle,
-            "reverseComplement": presentation.reverse_complement,
-            "gridRow": presentation.grid_row,
-            "gridColumn": presentation.grid_column,
-        },
+        "presentation": _encode_record_presentation(record.presentation),
+    }
+
+
+def _encode_record_display(display: RecordDisplayOptions) -> dict[str, Any]:
+    return {"isCircular": display.is_circular, "startCoordinate": display.start_coordinate}
+
+
+def _encode_record_presentation(presentation: RecordPresentation) -> dict[str, Any]:
+    return {
+        "label": presentation.label,
+        "subtitle": presentation.subtitle,
+        "reverseComplement": presentation.reverse_complement,
+        "gridRow": presentation.grid_row,
+        "gridColumn": presentation.grid_column,
     }
 
 
@@ -1825,13 +1872,15 @@ def _decode_diagram_options(
         if item.name not in _COMPARISON_FIELDS
         and item.name not in _PLACEMENT_INPUT_FIELDS
         and item.name not in _RING_SEARCH_FIELDS
+        and item.name not in _TABLE_PATH_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
         raise CanonicalRequestDecodingError(
             "Unknown field(s) at renderRequest.diagramOptions: "
             + ", ".join(sorted(unknown))
-            + "."
+            + ".",
+            diagnostic=_REQUEST_FIELDS_INVALID,
         )
     decoded = {
         known[key]: _decode_option_value(
@@ -2782,6 +2831,8 @@ def _decode_option_value(
         return _decode_resource_matrix(
             value, name=name, table=False, resource_paths=resource_paths
         )
+    if name in _NAME_OPTIONS:
+        return _string(value, f"renderRequest.diagramOptions.{_option_wire_key(name)}")
     return value
 
 
@@ -3125,14 +3176,14 @@ def _decode_annotation_style(value: object, *, path: str) -> RegionAnnotationSty
             path=f"{path}.hatch",
             required={"angle", "spacing", "color", "width", "cross"},
         )
-        hatch = HatchStyle(**raw_hatch)
+        hatch = HatchStyle(**{**raw_hatch, "cross": _boolean(raw_hatch["cross"], f"{path}.hatch.cross")})
     dasharray = _array(payload["strokeDasharray"], path=f"{path}.strokeDasharray")
     return RegionAnnotationStyle(
         stroke=payload["stroke"],
         stroke_width=payload["strokeWidth"],
         stroke_dasharray=tuple(dasharray),
         line_cap=payload["lineCap"],
-        fill=payload["fill"],
+        fill=_optional_string(payload["fill"], f"{path}.fill"),
         fill_opacity=payload["fillOpacity"],
         hatch=hatch,
         label_color=payload["labelColor"],
@@ -3159,7 +3210,8 @@ def _encode_annotations(value: object, *, resources: RequestResources) -> dict[s
                     "start": target.start,
                     "end": target.end,
                     "coordinateSpace": target.coordinate_space,
-                    "wrapsOrigin": target.wraps_origin,
+                    # CoordinateSpan reads wraps_origin by truth (OV-632).
+                    "wrapsOrigin": bool(target.wraps_origin),
                     "outOfBounds": target.out_of_bounds,
                 }
             elif isinstance(target, FeatureSpan):
@@ -3256,7 +3308,7 @@ def _decode_annotations(
                     start=target_payload["start"],
                     end=target_payload["end"],
                     coordinate_space=target_payload["coordinateSpace"],
-                    wraps_origin=target_payload["wrapsOrigin"],
+                    wraps_origin=_boolean(target_payload["wrapsOrigin"], f"{item_path}.target.wrapsOrigin"),
                     out_of_bounds=target_payload["outOfBounds"],
                 )
             elif kind == "featureSpan":
@@ -3267,7 +3319,7 @@ def _decode_annotations(
                 )
                 raw_selectors = _array(target_payload["selectors"], path=f"{item_path}.target.selectors")
                 selectors = tuple(
-                    FeatureSelector(**_object(raw, path=f"{item_path}.target.selectors[{index}]", required={"key", "value"}))
+                    _decode_feature_selector(raw, path=f"{item_path}.target.selectors[{index}]")
                     for index, raw in enumerate(raw_selectors)
                 )
                 target = FeatureSpan(
@@ -3291,20 +3343,22 @@ def _decode_annotations(
             else:
                 raise CanonicalRequestDecodingError(f"Unsupported annotation target kind at {item_path}: {kind!r}.")
             metadata = _object(item["metadata"], path=f"{item_path}.metadata")
+            # A Web writer wrote a fraction at lane (OV-630): the model reads its integer part.
             annotations.append(
                 RegionAnnotation(
-                    id=item["id"], target=target, label=item["label"], mark=item["mark"],
+                    id=_string(item["id"], f"{item_path}.id"), target=target,
+                    label=_string(item["label"], f"{item_path}.label"), mark=item["mark"],
                     lane=item["lane"],
                     style=(_decode_annotation_style(item["style"], path=f"{item_path}.style") if item["style"] is not None else None),
-                    legend_label=item["legendLabel"], metadata=metadata,
+                    legend_label=_optional_string(item["legendLabel"], f"{item_path}.legendLabel"), metadata=metadata,
                 )
             )
         sets.append(
             AnnotationSet(
-                id=set_payload["id"],
+                id=_string(set_payload["id"], f"{set_path}.id"),
                 annotations=tuple(annotations),
                 default_style=_decode_annotation_style(set_payload["defaultStyle"], path=f"{set_path}.defaultStyle"),
-                legend_label=set_payload["legendLabel"],
+                legend_label=_optional_string(set_payload["legendLabel"], f"{set_path}.legendLabel"),
             )
         )
     table = (
@@ -3321,6 +3375,14 @@ def _decode_annotations(
         if payload["tableFile"] is not None else None
     )
     return AnnotationOptions(sets=tuple(sets), table=table, table_file=table_file)
+
+
+def _decode_feature_selector(value: object, *, path: str) -> FeatureSelector:
+    selector = _object(value, path=path, required={"key", "value"})
+    return FeatureSelector(
+        key=_optional_string(selector["key"], f"{path}.key"),
+        value=_string(selector["value"], f"{path}.value"),
+    )
 
 
 def _encode_track_slots(value: object) -> list[Any] | None:
@@ -3357,8 +3419,16 @@ def _encode_track_slot(
         if isinstance(slot, CircularTrackSlot)
         else fields(LinearTrackSlot)
     )
+    # The names the track planner reads a renderer and a side as (OV-653).
+    renderer_name = (
+        _circular_renderer_name if isinstance(slot, CircularTrackSlot) else _linear_renderer_name
+    )
+    names = {
+        "renderer": renderer_name(str(slot.renderer)),
+        "side": None if slot.side is None else str(slot.side).strip().lower(),
+    }
     for item in slot_fields:
-        raw = getattr(slot, item.name)
+        raw = names[item.name] if item.name in names else getattr(slot, item.name)
         if isinstance(raw, ScalarSpec):
             raw = {"value": raw.value, "unit": raw.unit}
         elif item.name == "params" and isinstance(raw, MappingABC):
@@ -3894,8 +3964,15 @@ def _decode_comparisons(
                         f"Could not decode {path}: {exc}",
                         diagnostic=cause and {**cause, "queryRecordIndex": query_index, "subjectRecordIndex": subject_index},
                     ) from exc
+                from gbdraw.api.prepared import register_prepared_resource_value
+
                 explicit_comparisons.append(
-                    LinearComparison(query_index, subject_index, table, search_frame_text=text)
+                    LinearComparison(
+                        query_index,
+                        subject_index,
+                        register_prepared_resource_value(table, resource_path),
+                        search_frame_text=text,
+                    )
                 )
             else:
                 blast_files.append(str(resource_path))
@@ -4023,7 +4100,7 @@ def _decode_pipeline(
         required=setting_keys - _OPTIONAL_PROTEIN_SETTINGS,
         optional=set(_OPTIONAL_PROTEIN_SETTINGS),
     )
-    mode = normalize_protein_blastp_mode(item["mode"])
+    mode = normalize_protein_blastp_mode(_string(item["mode"], f"{path}.mode"))
     result: dict[str, Any] = {}
     search_values: dict[str, Any] = {}
     runtime_values: dict[str, Any] = {}
@@ -4056,7 +4133,7 @@ def _decode_pipeline(
     if schema < 8:
         owned_settings.append((_LEGACY_ALIGNMENT_SETTING, "legacy", "align_orthogroup_feature"))
     for key, owner, name in owned_settings:
-        raw = settings.get(key, True) if name == "collinear_infer_orthogroups" else settings[key]
+        raw = settings[key] if key in settings else _absent_protein_setting(key)
         if owner == "search":
             search_values[name] = raw
             continue
@@ -4075,6 +4152,12 @@ def _decode_pipeline(
                 source_schema=schema,
             )
             continue
+        names = _setting_names(name)
+        if names and schema >= _SETTING_NAMES_SCHEMA and raw not in names:
+            raise CanonicalRequestDecodingError(
+                f"{path}.settings.{key} must be one of: {', '.join(names)}.",
+                diagnostic=_REQUEST_FIELDS_INVALID,
+            )
         if name == "collinearity_params":
             decoded, legacy_max_paralog_links = _decode_collinearity_params(
                 raw,
@@ -4101,6 +4184,24 @@ def _decode_pipeline(
             legacy_max_paralog_links
         )
     return result
+
+
+def _absent_protein_setting(key: str) -> object:
+    """The value of an optional protein setting (``_OPTIONAL_PROTEIN_SETTINGS``) that a request does not hold."""
+
+    name = next(name for wire, _owner, name in _PROTEIN_SETTINGS_WIRE if wire == key)
+    return getattr(_DEFAULT_LINEAR_OPTIONS, name)
+
+
+def _setting_names(name: str) -> tuple[str, ...]:
+    """The names a LinearDiagramOptions setting stores: the Literal part of its type."""
+
+    return tuple(
+        value
+        for branch in get_args(_class_type_hints(LinearDiagramOptions)[name]) or ()
+        if get_origin(branch) is Literal
+        for value in get_args(branch)
+    )
 
 
 def _decode_collinearity_params(
@@ -4792,13 +4893,19 @@ def _non_negative_index(value: object, path: str) -> int:
 
 def _boolean(value: object, path: str) -> bool:
     if not isinstance(value, bool):
-        raise CanonicalRequestDecodingError(f"{path} must be a boolean.")
+        raise CanonicalRequestDecodingError(f"{path} must be a boolean.", diagnostic=_REQUEST_FIELDS_INVALID)
+    return value
+
+
+def _string(value: object, path: str) -> str:
+    if not isinstance(value, str):
+        raise CanonicalRequestDecodingError(f"{path} must be a string.", diagnostic=_REQUEST_FIELDS_INVALID)
     return value
 
 
 def _optional_string(value: object, path: str) -> str | None:
     if value is not None and not isinstance(value, str):
-        raise CanonicalRequestDecodingError(f"{path} must be a string or null.")
+        raise CanonicalRequestDecodingError(f"{path} must be a string or null.", diagnostic=_REQUEST_FIELDS_INVALID)
     return value
 
 
@@ -4816,6 +4923,448 @@ def _check_singleton_kind(kind: str, seen: set[str], *, path: str) -> None:
     seen.add(kind)
 
 
+@lru_cache(maxsize=1)
+def _current_request_description() -> dict[str, Any]:
+    return describe_canonical_request()
+
+
+def _undescribed_parts(payload: object) -> list[str]:
+    """Where a current-schema request leaves its description (BA-D09); older
+    schemas are not described."""
+
+    from .contract_shapes import ref, violations
+
+    schema = payload.get("schema") if isinstance(payload, MappingABC) else None
+    if type(schema) is not int or schema != CANONICAL_REQUEST_SCHEMA:
+        return []
+    description = _current_request_description()
+    return violations(payload, ref(description["root"]), description["types"], "renderRequest")
+
+
+def describe_canonical_request() -> dict[str, Any]:
+    """Describe the JSON of a current-schema request as neutral data.
+
+    Returns ``{"root": name, "types": {name: shape}}`` with the shapes of
+    :mod:`gbdraw.contract_shapes`. Each object comes from the dataclass whose
+    fields the encoder writes, and from the tables the encoder and the decoder
+    route option fields with; an object with no dataclass names its encoder.
+    Old schemas are not described.
+    """
+
+    from .contract_shapes import (
+        INTEGER, NULL, NUMBER, STRING, UNKNOWN, Shape,
+        array, bounded, literal, non_null, nullable, obj, record, ref, shape_of_hint, shape_violations, tuple_of,
+        union,
+    )
+    from .mode_profiles import DINUCLEOTIDE_PATTERN
+    from .annotations.models import BLANK_TEXT_PATTERN, COLOR_NAME_TEXT_PATTERN, HEX_COLOR_TEXT_PATTERN
+    from .session_resources import SessionResourceTable
+
+    types_: dict[str, Shape] = {}
+
+    def named(name: str, shape: Shape) -> Shape:
+        types_[f"Canonical{name}"] = shape
+        return ref(f"Canonical{name}")
+
+    def kinds(name: str, suffix: str, variants: Mapping[str, Mapping[str, Shape]]) -> Shape:
+        """An object tagged by ``kind``; each variant is named ``<Kind><suffix>``."""
+
+        return named(name, union(*(
+            named(
+                kind[0].upper() + kind[1:] + ("" if kind.endswith(suffix) else suffix),
+                obj({"kind": literal(kind), **variant}),
+            )
+            for kind, variant in variants.items()
+        )))
+
+    # _table_ref and _file_ref.
+    table_ref = named("TableRef", obj({"resourceId": STRING, "representation": literal("canonicalTsv")}))
+    file_ref = named("FileRef", obj({"resourceId": STRING, "representation": literal("file")}))
+    # _encode_selector.
+    selector = kinds("RecordSelector", "Selector", {
+        "recordId": {"value": STRING},
+        "recordIndex": {"index": INTEGER},
+    })
+
+    # The shape of a class the encoder writes its own way, by class.
+    wire: dict[object, Shape] = {
+        DataFrame: table_ref,
+        RecordSelector: selector,
+        # asdict(GbdrawConfig) or a caller's mapping; the decoder migrates it.
+        GbdrawConfig: record(UNKNOWN),
+    }
+
+    def of(hint: object) -> Shape:
+        return shape_of_hint(hint, wire.get)
+
+    def resource(hint: object) -> Shape:
+        """A path or a table that the encoder writes as a resource reference."""
+
+        return shape_of_hint(hint, lambda item: file_ref if item in {str, Path} else wire.get(item))
+
+    def data(
+        cls: type,
+        name: str | None = None,
+        *,
+        files: frozenset[str] = frozenset(),
+        replace: Mapping[str, Shape] | None = None,
+        extra: Mapping[str, Shape] | None = None,
+        kind: str | None = None,
+        defaults: Mapping[str, object] | None = None,
+    ) -> Shape:
+        """The object the encoder writes for a dataclass: one camelCase key per field.
+
+        ``files`` are the fields written as resource references, ``replace``
+        the fields the encoder writes its own way, ``extra`` the keys it adds,
+        ``kind`` the tag it adds, and ``defaults`` the values a repair of a
+        stored request puts at a field (the encoder's form of the default).
+        """
+
+        hints = _class_type_hints(cls)
+        members: dict[str, Shape] = {"kind": literal(kind)} if kind is not None else {}
+        for item in fields(cls):
+            members[_camel(item.name)] = (replace or {}).get(item.name) or (
+                resource if item.name in files else of
+            )(hints[item.name])
+        wire[cls] = named(name or cls.__name__, obj({**members, **(extra or {})}, defaults=defaults))
+        return wire[cls]
+
+    # _encode_record: RecordInput; _SOURCE_FILE_RESOURCES names each source's resources.
+    source = kinds("RecordSource", "RecordSource", {
+        _camel(kind): {field: STRING for _resource_kind, field in resource_fields}
+        for kind, resource_fields in _SOURCE_FILE_RESOURCES.items()
+    })
+    # The value domains the owners check beyond the kind: a field's bounds sit
+    # beside the class it belongs to, each named with its owner's check.
+    def bound(cls: type, name: str, **bounds: object) -> Shape:
+        return bounded(of(_class_type_hints(cls)[name]), **bounds)
+
+    # RecordDisplayOptions.__post_init__: a positive integer.
+    data(RecordDisplayOptions, replace={"start_coordinate": bound(RecordDisplayOptions, "start_coordinate", minimum=1)})
+    # _encode_record: every presentation value is the writer's default when unset.
+    data(RecordPresentation, defaults={
+        _camel(item.name): getattr(RecordPresentation(), item.name) for item in fields(RecordPresentation)
+    })
+    region_hints = _class_type_hints(RegionSpec)
+    region = named("RecordRegion", obj({  # _encode_region
+        "selector": nullable(selector),
+        "start": of(region_hints["start"]),
+        "end": of(region_hints["end"]),
+        "reverseComplement": of(region_hints["reverse_complement"]),
+    }))
+    # A request has a record (validate_render_request); RecordInput.__post_init__
+    # refuses a blank record key.
+    records = bounded(array(data(RecordInput, "Record", replace={
+        "source": source,
+        "region": nullable(region),
+        "record_key": bounded(STRING, pattern=r"\S"),  # written as given or as record-<n>
+    }, defaults={
+        "display": _encode_record_display(RecordDisplayOptions()),
+        "presentation": _encode_record_presentation(RecordPresentation()),
+        "cardinality": RecordInput.__dataclass_fields__["cardinality"].default.value,
+    })), minItems=1)
+
+    # _encode_output: output_directory is the caller's, overwrite is read and ignored.
+    output_hints = _class_type_hints(RenderOutputRequest)
+    output = named("RequestOutput", obj({
+        "prefix": of(output_hints["output_prefix"]),
+        "formats": bounded(array(STRING), minItems=1),  # RenderOutputRequest.__post_init__
+        "overwrite": of(output_hints["overwrite"]),
+        "interactiveMetadataPolicy": of(output_hints["interactive_metadata_policy"]),
+    }))
+
+    # _encode_layout: an empty object when the request has no layout.
+    empty = named("EmptyLayout", obj({}))
+    data(AlignmentAnchorIdentity)
+    data(AlignmentRecordDecision)
+    # SimilarityAlignmentPlan.__post_init__ refuses every other schema.
+    data(SimilarityAlignmentPlan, replace={
+        "schema": literal(SIMILARITY_ALIGNMENT_PLAN_SCHEMA),
+        "records": bound(SimilarityAlignmentPlan, "records", minItems=1),
+    })
+    data(LinearRecordTranslation)
+    layouts = {
+        # CircularMultiRecordOptions.__post_init__: a radius ratio in (0, 1], gaps >= 0.
+        "circular": union(empty, data(CircularMultiRecordOptions, "CircularLayout", replace={
+            "multi_record_min_radius_ratio": bound(
+                CircularMultiRecordOptions, "multi_record_min_radius_ratio", exclusiveMinimum=0, maximum=1
+            ),
+            "multi_record_column_gap_ratio": bound(CircularMultiRecordOptions, "multi_record_column_gap_ratio", minimum=0),
+            "multi_record_row_gap_ratio": bound(CircularMultiRecordOptions, "multi_record_row_gap_ratio", minimum=0),
+        }, defaults={
+            _camel(item.name): getattr(CircularMultiRecordOptions(), item.name)
+            for item in fields(CircularMultiRecordOptions) if item.name != "multi_record_positions"
+        })),
+        "linear": union(empty, data(LinearMultiRecordOptions, "LinearLayout", extra={
+            "similarityAlignment": nullable(wire[SimilarityAlignmentPlan]),
+        }, defaults={
+            "recordGapPx": LinearMultiRecordOptions().record_gap_px,
+            "recordTranslations": list(LinearMultiRecordOptions().record_translations),
+            "similarityAlignment": None,
+        })),
+    }
+
+    # _encode_diagram_options and _encode_option_value.
+    data(ColorOptions, files=frozenset({"color_table_file", "default_colors_file"}))
+    # annotations.models._color: a hex of 3 or 6 digits or a color name in any
+    # case, with outer spaces; an unset fill is null or a blank text.
+    color = named("AnnotationColor", union(
+        bounded(STRING, pattern=HEX_COLOR_TEXT_PATTERN), bounded(STRING, pattern=COLOR_NAME_TEXT_PATTERN),
+    ))
+    hatch_default, style_default = HatchStyle(), RegionAnnotationStyle()
+    data(HatchStyle, replace={"color": color}, defaults={"color": hatch_default.color})
+    data(RegionAnnotationStyle, replace={  # RegionAnnotationStyle.__post_init__
+        "fill_opacity": bound(RegionAnnotationStyle, "fill_opacity", minimum=0, maximum=1),
+        "stroke": color, "label_color": color,
+        "fill": union(color, bounded(STRING, pattern=BLANK_TEXT_PATTERN), NULL),
+    }, defaults={"stroke": style_default.stroke, "labelColor": style_default.label_color, "fill": style_default.fill})
+    data(FeatureSelector)
+    # A Web writer wrote a fraction at lane, start and end (OV-630, BA-OD74);
+    # the decoder reads its integer part.
+    # CoordinateSpan.__post_init__: 1-based.
+    data(CoordinateSpan, kind="coordinateSpan", replace={
+        "start": bounded(NUMBER, minimum=1), "end": bounded(NUMBER, minimum=1),
+    })
+    # FeatureSpan.__post_init__: at least one selector.
+    data(FeatureSpan, kind="featureSpan", replace={"selectors": bound(FeatureSpan, "selectors", minItems=1)})
+    data(FeatureIdentitySpan, kind="featureIdentity")
+    data(RegionAnnotation, replace={"lane": nullable(NUMBER)})
+    data(AnnotationSet)
+    data(AnnotationOptions, files=frozenset({"table_file"}))
+    scalar = data(ScalarSpec)
+    data(CircularTrackSlot, kind="circularTrackSlot")
+    # A Linear slot's height and spacing are pixels (gbdraw.tracks.linear._validate_px_scalar).
+    pixels = nullable(named("LinearScalarSpec", obj(
+        {**types_[scalar["name"]]["fields"], "unit": literal("px")}
+    )))
+    data(LinearTrackSlot, kind="linearTrackSlot", replace={"height": pixels, "spacing": pixels})
+    data(FeatureOverride)  # FeatureOverride.to_mapping
+    target_hints = _class_type_hints(FeaturePlacementTarget)
+    placement_hints = _class_type_hints(FeaturePlacementOverride)
+    modes: dict[Literal["circular", "linear"], tuple[type, type, type]] = {
+        "circular": (CircularDiagramOptions, CircularRequestTrackOptions, CircularOutputOptions),
+        "linear": (LinearDiagramOptions, LinearRequestTrackOptions, LinearOutputOptions),
+    }
+    option_files = (
+        _TABLE_FIELDS | _FILE_FIELDS | _TABLE_SEQUENCE_FIELDS | _FILE_SEQUENCE_FIELDS
+        | _OPTIONAL_FILE_SEQUENCE_FIELDS
+    )
+    # The decoder also reads the depth inputs of older writers (the writer
+    # stores every depth input as depthTracks).
+    unwritten = (
+        _COMPARISON_FIELDS | _PLACEMENT_INPUT_FIELDS | _RING_SEARCH_FIELDS | _DEPTH_COMPATIBILITY_FIELDS
+        | _TABLE_PATH_FIELDS
+    )
+
+    def option(name: str, hint: object, mode: Literal["circular", "linear"]) -> Shape:
+        """The hint's shape, without null where the option's decoder refuses null."""
+
+        shape = (resource if name in option_files else of)(hint)
+        try:
+            _decode_option_value(
+                name, None, mode=mode, schema=CANONICAL_REQUEST_SCHEMA, resource_paths={}
+            )
+        except CanonicalRequestDecodingError:
+            return non_null(shape)
+        return shape
+
+    diagram_options: dict[str, Shape] = {}
+    for mode, (options_class, track_class, output_class) in modes.items():
+        title = mode.capitalize()
+        # A depth track has a height only in a Linear diagram
+        # (CircularDiagramOptions.__post_init__).
+        # DepthTrackInput.__post_init__: at least one source, and positive numbers.
+        depth_hints = _class_type_hints(DepthTrackInput)
+        data(DepthTrackInput, f"{title}DepthTrack", files=frozenset({"source"}), replace={
+            "source": bounded(resource(depth_hints["source"]), minItems=1),
+            **{name: bounded(of(depth_hints[name]), exclusiveMinimum=0) for name in DEPTH_TRACK_POSITIVE_FIELDS},
+            **({"height": NULL} if mode == "circular" else {}),
+        })
+        # FeaturePlacementOverride.from_mapping: a lane has a level and a side
+        # of its mode (FeaturePlacementTarget.validate_mode), main neither.
+        wire[FeaturePlacementOverride] = named(f"{title}FeaturePlacement", obj({
+            "recordKey": of(placement_hints["record_key"]),
+            "biologicalFeatureId": of(placement_hints["biological_feature_id"]),
+            "placement": union(obj({"kind": literal("main")}), obj({
+                "kind": literal("lane"),
+                "side": literal(*_LANE_SIDES[mode]),
+                # FeaturePlacementTarget: level 1 only.
+                "level": bounded(non_null(of(target_hints["level"])), minimum=1, maximum=1),
+            })),
+        }))
+        # _encode_tracks writes the track fields of both modes, the other mode's as null.
+        # _validate_track_configuration: a Linear slot list holds a slot.
+        track_hints = _class_type_hints(track_class)
+        track_bounds: dict[str, dict[str, object]] = {"linear_track_slots": {"minItems": 1}}
+        wire[track_class] = named(f"{title}TrackOptions", obj({
+            _camel(item.name): (
+                bounded(of(track_hints[item.name]), **track_bounds[item.name])
+                if item.name in track_bounds else of(track_hints[item.name])
+            ) if owner is track_class else NULL
+            for _options, owner, _output in modes.values()
+            for item in fields(owner)
+        }))
+        data(output_class)
+        hints = _class_type_hints(options_class)
+        members: dict[str, Shape] = {
+            "featurePlacements": array(wire[FeaturePlacementOverride]),
+            "featureOverrides": array(wire[FeatureOverride]),
+        }
+        required = sorted(members)
+        # The diagram options' own checks: depth tracks hold a track, and a
+        # dinucleotide is two bases (validate_dinucleotide).
+        option_bounds: dict[str, dict[str, object]] = {
+            "depth_tracks": {"minItems": 1}, "dinucleotide": {"pattern": DINUCLEOTIDE_PATTERN},
+        }
+        for item in fields(options_class):
+            if item.name not in unwritten:
+                members[_option_wire_key(item.name)] = bounded(
+                    option(item.name, hints[item.name], mode), **option_bounds.get(item.name, {})
+                )
+        # A shared option of the other mode is accepted at its default only.
+        for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
+            members.setdefault(_option_wire_key(name), literal(default))
+        # The decoder leaves an absent option at the dataclass default; the
+        # default is written as the encoder writes it, and None is "unset".
+        defaults = _DEFAULT_CIRCULAR_OPTIONS if mode == "circular" else _DEFAULT_LINEAR_OPTIONS
+        diagram_options[mode] = named(f"{title}DiagramOptions", obj(
+            members, optional=sorted(set(members) - set(required)), defaults={
+                # _encode_diagram_options writes no row as the empty list.
+                **{name: [] for name in required},
+                **{
+                    _option_wire_key(item.name): _encode_option_value(
+                        item.name, getattr(defaults, item.name), resources=SessionResourceTable().request()
+                    )
+                    for item in fields(options_class)
+                    if item.name not in unwritten and getattr(defaults, item.name) is not None
+                },
+            },
+        ))
+
+    # _encode_comparisons; _PROTEIN_SETTINGS_WIRE names each setting's typed owner.
+    wire[LosslessCollinearityParameters] = named("CollinearityParameters", obj({
+        "kind": literal("lossless"),
+        "parameters": data(LosslessCollinearityParameters),
+    }))
+    setting_hints = {
+        "options": _class_type_hints(LinearDiagramOptions),
+        "search": _class_type_hints(LosatSearchOptions),
+        "runtime": _class_type_hints(LosatRuntimeOptions),
+    }
+    # LinearDiagramOptions.__post_init__ normalizes these settings, so the
+    # encoder writes one of the names their normalizers check. The decoder
+    # reads other spellings of a name as well (OV-651).
+    # The description names the other spellings they read, which a reader of a
+    # stored request reads as the name.
+    setting_names: dict[str, Shape] = {
+        "collinearity_unit_mode": literal(*_COLLINEARITY_UNIT_MODES, spellings=COLLINEARITY_UNIT_MODE_SPELLINGS),
+        "collinearity_anchor_mode": literal(
+            *COLLINEARITY_ANCHOR_MODES, spellings=COLLINEARITY_ANCHOR_MODE_SPELLINGS
+        ),
+        "collinearity_search_scope": literal(
+            *COLLINEARITY_SEARCH_SCOPES, spellings=COLLINEARITY_SEARCH_SCOPE_SPELLINGS
+        ),
+        "collinearity_color_mode": literal(*COLLINEARITY_COLOR_MODES, spellings=COLLINEARITY_COLOR_MODE_SPELLINGS),
+        "orthogroup_membership_mode": literal(
+            *ORTHOGROUP_MEMBERSHIP_MODES, spellings=ORTHOGROUP_MEMBERSHIP_MODE_SPELLINGS
+        ),
+    }
+    pair = {"queryRecordIndex": INTEGER, "subjectRecordIndex": INTEGER}
+    comparison = kinds("Comparison", "Comparison", {
+        "nucleotideBlast": {"resourceId": STRING, **pair},
+        "precomputedProteinComparison": {
+            "resourceId": STRING, "encoding": literal("canonicalTsv"), **pair,
+        },
+        "orthogroupResult": {"resourceId": STRING, "encoding": literal("canonicalJson")},
+        "collinearityResult": {
+            "resourceId": STRING,
+            "encoding": literal("canonicalJson"),
+            "valueKind": literal("result", "blocks"),
+        },
+        "generatedProteinComparison": {
+            "mode": literal(*LOSATP_MODE_WIRE.values()),
+            "pairs": array(obj(pair)),
+            "settings": named("ProteinComparisonSettings", obj(
+                {
+                    key: setting_names[name] if name in setting_names else of(setting_hints[owner][name])
+                    for key, owner, name in _PROTEIN_SETTINGS_WIRE
+                },
+                optional=sorted(_OPTIONAL_PROTEIN_SETTINGS),
+                defaults={key: _absent_protein_setting(key) for key in _OPTIONAL_PROTEIN_SETTINGS},
+            )),
+        },
+    })
+
+    # _encode_canonical_request and decode_canonical_request.
+    # A CircularDiagramRequest resolves its grouping; a CircularBatchRequest is "batch".
+    grouping = union(
+        non_null(of(_class_type_hints(CircularDiagramRequest)["grouping"])), literal("batch")
+    )
+    requests = []
+    for mode in modes:
+        top = {
+            "schema": literal(CANONICAL_REQUEST_SCHEMA),
+            "mode": literal(mode),
+            "grouping": grouping if mode == "circular" else literal("single"),
+            "records": records,
+            "diagramOptions": diagram_options[mode],
+            "layout": layouts[mode],
+            # A Circular request has no comparison item.
+            "comparisons": array(comparison) if mode == "linear" else tuple_of(),
+            # A Circular batch has one output per record.
+            "output": bounded(union(output, array(output)), minItems=1) if mode == "circular" else output,
+        }
+        if set(top) != _TOP_LEVEL_FIELDS_V5:
+            raise RuntimeError("The request description and _TOP_LEVEL_FIELDS_V5 differ.")
+        # What a repair of a stored request puts at a part it cannot read:
+        # what the encoder writes for the default options and output.
+        options_class = modes[mode][0]
+        requests.append(named(f"{mode.capitalize()}RenderRequest", obj(top, defaults={
+            "diagramOptions": _encode_diagram_options(
+                options_class(), record_count=1, resources=SessionResourceTable().request()
+            ),
+            "output": _encode_output(RenderOutputRequest()),
+        })))
+    named("RenderRequest", union(*requests))
+    # A required field that holds null takes null where its stored value
+    # cannot be read: the encoder writes null for an unset value (OV-777).
+    # Null is no empty form where another value decides whether it may be
+    # null: a decision's anchor and the anchor's identity
+    # (AlignmentRecordDecision.__post_init__; the plan finds its reference by
+    # the identity), a slot list an axis index names
+    # (_validate_track_configuration), and the edits of a feature override
+    # (FeatureOverride: at least one edit).
+    null_decided_elsewhere = {
+        "CanonicalAlignmentRecordDecision": {"anchor"},
+        "CanonicalAlignmentAnchorIdentity": {"sourceFeatureIndex", "stableFeatureSvgId"},
+        "CanonicalCircularTrackOptions": {"circularTrackSlots"},
+        "CanonicalLinearTrackOptions": {"linearTrackSlots"},
+        "CanonicalFeatureOverride": {"featureVisibility", "labelText", "labelVisibility"},
+    }
+    for name, shape in types_.items():
+        if shape["kind"] == "object":
+            nullable_fields = {
+                key: None
+                for key, field in shape["fields"].items()
+                if key not in shape["optional"] and key not in null_decided_elsewhere.get(name, set())
+                and field != UNKNOWN and not shape_violations(None, field, types_, key)
+            }
+            shape_defaults = {**nullable_fields, **shape.get("defaults", {})}
+            if shape_defaults:
+                shape["defaults"] = dict(sorted(shape_defaults.items()))
+    # Only a default that fits its field is described.
+    for shape in types_.values():
+        if shape["kind"] == "object" and "defaults" in shape:
+            shape["defaults"] = {
+                key: value
+                for key, value in shape["defaults"].items()
+                if not shape_violations(value, shape["fields"][key], types_, key)
+            }
+            if not shape["defaults"]:
+                del shape["defaults"]
+    return {"root": "CanonicalRenderRequest", "types": types_}
+
+
 __all__ = [
     "CANONICAL_REQUEST_SCHEMA",
     "SUPPORTED_CANONICAL_REQUEST_SCHEMAS",
@@ -4827,6 +5376,7 @@ __all__ = [
     "EncodedCanonicalRequest",
     "decode_canonical_typed_resource",
     "decode_canonical_request",
+    "describe_canonical_request",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
     "with_automatic_scale_interval",

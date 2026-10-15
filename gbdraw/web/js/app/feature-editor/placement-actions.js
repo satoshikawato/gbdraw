@@ -1,7 +1,8 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DiagramMode, DrawingState } from '../../state.js' */
 /** @import { FeaturePlacementDraftRow, FeaturePlacementTarget } from '../../services/feature-placement.js' */
 /** @import { ChangeTrackLayout, LayoutControl } from '../track-slot-edits.js' */
+/** @import { RecordKeyedFeature } from '../../services/feature-identity.js' */
 import {
   canonicalFeaturePlacements,
   featureIdentityKeyOf,
@@ -11,12 +12,33 @@ import { resolveCircularTrackFeaturePlacement } from '../../services/circular-tr
 import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../../services/linear-track-slot-model.js';
 import { validateCustomTrackPlan } from '../../services/track-slot-validation.js';
 
+/**
+ * A feature the placement control lists: a row of the Features list or a clicked feature.
+ * @typedef {Record<string, unknown>} PlacedFeature
+ */
+
+/**
+ * The inputs of a feature slot, as the draft of one drawing holds them.
+ * @typedef {{ mode: DiagramMode, form: DrawingState['form'], adv: DrawingState['adv'] }} PlacementDraft
+ */
+
+/**
+ * What `saveTrackLayout` keeps: the layout form fields and, per mode, the stack and a copy of each row.
+ * @typedef {object} SavedTrackLayout
+ * @property {Record<string, unknown>} form
+ * @property {{ mode: string, slots: unknown, enabled: unknown, axis: unknown, rows: [Record<string, unknown>, unknown][] }[]} stacks
+ */
+
 const SIDES = { circular: ['outward', 'inward'], linear: ['above', 'below'] };
 
 // The placement targets of a draft's feature slot: the one availability
 // predicate of the popup choices and of a layout change (R3, R10). It resolves
 // the draft through the same slot owner used by request projection; Result
 // geometry continues to describe the last successful Generate.
+/**
+ * @param {PlacementDraft} draft
+ * @returns {{ kind: string, side?: string, level?: number }[]} The main track and, when the slot splits, one lane per side.
+ */
 export const draftPlacementTargets = ({ mode, form, adv }) => {
   const trackType = mode === 'circular' ? form.track_type : form.linear_track_layout;
   const slot = adv[`${mode}_track_slots_enabled`]
@@ -36,20 +58,27 @@ export const draftPlacementTargets = ({ mode, form, adv }) => {
 // The draft inputs of draftPlacementTargets, saved and restored in place so
 // the stack rows keep their identity (R10).
 const LAYOUT_FORM_FIELDS = ['track_type', 'linear_track_layout', 'separate_strands'];
+/**
+ * @param {unknown} value
+ * @returns {unknown}
+ */
 const copy = (value) => (Array.isArray(value) ? value.map(copy) : value && typeof value === 'object'
   ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, copy(entry)])) : value);
-/** @param {Record<string, any>} draft The draft's `form` and `adv`. */
+/**
+ * @param {Record<string, any>} draft The draft's `form` and `adv`.
+ * @returns {SavedTrackLayout}
+ */
 export const saveTrackLayout = ({ form, adv }) => ({
   form: Object.fromEntries(LAYOUT_FORM_FIELDS.map((field) => [field, form[field]])),
   stacks: Object.keys(SIDES).map((mode) => {
     const slots = adv[`${mode}_track_slots`];
     return { mode, slots, enabled: adv[`${mode}_track_slots_enabled`], axis: adv[`${mode}_track_slots_axis_index`],
-      rows: (Array.isArray(slots) ? slots : []).map((slot) => [slot, copy(slot)]) };
+      rows: /** @type {[Record<string, unknown>, unknown][]} */ ((Array.isArray(slots) ? slots : []).map((slot) => [slot, copy(slot)])) };
   })
 });
 /**
  * @param {Record<string, any>} draft The draft's `form` and `adv`.
- * @param {Record<string, any>} saved The result of `saveTrackLayout`.
+ * @param {SavedTrackLayout} saved The result of `saveTrackLayout`.
  */
 export const restoreTrackLayout = ({ form, adv }, saved) => {
   Object.assign(form, saved.form);
@@ -69,7 +98,7 @@ export const restoreTrackLayout = ({ form, adv }, saved) => {
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {() => ({ mode?: string } | null)} getCommittedRequest The committed canonical request.
- * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {<T extends object>(value: T) => T} [reactive] Vue `reactive`
  * @property {() => Promise<any>} [nextTick] Vue `nextTick`
  */
@@ -81,18 +110,23 @@ export const createFeaturePlacementActions = ({
 }) => {
   /** @param {DrawingState} drawing */
   const draft = (drawing) => ({ mode: state.mode.value, form: drawing.form, adv: drawing.adv });
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {PlacedFeature[]} features
+   */
   const targetsFor = (drawing, features) => {
     const mode = state.mode.value;
     if (!features.length || getCommittedRequest()?.mode !== mode) return [];
+    /** @type {{ recordKeys: unknown[] }[]} */
     const items = state.featureCatalog.value?.items || [];
     if (!features.every((feature) => items.some((item) => item.recordKeys.includes(feature?.record_key)))) return [];
     return draftPlacementTargets(draft(drawing));
   };
+  /** @param {PlacedFeature[]} features */
   const choices = (features) => {
     const drawing = state.activeDrawing();
     const targets = targetsFor(drawing, features);
-    return ['auto', 'main', ...SIDES[state.mode.value]].map((value) => {
+    return ['auto', 'main', ...SIDES[/** @type {DiagramMode} */ (state.mode.value)]].map((value) => {
       const enabled = features.length > 0 && features.every((feature) => {
         if (!featureIdentityKeyOf(feature) || !isCurrentFeature(feature)) return false;
         if (value === 'auto') return true;
@@ -103,6 +137,10 @@ export const createFeaturePlacementActions = ({
       reason: enabled ? '' : 'Unavailable in the current draft feature slot.' };
     });
   };
+  /**
+   * @param {PlacedFeature[]} features
+   * @param {string} value
+   */
   const setPlacement = (features, value) => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
@@ -138,8 +176,9 @@ export const createFeaturePlacementActions = ({
   /** @type {{ control: LayoutControl | null, apply: () => any } | null} */
   let pendingLayout = null;
   /** @param {DrawingState} drawing */
-  const laneSides = (drawing) => draftPlacementTargets({ mode: state.mode.value, form: drawing.form, adv: drawing.adv })
-    .map((target) => target.side).filter(Boolean);
+  // `filter(Boolean)` drops the undefined side of the main target.
+  const laneSides = (drawing) => /** @type {string[]} */ (draftPlacementTargets({ mode: state.mode.value, form: drawing.form, adv: drawing.adv })
+    .map((target) => target.side).filter(Boolean));
   /**
    * @param {DrawingState} drawing
    * @param {string[]} before
@@ -151,6 +190,7 @@ export const createFeaturePlacementActions = ({
       return before.includes(placement?.side) && !after.includes(placement?.side);
     });
   };
+  /** @param {() => HTMLElement | null | undefined} find */
   const focusAfterRender = (find) => nextTick().then(() => find()?.focus?.());
   /**
    * The `ChangeTrackLayout` port of the track stack editors (app/track-slot-edits.js).
@@ -175,9 +215,11 @@ export const createFeaturePlacementActions = ({
     Object.assign(layoutChange, { open: true, count: lost.length, value,
       setting: control?.getAttribute?.('aria-label') || control?.labels?.[0]?.textContent.trim()
         || (control?.tagName === 'BUTTON' && control.textContent.trim()) || control?.title || 'This change' });
-    void focusAfterRender(() => globalThis.document?.querySelector('[data-placement-layout-primary]'));
+    // The primary choice of the layout dialog is a button.
+    void focusAfterRender(() => /** @type {HTMLElement | null | undefined} */ (globalThis.document?.querySelector('[data-placement-layout-primary]')));
     return false;
   };
+  /** @param {'reset' | 'cancel'} choice */
   const resolveLayoutChange = async (choice) => {
     const drawing = state.activeDrawing();
     const change = pendingLayout;
@@ -192,15 +234,20 @@ export const createFeaturePlacementActions = ({
     void focusAfterRender(() => change.control);
     return result;
   };
+  /**
+   * @param {Event} event A change of the select or checkbox that holds the setting.
+   * @param {string} field
+   */
   const changeLayoutSetting = (event, field) => {
     const drawing = state.activeDrawing();
-    const control = event.target;
+    // The listeners sit on a select or a checkbox.
+    const control = /** @type {LayoutControl & { value?: string }} */ (event.target);
     const value = control.type === 'checkbox' ? control.checked : control.value;
     return changeTrackLayout(() => { drawing.form[field] = value; }, control);
   };
 
   return { choices, setPlacement, layoutChange, resolveLayoutChange, changeLayoutSetting, changeTrackLayout,
-    valueFor: (feature) => {
+    valueFor: (/** @type {PlacedFeature} */ feature) => {
       const drawing = state.activeDrawing();
       // The control lists the shown mode's drawing's placements (R2).
       const target = drawing.featurePlacementOverrides[featureIdentityKeyOf(feature)]?.placement;

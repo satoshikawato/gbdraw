@@ -6,8 +6,12 @@ import {
   compositionUserDeltas
 } from './composition-actions.js';
 
+/** @import { CompositionBinding } from './composition-actions.js' */
+
+/** @param {string} side */
 const isHorizontalSide = (side) => side === 'top' || side === 'bottom';
 
+/** @param {Element | null | undefined} legendGroup @param {string} side */
 const setLegendVariant = (legendGroup, side) => {
   const horizontal = legendGroup?.querySelector?.('#legend_horizontal') || null;
   const vertical = legendGroup?.querySelector?.('#legend_vertical') || null;
@@ -50,6 +54,7 @@ export const createLegendRepositionActions = ({
     plotTitleAutoTransform,
     plotTitleUserOffset
   } = state;
+  /** @param {Element} svg @param {CompositionBinding} [binding] */
   const syncStateFromComposition = (svg, binding = bindCompositionMetadata(svg)) => {
     const { metadata } = binding;
     const deltas = compositionUserDeltas(svg);

@@ -274,6 +274,7 @@ tools/check-web-change-budget.mjs
 tools/web-architecture-detectors.mjs
 tools/web-architecture-evaluation.mjs
 tools/web-owner-graph-detectors.mjs
+tools/web-twin-detectors.mjs
 tools/web-change-source.mjs
 tools/web-promotion-context.mjs
 tools/check-promotion-readiness.mjs
@@ -343,6 +344,7 @@ tools/web-change-policy.json
 tools/web-design-rule-guards.json
 tools/web-owner-graph.json
 tools/web-owner-graph-detectors.mjs
+tools/web-twin-detectors.mjs
 gbdraw/web/CLAUDE.md
 docs/internal/WEB_CHANGE_POLICY.md
 tests/web/architecture-contracts.test.mjs
@@ -364,11 +366,53 @@ list in this policy.
 
 `gbdraw/web/CLAUDE.md` holds the numbered Web design rules (R1, R2, …). Each rule names the
 guard tests that enforce it, and some guards carry an allowlist or a baseline
-literal that the rule's text authorizes (a shrink-only count, a map of counts
-per module, a set of exempt exports, or a map of exempt writers per module).
-`tools/web-design-rule-guards.json` registers, per rule, the heading, the
-guard paths, and those literals (`path`, `symbol`, `kind`). The checker reads
-the registry from the trusted base.
+literal that the rule's text authorizes. `tools/web-design-rule-guards.json`
+(schema 2) registers, per rule, the heading, the guards, and those literals.
+The checker reads the registry from the trusted base.
+
+- A rule has an `id` and the `heading` of its text. A rule whose text is not
+  one of the numbered rules names its file in its own `rulesPath` and takes an
+  upper-case id: `TYPE-DEBT` is "Type checking" in
+  `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md`, and
+  `CW` is "Computation ownership" in `gbdraw/web/CLAUDE.md`.
+- A guard is `{ path, rootCause, job, retireWhen }`: the root-cause pattern it
+  exists to stop (below, or `new`), the job of `.github/workflows/test.yml`
+  that runs it, and the condition under which it is deleted (`never` for a
+  behavior test with no planned replacement).
+- A literal is `{ path, symbol, kind }`. The kinds are `count` (one number),
+  `count-map` (a number per key), `set` (exempt names), `writer-map` (exempt
+  writers per module, each with a category), `set-map` (names per path),
+  `json-entries` (the objects of a JSON array, by `id`), `json-ids` (the `id`
+  set of a JSON array: a new id is an expansion, a removed id a contraction,
+  and an edit of another field neither), and `py-count`, `py-count-map`, and
+  `py-set` for a module-level literal of a Python test.
+- A count is a ceiling. Its test asserts observed ≤ recorded, per key for a
+  map, and a key without an entry counts as 0. Lowering or removing an entry
+  is a contraction and is optional; the test names what may be lowered.
+  Raising an entry or adding a key is an expansion. The two R6 site counts
+  (`UNCLASSIFIED_THROW_BASELINE`, `UNPROVEN_BASELINE`) are one total each
+  (`count`, `py-count`), so a site that moves to another module with its code
+  changes nothing. The four maps keyed by module path
+  (`NO_IMPLICIT_ANY_BASELINE`, `EXPLICIT_ANY_BASELINE`,
+  `OUTSIDE_OWNER_BASELINE`, `TYPE_DEBT_BASELINE`) stay per module, so a new or
+  moved module starts at 0.
+
+Root-cause patterns (boundary audit of 2026-10-10):
+
+| Pattern | What recurs |
+|---|---|
+| `P1` | A live edit and Generate compute the same derived value twice. |
+| `P2` | A setting or an edit is not confined to its diagram mode. |
+| `P3` | A migration or a reader exists on one side only (JavaScript or Python). |
+| `P4` | JavaScript derives again what Python decided. |
+| `P5` | An identity is read from a displayed value (a caption, a swatch color). |
+| `P6` | The meaning of a failure is lost between Python and the Web. |
+| `P7` | State is written outside a transition, or depends on timing. |
+| `P8` | One surface writes a file that another surface reads differently. |
+| `P9` | An asynchronous or cached copy is read as the truth. |
+| `P10` | A guard has a blind spot of its own. |
+
+The Gate applies these rules:
 
 - A diff that changes `gbdraw/web/CLAUDE.md` or the registry and any
   production runtime path fails the Gate ("production runtime files and Web
@@ -378,16 +422,40 @@ the registry from the trusted base.
 - A diff that changes production runtime paths may contract a registered
   allowlist in the same guard test (remove an entry, lower a count) and passes;
   the report lists the contraction.
+- A test that holds a registered count literal (`count`, `count-map`,
+  `py-count`, `py-count-map`) counts with its own code, so beside production
+  runtime paths (for a `py-*` literal, also beside Python package files) it
+  changes only inside its registered literals, which stay readable, except
+  that a quoted path may follow a rename in the same diff; the counting code
+  those tests share (`COUNTING_CODE_PATHS` in
+  `tools/check-web-change-budget.mjs`) does not change beside production
+  runtime paths at all. Any other change, deletion included, fails the Gate
+  with `design-rule.count-scope` and goes to a pull request without
+  production code.
 - A diff that expands a registered allowlist, or leaves it unreadable, alongside
-  production runtime paths fails the Gate with `design-rule.co-change`. The
-  expansion goes to its own authority-only pull request, which is Review
-  REQUIRED ("registered design-rule allowlists expanded") and names the rule
-  and the reason for the new entry.
+  production runtime paths fails the Gate with `design-rule.co-change`. For a
+  `py-*` literal, a Python file of the package (`gbdraw/**/*.py` outside
+  `gbdraw/web/`) counts as production as well. The expansion goes to its own
+  authority-only pull request, which is Review REQUIRED ("registered
+  design-rule allowlists expanded") and names the rule and the reason for the
+  new entry. A new twin row in `tools/twins.json` (R9) cannot follow its twin,
+  because the twin guard fails a twin without a row, so it goes in first with
+  `"pending": true`, and the runtime pull request that adds the twin removes
+  `pending`.
 - A malformed registry fails closed and is Review REQUIRED.
 
 Adding a test case to a guard test is neither an expansion nor a contraction
-and is not restricted by this rule. A new allowlist or baseline literal in a
+and is not restricted by this rule, except in a count-literal test or the
+counting code: there a new case, a failing-first case included, goes in a
+pull request without production code. A new allowlist or baseline literal in a
 guard test is registered in the same authority-only pull request that adds it.
+
+`tests/web/architecture-contracts.test.mjs` checks the registry in both
+directions: every `tests/` path that `gbdraw/web/CLAUDE.md` names is
+registered, every registered path is named by its rule, every guard is
+selected by the job it declares, and every node test under `tests/web` is
+selected by a pull-request job. It reads the selection from the workflow's
+commands, `tests/ci/functional-shards.json`, and the pytest markers.
 
 ### Product Impact separation
 

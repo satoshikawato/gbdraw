@@ -1,5 +1,6 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { ShowNotice } from '../app-messages.js' */
+/** @import { DrawingState, DiagramMode } from '../../state.js' */
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
@@ -16,8 +17,34 @@ import { downloadTextFile } from '../../services/text-download.js';
 import { editorTableRef } from '../../services/file-imports.js';
 import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
 import { readFileText } from '../../services/file-content-cache.js';
+import { ownEntry } from '../../utils/own-entry.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
+
+/**
+ * A feature row of the displayed Result's catalog or of the extracted list.
+ * Python owns the fields (R7), so the editor reads them as `unknown`.
+ * @typedef {Record<string, unknown>} LabelFeature
+ */
+/**
+ * What the label code reads of a render request's `diagramOptions`.
+ * @typedef {{ configOverrides?: Readonly<Record<string, unknown>> | null, featureShapes?: Readonly<Record<string, unknown>> | null }} LabelDiagramOptions
+ */
+/** @typedef {{ x: number, y: number }} LabelPoint */
+/** @typedef {{ id: string, x: number, y: number, groupId: string }} FeatureCentroid */
+/** @typedef {{ all: FeatureCentroid[], byGroup: Map<string, FeatureCentroid[]> }} FeatureGeometry */
+/** @typedef {{ key: string, idx: number, text: string, sourceText: string, featureId: string, kind: string, draftText: string }} EditableLabelEntry */
+/**
+ * The popup's label fields as one Apply reads them.
+ * @typedef {{ text: string, sourceText: string, visibility: string, hasEditableLabel: boolean }} LabelPopupEdit
+ */
+/** @typedef {(options?: { forceReflow?: boolean }) => unknown} LabelApply */
+/** @typedef {{ textEl: SVGTextElement, referencePoint: LabelPoint, candidates: FeatureCentroid[], candidateById: Map<string, FeatureCentroid>, kind: string }} LabelMeta */
+/**
+ * The input a Label TSV change reads: a file input, or the object the retry
+ * passes in its place.
+ * @typedef {{ files: ArrayLike<File> | null, value: string }} LabelTableInput
+ */
 
 export const EXCLUDED_GROUP_SELECTOR = [
   '#legend',
@@ -43,6 +70,11 @@ const VISIBILITY_LABEL_SELECTOR = `${EDITABLE_LABEL_SELECTOR}, `
 
 // The locator of a feature whose label binding failed: its rendered ID, type,
 // and one-based span from the displayed feature catalog (R6).
+/**
+ * @param {unknown} featureId
+ * @param {(LabelFeature | null | undefined)[] | null | undefined} features
+ * @param {number} count
+ */
 const labelBindingLocator = (featureId, features, count) => {
   const key = normalizeKeyToken(featureId);
   const feature = (Array.isArray(features) ? features : [])
@@ -60,11 +92,17 @@ const labelBindingLocator = (featureId, features, count) => {
 // A required feature binds exactly one label, an optional one at most one.
 // A missing forced label is a setting the user can change (LABEL_NOT_DRAWN);
 // two labels for one feature repeat for the same inputs (RENDER_FAILED).
+/**
+ * @param {Iterable<Element> | null | undefined} labelElements
+ * @param {Iterable<unknown> | null | undefined} requiredFeatureIds
+ * @param {{ allowMissing?: boolean, features?: (LabelFeature | null | undefined)[] | null }} [options]
+ */
 export const requireUniqueEditableLabelBindings = (
   labelElements,
   requiredFeatureIds,
   { allowMissing = false, features = [] } = {}
 ) => {
+  /** @type {Map<string, string>} */
   const required = new Map();
   Array.from(requiredFeatureIds || []).forEach((featureId) => {
     const key = normalizeKeyToken(featureId);
@@ -77,6 +115,7 @@ export const requireUniqueEditableLabelBindings = (
     // `counts.has(key)` was just checked, so `get` returns a number.
     if (counts.has(key)) counts.set(key, /** @type {number} */ (counts.get(key)) + 1);
   });
+  /** @param {(count: number) => boolean} predicate */
   const failing = (predicate) => Array.from(counts).filter(([, count]) => predicate(count))
     .map(([key]) => required.get(key));
   const missing = allowMissing ? [] : failing((count) => count === 0);
@@ -92,7 +131,7 @@ export const requireUniqueEditableLabelBindings = (
 
 // Whether a label is drawn only when it fits inside its feature, which only
 // Python measures: a label edit then asks for the label rerender.
-/** @param {{ configOverrides?: Readonly<Record<string, unknown>> } | null | undefined} diagramOptions */
+/** @param {LabelDiagramOptions | null | undefined} diagramOptions */
 const labelsEmbeddedOnly = (diagramOptions) => diagramOptions?.configOverrides?.['labels.rendering'] === 'embedded_only';
 
 // A feature drawn as underlay has no label (gbdraw/features/factory.py), and
@@ -100,6 +139,10 @@ const labelsEmbeddedOnly = (diagramOptions) => diagramOptions?.configOverrides?.
 // inside its feature (gbdraw/labels/). Returns 'underlay', 'embedded_only', or
 // '' for a render request's diagram options. Generate and the label rerender
 // ask this of the features their own request draws.
+/**
+ * @param {LabelFeature | null | undefined} feature
+ * @param {LabelDiagramOptions | null | undefined} diagramOptions
+ */
 export const labelDrawingBlocker = (feature, diagramOptions) => {
   const featureType = String(feature?.type || '').trim();
   if (featureType && (
@@ -108,16 +151,34 @@ export const labelDrawingBlocker = (feature, diagramOptions) => {
   return labelsEmbeddedOnly(diagramOptions) ? 'embedded_only' : '';
 };
 // Why the diagram draws no label for a feature (`labelAbsenceReason`): the one
-// table of sentences the popup note and the Label Not Shown dialog both render.
+// table of reasons, as the sentence the Label Not Shown dialog renders and the
+// few words of the popup note. The reason is read as `string` (it is ''
+// when none applies), so a lookup is `undefined` for what the table lacks.
+/** @type {Readonly<Record<string, { sentence: string, cause: string } | undefined>>} */
 export const LABEL_ABSENCE_REASONS = Object.freeze({
-  hidden: ' The feature is hidden.',
-  underlay: ' Labels are not drawn for features drawn as "Underlay".',
-  scope_none: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
-  scope_first: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
-  scope_orthogroup_top: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
-  whitelist: ' A label whitelist is set, and labels are drawn only for the features it lists.',
-  blacklist: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
-  embedded_only: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'
+  hidden: { sentence: ' The feature is hidden.', cause: 'the feature is hidden' },
+  underlay: { sentence: ' Labels are not drawn for features drawn as "Underlay".', cause: 'drawn as Underlay' },
+  scope_none: {
+    sentence: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
+    cause: 'Show Labels = None'
+  },
+  scope_first: {
+    sentence: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
+    cause: 'Show Labels = First Record Only'
+  },
+  scope_orthogroup_top: {
+    sentence: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
+    cause: 'Show Labels = Top Similarity Group Record'
+  },
+  whitelist: { sentence: ' A label whitelist is set, and labels are drawn only for the features it lists.', cause: 'not in the label whitelist' },
+  blacklist: {
+    sentence: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
+    cause: 'matches the label blacklist'
+  },
+  embedded_only: {
+    sentence: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.',
+    cause: 'does not fit; Label Rendering = Embedded Only'
+  }
 });
 const LABEL_ABSENT_PREFIX = 'This feature has no label in the current Result.';
 // No reason found: the Show Labels scope and the label filters decide the rest.
@@ -127,6 +188,10 @@ const LABEL_ABSENCE_UNKNOWN = ' The current Show Labels and label filter setting
 // with Default label visibility unlabeled: '' or a LABEL_ABSENCE_REASONS key.
 // Python decides which feature a filter removes; a set filter is named as the
 // reason once no other reason applies.
+/**
+ * @param {LabelFeature | null | undefined} feature
+ * @param {LabelDiagramOptions | null | undefined} diagramOptions
+ */
 const labelScopeFilterReason = (feature, diagramOptions) => {
   const overrides = diagramOptions?.configOverrides || {};
   const scope = overrides['labels.circular.scope'] ?? overrides['labels.linear.scope'];
@@ -140,18 +205,28 @@ const labelScopeFilterReason = (feature, diagramOptions) => {
   return Array.isArray(blacklist) && blacklist.length > 0 ? 'blacklist' : '';
 };
 
+/** @param {string | null} value @param {number} [fallback] */
 const toNumber = (value, fallback = 0) => {
-  const parsed = Number.parseFloat(value);
+  const parsed = Number.parseFloat(String(value));
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+/** @param {unknown} value */
 const normalizeKeyToken = (value) => String(value ?? '').trim().toLowerCase();
+/** @param {unknown} name @param {string} [fallback] */
 const makeSafeFilename = (name, fallback = 'gbdraw') => {
   const cleaned = String(name || '')
     .replace(/[^\w.-]+/g, '_')
     .replace(/^_+|_+$/g, '');
   return cleaned || fallback;
 };
+/**
+ * @param {SVGSVGElement | null | undefined} svg
+ * @param {SVGGraphicsElement | null | undefined} element
+ * @param {number} x
+ * @param {number} y
+ * @returns {LabelPoint}
+ */
 const getSvgPoint = (svg, element, x, y) => {
   if (!svg || !element) return { x, y };
   const point = svg.createSVGPoint();
@@ -163,25 +238,37 @@ const getSvgPoint = (svg, element, x, y) => {
   return { x: transformed.x, y: transformed.y };
 };
 
+/**
+ * @param {LabelPoint | null | undefined} point
+ * @returns {point is LabelPoint}
+ */
 const isFinitePoint = (point) =>
-  Boolean(point) && Number.isFinite(point.x) && Number.isFinite(point.y);
+  !!point && Number.isFinite(point.x) && Number.isFinite(point.y);
 
+/** @param {Element | null | undefined} textPathEl */
 const getTextPathHref = (textPathEl) =>
   String(textPathEl?.getAttribute('href') || textPathEl?.getAttribute('xlink:href') || '').trim();
 
+/**
+ * @param {SVGSVGElement} svg
+ * @param {Element} textEl
+ * @returns {SVGPathElement | null}
+ */
 const resolveEmbeddedLabelPathElement = (svg, textEl) => {
   const textPathEl = textEl?.querySelector?.('textPath');
   if (!textPathEl || !svg) return null;
   const href = getTextPathHref(textPathEl);
   if (href.startsWith('#')) {
     const linkedEl = svg.getElementById(href.slice(1));
-    if (linkedEl?.tagName?.toLowerCase() === 'path') return linkedEl;
+    // The tag name `path` makes it an SVGPathElement.
+    if (linkedEl?.tagName?.toLowerCase() === 'path') return /** @type {SVGPathElement} */ (linkedEl);
   }
   const prev = textEl.previousElementSibling;
-  if (prev?.tagName?.toLowerCase() === 'path') return prev;
+  if (prev?.tagName?.toLowerCase() === 'path') return /** @type {SVGPathElement} */ (prev);
   return null;
 };
 
+/** @param {SVGSVGElement} svg @param {Element} textEl */
 const getEmbeddedLabelAnchor = (svg, textEl) => {
   const pathEl = resolveEmbeddedLabelPathElement(svg, textEl);
   if (!pathEl) return null;
@@ -202,6 +289,7 @@ const getEmbeddedLabelAnchor = (svg, textEl) => {
   }
 };
 
+/** @param {SVGSVGElement} svg @param {SVGGraphicsElement} element @returns {LabelPoint} */
 const getElementCenter = (svg, element) => {
   try {
     const bbox = element.getBBox();
@@ -210,18 +298,20 @@ const getElementCenter = (svg, element) => {
     if (element?.tagName?.toLowerCase() === 'text') {
       const anchor = getEmbeddedLabelAnchor(svg, element);
       // isFinitePoint is true only for a non-null point.
-      if (isFinitePoint(anchor)) return /** @type {{ x: number, y: number }} */ (anchor);
+      if (isFinitePoint(anchor)) return anchor;
     }
     return { x: 0, y: 0 };
   }
 };
 
+/** @param {Element} textEl */
 const getLabelText = (textEl) => {
   const textPath = textEl.querySelector('textPath');
   if (textPath) return textPath.textContent || '';
   return textEl.textContent || '';
 };
 
+/** @param {Element} textEl @param {unknown} value */
 const setLabelText = (textEl, value) => {
   const nextText = String(value ?? '');
   const textPath = textEl.querySelector('textPath');
@@ -232,8 +322,10 @@ const setLabelText = (textEl, value) => {
   textEl.textContent = nextText;
 };
 
+/** @param {Element} textEl */
 const hasExcludedAncestor = (textEl) => Boolean(textEl.closest(EXCLUDED_GROUP_SELECTOR));
 
+/** @param {Element} svg @param {SVGTextElement} textEl @returns {SVGLineElement | null} */
 const getPhasedCircularFeatureLine = (svg, textEl) => {
   const textGroup = textEl.closest('g[id="label_text"], g[id^="label_text_"]');
   if (!textGroup) return null;
@@ -247,9 +339,10 @@ const getPhasedCircularFeatureLine = (svg, textEl) => {
   return leaderLines[(2 * textIndex) + 1] || null;
 };
 
+/** @param {SVGSVGElement} svg @param {SVGTextElement} textEl */
 const getCircularFeatureAnchor = (svg, textEl) => {
   const inLabelsGroup = Boolean(textEl.closest('g[id="labels"], g[id^="labels_"]'));
-  /** @type {Element | null} */
+  /** @type {SVGGraphicsElement | null} */
   let featureLine = null;
   if (inLabelsGroup) {
     const prev = textEl.previousElementSibling;
@@ -257,7 +350,8 @@ const getCircularFeatureAnchor = (svg, textEl) => {
     const lines = [prev, prev2].filter(
       (candidate) => candidate && candidate.tagName && candidate.tagName.toLowerCase() === 'line'
     );
-    featureLine = lines[0] || null;
+    // The filter above keeps only `line` elements.
+    featureLine = /** @type {SVGLineElement | undefined} */ (lines[0]) || null;
   } else {
     featureLine = getPhasedCircularFeatureLine(svg, textEl);
   }
@@ -269,6 +363,7 @@ const getCircularFeatureAnchor = (svg, textEl) => {
   return getSvgPoint(svg, featureLine, x2, y2);
 };
 
+/** @param {SVGSVGElement} svg @param {SVGTextElement} textEl @param {DiagramMode} mode @returns {LabelPoint | null} */
 const getLabelReferencePoint = (svg, textEl, mode) => {
   if (mode === 'circular') {
     const circularAnchor = getCircularFeatureAnchor(svg, textEl);
@@ -280,15 +375,19 @@ const getLabelReferencePoint = (svg, textEl, mode) => {
   return isFinitePoint(center) ? center : null;
 };
 
+/** @param {SVGSVGElement} svg @param {DiagramMode} mode @returns {SVGTextElement[]} */
 const collectEditableLabelElements = (svg, mode) => {
+  /** @type {Set<SVGTextElement>} */
   const labels = new Set();
+  // Every selector below names `text` elements (`text > textPath` takes the
+  // parent), which are SVGTextElement.
 
   if (mode === 'circular') {
-    svg.querySelectorAll('g[id="labels"] text, g[id^="labels_"] text').forEach((textEl) => {
+    /** @type {NodeListOf<SVGTextElement>} */ (svg.querySelectorAll('g[id="labels"] text, g[id^="labels_"] text')).forEach((textEl) => {
       if (hasExcludedAncestor(textEl)) return;
       labels.add(textEl);
     });
-    svg.querySelectorAll('g[id="label_text"] text, g[id^="label_text_"] text').forEach((textEl) => {
+    /** @type {NodeListOf<SVGTextElement>} */ (svg.querySelectorAll('g[id="label_text"] text, g[id^="label_text_"] text')).forEach((textEl) => {
       if (hasExcludedAncestor(textEl)) return;
       labels.add(textEl);
     });
@@ -296,10 +395,12 @@ const collectEditableLabelElements = (svg, mode) => {
       const parentText = textPathEl.parentElement;
       if (!parentText) return;
       if (hasExcludedAncestor(parentText)) return;
-      labels.add(parentText);
+      // The selector `text > textPath` makes the parent a `text` element; the
+      // DOM typing of `parentElement` is HTMLElement.
+      labels.add(/** @type {SVGTextElement} */ (/** @type {unknown} */ (parentText)));
     });
   } else {
-    svg.querySelectorAll('text[dominant-baseline="central"]').forEach((textEl) => {
+    /** @type {NodeListOf<SVGTextElement>} */ (svg.querySelectorAll('text[dominant-baseline="central"]')).forEach((textEl) => {
       if (hasExcludedAncestor(textEl)) return;
       labels.add(textEl);
     });
@@ -313,9 +414,12 @@ const collectEditableLabelElements = (svg, mode) => {
   });
 };
 
+/** @param {SVGSVGElement} svg @returns {FeatureGeometry} */
 const collectFeatureGeometry = (svg) => {
+  /** @type {Map<string, { id: string, x: number, y: number, n: number, groupId: string }>} */
   const grouped = new Map();
-  svg.querySelectorAll(FEATURE_SELECTOR).forEach((el) => {
+  // FEATURE_SELECTOR names path, polygon, and rect elements, which are SVGGraphicsElement.
+  /** @type {NodeListOf<SVGGraphicsElement>} */ (svg.querySelectorAll(FEATURE_SELECTOR)).forEach((el) => {
     const id = getFeatureIdentity(el);
     if (!id) return;
     const center = getElementCenter(svg, el);
@@ -323,13 +427,16 @@ const collectFeatureGeometry = (svg) => {
     if (!grouped.has(id)) {
       grouped.set(id, { id, x: 0, y: 0, n: 0, groupId });
     }
-    const item = grouped.get(id);
+    // Set just above when absent.
+    const item = /** @type {{ id: string, x: number, y: number, n: number, groupId: string }} */ (grouped.get(id));
     item.x += center.x;
     item.y += center.y;
     item.n += 1;
   });
 
+  /** @type {FeatureCentroid[]} */
   const all = [];
+  /** @type {Map<string, FeatureCentroid[]>} */
   const byGroup = new Map();
   grouped.forEach((item) => {
     if (item.n <= 0) return;
@@ -343,12 +450,14 @@ const collectFeatureGeometry = (svg) => {
     if (!byGroup.has(centroid.groupId)) {
       byGroup.set(centroid.groupId, []);
     }
-    byGroup.get(centroid.groupId).push(centroid);
+    // Set just above when absent.
+    /** @type {FeatureCentroid[]} */ (byGroup.get(centroid.groupId)).push(centroid);
   });
 
   return { all, byGroup };
 };
 
+/** @param {FeatureGeometry | null | undefined} featureGeometry @param {Element} textEl @param {DiagramMode} mode */
 const getFeatureCandidatesForLabel = (featureGeometry, textEl, mode) => {
   if (!featureGeometry || featureGeometry.all.length === 0) return [];
   const labelGroupId = textEl.closest('g[id]')?.id || '';
@@ -362,24 +471,35 @@ const getFeatureCandidatesForLabel = (featureGeometry, textEl, mode) => {
   return candidates;
 };
 
+/** @param {DiagramMode} mode @param {string} kind */
 const getDistanceThreshold = (mode, kind) => {
   if (mode === 'linear') return kind === 'embedded' ? 700 : 540;
   return kind === 'embedded' ? 520 : 420;
 };
 
+/** @param {LabelPoint} referencePoint @param {LabelPoint} candidate @param {DiagramMode} mode */
 const computeCandidateDistance = (referencePoint, candidate, mode) => {
   const dx = candidate.x - referencePoint.x;
   const dy = candidate.y - referencePoint.y;
   return mode === 'linear' ? Math.abs(dx) + Math.abs(dy) * 0.6 : Math.hypot(dx, dy);
 };
 
+/**
+ * @param {SVGSVGElement} svg
+ * @param {SVGTextElement[]} labelElements
+ * @param {FeatureGeometry | null | undefined} featureGeometry
+ * @param {DiagramMode} mode
+ */
 const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => {
+  /** @type {Map<SVGTextElement, string>} */
   const assignments = new Map();
   if (!featureGeometry || featureGeometry.all.length === 0) return assignments;
 
   const featureIds = new Set(featureGeometry.all.map((feature) => feature.id));
+  /** @type {Set<string>} */
   const usedFeatureIds = new Set();
-  const labelMeta = labelElements
+  // `filter(Boolean)` drops the nulls the callback returns.
+  const labelMeta = /** @type {LabelMeta[]} */ (labelElements
     .map((textEl) => {
       const referencePoint = getLabelReferencePoint(svg, textEl, mode);
       if (!isFinitePoint(referencePoint)) return null;
@@ -392,7 +512,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
         kind: textEl.querySelector('textPath') ? 'embedded' : 'regular'
       };
     })
-    .filter(Boolean);
+    .filter(Boolean));
 
   labelMeta.forEach((meta) => {
     const existingId = String(meta.textEl.getAttribute('data-label-feature-id') || '').trim();
@@ -403,6 +523,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
     usedFeatureIds.add(existingId);
   });
 
+  /** @type {{ textEl: SVGTextElement, featureId: string, distance: number }[]} */
   const edges = [];
   labelMeta.forEach((meta) => {
     if (assignments.has(meta.textEl)) return;
@@ -446,6 +567,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads (Label On asks the blocker of it).
  * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
+ * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
 
 /** @param {FeatureLabelActionsOptions} options */
@@ -460,7 +582,8 @@ export const createFeatureLabelActions = ({
   getCommittedRequest = () => null,
   setFeatureVisibility = null,
   prepareDrawnFeatureMatches = () => true,
-  evaluateLabelRules
+  evaluateLabelRules,
+  showNotice = () => {}
 }) => {
   const {
     mode,
@@ -495,19 +618,24 @@ export const createFeatureLabelActions = ({
   // A mounted label names its feature by rendered ID; the displayed Result's
   // catalog binds that ID to the feature's source identity (R3).
   const displayedFeatures = () => resultRenderedFeatures(state);
+  /**
+   * @param {unknown} featureIdRaw
+   * @param {Map<string, LabelFeature> | null} [displayed]
+   * @returns {LabelFeature | null}
+   */
   const labelFeature = (featureIdRaw, displayed = displayedFeatures()) => {
     const featureId = String(featureIdRaw || '').trim();
     if (!featureId) return null;
     if (displayed) return displayed.get(featureId) || null;
     const key = normalizeKeyToken(featureId);
-    return (extractedFeatures.value || []).find((feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
+    return (extractedFeatures.value || []).find((/** @type {LabelFeature | null | undefined} */ feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
   };
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {LabelFeature | null | undefined} feature */
   const rowOf = (drawing, feature) => {
     const key = featureIdentityKeyOf(feature);
     return key ? drawing.featureOverrides[key] || null : null;
   };
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {unknown} featureId @param {Map<string, LabelFeature> | null} [displayed] */
   const labelRow = (drawing, featureId, displayed) => rowOf(drawing, labelFeature(featureId, displayed));
 
   // Whether the label rerender after this edit draws the feature: the last
@@ -515,21 +643,33 @@ export const createFeatureLabelActions = ({
   // feature visibility owner's resolver answers as Generate does.
   /** @param {DrawingState} drawing */
   const drawnContext = (drawing) => featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions });
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {LabelFeature | null | undefined} feature
+   * @param {ReturnType<typeof drawnContext>} [context]
+   */
   const featureHidden = (drawing, feature, context = drawnContext(drawing)) => (
     featureDrawnInResult(feature, context, resultCatalogFeatures(state)) === false
   );
   // Owner decisions Q1 and Q2 (2026-10-04): Label visibility On takes effect
   // only when the diagram can draw the label. Returns 'hidden', 'underlay', or
   // 'embedded_only', or '' when the label is drawn.
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {LabelFeature | null | undefined} feature
+   * @param {LabelDiagramOptions | null | undefined} diagramOptions
+   */
   const labelOnBlocker = (drawing, feature, diagramOptions) => (
     featureHidden(drawing, feature) ? 'hidden' : labelDrawingBlocker(feature, diagramOptions)
   );
   // Why the displayed Result has no label for the feature: the blocker, unless
   // a scope or filter reason applies to Default label visibility first.
   // '' or a LABEL_ABSENCE_REASONS key.
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {LabelFeature | null | undefined} feature
+   * @param {LabelDiagramOptions | null | undefined} diagramOptions
+   */
   const labelAbsenceReason = (drawing, feature, diagramOptions) => {
     const blocker = labelOnBlocker(drawing, feature, diagramOptions);
     if (blocker === 'hidden' || blocker === 'underlay'
@@ -557,12 +697,13 @@ export const createFeatureLabelActions = ({
     labelReflowRequestSeq.value += 1;
   };
 
+  /** @param {unknown} value */
   const normalizeVisibilityMode = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'on' || normalized === 'off' ? normalized : 'default';
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {Element} svg */
   const resetLabelsToSourceText = (drawing, svg) => {
     let changed = false;
     const displayed = displayedFeatures();
@@ -582,7 +723,7 @@ export const createFeatureLabelActions = ({
   // override, else the bulk override of its source text, else that source
   // text. A label edited, imported, undone, or reset while another Result was
   // displayed therefore shows the current intent here (R3).
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {Element} svg */
   const projectLabelTextIntent = (drawing, svg) => {
     let changed = false;
     const displayed = displayedFeatures();
@@ -591,7 +732,9 @@ export const createFeatureLabelActions = ({
       const sourceText = row?.labelSourceText
         ?? textEl.getAttribute('data-label-source-text') ?? getLabelText(textEl);
       textEl.setAttribute('data-label-source-text', sourceText);
-      const desiredText = row?.labelText ?? drawing.labelTextBulkOverrides[sourceText] ?? sourceText;
+      // The source text is free text, so the bulk table is read by own key.
+      const bulkText = ownEntry(drawing.labelTextBulkOverrides, sourceText);
+      const desiredText = row?.labelText ?? bulkText ?? sourceText;
       if (getLabelText(textEl) === desiredText) return;
       setLabelText(textEl, desiredText);
       changed = true;
@@ -599,6 +742,7 @@ export const createFeatureLabelActions = ({
     return changed;
   };
 
+  /** @param {Element | null | undefined} svg @param {Element | null | undefined} textEl */
   const resolveCompleteLabelVisualUnit = (svg, textEl) => {
     if (!svg || !textEl) return null;
     const featureId = String(textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
@@ -614,6 +758,7 @@ export const createFeatureLabelActions = ({
     return { featureId, parts };
   };
 
+  /** @param {Element | null | undefined} svg @param {Element | null | undefined} textEl @param {unknown} modeRaw */
   const applyLabelVisibilityPreview = (svg, textEl, modeRaw) => {
     const visualUnit = resolveCompleteLabelVisualUnit(svg, textEl);
     if (!visualUnit) return { available: false, changed: false };
@@ -684,7 +829,9 @@ export const createFeatureLabelActions = ({
     return { changed, unavailableOverride };
   };
 
+  /** @param {Element} svg */
   const refreshEditableList = (svg) => {
+    /** @type {EditableLabelEntry[]} */
     const nextEntries = [];
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl, index) => {
       const key = textEl.getAttribute('data-label-key');
@@ -707,17 +854,19 @@ export const createFeatureLabelActions = ({
   };
 
   const clickedFeatureId = () => String(clickedFeature.value?.svg_id || clickedFeature.value?.id || '').trim();
+  /** @param {string} featureId @returns {LabelFeature | null} */
   const featureById = (featureId) => (
     (clickedFeatureId() === featureId ? clickedFeature.value?.feat : null)
     || labelFeature(featureId)
   );
 
+  /** @param {unknown} featureId @returns {EditableLabelEntry | null} */
   const getEditableLabelByFeatureId = (featureId) => {
     const target = normalizeKeyToken(featureId);
     if (!target) return null;
     return (
       editableLabels.value.find(
-        (entry) => normalizeKeyToken(entry?.featureId) === target
+        (/** @type {EditableLabelEntry | null | undefined} */ entry) => normalizeKeyToken(entry?.featureId) === target
       ) || null
     );
   };
@@ -887,11 +1036,12 @@ export const createFeatureLabelActions = ({
     return true;
   };
 
+  /** @param {string | null | undefined} labelKey @param {unknown} nextTextRaw */
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!labelKey) return;
-    const entry = editableLabels.value.find((candidate) => candidate.key === labelKey);
+    const entry = editableLabels.value.find((/** @type {EditableLabelEntry} */ candidate) => candidate.key === labelKey);
     if (!entry) return;
     const nextText = String(nextTextRaw ?? '');
     if (entry.text === nextText) return;
@@ -902,7 +1052,7 @@ export const createFeatureLabelActions = ({
     labelTextScopeDialog.sourceText = entry.sourceText || entry.text;
     labelTextScopeDialog.featureId = entry.featureId || '';
     labelTextScopeDialog.matchingCount = editableLabels.value.filter(
-      (candidate) => candidate.sourceText === (entry.sourceText || entry.text)
+      (/** @type {EditableLabelEntry} */ candidate) => candidate.sourceText === (entry.sourceText || entry.text)
     ).length;
     if (clickedFeature.value?.labelKey === entry.key) {
       clickedFeature.value.labelText = nextText;
@@ -918,6 +1068,7 @@ export const createFeatureLabelActions = ({
     labelTextScopeDialog.matchingCount = 0;
   };
 
+  /** @param {unknown} featureId @param {unknown} nextTextRaw */
   const requestLabelTextChangeByFeatureId = (featureId, nextTextRaw) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -928,7 +1079,7 @@ export const createFeatureLabelActions = ({
   };
 
   // Stores one feature's Label visibility and shows it in its open popup.
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {LabelFeature | null | undefined} feature @param {unknown} modeRaw */
   const setLabelVisibilityOverride = (drawing, feature, modeRaw) => {
     const nextMode = normalizeVisibilityMode(modeRaw);
     const previousMode = normalizeVisibilityMode(rowOf(drawing, feature)?.labelVisibility);
@@ -941,7 +1092,13 @@ export const createFeatureLabelActions = ({
 
   // One feature's label text edit: the text equal to the label's own text
   // removes the edit; any other text is one line, kept with its source text.
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {LabelFeature | null | undefined} feature
+   * @param {unknown} labelTextRaw
+   * @param {unknown} sourceTextRaw
+   * @param {unknown} baselineTextRaw
+   */
   const applyDirectFeatureLabelOverride = (drawing, feature, labelTextRaw, sourceTextRaw, baselineTextRaw) => {
     if (!featureIdentityKeyOf(feature)) return false;
     const nextText = String(labelTextRaw ?? '');
@@ -955,6 +1112,7 @@ export const createFeatureLabelActions = ({
     });
   };
 
+  /** @param {unknown} featureId @param {string} nextText */
   const applyDirectTextToCurrentSvg = (featureId, nextText) => {
     if (!svgContainer.value) return { svg: null, changed: false };
     const svg = svgContainer.value.querySelector('svg');
@@ -969,6 +1127,11 @@ export const createFeatureLabelActions = ({
     return { svg, changed: true };
   };
 
+  /**
+   * @param {unknown} featureId
+   * @param {unknown} visibilityMode
+   * @returns {{ available: boolean, changed: boolean, svg?: Element }}
+   */
   const applyDirectVisibilityToCurrentSvg = (featureId, visibilityMode) => {
     if (!svgContainer.value) return { available: false, changed: false };
     const svg = svgContainer.value.querySelector('svg');
@@ -987,16 +1150,33 @@ export const createFeatureLabelActions = ({
   // are one step each and Cancel writes nothing and records none.
   /** @type {((choice: string) => unknown) | null} */
   let answerHiddenLabelTextDialog = null;
+  // The one close of the dialog. A dialog hidden without a choice (Reset label
+  // edits, an applied Load Label TSV, a mode switch) is answered as Cancel:
+  // the text is not written and the History step of its Apply ends (OV-462).
+  const closeHiddenLabelTextDialog = (choice = 'cancel') => {
+    const answer = answerHiddenLabelTextDialog;
+    answerHiddenLabelTextDialog = null;
+    hiddenLabelTextDialog.show = false;
+    hiddenLabelTextDialog.featureId = '';
+    hiddenLabelTextDialog.reason = '';
+    return answer?.(choice);
+  };
 
   // One popup Label edit: the overrides, then the displayed Result.
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {LabelFeature} feature
+   * @param {string} featureId
+   * @param {LabelPopupEdit} edit
+   * @param {{ forceReflow?: boolean }} [options]
+   */
   const applyPopupLabelEdit = (drawing, feature, featureId, edit, { forceReflow = false } = {}) => {
     const row = rowOf(drawing, feature);
     if (edit.text.trim() && edit.visibility === 'default'
       && normalizeVisibilityMode(row?.labelVisibility) === 'default'
       && normalizeFeatureOverrideLabelText(edit.text) !== normalizeFeatureOverrideLabelText(String(row?.labelText ?? edit.sourceText))
       && !getEditableLabelByFeatureId(featureId)) {
-      answerHiddenLabelTextDialog?.('cancel');
+      closeHiddenLabelTextDialog();
       hiddenLabelTextDialog.featureId = featureId;
       hiddenLabelTextDialog.reason = labelAbsenceReason(drawing, feature, getCommittedRequest()?.diagramOptions);
       hiddenLabelTextDialog.show = true;
@@ -1070,6 +1250,7 @@ export const createFeatureLabelActions = ({
       clickedFeature.value.labelText = sourceText;
       clickedFeature.value.labelVisibility = edit.visibility;
     }
+    /** @type {LabelApply} */
     const apply = (options) => applyPopupLabelEdit(drawing, feature, featureId, edit, options);
     if (edit.visibility === 'on' && normalizeVisibilityMode(rowOf(drawing, feature)?.labelVisibility) !== 'on') {
       return applyLabelOn(drawing, featureId, apply);
@@ -1077,20 +1258,12 @@ export const createFeatureLabelActions = ({
     return apply();
   };
 
-  const closeHiddenLabelTextDialog = () => {
-    hiddenLabelTextDialog.show = false;
-    hiddenLabelTextDialog.featureId = '';
-    hiddenLabelTextDialog.reason = '';
-  };
-
   // The Label Not Shown dialog answers the Apply that opened it.
+  /** @param {string} choice */
   const handleHiddenLabelTextChoice = (choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const answer = answerHiddenLabelTextDialog;
-    answerHiddenLabelTextDialog = null;
-    closeHiddenLabelTextDialog();
-    return answer?.(choice);
+    return closeHiddenLabelTextDialog(choice);
   };
 
   // Owner decisions Q1 and Q2 (2026-10-04): applying Label visibility On asks
@@ -1100,7 +1273,7 @@ export const createFeatureLabelActions = ({
   // (Keep without label). The caller's History step stays open until the
   // choice, so a choice is one step and Cancel, which leaves the label intent
   // as it was, records none. Global settings never change.
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {string} featureId @param {LabelApply} apply */
   const applyLabelOn = async (drawing, featureId, apply) => {
     // The blocker reads Python's rule matches; prepared ones answer at once.
     const prepared = /** @type {any} */ (prepareDrawnFeatureMatches());
@@ -1114,6 +1287,7 @@ export const createFeatureLabelActions = ({
 
   /** @type {((choice: string) => void) | null} */
   let answerLabelOnDialog = null;
+  /** @param {string} reason @param {LabelFeature | null} feature @returns {Promise<string>} */
   const askLabelOn = (reason, feature) => {
     answerLabelOnDialog?.('cancel');
     labelOnDialog.reason = reason;
@@ -1123,6 +1297,7 @@ export const createFeatureLabelActions = ({
   };
 
   // The Label visibility On dialog answers the Apply that opened it.
+  /** @param {string} choice */
   const handleLabelOnChoice = (choice) => {
     const answer = answerLabelOnDialog;
     answerLabelOnDialog = null;
@@ -1135,17 +1310,18 @@ export const createFeatureLabelActions = ({
     return false;
   };
 
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {LabelFeature | null} feature */
   const captureFeatureLabelIntent = (drawing, feature) => {
     const row = rowOf(drawing, feature);
     return Object.fromEntries(LABEL_FIELDS.map((field) => [field, row?.[field] ?? null]));
   };
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {LabelFeature | null} feature @param {Record<string, string | null>} captured */
   const restoreFeatureLabelIntent = (drawing, feature, captured) => updateFeatureOverride(drawing.featureOverrides, feature, captured);
 
   // Whether the label reflow that this Apply queued drew the feature's label;
   // null when no reflow replaced the Result (it was skipped or failed, or a
   // Generate took over), so nothing is asked.
+  /** @param {string} featureId */
   const reflowDrawsLabel = async (featureId) => {
     const generationKey = state.resultGenerationKey?.value;
     const before = results.value[selectedResultIndex.value];
@@ -1168,7 +1344,10 @@ export const createFeatureLabelActions = ({
       .some((element) => normalizeKeyToken(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE)) === key);
   };
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {{ featureId: string, feature: LabelFeature | null, diagramOptions: LabelDiagramOptions | null | undefined, blocker: string, apply: LabelApply }} choice
+   */
   const confirmLabelOn = async (drawing, { featureId, feature, diagramOptions, blocker, apply }) => {
     const showFeature = blocker === 'hidden';
     if (showFeature) {
@@ -1182,7 +1361,8 @@ export const createFeatureLabelActions = ({
     const embeddedOnly = drawnAs === 'embedded_only';
     const labelIntent = captureFeatureLabelIntent(drawing, feature);
     const featureVisibility = getFeatureVisibilityOverride(drawing.featureOverrides, feature);
-    if (showFeature) setFeatureVisibility?.(feature, 'on', { triggerReflow: false });
+    // The port returns false for a feature without an identity key, which is what a null feature has.
+    if (showFeature) setFeatureVisibility?.(/** @type {LabelFeature} */ (feature), 'on', { triggerReflow: false });
     apply({ forceReflow: embeddedOnly });
     if (!embeddedOnly) return true;
     const applied = JSON.stringify(captureFeatureLabelIntent(drawing, feature));
@@ -1193,13 +1373,14 @@ export const createFeatureLabelActions = ({
     // Cancel restores the label intent and feature visibility this Apply
     // changed, and the label reflow draws the Result they describe again.
     restoreFeatureLabelIntent(drawing, feature, labelIntent);
-    if (showFeature) setFeatureVisibility?.(feature, featureVisibility, { triggerReflow: false });
+    if (showFeature) setFeatureVisibility?.(/** @type {LabelFeature} */ (feature), featureVisibility, { triggerReflow: false });
     reconcileLabelOverrides({ rerender: true });
     return cancelLabelOn();
   };
 
   // The popup note when the displayed Result draws no label for the clicked
-  // feature: why the diagram cannot draw it (Owner Q1, Q2), or that On shows it.
+  // feature: why the diagram cannot draw it (Owner Q1, Q2), or that On shows it,
+  // in one line.
   const clickedFeatureLabelHint = computed(() => {
     const drawing = state.activeDrawing();
     const clicked = clickedFeature.value;
@@ -1216,25 +1397,25 @@ export const createFeatureLabelActions = ({
     if (clicked.labelKey && blocker !== 'hidden') return '';
     let next = '';
     if (normalizeVisibilityMode(rowOf(drawing, clicked.feat)?.labelVisibility) === 'on') {
-      next = ` Its Label visibility "On" applies when ${blocker === 'hidden' ? 'the feature is shown' : 'the label can be drawn'}.`;
+      next = ` On applies when ${blocker === 'hidden' ? 'the feature is shown' : 'the label can be drawn'}.`;
     } else if (!blocker && draft === 'default') {
       next = ' Choose On to show it.';
     } else if (!blocker) {
       return '';
     }
-    const reason = labelAbsenceReason(drawing, feature, diagramOptions);
-    return `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[reason] || ''}${next}`;
+    const cause = LABEL_ABSENCE_REASONS[labelAbsenceReason(drawing, feature, diagramOptions)]?.cause;
+    return `No label shown${cause ? ` (${cause})` : ''}.${next}`;
   });
 
   // The Label Not Shown dialog: the same reason sentence as the popup note.
   const hiddenLabelTextMessage = computed(() => (
-    `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason] || LABEL_ABSENCE_UNKNOWN}`
+    `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason]?.sentence || LABEL_ABSENCE_UNKNOWN}`
     + ' The edited text will not appear unless you show this label.'
   ));
 
   // A label list edit: one line of text, or an empty text, which hides the
   // label (Label visibility Off) as an empty label-table text does.
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {LabelFeature | null} feature @param {unknown} text @param {string} sourceText */
   const applyLabelTextEdit = (drawing, feature, text, sourceText) => {
     const labelText = normalizeFeatureOverrideLabelText(String(text ?? ''));
     return updateFeatureOverride(drawing.featureOverrides, feature, labelText
@@ -1242,6 +1423,7 @@ export const createFeatureLabelActions = ({
       : { labelText: null, labelVisibility: 'off', labelSourceText: sourceText || null });
   };
 
+  /** @param {string} choice */
   const handleLabelTextScopeChoice = (choice) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -1269,7 +1451,7 @@ export const createFeatureLabelActions = ({
       let matchedCount = 0;
       let hasUntrackableMatch = false;
       const displayed = displayedFeatures();
-      svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
+      svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((/** @type {Element} */ textEl) => {
         const candidateSource = textEl.getAttribute('data-label-source-text') || '';
         if (candidateSource !== sourceText) return;
         matchedCount += 1;
@@ -1329,12 +1511,12 @@ export const createFeatureLabelActions = ({
   // A Label TSV row selects labels in every Result of a batch. The displayed
   // Result binds its labels as the editor does; the committed content of
   // another Result carries the renderer's label bindings (B6).
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {Element} element @param {LabelFeature | null} feature */
   const labelSourceText = (drawing, element, feature) => (
     rowOf(drawing, feature)?.labelSourceText
     ?? element.getAttribute('data-label-source-text') ?? getLabelText(element)
   );
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @param {SVGSVGElement} svg */
   const labelImportTargets = (drawing, svg) => {
     const elements = collectEditableLabelElements(svg, mode.value);
     const assignments = assignFeatureIdsToLabels(svg, elements, collectFeatureGeometry(svg), mode.value);
@@ -1345,7 +1527,7 @@ export const createFeatureLabelActions = ({
       return { featureId, feature, sourceText: labelSourceText(drawing, element, feature) };
     });
     const seen = new Set(targets.map(({ feature }) => featureIdentityKeyOf(feature)).filter(Boolean));
-    results.value.forEach((result, index) => {
+    results.value.forEach((/** @type {{ content?: unknown } | null | undefined} */ result, /** @type {number} */ index) => {
       if (index === selectedResultIndex.value || typeof result?.content !== 'string') return;
       const features = resultRenderedFeatures(state, index);
       const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
@@ -1377,6 +1559,7 @@ export const createFeatureLabelActions = ({
   };
   /** @param {DrawingState} drawing */
   const labelIntentSignature = (drawing) => JSON.stringify([drawing.featureOverrides, drawing.labelTextBulkOverrides]);
+  /** @param {{ target: LabelTableInput | null, sourceInput?: LabelTableInput }} event A file input's change event, or the retry's stand-in for it. */
   const loadLabelOverrideTable = async (event) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -1405,26 +1588,41 @@ export const createFeatureLabelActions = ({
         ))
       });
       if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
-      if (revision !== labelImportRevision || labelIntent !== labelIntentSignature(drawing)
-        || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
-        || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
+      if (revision !== labelImportRevision || input.files?.[0] !== file) return;
+      // OV-447, OV-449 (Owner decisions): the table was evaluated against a
+      // state that changed meanwhile, so the load is declined and names the
+      // change. An edit of the label intent stays; it is named first, since
+      // it also redraws the diagram and makes the rule preparation stale.
+      const changed = labelIntent !== labelIntentSignature(drawing)
+        ? 'a label or feature visibility edit was made while the table loaded. The edit was kept'
+        : (svgContainer.value?.querySelector('svg') || null) !== sourceSvg
+          ? 'the displayed diagram changed while the table loaded'
+          : !rulePreparation.isCurrent(before)
+            ? "colors, color rules, the Legend, or the diagram's inputs changed while the table loaded" : '';
+      if (changed) {
+        showNotice({ text: `Loaded ${rows.length} row(s). Not applied: ${changed}. Load the table again.`, tone: 'warning' });
+        return;
+      }
       if (!svg) {
-        window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
+        showNotice({ text: `Loaded ${rows.length} row(s). No diagram is shown, so nothing was applied.`, tone: 'warning' });
         return;
       }
       // A `location` or `record_location` row cannot be decided for a label
       // whose drawn values the Result does not record (feature catalog 3 or 4
       // on a cropped, reverse-complemented, or rotated record). The import is
       // declined whole, so the label edits it would replace stay (R4).
+      // `drawnSelectorUnknown` holds only for a feature that has a `drawnSelector` key, so `feature` is set below.
       const undecided = labels.filter(({ feature }) => drawnSelectorUnknown(feature) && rows.some((row) => (
         DRAWN_SELECTOR_QUALIFIERS.has(row.qualifier.toLowerCase())
-        && (row.recordId === '*' || row.recordId === String(feature.record_id ?? ''))
-        && (row.featureType === '*' || row.featureType === String(feature.type ?? ''))
+        && (row.recordId === '*' || row.recordId === String(/** @type {LabelFeature} */ (feature).record_id ?? ''))
+        && (row.featureType === '*' || row.featureType === String(/** @type {LabelFeature} */ (feature).type ?? ''))
       ))).length;
       if (undecided > 0) {
-        window.alert(`Loaded ${rows.length} row(s). Not applied: location and record_location rows cannot be `
-          + `matched to ${undecided} label(s) on cropped, reverse-complemented, or rotated records until the `
-          + 'diagram records where it drew them. Generate the diagram again, then load the table.');
+        showNotice({ text: `Loaded ${rows.length} row(s). Not applied.`, items: [
+          `location and record_location rows cannot be matched to ${undecided} label(s) on cropped, `
+            + 'reverse-complemented, or rotated records until the diagram records where it drew them. '
+            + 'Generate the diagram again, then load the table.'
+        ] });
         return;
       }
 
@@ -1446,9 +1644,11 @@ export const createFeatureLabelActions = ({
         return [{ entry, matchedRow, tracked }];
       });
       if (applicable.length === 0) {
-        window.alert(`Loaded ${rows.length} row(s). Not applied: ${skippedNonTrackableCount > 0
-          ? `the ${skippedNonTrackableCount} matched label(s) lacked a feature key`
-          : 'no row matched a label of the diagram'}. The existing label edits were kept.`);
+        showNotice({ text: `Loaded ${rows.length} row(s). Not applied; the existing label edits were kept.`, items: [
+          skippedNonTrackableCount > 0
+            ? `The ${skippedNonTrackableCount} matched label(s) lacked a feature key.`
+            : 'No row matched a label of the diagram.'
+        ] });
         return;
       }
       clearOverrides(drawing);
@@ -1465,13 +1665,13 @@ export const createFeatureLabelActions = ({
       closeHiddenLabelTextDialog();
       queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
 
-      let message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
-      if (skippedNonTrackableCount > 0) {
-        message += ` ${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`;
-      }
+      const message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
+      const skipped = skippedNonTrackableCount > 0
+        ? [`${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`]
+        : [];
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;
-      window.alert(message);
+      showNotice({ text: message, items: skipped });
     } catch (error) {
       if (revision !== labelImportRevision || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
         || state.errorLog?.value !== previousError) return;
@@ -1497,7 +1697,7 @@ export const createFeatureLabelActions = ({
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
           normalizeTsvCell(drawing.labelTextBulkOverrides[sourceText])}`);
     if (rows.length === 0) {
-      window.alert('No label rules to export. Export Feature Edits TSV writes per-feature label edits.');
+      showNotice({ text: 'There are no label rules to export. Export Feature Edits TSV writes per-feature label edits.' });
       return;
     }
     const selectedIdx = selectedResultIndex.value;
@@ -1513,6 +1713,7 @@ export const createFeatureLabelActions = ({
     applyFeatureVisibilityToLabels,
     clearLabelBuildNotices,
     clickedFeatureLabelHint,
+    closeHiddenLabelTextDialog,
     closeLabelTextScopeDialog,
     hiddenLabelTextMessage,
     downloadLabelOverrideTable,

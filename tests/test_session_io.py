@@ -58,6 +58,8 @@ from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
     LOSAT_DERIVED_CACHE_SCHEMA,
+    MODE_SCOPED_SESSION_MIN_VERSION,
+    ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
     SESSION_FORMAT,
@@ -67,7 +69,9 @@ from gbdraw.session_io import (
     build_session_json,
     compact_session_feature_catalog,
     decode_depth_payload,
+    legend_edits_by_row_key,
     load_session,
+    session_legend_edits_by_row_key,
     materialize_embedded_file,
     migrate_legacy_repeat_feature_shape_args,
     migrate_persisted_web_state_field_names,
@@ -531,58 +535,82 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
 
 
 def test_current_session_version_matches_web_config() -> None:
-    source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")
-    match = re.search(r"const\s+SESSION_VERSION\s*=\s*(\d+);", source)
-    assert match is not None
-    supported_match = re.search(
-        r"SUPPORTED_SESSION_VERSIONS\s*=\s*new Set\(\[([\s\S]*?)\]\)",
-        source,
-    )
-    assert supported_match is not None
-    web_supported_versions = {
-        int(value) for value in re.findall(r"\b\d+\b", supported_match.group(1))
-    }
-    if "SESSION_VERSION" in supported_match.group(1):
-        web_supported_versions.add(int(match.group(1)))
-
-    assert CURRENT_SESSION_VERSION == 46
+    # The Web reads these values from `contracts/schema.generated.js`.
+    assert CURRENT_SESSION_VERSION == ROW_KEYED_LEGEND_SESSION_MIN_VERSION == 47
+    assert MODE_SCOPED_SESSION_MIN_VERSION == 46
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, CURRENT_SESSION_VERSION}
     )
-    assert int(match.group(1)) == CURRENT_SESSION_VERSION
-    assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
 
-    authority_source = Path(
-        "gbdraw/web/js/services/session-authority.js"
-    ).read_text(encoding="utf-8")
-    forbidden_match = re.search(
-        r"CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS\s*=\s*Object\.freeze\(\["
-        r"([\s\S]*?)\]\)",
-        authority_source,
-    )
-    assert forbidden_match is not None
-    web_forbidden_fields = frozenset(
-        re.findall(r"'([^']+)'", forbidden_match.group(1))
-    )
-    assert session_io_module.CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS == (
-        web_forbidden_fields
-    )
-    authority_match = re.search(
-        r"SESSION_TOP_LEVEL_AUTHORITY\s*=\s*Object\.freeze\(\{"
-        r"([\s\S]*?)\}\);",
-        authority_source,
-    )
-    assert authority_match is not None
-    web_authority_fields = frozenset(
-        re.findall(
-            r"^\s{2}([A-Za-z][A-Za-z0-9]*):",
-            authority_match.group(1),
-            flags=re.MULTILINE,
-        )
-    )
-    assert session_io_module.CURRENT_SESSION_TOP_LEVEL_FIELDS == (
-        web_authority_fields
-    )
+
+# The reading of a Session 46 Legend's edits by row key, shared with the Web
+# (tests/web/legend-row-key-vectors.test.mjs).
+LEGEND_ROW_KEY_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "sessions" / "legend-row-key-vectors.json").read_text(encoding="utf-8")
+)
+
+
+@pytest.mark.parametrize("case", LEGEND_ROW_KEY_VECTORS["cases"], ids=lambda case: case["name"])
+def test_session_46_legend_edits_move_to_the_row_key(case: dict) -> None:
+    assert LEGEND_ROW_KEY_VECTORS["readsSessionVersion"] == MODE_SCOPED_SESSION_MIN_VERSION
+    source = copy.deepcopy(case["legend"])
+    assert legend_edits_by_row_key(source) == (case["expected"], case["outcomes"])
+    assert source == case["legend"]
+
+
+# The Session 46 that first-parent main 9839de8e wrote after renaming GC skew (+)
+# to Z, GC content to GC skew (+) (then red), and GC skew (-) to W (blue,
+# deleted), with a stroke on Z (see its .provenance.json).
+LEGEND_RENAMED_ROWS_V46 = (
+    Path(__file__).parent / "fixtures" / "sessions" / "legend-renamed-rows.v46.gbdraw-session.json.gz"
+)
+# The edits as Session 46 Load read them: the drawn stroke `none` is no color.
+ROW_KEYED_LEGEND_EDITS = {
+    "colorOverrides": {"GC content": "#ff0000", "GC skew (-)": "#0000ff"},
+    "strokeOverrides": {"GC skew (+)": {
+        "originalStrokeColor": None, "originalStrokeWidth": 0, "strokeWidth": 2, "strokeColor": "#00aa00",
+    }},
+}
+
+
+# The moves its reading reports, in the order the Web reports them.
+LEGEND_RENAMED_ROWS_V46_MOVES = (
+    ("colorOverrides", "GC skew (+)", "GC content"),
+    ("colorOverrides", "W", "GC skew (-)"),
+    ("strokeOverrides", "Z", "GC skew (+)"),
+)
+
+
+def _legend_edits(session: dict) -> dict:
+    legend = session["modes"]["circular"]["editorState"]["legend"]
+    return {store: legend[store] for store in ROW_KEYED_LEGEND_EDITS}
+
+
+def test_session_46_upgrade_and_cli_resave_key_the_legend_edits_by_row(tmp_path: Path) -> None:
+    from gbdraw.session import upgrade_session_document
+
+    source = load_session(LEGEND_RENAMED_ROWS_V46)
+    assert source["version"] == 46
+    assert _legend_edits(source)["colorOverrides"] == {"GC skew (+)": "#ff0000", "W": "#0000ff"}
+    assert session_legend_edits_by_row_key(source)[1] == [
+        {"slice": "circular", "store": store, "fromKey": shown, "toKey": key, "outcome": "moved"}
+        for store, shown, key in LEGEND_RENAMED_ROWS_V46_MOVES
+    ]
+
+    upgraded = upgrade_session_document(LEGEND_RENAMED_ROWS_V46).document.to_dict()
+    assert upgraded["version"] == CURRENT_SESSION_VERSION
+    assert _legend_edits(upgraded) == ROW_KEYED_LEGEND_EDITS
+    expected_legend = source["modes"]["circular"]["editorState"]["legend"] | ROW_KEYED_LEGEND_EDITS
+    assert upgraded["modes"]["circular"]["editorState"]["legend"] == expected_legend
+    # A current Session is read as it is.
+    assert _legend_edits(upgrade_session_document(upgraded).document.to_dict()) == ROW_KEYED_LEGEND_EDITS
+
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    circular_main(["--session", str(LEGEND_RENAMED_ROWS_V46), "--output", str(tmp_path / "replay"),
+                   "--format", "svg", "--session_output", str(sidecar)])
+    resaved = load_session(sidecar)
+    assert resaved["version"] == CURRENT_SESSION_VERSION
+    assert _legend_edits(resaved) == ROW_KEYED_LEGEND_EDITS
 
 
 def test_current_session_feature_catalog_is_single_and_lossless(
@@ -1016,7 +1044,7 @@ def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> 
         "linear": {"features": {"featureOverrides": {key("feature-1"): other_mode}}},
     }
 
-    assert payload["version"] == CURRENT_SESSION_VERSION == 46
+    assert payload["version"] == CURRENT_SESSION_VERSION == 47
     validate_session(payload)
 
     triple_key = json.dumps(["circular", "record-1", "feature-1"], separators=(",", ":"))

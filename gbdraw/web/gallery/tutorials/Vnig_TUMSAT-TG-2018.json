@@ -34,10 +34,26 @@
       "body": "Upload GCF_015097735.1_ASM1509773v1_genomic.gbff. The app will detect the two chromosomes and four plasmids in the file.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-02-01-gbff-upload.webp",
             "alt": "Circular input panel with the Vibrio GBFF file selected.",
             "caption": "GCF_015097735.1_ASM1509773v1_genomic.gbff is selected as the GenBank file."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "viewport": {"width": 1280, "height": 900},
+            "clipSelectors": [
+              "[data-settings-section='input-genomes'] > .card-header",
+              "[data-settings-section='input-genomes'] [role='group'][aria-label='GenBank/DDBJ File selection']"
+            ],
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "circular",
+              "files.c_gb.name": "GCF_015097735.1_ASM1509773v1_genomic.gbff"
+            },
+            "visibleText": ["GCF_015097735.1_ASM1509773v1_genomic.gbff"]
           }
         }
       ]
@@ -125,9 +141,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selector": "#legend-position",
@@ -192,6 +208,7 @@
           },
           "capture": {
             "source": "webapp",
+            "viewport": {"width": 1600, "height": 1800},
             "openDetails": ["Layout"],
             "actions": [
               {
@@ -336,7 +353,7 @@
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-08-01-feature-popup.webp",
             "alt": "Zoomed Vibrio multi-record crop with the clicked CDS on chromosome 1 and its feature popup.",
-            "caption": "The popup reports the selected chromosome CDS location, protein ID, qualifiers, and sequence."
+            "caption": "The popup header gives the selected chromosome CDS location, and the Details tab its length and protein ID; the Qualifiers and Sequence tabs hold the rest."
           },
           "capture": {
             "source": "webapp",

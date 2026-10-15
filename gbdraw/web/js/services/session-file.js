@@ -9,24 +9,23 @@ const JSON_TASK_BUDGET_MS = 16;
 export const SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
 /**
+ * A compressed Session above the threshold asks before its download;
+ * the caller asks with the app's choice dialog.
  * @param {Blob} blob The compressed Session.
- * @param {(message: string) => boolean} [confirmFn]
- * @returns {boolean} Whether the download may continue.
+ * @returns {number | null} Its size in MB when the download asks first, else null.
  */
-export const confirmLargeSessionBlob = (
-  blob,
-  confirmFn = globalThis.confirm
-) => {
+export const largeSessionDownloadMegabytes = (blob) => {
   if (!(blob instanceof Blob)) {
     throw new TypeError('Session download confirmation requires a Blob.');
   }
-  if (blob.size <= SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES) return true;
-  if (typeof confirmFn !== 'function') return true;
-  return Boolean(confirmFn(
-    `Compressed session size is ${(blob.size / (1024 * 1024)).toFixed(1)} MB. Continue?`
-  ));
+  return blob.size > SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES ? blob.size / (1024 * 1024) : null;
 };
 
+/**
+ * @param {ReadableStream<Uint8Array>} stream
+ * @param {number} maxBytes
+ * @returns {Promise<string>}
+ */
 const readUtf8Stream = async (stream, maxBytes) => {
   const reader = stream.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -52,28 +51,45 @@ const readUtf8Stream = async (stream, maxBytes) => {
   }
 };
 
+/** @param {Blob} file */
 const isGzipFile = async (file) => {
   if (file.size < GZIP_MAGIC.length) return false;
   const header = new Uint8Array(await file.slice(0, GZIP_MAGIC.length).arrayBuffer());
   return GZIP_MAGIC.every((byte, index) => header[index] === byte);
 };
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 const isPlainObject = (value) => {
   if (!value || typeof value !== 'object') return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 };
 
+/** @param {unknown} value */
 const unsupportedJsonValue = (value) => {
   const type = typeof value;
   return type === 'undefined' || type === 'function' || type === 'symbol';
 };
 
+/** @typedef {'root' | 'array' | 'object'} JsonContainer Where a value sits in the document being sized or written. */
+
+/**
+ * An upper bound of the JSON bytes `value` needs, or -1 when it exceeds `limit`
+ * or JSON.stringify would not treat it as plain data.
+ * @param {unknown} value
+ * @param {Set<unknown>} ancestors
+ * @param {JsonContainer} container
+ * @param {number} limit
+ * @returns {number}
+ */
 const boundedJsonUpperBytes = (value, ancestors, container, limit) => {
   if (value === null) return limit >= 4 ? 4 : -1;
   const type = typeof value;
   if (type === 'string') {
-    const upperBytes = 2 + (value.length * 6);
+    const upperBytes = 2 + (/** @type {string} */ (value).length * 6); // `type === 'string'` above
     return upperBytes <= limit ? upperBytes : -1;
   }
   if (type === 'boolean') {
@@ -93,7 +109,7 @@ const boundedJsonUpperBytes = (value, ancestors, container, limit) => {
   if (
     toJsonDescriptor?.get
     || typeof toJsonDescriptor?.value === 'function'
-    || (!toJsonDescriptor && typeof value.toJSON === 'function')
+    || (!toJsonDescriptor && typeof /** @type {{ toJSON?: unknown }} */ (value).toJSON === 'function') // probe of an array or a plain object
   ) return -1;
 
   ancestors.add(value);
@@ -140,6 +156,12 @@ const boundedJsonUpperBytes = (value, ancestors, container, limit) => {
   }
 };
 
+/**
+ * @param {unknown} value
+ * @param {Set<unknown>} ancestors
+ * @param {JsonContainer} container
+ * @returns {string | null}
+ */
 const boundedNativeJson = (value, ancestors, container) => (
   boundedJsonUpperBytes(
     value,
@@ -151,6 +173,10 @@ const boundedNativeJson = (value, ancestors, container) => (
     : null
 );
 
+/**
+ * @param {string} value
+ * @returns {Generator<string, void, undefined>}
+ */
 function* quotedJsonFragments(value) {
   yield '"';
   const sliceTarget = Math.max(1, Math.floor(JSON_CHUNK_TARGET_BYTES / 8));
@@ -172,6 +198,12 @@ function* quotedJsonFragments(value) {
   yield '"';
 }
 
+/**
+ * @param {unknown} value
+ * @param {Set<unknown>} [ancestors]
+ * @param {JsonContainer} [container]
+ * @returns {Generator<string, void, undefined>}
+ */
 function* jsonFragments(value, ancestors = new Set(), container = 'root') {
   if (value === null) {
     yield 'null';
@@ -180,7 +212,7 @@ function* jsonFragments(value, ancestors = new Set(), container = 'root') {
 
   const type = typeof value;
   if (type === 'string') {
-    yield* quotedJsonFragments(value);
+    yield* quotedJsonFragments(/** @type {string} */ (value)); // `type === 'string'` above
     return;
   }
   if (type === 'boolean') {
@@ -201,7 +233,7 @@ function* jsonFragments(value, ancestors = new Set(), container = 'root') {
     }
     return;
   }
-  if (typeof value?.toJSON === 'function') {
+  if (typeof /** @type {{ toJSON?: unknown } | undefined} */ (value)?.toJSON === 'function') {
     throw new TypeError('Session data contains an unsupported object value.');
   }
   if (!Array.isArray(value) && !isPlainObject(value)) {
@@ -246,6 +278,10 @@ function* jsonFragments(value, ancestors = new Set(), container = 'root') {
   }
 }
 
+/**
+ * @param {unknown} data
+ * @returns {ReadableStream<Uint8Array<ArrayBuffer>>}
+ */
 const jsonByteStream = (data) => {
   const fragments = jsonFragments(data);
   const encoder = new TextEncoder();

@@ -9,8 +9,56 @@ import {
   uniqueOrthogroupEntries
 } from './feature-identity.js';
 
+/** @import { AliasSource } from './feature-identity.js' */
+
+/** @typedef {AliasSource} OrthogroupFeature A Feature record; the alias fields are read, the orthogroup fields written. */
+/** @typedef {AliasSource} OrthogroupMember A member record of a saved orthogroup. */
+/**
+ * @typedef {object} OrthogroupGroup
+ * @property {unknown} [id]
+ * @property {unknown} [members]
+ * @property {unknown} [member_count]
+ * @property {unknown} [record_coverage_count]
+ * @property {unknown} [scope]
+ * @property {unknown} [source_record_index]
+ */
+/**
+ * The orthogroup fields one Feature takes from its member.
+ * @typedef {object} OrthogroupMetadataEntry
+ * @property {string} orthogroupId
+ * @property {number} orthogroupMemberCount
+ * @property {number} orthogroupRecordCoverage
+ * @property {string} proteinId
+ * @property {string} sourceProteinId
+ * @property {boolean} orthogroupRepresentative
+ * @property {string} orthogroupScope
+ * @property {number | null} orthogroupSourceRecordIndex
+ * @property {OrthogroupMember} orthogroupMember
+ */
+/**
+ * @typedef {object} IndexCandidate
+ * @property {OrthogroupMetadataEntry} entry
+ * @property {string[]} keys The index keys the member answers to.
+ * @property {number | null} renderedRecordIndex The record whose rendered IDs the member names, else null.
+ */
+/** @typedef {IndexCandidate & { owner: Record<string, never>, recordIndex: number | null }} ProjectedCandidate `owner` is the identity of the candidate in a key's candidate map. */
+/** @typedef {{ supplied: boolean, value: unknown }} OriginalProteinField */
+/**
+ * A registered Feature and what restores it before a refresh.
+ * @typedef {object} FeatureDescriptor
+ * @property {OrthogroupFeature} feature
+ * @property {number | null} fallbackRecordIndex
+ * @property {Record<string, OriginalProteinField>} originalProteinFields
+ */
+/** @typedef {{ name?: string, description?: string }} OrthogroupOverrideText */
+
+/** @param {unknown} value */
 const normalizeText = (value) => String(value || '').trim();
 
+/**
+ * @param {unknown} value
+ * @returns {number | null}
+ */
 const normalizeRecordIndex = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const text = String(value).trim();
@@ -19,22 +67,42 @@ const normalizeRecordIndex = (value) => {
   return Number.isSafeInteger(normalized) ? normalized : null;
 };
 
+/**
+ * @param {number | null} recordIndex
+ * @param {string} featureSvgId
+ */
 const orthogroupFeatureIndexKey = (recordIndex, featureSvgId) => (
   `record-id:${Number(recordIndex)}:${normalizeText(featureSvgId)}`
 );
 
+/**
+ * @param {number | null} recordIndex
+ * @param {string} featureSvgId
+ */
 const orthogroupRenderedFeatureIndexKey = (recordIndex, featureSvgId) => (
   `record-rendered-id:${Number(recordIndex)}:${normalizeText(featureSvgId)}`
 );
 
+/**
+ * @param {number | null} recordIndex
+ * @param {number} featureIndex
+ */
 const orthogroupFeatureIndexSourceKey = (recordIndex, featureIndex) => (
   `record-feature-index:${Number(recordIndex)}:${Number(featureIndex)}`
 );
 
+/**
+ * @param {string} recordKey
+ * @param {string} biologicalFeatureId
+ */
 const orthogroupFeatureCanonicalKey = (recordKey, biologicalFeatureId) => (
   `canonical:${normalizeText(recordKey)}\u0000${normalizeText(biologicalFeatureId)}`
 );
 
+/**
+ * @param {AliasSource | null | undefined} payload
+ * @param {readonly string[]} keys
+ */
 const consistentTextAlias = (payload, keys) => {
   const status = textAliasStatus(payload, keys);
   return {
@@ -44,7 +112,7 @@ const consistentTextAlias = (payload, keys) => {
 };
 
 /**
- * @param {Record<string, any> | null | undefined} payload
+ * @param {AliasSource | null | undefined} payload
  * @param {readonly string[]} keys
  * @param {number | string | null} [fallback]
  */
@@ -63,6 +131,7 @@ const consistentIntegerAlias = (payload, keys, fallback = null) => {
   };
 };
 
+/** @param {AliasSource | null | undefined} payload */
 const sourceIdentity = (payload) => {
   const stable = consistentTextAlias(payload, [
     'stableFeatureSvgId', 'stable_feature_svg_id', 'stableFeatureId',
@@ -77,16 +146,19 @@ const sourceIdentity = (payload) => {
   };
 };
 
+/** @param {AliasSource | null | undefined} payload */
 const renderedIdentity = (payload) => consistentTextAlias(payload, [
   ...RENDERED_FEATURE_ID_KEYS
 ]);
 
+/** @param {AliasSource | null | undefined} payload */
 const memberIdentity = (payload) => {
   const source = sourceIdentity(payload);
   const rendered = renderedIdentity(payload);
   return { valid: source.valid && rendered.valid, source, rendered };
 };
 
+/** @param {AliasSource | null | undefined} payload */
 const featureIdentity = (payload) => {
   const source = sourceIdentity(payload);
   const rendered = renderedIdentity(payload);
@@ -105,6 +177,10 @@ const featureIdentity = (payload) => {
   return { valid: true, source, rendered };
 };
 
+/**
+ * @param {AliasSource | null | undefined} payload
+ * @returns {{ valid: boolean, value: [string, string] | null }}
+ */
 const canonicalIdentity = (payload) => {
   const record = consistentTextAlias(payload, ['recordKey', 'record_key']);
   const feature = consistentTextAlias(
@@ -117,13 +193,14 @@ const canonicalIdentity = (payload) => {
   };
 };
 
+/** @param {AliasSource | null | undefined} payload */
 const sourceFeatureIndex = (payload) => consistentIntegerAlias(
   payload,
   SOURCE_FEATURE_INDEX_KEYS
 );
 
 /**
- * @param {Record<string, any> | null | undefined} payload
+ * @param {AliasSource | null | undefined} payload
  * @param {number | string | null} [fallback]
  */
 const recordIdentity = (payload, fallback = null) => consistentIntegerAlias(
@@ -149,6 +226,7 @@ const ORTHOGROUP_FEATURE_FIELDS = Object.freeze([
   'orthogroup_member'
 ]);
 
+/** @param {OrthogroupFeature | null | undefined} feature */
 const clearDerivedOrthogroupMetadata = (feature) => {
   if (!feature || !ORTHOGROUP_FEATURE_FIELDS.some((field) => (
     Object.prototype.hasOwnProperty.call(feature, field)
@@ -158,6 +236,10 @@ const clearDerivedOrthogroupMetadata = (feature) => {
   return cleared;
 };
 
+/**
+ * @param {FeatureDescriptor} descriptor
+ * @param {OrthogroupMetadataEntry | null} entry
+ */
 const applyDerivedOrthogroupMetadata = (descriptor, entry) => {
   const feature = descriptor?.feature;
   if (!feature || typeof feature !== 'object') return feature;
@@ -185,6 +267,16 @@ const applyDerivedOrthogroupMetadata = (descriptor, entry) => {
   return feature;
 };
 
+/**
+ * @param {{
+ *   group: OrthogroupGroup,
+ *   member: OrthogroupMember,
+ *   orthogroupId: string,
+ *   memberCount: number,
+ *   recordCoverage: number
+ * }} input
+ * @returns {IndexCandidate | null}
+ */
 const indexCandidateForMember = ({
   group,
   member,
@@ -218,6 +310,7 @@ const indexCandidateForMember = ({
     orthogroupSourceRecordIndex: normalizeRecordIndex(group?.source_record_index),
     orthogroupMember: member
   };
+  /** @type {string[]} */
   const keys = [];
   if (identity.source.value) {
     keys.push(orthogroupFeatureIndexKey(record.value, identity.source.value));
@@ -238,7 +331,7 @@ const indexCandidateForMember = ({
   };
 };
 
-/** @typedef {Map<any, any> & { recordsWithRenderedIds?: Set<any> }} OrthogroupFeatureIndex */
+/** @typedef {Map<string, OrthogroupMetadataEntry> & { recordsWithRenderedIds?: Set<number> }} OrthogroupFeatureIndex */
 
 /**
  * Incrementally project orthogroup metadata while the catalog owner is already
@@ -248,24 +341,34 @@ const indexCandidateForMember = ({
 export const createOrthogroupFeatureProjection = () => {
   /** @type {OrthogroupFeatureIndex} */
   const index = new Map();
+  /** @type {Set<number>} */
   const recordsWithRenderedIds = new Set();
+  /** @type {Map<string, Map<Record<string, never>, ProjectedCandidate>>} */
   const candidatesByKey = new Map();
+  /** @type {Map<string, Set<FeatureDescriptor>>} */
   const featureDescriptorsByKey = new Map();
+  /** @type {Map<number, Set<FeatureDescriptor>>} */
   const featureDescriptorsByRecord = new Map();
+  /** @type {Map<string, ProjectedCandidate[]>} */
   const groupCandidatesById = new Map();
+  /** @type {Set<string>} */
   const duplicateGroupIds = new Set();
+  /** @type {Map<number, number>} */
   const renderedRecordCounts = new Map();
   index.recordsWithRenderedIds = recordsWithRenderedIds;
 
+  /** @param {string} key */
   const refreshIndexKey = (key) => {
     const candidates = candidatesByKey.get(key);
     if (candidates?.size === 1) {
-      index.set(key, candidates.values().next().value.entry);
+      // The one candidate of a key whose map holds one.
+      index.set(key, /** @type {ProjectedCandidate} */ (candidates.values().next().value).entry);
     } else {
       index.delete(key);
     }
   };
 
+  /** @param {FeatureDescriptor} descriptor */
   const refreshFeatureDescriptor = (descriptor) => {
     applyDerivedOrthogroupMetadata(
       descriptor,
@@ -277,7 +380,9 @@ export const createOrthogroupFeatureProjection = () => {
     );
   };
 
+  /** @param {Set<string>} keys */
   const refreshFeatureKeys = (keys) => {
+    /** @type {Set<FeatureDescriptor>} */
     const descriptors = new Set();
     keys.forEach((key) => {
       featureDescriptorsByKey.get(key)?.forEach((descriptor) => descriptors.add(descriptor));
@@ -285,6 +390,11 @@ export const createOrthogroupFeatureProjection = () => {
     descriptors.forEach(refreshFeatureDescriptor);
   };
 
+  /**
+   * @param {number | null} recordIndex
+   * @param {number} delta
+   * @param {Set<FeatureDescriptor>} refreshDescriptors
+   */
   const updateRenderedRecordCount = (recordIndex, delta, refreshDescriptors) => {
     if (recordIndex === null) return;
     const previous = renderedRecordCounts.get(recordIndex) || 0;
@@ -303,16 +413,26 @@ export const createOrthogroupFeatureProjection = () => {
     }
   };
 
+  /**
+   * @param {ProjectedCandidate} candidate
+   * @param {Set<string>} refreshKeys
+   * @param {Set<FeatureDescriptor>} refreshDescriptors
+   */
   const addCandidate = (candidate, refreshKeys, refreshDescriptors) => {
     candidate.keys.forEach((key) => {
       if (!candidatesByKey.has(key)) candidatesByKey.set(key, new Map());
-      candidatesByKey.get(key).set(candidate.owner, candidate);
+      /** @type {Map<Record<string, never>, ProjectedCandidate>} */ (candidatesByKey.get(key)).set(candidate.owner, candidate); // set above
       refreshIndexKey(key);
       refreshKeys.add(key);
     });
     updateRenderedRecordCount(candidate.renderedRecordIndex, 1, refreshDescriptors);
   };
 
+  /**
+   * @param {ProjectedCandidate} candidate
+   * @param {Set<string>} refreshKeys
+   * @param {Set<FeatureDescriptor>} refreshDescriptors
+   */
   const removeCandidate = (candidate, refreshKeys, refreshDescriptors) => {
     candidate.keys.forEach((key) => {
       const candidates = candidatesByKey.get(key);
@@ -324,10 +444,13 @@ export const createOrthogroupFeatureProjection = () => {
     updateRenderedRecordCount(candidate.renderedRecordIndex, -1, refreshDescriptors);
   };
 
+  /** @param {OrthogroupGroup} group */
   const addGroup = (group) => {
     const [{ id: orthogroupId } = {}] = uniqueOrthogroupEntries([group]);
     if (!orthogroupId || duplicateGroupIds.has(orthogroupId)) return;
+    /** @type {Set<string>} */
     const refreshKeys = new Set();
+    /** @type {Set<FeatureDescriptor>} */
     const refreshDescriptors = new Set();
     const previousCandidates = groupCandidatesById.get(orthogroupId);
     if (previousCandidates) {
@@ -341,9 +464,12 @@ export const createOrthogroupFeatureProjection = () => {
       return;
     }
 
+    /** @type {OrthogroupMember[]} */
     const members = Array.isArray(group?.members) ? group.members : [];
     const memberCount = Number(group?.member_count || members.length || 0);
+    /** @type {Set<number>} */
     const recordIndexes = new Set();
+    /** @type {OrthogroupMember[]} */
     const candidates = [];
     members.forEach((member) => {
       const recordIndex = normalizeRecordIndex(member?.recordIndex ?? member?.record_index);
@@ -378,12 +504,18 @@ export const createOrthogroupFeatureProjection = () => {
     refreshDescriptors.forEach(refreshFeatureDescriptor);
   };
 
+  /**
+   * @param {OrthogroupFeature} feature
+   * @param {number | null} [fallbackRecordIndex]
+   */
   const registerFeature = (feature, fallbackRecordIndex = null) => {
     const record = recordIdentity(feature, fallbackRecordIndex);
     const sourceIndex = sourceFeatureIndex(feature);
     const identity = featureIdentity(feature);
     const canonical = canonicalIdentity(feature);
+    /** @type {string[]} */
     const keys = [];
+    /** @type {FeatureDescriptor} */
     const descriptor = {
       feature,
       fallbackRecordIndex,
@@ -398,7 +530,7 @@ export const createOrthogroupFeatureProjection = () => {
       if (!featureDescriptorsByRecord.has(record.value)) {
         featureDescriptorsByRecord.set(record.value, new Set());
       }
-      featureDescriptorsByRecord.get(record.value).add(descriptor);
+      /** @type {Set<FeatureDescriptor>} */ (featureDescriptorsByRecord.get(record.value)).add(descriptor); // set above
     }
     if (record.value !== null && identity.source.value) {
       keys.push(orthogroupFeatureIndexKey(record.value, identity.source.value));
@@ -412,7 +544,7 @@ export const createOrthogroupFeatureProjection = () => {
     if (canonical.value) keys.push(orthogroupFeatureCanonicalKey(...canonical.value));
     keys.forEach((key) => {
       if (!featureDescriptorsByKey.has(key)) featureDescriptorsByKey.set(key, new Set());
-      featureDescriptorsByKey.get(key).add(descriptor);
+      /** @type {Set<FeatureDescriptor>} */ (featureDescriptorsByKey.get(key)).add(descriptor); // set above
     });
     refreshFeatureDescriptor(descriptor);
     return feature;
@@ -421,6 +553,7 @@ export const createOrthogroupFeatureProjection = () => {
   return Object.freeze({ index, addGroup, registerFeature });
 };
 
+/** @param {readonly OrthogroupGroup[] | null | undefined} orthogroups */
 export const buildOrthogroupFeatureIndex = (orthogroups) => {
   const projection = createOrthogroupFeatureProjection();
   (Array.isArray(orthogroups) ? orthogroups : []).forEach(projection.addGroup);
@@ -428,9 +561,10 @@ export const buildOrthogroupFeatureIndex = (orthogroups) => {
 };
 
 /**
- * @param {OrthogroupFeatureIndex} index
- * @param {any} feature
+ * @param {OrthogroupFeatureIndex | null | undefined} index No index (a Map is required) resolves nothing.
+ * @param {OrthogroupFeature} feature
  * @param {number | null} [fallbackRecordIndex]
+ * @returns {OrthogroupMetadataEntry | null}
  */
 const resolveOrthogroupFeatureMetadata = (
   index,
@@ -458,7 +592,7 @@ const resolveOrthogroupFeatureMetadata = (
     : [];
   if (
     identity.rendered.value
-    && index.recordsWithRenderedIds?.has(record.value)
+    && index.recordsWithRenderedIds?.has(/** @type {number} */ (record.value)) // a rendered ID names a record above
   ) {
     keys.push(
       orthogroupRenderedFeatureIndexKey(record.value, identity.rendered.value)
@@ -470,6 +604,7 @@ const resolveOrthogroupFeatureMetadata = (
   if (canonical.value) {
     keys.push(orthogroupFeatureCanonicalKey(...canonical.value));
   }
+  /** @type {Set<OrthogroupMetadataEntry>} */
   const matches = new Set();
   for (const key of keys) {
     const entry = index.get(key);
@@ -477,13 +612,13 @@ const resolveOrthogroupFeatureMetadata = (
     matches.add(entry);
   }
   return keys.length > 0 && matches.size === 1
-    ? matches.values().next().value
+    ? /** @type {OrthogroupMetadataEntry} */ (matches.values().next().value) // one match
     : null;
 };
 
 /**
- * @param {OrthogroupFeatureIndex} index
- * @param {any} feature
+ * @param {OrthogroupFeatureIndex | null | undefined} index No index (a Map is required) resolves nothing.
+ * @param {OrthogroupFeature} feature
  * @param {number | null} [fallbackRecordIndex]
  */
 export const enrichFeatureWithOrthogroup = (
@@ -508,24 +643,36 @@ export const enrichFeatureWithOrthogroup = (
   };
 };
 
+/**
+ * @param {readonly OrthogroupFeature[] | null | undefined} features
+ * @param {OrthogroupFeatureIndex} index
+ */
 export const enrichFeaturesWithOrthogroups = (features, index) => (
   (Array.isArray(features) ? features : []).map((feature) => (
     enrichFeatureWithOrthogroup(index, feature)
   ))
 );
 
+/** @param {OrthogroupMember | null | undefined} member */
 const memberSetEntry = (member) => normalizeText(member?.proteinId)
   || [member?.recordId, member?.featureSvgId, member?.start, member?.end].map(normalizeText).join('|');
 
 // The member set that a user name belongs to (D-21, PD-OI-075).
+/** @param {OrthogroupGroup | null | undefined} group */
 export const orthogroupMemberSetKey = (group) => JSON.stringify(
   [...new Set((Array.isArray(group?.members) ? group.members : []).map(memberSetEntry).filter(Boolean))].sort()
 );
 
+/**
+ * @param {unknown} value
+ * @returns {Record<string, OrthogroupOverrideText>}
+ */
 export const normalizeOrthogroupDormantOverrides = (value) => {
+  /** @type {Record<string, OrthogroupOverrideText>} */
   const result = {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
-  Object.entries(value).forEach(([key, entry]) => {
+  // A saved override table maps a member-set key to a `{ name, description }` record.
+  Object.entries(/** @type {Record<string, { name?: unknown, description?: unknown } | null | undefined>} */ (value)).forEach(([key, entry]) => {
     const name = normalizeText(entry?.name);
     const description = normalizeText(entry?.description);
     if (!key || key === '[]' || (!name && !description)) return;
@@ -537,6 +684,15 @@ export const normalizeOrthogroupDormantOverrides = (value) => {
 // D-21 (PD-OI-075): a group name and description follow the exact member set
 // across a regrouping. Names whose members no longer form one group stay
 // dormant and return when that group forms again; nothing moves by ID alone.
+/**
+ * @param {{
+ *   previousGroups?: readonly OrthogroupGroup[] | null,
+ *   candidateGroups?: readonly OrthogroupGroup[] | null,
+ *   names?: Record<string, unknown>,
+ *   descriptions?: Record<string, unknown>,
+ *   dormant?: unknown
+ * }} input
+ */
 export const rekeyOrthogroupOverrides = ({
   previousGroups, candidateGroups, names = {}, descriptions = {}, dormant = {}
 }) => {
@@ -549,6 +705,7 @@ export const rekeyOrthogroupOverrides = ({
     if (!id || key === '[]' || (!name && !description)) return;
     pool.set(key, { ...(name ? { name } : {}), ...(description ? { description } : {}) });
   });
+  /** @type {{ names: Record<string, string>, descriptions: Record<string, string> }} */
   const next = { names: {}, descriptions: {} };
   (Array.isArray(candidateGroups) ? candidateGroups : []).forEach((group) => {
     const id = normalizeText(group?.id);

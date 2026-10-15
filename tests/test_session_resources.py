@@ -207,18 +207,18 @@ def test_a_request_reference_must_resolve() -> None:
 # table existed (3522c0bc): a table without seed resources must reproduce the
 # single-request writer byte for byte. A codec change that changes a fixture's
 # single-request output updates its digest here; so does a Session version
-# bump (46: only the version field changed).
+# bump (46, 47: only the version field changed).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
-        "3cc4fba653c38fa6fad1b74739856a08452f5b563445d35833575c5e9ffd4752",
+        "dedc5d32ca59345feab55df97963a5ef99496b625fd3a9f7f003f7831ad28bf8",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
-        "7d56b108825c3efb59beadf3e7c9e282b1e4f0e2af36bd5812dc41a07356adf2",
+        "fa390b267f3146c157d10aed269972816d4f4c5780354c2078303a23960e1c96",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
-        "1c00cfa3e9f3ed00a5011e6d2f1d0703ce2b319400f60ffc4870b4fa3a0b44cd",
+        "9e0a1ba5bdf6c4837d3837199f74d42b0bd92e84f846b5eb6465e37bc0a25a73",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
-        "859c5c600e63d6869cdf26ea37b7dc5c2e8c5a46c213723c645d14bea1d76cfe",
+        "f59cccd763081bcfd86c558c74ca95511fd2aeeba08efeb94175cb0173d11eb4",
     "selected-feature-annotations.v44.gbdraw-session.json.gz":
-        "4b343bc039845d2ebb69fac8630391b111f523777a40d0d0207ab3dcb543dd43",
+        "ffe9415fb5c75a06c2da39e212cff3387fd323c29b497dd87a3d53c6278e2a06",
 }
 
 

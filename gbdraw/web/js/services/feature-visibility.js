@@ -12,7 +12,7 @@ import {
 } from './feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
 import { pythonLegendRows } from './legend-svg.js';
-/** @import { FeatureRequestRecord } from './feature-placement.js' */
+/** @import { FeatureOverrideDraft, FeaturePlacementDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
 /** @import { LegendRowContext, SpecificColorRule } from './specific-color-rules.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
@@ -25,6 +25,7 @@ const EXCLUDE_MATCHING_ACTIONS = new Set(['exclude_matching', 'suppress']);
 
 let generatedRuleId = 0;
 
+/** @param {unknown} value */
 const normalizeSource = (value) => {
   const normalized = normalizeCell(value).toLowerCase();
   return ['manual', 'editor', 'file'].includes(normalized) ? normalized : 'manual';
@@ -32,12 +33,14 @@ const normalizeSource = (value) => {
 
 export const featureVisibilityQualifierSuggestions = COMMON_QUALIFIERS;
 
+/** @param {unknown} value */
 export const normalizeVisibilityMode = (value) => {
   const normalized = normalizeCell(value).toLowerCase();
   if (normalized === 'suppress') return 'exclude_matching';
   return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
 };
 
+/** @param {unknown} value */
 export const normalizeFeatureVisibilityAction = (value) => {
   const normalized = normalizeCell(value).toLowerCase();
   if (SHOW_ACTIONS.has(normalized)) return 'show';
@@ -46,6 +49,7 @@ export const normalizeFeatureVisibilityAction = (value) => {
   return '';
 };
 
+/** @param {unknown} value */
 export const featureVisibilityActionToMode = (value) => {
   const action = normalizeFeatureVisibilityAction(value);
   if (action === 'show') return 'on';
@@ -54,6 +58,7 @@ export const featureVisibilityActionToMode = (value) => {
   return 'default';
 };
 
+/** @param {unknown} value */
 export const featureVisibilityModeToAction = (value) => {
   const normalized = normalizeCell(value).toLowerCase();
   if (normalized === 'on') return 'show';
@@ -68,6 +73,7 @@ const nextRuleId = (prefix = 'feature-visibility-rule') => {
   return `${prefix}-${generatedRuleId}`;
 };
 
+/** @param {string[]} fields */
 const isHeaderRow = (fields) => {
   const normalized = fields.map((field) => normalizeCell(field).toLowerCase());
   if (normalized.join('\t') === REQUIRED_COLUMNS.join('\t')) return true;
@@ -96,13 +102,53 @@ const isHeaderRow = (fields) => {
  */
 
 /**
+ * A rule row as the draft or a Session holds it: the row of
+ * `FeatureVisibilityRule` under its camel-case or snake-case names, unvalidated.
+ * @typedef {object} FeatureVisibilityRuleDraft
+ * @property {unknown} [id]
+ * @property {unknown} [source]
+ * @property {unknown} [featureId]
+ * @property {unknown} [feature_id]
+ * @property {unknown} [label]
+ * @property {unknown} [recordId]
+ * @property {unknown} [record_id]
+ * @property {unknown} [featureType]
+ * @property {unknown} [feature_type]
+ * @property {unknown} [qualifier]
+ * @property {unknown} [value]
+ * @property {unknown} [action]
+ */
+
+/**
  * The fields an exact-qualifier rule is built or removed by.
  * @typedef {object} FeatureVisibilityRuleInput
  * @property {string} [featureType]
  * @property {string} [qualifier]
  * @property {string} [value]
- * @property {string} [action]
+ * @property {unknown} [action]
  * @property {string} [label]
+ */
+
+/**
+ * A feature as the resolver reads it: a catalog row, an extracted feature, or a
+ * change that names one (JSON keyed by name).
+ * @typedef {{
+ *   type?: unknown, record_key?: unknown, recordKey?: unknown,
+ *   biological_feature_id?: unknown, biologicalFeatureId?: unknown,
+ *   svg_id?: unknown, svgId?: unknown, featureId?: unknown, feature_id?: unknown, id?: unknown
+ * }} VisibilityFeature
+ */
+
+/**
+ * One feature's visibility change: its identity, the modes before and after
+ * (`mode` replaces `after` when a History restore sets it).
+ * @typedef {VisibilityFeature & { before?: string, after?: unknown, mode?: unknown }} FeatureVisibilityChange
+ */
+
+/**
+ * What Python reports for an edit of a request; an `unresolved` one names the
+ * kinds of edit whose feature the source does not have.
+ * @typedef {{ status?: unknown, recordKey: string, biologicalFeatureId: string, kinds?: readonly string[] }} UnresolvedNotice
  */
 
 /** @returns {FeatureVisibilityRule} */
@@ -119,7 +165,7 @@ export const createDefaultFeatureVisibilityRule = () => ({
 });
 
 /**
- * @param {Record<string, any>} [raw]
+ * @param {FeatureVisibilityRuleDraft} [raw]
  * @returns {FeatureVisibilityRule}
  */
 export const normalizeFeatureVisibilityRule = (raw = {}) => {
@@ -138,6 +184,7 @@ export const normalizeFeatureVisibilityRule = (raw = {}) => {
   };
 };
 
+/** @param {FeatureVisibilityRuleDraft} rule */
 const isSerializableRule = (rule) => {
   const normalized = normalizeFeatureVisibilityRule(rule);
   return Boolean(
@@ -150,10 +197,12 @@ const isSerializableRule = (rule) => {
 };
 
 // The rules a request carries, in table order (Generate reads no other row).
+/** @param {readonly FeatureVisibilityRuleDraft[] | null | undefined} rules */
 export const requestFeatureVisibilityRules = (rules) => (Array.isArray(rules) ? rules : [])
   .map((rule) => normalizeFeatureVisibilityRule(rule))
   .filter(isSerializableRule);
 
+/** @param {readonly FeatureVisibilityRuleDraft[] | null | undefined} rules */
 export const serializeFeatureVisibilityRules = (rules) => {
   const rows = requestFeatureVisibilityRules(rules)
     .map((rule) => [
@@ -167,7 +216,9 @@ export const serializeFeatureVisibilityRules = (rules) => {
   return rows.length > 0 ? `${rows.join('\n')}\n` : '';
 };
 
+/** @param {unknown} text */
 export const parseFeatureVisibilityRules = (text) => {
+  /** @type {FeatureVisibilityRule[]} */
   const rules = [];
   const lines = String(text ?? '').split(/\r?\n/);
 
@@ -209,14 +260,24 @@ export const parseFeatureVisibilityRules = (text) => {
   return { rules, count: rules.length };
 };
 
+/** @param {VisibilityFeature | null} [feat] */
 const getFeatureId = (feat = {}) => normalizeCell(feat?.svg_id ?? feat?.svgId ?? feat?.featureId ?? feat?.feature_id ?? feat?.id);
 
 // Feature visibility edits live in the identity-keyed featureOverrides draft
 // (design Q4); these read and write one feature's `featureVisibility`.
+/**
+ * @param {FeatureOverrideDraft | null | undefined} featureOverrides
+ * @param {VisibilityFeature | null | undefined} feature
+ */
 export const getFeatureVisibilityOverride = (featureOverrides, feature) => normalizeVisibilityMode(
   featureOverrideValue(featureOverrides, feature, 'featureVisibility')
 );
 
+/**
+ * @param {FeatureOverrideDraft | null | undefined} featureOverrides
+ * @param {VisibilityFeature | null | undefined} feature
+ * @param {unknown} modeRaw
+ */
 export const setFeatureVisibilityOverride = (featureOverrides, feature, modeRaw) => {
   const previous = getFeatureVisibilityOverride(featureOverrides, feature);
   const mode = normalizeVisibilityMode(modeRaw);
@@ -226,9 +287,16 @@ export const setFeatureVisibilityOverride = (featureOverrides, feature, modeRaw)
 
 // One change per feature identity: {scope, recordKey, biologicalFeatureId,
 // featureId (the rendered ID it is drawn with), before, after}.
+/**
+ * @param {readonly VisibilityFeature[] | null | undefined} features
+ * @param {unknown} modeRaw
+ * @param {FeatureOverrideDraft} [featureOverrides]
+ */
 export const buildFeatureVisibilityChanges = (features, modeRaw, featureOverrides = {}) => {
   const mode = normalizeVisibilityMode(modeRaw);
+  /** @type {Set<string>} */
   const seen = new Set();
+  /** @type {FeatureVisibilityChange[]} */
   const changes = [];
   (Array.isArray(features) ? features : []).forEach((feature) => {
     const key = featureIdentityKeyOf(feature);
@@ -241,6 +309,10 @@ export const buildFeatureVisibilityChanges = (features, modeRaw, featureOverride
   return changes;
 };
 
+/**
+ * @param {FeatureOverrideDraft | null | undefined} featureOverrides
+ * @param {readonly FeatureVisibilityChange[] | null | undefined} changes
+ */
 export const applyFeatureVisibilityOverrideChanges = (featureOverrides, changes) => {
   if (!featureOverrides || !Array.isArray(changes)) return 0;
   let applied = 0;
@@ -261,10 +333,11 @@ const KIND_FIELDS = Object.freeze({
 // Python's `unresolved` notices of a request by identity key: the edit kinds
 // whose feature the source does not have (design Q4 3.4).
 /**
- * @param {any} notices
+ * @param {readonly UnresolvedNotice[] | null | undefined} notices
  * @param {(recordKey: string) => boolean} [recordKeyFilter]
  */
 const unresolvedNoticeKinds = (notices, recordKeyFilter = () => true) => {
+  /** @type {Map<string, Set<string>>} */
   const unresolved = new Map();
   (Array.isArray(notices) ? notices : []).forEach((notice) => {
     if (notice?.status !== 'unresolved' || !recordKeyFilter(notice.recordKey)) return;
@@ -334,7 +407,7 @@ const removeFeatureEdits = ({
  *   featureOverrides?: Record<string, any>,
  *   featurePlacementOverrides?: Record<string, any>,
  *   featureStrokeOverrides?: Record<string, any>,
- *   notices?: Record<string, any>[],
+ *   notices?: UnresolvedNotice[],
  *   replacedRecordKeys?: string[],
  *   previousRecords?: Record<string, any>[],
  *   currentRecords?: Record<string, any>[],
@@ -381,6 +454,9 @@ export const pruneUnmatchedFeatureOverrides = ({
 // The unresolved edits the drafts still hold after a Generate that replaced no
 // source; "Remove N unmatched feature edits" removes them (an explicit Reset,
 // R2). The drafts are those of the drawing of the request whose notices these are.
+/** @typedef {{ featureOverrides?: FeatureOverrideDraft, featurePlacementOverrides?: FeaturePlacementDraft, notices?: UnresolvedNotice[] }} UnresolvedEditDrafts */
+
+/** @param {UnresolvedEditDrafts} [drafts] */
 export const countUnresolvedFeatureEdits = ({
   featureOverrides = {}, featurePlacementOverrides = {}, notices = []
 } = {}) => {
@@ -395,15 +471,20 @@ export const countUnresolvedFeatureEdits = ({
   return count;
 };
 
+/** @param {UnresolvedEditDrafts} [drafts] */
 export const removeUnresolvedFeatureEdits = ({
   featureOverrides = {}, featurePlacementOverrides = {}, notices = []
 } = {}) => (
   removeFeatureEdits({ featureOverrides, featurePlacementOverrides, unresolved: unresolvedNoticeKinds(notices) })
 );
 
+/** @param {readonly FeatureVisibilityRuleDraft[] | null | undefined} rules */
 export const splitLegacyVisibilityRules = (rules) => {
+  /** @type {Record<string, string>} */
   const overrides = {};
+  /** @type {FeatureVisibilityRule[]} */
   const manualRules = [];
+  /** @type {string[]} */
   const warnings = [];
   (Array.isArray(rules) ? rules : []).forEach((rule) => {
     const normalized = normalizeFeatureVisibilityRule(rule);
@@ -422,11 +503,24 @@ export const splitLegacyVisibilityRules = (rules) => {
   return { overrides, manualRules, warnings };
 };
 
+/**
+ * The inputs `resolveFeatureDrawn` reads.
+ * @typedef {object} FeatureDrawnContext
+ * @property {FeatureOverrideDraft} featureOverrides
+ * @property {FeatureVisibilityRule[]} rules
+ * @property {Set<string> | null} selectedTypes `null` while the request's types are unknown.
+ * @property {Partial<SpecificColorRule>[]} colorRules
+ */
+
 // The inputs `resolveFeatureDrawn` reads. The feature types come from the
 // request's diagram options (a label rerender keeps the last Generate's); the
 // edits and rules are the current ones, which a label rerender and Generate
 // both carry.
-/** @param {Record<string, any>} drawing The drawing whose edits and rules decide. */
+/**
+ * @param {Record<string, any>} drawing The drawing whose edits and rules decide.
+ * @param {{ diagramOptions?: { selectedFeaturesSet?: unknown } | null, featureOverrides?: FeatureOverrideDraft }} [inputs]
+ * @returns {FeatureDrawnContext}
+ */
 export const featureDrawnContext = (drawing, {
   diagramOptions = /** @type {{ selectedFeaturesSet?: unknown } | null} */ (null),
   featureOverrides = drawing?.featureOverrides
@@ -442,6 +536,7 @@ export const featureDrawnContext = (drawing, {
 // context is built for one pass over the features (OV-193).
 /** @type {WeakMap<object, RuleMatcher>} */
 const colorMatchersByContext = new WeakMap();
+/** @param {FeatureDrawnContext} context */
 const colorRuleMatcher = (context) => {
   let matcher = colorMatchersByContext.get(context);
   if (!matcher) colorMatchersByContext.set(context, matcher = ruleMatcher(context.colorRules));
@@ -457,6 +552,11 @@ const colorRuleMatcher = (context) => {
 // (app/rule-matching.js, R4); the shared vectors in
 // tests/fixtures/feature_drawn_cases.json hold both sides to one answer.
 // Returns true, false, or null while a match it needs is unknown.
+/**
+ * @param {VisibilityFeature | null | undefined} feature
+ * @param {FeatureDrawnContext} context
+ * @returns {boolean | null}
+ */
 export const resolveFeatureDrawn = (feature, context) => {
   const { featureOverrides, rules, selectedTypes } = context;
   if (!feature) return null;
@@ -502,7 +602,7 @@ export const displayedDrawnFeatures = (state, drawing) => ({
 /**
  * What `displayedLegendRowContext` reads of the app state.
  * @typedef {Parameters<typeof displayedDrawnFeatures>[0] & {
- *   svgContainer?: { value?: { querySelector?: (selector: string) => Element | null } | null },
+ *   svgContainer?: { value?: { querySelector?: (selector: 'svg') => SVGSVGElement | null } | null },
  *   originalLegendOrder?: { value?: readonly string[] }
  * }} DisplayedLegendState
  */
@@ -525,6 +625,12 @@ export const displayedLegendRowContext = (state, drawing) => ({
 // Whether a Result draws a catalog feature (R-5): the resolver's answer, else
 // (unknown) whether the Result's catalog (`resultCatalogFeatures`) renders it,
 // which Python decided when it last rendered the Result; null without one.
+/**
+ * @param {VisibilityFeature | null | undefined} feature
+ * @param {FeatureDrawnContext} context
+ * @param {LegendCatalogFeatures | null | undefined} catalogFeatures
+ * @returns {boolean | null}
+ */
 export const featureDrawnInResult = (feature, context, catalogFeatures) => (
   resolveFeatureDrawn(feature, context)
   ?? (catalogFeatures ? catalogFeatures.renderedByIdentity.has(stableKeyOf(feature)) : null)
@@ -534,12 +640,20 @@ export const featureDrawnInResult = (feature, context, catalogFeatures) => (
 // Result's catalog features, each biological feature that is of a selected
 // type, has its own Feature visibility, or is drawn, with whether it is drawn.
 // A feature the Result draws is listed as its rendered feature.
+/**
+ * @param {LegendCatalogFeatures} catalogFeatures
+ * @param {FeatureDrawnContext} context
+ */
 export const listFeatureRows = (catalogFeatures, context) => {
+  /** @type {VisibilityFeature[]} */
   const rows = [];
+  /** @type {Map<VisibilityFeature, boolean | null>} */
   const drawn = new Map();
+  /** @type {Set<VisibilityFeature>} */
   const rendered = new Set();
   const { selectedTypes, featureOverrides } = context;
-  catalogFeatures.biological.forEach((feature) => {
+  // The catalog's rows are untyped (`any`) at their provider; this reads the fields of `VisibilityFeature`.
+  catalogFeatures.biological.forEach((/** @type {VisibilityFeature} */ feature) => {
     const shown = catalogFeatures.renderedByIdentity.get(stableKeyOf(feature));
     const row = shown || feature;
     const isDrawn = featureDrawnInResult(row, context, catalogFeatures);
@@ -560,10 +674,10 @@ export const listFeatureRows = (catalogFeatures, context) => {
 // from its catalog features: `asRendered` reads the features Python drew at
 // the last render, else `featureDrawnInResult` answers.
 /** @typedef {NonNullable<ReturnType<typeof resultCatalogFeatures>>} LegendCatalogFeatures */
-/** @typedef {ReturnType<typeof featureDrawnContext>} LegendRuleContext */
+/** @typedef {{ feat?: unknown, cap?: unknown, color?: unknown }} LegendRuleWinner The color rule that wins a feature (a row of `colorRules`). */
 /**
  * @param {LegendCatalogFeatures} catalogFeatures
- * @param {LegendRuleContext} context
+ * @param {FeatureDrawnContext} context
  * @param {{ asRendered: boolean }} options
  */
 const drawnLegendFeatures = (catalogFeatures, context, { asRendered }) => {
@@ -607,27 +721,42 @@ const legendRuleCaption = (rule) => String(rule?.cap ?? '').trim();
 // row), while another batch Result shows the row it was drawn with until
 // Python draws it again (OV-44). A source is null while a rule match it needs
 // is unknown; null equals no source (`sameLegendSources`).
+/**
+ * @param {LegendCatalogFeatures} catalogFeatures
+ * @param {FeatureDrawnContext} context
+ * @param {{ asRendered: boolean, withColors: boolean }} options
+ */
 const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) => {
   const caption = legendRuleCaption;
+  /** @param {{ color?: unknown } | null | undefined} rule */
   const colorOf = (rule) => String(rule?.color ?? '').trim().toLowerCase();
+  /** @param {{ color?: unknown } | null | undefined} rule */
   const color = (rule) => (withColors ? colorOf(rule) : '');
+  /** @param {{ cap?: unknown, color?: unknown } | null | undefined} rule */
   const usage = (rule) => JSON.stringify([caption(rule), color(rule)]);
   const rules = context.colorRules;
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered });
   if (!drawn) return null;
+  /** @type {Map<string, string[]>} */
   const typesByRecord = new Map();
+  /** @type {Map<string, (LegendRuleWinner | null)[]>} */
   const winnersByType = new Map();
   for (const { feature, type, winner } of drawn) {
     const record = String(feature.recordKey ?? '');
-    if (!typesByRecord.has(record)) typesByRecord.set(record, []);
-    if (!typesByRecord.get(record).includes(type)) typesByRecord.get(record).push(type);
+    const recordTypes = typesByRecord.get(record) || [];
+    typesByRecord.set(record, recordTypes);
+    if (!recordTypes.includes(type)) recordTypes.push(type);
     const winners = winnersByType.get(type) || [];
     winnersByType.set(type, winners);
     if (winner !== undefined) winners.push(winner);
   }
+  /** @type {Set<string>} */
   const used = new Set();
+  /** @type {Set<string>} */
   const defaultTypes = new Set();
+  /** @type {Set<string>} */
   const plainTypes = new Set();
+  /** @type {Set<string | undefined>} */
   const recolored = new Set();
   for (const [type, winners] of winnersByType) {
     if (winners.length === 0) {
@@ -643,6 +772,7 @@ const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) =>
       });
     }
   }
+  /** @param {Partial<SpecificColorRule>} rule */
   const counted = (rule) => !(recolored.has(rule.feat) && caption(rule) === rule.feat);
   return JSON.stringify([
     [...typesByRecord],
@@ -655,6 +785,11 @@ const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) =>
 };
 
 // The Legend source of every committed Result, in Result order.
+/**
+ * @param {{ results?: { value?: unknown } } | null | undefined} state
+ * @param {FeatureDrawnContext} context
+ * @param {{ asRendered?: boolean }} [options]
+ */
 export const resultLegendSources = (state, context, { asRendered = false } = {}) => {
   const results = Array.isArray(state?.results?.value) ? state.results.value : [];
   return results.map((_, index) => {
@@ -665,6 +800,7 @@ export const resultLegendSources = (state, context, { asRendered = false } = {})
   });
 };
 
+/** @param {readonly (string | null)[]} left @param {readonly (string | null)[]} right */
 export const sameLegendSources = (left, right) => left.length === right.length
   && left.every((source, index) => source !== null && source === right[index]);
 
@@ -676,7 +812,7 @@ export const sameLegendSources = (left, right) => left.length === right.length
 // derives the rows and their order. Null while a match is unknown, when a
 // wildcard rule has a caption, or when a used caption names a row Python
 // generates (it suffixes the caption by color, PD-OI-042).
-/** @param {LegendCatalogFeatures} catalogFeatures @param {LegendRuleContext} context */
+/** @param {LegendCatalogFeatures} catalogFeatures @param {FeatureDrawnContext} context */
 const legendRowKeysOf = (catalogFeatures, context) => {
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered: false });
   if (!drawn || context.colorRules.some((rule) => rule?.feat === '*' && legendRuleCaption(rule))) return null;
@@ -697,7 +833,7 @@ const legendRowKeysOf = (catalogFeatures, context) => {
 
 // The row keys of every committed Result, in Result order (an empty map for
 // a Result without a catalog).
-/** @param {{ results?: { value?: unknown } }} state @param {LegendRuleContext} context */
+/** @param {{ results?: { value?: unknown } }} state @param {FeatureDrawnContext} context */
 export const resultLegendRowKeys = (state, context) => {
   const results = Array.isArray(state?.results?.value) ? state.results.value : [];
   return results.map((_, index) => {
@@ -770,11 +906,13 @@ export const legendRowsShowable = (before, after, { displayed, shows, firstRule,
   })
 );
 
+/** @param {FeatureVisibilityRuleDraft} rule */
 const isEditorFeatureRule = (rule) => {
   const normalized = normalizeFeatureVisibilityRule(rule);
   return normalized.source === 'editor' && Boolean(normalized.featureId);
 };
 
+/** @param {FeatureVisibilityRuleDraft} rule */
 const isEditorExactQualifierRule = (rule) => {
   const normalized = normalizeFeatureVisibilityRule(rule);
   const qualifier = normalized.qualifier.toLowerCase();
@@ -787,10 +925,14 @@ const isEditorExactQualifierRule = (rule) => {
     normalized.value.endsWith('$');
 };
 
+/** @param {FeatureVisibilityRuleDraft[] | null | undefined} rules */
 const reorderEditorVisibilityRules = (rules) => {
   if (!Array.isArray(rules)) return;
+  /** @type {FeatureVisibilityRuleDraft[]} */
   const featureRules = [];
+  /** @type {FeatureVisibilityRuleDraft[]} */
   const qualifierRules = [];
+  /** @type {FeatureVisibilityRuleDraft[]} */
   const otherRules = [];
   rules.forEach((rule) => {
     if (isEditorFeatureRule(rule)) {
@@ -832,6 +974,11 @@ export const buildExactQualifierFeatureVisibilityRule = ({
   });
 };
 
+/**
+ * @param {FeatureVisibilityRuleDraft[] | null | undefined} rules The table, edited in place.
+ * @param {FeatureVisibilityRuleInput | undefined} ruleInput
+ * @param {unknown} actionRaw
+ */
 export const upsertEditorQualifierFeatureVisibilityRule = (rules, ruleInput, actionRaw) => {
   if (!Array.isArray(rules)) return null;
   const nextRule = buildExactQualifierFeatureVisibilityRule({ ...ruleInput, action: actionRaw });
@@ -859,7 +1006,7 @@ export const upsertEditorQualifierFeatureVisibilityRule = (rules, ruleInput, act
 };
 
 /**
- * @param {any} rules
+ * @param {FeatureVisibilityRuleDraft[] | null | undefined} rules The table, edited in place.
  * @param {FeatureVisibilityRuleInput} [ruleInput]
  */
 export const removeEditorQualifierFeatureVisibilityRule = (rules, ruleInput = {}) => {

@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { PersistedPreviewViewport } from '../services/config.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 
 // Keep one burst alive through the existing 0.2 s transform transition. This
@@ -30,6 +31,17 @@ const editorReserveWidth = (container) => {
   return width;
 };
 
+/**
+ * What a preview transform interaction (wheel zoom or pan) tells its subscribers when it starts or ends.
+ * @typedef {object} PreviewTransformInteractionChange
+ * @property {boolean} active
+ * @property {string} kind The interaction: `wheel`, `pan`, or `cancel`.
+ * @property {Event | null} event The event that started it; null when it ends.
+ * @property {boolean} reconcile Whether the subscriber reconciles what the interaction deferred.
+ */
+
+/** @typedef {(change: PreviewTransformInteractionChange) => void} PreviewTransformInteractionListener */
+
 /** @param {Record<string, any>} state Shape owned by state.js. */
 export const createPanZoom = (state) => {
   const { zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer } = state;
@@ -37,6 +49,7 @@ export const createPanZoom = (state) => {
   let panFrameId = null;
   /** @type {{ x: number, y: number } | null} */
   let pendingPanPointer = null;
+  /** @type {Set<string>} */
   const previewTransformInteractionSources = new Set();
   /** @type {number | null} */
   let wheelBurstTimerId = null;
@@ -46,10 +59,12 @@ export const createPanZoom = (state) => {
   let wheelTransitionTarget = null;
   let wheelBurstComplete = false;
   let wheelTransitionComplete = false;
+  /** @type {Set<PreviewTransformInteractionListener>} */
   const previewTransformInteractionListeners = new Set();
 
   const previewTransformInteraction = Object.freeze({
     isActive: () => previewTransformInteractionSources.size > 0,
+    /** @param {PreviewTransformInteractionListener} listener */
     subscribe(listener) {
       if (typeof listener !== 'function') return () => {};
       previewTransformInteractionListeners.add(listener);
@@ -57,12 +72,22 @@ export const createPanZoom = (state) => {
     }
   });
 
+  /**
+   * @param {boolean} active
+   * @param {string} kind
+   * @param {Event | null} event
+   * @param {boolean} reconcile
+   */
   const notifyPreviewTransformInteraction = (active, kind, event, reconcile) => {
     previewTransformInteractionListeners.forEach((listener) => {
       listener({ active, kind, event, reconcile });
     });
   };
 
+  /**
+   * @param {string} kind
+   * @param {Event} event
+   */
   const beginPreviewTransformInteraction = (kind, event) => {
     const wasActive = previewTransformInteractionSources.size > 0;
     previewTransformInteractionSources.add(kind);
@@ -72,6 +97,10 @@ export const createPanZoom = (state) => {
     return true;
   };
 
+  /**
+   * @param {string} kind
+   * @param {{ reconcile?: boolean }} [options]
+   */
   const endPreviewTransformInteraction = (kind, { reconcile = true } = {}) => {
     if (!previewTransformInteractionSources.delete(kind)) return false;
     if (previewTransformInteractionSources.size > 0) return false;
@@ -105,6 +134,7 @@ export const createPanZoom = (state) => {
     return endPreviewTransformInteraction('wheel', { reconcile });
   };
 
+  /** @param {TransitionEvent} event */
   function handleWheelTransitionEnd(event) {
     if (
       !previewTransformInteractionSources.has('wheel')
@@ -132,6 +162,7 @@ export const createPanZoom = (state) => {
     }, WHEEL_TRANSITION_FALLBACK_MS);
   };
 
+  /** @param {WheelEvent} event */
   const beginWheelInteraction = (event) => {
     const isNewWheelInteraction = !previewTransformInteractionSources.has('wheel');
     beginPreviewTransformInteraction('wheel', event);
@@ -161,9 +192,11 @@ export const createPanZoom = (state) => {
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
+  /** @param {Element | null | undefined} target */
   const isFormControlTarget = (target) =>
     Boolean(target?.closest?.('button, input, textarea, select, a, [role="button"]'));
 
+  /** @param {Element | null | undefined} target */
   const isSvgEditingTarget = (target) =>
     Boolean(
       target?.closest?.(
@@ -189,6 +222,12 @@ export const createPanZoom = (state) => {
     }
   };
 
+  /**
+   * @param {number} panX
+   * @param {number} panY
+   * @param {number} zoomLevel
+   * @param {boolean} [disableTransition]
+   */
   const applyPreviewTransform = (panX, panY, zoomLevel, disableTransition = isPanning.value) => {
     if (!svgContainer.value) return;
     svgContainer.value.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
@@ -197,6 +236,7 @@ export const createPanZoom = (state) => {
     svgContainer.value.style.willChange = disableTransition ? 'transform' : '';
   };
 
+  /** @param {number} clientX @param {number} clientY */
   const getPanPosition = (clientX, clientY) => {
     const dx = clientX - panStart.x;
     const dy = clientY - panStart.y;
@@ -206,6 +246,7 @@ export const createPanZoom = (state) => {
     };
   };
 
+  /** @param {number} clientX @param {number} clientY */
   const flushPanUpdate = (clientX, clientY) => {
     const nextPan = getPanPosition(clientX, clientY);
     applyPreviewTransform(nextPan.x, nextPan.y, zoom.value, true);
@@ -271,12 +312,14 @@ export const createPanZoom = (state) => {
     }, nextZoom);
   };
 
+  /** @param {WheelEvent} event */
   const handleWheel = (event) => {
     beginWheelInteraction(event);
     zoom.value = clampZoom(zoom.value + (event.deltaY > 0 ? -0.1 : 0.1));
     applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, isPanning.value);
   };
 
+  /** @param {MouseEvent & { target: Element }} event A press on the canvas; its target is an element. */
   const startPan = (event) => {
     if (event.button !== 0) return;
     if (event.shiftKey && svgContainer.value?.querySelector?.('svg')) return;
@@ -312,6 +355,7 @@ export const createPanZoom = (state) => {
     applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, true);
   };
 
+  /** @param {MouseEvent} event */
   const doPan = (event) => {
     if (!isPanning.value) return;
     pendingPanPointer = { x: event.clientX, y: event.clientY };
@@ -323,6 +367,7 @@ export const createPanZoom = (state) => {
     });
   };
 
+  /** @param {MouseEvent} event A mouse event or a pointer cancel / capture loss. */
   const endPan = (event) => {
     const wasPanning = isPanning.value;
     // Cancellation and capture loss may carry (0, 0), not a pointer position.
@@ -349,6 +394,20 @@ export const createPanZoom = (state) => {
     if (wasPanning) endPreviewTransformInteraction('pan');
   };
 
+  // A view shown only for a while (the fitted figure of Review alignment) is not what a Session
+  // or an artifact checkpoint keeps. The view from before it is held here, and the Session
+  // writer and the UI capture read it through `heldPreviewViewport`.
+  /** @type {PersistedPreviewViewport | null} */
+  let held = null;
+  const holdPreviewViewport = () => { held ??= { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } }; };
+  /** @param {{ restore: boolean }} options `restore` shows the held view again; without it the hold is dropped. */
+  const releasePreviewViewport = ({ restore }) => {
+    const view = held;
+    held = null;
+    if (view && restore) setPreviewViewport(view.canvasPan, view.zoom);
+  };
+  const heldPreviewViewport = () => held;
+
   const disposePanZoom = () => {
     cancelPreviewTransformInteraction({ reconcile: false });
     previewTransformInteractionListeners.clear();
@@ -361,6 +420,9 @@ export const createPanZoom = (state) => {
     endPan,
     resetPreviewViewport,
     fitPreviewToViewport,
+    holdPreviewViewport,
+    releasePreviewViewport,
+    heldPreviewViewport,
     cancelPreviewTransformInteraction,
     disposePanZoom,
     previewTransformInteraction
@@ -371,6 +433,7 @@ export const createPanZoom = (state) => {
 export const createSidebarResize = (state) => {
   const { sidebarWidth, isResizing } = state;
 
+  /** @param {MouseEvent} event */
   const doResize = (event) => {
     if (!isResizing.value) return;
     const newWidth = event.clientX - 16;
@@ -384,6 +447,8 @@ export const createSidebarResize = (state) => {
   };
 
   const startResizing = () => {
+    // The press is default-prevented, so the field is blurred here.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     isResizing.value = true;
     document.addEventListener('mousemove', doResize);
     document.addEventListener('mouseup', stopResizing);
@@ -398,6 +463,7 @@ export const createSidebarResize = (state) => {
  * @property {(callback: () => void) => void} onMounted
  * @property {(callback: () => void) => void} onUnmounted
  * @property {() => void} closeRightDrawer
+ * @property {() => boolean} previewPopupsHeld While it holds, a click outside leaves the feature and match popups as they are.
  */
 
 /** @param {GlobalUiEventsOptions} options */
@@ -405,7 +471,8 @@ export const setupGlobalUiEvents = ({
   state,
   onMounted,
   onUnmounted,
-  closeRightDrawer
+  closeRightDrawer,
+  previewPopupsHeld
 }) => {
   const {
     clickedFeature,
@@ -428,6 +495,7 @@ export const setupGlobalUiEvents = ({
       && Boolean(e.target.closest('.feature-popup, .pairwise-match-popup, .label-popup'));
   };
 
+  /** @param {MouseEvent & { target: Element }} e A click; the popups and dialogs are elements. */
   const closeFeaturePopup = (e) => {
     const startedInPopup = pressStartedInPopup;
     pressStartedInPopup = false;
@@ -438,16 +506,20 @@ export const setupGlobalUiEvents = ({
       && !e.target.closest('.pairwise-match-popup')
       && !e.target.closest('.label-popup')
       && !e.target.closest('[data-similarity-alignment-overlay]')
+      // The notice banner's Dismiss is not a click on the diagram.
+      && !e.target.closest('[data-app-notice]')
     ) {
+      if (clickedLabel.value) clickedLabel.value = null;
+      if (previewPopupsHeld()) return;
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
-      if (clickedLabel.value) clickedLabel.value = null;
     }
   };
 
   // Escape closes the top layer only: an open popup first, so the drawer that
   // opened it stays and focus returns to its opener there; then the canvas
   // controls and the drawer.
+  /** @param {KeyboardEvent} e */
   const handleEscapeKey = (e) => {
     if (e.key !== 'Escape' || modalDialogOpen()) return;
     if (clickedFeature.value || clickedPairwiseMatch?.value || clickedLabel.value) {
@@ -460,15 +532,17 @@ export const setupGlobalUiEvents = ({
     closeRightDrawer();
   };
 
+  // A click that reaches the document comes from an element, as `closeFeaturePopup` reads it:
+  // the cast to EventListener widens its parameter back to Event.
   onMounted(() => {
     document.addEventListener('mousedown', rememberPressTarget, true);
-    document.addEventListener('click', closeFeaturePopup);
+    document.addEventListener('click', /** @type {EventListener} */ (closeFeaturePopup));
     document.addEventListener('keydown', handleEscapeKey);
   });
 
   onUnmounted(() => {
     document.removeEventListener('mousedown', rememberPressTarget, true);
-    document.removeEventListener('click', closeFeaturePopup);
+    document.removeEventListener('click', /** @type {EventListener} */ (closeFeaturePopup));
     document.removeEventListener('keydown', handleEscapeKey);
   });
 };

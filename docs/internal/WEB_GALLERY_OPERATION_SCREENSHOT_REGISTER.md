@@ -1,23 +1,51 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-10-10
+Last updated: 2026-10-12
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
 
-## BGC record orientation
+## Edit-surface redesign: feature popup, search bar, Legend tab (2026-10-12)
 
-MIBiG stores BGC0000713 on the opposite strand from the other four clusters.
-Since 2026-07-15 the BGC Gallery Session stores a reverse-complemented copy of
-that file instead of the original file with **Reverse complement** on, so a
-reader who starts from the MIBiG files still needs the step. The recipe reads
-the records first, so the **Record** select shows its loaded options rather
-than **Loading records...**.
+Operations that show the redesigned feature popup, the Feature search bar, or the Editor drawer's Legend tab.
+Recaptured at the tool default scale; an image is kept only when it visibly differs from the committed one.
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
-| `BGC0000708-BGC0000713` | `manual-04-02-reverse-bgc0000713.webp` | Recapture | Exact BGC Session; the BGC0000713 file card from its file name to **Region (optional)**, with **Record options** open and **Reverse complement** checked | Captured at DSF 3; accepted |
-| `BGC0000708-BGC0000713` | `manual-04-04-pairwise-style-curve.webp` | Delete | None; no step referenced it | Deleted |
+| `vibrio-harveyi-group-collinear` | `manual-06-01-search-dnaa.webp`, `manual-07-01-search-rctb.webp` | Recapture; recipe corrected | Search bar with **Regular expression** and the status `1 of 2 matches`; the replay waits on that status; the open feature popup is closed first | Accepted; no popup fragment |
+| `vibrio-harveyi-group-collinear` | `manual-06-02-rotate-start.webp` | Recapture; text corrected | **Edit** tab: header gene, product, record and location; **Similarity group** above **Layout**; **Apply when I Generate** and **Apply now** | Accepted |
+| `BGC0000708-BGC0000713` | `manual-07-01-align-og6.webp` | Recapture; recipe corrected | neoU popup with gene and product in the header, **Similarity group**, **Align…**, **Review alignment options…**; the recipe sets the popup's own width to 500 px (the size state it wrote before is not on `window.__GBDRAW_APP__`, so the popup stayed 720 px wide and left the window), crops from the whole popup header, and stops when the popup does not fit the window | Accepted at 1926x858: close button, tabs, and **Align…** inside the crop |
+| `BGC0000708-BGC0000713` | `manual-12-01-feature-popup.webp` | Recapture; recipe corrected | **Qualifiers** tab as a name and value list (no row borders): the recipe marks each name and the value beside it and scrolls the name to the top | Accepted |
+| `BGC0000708-BGC0000713` | `manual-11-01-orthogroup-popup.webp` | Keep | Similarity-group popup unchanged apart from sub-percent noise | Committed bytes kept |
+| `HmmtDNA_ATskew` | `manual-10-01-feature-popup.webp` | Recapture; recipe corrected | RNR2 **Details** popup left of the highlighted l-rRNA; the recipe pans the feature to a fixed place in the preview before the click, where it left the place to the scroll that the click does on a feature outside the visible preview (three different outcomes seen, one capture run timed out) | Accepted at 3153x903; two runs byte-identical |
+| `HmmtDNA_ATskew` | `post-02-01-legend-editor.webp` | Recapture; recipe added | Exact Session; **Editor** drawer open on **Legend**; list scrolled to the AT skew rows; crop from the drawer header to the last row | Accepted; the AT skew swatches show the GC skew colors (Product bug, see the handoff) |
+
+The capture tool's `resetSettings` action confirms the in-app **Reset all settings?** dialog; the tool no longer expects a browser dialog.
+
+## BGC progressive tutorial (Gallery revision 2026-10-11)
+
+The BGC Gallery Session is rebuilt from the five MIBiG files in
+`gbdraw/web/tutorial-data/aminoglycoside-bgc-five` through the Web app (D-08):
+BGC0000713 is the original file with record-level **Reverse complement** on, so
+**Reset Settings** returns to the reader's starting state. The tutorial starts
+from the Web defaults and shows the preview after each Generate (D-01): every
+manual step carries `replay`, and each preview capture uses `replayThrough` of
+its own step. The route that builds the Session runs the same `replay` actions
+(task folder `scripts/b_route.py`). Before each upload it gives the empty slot
+the key `record-<n>`, the key CLI-written Sessions use, instead of the random
+`linear-seq-<uuid>` key; nothing refers to the key yet, so the LOSAT cache and
+protein identities are built from it. Renaming keys after the fact breaks
+those hashes. Earlier BGC media were renamed to their new step numbers or
+deleted.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-02-01-file1-defaults.webp`, `manual-03-01-file5-defaults.webp` | Add (replace `manual-02-01-record-text-row.webp`) | Replay through step 2 or 3; File 1 (or File 5 with **Add sequence**) from its header to **File defaults** | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-05-03-preview-losatp.webp`, `manual-06-02-preview-reversed.webp`, `manual-07-04-preview-aligned.webp`, `manual-08-02-preview-colors.webp`, `manual-09-02-preview-labels.webp`, `manual-10-04-preview-final.webp` | Add (replace `manual-08-04-aligned-preview.webp`) | Replay through the step; the whole SVG at 1100 px, preview controls hidden; state asserted per stage | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-05-01-comparison-settings.webp` | Replace `manual-03-01-open-pairwise.webp` | Final Session; **Settings** open; LOSATP, Similarity groups, Minimum identity 30 | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-07-01-align-og6.webp`, `manual-07-02-anchor-candidates.webp`, `manual-07-03-alignment-direction.webp` | Recapture (renamed from `manual-08-0x`) | Replay through step 6 (reversed, not yet aligned, default colors) | Captured at DSF 3; accepted. 2026-10-12: `-02` and `-03` recaptured for the docked Review alignment panel (After Apply strip, no candidate numbers); `-01` (popup opener) is byte-identical |
+| `BGC0000708-BGC0000713` | `manual-08-01-specific-rules-all.webp`, `manual-09-01-show-labels-first.webp`, `manual-10-01-arrow-shaft-width.webp`, `manual-10-02-scale-style-ruler.webp`, `manual-10-03-plot-title.webp`, `manual-11-01-orthogroup-popup.webp`, `manual-12-01-feature-popup.webp` | Recapture (renumbered) | Final Session. The og_18 popup now shows the computed group name: the old Session carried a rename of og_18 to livA that no step taught | Captured at DSF 3; accepted |
+| `BGC0000708-BGC0000713` | `manual-03-02-runtime-reproducibility.webp`, `manual-03-03-first-comparison-boundary.webp`, `manual-03-04-first-raw-result.webp`, `manual-04-03-track-layout-middle.webp`, `manual-06-02-record-labels.webp` | Delete | None: the progressive tutorial shows only controls the reader changes (Track Layout Middle and the record-label visibility are defaults) | Deleted |
 
 ## BGC og_6 alignment and arrow shaft width (Gallery revision 2026-10-10)
 
@@ -141,6 +169,30 @@ species boundary and four cross-record combinations.
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
 | `vibrio-harveyi-group-collinear` | all referenced media under its own media directory | Recapture | Exact regenerated two-species session; 4 Linear records; rows `1,1,2,2`; *V. parahaemolyticus* and *V. alginolyticus* identity; one adjacent collinear boundary | Recaptured at DSF 3 and quality 94; strict validation passed; final 3804×591 overview and operation crops visually accepted |
+
+### Progressive Vibrio tutorial (2026-10-11)
+
+The tutorial now teaches in stages: add File 1 and fill its File defaults, add
+File 2 the same way, Generate with the Web defaults, run LOSATP Collinear blocks
+once, rotate the four chromosomes to *dnaA* and *rctB*, Generate again from the
+cached LOSAT results, then finish the figure. Each Generate step shows its own
+preview, captured by replay (`replayThrough` = that step): the tool loads the
+Gallery Session, clicks **Reset Settings**, and performs the steps' `replay`
+actions. Every preview recipe fails if a record label shows an accession,
+replicon, or length (D-07). The final replayed figure matches the Gallery SVG
+in layout, rotations, and all 116 comparison ribbons; only the ruler tick and
+label color differs (black instead of dimgray, OV-440).
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `vibrio-harveyi-group-collinear` | `manual-02-01-file1-defaults.webp`, `manual-03-01-file2-defaults.webp` | Add (replace `manual-02-01-record-row.webp`) | Replay through step 2 or 3; File card with the GBFF name, **File defaults** filled, **Number of records: 2**; File 2 crop includes **Add sequence** | Captured at DSF 3; accepted |
+| `vibrio-harveyi-group-collinear` | `manual-04-01-default-preview.webp` | Add | Replay through step 4; Web defaults, rows `1,1,2,2`, no comparison, species and strain only | Captured at DSF 3; accepted |
+| `vibrio-harveyi-group-collinear` | `manual-05-05-unrotated-blocks.webp` | Add | Replay through step 5; LOSATP Collinear blocks on unrotated records; diagonal ribbons | Captured at DSF 3; accepted |
+| `vibrio-harveyi-group-collinear` | `manual-08-01-rotated-blocks.webp` | Add | Replay through step 8; rotated records, search cleared, vertical blocks | Captured at DSF 3; accepted |
+| `vibrio-harveyi-group-collinear` | `manual-08-01-collinear-overview.webp` → `manual-10-01-collinear-overview.webp` | Replace | Replay through step 10; the finished figure, legend gap check | Captured at DSF 3, 3804×591; accepted |
+| `vibrio-harveyi-group-collinear` | `manual-03-10-search-dnaa.webp`, `manual-03-11-rotate-start.webp`, `manual-03-13-search-rctb.webp` → `manual-06-01-…`, `manual-06-02-…`, `manual-07-01-…` | Recapture; renamed | Replay through step 5 (dnaA) or 6 (RctB), so the search and rotation act on unrotated records | Captured at DSF 3; accepted |
+| `vibrio-harveyi-group-collinear` | `manual-04-00`, `manual-04-01`, `manual-04-02`, `manual-04-04` → `manual-05-01` … `manual-05-04`; `manual-05-01-rectangle-features.webp`, `manual-06-01-linear-layout.webp` → `manual-09-01-…`, `manual-09-02-…` | Recapture; renamed | Session alone; the values equal the final Session | Captured at DSF 3; accepted |
+| `vibrio-harveyi-group-collinear` | `manual-03-01-record-layout.webp`, `manual-04-03-adjacent-pairs.webp`, `manual-07-02-bottom-legend.webp` | Delete | None: Arrange in rows, Adjacent pairs, and Legend Bottom are Web defaults | Deleted |
 
 ## Linear input workflow cleanup (#568 Phase 1)
 
@@ -304,7 +356,7 @@ All six linked Gallery result WebPs were refreshed from their exact sessions.
 | `T-GUI-02` | Four files under `docs/images/t-gui-02/` | Exact: `lambda_basic_linear/manual-05-01-final-preview.webp` | Fresh Lambda flow for docs; exact `lambda_basic_linear` session for Gallery; Linear, no comparison, all labels, ruler, left legend | Re-run all owner outputs; expect input-only PNG unchanged; recapture generated-result/full-preview views | Corrected documentation images accepted; exact-session Gallery WebP recaptured at 4182×1452 |
 | `T-GUI-05` | Five files under `docs/images/t-gui-05/` | Exact: `tobacco-chloroplast/manual-08-01-chloroplast-preview.webp` | Fresh NC_001879.2 flow for docs; exact `tobacco-chloroplast` session for Gallery; three-slot stack, four region labels, upper-left legend | Re-run all owner outputs and recapture the exact-session Gallery result | Corrected documentation images accepted; exact-session Gallery WebP recaptured at 3072×2187 |
 | `H-GUI-02` | `grid-settings.png`, `grid-result.png` | Contextual only: `Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp` | Docs use four complete mitochondrial records in a 2×2 equal-size grid; Gallery uses six Vibrio replicons with Auto sizing, left legend, bottom title | Keep distinction explicit; add exact-session metadata for the Gallery result before recapture | Documentation images accepted; contextual Gallery WebP recaptured at 3072×2016 |
-| `H-GUI-03` | `record-layout.png`, `orientation-result.png` | Contextual only: `vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp` | Docs use two comparison-free phage rows at 24 px; Gallery uses four comparison records in two rows at 48 px with bottom legend | Recapture docs result; strengthen Gallery app-state/visible-text assertions before its result recapture | Documentation images accepted; contextual Gallery WebP recaptured at 3804×591 |
+| `H-GUI-03` | `record-layout.png`, `orientation-result.png` | Contextual only: `vibrio-harveyi-group-collinear/manual-10-01-collinear-overview.webp` | Docs use two comparison-free phage rows at 24 px; Gallery uses four comparison records in two rows at 48 px with bottom legend | Recapture docs result; strengthen Gallery app-state/visible-text assertions before its result recapture | Documentation images accepted; contextual Gallery WebP recaptured at 3804×591 |
 | `H-GUI-09` | `track-settings.png`, `track-result.png` | Contextual only: `HmmtDNA_ATskew/manual-09-01-atskew-preview.webp` | Docs use AP027133 depth + GC content/skew; Gallery uses HmmtDNA GC/AT skew without depth | Recapture docs result; add exact-session metadata for the manual-only Gallery result | Documentation result accepted at 70%; contextual Gallery WebP recaptured at 3072×2304 |
 | `H-GUI-10` | `slot-settings.png`, `annotation-result.png` | Contextual only: tobacco chloroplast final preview | Docs use alternating annotation lanes, an outside annotation slot, AT skew, top title, right legend; Gallery uses one inside region lane, no AT skew, no title, upper-left legend | Recapture docs result; reuse the T-GUI-05 Gallery recapture only as contextual coverage | Documentation result accepted at 70%; contextual Gallery coverage verified |
 | `H-GUI-11` | `style-settings.png`, `style-result.png` | Contextual only: HmmtDNA basic final preview | Docs use soft_pastels, whitelist, selected labels, top title, and exact legend order; Gallery basic example has a different style/title state | Recapture both docs views; reuse the T-GUI-01 Gallery recapture only as contextual right-legend coverage | Documentation images accepted at the largest complete-fit scale; contextual Gallery coverage verified |
@@ -331,3 +383,78 @@ capture validation proves the visible control or selected value is stale.
 - The HmmtDNA feature-highlight result uses `Middle`, strand separation off,
   70%, and gene labels for all 13 mitochondrial CDS features, including
   `COX1`.
+
+## Compact sidebar input cards (Gallery revision 2026-10-12)
+
+The Web sidebar's File cards, Record options, Colors, and slot rows were
+compacted. The File card's defaults block now reads **Names for all records in
+this file**, and the tutorial text, `visibleText`, alt text, and captions follow
+that label. Media were recaptured only where the surface visibly changed;
+captures that differ from the committed bytes by noise only keep the committed
+bytes.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713`, `vibrio-harveyi-group-collinear` | `manual-02-01-file1-defaults.webp`, `manual-03-01-file5-defaults.webp` (Vibrio: `manual-03-01-file2-defaults.webp`) | Recapture | Replay through the step; File card with **Names for all records in this file** and the rendered taxon-name preview line | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-06-01-reverse-bgc0000713.webp` | Recapture | File 5 card from its header through the compact **Record options** (record header, **Using file default** names, **Reverse complement**) | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-08-01-specific-rules-all.webp` | Recapture; scroll corrected | **SPECIFIC RULES** heading scrolled to `block: 'start'` with a 120 px scroll margin so the app header does not cover the **TSV** / **Clear All** row; the four rule rows are opened | No app-header overlap; visually accepted |
+| `BGC0000708-BGC0000713` | `manual-10-03-plot-title.webp` | Recapture | **Titles & Record Labels** card; Plot Title with its markup preview line | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-05-01-comparison-settings.webp`, `manual-09-01-show-labels-first.webp`, `manual-10-01-arrow-shaft-width.webp`, `manual-10-02-scale-style-ruler.webp`; Vibrio `manual-09-01-rectangle-features.webp`, `manual-09-02-linear-layout.webp` | Keep | Surfaces without a visible change | Recapture differed by noise only |
+| `BGC0000708-BGC0000713` | `manual-06-01-reverse-bgc0000713.webp` (record wait) | Recipe corrected | The wait for the record-5 select proves the records were read: the select `Record selector for sequence 5` is enabled and lists `BGC0000713` | The old wait on the absence of "Loading records" proved nothing |
+| `HmmtDNA_ATskew` | `manual-06-01-at-skew-slot-context.webp` | Recapture; recipe corrected | Exact mitochondrial session; custom stack enabled; the capture opens the slot's `[data-track-slot-more='a_skew_2']` disclosure; `assertAppState` (slot 3 id, renderer, nt, legend label, both colors) and six `visibleControls` (id, renderer, dinucleotide AT, legend label AT skew, both colors) | Data-dependent; recaptured 810x2319; disclosure open, both swatches inside the highlight |
+
+## Short/long size boundary: BGC previews and step 10 (Gallery revision 2026-10-12)
+
+Linear Auto sizes use the short styles for a longest record under 100 kb (it
+was 50 kb), so the previews that replay the reader's steps from the Web
+defaults now draw the five clusters (longest 50,466 bp) with the short sizes.
+The published figure does not change: its Session fixes Head Length Ratio
+0.64, and step 10 types that value. The step 10 replay gives the published
+SVG byte for byte, so the finished-figure and popup captures keep their bytes.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-05-03-preview-losatp.webp`, `manual-06-02-preview-reversed.webp`, `manual-07-04-preview-aligned.webp`, `manual-08-02-preview-colors.webp`, `manual-09-02-preview-labels.webp` | Recapture | Replay through the step, recipes unchanged; short Auto sizes (80 px features on two strand lanes, 24 px definition lines) | Recaptured at DSF 3; each compared with the previous image side by side |
+| `BGC0000708-BGC0000713` | `manual-07-01-align-og6.webp` | Recapture | Replay through step 6, recipe unchanged; the highlighted neoU arrow is drawn at the short feature height beside the same popup | Recaptured at DSF 3, same 2502x792 crop |
+| `BGC0000708-BGC0000713` | `manual-10-01-arrow-shaft-width.webp` | Recapture; contract extended | Final Session; **Arrow Geometry** box with Head Length Ratio 0.64 and Shaft Width Ratio 0.6, both highlighted; `assertAppState` and `visibleControls` name both ratios | Recaptured at DSF 3, same 1422x315 crop |
+| `BGC0000708-BGC0000713` | `manual-09-02-preview-labels.webp` caption; step 10 text, replay, and both tables | Text | The caption no longer says that the shafts hide the heads of short genes; step 10 has the Head Length Ratio row and says what each group of rows does against the Auto values the reader sees | Tables checked against the Auto notes read after the step 9 replay |
+| `BGC0000708-BGC0000713` | `manual-10-04-preview-final.webp`, `manual-11-01-orthogroup-popup.webp`, `manual-12-01-feature-popup.webp` | Keep | The pinned Session and the step 10 replay draw the published figure | Not recaptured |
+
+## Record name fields on one-record File cards (Gallery revision 2026-10-12)
+
+A Linear File with one record and no File-level name shows that record's own
+**Organism / strain (optional)** and **Subtitle / title (optional)** on its
+card, in place of **Names for all records in this file**; **Record options** no
+longer repeat them. The BGC tutorial therefore types the names into the record
+fields, and its Gallery Session was saved again through the Web app with the
+five names on the records instead of the Files. The published figure is
+unchanged: the source SVG, the rendered example, the thumbnail and
+`examples.json` keep their bytes. This section replaces the capture state of
+the same media in the rows of the earlier sections; those rows stay as history.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-02-01-file1-defaults.webp`, `manual-03-01-file5-defaults.webp` | Recapture; recipe changed | Replay through the step (step 2 `replayThrough` 1 -> 2); clip `:scope > [data-linear-record-names]` of the File card; File card from its header to the record's **Organism / strain (optional)** and **Subtitle / title (optional)** with the markup preview line; no **Names for all records in this file**; File 5 with **Add sequence** | Recaptured at DSF 3, 1164x768 and 1203x1233; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-06-01-reverse-bgc0000713.webp` | Recapture | File 5 card with the name fields on the card; open **Record options** hold the record header, Region and **Reverse complement** on; no **Using file default** | Recaptured at DSF 3, 1704x1839; compared by eye |
+| `hepatoplasmataceae_collinear`, `hepatoplasmataceae_orthogroup` | `manual-02-01-upload-row-context.webp` (the two files are byte-identical) | Recapture; alt and caption changed | Exact Session; AP027078.gb File card with empty name fields on the card; open **Record options** with the region controls | Recaptured, 1422x1689; compared by eye |
+| `majanivirus_orthogroup` | `manual-02-01-upload-row-label-context.webp` | Recapture; recipe changed | The capture finds the field by `[data-linear-record-names="record-1"]`; MjeNMV.gb File card with its Organism / strain value on the card; **Record options** closed | Recaptured, 1782x1002; compared by eye |
+| `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Keep | The clip is the card header and the uploader; the names area is outside it | Recaptured and reverted |
+| `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-10-04-preview-final.webp` | Keep | The replay with the names in the record fields draws the same previews (step 4 SVG byte-identical, step 10 within raster noise) | Recaptured as proof and reverted |
+
+## File card fold line and long upload names (Gallery revision 2026-10-13)
+
+Each Linear File card has a header line with a caret that folds the card, and
+the upload zone cuts a long file name at its end with an ellipsis. Two upload
+crops were held back from the first recapture of the File cards and are
+recorded here; the rows of the earlier sections for the same media stay as
+history.
+
+The capture tool now lets running CSS transitions end before it measures and
+takes a crop (`wait_for_css_transitions`). A caret turns over 200 ms after its
+card or section opens, and the Lambda upload crop, taken right after the tool
+opened the loaded Session's folded card, showed the caret mid-turn.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Recapture; recipe unchanged | Exact Lambda Session; open File 1 card from its header line, with the caret at rest, to the **GenBank / DDBJ File** uploader containing `NC_001416.gb` | Recaptured at DSF 3, 864x336 (was 930x324; the same two elements are 22 px narrower and 4 px taller in the current pane); compared side by side |
+| `Vnig_TUMSAT-TG-2018` | `manual-02-01-gbff-upload.webp` | Recapture; recipe added | Exact Vnig Session; `dataDependent`; clip from the **Input Genomes** card header to the **GenBank/DDBJ File** uploader; `assertAppState` and `visibleText` name `GCF_015097735.1_ASM1509773v1_genomic.gbff`; the zone shows the name cut at its end with an ellipsis. The rest of the card is outside the clip: the restored Session shows the record hints of the finished figure (Multi-Record Canvas on), not the state at the upload step | Recaptured at DSF 3, 942x483 (was a manual 656x542 crop); compared side by side |

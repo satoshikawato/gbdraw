@@ -35,9 +35,11 @@ const save = async (title) => {
   assert.equal(result.status, 'saved', result.error?.message);
   return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
 };
+// The Load dialogs asked (BA-D25); the port answers [Load].
+const loadDialogs = [];
 const load = (session) => importSession({
   target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-});
+}, { confirmLoadRepairs: async (dialog) => { loadDialogs.push(dialog); return true; } });
 const resetDrawings = () => {
   for (const mode of MODES) {
     Object.assign(state.drawings[mode].form, createDefaultForm());
@@ -52,7 +54,7 @@ const sliceKeys = (value, container = '') => Object.entries(value).flatMap(([key
 });
 
 test('Session 46 saves each drawing as its mode slice and loads it back into that drawing (S1, S6)', async () => {
-  assert.equal(SESSION_VERSION, 46);
+  assert.equal(SESSION_VERSION, 47);
   resetDrawings();
   state.mode.value = 'circular';
   state.drawings.circular.adv.label_font_size = 13;
@@ -67,7 +69,7 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   state.drawings.linear.dormantLegendEntries.value = [waiting];
   const saved = await save('two drawings');
 
-  assert.equal(saved.version, 46);
+  assert.equal(saved.version, SESSION_VERSION);
   assert.equal(saved.renderRequest, null);
   for (const retired of ['config', 'features']) assert.equal(Object.hasOwn(saved, retired), false, retired);
   for (const retired of ['layoutPreferences', 'canvasPadding', 'pendingPaletteName', 'pendingPaletteColors',
@@ -127,6 +129,24 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   assert.equal(state.drawings.circular.form.separate_strands, false);
   assert.equal(state.drawings.linear.adv.depth_min, createDefaultAdv('linear').depth_min);
   assert.equal(state.drawings.linear.form.plot_title, '');
+});
+
+test('a file that is not a gbdraw Session is refused as such before its contents are read', async () => {
+  resetDrawings();
+  const reason = async (value) => {
+    const outcome = await load(value);
+    assert.equal(outcome.status, 'error', JSON.stringify(value));
+    return outcome.error.context?.reason;
+  };
+  for (const value of [null, [], 'x', 5, {}, { format: 'gbdraw-session' }, { format: 'other', version: 46 }]) {
+    assert.equal(await reason(value), 'SESSION_FORMAT', JSON.stringify(value));
+  }
+  // The version is read first: a version this app does not read names the fields.
+  assert.equal(await reason({ format: 'other', version: 45 }), 'FIELDS');
+  assert.equal(await reason({ format: 'gbdraw-session', version: 48 }), 'FIELDS');
+  // A second fault does not hide the format (Python's reader checks the format first too).
+  assert.equal(await reason({ format: 'other', version: 39, bogus: 1 }), 'SESSION_FORMAT');
+  assert.equal(await reason({ format: 'other', version: 46, bogus: 1 }), 'SESSION_FORMAT');
 });
 
 test('Session 45 and a Session 46 with a retired field or a non-registry slice field are rejected (S3, S4)', async () => {
@@ -190,7 +210,7 @@ test('named Legend and stroke colors load as their CSS hex values (OV-160)', asy
 });
 
 // D-43 (OV-300): a stored Legend entry whose color lies outside the Default
-// colors (-d) domain is dropped at Load and named in the Load notice; a named
+// colors (-d) domain is dropped at Load and named in the Load dialog; a named
 // color is stored as its table hex and a hex as written (D-30). It holds for a
 // Session 46 mode slice and for the top-level editorState of an older Session.
 test('a stored Legend entry color outside the Default colors domain is dropped and named at Load (OV-300)', async () => {
@@ -208,23 +228,79 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   current.modes.circular.editorState.legend.entries = structuredClone(stored);
   current.modes.circular.editorState.legend.deletedEntries = [{ caption: 'W', color: 'currentColor', featureIds: [] }];
   alerts.length = 0;
+  loadDialogs.length = 0;
   const loaded = await load(current);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(shownRows(state.drawings.circular), kept);
   assert.deepEqual(state.drawings.circular.deletedLegendEntries.value, []);
-  assert.match(alerts.at(-1),
-    / Legend: entries "X", "W" \(deleted\) had a color the app does not accept and were dropped\.$/);
+  assert.deepEqual(loadDialogs.map(({ items }) => items),
+    [['Legend: entries "X", "W" (deleted) had a color the app does not accept and were dropped.']]);
+  assert.deepEqual(loaded.notices, []);
+  assert.deepEqual(alerts, []);
 
   const older = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/settings-only.v42.json.gz', import.meta.url))));
   // A caption whose first row has a bad color but a later row a valid one is shown, not named.
   older.editorState.legend.entries = [{ caption: 'Z', color: 'notacolor', featureIds: [] }, ...structuredClone(stored)];
   resetDrawings();
   alerts.length = 0;
+  loadDialogs.length = 0;
   const loadedOlder = await load(older);
   assert.equal(loadedOlder.status, 'ok', JSON.stringify(loadedOlder.error));
   assert.deepEqual(shownRows(state.activeDrawing()), kept);
-  assert.match(alerts.at(-1), / Legend: entry "X" had a color the app does not accept and was dropped\.$/);
-  assert.equal(alerts.at(-1).match(/Legend:/g).length, 1);
+  assert.deepEqual(loadDialogs.map(({ items }) => items),
+    [['Legend: entry "X" had a color the app does not accept and was dropped.']]);
+  assert.deepEqual(alerts, []);
+});
+
+// PD-OI-061 revision 5: Session 47 keys a slice's Legend color and stroke
+// edits by the row key, so two rows of one name keep their own edits; a
+// Session 46 stored them under the shown caption and is read by row key
+// (tests/fixtures/sessions/legend-row-key-vectors.json).
+test('Session 47 keeps the edits of two rows of one name; a Session 46 is read by row key', async () => {
+  resetDrawings();
+  state.mode.value = 'circular';
+  const drawing = state.drawings.circular;
+  const rows = [
+    { caption: 'GC', originalCaption: 'GC content', color: '#a0a0a0', featureIds: [] },
+    { caption: 'GC', originalCaption: 'GC skew', color: '#5050f0', featureIds: [] }
+  ];
+  drawing.legendEntries.value = structuredClone(rows);
+  Object.assign(drawing.legendColorOverrides, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
+  Object.assign(drawing.legendStrokeOverrides, { 'GC skew': { strokeColor: '#00aa00', strokeWidth: 2 } });
+  const saved = await save('two rows of one name');
+  const legend = saved.modes.circular.editorState.legend;
+  assert.deepEqual(legend.entries.map(({ caption, originalCaption }) => [caption, originalCaption]),
+    [['GC', 'GC content'], ['GC', 'GC skew']]);
+  assert.deepEqual(legend.colorOverrides, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
+
+  resetDrawings();
+  drawing.legendEntries.value = [];
+  for (const store of [drawing.legendColorOverrides, drawing.legendStrokeOverrides]) {
+    Object.keys(store).forEach((key) => delete store[key]);
+  }
+  const loaded = await load(saved);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(drawing.legendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+    [['GC', 'GC content'], ['GC', 'GC skew']]);
+  assert.deepEqual({ ...drawing.legendColorOverrides }, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
+  assert.deepEqual({ ...drawing.legendStrokeOverrides['GC skew'] }, { strokeColor: '#00aa00', strokeWidth: 2 });
+
+  // DESIGN 1a: GC skew renamed Z, then GC content renamed GC skew and colored red.
+  const older = structuredClone(saved);
+  older.version = 46;
+  older.modes.circular.editorState.legend = {
+    ...older.modes.circular.editorState.legend,
+    entries: [
+      { caption: 'GC skew', originalCaption: 'GC content', color: '#a0a0a0', featureIds: [] },
+      { caption: 'Z', originalCaption: 'GC skew', color: '#5050f0', featureIds: [] }
+    ],
+    colorOverrides: { 'GC skew': '#ff0000' },
+    strokeOverrides: { Z: { strokeColor: '#00aa00', strokeWidth: 2 } }
+  };
+  const loadedOlder = await load(older);
+  assert.equal(loadedOlder.status, 'ok', JSON.stringify(loadedOlder.error));
+  assert.deepEqual({ ...drawing.legendColorOverrides }, { 'GC content': '#ff0000' });
+  assert.deepEqual(Object.keys(drawing.legendStrokeOverrides), ['GC skew']);
 });
 
 // OV-337: Load leaves a Linear row without a Depth file as the Session binds it
@@ -243,6 +319,19 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
   assert.deepEqual(state.linearSeqs.map((seq) => seq.depth), [null]);
   const second = await save('gallery round trip again');
   assert.deepEqual(second.webFiles.bindings.linearSeqs.map((row) => row.depth), rows.map((row) => row.depth));
+});
+
+// A Session does not save the label fit report, so a loaded Result has no
+// "Leader lines cross" notice (PD-OI-097).
+test('Session Load clears the label fit notice of the Result shown before', async () => {
+  resetDrawings();
+  state.mode.value = 'circular';
+  const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
+  state.labelFitReports.value = [{ resultIndex: 0, resultName: 'fit.svg', rowToken: 'circular:1:0',
+    report: { drawn: true, notice: ['Leader lines cross (5 pairs).'] } }];
+  assert.equal((await load(gallery)).status, 'ok');
+  assert.ok(state.results.value.length > 0, 'the Session has a Result');
+  assert.deepEqual(state.labelFitReports.value, []);
 });
 
 // Record selection D-05: each slice keeps the keys of its OFF records; an

@@ -15,6 +15,40 @@ import {
 import { countGenBankRecords } from '../services/genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
+import { isCurrentRequestSchema } from '../utils/request-schema.js';
+/** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
+/** @import { LosatCacheInfoEntry } from '../services/config.js' */
+
+/**
+ * @typedef {{ path?: unknown, name?: unknown, kind?: unknown, slot?: unknown }} FileMetadataInput One file's metadata as a caller supplies it.
+ * @typedef {Map<unknown, FileMetadataInput> | (FileMetadataInput | [unknown, FileMetadataInput] | null)[] | Record<string, FileMetadataInput> | null | undefined} FileMetadataSource
+ * @typedef {{ path: string, name: string, kind: 'generated' | 'uploaded', slot: string, resourceId?: string }} RecipeFileMetadata
+ * @typedef {(path: string) => string} FinalNameForPath The visible name allocated to a generated file's path.
+ * @typedef {{ path: string, name: string, slot: string, data?: string | Uint8Array, buildData?: (finalNameForPath: FinalNameForPath) => string | Uint8Array }} RecipeGeneratedFile
+ * @typedef {(resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>} ResourceRecordCounter
+ * @typedef {{ source?: boolean, fallback?: string, slot?: string, nameHintSlot?: string }} RecipeResourcePathOptions
+ * @typedef {object} RecipeFiles The files a recipe names, by visible name and resource.
+ * @property {(resourceId: unknown, options?: RecipeResourcePathOptions) => string} resourcePath
+ * @property {(nameRaw: unknown, data: string | ((finalNameForPath: FinalNameForPath) => string), slot: string | undefined) => string} generatedTextPath
+ * @property {(path: string) => string} visibleName
+ * @property {(resourceId: unknown, kind: 'genbank' | 'fasta') => Promise<number>} resourceRecordCount
+ * @property {Map<string, RecipeFileMetadata>} fileMetadata
+ * @property {RecipeGeneratedFile[]} generatedFiles
+ * @typedef {{ schema: number, consumedPaths: Set<string>, metadataPaths: Set<string> }} RecipeCoverage The semantic fields of a request, by path.
+ * @typedef {{ kind: 'genbank' | 'gffFasta', ids: string[] }} SourceSpec The resource ids that one record needs.
+ * @typedef {{ path: string, name: string, slot: string }} RecipeHelperFile A file the recipe or the replay needs beside the uploaded inputs.
+ * @typedef {{ program: string, kind: string, version: string | null, source: string, path: string | null }} LosatRuntimeRecord
+ * @typedef {object} SourceRecipe
+ * @property {boolean} available
+ * @property {'circular' | 'linear'} mode
+ * @property {string[]} args
+ * @property {Map<string, RecipeFileMetadata>} fileMetadata
+ * @property {RecipeGeneratedFile[]} generatedFiles
+ * @property {{ schema: number, consumedPaths: string[], metadataPaths: string[] } | null} semanticCoverage
+ * @property {string} unavailableReason
+ */
 
 const SAFE_SHELL_TOKEN_RE = /^[A-Za-z0-9_@%+=:,./-]+$/;
 
@@ -26,6 +60,7 @@ class SourceRecipeUnavailable extends Error {}
 // identityTableUnavailable assigns reason after construction.
 /** @typedef {{ reason?: string }} Reasoned */
 
+/** @param {unknown} value */
 const normalizePath = (value) => String(value ?? '').trim();
 
 /**
@@ -36,6 +71,7 @@ const isPlainObject = (value) => Boolean(
   value && typeof value === 'object' && !Array.isArray(value)
 );
 
+/** @param {unknown} value */
 const visibleBasename = (value) => {
   // `split` always returns at least one element, so `pop` returns a string.
   const name = /** @type {string} */ (String(value || '')
@@ -47,20 +83,23 @@ const visibleBasename = (value) => {
   return name && name !== '.' && name !== '..' ? name : '';
 };
 
+/** @param {unknown} path */
 const fallbackNameFromPath = (path) => {
   const name = normalizePath(path).split('/').filter(Boolean).pop();
   return name || 'file';
 };
 
+/** @param {FileMetadataSource} fileMetadata */
 const normalizeMetadataEntries = (fileMetadata) => {
   if (!fileMetadata) return [];
   if (fileMetadata instanceof Map) return Array.from(fileMetadata.entries());
   if (Array.isArray(fileMetadata)) {
     // `filter(Boolean)` drops the `null` entries, which leaves only [path, entry] pairs.
-    return /** @type {any[][]} */ (fileMetadata
+    return /** @type {[unknown, FileMetadataInput][]} */ (fileMetadata
       .map((entry) => {
         if (Array.isArray(entry) && entry.length >= 2) return [entry[0], entry[1]];
-        if (entry && typeof entry === 'object') return [entry.path, entry];
+        // A one-item array also reaches here; it has no `path`, which reads as undefined.
+        if (entry && typeof entry === 'object') return [/** @type {FileMetadataInput} */ (entry).path, entry];
         return null;
       })
       .filter(Boolean));
@@ -69,7 +108,9 @@ const normalizeMetadataEntries = (fileMetadata) => {
   return [];
 };
 
+/** @param {FileMetadataSource} fileMetadata */
 const normalizeFileMetadata = (fileMetadata) => {
+  /** @type {Map<string, RecipeFileMetadata>} */
   const map = new Map();
   normalizeMetadataEntries(fileMetadata).forEach(([pathRaw, entryRaw]) => {
     const path = normalizePath(pathRaw || entryRaw?.path);
@@ -88,9 +129,14 @@ const normalizeFileMetadata = (fileMetadata) => {
   return map;
 };
 
+/** @param {unknown} name */
 const filenameCollisionKey = (name) => String(name || '')
   .replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 
+/**
+ * @param {string} name
+ * @param {number} suffix
+ */
 const suffixedFilename = (name, suffix) => {
   const dot = name.lastIndexOf('.');
   return dot > 0
@@ -98,10 +144,18 @@ const suffixedFilename = (name, suffix) => {
     : `${name}-${suffix}`;
 };
 
+/**
+ * @param {{ sourceMetadata: Map<string, RecipeFileMetadata>, exactMetadata: Map<string, RecipeFileMetadata>, sourceAvailable: boolean }} options
+ */
 const allocateVisibleFilenames = ({ sourceMetadata, exactMetadata, sourceAvailable }) => {
   const source = new Map(Array.from(sourceMetadata, ([path, entry]) => [path, { ...entry }]));
   const exact = new Map(Array.from(exactMetadata, ([path, entry]) => [path, { ...entry }]));
   const used = new Map();
+  /**
+   * @param {string} namespace
+   * @param {string} path
+   * @param {RecipeFileMetadata} entry
+   */
   const reserveFixed = (namespace, path, entry) => {
     const name = visibleBasename(entry.name);
     if (!name) {
@@ -119,6 +173,12 @@ const allocateVisibleFilenames = ({ sourceMetadata, exactMetadata, sourceAvailab
     entry.name = name;
     used.set(key, owner);
   };
+  /**
+   * @param {string} namespace
+   * @param {string} path
+   * @param {RecipeFileMetadata} entry
+   * @param {number} index
+   */
   const reserveGenerated = (namespace, path, entry, index) => {
     const base = visibleBasename(entry.name) || visibleBasename(path) || `helper-${index}`;
     let name = base;
@@ -131,7 +191,7 @@ const allocateVisibleFilenames = ({ sourceMetadata, exactMetadata, sourceAvailab
     used.set(filenameCollisionKey(name), `${namespace}:${path}`);
   };
 
-  /** @type {Array<[string, Map<string, any>]>} */
+  /** @type {Array<[string, Map<string, RecipeFileMetadata>]>} */
   const namespaces = sourceAvailable ? [['source', source], ['exact', exact]] : [['exact', exact]];
   namespaces.forEach(([namespace, metadata]) => metadata.forEach((entry, path) => {
     if (entry.kind !== 'generated') reserveFixed(namespace, path, entry);
@@ -145,6 +205,7 @@ const allocateVisibleFilenames = ({ sourceMetadata, exactMetadata, sourceAvailab
   return { source, exact };
 };
 
+/** @param {readonly { name?: unknown, path?: unknown }[] | null | undefined} files */
 const formatHelperFileList = (files) => {
   const names = Array.from(new Set((Array.isArray(files) ? files : [])
     .map((file) => String(file?.name || fallbackNameFromPath(file?.path)).trim())
@@ -154,6 +215,7 @@ const formatHelperFileList = (files) => {
   return `${names.slice(0, 3).join(', ')}, and ${names.length - 3} more`;
 };
 
+/** @param {unknown} selector */
 const selectorText = (selector) => {
   if (!isPlainObject(selector)) return '';
   if (selector.kind === 'recordId') return String(selector.value || '').trim();
@@ -164,11 +226,16 @@ const selectorText = (selector) => {
   return '';
 };
 
+/** @param {unknown} value */
 const tsvCell = (value) => {
   const text = String(value ?? '');
   return /[\t\r\n"]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 };
 
+/**
+ * @param {readonly string[]} columns
+ * @param {readonly Record<string, unknown>[]} rows
+ */
 const tsv = (columns, rows) => `${[
   columns.join('\t'),
   ...rows.map((row) => columns.map((column) => tsvCell(row[column])).join('\t'))
@@ -176,6 +243,7 @@ const tsv = (columns, rows) => `${[
 
 // An identity table that cannot carry a row: the Source recipe is unavailable,
 // and Export Feature Edits TSV reports the reason.
+/** @param {string} reason */
 const identityTableUnavailable = (reason) => Object.assign(
   new SourceRecipeUnavailable(`Source recipe unavailable: ${reason}`), { reason }
 );
@@ -184,6 +252,11 @@ const identityTableUnavailable = (reason) => Object.assign(
 // reader (gbdraw/features/source.py::read_identity_table trims every cell except
 // label_text). hash=<biologicalFeatureId> names exactly one source feature; a bare
 // value would match the shared hash of identical features.
+/**
+ * @param {CanonicalRenderRequest} renderRequest
+ * @param {{ recordKey: string, biologicalFeatureId: string }} row
+ * @param {string} kind
+ */
 const identityTableCells = (renderRequest, row, kind) => {
   const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
   const id = row.biologicalFeatureId;
@@ -197,6 +270,10 @@ const identityTableCells = (renderRequest, row, kind) => {
 const FEATURE_OVERRIDE_TABLE_COLUMNS = [
   'record', 'feature_selector', 'feature_visibility', 'label_visibility', 'label_text'
 ];
+/**
+ * @param {CanonicalRenderRequest} renderRequest
+ * @param {CanonicalFeatureOverride} row
+ */
 const featureOverrideTableRow = (renderRequest, row) => {
   const cells = identityTableCells(renderRequest, row, 'feature edit');
   const { featureVisibility: feature, labelVisibility: label, labelText: text } = row;
@@ -207,10 +284,18 @@ const featureOverrideTableRow = (renderRequest, row) => {
   }
   return { ...cells, feature_visibility: feature ?? '', label_visibility: label ?? '', label_text: text ?? '' };
 };
+/**
+ * @param {CanonicalRenderRequest} renderRequest
+ * @param {readonly CanonicalFeatureOverride[]} rows
+ */
 const featureOverrideTable = (renderRequest, rows) => tsv(
   FEATURE_OVERRIDE_TABLE_COLUMNS, rows.map((row) => featureOverrideTableRow(renderRequest, row))
 );
 
+/**
+ * @param {unknown} value
+ * @param {Map<string, string>} hints
+ */
 const collectBindingNameHints = (value, hints) => {
   if (Array.isArray(value)) {
     value.forEach((entry) => collectBindingNameHints(entry, hints));
@@ -223,7 +308,9 @@ const collectBindingNameHints = (value, hints) => {
   Object.values(value).forEach((entry) => collectBindingNameHints(entry, hints));
 };
 
+/** @param {Record<string, unknown> | null | undefined} webFiles */
 const originalResourceNameHints = (webFiles) => {
+  /** @type {Map<string, string>} */
   const hints = new Map();
   const stored = isPlainObject(webFiles?.resourceOriginalNames)
     ? webFiles.resourceOriginalNames
@@ -236,12 +323,14 @@ const originalResourceNameHints = (webFiles) => {
   return hints;
 };
 
+/** @param {Map<string, string> | Record<string, string> | null | undefined} hints */
 const normalizeNameHints = (hints) => new Map(
   hints instanceof Map
     ? hints
     : (isPlainObject(hints) ? Object.entries(hints) : [])
 );
 
+/** @param {unknown} descriptor */
 const resourceBytes = (descriptor) => {
   if (!isPlainObject(descriptor)) return null;
   if (descriptor.encoding === 'base64' && typeof descriptor.data === 'string') {
@@ -253,17 +342,33 @@ const resourceBytes = (descriptor) => {
   return null;
 };
 
+/**
+ * @param {Record<string, unknown> | null | undefined} resources
+ * @param {Record<string, unknown> | null | undefined} webFiles
+ * @param {Map<string, string> | null | undefined} generatedFileNameHints
+ * @param {ResourceRecordCounter | null | undefined} readResourceRecordCount
+ * @returns {RecipeFiles}
+ */
 const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readResourceRecordCount) => {
   const descriptors = isPlainObject(resources) ? resources : {};
   const originalNames = originalResourceNameHints(webFiles);
   const generatedNames = normalizeNameHints(generatedFileNameHints);
+  /** @type {Map<string, RecipeFileMetadata>} */
   const fileMetadata = new Map();
+  /** @type {RecipeGeneratedFile[]} */
   const generatedFiles = [];
+  /** @type {Map<string, string>} */
   const pathsByResourceId = new Map();
+  /** @type {Map<string, string>} */
   const visibleNameOwners = new Map();
+  /** @type {Map<string, number>} */
   const recordCountCache = new Map();
   let generatedIndex = 0;
 
+  /**
+   * @param {string} name
+   * @param {string} owner
+   */
   const reserveName = (name, owner) => {
     const collisionKey = name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
     const existing = visibleNameOwners.get(collisionKey);
@@ -275,6 +380,11 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     visibleNameOwners.set(collisionKey, owner);
   };
 
+  /**
+   * @param {unknown} resourceIdRaw
+   * @param {RecipeResourcePathOptions} [options]
+   * @returns {string}
+   */
   const resourcePath = (resourceIdRaw, {
     source = false,
     fallback = 'helper.tsv',
@@ -288,7 +398,8 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
         `Source recipe unavailable: canonical resource "${resourceId || '(missing)'}" is unavailable.`
       );
     }
-    if (pathsByResourceId.has(resourceId)) return pathsByResourceId.get(resourceId);
+    // `has` holds, so the entry is a string.
+    if (pathsByResourceId.has(resourceId)) return /** @type {string} */ (pathsByResourceId.get(resourceId));
 
     const originalName = originalNames.get(resourceId) || '';
     if (source && !originalName) throw new SourceRecipeUnavailable(SOURCE_PROVENANCE_UNAVAILABLE);
@@ -326,6 +437,11 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     return path;
   };
 
+  /**
+   * @param {unknown} nameRaw
+   * @param {string | ((finalNameForPath: FinalNameForPath) => string)} data
+   * @param {string | undefined} slot
+   */
   const generatedTextPath = (nameRaw, data, slot) => {
     generatedIndex += 1;
     const name = visibleBasename(nameRaw) || `helper-${generatedIndex}.tsv`;
@@ -343,11 +459,18 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     return path;
   };
 
+  /** @param {string} path */
   const visibleName = (path) => fileMetadata.get(path)?.name || fallbackNameFromPath(path);
+  /**
+   * @param {unknown} resourceIdRaw
+   * @param {'genbank' | 'fasta'} kind
+   * @returns {Promise<number>}
+   */
   const resourceRecordCount = async (resourceIdRaw, kind) => {
     const resourceId = String(resourceIdRaw || '').trim();
     const cacheKey = `${resourceId}:${kind}`;
-    if (recordCountCache.has(cacheKey)) return recordCountCache.get(cacheKey);
+    // `has` holds, so the entry is a number.
+    if (recordCountCache.has(cacheKey)) return /** @type {number} */ (recordCountCache.get(cacheKey));
     let count;
     if (typeof readResourceRecordCount === 'function') {
       count = await readResourceRecordCount(resourceId, kind);
@@ -382,6 +505,13 @@ const DIAGRAM_OPTION_FIELDS = new Set([
   'conservationColors', 'conservationRingWidth', 'conservationRingGap'
 ]);
 
+/**
+ * @param {RecipeCoverage} coverage
+ * @param {unknown} value
+ * @param {string} path
+ * @param {Iterable<string>} projected
+ * @param {Iterable<string>} [metadata]
+ */
 const coverObject = (coverage, value, path, projected, metadata = []) => {
   if (!isPlainObject(value)) {
     throw new SourceRecipeUnavailable(
@@ -402,15 +532,30 @@ const coverObject = (coverage, value, path, projected, metadata = []) => {
   });
 };
 
+/**
+ * @param {RecipeCoverage} coverage
+ * @param {unknown} value
+ * @param {string} path
+ */
 const coverResourceRef = (coverage, value, path) => {
   if (value === null || value === undefined) return;
   coverObject(coverage, value, path, ['resourceId', 'representation']);
 };
 
+/**
+ * @param {RecipeCoverage} coverage
+ * @param {unknown} value
+ * @param {string} path
+ */
 const coverTrackScalar = (coverage, value, path) => {
   if (isPlainObject(value)) coverObject(coverage, value, path, ['value', 'unit']);
 };
 
+/**
+ * @param {RecipeCoverage} coverage
+ * @param {Partial<CanonicalCircularTrackOptions> | Partial<CanonicalLinearTrackOptions>} tracks
+ * @param {CanonicalRenderRequest['mode']} mode
+ */
 const coverTrackSlots = (coverage, tracks, mode) => {
   coverObject(coverage, tracks, 'diagramOptions.tracks', [
     'circularTrackSlots', 'circularTrackAxisIndex', 'linearTrackSlots',
@@ -427,7 +572,8 @@ const coverTrackSlots = (coverage, tracks, mode) => {
       ...(mode === 'circular' ? ['innerGapPx', 'outerGapPx'] : []),
       'z', 'params'
     ]);
-    scalarFields.forEach((field) => coverTrackScalar(coverage, slot[field], `${path}.${field}`));
+    // The slot is read by field name; each value is checked as it is covered.
+    scalarFields.forEach((field) => coverTrackScalar(coverage, /** @type {Record<string, unknown>} */ (slot)[field], `${path}.${field}`));
     const params = slot.params;
     if (!isPlainObject(params)) return;
     coverObject(coverage, params, `${path}.params`, [
@@ -439,7 +585,9 @@ const coverTrackSlots = (coverage, tracks, mode) => {
   });
 };
 
+/** @param {CanonicalRenderRequest} request */
 const validateCurrentSemanticCoverage = (request) => {
+  /** @type {RecipeCoverage} */
   const coverage = { schema: request.schema, consumedPaths: new Set(), metadataPaths: new Set() };
   coverObject(coverage, request, '', [
     'mode', 'grouping', 'records', 'diagramOptions', 'layout', 'comparisons', 'output'
@@ -454,9 +602,9 @@ const validateCurrentSemanticCoverage = (request) => {
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
     const path = `records[${index}]`;
     coverObject(coverage, record, path, [
-      'cardinality', 'source', 'selector', 'region', 'presentation', ...(request.schema >= 7 ? ['display'] : [])
+      'cardinality', 'source', 'selector', 'region', 'presentation', ...(isCurrentRequestSchema(request) ? ['display'] : [])
     ], ['recordKey']);
-    if (request.schema >= 7) coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
+    if (isCurrentRequestSchema(request)) coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
     if (!['all', 'exactly_one'].includes(record.cardinality)) {
       throw new SourceRecipeUnavailable(
         `Source recipe unavailable: record cardinality "${String(record.cardinality || 'missing')}" has no current CLI projection.`
@@ -504,8 +652,8 @@ const validateCurrentSemanticCoverage = (request) => {
     coverObject(coverage, record.presentation, `${path}.presentation`, [
       'label', 'subtitle', 'reverseComplement', 'gridRow', 'gridColumn'
     ]);
-    ['gridRow', 'gridColumn'].forEach((field) => {
-      const value = record.presentation[field];
+    /** @type {const} */ (['gridRow', 'gridColumn']).forEach((field) => {
+      const value = /** @type {unknown} */ (record.presentation[field]); // read as text too: a blank cell is ''
       if (value !== null && value !== undefined && value !== '' && gridCoordinate(value) === '') {
         throw new SourceRecipeUnavailable(
           `Source recipe unavailable: record placement "${path}.presentation.${field}" is invalid.`
@@ -517,8 +665,8 @@ const validateCurrentSemanticCoverage = (request) => {
   const options = request.diagramOptions;
   coverObject(coverage, options, 'diagramOptions', new Set([
     ...DIAGRAM_OPTION_FIELDS,
-    ...(request.schema >= 7 ? ['featurePlacements'] : []),
-    ...(request.schema >= 9 ? ['featureOverrides'] : [])
+    ...(isCurrentRequestSchema(request) ? ['featurePlacements'] : []),
+    ...(isCurrentRequestSchema(request) ? ['featureOverrides'] : [])
   ]));
   (options.featureOverrides || []).forEach((row, index) => {
     coverObject(coverage, row, `diagramOptions.featureOverrides[${index}]`, [
@@ -544,16 +692,16 @@ const validateCurrentSemanticCoverage = (request) => {
   coverObject(coverage, options.colors || {}, 'diagramOptions.colors', [
     'colorTable', 'colorTableFile', 'defaultColors', 'defaultColorsPalette', 'defaultColorsFile'
   ]);
-  ['colorTable', 'colorTableFile', 'defaultColors', 'defaultColorsFile'].forEach((field) => (
+  /** @type {const} */ (['colorTable', 'colorTableFile', 'defaultColors', 'defaultColorsFile']).forEach((field) => (
     coverResourceRef(coverage, options.colors?.[field], `diagramOptions.colors.${field}`)
   ));
   coverObject(coverage, options.featureShapes || {}, 'diagramOptions.featureShapes', Object.keys(
     options.featureShapes || {}
   ));
-  [
+  /** @type {const} */ ([
     'featureVisibilityTableFile', 'labelWhitelistFile', 'qualifierPriorityFile',
     'qualifierPriorityTable', 'labelOverrideFile'
-  ].forEach((field) => coverResourceRef(coverage, options[field], `diagramOptions.${field}`));
+  ]).forEach((field) => coverResourceRef(coverage, options[field], `diagramOptions.${field}`));
   (Array.isArray(options.depthTracks) ? options.depthTracks : []).forEach((track, index) => {
     const path = `diagramOptions.depthTracks[${index}]`;
     coverObject(coverage, track, path, [
@@ -565,7 +713,7 @@ const validateCurrentSemanticCoverage = (request) => {
       coverage, ref, `${path}.source${Array.isArray(track.source) ? `[${refIndex}]` : ''}`
     ));
   });
-  ['conservationBlastFiles', 'conservationFastaFiles'].forEach((field) => {
+  /** @type {const} */ (['conservationBlastFiles', 'conservationFastaFiles']).forEach((field) => {
     (Array.isArray(options[field]) ? options[field] : []).forEach((ref, index) => (
       coverResourceRef(coverage, ref, `diagramOptions.${field}[${index}]`)
     ));
@@ -628,7 +776,12 @@ const validateCurrentSemanticCoverage = (request) => {
   };
 };
 
+/**
+ * @param {CanonicalRecord | null | undefined} record
+ * @returns {SourceSpec}
+ */
 const sourceSpec = (record) => {
+  /** @type {CanonicalRecord['source'] | Record<string, unknown>} */
   const source = isPlainObject(record?.source) ? record.source : {};
   if (source.kind === 'genbank') {
     return { kind: 'genbank', ids: [String(source.resourceId || '').trim()] };
@@ -650,6 +803,10 @@ const sourceSpec = (record) => {
 // The row of each record, and, when the order of the positions within a row is
 // not the record order (CI-02: Up/Down), each record's 1-based place in its row:
 // a records table orders a row by `column`, then by its record order.
+/**
+ * @param {CanonicalRenderRequest} request
+ * @param {readonly CanonicalRecord[]} records
+ */
 const layoutRows = (request, records) => {
   const positions = request.layout?.multiRecordPositions;
   /** @type {number[]} */
@@ -709,12 +866,22 @@ const layoutRows = (request, records) => {
   return { rows, columns };
 };
 
+/**
+ * @param {unknown} value
+ * @returns {number | ''}
+ */
 const gridCoordinate = (value) => {
   if (value === null || value === undefined || value === '') return '';
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : '';
 };
 
+/**
+ * @param {string[]} args
+ * @param {CanonicalRenderRequest} request
+ * @param {RecipeFiles} files
+ * @returns {Promise<boolean>} Whether a records table carries the records.
+ */
 const appendInputArgs = async (args, request, files) => {
   const records = Array.isArray(request.records) ? request.records : [];
   if (records.length === 0) {
@@ -771,10 +938,10 @@ const appendInputArgs = async (args, request, files) => {
     }
   });
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
-  if (request.schema >= 6 && recordsTableRequired) {
+  if (isCurrentRequestSchema(request) && recordsTableRequired) {
     for (const [index, record] of records.entries()) {
       if (record.cardinality === 'exactly_one') continue;
-      if (request.schema >= 7 && await files.resourceRecordCount(
+      if (isCurrentRequestSchema(request) && await files.resourceRecordCount(
         specs[index].ids.at(-1), inputKind === 'genbank' ? 'genbank' : 'fasta'
       ) === 1) continue;
       throw new SourceRecipeUnavailable(
@@ -783,7 +950,7 @@ const appendInputArgs = async (args, request, files) => {
     }
   }
 
-  if (request.schema >= 6 && !recordsTableRequired) {
+  if (isCurrentRequestSchema(request) && !recordsTableRequired) {
     const loadComparison = request.mode === 'linear'
       && Array.isArray(request.comparisons)
       && request.comparisons.length > 0;
@@ -812,8 +979,8 @@ const appendInputArgs = async (args, request, files) => {
   if (recordsTableRequired) {
     const requestedTableRows = requestedRows;
     const columns = inputKind === 'genbank'
-      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])]
-      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])];
+      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(isCurrentRequestSchema(request) ? ['topology', 'display_start'] : [])]
+      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(isCurrentRequestSchema(request) ? ['topology', 'display_start'] : [])];
     const rows = records.map((record, index) => {
       const region = isPlainObject(record.region) ? record.region : null;
       const selector = selectorText(region?.selector || record.selector);
@@ -881,11 +1048,22 @@ const appendInputArgs = async (args, request, files) => {
   return false;
 };
 
+/**
+ * @param {string[]} args
+ * @param {string} option
+ * @param {unknown} value
+ */
 const appendOption = (args, option, value) => {
   if (value === null || value === undefined || value === '') return;
   args.push(option, String(value));
 };
 
+/**
+ * @param {string[]} args
+ * @param {unknown} value
+ * @param {string} enabledOption
+ * @param {string} [disabledOption]
+ */
 const appendBooleanOption = (args, value, enabledOption, disabledOption = '') => {
   if (value === true && enabledOption) args.push(enabledOption);
   else if (value === false && disabledOption) args.push(disabledOption);
@@ -896,6 +1074,7 @@ const CONFIG_VALUE_OPTIONS = Object.freeze({
   'objects.features.arrow_geometry.shaft_width_ratio': '--arrow_shaft_width_ratio',
   'objects.features.block_stroke_color': '--block_stroke_color',
   'objects.features.line_stroke_color': '--line_stroke_color',
+  'objects.text.font_family': '--font_family',
   'labels.rendering': '--label_rendering',
   'objects.gc_content.mode': '--gc_content_mode',
   'objects.gc_content.min_percent': '--gc_content_min_percent',
@@ -962,10 +1141,15 @@ const LINEAR_LENGTH_OPTIONS = Object.freeze({
   'labels.font_size.linear': '--label_font_size'
 });
 
+/**
+ * @param {string[]} args
+ * @param {CanonicalRenderRequest} request
+ */
 const appendConfigOverrides = (args, request) => {
   const options = request.diagramOptions || {};
   const overrides = isPlainObject(options.configOverrides) ? options.configOverrides : {};
   const consumed = new Set();
+  /** @param {string} path */
   const take = (path) => {
     if (!Object.hasOwn(overrides, path)) return undefined;
     consumed.add(path);
@@ -1022,6 +1206,7 @@ const appendConfigOverrides = (args, request) => {
   if (request.mode === 'linear') {
     // Without --ruler_label_font_size the CLI ruler labels follow
     // --scale_font_size; this render keeps the configured ruler-label sizes.
+    /** @param {string} prefix */
     const hasSizedOverride = (prefix) => ['short', 'long'].some(
       (size) => Object.hasOwn(overrides, `${prefix}.${size}`)
     );
@@ -1109,11 +1294,19 @@ const appendConfigOverrides = (args, request) => {
   }
 };
 
+/** @param {{ resourceId?: unknown } | null | undefined} value */
 const referencedResourceId = (value) => String(value?.resourceId || '').trim();
 
+/**
+ * @param {string[]} args
+ * @param {CanonicalRenderRequest['diagramOptions']} options
+ * @param {RecipeFiles} files
+ */
 const appendResourceOptions = (args, options, files) => {
+  /** @type {Partial<CanonicalColorOptions>} */
   const colors = isPlainObject(options.colors) ? options.colors : {};
   appendOption(args, '-p', colors.defaultColorsPalette);
+  /** @type {[string, { resourceId?: unknown } | null | undefined, string][]} */
   const resourceOptions = [
     ['-t', colors.colorTable || colors.colorTableFile, 'specific-colors.tsv'],
     ['-d', colors.defaultColors || colors.defaultColorsFile, 'default-colors.tsv'],
@@ -1139,6 +1332,11 @@ const appendResourceOptions = (args, options, files) => {
   }
 };
 
+/**
+ * @param {string[]} args
+ * @param {CanonicalRenderRequest['diagramOptions'] & { mode: CanonicalRenderRequest['mode'] }} options
+ * @param {RecipeFiles} files
+ */
 const appendDepthOptions = (args, options, files) => {
   const tracks = Array.isArray(options.depthTracks) ? options.depthTracks : [];
   tracks.forEach((track, trackIndex) => {
@@ -1158,6 +1356,10 @@ const appendDepthOptions = (args, options, files) => {
     }
     args.push('--depth_track', ...paths);
   });
+  /**
+   * @param {string} option
+   * @param {Exclude<keyof CanonicalLinearDepthTrack, 'source'>} field The depth track of each mode has these fields.
+   */
   const appendTrackValues = (option, field) => {
     if (tracks.length === 0) return;
     const values = tracks.map((track) => {
@@ -1175,6 +1377,10 @@ const appendDepthOptions = (args, options, files) => {
   appendTrackValues('--depth_track_tick_font_size', 'tickFontSize');
 };
 
+/**
+ * @param {unknown} value
+ * @param {{ allowFactor?: boolean }} [options]
+ */
 const formatCanonicalTrackScalar = (value, { allowFactor = false } = {}) => {
   if (!isPlainObject(value)) return value;
   const numeric = Number(value.value);
@@ -1187,6 +1393,7 @@ const formatCanonicalTrackScalar = (value, { allowFactor = false } = {}) => {
   return unit === 'px' ? `${numeric}px` : String(numeric);
 };
 
+/** @type {Readonly<Record<'circular' | 'linear', Readonly<Record<string, Set<string>>>>>} */
 const TRACK_PARAM_KEYS = Object.freeze({
   circular: {
     features: new Set(['lane_direction', 'legend_label']),
@@ -1214,6 +1421,11 @@ const TRACK_PARAM_KEYS = Object.freeze({
   }
 });
 
+/**
+ * @param {CanonicalRenderRequest['mode']} mode
+ * @param {string} renderer
+ * @param {unknown} params
+ */
 const validateTrackParams = (mode, renderer, params) => {
   if (!isPlainObject(params)) {
     throw new SourceRecipeUnavailable(
@@ -1234,6 +1446,10 @@ const validateTrackParams = (mode, renderer, params) => {
   }
 };
 
+/**
+ * @param {CanonicalCircularTrackSlot | CanonicalLinearTrackSlot} slot
+ * @param {CanonicalRenderRequest['mode']} mode
+ */
 const validateStructuredTrackSlot = (slot, mode) => {
   if (!isPlainObject(slot)) {
     throw new SourceRecipeUnavailable(
@@ -1266,6 +1482,11 @@ const validateStructuredTrackSlot = (slot, mode) => {
 // strip_inline_comment, one "@", one ":" in the head, "," between key=value
 // options) and require the same identity and well-formed options. A token that
 // the CLI would cut, re-split, or rename makes the recipe unavailable.
+/**
+ * @param {string} token
+ * @param {CanonicalRenderRequest['mode']} mode
+ * @param {{ id: string, renderer: string, exact?: boolean }} identity
+ */
 const assertCliSlotTokenLossless = (token, mode, { id, renderer, exact = false }) => {
   const unavailable = () => new SourceRecipeUnavailable(
     `Source recipe unavailable: a ${mode} track slot contains text (",", ":", "@", or " #") that the CLI slot grammar cannot carry.`
@@ -1298,6 +1519,11 @@ const assertCliSlotTokenLossless = (token, mode, { id, renderer, exact = false }
   if (exact && reread !== text) throw unavailable();
 };
 
+/**
+ * @param {string | CanonicalCircularTrackSlot | CanonicalLinearTrackSlot} slot
+ * @param {CanonicalRenderRequest['mode']} mode
+ * @param {CanonicalRenderRequest['diagramOptions']} options
+ */
 const trackSlotForRecipe = (slot, mode, options) => {
   if (typeof slot === 'string') {
     const text = slot.trim();
@@ -1326,12 +1552,15 @@ const trackSlotForRecipe = (slot, mode, options) => {
   try {
     if (mode === 'circular') {
       token = buildCircularTrackSlotSpec(
-        circularTrackSlotForRecipe(slot),
+        // validateStructuredTrackSlot above required `slot.kind` to be `${mode}TrackSlot`.
+        circularTrackSlotForRecipe(/** @type {CanonicalCircularTrackSlot} */ (slot)),
         options.dinucleotide,
-        options.configOverrides?.['canvas.circular.track_type']
+        // The codec reads this key as the circular track type text.
+        /** @type {string | undefined} */ (options.configOverrides?.['canvas.circular.track_type'])
       );
     } else {
-      const parsed = parseLinearTrackSlotSpec(slot);
+      // A slot that names no dinucleotide states the request's, as Python read it (OV-490).
+      const parsed = parseLinearTrackSlotSpec(slot, options.dinucleotide || 'GC');
       validateTrackParams('linear', parsed.renderer, parsed.params || {});
       token = buildLinearTrackSlotSpec(linearTrackSlotForRecipe(parsed), { includeEnabled: true });
     }
@@ -1345,20 +1574,27 @@ const trackSlotForRecipe = (slot, mode, options) => {
   return token;
 };
 
+/** @param {CanonicalCircularTrackSlot} slot */
 const circularTrackSlotForRecipe = (slot) => ({
   ...slot,
   radius: formatCanonicalTrackScalar(slot?.radius, { allowFactor: true }),
   width: formatCanonicalTrackScalar(slot?.width, { allowFactor: true })
 });
 
+/** @param {LinearTrackSlot} slot */
 const linearTrackSlotForRecipe = (slot) => ({
   ...slot,
   height: formatCanonicalTrackScalar(slot?.height),
   spacing: formatCanonicalTrackScalar(slot?.spacing)
 });
 
+/**
+ * @param {string[]} args
+ * @param {CanonicalRenderRequest} request
+ */
 const appendTrackOptions = (args, request) => {
   const options = request.diagramOptions || {};
+  /** @type {Partial<CanonicalCircularTrackOptions> | Partial<CanonicalLinearTrackOptions>} */
   const tracks = isPlainObject(options.tracks) ? options.tracks : {};
   appendOption(args, '--center_reserved_radius', tracks.centerReservedRadius);
   const field = request.mode === 'circular' ? 'circularTrackSlots' : 'linearTrackSlots';
@@ -1391,6 +1627,11 @@ const appendTrackOptions = (args, request) => {
   );
 };
 
+/**
+ * @param {string[]} args
+ * @param {CanonicalRenderRequest} request
+ * @param {RecipeFiles} files
+ */
 const appendComparisonOptions = (args, request, files) => {
   const options = request.diagramOptions || {};
   if (request.mode === 'circular') {
@@ -1433,7 +1674,10 @@ const appendComparisonOptions = (args, request, files) => {
     return;
   }
 
-  const comparisons = Array.isArray(request.comparisons) ? request.comparisons : [];
+  // A comparison of another kind has no record indexes; the `Number.isInteger` tests below reject it before any other use.
+  const comparisons = /** @type {(Omit<CanonicalNucleotideBlastComparison, 'kind'> & { kind: string })[]} */ (
+    Array.isArray(request.comparisons) ? request.comparisons : []
+  );
   if (comparisons.length === 0) return;
   const recordCount = Array.isArray(request.records) ? request.records.length : 0;
   if (comparisons.some((comparison) => (
@@ -1499,6 +1743,11 @@ const appendComparisonOptions = (args, request, files) => {
   );
 };
 
+/**
+ * @param {string[]} args
+ * @param {CanonicalRenderRequest} request
+ * @param {RecipeFiles} files
+ */
 const appendDiagramOptions = (args, request, files) => {
   const options = request.diagramOptions || {};
   if (Array.isArray(request.output) && request.output.length !== 1) {
@@ -1542,7 +1791,7 @@ const appendDiagramOptions = (args, request, files) => {
   appendOption(args, '--depth_step', options.depthStep);
   appendOption(args, '--plot_title', options.plotTitle);
   appendOption(args, '--plot_title_font_size', options.plotTitleFontSize);
-  ['evalue', 'bitscore', 'identity'].forEach((field) => appendOption(args, `--${field}`, options[field]));
+  /** @type {const} */ (['evalue', 'bitscore', 'identity']).forEach((field) => appendOption(args, `--${field}`, options[field]));
   appendOption(args, '--alignment_length', options.alignmentLength);
   if (request.mode === 'circular') {
     appendOption(args, '--species', options.species);
@@ -1567,7 +1816,13 @@ const appendDiagramOptions = (args, request, files) => {
   appendComparisonOptions(args, request, files);
 };
 
+/**
+ * @param {string[]} args
+ * @param {CanonicalRenderRequest} request
+ * @param {boolean} [recordsTableUsed]
+ */
 const appendLayoutOptions = (args, request, recordsTableUsed = false) => {
+  /** @type {Partial<CanonicalCircularLayout> & Partial<CanonicalLinearLayout>} */
   const layout = isPlainObject(request.layout) ? request.layout : {};
   if (request.mode === 'linear') {
     appendOption(args, '--linear_record_gap', layout.recordGapPx);
@@ -1586,6 +1841,10 @@ const appendLayoutOptions = (args, request, recordsTableUsed = false) => {
 
 // Identity tables name a record by its #index among the materialized records,
 // which is its request index only when no input expands to several records.
+/**
+ * @param {CanonicalRenderRequest} renderRequest
+ * @param {RecipeFiles} files
+ */
 const requireExactRecords = async (renderRequest, files) => {
   for (const record of renderRequest.records) {
     if (record.cardinality === 'exactly_one') continue;
@@ -1599,7 +1858,7 @@ const requireExactRecords = async (renderRequest, files) => {
 // Export Feature Edits TSV (design Q4 6.4): request featureOverrides rows as the
 // Source recipe writes its --feature_override_table, or why no table carries them.
 /**
- * @param {Pick<SourceRecipeOptions, 'resources' | 'readResourceRecordCount'> & { renderRequest: Record<string, any>, rows: any }} options
+ * @param {Pick<SourceRecipeOptions, 'resources' | 'readResourceRecordCount'> & { renderRequest: CanonicalRenderRequest, rows: readonly CanonicalFeatureOverride[] }} options
  */
 export const buildFeatureOverrideTable = async ({
   renderRequest, resources, rows, readResourceRecordCount = null
@@ -1616,14 +1875,17 @@ export const buildFeatureOverrideTable = async ({
 
 /**
  * @typedef {Object} SourceRecipeOptions
- * @property {Record<string, any>} [renderRequest] Committed render request (schema owned by the session request).
- * @property {Record<string, any>} [resources]
- * @property {any} [webFiles]
+ * @property {CanonicalRenderRequest} [renderRequest] Committed render request (schema owned by the session request).
+ * @property {Record<string, unknown>} [resources]
+ * @property {Record<string, unknown>} [webFiles]
  * @property {Map<string, string>} [generatedFileNameHints]
- * @property {((resourceId: string, kind: string) => number | Promise<number>) | null} [readResourceRecordCount]
+ * @property {ResourceRecordCounter | null} [readResourceRecordCount]
  */
 
-/** @param {SourceRecipeOptions} [options] */
+/**
+ * @param {SourceRecipeOptions} [options]
+ * @returns {Promise<SourceRecipe>}
+ */
 export const buildSourceRecipe = async ({
   renderRequest,
   resources,
@@ -1632,6 +1894,10 @@ export const buildSourceRecipe = async ({
   readResourceRecordCount = null
 } = {}) => {
   const mode = String(renderRequest?.mode || '').trim();
+  /**
+   * @param {unknown} reason
+   * @returns {SourceRecipe}
+   */
   const unavailable = (reason) => ({
     available: false,
     mode: mode === 'linear' ? 'linear' : 'circular',
@@ -1645,10 +1911,11 @@ export const buildSourceRecipe = async ({
     return unavailable('Source recipe unavailable: the committed render request is missing or invalid.');
   }
   try {
-    const semanticCoverage = renderRequest.schema >= 6
+    const semanticCoverage = isCurrentRequestSchema(renderRequest)
       ? validateCurrentSemanticCoverage(renderRequest)
       : { schema: renderRequest.schema, consumedPaths: [], metadataPaths: [] };
     const files = createRecipeFiles(resources, webFiles, generatedFileNameHints, readResourceRecordCount);
+    /** @type {string[]} */
     const args = [];
     const recordsTableUsed = await appendInputArgs(args, renderRequest, files);
     const placements = renderRequest.diagramOptions?.featurePlacements || [];
@@ -1672,7 +1939,8 @@ export const buildSourceRecipe = async ({
     appendLayoutOptions(args, renderRequest, recordsTableUsed);
     return {
       available: true,
-      mode,
+      // The `includes` test above admitted only these two.
+      mode: /** @type {'circular' | 'linear'} */ (mode),
       args,
       fileMetadata: files.fileMetadata,
       generatedFiles: files.generatedFiles,
@@ -1686,16 +1954,19 @@ export const buildSourceRecipe = async ({
   }
 };
 
+/** @param {unknown} value */
 export const quoteShellArg = (value) => {
   const token = String(value ?? '');
   if (token.length > 0 && SAFE_SHELL_TOKEN_RE.test(token)) return token;
   return `'${token.replace(/'/g, `'\\''`)}'`;
 };
 
+/** @param {readonly unknown[] | null | undefined} tokens */
 export const buildShellCommand = (tokens) => (Array.isArray(tokens) ? tokens : [])
   .map((token) => quoteShellArg(token))
   .join(' ');
 
+/** @param {unknown} elapsedMs */
 export const formatElapsedMs = (elapsedMs) => {
   const ms = Number(elapsedMs);
   if (!Number.isFinite(ms) || ms < 0) return 'n/a';
@@ -1706,6 +1977,7 @@ export const formatElapsedMs = (elapsedMs) => {
   return `${minutes} min ${seconds.toFixed(1)} s`;
 };
 
+/** @param {unknown} level */
 export const reproducibilityLabel = (level) => {
   const normalized = String(level || '').trim();
   if (normalized === 'source-unavailable') return 'Source recipe unavailable';
@@ -1716,9 +1988,14 @@ export const reproducibilityLabel = (level) => {
   return 'Approximate command';
 };
 
+/**
+ * @param {{ mode: 'circular' | 'linear', args: readonly unknown[] | null | undefined, fileMetadata: FileMetadataSource, generatedBy: string }} options
+ */
 const projectInvocation = ({ mode, args, fileMetadata, generatedBy }) => {
   const metadata = normalizeFileMetadata(fileMetadata);
+  /** @type {RecipeHelperFile[]} */
   const helperFiles = [];
+  /** @type {{ argIndex: number, path: string }[]} */
   const unresolvedFileArgs = [];
   const displayArgs = (Array.isArray(args) ? args : []).map((arg, argIndex) => {
     const token = String(arg ?? '');
@@ -1733,11 +2010,14 @@ const projectInvocation = ({ mode, args, fileMetadata, generatedBy }) => {
     }
     return displayName;
   });
+  /** @type {Map<string, number[]>} */
   const bindingArgIndexesByName = new Map();
   displayArgs.forEach((token, index) => {
     if (!bindingArgIndexesByName.has(token)) bindingArgIndexesByName.set(token, []);
-    bindingArgIndexesByName.get(token).push(index);
+    // The entry was set on the line above when it was missing.
+    /** @type {number[]} */ (bindingArgIndexesByName.get(token)).push(index);
   });
+  /** @type {{ argIndex: number, slot: string, name: string, originalArgIndex: number }[]} */
   const fixedFileBindings = [];
   const seenBindingKeys = new Set();
   (Array.isArray(args) ? args : []).forEach((arg, originalIndex) => {
@@ -1750,7 +2030,8 @@ const projectInvocation = ({ mode, args, fileMetadata, generatedBy }) => {
     const key = `${argIndex}:${meta.slot}`;
     if (seenBindingKeys.has(key)) return;
     seenBindingKeys.add(key);
-    fixedFileBindings.push({ argIndex, slot: meta.slot, name: displayName, originalArgIndex: originalIndex });
+    // `Number.isInteger` above returned for an undefined index.
+    fixedFileBindings.push({ argIndex: /** @type {number} */ (argIndex), slot: meta.slot, name: displayName, originalArgIndex: originalIndex });
   });
   const invocation = {
     schema: 1,
@@ -1772,7 +2053,12 @@ const projectInvocation = ({ mode, args, fileMetadata, generatedBy }) => {
   };
 };
 
+/**
+ * @param {readonly RecipeGeneratedFile[] | null | undefined} generatedFiles
+ * @param {Map<string, RecipeFileMetadata>} allocatedMetadata
+ */
 const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
+  /** @param {unknown} pathRaw */
   const finalNameForPath = (pathRaw) => {
     const path = String(pathRaw || '').trim();
     const name = allocatedMetadata.get(path)?.name;
@@ -1803,10 +2089,12 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
 export const LOSAT_DATABASE_SCOPE_NOTE = 'LOSAT E-values use the subject source file as the search database, '
   + 'without the query record when both records come from the same file.';
 
+/** @type {Readonly<Record<string, string>>} */
 const LOSAT_RUNTIME_NAMES = Object.freeze({ losat: 'LOSAT', 'ncbi-blast': 'NCBI BLAST+' });
 
 // One line per search runtime: program, runtime kind, version and source, plus
 // the executable path that CLI Sessions record (design D9/D10).
+/** @param {LosatRuntimeRecord} runtime */
 export const formatLosatRuntime = ({ program, kind, version, source, path }) => {
   if (!kind) return `${program}: runtime not recorded`;
   const name = LOSAT_RUNTIME_NAMES[kind] || kind;
@@ -1817,13 +2105,19 @@ export const formatLosatRuntime = ({ program, kind, version, source, path }) => 
 
 // The distinct runtimes of the displayed raw LOSAT entries of a run, Web or
 // CLI made. Entries saved before runtimes were recorded show "not recorded".
+/**
+ * @param {readonly (Partial<Pick<LosatCacheInfoEntry, 'key' | 'display'>> | null | undefined)[] | null | undefined} cacheInfo
+ *   The cache info rows; a row a Session load stored holds the saved key unchecked.
+ * @param {{ get(key: unknown): RawLosatCacheEntry | undefined } | null | undefined} cacheMap
+ */
 export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
   const runtimes = new Map();
   (Array.isArray(cacheInfo) ? cacheInfo : []).forEach((info) => {
     if (!info?.key || info.display === false) return;
     const entry = cacheMap?.get?.(info.key);
     if (!entry || typeof entry !== 'object') return;
-    const runtime = entry.runtime && typeof entry.runtime === 'object' ? entry.runtime : null;
+    // An entry's `runtime` that is an object is read as the runtime record, each field unchecked.
+    const runtime = entry.runtime && typeof entry.runtime === 'object' ? /** @type {LosatCacheRuntime} */ (entry.runtime) : null;
     const record = {
       program: String(runtime?.program || entry.program || ''),
       kind: runtime ? String(runtime.kind || '') : '',
@@ -1841,7 +2135,7 @@ export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
  * @typedef {Object} RunInfoOptions
  * @property {string} [mode]
  * @property {string[]} [args]
- * @property {Record<string, any> | null} [sourceRecipe] Result of buildSourceRecipe.
+ * @property {SourceRecipe | null} [sourceRecipe] Result of buildSourceRecipe.
  * @property {string[]} [exactReplayArgs]
  * @property {any} [fileMetadata] Map or entries of uploaded and generated file metadata.
  * @property {number} [elapsedMs]
@@ -1888,6 +2182,7 @@ export const buildRunInfo = ({
     Array.from(allExactMetadata).filter(([path]) => exactPaths.has(path))
   );
   let allocatedMetadata;
+  /** @type {RecipeGeneratedFile[]} */
   let finalizedGeneratedFiles = [];
   try {
     allocatedMetadata = allocateVisibleFilenames({

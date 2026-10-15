@@ -3,38 +3,113 @@ import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
 import {
   LEGACY_LAYOUT_PREFERENCE_FIELDS, normalizeLayoutPreferences, resolveActiveLayoutPreference, restoredLayoutPreferences
 } from './layout-preferences.js';
-import { splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
+import { sessionLegendEditsByRowKey, splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
+import {
+  CANONICAL_REQUEST_SCHEMA as CURRENT_REQUEST_SCHEMA,
+  FLAT_DRAFT_TOP_LEVEL_FIELDS,
+  MODE_SCOPED_SESSION_VERSION,
+  PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+  PROTEIN_LOSAT_CACHE_SCHEMA,
+  SESSION_VERSION as CURRENT_VERSION
+} from '../contracts/schema.generated.js';
 import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
 } from './imported-comparison-intent.js';
-const CURRENT_VERSION = 46, CURRENT_REQUEST_SCHEMA = 9, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
-// The top-level homes of the flat draft that Session 46 moved into `modes`.
-const RETIRED_DRAFT_FIELDS = ['config', 'features'];
 const noComparisonPlan = () => ({ mode: 'none', defaultSource: 'losat', edges: [] });
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+const clone = (value) => value === undefined ? value : JSON.parse(JSON.stringify(value));
+/**
+ * @param {unknown} value
+ * @param {string} key
+ */
 const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+/** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { ActiveWebConfig } from './session-active-config-contract.js' */
+/** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
+/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+
+/** @typedef {Partial<ActiveWebConfig> & Record<string, unknown>} PublicationConfig A Session 46 slice may omit a field; it reads that mode's default (plan 4.1). */
+/** @typedef {PublicationConfig & Pick<ActiveWebConfig, 'form' | 'adv'>} PublishedConfig The configuration the publication rebuilds: it always has `form` and `adv`. */
+
+/** @typedef {{ schema?: unknown, kind?: unknown, program?: unknown, idEncoding?: unknown, queryProteinSetHash?: unknown, subjectProteinSetHash?: unknown }} PublicationLosatEntry */
+/** @typedef {{ config?: PublicationConfig, features?: Record<string, unknown>, ui?: { layoutPreferences?: unknown } & Record<string, unknown> }} PublicationModeSlice */
+/**
+ * What `owners.projectRequest` returns for a Session's request, as the publication reads it.
+ * @typedef {object} PublicationProjection
+ * @property {'circular' | 'linear'} mode
+ * @property {PublicationConfig} [config]
+ * @property {StoredLayoutPreferences | null} [layoutPreferences]
+ * @property {{ linearSeqs: { cardinality?: unknown }[], [field: string]: unknown }} files
+ */
+/**
+ * A Session document at publication. Admission checks it: the current writer format (`modes`), an
+ * older Session's flat Web draft (`config`, `features`), or a CLI-written Session (neither).
+ * @typedef {PublicationSessionFields & Record<string, unknown>} PublicationSession
+ */
+/**
+ * A Session's request as publication reads it. Before admission it is unvalidated and of any schema that
+ * admission promotes (5 to 9); a current request (`CanonicalRenderRequest`) is one of these.
+ * @typedef {object} PublicationRequest
+ * @property {unknown} [schema]
+ * @property {string} mode
+ * @property {{ config?: unknown, colors?: { defaultColors?: unknown, defaultColorsFile?: unknown } }} [diagramOptions]
+ * @property {{ kind?: unknown }[]} [comparisons]
+ * @property {unknown} [output]
+ */
+/**
+ * @typedef {object} PublicationSessionFields
+ * @property {string} [format]
+ * @property {number} [version]
+ * @property {PublicationRequest} renderRequest
+ * @property {Record<string, { kind?: unknown, encoding?: unknown, data?: unknown }>} [resources]
+ * @property {Record<string, unknown>} [webFiles]
+ * @property {unknown} [files]
+ * @property {PublicationConfig} [config]
+ * @property {Record<string, unknown>} [features]
+ * @property {Record<string, PublicationModeSlice>} [modes]
+ * @property {unknown} [ui]
+ * @property {{ generatedBy?: unknown, fileBindings?: unknown }} [cliInvocation]
+ * @property {{ featureCatalog?: FeatureCatalog | null }} [editorState]
+ * @property {Record<string, unknown> | null} [orthogroupState]
+ * @property {{ entries?: PublicationLosatEntry[] }} [losatCache]
+ * @property {{ entries?: unknown[] }} [losatDerivedCache]
+ * @property {{ schema?: unknown }} [proteinIdentityManifest]
+ * @property {unknown} [otherModeResult]
+ */
+
+/** @param {PublicationSession['orthogroupState']} value */
 const currentOrthogroupState = (value) => {
   if (!isObject(value)) return value;
   const current = clone(value);
   delete current.selectedOrthogroupAlignmentFeature;
   return current;
 };
+/** @param {PublicationSession} session */
 const regenerableProteinCache = (session) => session.renderRequest?.comparisons?.some(
-  ({ kind }) => kind === 'generatedProteinComparison') && session.proteinIdentityManifest?.schema === 2
-  && session.losatCache?.entries?.some((entry) => entry?.schema === 4 && entry?.kind === 'raw-losat' && entry?.program === 'blastp'
+  ({ kind }) => kind === 'generatedProteinComparison') && session.proteinIdentityManifest?.schema === PROTEIN_IDENTITY_MANIFEST_SCHEMA
+  && session.losatCache?.entries?.some((entry) => entry?.schema === PROTEIN_LOSAT_CACHE_SCHEMA && entry?.kind === 'raw-losat' && entry?.program === 'blastp'
     && entry?.idEncoding === 'runtime-handle-v1'
     && typeof entry?.queryProteinSetHash === 'string' && typeof entry?.subjectProteinSetHash === 'string');
 /**
- * @param {Record<string, any>} session
+ * @param {PublicationSession} session
  * @param {{ limitBytes?: number }} [options]
- * @returns {Record<string, any>}
+ * @returns {PublicationSession}
  */
 export const applyDerivedCachePublicationPolicy = (session, { limitBytes = CACHE_LIMIT_BYTES } = {}) => {
   const entries = session.losatDerivedCache?.entries;
@@ -44,21 +119,27 @@ export const applyDerivedCachePublicationPolicy = (session, { limitBytes = CACHE
 // A CLI-written Session has no Web configuration; publication derives it from
 // the request, as Session Load does, so a Gallery Session can be built from its
 // declared command.
+/** @param {PublicationSession} session */
 const isCliWritten = (session) => !has(session, 'config') && !has(session, 'modes')
   && session?.cliInvocation?.generatedBy === 'gbdraw';
 // The draft of the Session's mode: its slice (Session 46) or the flat draft of
 // an older Session that admission promoted. Publication writes the slice of the
 // Session's mode only; the other mode takes its defaults (plan 4.3).
+/** @param {PublicationSession} session */
 const modeSlice = (session) => {
   const slice = isObject(session?.modes) ? session.modes[session.renderRequest?.mode] : null;
   return isObject(slice) ? slice : null;
 };
+/** @param {unknown} output */
 const outputEntries = (output) => {
   const entries = Array.isArray(output) ? output : [output];
   return entries.every(isObject) ? entries : null;
 };
+/** @param {PublicationSession} session */
 const draftConfig = (session) => (has(session, 'modes') ? modeSlice(session)?.config || {} : session?.config);
+/** @param {PublicationSession} session */
 const draftFeatures = (session) => (has(session, 'modes') ? modeSlice(session)?.features : session?.features);
+/** @param {PublicationSession} session */
 const validateEnvelope = (session) => {
   if (!isObject(session) || session.format !== 'gbdraw-session') throw new Error('Gallery publication requires a gbdraw-session document.'); if (Number(session.version) !== CURRENT_VERSION) throw new Error(`Gallery publication requires session version ${CURRENT_VERSION}.`);
   if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error(`Gallery publication requires canonical renderRequest schema ${CURRENT_REQUEST_SCHEMA}.`);
@@ -67,8 +148,10 @@ const validateEnvelope = (session) => {
   return session;
 };
 // A Session 46 keeps the Web draft in `modes` only (plan 4.1).
+/** @param {PublicationSession} session */
 const validateCurrentFields = (session) => {
-  if (RETIRED_DRAFT_FIELDS.some((field) => has(session, field))) throw new Error('Gallery publication requires the Web draft in modes (Session 46).');
+  // The top-level homes of the flat draft that Session 46 moved into `modes`.
+  if (FLAT_DRAFT_TOP_LEVEL_FIELDS.some((field) => has(session, field))) throw new Error('Gallery publication requires the Web draft in modes (Session 46).');
   if (has(session, 'modes')) {
     const modes = session.modes;
     if (!isObject(modes) || Object.keys(modes).some((mode) => mode !== 'circular' && mode !== 'linear'))
@@ -77,12 +160,19 @@ const validateCurrentFields = (session) => {
   }
   return session;
 };
+/** @param {PublicationSession} session */
 const validateCurrent = (session) => {
   validateEnvelope(session); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: draftConfig(session) });
   return session;
 };
+/**
+ * @param {PublicationSession} session
+ * @param {PublicationProjection} projection
+ * @returns {PublishedConfig}
+ */
 const publicationConfig = (session, projection) => {
   const projected = clone(projection.config || {}), stored = draftConfig(session) || {}, losat = createDefaultLosat();
+  /** @type {PublishedConfig} */
   const config = { ...projected,
     form: { ...createDefaultForm(), ...projected.form, ...stored.form },
     adv: { ...createDefaultAdv(projection.mode), ...projected.adv, ...stored.adv },
@@ -105,6 +195,11 @@ const publicationConfig = (session, projection) => {
 // over its request's layout, or an older Session's layout as Session Load
 // restores it. The request reads the shown slot's Legend and plot-title
 // positions from the drawing's form and advanced settings.
+/**
+ * @param {PublicationSession} session
+ * @param {PublishedConfig} config
+ * @param {PublicationProjection} projection
+ */
 const publicationLayout = (session, config, projection) => {
   const mode = projection.mode;
   const slot = modeSlice(session)?.ui?.layoutPreferences;
@@ -125,6 +220,13 @@ const publicationLayout = (session, config, projection) => {
 // that mode's defaults. An older Session's flat draft is split by the registry
 // (plan 4.2); a Session 46 keeps the rest of its slice. The layout has one
 // home, so the older `ui` layout fields go.
+/**
+ * @param {PublicationSession} session
+ * @param {PublishedConfig} config
+ * @param {LayoutPreferences} layout
+ * @param {PublicationProjection} projection
+ * @param {Record<string, unknown>} features
+ */
 const publishedSession = (session, config, layout, projection, features) => {
   const mode = projection.mode;
   const flat = !has(session, 'modes');
@@ -145,26 +247,23 @@ const publishedSession = (session, config, layout, projection, features) => {
     .filter(([field]) => !LEGACY_LAYOUT_PREFERENCE_FIELDS.includes(field)));
   return { ...published, ui, modes: { [mode]: { ...slice, ui: { ...(slice.ui || {}), layoutPreferences: clone(layout[mode]) } } } };
 };
-const publicationCanonicalRequest = (
-  request,
-  promoteRequest,
-  { featureCatalog = null, legacyOrthogroupState = null } = {}
-) => {
-  const current = promoteRequest(request, { featureCatalog, legacyOrthogroupState });
-  if (Number(request?.schema) === 5) {
-    current.records.forEach((record) => { record.cardinality = 'exactly_one'; });
-  }
-  return current;
-};
+/**
+ * The Session's request read by the one reader with the Session's context
+ * (OV-771: a schema-5 record keeps the cardinality the reader's promotion gives it).
+ * @param {PublicationSession} session
+ * @param {GallerySessionPublicationOwners['readRequest']} readRequest
+ */
+const publicationCanonicalRequest = (session, readRequest) => readRequest(session.renderRequest, {
+  featureCatalog: session.editorState?.featureCatalog || null,
+  legacyOrthogroupState: session.orthogroupState || null,
+  resourceIds: new Set(isObject(session.resources) ? Object.keys(session.resources) : [])
+});
+/**
+ * @param {PublicationSession} session
+ * @param {GallerySessionPublicationOwners} owners
+ */
 const rebuildIntent = async (session, owners) => {
-  const renderRequest = publicationCanonicalRequest(
-    session.renderRequest,
-    owners.promoteRequest,
-    {
-      featureCatalog: session.editorState?.featureCatalog || null,
-      legacyOrthogroupState: session.orthogroupState || null
-    }
-  );
+  const renderRequest = publicationCanonicalRequest(session, owners.readRequest);
   // A read-only comparison (one the Web controls cannot represent) is rebuilt
   // as Generate's Inherit builds it (D-04, OV-268): Load projects the request
   // without it, the request draws no comparison of its own, and the committed
@@ -203,6 +302,7 @@ const rebuildIntent = async (session, owners) => {
   }
   // A CLI-written request compares without its resolved configuration;
   // defaults it leaves unstated compare as absent in the equivalence (OV-398).
+  /** @param {CanonicalRenderRequest} request */
   const comparable = (request) => {
     if (!cliConfig) return request;
     const diagramOptions = Object.fromEntries(Object.entries(request.diagramOptions)
@@ -212,12 +312,17 @@ const rebuildIntent = async (session, owners) => {
   return { config, features, layout, projection, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),
     expectedResources: session.resources, actualRequest: comparable(rebuilt.renderRequest), actualResources: rebuilt.resources }) };
 };
+/**
+ * @param {PublicationSession} prepared
+ * @param {PublicationSession} replayed
+ */
 const mergeReplayResources = (prepared, replayed) => {
   for (const [id, expected] of Object.entries(prepared.resources || {})) {
-    const actual = replayed.resources?.[id], fields = actual && ['kind', 'encoding', 'data'].filter((field) => expected[field] !== actual[field]);
+    const actual = replayed.resources?.[id], fields = actual && /** @type {('kind' | 'encoding' | 'data')[]} */ (['kind', 'encoding', 'data']).filter((field) => expected[field] !== actual[field]);
     if (fields?.length) throw new Error(`Gallery replay resource collision at resources.${id}: ${fields.join(', ')}.`);
   }
-  const resources = { ...(prepared.resources || {}) }, referenced = new Set();
+  const resources = { ...(prepared.resources || {}) }, /** @type {Set<string>} */ referenced = new Set();
+  /** @param {unknown} value */
   const collect = (value) => {
     if (Array.isArray(value)) return value.forEach(collect);
     if (!isObject(value)) return;
@@ -236,15 +341,17 @@ const mergeReplayResources = (prepared, replayed) => {
  * (`services/session-request.js`, `services/gallery-session-migration.js`) and
  * the Linear comparison planner. Each takes and returns unvalidated documents.
  * @typedef {object} GallerySessionPublicationOwners
- * @property {(session: Record<string, any>) => Record<string, any>} promoteSession
+ * @property {(session: Record<string, any>) => PublicationSession} promoteSession
  *   Promotes a historical Session to the current version.
  * @property {(input: Record<string, any>) => Promise<Record<string, any>>} assertRequestsEquivalent
- * @property {(input: Record<string, any>) => Record<string, any>} buildRequest
+ * @property {(input: Record<string, any>) => { renderRequest: CanonicalRenderRequest, resources: NonNullable<PublicationSession['resources']>, webFiles: Record<string, unknown> }} buildRequest
  * @property {(input: Record<string, any>) => { state: Record<string, any>, drawing: Record<string, any>, features: Record<string, unknown> }} buildRequestState
  *   The request inputs of a Session: project inputs and artifacts (`state`), settings and edits (`drawing`),
  *   and the drawing's per-feature edits as the draft stores them (`features`).
- * @property {(request: Record<string, any>, promotion?: Record<string, any>) => Record<string, any>} promoteRequest
- * @property {(input: Record<string, any>) => Record<string, any>} projectRequest
+ * @property {(request: unknown, context: { featureCatalog: unknown, legacyOrthogroupState: unknown,
+ *   resourceIds: ReadonlySet<string> }) => CanonicalRenderRequest} readRequest The one reader of a stored
+ *   request (`readPublishedRenderRequest`), refusing any repair.
+ * @property {(input: Record<string, any>) => PublicationProjection} projectRequest
  * @property {(input: Record<string, any>) => any} resolveComparisonPlan
  */
 
@@ -252,6 +359,7 @@ const mergeReplayResources = (prepared, replayed) => {
  * @param {GallerySessionPublicationOwners} owners
  */
 export const createGallerySessionPublication = (owners) => {
+  /** @param {PublicationSession} session */
   const promoteVisibilityState = (session) => ({
     ...session,
     config: isObject(session?.config) && isObject(session.config.adv)
@@ -259,52 +367,54 @@ export const createGallerySessionPublication = (owners) => {
           ...session.config,
           adv: migrateLegacyLinearLabelVisibility(session.config.adv),
           ...(Array.isArray(session.config.recordDisplayDrafts) ? {
-            recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
+            // The migration maps an array (tested above) to an array; its declared result is `unknown`.
+            recordDisplayDrafts: /** @type {Record<string, unknown>[]} */ (migrateLegacyRecordDisplayDrafts(
               session.config.recordDisplayDrafts
-            )
+            ))
           } : {}),
           ...(has(session.config, 'featurePlacementOverrides') ? {
             featurePlacementOverrides: migrateSessionFeaturePlacements(session.config.featurePlacementOverrides)
           } : {})
         }
       : session?.config,
-    editorState: [3, 4].includes(session?.editorState?.featureCatalog?.schema)
-      && session.editorState.featureCatalog.schema !== FEATURE_CATALOG_SCHEMA
+    // The `includes` test is false for an absent catalog, so the catalog exists in the branch.
+    editorState: /** @type {(number | undefined)[]} */ ([3, 4]).includes(session?.editorState?.featureCatalog?.schema)
+      && /** @type {{ featureCatalog: FeatureCatalog }} */ (session.editorState).featureCatalog.schema !== FEATURE_CATALOG_SCHEMA
       ? {
           ...session.editorState,
           featureCatalog: migrateLegacyFeatureCatalog(
-            session.editorState.featureCatalog
+            /** @type {{ featureCatalog: FeatureCatalog }} */ (session.editorState).featureCatalog
           )
         }
       : session?.editorState,
     // The current writer keys per-feature edits by source identity (design Q4 4.3).
+    // An older Session without `features` is read as empty: `migrateSessionFeatureEdits` tests `isObject(features)`.
     features: migrateSessionFeatureEdits({
       features: session?.features,
       mode: session?.renderRequest?.mode,
       catalog: session?.editorState?.featureCatalog || null
     }).features
   });
+  /** @param {PublicationSession} session */
   const admit = (session) => {
     const version = Number(session?.version);
-    if (version === CURRENT_VERSION) {
-      validateCurrentFields(session);
-      return isCliWritten(session) ? validateEnvelope(session) : validateCurrent(session);
+    if (version === CURRENT_VERSION || version === MODE_SCOPED_SESSION_VERSION) {
+      // A Session 46 differs only in the keys of its Legend edits.
+      const current = version === CURRENT_VERSION
+        ? session : { ...sessionLegendEditsByRowKey(session, version).session, version: CURRENT_VERSION };
+      validateCurrentFields(current);
+      return isCliWritten(current) ? validateEnvelope(current) : validateCurrent(current);
     }
     // An older Session is promoted to the current request and kept as a flat
     // draft until `prepare` splits it into the Session's mode slice.
     if ([40, 41, 42, 44].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
-      renderRequest: publicationCanonicalRequest(
-        session.renderRequest,
-        owners.promoteRequest,
-        {
-          featureCatalog: session.editorState?.featureCatalog || null,
-          legacyOrthogroupState: session.orthogroupState || null
-        }
-      ) }));
-    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44; received ${String(session?.version)}.`);
+      renderRequest: publicationCanonicalRequest(session, owners.readRequest) }));
+    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44/${MODE_SCOPED_SESSION_VERSION}; received ${String(session?.version)}.`);
     return validateCurrent(promoteVisibilityState(owners.promoteSession(session)));
   };
+  /** @param {PublicationSession} session */
   const rebuild = (session) => rebuildIntent(session, owners);
+  /** @param {PublicationSession} source */
   const prepare = async (source) => {
     const admitted = admit(source), { config, features, layout, projection, rebuilt, equivalence } = await rebuild(admitted);
     const session = {
@@ -316,16 +426,19 @@ export const createGallerySessionPublication = (owners) => {
     };
     return { session: validateCurrent(validateCurrentFields(session)), equivalence };
   };
+  /** @param {{ prepared: PublicationSession, replayed: PublicationSession }} input */
   const finalize = async ({ prepared, replayed }) => {
     validateCurrent(validateCurrentFields(prepared)); validateCurrent(validateCurrentFields(replayed));
     const resources = mergeReplayResources(prepared, replayed);
     await owners.assertRequestsEquivalent({ expectedRequest: prepared.renderRequest, expectedResources: prepared.resources, actualRequest: replayed.renderRequest,
       actualResources: replayed.resources, normalizeReplayGeneratedResources: true });
+    /** @type {PublicationSession} */
     let session = { ...prepared, resources };
     for (const field of ARTIFACT_FIELDS) if (has(replayed, field)) session[field] = replayed[field];
     session = applyDerivedCachePublicationPolicy(session);
     return { session, equivalence: (await rebuild(session)).equivalence };
   };
+  /** @param {PublicationSession} session */
   const validate = (session) => (validateCurrent(validateCurrentFields(session)), rebuild(session));
   return Object.freeze({ admitGallerySession: admit, finalizeGallerySessionPublication: finalize, prepareGallerySessionForPublication: prepare, validateGalleryPublicationReadiness: validate });
 };

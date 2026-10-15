@@ -68,12 +68,12 @@ const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
  * @property {string | number | null} [totalThreadBudget]
  * @property {string | number | null} [threadsPerJob]
  * @property {LosatSequences} [sequences]
- * @property {AbortSignal} [signal]
+ * @property {AbortSignal | null} [signal]
  * @property {string} [workerUrl]
  * @property {string} [wasmPath]
  * @property {string} [threadedWorkerUrl]
  * @property {string} [threadedWasmPath]
- * @property {WebAssembly.Module} [wasmModule]
+ * @property {WebAssembly.Module | null} [wasmModule]
  * @property {(status: LosatRuntimeStatus) => void} [onRuntimeStatus]
  * @property {(progress: LosatProgress) => void} [onProgress]
  */
@@ -117,19 +117,23 @@ const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
  * @property {string} [outfmt]
  * @property {string[]} [extraArgs]
  * @property {string} [wasmPath]
- * @property {AbortSignal} [signal]
+ * @property {AbortSignal | null} [signal]
  */
 
 /** @type {Promise<any> | null} */
 let wasiShimPromise = null;
+/** @type {Map<string, Promise<WebAssembly.Module>>} */
 const wasmModulePromises = new Map();
+/** @type {Map<string, Promise<LosatRuntimeStatus>>} */
 const threadedSupportPromises = new Map();
 
+/** @param {string} path */
 const resolveAssetUrl = (path) => new URL(path, window.location.href).toString();
 const resolveWorkerUrl = () => new URL('../workers/losat-worker.js', import.meta.url).toString();
 const resolveThreadedWorkerUrl = () => new URL('../workers/losat-threaded-worker.js', import.meta.url).toString();
 // `performance` may be absent outside a browser, so the check reads a possibly missing `now`.
 const getNow = () => ((/** @type {Performance | undefined} */ (globalThis.performance))?.now ? performance.now() : Date.now());
+/** @param {number} startedAt */
 const formatDuration = (startedAt) => `${((getNow() - startedAt) / 1000).toFixed(2)}s`;
 
 const createAbortError = () => {
@@ -139,6 +143,7 @@ const createAbortError = () => {
   return error;
 };
 
+/** @param {AbortSignal | null | undefined} signal */
 const getAbortReason = (signal) => {
   const reason = signal?.reason;
   if (reason instanceof Error) return reason;
@@ -151,10 +156,15 @@ const getAbortReason = (signal) => {
   return createAbortError();
 };
 
+/** @param {AbortSignal | null | undefined} signal */
 const throwIfAborted = (signal) => {
   if (signal?.aborted) throw getAbortReason(signal);
 };
 
+/**
+ * @param {{ canceled?: unknown, name?: unknown } | null | undefined} error A caught value.
+ * @param {AbortSignal | null | undefined} signal
+ */
 const isAbortError = (error, signal) =>
   Boolean(signal?.aborted && (error === signal.reason || error?.canceled || error?.name === 'AbortError'));
 
@@ -170,6 +180,10 @@ const loadWasiShim = async () => {
   return wasiShimPromise;
 };
 
+/**
+ * @param {string} [wasmPath]
+ * @returns {Promise<WebAssembly.Module>}
+ */
 const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
   const key = String(wasmPath || DEFAULT_WASM_PATH);
   if (!wasmModulePromises.has(key)) {
@@ -183,9 +197,10 @@ const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
       return WebAssembly.compile(bytes);
     })());
   }
-  return wasmModulePromises.get(key);
+  return /** @type {Promise<WebAssembly.Module>} */ (wasmModulePromises.get(key)); // set above
 };
 
+/** @param {WebAssembly.Module} wasmModule */
 const moduleHasThreadedWasiShape = (wasmModule) => {
   const exports = WebAssembly.Module.exports(wasmModule);
   const imports = WebAssembly.Module.imports(wasmModule);
@@ -222,6 +237,10 @@ export const losatThreadingPrecondition = () => {
   return buildThreadingStatus('available', 'Threaded LOSAT preconditions are met.');
 };
 
+/**
+ * @param {{ threadedWasmPath?: string }} [options]
+ * @returns {Promise<LosatRuntimeStatus>}
+ */
 export const getLosatThreadingSupport = async ({
   threadedWasmPath = DEFAULT_THREADED_WASM_PATH
 } = {}) => {
@@ -254,7 +273,7 @@ export const getLosatThreadingSupport = async ({
       )
     ));
   }
-  return threadedSupportPromises.get(key);
+  return /** @type {Promise<LosatRuntimeStatus>} */ (threadedSupportPromises.get(key)); // set above
 };
 
 /**
@@ -309,11 +328,16 @@ export const runLosatPair = async ({
   });
 };
 
+/** @param {unknown} value */
 const normalizeExecutionMode = (value) => {
   const mode = String(value || 'auto').trim().toLowerCase();
   return ['auto', 'serial', 'threaded'].includes(mode) ? mode : 'auto';
 };
 
+/**
+ * @param {LosatJob} job
+ * @param {Map<string, string>} sequenceStore
+ */
 const getThreadedFastaCharCount = (job, sequenceStore) => {
   let total = 0;
   try {
@@ -325,6 +349,11 @@ const getThreadedFastaCharCount = (job, sequenceStore) => {
   return total;
 };
 
+/**
+ * @param {LosatJob[]} jobs
+ * @param {Map<string, string>} sequenceStore
+ * @param {number} threadsPerJob
+ */
 const shouldUseThreadedLosat = (jobs, sequenceStore, threadsPerJob) => {
   if (!Array.isArray(jobs) || jobs.length === 0 || threadsPerJob <= 1) return false;
   if (jobs.length === 1) {
@@ -346,10 +375,19 @@ const buildRuntimeStatus = (state, message, details = {}) => ({
   ...details
 });
 
+/**
+ * @param {((status: LosatRuntimeStatus) => void) | undefined} callback
+ * @param {LosatRuntimeStatus} status
+ */
 const notifyRuntimeStatus = (callback, status) => {
   if (typeof callback === 'function') callback(status);
 };
 
+/**
+ * @param {LosatJob[]} jobs
+ * @param {LosatRunOptions} options
+ * @param {Map<string, string>} sequenceStore
+ */
 const buildThreadedRuntimePlan = (jobs, options, sequenceStore) => {
   const plan = resolveLosatThreadPlan({
     jobCount: jobs.length,
@@ -360,8 +398,10 @@ const buildThreadedRuntimePlan = (jobs, options, sequenceStore) => {
   return { ...plan, useful: shouldUseThreadedLosat(jobs, sequenceStore, plan.threadsPerJob) };
 };
 
+/** @param {LosatJob} job */
 const formatPairErrorPrefix = (job) => {
-  const pairNumber = Number.isInteger(job?.pairIndex) ? job.pairIndex + 1 : null;
+  // A number after `Number.isInteger`.
+  const pairNumber = Number.isInteger(job?.pairIndex) ? /** @type {number} */ (job.pairIndex) + 1 : null;
   return pairNumber ? `LOSAT pair #${pairNumber}` : 'LOSAT pair';
 };
 
@@ -384,6 +424,12 @@ const normalizeSequenceStore = (sequences) => {
   return new Map();
 };
 
+/**
+ * @param {Map<string, string>} sequenceStore
+ * @param {string | undefined} key
+ * @param {string} label
+ * @returns {string}
+ */
 const resolveJobSequence = (sequenceStore, key, label) => {
   const normalizedKey = String(key || '');
   if (!normalizedKey || !sequenceStore.has(normalizedKey)) {
@@ -396,14 +442,28 @@ const resolveJobSequence = (sequenceStore, key, label) => {
   return fasta;
 };
 
+/**
+ * @param {LosatJob} job
+ * @param {Map<string, string>} sequenceStore
+ */
 const materializeJobSequences = (job, sequenceStore) => ({
   ...job,
   queryFasta: resolveJobSequence(sequenceStore, job.querySequenceKey, 'query'),
   subjectFasta: resolveJobSequence(sequenceStore, job.subjectSequenceKey, 'subject')
 });
 
+/**
+ * @param {LosatJob} job
+ * @param {Map<string, string>} sequenceStore
+ * @param {Set<string>} loadedKeys
+ */
 const buildJobSequencePayload = (job, sequenceStore, loadedKeys) => {
+  /** @type {{ key: string, fasta: string }[]} */
   const payload = [];
+  /**
+   * @param {string | undefined} key
+   * @param {string} label
+   */
   const addSequence = (key, label) => {
     const normalizedKey = String(key || '');
     if (!normalizedKey || loadedKeys.has(normalizedKey)) return;
@@ -455,12 +515,13 @@ const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal, wa
 /**
  * @param {Worker} worker
  * @param {LosatWorkerInit} payload
- * @param {AbortSignal} [signal]
+ * @param {AbortSignal | null} [signal]
  * @returns {Promise<Worker>}
  */
 const initializeLosatWorker = (worker, payload, signal) =>
   new Promise((resolve, reject) => {
     let settled = false;
+    /** @param {() => void} callback */
     const settle = (callback) => {
       if (settled) return;
       settled = true;
@@ -476,6 +537,7 @@ const initializeLosatWorker = (worker, payload, signal) =>
       worker.removeEventListener('messageerror', handleMessageError);
       signal?.removeEventListener?.('abort', handleAbort);
     };
+    /** @param {MessageEvent} event */
     const handleMessage = (event) => {
       const data = /** @type {LosatWorkerReply} */ (event.data || {});
       if (data.id !== payload.id || data.type !== 'init') return;
@@ -486,6 +548,7 @@ const initializeLosatWorker = (worker, payload, signal) =>
       settle(() => reject(new Error(data.error || 'LOSAT worker initialization failed')));
     };
 
+    /** @param {ErrorEvent} event */
     const handleError = (event) => {
       settle(() => reject(new Error(event.message || 'LOSAT worker initialization error')));
     };
@@ -529,7 +592,9 @@ const runLosatPairsWithWorkers = async (
   const wasmModule = await loadLosatModule(wasmPath || DEFAULT_WASM_PATH);
   throwIfAborted(signal);
   const results = new Array(jobs.length);
+  /** @type {Worker[]} */
   const workers = [];
+  /** @type {Map<Worker, Set<string>>} */
   const workerLoadedSequenceKeys = new Map();
   let nextJobIndex = 0;
   let completed = 0;
@@ -571,6 +636,7 @@ const runLosatPairsWithWorkers = async (
       workers.forEach((worker) => worker.terminate());
     };
 
+    /** @param {unknown} error */
     const fail = (error) => {
       if (settled) return;
       settled = true;
@@ -595,6 +661,7 @@ const runLosatPairsWithWorkers = async (
       resolve(results);
     };
 
+    /** @param {Worker} worker */
     const assignNext = (worker) => {
       if (settled) return;
       if (signal?.aborted) {
@@ -620,6 +687,7 @@ const runLosatPairsWithWorkers = async (
         return;
       }
 
+      /** @param {MessageEvent} event */
       const handleMessage = (event) => {
         const data = /** @type {LosatWorkerReply} */ (event.data || {});
         if (data.id !== id) return;
@@ -645,6 +713,7 @@ const runLosatPairsWithWorkers = async (
         assignNext(worker);
       };
 
+      /** @param {ErrorEvent} event */
       const handleError = (event) => {
         worker.removeEventListener('message', handleMessage);
         worker.removeEventListener('error', handleError);
@@ -713,8 +782,11 @@ const runLosatPairsThreaded = async (
   const compiledModule = wasmModule || await loadLosatModule(threadedWasmPath || DEFAULT_THREADED_WASM_PATH);
   const effectiveThreads = Math.max(1, Number(threadsPerJob) || 1);
   const results = new Array(jobs.length);
+  /** @type {Set<Worker>} */
   const activeWorkers = new Set();
+  /** @type {Set<BroadcastChannel>} */
   const faultChannels = new Set();
+  /** @type {Map<number, number>} */
   const trapRetries = new Map();
   let nextJobIndex = 0;
   let completed = 0;
@@ -731,6 +803,7 @@ const runLosatPairsThreaded = async (
       faultChannels.forEach((channel) => channel.close());
       faultChannels.clear();
     };
+    /** @param {unknown} error */
     const fail = (error) => {
       if (settled) return;
       settled = true;
@@ -761,6 +834,11 @@ const runLosatPairsThreaded = async (
       nextJobIndex += 1;
       launchJob(index);
     };
+    /**
+     * @param {number} index
+     * @param {Error} error
+     * @param {boolean} trapped
+     */
     const failOrRetryTrap = (index, error, trapped) => {
       const attempt = (trapRetries.get(index) || 0) + 1;
       if (!trapped || attempt > THREADED_TRAP_RETRY_LIMIT || settled || signal?.aborted) {
@@ -771,6 +849,7 @@ const runLosatPairsThreaded = async (
       console.warn(`${error.message}; running the pair again (retry ${attempt} of ${THREADED_TRAP_RETRY_LIMIT}).`);
       launchJob(index);
     };
+    /** @param {number} index */
     const launchJob = (index) => {
       const job = jobs[index];
       const id = `threaded-${Date.now()}-${requestId}`;
@@ -811,6 +890,7 @@ const runLosatPairsThreaded = async (
         }
       };
 
+      /** @param {MessageEvent} event */
       const handleMessage = (event) => {
         const data = /** @type {LosatWorkerReply} */ (event.data || {});
         if (data.id !== id) return;
@@ -839,6 +919,7 @@ const runLosatPairsThreaded = async (
         maybeResolve();
       };
 
+      /** @param {ErrorEvent} event */
       const handleError = (event) => {
         cleanupWorker();
         fail(new Error(`${formatPairErrorPrefix(job)}: ${event.message || 'Threaded LOSAT worker error'}`));
@@ -849,6 +930,7 @@ const runLosatPairsThreaded = async (
         fail(new Error(`${formatPairErrorPrefix(job)}: Threaded LOSAT worker message could not be decoded`));
       };
 
+      /** @param {MessageEvent} event */
       const handleThreadFault = (event) => {
         const data = /** @type {LosatWorkerReply} */ (event.data || {});
         if (data.type !== 'thread-fault') return;

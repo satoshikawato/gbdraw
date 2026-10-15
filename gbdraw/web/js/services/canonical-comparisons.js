@@ -1,20 +1,44 @@
 // @ts-check
+/**
+ * What these helpers read of a canonical comparison entry.
+ * @typedef {{
+ *   kind?: string,
+ *   resourceId?: string,
+ *   encoding?: string,
+ *   queryRecordIndex?: number,
+ *   subjectRecordIndex?: number,
+ *   valueKind?: string,
+ *   canonicalInput?: boolean,
+ *   file?: unknown
+ * }} ResourceBackedComparison
+ */
+
+/** @type {Set<string | undefined>} */
 const RESOURCE_BACKED_CANONICAL_COMPARISON_KINDS = new Set([
   'precomputedProteinComparison',
   'orthogroupResult',
   'collinearityResult'
 ]);
 
+/**
+ * @param {ResourceBackedComparison | null | undefined} comparison
+ * @returns {comparison is ResourceBackedComparison}
+ */
 export const isResourceBackedCanonicalComparison = (comparison) => (
   RESOURCE_BACKED_CANONICAL_COMPARISON_KINDS.has(comparison?.kind)
 );
 
-export const canonicalComparisonResourceKind = (comparison) => ({
+/** @param {ResourceBackedComparison | null | undefined} comparison */
+export const canonicalComparisonResourceKind = (comparison) => (/** @type {Record<string, string>} */ ({
   precomputedProteinComparison: 'canonical-tsv',
   orthogroupResult: 'orthogroup-result',
   collinearityResult: 'collinearity-result'
-}[comparison?.kind] || null);
+}))[/** @type {string} */ (comparison?.kind)] || null;
 
+/**
+ * @param {ResourceBackedComparison | null | undefined} comparison
+ * @param {(file: unknown) => unknown} [mapFile]
+ */
 export const mapResourceBackedCanonicalComparison = (
   comparison,
   mapFile = (file) => file

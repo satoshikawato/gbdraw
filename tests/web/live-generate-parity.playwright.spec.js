@@ -8,9 +8,9 @@
 // live-generate-parity-legend.playwright.spec.js, the track-data and mode cases
 // in live-generate-parity-track-data.playwright.spec.js, and the steps they all
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
-const { test, expect } = require('@playwright/test');
+const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows, switchMode } = require('./helpers/mode-transition.cjs');
@@ -48,6 +48,35 @@ const legendRowStroke = async (page, caption, color, width) => {
 const renameLegendRow = async (page, caption, name) => {
   await renameRow(page, caption, name);
   await settleLive(page);
+};
+
+// OV-484: custom track slots with two more skew slots, a GC skew slot without
+// colors of its own and an AT skew slot with its own colors, then Generate.
+// The second GC skew slot has the first slot's label and swatches, so its rows
+// share the first slot's rows (Owner receipt legend.row-name-multiplicity:
+// one label and one swatch draw one row; tests/fixtures/legend_track_slot_rows.json, "two content
+// slots and two skew slots of one label and one swatch share their rows").
+const addSkewSlots = async (page) => {
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const linear = app.mode === 'linear';
+    if (linear) app.form.show_skew = true;
+    const slots = () => (linear ? app.adv.linear_track_slots : app.adv.circular_track_slots);
+    const add = () => {
+      const before = new Set(slots().map((slot) => slot.id));
+      if (linear) app.addLinearTrackSlot('dinucleotide_skew'); else app.addCircularTrackSlot('dinucleotide_skew');
+      return slots().find((slot) => !before.has(slot.id));
+    };
+    if (linear) app.setLinearTrackSlotsEnabled(true); else app.setCircularTrackSlotsEnabled(true);
+    if (!slots().some((slot) => slot.renderer === 'dinucleotide_skew')) add();
+    Object.assign(add().params, { nt: 'GC' });
+    Object.assign(add().params, { nt: 'AT', positive_color: '#deaf6e', negative_color: '#7294e3' });
+  });
+  await generate(page);
+  const rows = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => [entry.caption, entry.color]));
+  expect(rows).toEqual(expect.arrayContaining([['AT skew (+)', '#deaf6e'], ['AT skew (-)', '#7294e3']]));
+  const captions = rows.map(([caption]) => caption);
+  expect(captions.filter((caption) => caption.startsWith('GC skew'))).toEqual(['GC skew (+)', 'GC skew (-)']);
 };
 
 // The edit kinds. Each appears at least once in the matrix.
@@ -486,6 +515,16 @@ const CASES = [
     setup: (page) => editorLegendRows(page, [['Manual row', '#118833']]),
     run: (page) => switchPalette(page, 'alpine_retreat')
   },
+  // OV-484: the Legend rows of a skew slot with its own colors keep them
+  // through a palette change, and the rows a second slot of one label and
+  // one swatch shares with the first slot follow the palette.
+  ...['circular', 'linear'].map((mode) => ({
+    kind: 'palette',
+    edit: 'Palette change with skew slots of their own colors and of one label',
+    states: { mode, results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: addSkewSlots,
+    run: (page) => switchPalette(page, 'alpine_retreat')
+  })),
   // Review U2BFIX #5: a Legend row delete (a writer not yet migrated to the
   // edit port) with a palette change, a Legend row stroke, and a Legend row
   // color shown through the port.
@@ -779,6 +818,63 @@ for (const { edit, states, setup, run, knownMismatch } of CASES) {
     await expectLiveEqualsGenerate(page, { label: `${edit} (${statesName(states)})` });
   });
 }
+
+// OV-484: a request without explicit track slots draws its skew track under
+// Python's preset slot id. A palette change repaints that track as the next
+// Generate draws it (the semantic snapshot does not read track fills).
+for (const mode of ['circular', 'linear']) {
+  test(`Palette change repaints the skew track of a request without track slots: ${mode}`, async ({ page }) => {
+    test.setTimeout(90_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    if (mode === 'linear') {
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_skew = true; });
+      await generate(page);
+    }
+    const skewFills = () => page.evaluate(() => [...document.querySelectorAll('svg g[data-gbdraw-slot-renderer="dinucleotide_skew"]')]
+      .map((group) => [...group.querySelectorAll('path')].map((path) => String(path.getAttribute('fill') || '').toLowerCase())
+        .filter((fill) => fill && fill !== 'none' && fill !== 'white')));
+    const drawn = await skewFills();
+    expect(drawn.flat().length, 'the Result draws a skew track').toBeGreaterThan(0);
+    await switchPalette(page, 'alpine_retreat');
+    const live = await skewFills();
+    expect(live, 'the palette repaints the skew track').not.toEqual(drawn);
+    await generate(page);
+    expect(live, 'the skew track of the live edit is the one Generate draws').toEqual(await skewFills());
+  });
+}
+
+// A Session 30 (gbdraw 0.13.0) has no request: the Web shows its saved Result,
+// described by the track settings Load recorded. A palette change repaints its
+// skew track and the track's Legend rows as Generate then draws them.
+test('Palette change repaints the skew track and its Legend rows of a loaded Session 30 Result', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openFresh(page);
+  // A CLI Session of 0.13.0 lists no extracted features, so the Load is awaited by its Result.
+  await page.locator('input[accept^=".json,"]').setInputFiles('tests/fixtures/sessions/scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz');
+  await expectNoLoadRepairDialog(page);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.svgContainer?.querySelector('g#skew'), null, { timeout: 60_000 });
+  await settleLive(page);
+  expect(await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest()),
+    'the loaded Result has no request').toBeNull();
+  const skew = () => page.evaluate(() => {
+    const fills = (selector) => [...window.__GBDRAW_APP__.svgContainer.querySelectorAll(selector)]
+      .map((shape) => String(shape.getAttribute('fill') || '').toLowerCase()).filter((fill) => fill && fill !== 'none' && fill !== 'white');
+    return {
+      track: fills('g#skew > path, g#gc_skew > path, g[data-gbdraw-slot-renderer="dinucleotide_skew"] path'),
+      rows: ['GC skew (+)', 'GC skew (-)'].map((key) => fills(`g[data-legend-key="${key}"] :is(rect, path)`)[0])
+    };
+  });
+  const drawn = await skew();
+  expect(drawn.track.length, 'the loaded Result draws a skew track').toBe(2);
+  expect(drawn.rows, 'the track\'s Legend rows show its fills').toEqual(drawn.track);
+  await switchPalette(page, 'alpine_retreat');
+  const live = await skew();
+  expect(live.track, 'the palette repaints the skew track').not.toEqual(drawn.track);
+  expect(live.rows, 'the palette repaints the track\'s Legend rows').toEqual(live.track);
+  await generate(page);
+  expect(live, 'the live edit shows what Generate draws').toEqual(await skew());
+});
 
 // OV-144 (D-07, PD-OI-062): the executor's record of Python's strokes travels
 // with a Result through Save Session and Load, so a stroke edit removed after
@@ -1162,10 +1258,12 @@ const WORK_ALLOWLIST = [
     // The rule's caption CDS gets a second color, so Python splits the CDS
     // row in two and the automatic rerender draws the Result again (OV-43);
     // its compile is Generate's plan, and the commit's own compile shows the
-    // rows it adds. Requests: the commit's caption normalization and rule
-    // matches; the rerender's rules are Python's captions already (OV-238).
+    // rows it adds. Requests: the commit's rule matches and the rerender. A
+    // caption written in two colors stays as written (the Legend numbers the
+    // names it draws), so no caption normalization request precedes the
+    // matches.
     kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
-    requests: ['evaluateRules', 'evaluateRules', 'render'],
+    requests: ['evaluateRules', 'render'],
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' })
   },
   {
@@ -1419,4 +1517,46 @@ test('Popup label text that does not fit, Embedded Only (circular, one Result)',
   await generate(page);
   await popupEdit(page, 'FL1', { labelText: LONG_LABEL });
   await expectLiveEqualsGenerate(page, { label: 'popup label text that does not fit' });
+});
+
+// CD-05: a case reuses the warm page only when the restore brought it back to
+// its fresh boot. The restore takes back inputs, settings and edits; what it
+// cannot take back (a page global here) gives the next case a fresh page.
+test.describe('the warm app page', () => {
+  test.describe.configure({ mode: 'serial' });
+  const warmPage = () => test.info().annotations.find(({ type }) => type === WARM_APP_PAGE)?.description;
+  const freshBootView = (page) => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const app = window.__GBDRAW_APP__;
+    return {
+      mode: app.mode,
+      results: app.results.length,
+      linearSources: state.linearSeqs.filter((seq) => seq.gb || seq.gff || seq.fasta).length,
+      showLabelsLinear: state.drawings.linear.form.show_labels_linear,
+      undo: window.__GBDRAW_HISTORY__.getUndoCount(),
+      leftByCase: window.leftByCase ?? null
+    };
+  });
+
+  test('a case leaves a Linear Result, a setting and a popup edit', async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await popupEdit(page, 'FL1', { fill: '#123456' });
+    expect((await freshBootView(page)).results).toBe(1);
+  });
+
+  test('the next case reuses the page at its fresh boot', async ({ page }) => {
+    expect(warmPage()).toBe('reused');
+    await openFresh(page);
+    expect(await freshBootView(page)).toEqual({
+      mode: 'circular', results: 0, linearSources: 0, showLabelsLinear: 'none', undo: 0, leftByCase: null
+    });
+    await page.evaluate(() => { window.leftByCase = true; });
+  });
+
+  test('a case after one that left a page global gets a fresh page', async ({ page }) => {
+    expect(warmPage()).toBe('fresh: page.globals.leftByCase: "<missing>" -> "boolean"');
+    await openFresh(page);
+    expect((await freshBootView(page)).leftByCase).toBe(null);
+  });
 });

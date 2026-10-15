@@ -1,4 +1,4 @@
-import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -76,7 +76,7 @@ const fileRecordKeys = request => [...new Set(request.records.map(
 ))];
 const load = bytes => importSession({ target: {
   files: [new File([bytes], 'current.json', { type: 'application/json' })], value: 'selected'
-} }, { transformLegacyResultSvg });
+} }, { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow });
 const DEFAULT_PLAN = { mode: 'none', defaultSource: 'losat', edges: [] };
 // B15: a read-only CLI comparison (-b) is not a Web draft. The replacement draft
 // is the Web default (No comparison), so Replace with current controls
@@ -384,6 +384,89 @@ await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan i
   withoutProtein.config.adv.losatProgram = 'blastn';
   const none = await loadDraft(withoutProtein);
   assert.deepEqual([none.plan, none.comparisons], [DEFAULT_PLAN, []]);
+});
+
+// OV-491: Python's encoder writes a Circular slot object with the renderer
+// name the request gave, which may be an alias (gbdraw/tracks/circular.py
+// `_RENDERER_ALIASES`). Load reads it as the track Python draws.
+await test('a request whose Circular slot objects name a renderer by alias loads as those tracks (OV-491)', async () => {
+  const session = JSON.parse(gunzipSync(await readFile(path.join(
+    root, 'tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'
+  ))));
+  const slot = (id, renderer) => ({ kind: 'circularTrackSlot', id, renderer, enabled: true, side: null, radius: null,
+    width: null, z: 0, params: {}, innerGapPx: null, outerGapPx: null });
+  session.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+    slot('features', 'features'), slot('c', 'content'), slot('g', 'GC_Content'), slot('s', 'skew')
+  ];
+  session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 0;
+  // Without the Web `config`, the form's slots come from the request alone.
+  delete session.config;
+  const result = await load(Buffer.from(JSON.stringify(session)));
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.deepEqual(state.drawings.circular.adv.circular_track_slots.map(({ id, renderer }) => [id, renderer]),
+    [['features', 'features'], ['c', 'dinucleotide_content'], ['g', 'dinucleotide_content'], ['s', 'dinucleotide_skew']]);
+  const { getCommittedCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/config.js');
+  const { drawnTracks } = await import('../../gbdraw/web/js/services/track-legend-rows.js');
+  assert.deepEqual(drawnTracks(getCommittedCanonicalRenderRequest()).map(({ slotId, kind }) => [slotId, kind]),
+    [['c', 'content'], ['g', 'content'], ['s', 'skew']]);
+});
+
+// Before the Font setting, a Web Session kept the diagram font as a preserved
+// override (PD-OI-009) in its draft and its request. Load moves it into the
+// setting, so no preserved override names a path the GUI manages. The
+// fixtures were written by first-parent main (font-family-preserved.provenance.json).
+for (const [version, file] of [[44, 'font-family-preserved.v44.gbdraw-session.json.gz'], [46, 'font-family-preserved.v46.gbdraw-session.json.gz']]) {
+  await test(`a Session ${version} of main that preserved objects.text.font_family loads it into the Font setting`, async () => {
+    const result = await load(gunzipSync(await readFile(path.join(root, 'tests/fixtures/sessions', file))));
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    assert.equal(state.drawings.circular.adv.font_family, "'DejaVu Serif', serif");
+    assert.deepEqual({ ...state.drawings.circular.unmanagedConfigOverrides }, {});
+  });
+}
+
+// A Session 27 to 30 has no request, so Load records the track settings its
+// Result was drawn with; a Session with a request records none.
+await test('Load of a 0.13.0 Session records the track settings of its Result', async () => {
+  const { getCommittedCanonicalRenderRequest, getLoadedTrackSettings } = await import('../../gbdraw/web/js/services/config.js');
+  const read = async name => gunzipSync(await readFile(path.join(root, 'tests/fixtures/sessions', name)));
+  assert.equal((await load(await read('scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz'))).status, 'ok');
+  assert.equal(getCommittedCanonicalRenderRequest(), null);
+  assert.deepEqual(getLoadedTrackSettings(), { mode: 'circular', dinucleotide: 'GC', slots: null });
+  // The record is the shown mode's Result: the other mode has none.
+  state.mode.value = 'linear';
+  assert.equal(getLoadedTrackSettings(), null);
+  state.mode.value = 'circular';
+  // Linear Custom Track Slots of a Session 30 load (the schema 1 slots are
+  // migrated). This file's Result was drawn with the slots off, so the record
+  // is the saved draft: a slot added after the last Generate (the owner gives
+  // such a track a row in its own color only where the row was drawn in it).
+  const session = JSON.parse(await read('BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'));
+  session.config.adv.linear_track_slots_enabled = true;
+  session.config.adv.linear_track_slots.push({ id: 'own', renderer: 'dinucleotide_skew', enabled: true, side: 'below',
+    height: '', spacing: '', z: 0, params: { nt: 'AT', positive_color: '#ff0000', negative_color: '#0000ff' } });
+  const loaded = await load(Buffer.from(JSON.stringify(session)));
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(getCommittedCanonicalRenderRequest(), null);
+  const settings = getLoadedTrackSettings();
+  assert.equal(settings.mode, 'linear');
+  assert.deepEqual(settings.slots.map(({ id, enabled, params }) => [id, enabled, params.positive_color]),
+    [['features', true, undefined], ['own', true, '#ff0000']]);
+  // A later edit of the form's slots leaves the record of the shown Result.
+  state.activeDrawing().adv.linear_track_slots[1].params.positive_color = '#00ff00';
+  assert.equal(getLoadedTrackSettings().slots[1].params.positive_color, '#ff0000');
+  // A failed Load keeps the Session that stays loaded, and its record.
+  const broken = structuredClone(session);
+  broken.config.adv.circular_track_slots_enabled = true;
+  assert.equal((await load(Buffer.from(JSON.stringify(broken)))).status, 'error');
+  assert.equal(getLoadedTrackSettings().slots[1].params.positive_color, '#ff0000');
+  assert.equal((await load(await read('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'))).status, 'ok');
+  assert.ok(getCommittedCanonicalRenderRequest());
+  assert.equal(getLoadedTrackSettings(), null);
+  // A Session 30 without a Result shows none, so it records nothing.
+  const settingsOnly = JSON.parse(await read('scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz'));
+  settingsOnly.results = [];
+  assert.equal((await load(Buffer.from(JSON.stringify(settingsOnly)))).status, 'ok');
+  assert.equal(getLoadedTrackSettings(), null);
 });
 
 // OV-38: the Web writers of Sessions 27–33 (release tags 0.12.0–0.13.0 and

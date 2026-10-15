@@ -28,15 +28,54 @@ const TWO_PI = Math.PI * 2;
 const MARQUEE_THRESHOLD_PX = 4;
 const TOOLBAR_EDGE_MARGIN_PX = 8;
 
+/**
+ * A listed feature as the selection reads it (the extracted features of
+ * `state.js`, whose owner has no typedef).
+ * @typedef {{
+ *   svg_id?: unknown, fileIdx?: unknown, record_idx?: unknown,
+ *   displayRecordId?: unknown, record_id?: unknown, type?: unknown
+ * }} SelectionFeature
+ */
+
+/** @typedef {{ left: number, top: number, right: number, bottom: number }} Edges */
+/** @typedef {Edges & { width: number, height: number }} ScreenRect */
+/** @typedef {ScreenRect & { centerX: number, centerY: number }} UnionRect */
+/** @typedef {{ id: string, feature: SelectionFeature, scope: string, rect: UnionRect }} RenderedFeatureGeometry */
+
+/**
+ * The marquee `featureSelectionDrag` of `state.js`.
+ * @typedef {{
+ *   active: boolean, committed: boolean, startX: number, startY: number,
+ *   currentX: number, currentY: number, additive: boolean
+ * }} FeatureSelectionDrag
+ */
+
+/** @typedef {{ clientX: number, clientY: number }} PointerPosition */
+
+/**
+ * The pointer position and target of an event the selection reads.
+ * @typedef {{ clientX?: number, clientY?: number, target?: EventTarget | null }} SelectionEventLike
+ */
+
+/**
+ * The members of the `state.js` state that `applyFeatureSelectionClasses` reads.
+ * @typedef {object} FeatureSelectionClassState
+ * @property {{ value?: ReadonlySet<string> | null }} [selectedFeatureIds]
+ * @property {{ value?: unknown }} [selectedFeatureAnchorId]
+ */
+
+/** @param {unknown} value */
 export const normalizeFeatureSelectionId = (value) =>
   String(value || '').trim().replace(FEATURE_PART_SUFFIX_RE, '');
 
+/** @param {SelectionFeature | null | undefined} feature */
 export const getFeatureSelectionScope = (feature) => [
   feature?.fileIdx ?? '',
   feature?.record_idx ?? '',
   feature?.displayRecordId || feature?.record_id || ''
 ].join('::');
 
+/** @param {Element | null | undefined} svg */
 export const stripFeatureSelectionClasses = (svg) => {
   if (!svg) return;
   FEATURE_SELECTION_CLASSES.forEach((className) => {
@@ -46,16 +85,23 @@ export const stripFeatureSelectionClasses = (svg) => {
   });
 };
 
+/** @param {Element | null | undefined} element */
 const getElementSelectionId = (element) =>
   normalizeFeatureSelectionId(
     element?.getAttribute?.(RENDERED_FEATURE_SELECTION_ID_ATTRIBUTE) ||
     element?.getAttribute?.(FEATURE_SELECTION_ID_ATTRIBUTE)
   );
 
+/**
+ * @param {SelectionEventLike | null | undefined} eventLike
+ * @param {Element | null | undefined} svg
+ * @returns {Element | null}
+ */
 const getSelectableTargetFromPoint = (eventLike, svg) => {
   if (!svg || !Number.isFinite(eventLike?.clientX) || !Number.isFinite(eventLike?.clientY)) return null;
   const stack = typeof document.elementsFromPoint === 'function'
-    ? document.elementsFromPoint(eventLike.clientX, eventLike.clientY)
+    // The Number.isFinite checks above are true only for an eventLike with both numbers.
+    ? document.elementsFromPoint(/** @type {PointerPosition} */ (eventLike).clientX, /** @type {PointerPosition} */ (eventLike).clientY)
     : [];
   for (const element of stack) {
     if (!element || !svg.contains(element)) continue;
@@ -67,13 +113,23 @@ const getSelectableTargetFromPoint = (eventLike, svg) => {
   return null;
 };
 
+/**
+ * @param {SelectionEventLike | null | undefined} eventLike
+ * @param {Element | null | undefined} svg
+ * @returns {Element | null}
+ */
 export const getSelectableFeatureTarget = (eventLike, svg) => {
   const pointTarget = getSelectableTargetFromPoint(eventLike, svg);
   if (pointTarget) return pointTarget;
-  const target = eventLike?.target?.closest?.(SELECTABLE_FEATURE_SELECTOR) || null;
+  // A pointer event on the preview is dispatched to an Element; `closest?.` covers a target without it.
+  const target = /** @type {Element | null | undefined} */ (eventLike?.target)?.closest?.(SELECTABLE_FEATURE_SELECTOR) || null;
   return target && svg?.contains?.(target) ? target : null;
 };
 
+/**
+ * @param {Element | null | undefined} svg
+ * @param {FeatureSelectionClassState | null | undefined} state
+ */
 export const applyFeatureSelectionClasses = (svg, state) => {
   if (!svg || !state) return;
   const selected = state.selectedFeatureIds?.value || new Set();
@@ -88,6 +144,10 @@ export const applyFeatureSelectionClasses = (svg, state) => {
   });
 };
 
+/**
+ * @param {Pick<FeatureSelectionDrag, 'startX' | 'startY' | 'currentX' | 'currentY'>} drag
+ * @returns {ScreenRect}
+ */
 const normalizePointerRect = (drag) => {
   const left = Math.min(drag.startX, drag.currentX);
   const top = Math.min(drag.startY, drag.currentY);
@@ -103,6 +163,10 @@ const normalizePointerRect = (drag) => {
   };
 };
 
+/**
+ * @param {Edges} left
+ * @param {Edges} right
+ */
 const rectsIntersect = (left, right) => (
   left.left <= right.right &&
   left.right >= right.left &&
@@ -110,12 +174,22 @@ const rectsIntersect = (left, right) => (
   left.bottom >= right.top
 );
 
+/**
+ * @param {number} value
+ * @param {number | undefined} min
+ * @param {number | undefined} max
+ */
 const clampNumber = (value, min, max) => {
   if (!Number.isFinite(value)) return 0;
-  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return value;
-  return Math.min(max, Math.max(min, value));
+  // Number.isFinite is true only for a number, so past these checks min and max are numbers.
+  if (!Number.isFinite(min) || !Number.isFinite(max) || /** @type {number} */ (min) > /** @type {number} */ (max)) return value;
+  return Math.min(/** @type {number} */ (max), Math.max(/** @type {number} */ (min), value));
 };
 
+/**
+ * @param {Element | null | undefined} element
+ * @returns {ScreenRect | null}
+ */
 const getElementScreenRect = (element) => {
   if (!element || element.getAttribute?.('display') === 'none') return null;
   const rect = typeof element.getBoundingClientRect === 'function'
@@ -132,8 +206,13 @@ const getElementScreenRect = (element) => {
   };
 };
 
+/**
+ * @param {(ScreenRect | null)[]} rects
+ * @returns {UnionRect | null}
+ */
 const unionRects = (rects) => {
-  const validRects = rects.filter(Boolean);
+  // filter(Boolean) removes the nulls.
+  const validRects = /** @type {ScreenRect[]} */ (rects.filter(Boolean));
   if (validRects.length === 0) return null;
   const left = Math.min(...validRects.map((rect) => rect.left));
   const top = Math.min(...validRects.map((rect) => rect.top));
@@ -152,11 +231,17 @@ const unionRects = (rects) => {
   };
 };
 
+/** @param {number} angle */
 const normalizeAngle = (angle) => {
   const normalized = angle % TWO_PI;
   return normalized < 0 ? normalized + TWO_PI : normalized;
 };
 
+/**
+ * @param {number} startAngle
+ * @param {number} endAngle
+ * @param {number} angle
+ */
 const angleOnClockwiseInterval = (startAngle, endAngle, angle) => {
   const span = normalizeAngle(endAngle - startAngle);
   const delta = normalizeAngle(angle - startAngle);
@@ -164,14 +249,35 @@ const angleOnClockwiseInterval = (startAngle, endAngle, angle) => {
 };
 
 /**
+ * The members of the `state.js` state that the selection reads and writes; a
+ * ref is `{ value }` because Vue comes from `window.Vue`.
+ * @typedef {object} FeatureSelectionState
+ * @property {{ value: Set<string> }} selectedFeatureIds
+ * @property {{ value: string }} selectedFeatureAnchorId
+ * @property {{ value: string }} featureSelectionStatus
+ * @property {{ value: boolean }} featureSelectionSuppressNextClick
+ * @property {FeatureSelectionDrag} featureSelectionDrag
+ * @property {{ value: SelectionFeature[] }} extractedFeatures
+ * @property {{ value: Map<string, SelectionFeature> }} featuresBySvgId
+ * @property {{ value: SelectionFeature[] }} selectedFeatures
+ * @property {{ value: HTMLElement | null }} svgContainer
+ * @property {{ value: unknown }} clickedFeature The open popup, closed by setting null.
+ * @property {{ value: unknown }} clickedPairwiseMatch The open popup, closed by setting null.
+ * @property {{ value: unknown }} clickedLabel The open popup, closed by setting null.
+ * @property {{ value: string }} mode
+ */
+
+/**
  * @typedef {object} FeatureSelectionOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {FeatureSelectionState} state
  * @property {((callback: () => void) => void) | null} [onMounted] Vue `onMounted`.
  * @property {((callback: () => void) => void) | null} [onUnmounted] Vue `onUnmounted`.
+ * @property {() => boolean} [previewPopupsHeld] While it holds, a selection gesture leaves the feature
+ *   and match popups as they are.
  */
 
 /** @param {FeatureSelectionOptions} options */
-export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = null }) => {
+export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = null, previewPopupsHeld = () => false }) => {
   const {
     selectedFeatureIds,
     selectedFeatureAnchorId,
@@ -190,7 +296,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
 
   /** @type {number | null} */
   let statusTimeoutId = null;
-  /** @type {{ svg: SVGSVGElement, pointerId: number, startX: number, startY: number, additive: boolean } | null} */
+  /** @type {{ svg: Element, pointerId: number, startX: number, startY: number, additive: boolean } | null} */
   let pendingDrag = null;
   /** @type {{ startX: number, startY: number, originX: number, originY: number, minX?: number, maxX?: number, minY?: number, maxY?: number } | null} */
   let activeToolbarDrag = null;
@@ -198,6 +304,10 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
 
   const getCurrentSvg = () => svgContainer.value?.querySelector?.('svg') || null;
 
+  /**
+   * @param {unknown} message
+   * @param {{ timeoutMs?: number }} [options]
+   */
   const setStatus = (message, { timeoutMs = 2200 } = {}) => {
     if (statusTimeoutId !== null) {
       window.clearTimeout(statusTimeoutId);
@@ -213,15 +323,17 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
   };
 
   const closePreviewPopups = () => {
+    if (clickedLabel?.value) clickedLabel.value = null;
+    if (previewPopupsHeld()) return;
     if (clickedFeature?.value) clickedFeature.value = null;
     if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
-    if (clickedLabel?.value) clickedLabel.value = null;
   };
 
   const syncFeatureSelectionClasses = (svg = getCurrentSvg()) => {
     applyFeatureSelectionClasses(svg, state);
   };
 
+  /** @param {HTMLElement | null} toolbar */
   const getToolbarDragBounds = (toolbar) => {
     if (!toolbar || typeof toolbar.getBoundingClientRect !== 'function') return null;
     const toolbarRect = toolbar.getBoundingClientRect();
@@ -244,6 +356,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     transform: `translate(${Math.round(toolbarOffset.x)}px, ${Math.round(toolbarOffset.y)}px)`
   }));
 
+  /** @param {PointerEvent} event */
   const moveToolbarDrag = (event) => {
     if (!activeToolbarDrag) return;
     const nextX = activeToolbarDrag.originX + ((Number(event.clientX) || 0) - activeToolbarDrag.startX);
@@ -262,12 +375,15 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     window.removeEventListener('blur', stopToolbarDrag);
   };
 
+  /** @param {PointerEvent} event */
   const startToolbarDrag = (event) => {
     if (event.button != null && event.button !== 0) return;
-    const fromHandle = Boolean(event.target?.closest?.('.feature-selection-toolbar-drag-handle'));
-    if (!fromHandle && event.target?.closest?.('input, select, button, label, textarea, a')) return;
+    // The toolbar and its children are Elements; `closest?.` covers a target without it.
+    const fromHandle = Boolean(/** @type {Element | null} */ (event.target)?.closest?.('.feature-selection-toolbar-drag-handle'));
+    if (!fromHandle && /** @type {Element | null} */ (event.target)?.closest?.('input, select, button, label, textarea, a')) return;
     stopToolbarDrag();
-    const toolbar = event.currentTarget?.closest?.('.feature-selection-toolbar') || null;
+    // The selector matches the toolbar, an HTML element.
+    const toolbar = /** @type {HTMLElement | null} */ (/** @type {Element | null} */ (event.currentTarget)?.closest?.('.feature-selection-toolbar') || null);
     /** @type {Partial<NonNullable<ReturnType<typeof getToolbarDragBounds>>>} */
     const bounds = getToolbarDragBounds(toolbar) || {};
     activeToolbarDrag = {
@@ -288,6 +404,10 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     event.stopPropagation();
   };
 
+  /**
+   * @param {Iterable<unknown> | null | undefined} ids
+   * @param {{ anchorId?: unknown, status?: string }} [options]
+   */
   const replaceSelectedFeatureIds = (ids, { anchorId = selectedFeatureAnchorId.value, status = '' } = {}) => {
     const nextIds = new Set(
       Array.from(ids || [])
@@ -300,6 +420,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     syncFeatureSelectionClasses();
   };
 
+  /** @param {{ keepAnchorId?: unknown, clearStatus?: boolean, syncDom?: boolean }} [options] */
   const clearFeatureSelection = ({
     keepAnchorId = '',
     clearStatus = false,
@@ -314,10 +435,15 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     if (syncDom) syncFeatureSelectionClasses();
   };
 
+  /** @param {unknown} featureId */
   const markPlainFeatureClick = (featureId) => {
     clearFeatureSelection({ keepAnchorId: featureId, clearStatus: true });
   };
 
+  /**
+   * @param {unknown} featureId
+   * @returns {SelectionFeature | null}
+   */
   const getFeatureById = (featureId) => {
     const id = normalizeFeatureSelectionId(featureId);
     if (!id) return null;
@@ -329,20 +455,28 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
       null;
   };
 
+  /** @param {Element | null | undefined} svg */
   const getSelectableElementsById = (svg) => {
+    /** @type {Map<string, Element[]>} */
     const indexed = new Map();
     if (!svg) return indexed;
     svg.querySelectorAll(SELECTABLE_FEATURE_SELECTOR).forEach((element) => {
       const id = getElementSelectionId(element);
       if (!id) return;
       if (!indexed.has(id)) indexed.set(id, []);
-      indexed.get(id).push(element);
+      // Set just above.
+      /** @type {Element[]} */ (indexed.get(id)).push(element);
     });
     return indexed;
   };
 
+  /**
+   * @param {Element | null | undefined} svg
+   * @param {string} [scope]
+   */
   const buildRenderedFeatureGeometry = (svg, scope = '') => {
     const elementIndex = getSelectableElementsById(svg);
+    /** @type {RenderedFeatureGeometry[]} */
     const geometries = [];
     (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
       const id = normalizeFeatureSelectionId(feature?.svg_id);
@@ -362,6 +496,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     return geometries;
   };
 
+  /** @param {unknown} featureId */
   const toggleFeatureSelection = (featureId) => {
     const id = normalizeFeatureSelectionId(featureId);
     if (!id || !getFeatureById(id)) return false;
@@ -379,6 +514,10 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     return true;
   };
 
+  /**
+   * @param {unknown} featureId
+   * @param {{ additive?: boolean }} [options]
+   */
   const selectFeatureRange = (featureId, { additive = false } = {}) => {
     const clickedId = normalizeFeatureSelectionId(featureId);
     const clicked = getFeatureById(clickedId);
@@ -414,6 +553,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
       if (!recordBounds) return false;
       const centerX = recordBounds.centerX;
       const centerY = recordBounds.centerY;
+      /** @param {RenderedFeatureGeometry} geometry */
       const angleFor = (geometry) => normalizeAngle(
         Math.atan2(geometry.rect.centerY - centerY, geometry.rect.centerX - centerX)
       );
@@ -445,6 +585,11 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     return true;
   };
 
+  /**
+   * @param {Element} svg
+   * @param {Edges} marqueeRect
+   * @param {boolean} [additive]
+   */
   const selectIntersectingFeatures = (svg, marqueeRect, additive = false) => {
     const nextIds = additive ? new Set(selectedFeatureIds.value || []) : new Set();
     const geometries = buildRenderedFeatureGeometry(svg);
@@ -461,6 +606,10 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     closePreviewPopups();
   };
 
+  /**
+   * @param {PointerEvent | null | undefined} event
+   * @param {Element | null | undefined} svg
+   */
   const startMarqueePointer = (event, svg) => {
     if (!event?.shiftKey || event.button !== 0 || !svg) return false;
     pendingDrag = {
@@ -487,6 +636,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     return true;
   };
 
+  /** @param {PointerEvent} event */
   const moveMarqueePointer = (event) => {
     if (!pendingDrag || event.pointerId !== pendingDrag.pointerId) return false;
     const dx = event.clientX - pendingDrag.startX;
@@ -504,6 +654,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     return true;
   };
 
+  /** @param {PointerEvent} event */
   const commitMarqueePointer = (event) => {
     if (!pendingDrag || event.pointerId !== pendingDrag.pointerId) return false;
     const wasActive = featureSelectionDrag.active;
@@ -560,6 +711,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     };
   });
 
+  /** @param {KeyboardEvent} event */
   const handleEscape = (event) => {
     if (event.key !== 'Escape') return;
     if (activeToolbarDrag) {
@@ -572,7 +724,8 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
       event.preventDefault();
       return;
     }
-    const target = event.target;
+    // The key event of an element; `closest?.` covers a target without it.
+    const target = /** @type {Element | null} */ (event.target);
     if (target?.closest?.('.feature-popup, .pairwise-match-popup, .label-popup, input, textarea, select, [contenteditable="true"]')) {
       return;
     }

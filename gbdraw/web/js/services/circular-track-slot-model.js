@@ -9,6 +9,32 @@ import { normalizeOptionalText } from './track-slot-display.js';
 import { parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
+/** @import { TrackSlotRow } from './track-slot-validation.js' */
+
+/**
+ * A Circular track-slot row as the editor and the request projection hold it.
+ * @typedef {object} CircularTrackSlot
+ * @property {string} id
+ * @property {string} renderer
+ * @property {boolean} enabled
+ * @property {unknown} width A Width draft: text, a number, `{ value, unit }`, or null for Auto.
+ * @property {unknown} radius A Radius draft, as the Width.
+ * @property {unknown} inner_gap_px Text or a number of pixels; null for Auto.
+ * @property {unknown} outer_gap_px As inner_gap_px.
+ * @property {string | null} side
+ * @property {number} z
+ * @property {Record<string, unknown>} params
+ */
+
+/**
+ * What the placement readers take of a row.
+ * @typedef {object} SlotPlacementSource
+ * @property {unknown} [enabled]
+ * @property {unknown} [renderer]
+ * @property {unknown} [side]
+ * @property {unknown} [params]
+ */
+
 const SUPPORTED_RENDERERS = [
   'features',
   'ticks',
@@ -20,6 +46,27 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
+// The renderer names a slot may use beside the supported ones, as Python reads
+// them on a spec string and on a slot object (gbdraw/tracks/circular.py
+// `_RENDERER_ALIASES`, `_normalize_renderer`; OV-489).
+/** @type {Readonly<Record<string, string>>} */
+const RENDERER_ALIASES = Object.freeze({
+  gc_content: 'dinucleotide_content',
+  content: 'dinucleotide_content',
+  gc_skew: 'dinucleotide_skew',
+  skew: 'dinucleotide_skew',
+  conservation: 'sequence_conservation',
+  circular_comparison: 'sequence_conservation'
+});
+// The renderer a Circular slot names: the one change point of the alias lookup,
+// for the slot normalizer and for Load's projection of a request's slot objects.
+/** @param {unknown} name @returns {string} */
+export const circularRendererName = (name) => {
+  const named = String(name ?? '').trim().toLowerCase();
+  return RENDERER_ALIASES[named] || named;
+};
+
+/** @type {Record<string, string>} */
 export const DEFAULT_SLOT_IDS = {
   features: 'features',
   ticks: 'ticks',
@@ -47,11 +94,17 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = new Set([
 ]);
 export const CIRCULAR_TRACK_PRESETS = ['tuckin', 'middle', 'spreadout'];
 
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ * @returns {string}
+ */
 export const normalizeCircularTrackPreset = (value, fallback = 'tuckin') => {
   const text = String(value || fallback).trim().toLowerCase();
   return CIRCULAR_TRACK_PRESETS.includes(text) ? text : fallback;
 };
 
+/** @param {unknown} preset */
 export const laneDirectionForPreset = (preset) => {
   const normalized = normalizeCircularTrackPreset(preset);
   if (normalized === 'middle') return 'split';
@@ -59,16 +112,23 @@ export const laneDirectionForPreset = (preset) => {
   return 'inside';
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ * @returns {string}
+ */
 export const normalizeLaneDirection = (value, fallback = 'inside') => {
   const text = String(value || fallback).trim().toLowerCase();
   return ['inside', 'outside', 'split'].includes(text) ? text : fallback;
 };
 
+/** @param {unknown} value */
 export const sideForLaneDirection = (value) => {
   const lane = normalizeLaneDirection(value);
   return lane === 'split' ? 'overlay' : lane;
 };
 
+/** @param {unknown} value */
 export const laneDirectionForSide = (value) => {
   const side = normalizePlacement(value);
   if (side === 'outside') return 'outside';
@@ -76,22 +136,37 @@ export const laneDirectionForSide = (value) => {
   return 'inside';
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ * @returns {string}
+ */
 export const normalizeNt = (value, fallback = 'GC') => {
   const text = String(value || '').trim().toUpperCase();
   return text || fallback;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} fallback
+ * @returns {string}
+ */
 const cleanToken = (value, fallback) => {
   const text = String(value || '').trim();
   return text || fallback;
 };
 
+/** @param {unknown} value */
 export const normalizeColorParam = (value) => {
   const text = normalizeOptionalText(value);
   if (text === null) return null;
   return resolveColorToHex(text);
 };
 
+/**
+ * @param {Record<string, unknown>} params Edited in place.
+ * @returns {Record<string, unknown>} The same object.
+ */
 const normalizeSkewColorParams = (params) => {
   if (normalizeOptionalText(params.positive_color) === null && normalizeOptionalText(params.high_color) !== null) {
     params.positive_color = params.high_color;
@@ -110,6 +185,10 @@ const normalizeSkewColorParams = (params) => {
   return params;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} field
+ */
 const normalizeGapText = (value, field) => {
   try {
     const numeric = parseOptionalPixel(value, `Circular track slot ${field}`, { allowZero: true });
@@ -119,16 +198,29 @@ const normalizeGapText = (value, field) => {
   }
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ * @returns {string}
+ */
 export const normalizePlacement = (value, fallback = 'inside') => {
   const text = String(value || fallback).trim().toLowerCase();
   return ['inside', 'outside', 'overlay'].includes(text) ? text : fallback;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
 export const normalizeOptionalPlacement = (value) => {
   if (value === null || value === undefined || value === '') return null;
   return normalizePlacement(value);
 };
 
+/**
+ * @param {unknown} value
+ * @returns {number | null}
+ */
 export const normalizeTrackIndex = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
@@ -136,11 +228,22 @@ export const normalizeTrackIndex = (value) => {
   return numeric;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ * @returns {string}
+ */
 export const normalizeTickLabelLayout = (value, fallback = DEFAULT_TICK_LABEL_LAYOUT) => {
   const text = String(value || fallback).trim().toLowerCase();
   return TICK_LABEL_LAYOUTS.includes(text) ? text : fallback;
 };
 
+/**
+ * @param {unknown} labelSide
+ * @param {unknown} tickSide
+ * @param {string} [fallback]
+ * @returns {string}
+ */
 export const tickLabelLayoutFromSides = (labelSide, tickSide, fallback = DEFAULT_TICK_LABEL_LAYOUT) => {
   const label = String(labelSide || '').trim().toLowerCase();
   const tick = String(tickSide || '').trim().toLowerCase();
@@ -153,11 +256,13 @@ export const tickLabelLayoutFromSides = (labelSide, tickSide, fallback = DEFAULT
 
 const defaultPresetTickLabelLayout = () => DEFAULT_INNER_TICK_LABEL_LAYOUT;
 
+/** @param {unknown} value */
 const isAutoOrientableTickLabelLayout = (value) => {
   const layout = normalizeTickLabelLayout(value);
   return [DEFAULT_TICK_LABEL_LAYOUT, DEFAULT_INNER_TICK_LABEL_LAYOUT].includes(layout);
 };
 
+/** @param {(CircularTrackSlot | null | undefined)[]} slots Edited in place. */
 const syncDefaultTickLayoutsForFeatureRelation = (slots) => {
   const featureIndex = slots.findIndex((slot) => slot?.enabled !== false && slot?.renderer === 'features');
   if (featureIndex < 0) return;
@@ -171,11 +276,19 @@ const syncDefaultTickLayoutsForFeatureRelation = (slots) => {
   });
 };
 
+/**
+ * @param {unknown} [params]
+ * @returns {Record<string, unknown>} A copy; empty for a value that is no plain object.
+ */
 export const cloneParams = (params = {}) => {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
   return { ...params };
 };
 
+/**
+ * @param {Record<string, unknown>} source
+ * @returns {string | null}
+ */
 const obsoleteCircularTrackSlotKey = (source) => {
   for (const key of Object.keys(source || {})) {
     if (OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(String(key).toLowerCase())) {
@@ -190,6 +303,7 @@ const obsoleteCircularTrackSlotKey = (source) => {
   return null;
 };
 
+/** @param {Record<string, unknown>} source */
 const assertCurrentCircularTrackSlotShape = (source) => {
   const obsoleteKey = obsoleteCircularTrackSlotKey(source);
   if (!obsoleteKey) return;
@@ -199,6 +313,10 @@ const assertCurrentCircularTrackSlotShape = (source) => {
   );
 };
 
+/**
+ * @param {TrackSlotRow} slot
+ * @returns {TrackSlotRow} A copy without the obsolete keys; the argument itself when it is no object.
+ */
 export const migrateLegacyCircularTrackSlot = (slot) => {
   if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return slot;
   const source = { ...slot };
@@ -235,6 +353,7 @@ export const migrateLegacyCircularTrackSlot = (slot) => {
   return source;
 };
 
+/** @param {unknown} spec */
 export const migrateLegacyCircularTrackSlotSpec = (spec) => {
   const text = String(spec || '').trim();
   const atIndex = text.indexOf('@');
@@ -268,8 +387,13 @@ export const migrateLegacyCircularTrackSlotSpec = (spec) => {
   return retained.length > 0 ? `${head}@${retained.join(',')}` : head;
 };
 
+/** @param {unknown} value */
 export const normalizeSlotSide = (value) => normalizeOptionalPlacement(value);
 
+/**
+ * @param {SlotPlacementSource | null | undefined} slot
+ * @param {unknown} [preset]
+ */
 export const resolveCircularTrackFeaturePlacement = (slot, preset = 'tuckin') => {
   const params = cloneParams(slot?.params);
   const rawLane = normalizeOptionalText(params.lane_direction ?? params.lanes);
@@ -287,10 +411,18 @@ export const resolveCircularTrackFeaturePlacement = (slot, preset = 'tuckin') =>
   };
 };
 
+/**
+ * @param {SlotPlacementSource | null | undefined} slot
+ * @param {unknown} [preset]
+ */
 const featureLaneForSlot = (slot, preset = 'tuckin') => (
   resolveCircularTrackFeaturePlacement(slot, preset).laneDirection
 );
 
+/**
+ * @param {CircularTrackSlot | null | undefined} slot
+ * @param {unknown} side
+ */
 const syncTickParamsForPlacement = (slot, side) => {
   if (!slot || slot.renderer !== 'ticks') return;
   void side;
@@ -300,6 +432,10 @@ const syncTickParamsForPlacement = (slot, side) => {
   delete slot.params.tick_side;
 };
 
+/**
+ * @param {CircularTrackSlot | null | undefined} slot Edited in place.
+ * @param {unknown} side
+ */
 export const syncSlotPlacementFromSide = (slot, side) => {
   if (!slot) return;
   const placement = normalizePlacement(side);
@@ -312,6 +448,11 @@ export const syncSlotPlacementFromSide = (slot, side) => {
   }
 };
 
+/**
+ * @param {SlotPlacementSource | null | undefined} slot
+ * @param {unknown} [preset]
+ * @returns {string}
+ */
 export const effectiveSlotPlacement = (slot, preset = 'tuckin') => {
   if (!slot) return 'inside';
   if (slot.renderer === 'features') {
@@ -320,6 +461,11 @@ export const effectiveSlotPlacement = (slot, preset = 'tuckin') => {
   return normalizePlacement(slot.side, 'inside');
 };
 
+/**
+ * @param {(SlotPlacementSource | null | undefined)[]} slots
+ * @param {unknown} [preset]
+ * @returns {number}
+ */
 export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
   const onAxisIndex = slots.findIndex((slot) => slot?.renderer !== 'annotations' && effectiveSlotPlacement(slot, preset) === 'overlay');
   if (onAxisIndex >= 0) return onAxisIndex;
@@ -333,6 +479,11 @@ export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
   return featureIndex;
 };
 
+/**
+ * @param {unknown} value
+ * @param {unknown} slotCount
+ * @returns {number | null} null when value is no integer.
+ */
 export const clampCircularTrackAxisIndex = (value, slotCount) => {
   const length = Math.max(0, Number(slotCount) || 0);
   const numeric = Number(value);
@@ -340,6 +491,12 @@ export const clampCircularTrackAxisIndex = (value, slotCount) => {
   return Math.min(Math.max(numeric, 0), length);
 };
 
+/**
+ * @param {(CircularTrackSlot | null | undefined)[]} slots Edited in place.
+ * @param {unknown} axisIndex
+ * @param {unknown} [preset]
+ * @returns {number} The Axis boundary used.
+ */
 export const syncSlotsFromAxisIndex = (slots, axisIndex, preset = 'tuckin') => {
   const axis = clampCircularTrackAxisIndex(axisIndex, slots.length);
   const resolvedAxis = axis === null ? inferLegacyAxisIndexFromFeature(slots, preset) : axis;
@@ -361,18 +518,25 @@ export const syncSlotsFromAxisIndex = (slots, axisIndex, preset = 'tuckin') => {
   return resolvedAxis;
 };
 
+/**
+ * @param {(CircularTrackSlot | null | undefined)[]} slots Edited in place.
+ * @param {unknown} axisIndex
+ * @param {unknown} [preset]
+ * @returns {number}
+ */
 export const enforceSingleOnAxisSlot = (slots, axisIndex, preset = 'tuckin') => {
-  const onAxisIndices = slots
+  // The filter keeps exactly the integers of the map, which are the non-null indices.
+  const onAxisIndices = /** @type {number[]} */ (slots
     .map((slot, index) => (
       slot?.renderer !== 'annotations' && effectiveSlotPlacement(slot, preset) === 'overlay' ? index : null
     ))
-    .filter((index) => Number.isInteger(index));
+    .filter((index) => Number.isInteger(index)));
   if (onAxisIndices.length === 0) {
     return clampCircularTrackAxisIndex(axisIndex, slots.length) ?? inferLegacyAxisIndexFromFeature(slots, preset);
   }
 
   const clampedAxis = clampCircularTrackAxisIndex(axisIndex, slots.length);
-  const keepIndex = onAxisIndices.includes(clampedAxis) ? clampedAxis : onAxisIndices[0];
+  const keepIndex = clampedAxis !== null && onAxisIndices.includes(clampedAxis) ? clampedAxis : onAxisIndices[0];
   onAxisIndices.forEach((index) => {
     if (index === keepIndex) return;
     syncSlotPlacementFromSide(slots[index], index < keepIndex ? 'outside' : 'inside');
@@ -380,7 +544,13 @@ export const enforceSingleOnAxisSlot = (slots, axisIndex, preset = 'tuckin') => 
   return keepIndex;
 };
 
-/** @param {number | null} [axisIndex] */
+/**
+ * @param {unknown} slots
+ * @param {string} [defaultNt]
+ * @param {string} [preset]
+ * @param {number | null} [axisIndex]
+ * @returns {CircularTrackSlot[]}
+ */
 export const applyCircularTrackOrderPlacements = (slots, defaultNt = 'GC', preset = 'tuckin', axisIndex = null) => {
   const normalized = normalizeCircularTrackSlots(slots, defaultNt, preset);
   const resolvedAxis = syncSlotsFromAxisIndex(normalized, axisIndex, preset);
@@ -388,7 +558,10 @@ export const applyCircularTrackOrderPlacements = (slots, defaultNt = 'GC', prese
   return normalized;
 };
 
-/** @param {{ id: string, renderer: string, enabled?: boolean, width?: any, radius?: any, inner_gap_px?: any, outer_gap_px?: any, side?: string | null, z?: number, params?: Record<string, any> }} slot */
+/**
+ * @param {{ id: string, renderer: string, enabled?: boolean, width?: unknown, radius?: unknown, inner_gap_px?: unknown, outer_gap_px?: unknown, side?: string | null, z?: number, params?: unknown }} slot
+ * @returns {CircularTrackSlot}
+ */
 export const makeSlot = ({
   id,
   renderer,
@@ -413,6 +586,11 @@ export const makeSlot = ({
   params: cloneParams(params)
 });
 
+/**
+ * @param {Record<string, unknown>} params
+ * @param {Record<string, unknown>} [expected]
+ * @returns {boolean}
+ */
 const paramsMatchExactly = (params, expected = {}) => {
   const actualEntries = Object.entries(cloneParams(params))
     .filter(([, value]) => normalizeOptionalText(value) !== null)
@@ -426,16 +604,25 @@ const paramsMatchExactly = (params, expected = {}) => {
   return expectedEntries.every(([key, value]) => actualMap[key] === value);
 };
 
+/** @param {Record<string, unknown>} source */
 const hasBlankSlotGeometry = (source) =>
   normalizeOptionalText(source.width) === null &&
   normalizeOptionalText(source.radius) === null &&
   normalizeOptionalText(source.inner_gap_px) === null &&
   normalizeOptionalText(source.outer_gap_px) === null;
 
+/** @param {Record<string, unknown>} source */
 const hasDefaultSlotFlags = (source) =>
   source.enabled !== false &&
   Number(source.z || 0) === 0;
 
+/**
+ * @param {TrackSlotRow} source
+ * @param {string} renderer
+ * @param {string} [defaultNt]
+ * @param {string} [preset]
+ * @returns {boolean}
+ */
 const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset = 'tuckin') => {
   if (!source || typeof source !== 'object' || Array.isArray(source)) return false;
   if (!hasBlankSlotGeometry(source) || !hasDefaultSlotFlags(source)) return false;
@@ -505,7 +692,7 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
 
 /**
  * @param {DefaultCircularTrackSlotsOptions} [options]
- * @returns {Record<string, any>[]}
+ * @returns {CircularTrackSlot[]}
  */
 export const createDefaultCircularTrackSlots = ({
   nt = 'GC',
@@ -574,7 +761,12 @@ const CIRCULAR_GEOMETRY_SHORTCUT_FIELDS = Object.freeze({
   gcSkewRadius: 'gc_skew_radius_circular'
 });
 
+/**
+ * @param {Record<string, unknown>} [values] The geometry shortcuts of the form, by field.
+ * @returns {Record<string, number | null>}
+ */
 export const normalizeCircularGeometryShortcuts = (values = {}) => {
+  /** @type {Record<string, number | null>} */
   const normalized = {};
   for (const [field, diagnosticField] of Object.entries(CIRCULAR_GEOMETRY_SHORTCUT_FIELDS)) {
     const raw = values?.[field];
@@ -591,14 +783,21 @@ export const normalizeCircularGeometryShortcuts = (values = {}) => {
   return normalized;
 };
 
+/** @param {Record<string, unknown>} [values] */
 export const hasCircularGeometryShortcuts = (values = {}) => (
   Object.values(normalizeCircularGeometryShortcuts(values))
     .some((value) => value !== null)
 );
 
+/**
+ * @param {TrackSlotRow[]} slots
+ * @param {Record<string, unknown>} [values]
+ * @returns {Record<string, unknown>[]} Copies of the rows with the shortcut widths and radii.
+ */
 export const applyCircularGeometryShortcuts = (slots, values = {}) => {
   const geometry = normalizeCircularGeometryShortcuts(values);
   return (Array.isArray(slots) ? slots : []).map((slot) => {
+    /** @type {Record<string, unknown>} */
     const next = {
       ...slot,
       params: cloneParams(slot?.params)
@@ -627,12 +826,22 @@ export const applyCircularGeometryShortcuts = (slots, values = {}) => {
   });
 };
 
+/**
+ * @param {TrackSlotRow} slot
+ * @param {number} [index]
+ * @param {string} [defaultNt]
+ * @param {string} [preset]
+ * @returns {CircularTrackSlot}
+ */
 export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', preset = 'tuckin') => {
+  /** @type {Record<string, unknown>} */
   const source = slot && typeof slot === 'object' && !Array.isArray(slot) ? slot : {};
   assertCurrentCircularTrackSlotShape(source);
-  const renderer = SUPPORTED_RENDERERS.includes(source.renderer) ? source.renderer : 'dinucleotide_skew';
+  const resolved = circularRendererName(source.renderer);
+  const renderer = SUPPORTED_RENDERERS.includes(resolved) ? resolved : 'dinucleotide_skew';
   const fallbackId = DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`;
   const inheritsPresetDefaults = isLegacyDefaultWebSlotShape(source, renderer, defaultNt, preset);
+  /** @type {Record<string, unknown>} */
   const params = inheritsPresetDefaults ? {} : cloneParams(source.params);
   [
     'side',
@@ -723,7 +932,8 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
           .map((mark) => String(mark || '').trim().toLowerCase())
           .filter(Boolean)
       ));
-      if (params.marks.length === 0) delete params.marks;
+      // params.marks is the array assigned just above.
+      if (/** @type {unknown[]} */ (params.marks).length === 0) delete params.marks;
     }
     for (const [field, defaultValue] of [['lane_gap_px', 3], ['padding_px', 2]]) {
       if (params[field] === null || params[field] === undefined || params[field] === '') {
@@ -758,6 +968,12 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
   });
 };
 
+/**
+ * @param {unknown} slots
+ * @param {string} [defaultNt]
+ * @param {string} [preset]
+ * @returns {CircularTrackSlot[]}
+ */
 export const normalizeCircularTrackSlots = (slots, defaultNt = 'GC', preset = 'tuckin') => {
   const base = Array.isArray(slots)
     ? slots
@@ -765,11 +981,19 @@ export const normalizeCircularTrackSlots = (slots, defaultNt = 'GC', preset = 't
   return base.map((slot, index) => normalizeCircularTrackSlot(slot, index, defaultNt, preset));
 };
 
+/**
+ * @param {unknown} spec `id:renderer@key=value,...`
+ * @param {number} [index]
+ * @param {string} [defaultNt]
+ * @param {string} [preset]
+ * @returns {CircularTrackSlot}
+ */
 export const parseCircularTrackSlotSpec = (spec, index = 0, defaultNt = 'GC', preset = 'tuckin') => {
   const text = String(spec || '').trim();
   const atIndex = text.indexOf('@');
   const head = (atIndex < 0 ? text : text.slice(0, atIndex)).trim();
   const separatorIndex = head.indexOf(':');
+  /** @type {{ id: string, renderer: string, enabled: boolean, width?: string, radius?: string, inner_gap_px?: string | number | null, outer_gap_px?: string | number | null, side?: string, z?: number, params: Record<string, unknown> }} */
   const source = {
     id: separatorIndex < 0 ? '' : head.slice(0, separatorIndex).trim(),
     renderer: separatorIndex < 0 ? head : head.slice(separatorIndex + 1).trim(),
@@ -822,12 +1046,22 @@ export const parseCircularTrackSlotSpec = (spec, index = 0, defaultNt = 'GC', pr
   return normalizeCircularTrackSlot(source, index, defaultNt, preset);
 };
 
+/**
+ * @param {unknown} specs
+ * @param {string} [defaultNt]
+ * @param {string} [preset]
+ * @returns {CircularTrackSlot[]}
+ */
 export const parseCircularTrackSlotSpecs = (specs, defaultNt = 'GC', preset = 'tuckin') => (
   Array.isArray(specs)
     ? specs.map((spec, index) => parseCircularTrackSlotSpec(spec, index, defaultNt, preset))
     : []
 );
 
+/**
+ * @param {Record<string, unknown>} params
+ * @returns {Record<string, unknown>}
+ */
 const canonicalAnnotationParams = (params) => {
   const next = { ...params };
   if (!Array.isArray(next.marks) || next.marks.length === 0) {
@@ -855,6 +1089,10 @@ const canonicalAnnotationParams = (params) => {
   return next;
 };
 
+/**
+ * @param {Pick<CircularTrackSlot, 'renderer' | 'params'>} slot
+ * @returns {Record<string, unknown>}
+ */
 const canonicalCircularParams = (slot) => {
   const params = cloneParams(slot?.params);
   Object.keys(params).forEach((key) => {
@@ -871,6 +1109,9 @@ const canonicalCircularParams = (slot) => {
  *
  * This path is intentionally structured so nested annotation style overrides
  * and mark arrays survive request/session round trips.
+ * @param {TrackSlotRow} slot
+ * @param {string} [defaultNt]
+ * @param {string} [preset]
  */
 export const buildCircularTrackSlotPayload = (
   slot,

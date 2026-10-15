@@ -25,6 +25,7 @@ from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import LegendDrawingConfigurator
+from gbdraw.configurators.legend import measure_legend
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import LinearComparison
@@ -124,29 +125,17 @@ def _linear_legend_svg() -> str:
         },
     }
     configurator = LegendDrawingConfigurator(
-        color_table=None,
-        default_colors=None,
-        selected_features_set=[],
         profile=profile,
-        gc_config=None,
-        skew_config=None,
-        feature_config=None,
         canvas_config=canvas_config,
     )
-    legend_measurement = configurator.measure_legend(
+    legend_measurement = measure_legend(
+        configurator,
         legend_table,
         placement=canvas_config.legend_position,
         wrap_width=canvas_config.total_width,
     )
     drawing = Drawing(debug=False)
-    drawing.add(
-        LegendGroup(
-            canvas_config,
-            legend_measurement,
-            legend_table,
-            cfg=cfg,
-        ).get_group()
-    )
+    drawing.add(LegendGroup(legend_measurement, legend_table).get_group())
     return drawing.tostring()
 
 

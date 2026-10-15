@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
+import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 const { buildSimilarityAlignmentResetReceipt: build, validateSimilarityAlignmentResetReceipt: admit,
   validateAlignmentResetReceiptShape: admitShape } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
@@ -11,7 +12,7 @@ const resource = { name: 'record.gbk', kind: 'genbank', encoding: 'base64', data
 const anchor = (recordKey) => ({ recordKey, biologicalFeatureId: `gene-${recordKey}`, sourceFeatureIndex: 1, stableFeatureSvgId: null });
 const fixture = () => {
   const before = { resources: { source: resource }, renderRequest: {
-    schema: 8, mode: 'linear', records: ['a', 'b', 'c'].map(recordKey => ({
+    schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear', records: ['a', 'b', 'c'].map(recordKey => ({
       recordKey, source: {kind: 'genbank', resourceId: 'source'}, cardinality: 'exactly_one',
       selector: { kind: 'recordId', id: recordKey }, region: null,
       display: { isCircular: null, startCoordinate: null }, presentation: { reverseComplement: false }
@@ -80,6 +81,13 @@ test('malformed modern receipt never becomes absent historical evidence', async 
     {...receipt, referenceDeltaX:{recordKey:'a',deltaX:Infinity}},
     {...receipt, mode:'left'} ];
   for (const invalid of variants) await assert.rejects(admit(invalid, f.after), stale);
+});
+test('a receipt whose binding is not a string fails the shape check and the public check alike', async () => {
+  const f = fixture(); const receipt = await build(f);
+  // A one-element array holding the hash coerces to it in the regex test, so only the type check rejects it.
+  const arrayBinding = { ...receipt, binding: [receipt.binding] };
+  assert.throws(() => admitShape(arrayBinding, f.after.renderRequest), stale);
+  await assert.rejects(admit(arrayBinding, f.after), stale);
 });
 // OV-115 and OV-130: a Linear receipt checked against a Circular request (and any
 // stale receipt) reaches Generate and Save as a specific diagnostic with a way out.

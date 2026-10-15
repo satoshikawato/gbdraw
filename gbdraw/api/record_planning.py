@@ -7,7 +7,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Hashable, Literal, MutableMapping, Sequence, cast
+from typing import Any, Callable, Hashable, Literal, Mapping, MutableMapping, Sequence, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -38,6 +38,8 @@ from gbdraw.io.record_select import (
 )
 from gbdraw.io.regions import RegionSpec, apply_region_specs, parse_region_spec
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.api.prepared import register_prepared_resource_value
+from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
@@ -220,6 +222,106 @@ class ResolvedRecordCollection:
         object.__setattr__(self, "transforms", tuple(transforms))
 
 
+_SOURCE_BINDING_COLUMNS = frozenset(
+    f"{role}_{name}" for role in ("query", "subject") for name in ("feature_index", "feature_svg_id")
+)
+
+
+@dataclass(frozen=True)
+class ComparisonRecordBinding:
+    """A drawn record's source feature IDs and view feature IDs, by source feature index.
+
+    ``current`` holds the view IDs of the record as drawn (in the search frame
+    when the binding was made for it), ``opposite`` those of the other strand.
+    """
+
+    source: Mapping[int, str]
+    current: Mapping[int, str]
+    opposite: Mapping[int, str]
+    length: int
+
+
+def comparison_record_binding(
+    record: SeqRecord,
+    source_feature_catalog: tuple[SourceFeatureIdentity, ...] | None,
+    search_frame: bool,
+) -> ComparisonRecordBinding:
+    """The feature binding of one record (render stage ``comparison_rows``)."""
+
+    current: dict[int, str] = {}
+    opposite: dict[int, str] = {}
+    for ordinal, feature in enumerate(_iter_source_features(record.features)):
+        if feature.location is None:
+            continue
+        index = _source_feature_index(feature)
+        index = ordinal if index is None else index
+        for target, location in ((current, feature.location),
+                                 (opposite, feature.location._flip(len(record)))):
+            target[index] = compute_feature_hash_from_location_parts(
+                feature.type,
+                [(int(part.start), int(part.end), part.strand) for part in location.parts],
+                record_id=record.id,
+            )
+    source = {feature.source_feature_index: feature.stable_feature_id
+              for feature in source_feature_catalog or ()}
+    if search_frame and _read_coord_map(record)[1] == -1:
+        current, opposite = opposite, current
+    return ComparisonRecordBinding(source, current, opposite, len(record))
+
+
+def project_comparison_frame(
+    frame: pd.DataFrame,
+    query: ComparisonRecordBinding,
+    subject: ComparisonRecordBinding,
+) -> pd.DataFrame:
+    """Rows of ``frame`` in the drawn views (render stage ``comparison_rows``).
+
+    Returns ``frame`` itself when no row changes.
+    """
+
+    if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
+        return frame
+    updated = None
+    for row_index, row in frame.iterrows():
+        flips = []
+        for role, binding, prefix in (("query", query, "q"), ("subject", subject, "s")):
+            try:
+                indices = [int(value) for value in str(row[f"{role}_feature_index"]).split(";")]
+            except ValueError:
+                raise ValidationError("Comparison source feature indexes must be integers.") from None
+            source_ids = str(row[f"{role}_feature_svg_id"]).split(";")
+            view_ids = str(row.get(f"{role}_view_feature_svg_id", row[f"{role}_feature_svg_id"])).split(";")
+            if not len(indices) == len(source_ids) == len(view_ids):
+                raise ValidationError("Comparison source feature binding has inconsistent coverage.")
+            if any(binding.source.get(index) != source_id
+                   for index, source_id in zip(indices, source_ids, strict=True)):
+                raise ValidationError("Comparison source feature index conflicts with its source feature ID.")
+            current_ids, opposite_ids = ([views.get(index) for index in indices]
+                                         for views in (binding.current, binding.opposite))
+            flip = view_ids != current_ids
+            if flip and view_ids != opposite_ids:
+                raise ValidationError("Comparison view feature IDs do not match the current source/crop binding.")
+            flips.append(flip)
+            if not flip:
+                continue
+            if updated is None:
+                updated = frame.copy(deep=True)
+            for coordinate_field in (f"{prefix}start", f"{prefix}end"):
+                coordinate = row[coordinate_field]
+                if not 1 <= coordinate <= binding.length or int(coordinate) != coordinate:
+                    raise ValidationError("Comparison view coordinate must be a finite genomic base within its record.")
+                updated.at[row_index, coordinate_field] = binding.length + 1 - int(coordinate)
+            # Every ID is present: view_ids matched opposite_ids, which has the same keys.
+            updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(
+                cast("list[str]", current_ids)
+            )
+        if updated is not None and flips[0] != flips[1] and "collinearity_orientation" in frame.columns:
+            orientation = row["collinearity_orientation"]
+            if orientation in ("plus", "minus"):
+                updated.at[row_index, "collinearity_orientation"] = "minus" if orientation == "plus" else "plus"
+    return frame if updated is None else updated
+
+
 def project_source_bound_comparisons(
     options: LinearDiagramOptions,
     records: Sequence[SeqRecord],
@@ -239,78 +341,31 @@ def project_source_bound_comparisons(
     """
     frames = [comparison.matches for comparison in options.linear_comparisons or ()]
     frames.extend(options.protein_comparisons or ())
-    required = {f"{role}_{name}" for role in ("query", "subject")
-                for name in ("feature_index", "feature_svg_id")}
-    if not any(not frame.empty and required <= set(frame.columns) for frame in frames):
+    if not any(not frame.empty and _SOURCE_BINDING_COLUMNS <= set(frame.columns) for frame in frames):
         return options
-    bindings = []
-    for record, item in zip(records, provenance, strict=True):
-        current: dict[int, str]
-        opposite: dict[int, str]
-        current, opposite = {}, {}
-        for ordinal, feature in enumerate(_iter_source_features(record.features)):
-            if feature.location is None:
-                continue
-            index = _source_feature_index(feature)
-            index = ordinal if index is None else index
-            for target, location in ((current, feature.location),
-                                     (opposite, feature.location._flip(len(record)))):
-                target[index] = compute_feature_hash_from_location_parts(
-                    feature.type,
-                    [(int(part.start), int(part.end), part.strand) for part in location.parts],
-                    record_id=record.id,
-                )
-        source = {feature.source_feature_index: feature.stable_feature_id
-                  for feature in item.source_feature_catalog or ()}
-        if search_frame and _read_coord_map(record)[1] == -1:
-            current, opposite = opposite, current
-        bindings.append((source, current, opposite, len(record)))
+    bindings = [
+        render_stage(
+            "comparison_rows",
+            comparison_record_binding,
+            record,
+            item.source_feature_catalog,
+            search_frame,
+        )
+        for record, item in zip(records, provenance, strict=True)
+    ]
 
     def project(frame: pd.DataFrame, query_index: int, subject_index: int) -> pd.DataFrame:
-        required = {f"{role}_{name}" for role in ("query", "subject")
-                    for name in ("feature_index", "feature_svg_id")}
-        if frame.empty or not required <= set(frame.columns):
+        if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
             return frame
-        updated = None
-        for row_index, row in frame.iterrows():
-            flips = []
-            for role, record_index, prefix in (("query", query_index, "q"), ("subject", subject_index, "s")):
-                if not 0 <= record_index < len(bindings):
-                    raise ValidationError("Comparison record endpoint is outside the resolved collection.")
-                source, current, opposite, length = bindings[record_index]
-                try:
-                    indices = [int(value) for value in str(row[f"{role}_feature_index"]).split(";")]
-                except ValueError:
-                    raise ValidationError("Comparison source feature indexes must be integers.") from None
-                source_ids = str(row[f"{role}_feature_svg_id"]).split(";")
-                view_ids = str(row.get(f"{role}_view_feature_svg_id", row[f"{role}_feature_svg_id"])).split(";")
-                if not len(indices) == len(source_ids) == len(view_ids):
-                    raise ValidationError("Comparison source feature binding has inconsistent coverage.")
-                if any(source.get(index) != source_id for index, source_id in zip(indices, source_ids, strict=True)):
-                    raise ValidationError("Comparison source feature index conflicts with its source feature ID.")
-                current_ids, opposite_ids = ([views.get(index) for index in indices] for views in (current, opposite))
-                flip = view_ids != current_ids
-                if flip and view_ids != opposite_ids:
-                    raise ValidationError("Comparison view feature IDs do not match the current source/crop binding.")
-                flips.append(flip)
-                if not flip:
-                    continue
-                if updated is None:
-                    updated = frame.copy(deep=True)
-                for coordinate_field in (f"{prefix}start", f"{prefix}end"):
-                    coordinate = row[coordinate_field]
-                    if not 1 <= coordinate <= length or int(coordinate) != coordinate:
-                        raise ValidationError("Comparison view coordinate must be a finite genomic base within its record.")
-                    updated.at[row_index, coordinate_field] = length + 1 - int(coordinate)
-                # Every ID is present: view_ids matched opposite_ids, which has the same keys.
-                updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(
-                    cast("list[str]", current_ids)
-                )
-            if updated is not None and flips[0] != flips[1] and "collinearity_orientation" in frame.columns:
-                orientation = row["collinearity_orientation"]
-                if orientation in ("plus", "minus"):
-                    updated.at[row_index, "collinearity_orientation"] = "minus" if orientation == "plus" else "plus"
-        return frame if updated is None else updated
+        if not (0 <= query_index < len(bindings) and 0 <= subject_index < len(bindings)):
+            raise ValidationError("Comparison record endpoint is outside the resolved collection.")
+        return render_stage(
+            "comparison_rows",
+            project_comparison_frame,
+            frame,
+            bindings[query_index],
+            bindings[subject_index],
+        )
 
     explicit = tuple(replace(comparison, matches=project(comparison.matches,
         comparison.query_record_index, comparison.subject_record_index))
@@ -886,19 +941,33 @@ def _unqualified_region(region: RegionSpec) -> RegionSpec:
     )
 
 
-def _apply_presentation(
-    record: SeqRecord,
-    presentation: RecordPresentation,
-    *,
-    record_key: str,
-) -> None:
+def _apply_record_key(record: SeqRecord, *, record_key: str) -> None:
     if getattr(record, "annotations", None) is None:
         record.annotations = {}
-    if presentation.label:
-        record.annotations["gbdraw_record_label"] = presentation.label
-    if presentation.subtitle:
-        record.annotations["gbdraw_record_subtitle"] = presentation.subtitle
     record.annotations["gbdraw_record_key"] = record_key
+
+
+def effective_record_presentation(
+    presentation: RecordPresentation,
+    options: RecordCollectionOptions,
+    resolved_index: int,
+) -> RecordPresentation:
+    """The presentation a resolved record is drawn with.
+
+    A non-empty collection label or subtitle at the record's place replaces the
+    one of its input. The record itself carries neither, so a record is the
+    same object, with the same render-stage identity, whatever its label.
+    """
+
+    label = options.labels[resolved_index] if resolved_index < len(options.labels) else None
+    subtitle = options.subtitles[resolved_index] if resolved_index < len(options.subtitles) else None
+    if not label and not subtitle:
+        return presentation
+    return replace(
+        presentation,
+        label=label or presentation.label,
+        subtitle=subtitle or presentation.subtitle,
+    )
 
 
 def _apply_provenance_annotations(
@@ -939,20 +1008,14 @@ def _apply_collection_options(
             records = apply_region_specs(records, options.regions, log=logger)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
-    for field_name, annotation_key in (
-        ("labels", "gbdraw_record_label"),
-        ("subtitles", "gbdraw_record_subtitle"),
-    ):
-        values = getattr(options, field_name)
-        if len(values) > len(records):
+    # Labels and subtitles apply by place through effective_record_presentation.
+    for field_name in ("labels", "subtitles"):
+        if len(getattr(options, field_name)) > len(records):
             logger.warning(
                 "WARNING: More record %s were provided than records resolved; "
                 "extra values will be ignored.",
                 field_name,
             )
-        for index, value in enumerate(values[: len(records)]):
-            if value:
-                records[index].annotations[annotation_key] = value
     for record, item in zip(records, provenance, strict=True):
         _apply_provenance_annotations(record, item)
     return records
@@ -1070,22 +1133,23 @@ def resolve_record_inputs(
                 is_cropped=source_cropped,
                 source_feature_catalog=parsed.source_feature_catalogs[source_record_index],
             )
-            _apply_presentation(
-                record,
-                record_input.presentation,
-                record_key=record_key,
-            )
+            _apply_record_key(record, record_key=record_key)
             _apply_provenance_annotations(record, item)
             records.append(record)
             provenance.append(item)
     before_collection = records
-    records = _apply_collection_options(
-        records,
-        provenance,
-        record_options or RecordCollectionOptions(),
-    )
-    provenance = [replace(item, has_collection_region=record is not before)
-                  for item, record, before in zip(provenance, records, before_collection, strict=True)]
+    collection_options = record_options or RecordCollectionOptions()
+    records = _apply_collection_options(records, provenance, collection_options)
+    provenance = [
+        replace(
+            item,
+            has_collection_region=record is not before,
+            presentation=effective_record_presentation(
+                item.presentation, collection_options, item.resolved_index
+            ),
+        )
+        for item, record, before in zip(provenance, records, before_collection, strict=True)
+    ]
     return ResolvedRecordCollection(tuple(records), tuple(provenance))
 
 
@@ -1384,7 +1448,8 @@ def resolve_linear_options(
             losat_pairs.append((query_index, subject_index))
             continue
         try:
-            matches = read_comparison_table(row.blast)
+            # The file's staged identity keys the stages that take its rows.
+            matches = register_prepared_resource_value(read_comparison_table(row.blast), row.blast)
         except ValidationError as exc:
             raise ValidationError(
                 f"{table.table_path}: row {row.row_number}, column 'blast': {exc}"
@@ -1459,6 +1524,7 @@ def resolve_circular_batch_outputs(
                 formats=policy.formats,
                 overwrite=policy.overwrite,
                 interactive_metadata_policy=policy.interactive_metadata_policy,
+                embed_fonts=policy.embed_fonts,
             )
         )
     return tuple(outputs)

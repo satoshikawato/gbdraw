@@ -11,6 +11,7 @@ await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
 await mkdir(join(tempDir, 'app', 'feature-search'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'contracts'), { recursive: true });
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 
 const copyModule = async (sourceRelative, targetRelative) => {
@@ -24,6 +25,13 @@ const copyModule = async (sourceRelative, targetRelative) => {
 await copyModule('gbdraw/web/js/services/feature-utils.js', 'services/feature-utils.js');
 await copyModule('gbdraw/web/js/services/feature-sequence-fasta.js', 'services/feature-sequence-fasta.js');
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
+// losat-normalization.js reads the comparison settings from the generated request description.
+await copyModule('gbdraw/web/js/contracts/request-shape.generated.js', 'contracts/request-shape.generated.js');
+await copyModule('gbdraw/web/js/utils/contract-shape.js', 'utils/contract-shape.js');
+await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js');
+// depth-track-state.js reads a Depth series color by name.
+await copyModule('gbdraw/web/js/utils/color-utils.js', 'utils/color-utils.js');
+await copyModule('gbdraw/web/js/utils/named-colors.js', 'utils/named-colors.js');
 await copyModule('gbdraw/web/js/services/record-source-coordinates.js', 'services/record-source-coordinates.js');
 await copyModule('gbdraw/web/js/app/feature-search/search-core.js', 'app/feature-search/search-core.js');
 await copyModule(
@@ -38,8 +46,11 @@ await copyModule(
   'gbdraw/web/js/services/orthogroup-feature-metadata.js',
   'services/orthogroup-feature-metadata.js'
 );
+// standalone-interactivity.js reads the bulk label table by own key.
+await copyModule('gbdraw/web/js/utils/own-entry.js', 'utils/own-entry.js');
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
+await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schema.generated.js');
 await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
 await copyModule('gbdraw/web/js/services/record-draw-selection.js', 'services/record-draw-selection.js');
@@ -48,6 +59,8 @@ for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache'
   'byte-utils', 'depth-file-codec', 'depth-track-state', 'track-slot-display', 'record-options']) {
   await copyModule(`gbdraw/web/js/services/${name}.js`, `services/${name}.js`);
 }
+// track-slot-display.js reads the generated size-class boundaries.
+await copyModule('gbdraw/web/js/mode-profiles.generated.js', 'mode-profiles.generated.js');
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
 await copyModule('gbdraw/web/js/utils/download-names.js', 'utils/download-names.js');
 const standaloneSource = await readFile(
@@ -56,7 +69,7 @@ const standaloneSource = await readFile(
 );
 await writeFile(
   join(tempDir, 'services', 'standalone-interactivity.js'),
-  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, createStandaloneBiologicalFeatureResolver, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
+  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, catalogItemWithStandaloneOverrides, createStandaloneBiologicalFeatureResolver, getStandaloneDisplayLabel, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
   'utf8'
 );
 await writeFile(join(tempDir, 'app', 'feature-editor-svg-actions.js'), `
@@ -152,7 +165,9 @@ const {
 const {
   buildStandaloneBiologicalFeaturePayloads,
   buildStandaloneOrthogroupPayloads,
+  catalogItemWithStandaloneOverrides,
   createStandaloneBiologicalFeatureResolver,
+  getStandaloneDisplayLabel,
   getStandaloneFeatureOrthogroupEntry,
   selectStandaloneCatalogItem,
   selectStandaloneSequenceSources
@@ -1939,4 +1954,44 @@ console.log('orthogroup stable identity tests passed');
   });
   const grouped = offEditor.groupOrthogroupMembersByRecord([{ fileIdx: 1 }, { fileIdx: 0 }]);
   assert.deepEqual(grouped.map((entry) => entry.recordLabel), ['record-a', 'record-c']);
+}
+
+// A Similarity group id is data, so the rename tables are read by own key: a
+// group named `constructor` shows its own name, not Object.prototype.
+{
+  const protoState = { ...state, orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} };
+  const protoEditor = createOrthogroupEditor({ state: withDrawings(protoState), runAnalysis: null });
+  const protoGroup = { id: 'constructor', name: 'Own name', description: 'Own description', members: [] };
+  assert.equal(protoEditor.resolveOrthogroupName(protoGroup), 'Own name');
+  assert.equal(protoEditor.resolveOrthogroupDescription(protoGroup), 'Own description');
+}
+
+// OV-554: the source text is label text; only an own key of the bulk table is an edit.
+{
+  const inheritedFeature = { svg_id: 'f1', product: 'constructor' };
+  assert.equal(
+    getStandaloneDisplayLabel(inheritedFeature, 'constructor', { labelTextBulkOverrides: {} }),
+    'constructor'
+  );
+  assert.equal(
+    getStandaloneDisplayLabel(inheritedFeature, 'constructor', { labelTextBulkOverrides: { constructor: 'ctor' } }),
+    'ctor'
+  );
+}
+
+// The same for a Similarity group id in the standalone HTML: only an own key of a rename table is a rename.
+{
+  const inheritedGroup = { id: 'constructor', name: 'Own name', description: 'Own description', members: [] };
+  const shown = (context) => [
+    ...buildStandaloneOrthogroupPayloads([], { orthogroups: [inheritedGroup], ...context }),
+    ...catalogItemWithStandaloneOverrides({ features: [], biologicalFeatures: [], orthogroups: [inheritedGroup] }, context).orthogroups
+  ].map((group) => [group.display_name ?? group.name, group.description]);
+  assert.deepEqual(
+    shown({ orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} }),
+    [['Own name', 'Own description'], ['Own name', 'Own description']]
+  );
+  assert.deepEqual(
+    shown({ orthogroupNameOverrides: { constructor: 'Renamed' }, orthogroupDescriptionOverrides: { constructor: 'Edited' } }),
+    [['Renamed', 'Edited'], ['Renamed', 'Edited']]
+  );
 }

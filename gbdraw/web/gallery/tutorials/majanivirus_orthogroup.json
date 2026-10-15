@@ -120,8 +120,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-02-01-upload-row-label-context.webp",
-            "alt": "MjeNMV.gb record card with Record options open and its Organism / strain value visible.",
-            "caption": "Upload MjeNMV.gb, open Record options, enter its Organism / strain value, and repeat the remaining rows from the table."
+            "alt": "MjeNMV.gb File card with its Organism / strain value typed in above the closed Record options.",
+            "caption": "Upload MjeNMV.gb, enter its Organism / strain value on the File card, and repeat the remaining rows from the table."
           },
           "capture": {
             "source": "webapp",
@@ -130,7 +130,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['MjeNMV.gb', 'MelaMJNV.gb', 'PemoMJNVA.gb', 'PeseMJNV.gb', 'PemoMJNVB.gb', 'LvMJNV.gb', 'TrcuMJNV.gb', 'MeenMJNV.gb', 'MejoMJNV.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Majanivirus GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = 'Marsupenaeus japonicus endogenous nimavirus'; const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Majanivirus Linear input row 1 was not found.'); options.open = true; const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === 'Organism / strain (optional)' && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error('Majanivirus Organism / strain input was not found.'); input.dataset.capture = 'majanivirus-organism-input'; row.dataset.capture = 'majanivirus-record-row'; row.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['MjeNMV.gb', 'MelaMJNV.gb', 'PemoMJNVA.gb', 'PeseMJNV.gb', 'PemoMJNVB.gb', 'LvMJNV.gb', 'TrcuMJNV.gb', 'MeenMJNV.gb', 'MejoMJNV.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Majanivirus GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = 'Marsupenaeus japonicus endogenous nimavirus'; const input = document.querySelector('[data-linear-record-names=\"record-1\"] input[aria-label=\"Definition for sequence 1\"]'); if (!input) throw new Error('Majanivirus Organism / strain input was not found.'); input.dataset.capture = 'majanivirus-organism-input'; const fileCard = input.closest('[data-linear-source-card]'); if (!fileCard) throw new Error('Linear file card was not found.'); fileCard.dataset.capture = 'majanivirus-record-row'; fileCard.scrollIntoView({ block: 'center' });"
               },
               {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"}
             ],
@@ -153,7 +153,7 @@
     },
     {
       "title": "Configure browser LOSAT",
-      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. The runtime controls are in the same Settings panel, under Runtime and reproducibility.",
+      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. The runtime controls are in the same Settings panel, under Performance.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -165,8 +165,8 @@
           ["LOSATP mode", "Similarity groups"],
           ["Bitscore", "100"],
           ["E-value", "1e-3"],
-          ["Minimum Identity", "20"],
-          ["Minimum Length", "0"]
+          ["Min identity (%)", "20"],
+          ["Min length", "0"]
         ]
       },
       "note": "This is a large browser workload. The displayed 32 is a requested per-run maximum, not 32 guaranteed workers: Total threads = Safe caps the effective value to the safe browser budget. Similarity groups forms visualization groups; it does not infer phylogeny-based orthology.",
@@ -215,8 +215,8 @@
               {"label": "LOSATP mode", "value": "Similarity groups"},
               {"label": "Bitscore", "value": 100},
               {"label": "E-value", "value": "1e-3"},
-              {"label": "Minimum identity", "value": 20},
-              {"label": "Minimum length", "value": 0}
+              {"label": "Min identity (%)", "value": 20},
+              {"label": "Min length", "value": 0}
             ]
           }
         },
@@ -272,11 +272,11 @@
         },
         {
           "dataDependent": true,
-          "title": "Runtime and reproducibility",
+          "title": "Performance",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-03-runtime-reproducibility.webp",
-            "alt": "Runtime and reproducibility controls with Safe total threads and 32 requested threads per run.",
-            "caption": "Request 32 threads per run under Runtime and reproducibility; the Safe total-thread budget caps the effective worker count."
+            "alt": "Performance controls with Safe total threads and 32 requested threads per run.",
+            "caption": "Request 32 threads per run under Performance; the Safe total-thread budget caps the effective worker count."
           },
           "capture": {
             "source": "webapp",
@@ -290,11 +290,11 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).some((section) => section.textContent.includes('Performance'))"
               },
               {
                 "type": "evaluate",
-                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'majanivirus-runtime'; section.scrollIntoView({ block: 'center' });"
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-comparison-disclosure=\"settings\"][open] section')).find((node) => node.textContent.includes('Performance')); if (!section) throw new Error('Performance section was not found.'); section.dataset.capture = 'majanivirus-runtime'; section.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='majanivirus-runtime']",
@@ -307,7 +307,7 @@
               "losatExecution.totalThreadBudget": "safe",
               "losatExecution.threadsPerJob": "32"
             },
-            "visibleText": ["Runtime and reproducibility", "Parallel runs"],
+            "visibleText": ["Performance", "Parallel runs"],
             "visibleControls": [
               {"selector": "[data-capture='majanivirus-runtime'] select[aria-label='LOSAT execution']", "value": "auto"},
               {"selector": "[data-capture='majanivirus-runtime'] select[aria-label='LOSAT total threads']", "value": "safe"},
@@ -323,7 +323,7 @@
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Track Layout", "Middle"],
+          ["Track Layout", "Features on axis"],
           ["Align to Center", "On"],
           ["Separate Strands", "On"],
           ["Lock Definition Column", "On"],
@@ -338,8 +338,8 @@
           "title": "Linear layout controls",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-04-01-linear-layout.webp",
-            "alt": "Linear Layout card with Middle, Separate Strands, Align to Center, and Lock Definition Column selected.",
-            "caption": "Set Track Layout to Middle and enable Separate Strands, Align to Center, and Lock Definition Column."
+            "alt": "Linear Layout card with Features on axis, Separate Strands, Align to Center, and Lock Definition Column selected.",
+            "caption": "Set Track Layout to Features on axis and enable Separate Strands, Align to Center, and Lock Definition Column."
           },
           "capture": {
             "source": "webapp",
@@ -364,9 +364,9 @@
             "crop": "openSelect",
             "cropPadding": {
               "top": 54,
-              "right": 80,
+              "right": 16,
               "bottom": 24,
-              "left": 80
+              "left": 16
             },
             "openSelect": {
               "selector": "#legend-position",
@@ -411,8 +411,8 @@
           "title": "Specific product rules",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-06-01-specific-rules-all.webp",
-            "alt": "SPECIFIC RULES (-t) controls with all three majanivirus CDS product rules.",
-            "caption": "Enter the WSSV-like proteins, BIRP, and tyrosine recombinase rows together in SPECIFIC RULES (-t)."
+            "alt": "SPECIFIC RULES controls with all three majanivirus CDS product rules.",
+            "caption": "Enter the WSSV-like proteins, BIRP, and tyrosine recombinase rows together in SPECIFIC RULES."
           },
           "capture": {
             "source": "webapp",
@@ -433,7 +433,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 480; const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.nextElementSibling; if (!header || !rows) throw new Error('Majanivirus specific-rules rows not found.'); header.setAttribute('data-capture', 'majanivirus-specific-rules-header'); rows.setAttribute('data-capture', 'majanivirus-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 480; document.querySelectorAll('[data-color-rule-editor]').forEach((editor) => { editor.open = true; }); const heading = Array.from(document.querySelectorAll('h4')).find((node) => node.textContent?.includes('SPECIFIC RULES')); const header = heading?.parentElement; const rows = header?.parentElement?.querySelector('[data-color-rule-row]')?.parentElement; if (!header || !rows) throw new Error('Majanivirus specific-rules rows not found.'); header.setAttribute('data-capture', 'majanivirus-specific-rules-header'); rows.setAttribute('data-capture', 'majanivirus-specific-rules-rows'); rows.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": ["[data-capture='majanivirus-specific-rules-header']", "[data-capture='majanivirus-specific-rules-rows']"],

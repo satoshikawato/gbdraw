@@ -1,17 +1,100 @@
 // @ts-check
+/**
+ * One capability verdict of the anchor resolver. `basis` is set on the offset
+ * verdict only.
+ * @typedef {object} AnchorCapability
+ * @property {boolean} enabled
+ * @property {string | null} code
+ * @property {string} message
+ * @property {string} [basis]
+ */
+
+/**
+ * One source-location part of a feature, as read from the extracted feature
+ * row. The resolver validates every field, so the values are not trusted.
+ * @typedef {object} AnchorPart
+ * @property {number} start
+ * @property {number} end
+ * @property {string} strand
+ */
+
+/**
+ * The source-location profile of a feature. The resolver validates every
+ * field against its allowed values, so the fields are plain strings.
+ * @typedef {object} AnchorProfile
+ * @property {string} precision
+ * @property {string} operator
+ * @property {string} partOrder
+ * @property {string} strand
+ */
+
+/**
+ * @typedef {object} AnchorIntent
+ * @property {string} placement
+ * @property {string | null} anchor
+ * @property {number} offsetBp
+ * @property {boolean} orientForward
+ */
+
+/**
+ * @typedef {object} AnchorIdentity
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ */
+
+/**
+ * @typedef {object} AnchorRequest
+ * @property {number} recordLength
+ * @property {boolean} effectiveCircular
+ * @property {boolean} [cropped]
+ * @property {boolean} currentReverseComplement
+ * @property {AnchorIdentity} identity
+ * @property {AnchorPart[] | undefined} parts
+ * @property {AnchorProfile | null | undefined} profile
+ * @property {AnchorIntent} intent
+ */
+
+/**
+ * @param {{ basis?: string }} [extra]
+ * @returns {AnchorCapability}
+ */
 const available = (extra = {}) => ({ enabled: true, code: null, message: '', ...extra });
+/**
+ * @param {string} code
+ * @param {string} message
+ * @param {{ basis?: string }} [extra]
+ * @returns {AnchorCapability}
+ */
 const unavailable = (code, message, extra = {}) => ({ enabled: false, code, message, ...extra });
 
+/**
+ * @param {AnchorCapability[]} operations
+ * @returns {AnchorCapability | null}
+ */
 const firstUnavailable = (...operations) => operations.find((operation) => !operation.enabled) || null;
 
+/**
+ * @param {number} coordinate
+ * @param {number} length
+ * @returns {number}
+ */
 const wrapCoordinate = (coordinate, length) => 1 + ((((coordinate - 1) % length) + length) % length);
 
+/**
+ * @param {string} sourceStrand
+ * @param {boolean} reverseComplement
+ * @returns {string}
+ */
 const displayedStrand = (sourceStrand, reverseComplement) => {
   if (!['+', '-'].includes(sourceStrand)) return sourceStrand;
   if (!reverseComplement) return sourceStrand;
   return sourceStrand === '+' ? '-' : '+';
 };
 
+/**
+ * @param {Pick<AnchorRequest, 'recordLength' | 'effectiveCircular' | 'cropped' | 'currentReverseComplement'>} options
+ * @returns {AnchorCapability}
+ */
 const recordCapability = ({ recordLength, effectiveCircular, cropped, currentReverseComplement }) => {
   if (!Number.isSafeInteger(recordLength) || recordLength <= 0) {
     return unavailable('record-length-unavailable', 'Record length must be a positive integer.');
@@ -28,6 +111,10 @@ const recordCapability = ({ recordLength, effectiveCircular, cropped, currentRev
   return available();
 };
 
+/**
+ * @param {AnchorProfile | null | undefined} profile
+ * @returns {AnchorCapability}
+ */
 const profileCapability = (profile) => {
   if (!profile || !['exact', 'fuzzy', 'unavailable'].includes(profile.precision)
     || !['single', 'join', 'order', 'unknown'].includes(profile.operator)
@@ -44,6 +131,11 @@ const profileCapability = (profile) => {
   return available();
 };
 
+/**
+ * @param {string} partStrand
+ * @param {string} profileStrand
+ * @returns {boolean}
+ */
 const partStrandMatches = (partStrand, profileStrand) => {
   if (profileStrand === 'mixed') return true;
   if (profileStrand === 'unstranded') {
@@ -52,6 +144,12 @@ const partStrandMatches = (partStrand, profileStrand) => {
   return partStrand === profileStrand;
 };
 
+/**
+ * @param {AnchorPart[] | undefined} parts
+ * @param {AnchorProfile} profile
+ * @param {number} recordLength
+ * @returns {AnchorCapability}
+ */
 const partsCapability = (parts, profile, recordLength) => {
   if (!Array.isArray(parts) || parts.length === 0) {
     return unavailable('location-parts-unavailable', 'Feature source-location parts are unavailable.');
@@ -79,6 +177,14 @@ const partsCapability = (parts, profile, recordLength) => {
   return available();
 };
 
+/**
+ * @param {AnchorCapability} record
+ * @param {AnchorCapability} profileState
+ * @param {AnchorCapability} partsState
+ * @param {AnchorProfile | Record<string, never>} profile - `{}` when no profile exists; the
+ *   states above are then unavailable and return first.
+ * @returns {AnchorCapability}
+ */
 const positionalCapability = (record, profileState, partsState, profile) => {
   const common = firstUnavailable(record, profileState, partsState);
   if (common) return common;
@@ -97,6 +203,12 @@ const positionalCapability = (record, profileState, partsState, profile) => {
   return available();
 };
 
+/**
+ * @param {AnchorPart[]} parts
+ * @param {number} offset
+ * @param {number} direction
+ * @returns {number | null}
+ */
 const baseAtCoveredOffset = (parts, offset, direction) => {
   let remaining = offset;
   for (const part of parts) {
@@ -109,12 +221,16 @@ const baseAtCoveredOffset = (parts, offset, direction) => {
   return null;
 };
 
+/**
+ * @param {AnchorIntent} intent
+ * @returns {AnchorCapability}
+ */
 const intentCapability = (intent) => {
   if (!intent || !['feature-start', 'anchor', 'feature-end'].includes(intent.placement)) {
     return unavailable('placement-invalid', 'Choose a feature-start, anchor, or feature-end placement.');
   }
   if (intent.placement === 'anchor'
-    && !['five-prime', 'midpoint', 'three-prime'].includes(intent.anchor)) {
+    && !(/** @type {(string | null)[]} */ (['five-prime', 'midpoint', 'three-prime'])).includes(intent.anchor)) {
     return unavailable('anchor-invalid', 'Choose a supported feature anchor.');
   }
   if (intent.placement !== 'anchor' && intent.anchor !== null) {
@@ -132,6 +248,10 @@ const intentCapability = (intent) => {
   return available();
 };
 
+/**
+ * @param {AnchorIdentity} identity
+ * @returns {AnchorCapability}
+ */
 const identityCapability = (identity) => {
   if (!identity || typeof identity.recordKey !== 'string' || !identity.recordKey
     || identity.recordKey.includes('\0') || typeof identity.biologicalFeatureId !== 'string'
@@ -141,6 +261,9 @@ const identityCapability = (identity) => {
   return available();
 };
 
+/**
+ * @param {AnchorRequest} request
+ */
 export const resolveFeatureAnchor = ({
   recordLength,
   effectiveCircular,
@@ -154,12 +277,16 @@ export const resolveFeatureAnchor = ({
   const record = recordCapability({ recordLength, effectiveCircular, cropped, currentReverseComplement });
   const profileState = profileCapability(profile);
   const partsState = profileState.enabled
-    ? partsCapability(parts, profile, recordLength) : profileState;
+    ? partsCapability(parts, /** @type {AnchorProfile} */ (profile), recordLength) : profileState;
   const positional = positionalCapability(record, profileState, partsState, profile || {});
+  // Each use below is reached only when `positional` (or the eligibility
+  // check) found the profile and the parts valid, so both exist there.
+  const located = /** @type {AnchorProfile} */ (profile);
+  const locatedParts = /** @type {AnchorPart[]} */ (parts);
 
   const midpoint = positional;
   const biologicalEnds = !positional.enabled ? positional
-    : !['+', '-'].includes(profile.strand)
+    : !['+', '-'].includes(located.strand)
       ? unavailable('biological-direction-unavailable', 'Biological 5-prime and 3-prime ends require a known strand.')
       : available();
   const offsetBasis = profile?.strand === 'unstranded' ? 'source-forward' : 'strand';
@@ -167,17 +294,17 @@ export const resolveFeatureAnchor = ({
     : available({ basis: offsetBasis });
   const orientForward = !record.enabled ? record
     : !profileState.enabled ? profileState
-      : !['+', '-'].includes(profile.strand)
+      : !['+', '-'].includes(located.strand)
         ? unavailable('orientation-strand-unavailable', 'Orient forward requires one known feature strand.')
         : available();
   const featureEnd = !positional.enabled ? positional
-    : profile.strand === 'unstranded' && profile.partOrder !== 'source-forward'
+    : located.strand === 'unstranded' && located.partOrder !== 'source-forward'
       ? unavailable('feature-end-direction-unavailable', 'Feature-end placement requires a known display traversal path.')
       : available();
   // The feature's first base in display order is its 5-prime or 3-prime base,
   // so placing it at the start needs a known strand.
   const featureStart = !positional.enabled ? positional
-    : !['+', '-'].includes(profile.strand)
+    : !['+', '-'].includes(located.strand)
       ? unavailable('feature-start-direction-unavailable', 'Needs a known feature strand.')
       : available();
   const capabilities = {
@@ -200,7 +327,7 @@ export const resolveFeatureAnchor = ({
     ? firstUnavailable(featureEnd, offset)
     : intent.placement === 'feature-start'
       ? firstUnavailable(featureStart)
-      : firstUnavailable(capabilities.anchors[intent.anchor], offset);
+      : firstUnavailable(capabilities.anchors[/** @type {'five-prime' | 'midpoint' | 'three-prime'} */ (intent.anchor)], offset);
   if (eligibility) {
     return {
       eligibility,
@@ -214,8 +341,8 @@ export const resolveFeatureAnchor = ({
     };
   }
 
-  const reverseComplement = intent.orientForward ? profile.strand === '-' : currentReverseComplement;
-  const strandAfter = displayedStrand(profile.strand, reverseComplement);
+  const reverseComplement = intent.orientForward ? located.strand === '-' : currentReverseComplement;
+  const strandAfter = displayedStrand(located.strand, reverseComplement);
   // Feature-start is the anchor whose base comes first in the resulting display
   // order: the 5-prime base when the feature reads forward there, else the
   // 3-prime base. It is recorded as that anchor, so provenance keeps its format.
@@ -223,28 +350,30 @@ export const resolveFeatureAnchor = ({
   const anchor = intent.placement === 'feature-start'
     ? (strandAfter === '+' ? 'five-prime' : 'three-prime')
     : intent.anchor;
-  const direction = profile.strand === '-' ? -1 : 1;
-  const coveredLength = parts.reduce((total, part) => total + part.end - part.start, 0);
+  const direction = located.strand === '-' ? -1 : 1;
+  const coveredLength = locatedParts.reduce((total, part) => total + part.end - part.start, 0);
   /** @type {number | null} */
   let sourceAnchorCoordinate = null;
   /** @type {number | null} */
   let sourceOutgoingBoundary = null;
+  // Both branches find a base: the parts are valid and the offsets lie inside them.
+  /** @type {number} */
   let baseCoordinate;
   if (placement === 'anchor') {
     const coveredOffset = anchor === 'five-prime' ? 0
       : anchor === 'midpoint' ? Math.floor((coveredLength - 1) / 2)
         : coveredLength - 1;
-    sourceAnchorCoordinate = baseAtCoveredOffset(parts, coveredOffset, direction);
-    baseCoordinate = sourceAnchorCoordinate;
+    sourceAnchorCoordinate = baseAtCoveredOffset(locatedParts, coveredOffset, direction);
+    baseCoordinate = /** @type {number} */ (sourceAnchorCoordinate);
   } else {
     const displayStep = reverseComplement ? -1 : 1;
     const followsPath = displayStep === direction;
     const lastOffset = followsPath ? coveredLength - 1 : 0;
-    const lastIncludedBase = baseAtCoveredOffset(parts, lastOffset, direction);
-    sourceOutgoingBoundary = wrapCoordinate(lastIncludedBase + displayStep, recordLength);
+    const lastIncludedBase = baseAtCoveredOffset(locatedParts, lastOffset, direction);
+    sourceOutgoingBoundary = wrapCoordinate(/** @type {number} */ (lastIncludedBase) + displayStep, recordLength);
     baseCoordinate = sourceOutgoingBoundary;
   }
-  const offsetDirection = profile.strand === '-' ? -1 : 1;
+  const offsetDirection = located.strand === '-' ? -1 : 1;
   const startCoordinate = wrapCoordinate(
     baseCoordinate + (offsetDirection * intent.offsetBp),
     recordLength
@@ -258,7 +387,7 @@ export const resolveFeatureAnchor = ({
     sourceAnchorCoordinate,
     sourceOutgoingBoundary,
     displayedStrand: {
-      before: displayedStrand(profile.strand, currentReverseComplement),
+      before: displayedStrand(located.strand, currentReverseComplement),
       after: strandAfter
     },
     provenance: {

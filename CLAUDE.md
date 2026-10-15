@@ -223,15 +223,12 @@ The `gbdraw/render/` module has a two-tier architecture:
 - `NamedTuple` for immutable data structures
 
 ### Type checking
-- mypy, pinned in the `typecheck` extra and configured in `[tool.mypy]`,
-  checks `gbdraw/` except `gbdraw/web/`. Third-party packages are `Any` to it,
-  so their imports need no `# type: ignore`.
-- A file's type debt is its mypy errors plus its `# type: ignore` comments.
-  `TYPE_DEBT_BASELINE` in `tests/test_type_check_ratchet.py` only goes down:
-  lower or remove a file's entry when its debt falls. A file without an
-  entry, including a new file, has no debt. Fix the type, use
-  `typing.cast`, or fix the code instead of adding `# type: ignore`. Raising
-  an entry or relaxing `[tool.mypy]` needs the Owner's approval.
+- The type-debt rule for `gbdraw/` (mypy, `TYPE_DEBT_BASELINE` in
+  `tests/test_type_check_ratchet.py`) is "Type checking" in
+  [the architecture ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#type-checking).
+  In short: a file's mypy errors plus `# type: ignore` comments stay at or
+  below its entry, a new file has none, and adding or raising an entry needs
+  the Owner's approval.
 - Class-body annotations are runtime data. `get_type_hints` reads dataclass
   fields in `gbdraw/config/modify.py` (config overrides) and
   `gbdraw/session_request_codec.py` (canonical request validation), and

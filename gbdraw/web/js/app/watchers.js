@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -10,15 +10,23 @@ import {
   parseWhitelistRules
 } from '../services/file-imports.js';
 import {
-  prepareSpecificColorImport
-} from '../services/specific-color-rules.js';
-import {
+  legendPositionOrDefault,
   normalizeCircularPlotTitlePosition,
   resolveCircularLayoutPreference
 } from '../services/layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
+/** @import { FileLike } from '../services/session-resource-backing.js' */
 
+/**
+ * @typedef {object} RecordDiscoveryWatcherOptions
+ * @property {{ readonly value: unknown } | null | undefined} [rollbackInProgress] A Session import is rolling back.
+ * @property {{ readonly value: unknown } | null | undefined} [semanticWatchersSuppressed]
+ * @property {{ readonly value: unknown } | null | undefined} [sessionResourceDiscoveryDeferred]
+ * @property {(options: { suppress: boolean }) => unknown} refresh The record discovery; `suppress` tells it to leave the derived state alone.
+ */
+
+/** @param {RecordDiscoveryWatcherOptions} options */
 export const runRecordDiscoveryWatcher = async ({
   rollbackInProgress,
   semanticWatchersSuppressed,
@@ -56,18 +64,19 @@ export const runRecordDiscoveryWatcher = async ({
  *   The Legend owner's reaction to a rebuilt Legend.
  * @property {{
  *   syncLabelEditor: (options?: Record<string, any>) => void,
- *   commitSpecificRules: (rules: Record<string, any>[], label?: string, options?: Record<string, any>) => Promise<any>
- * }} featureActions The feature editor's label reaction and its commit of the specific color rules.
+ *   importSpecificRules: (text: string, options?: { drawing?: DrawingState, isCurrent?: () => boolean }) => Promise<number | false>
+ * }} featureActions The feature editor's label reaction and the rule owner's import of a rules TSV.
  * @property {{ applyCanvasPadding: () => void, refreshDiagramDragAffordances: () => void }} legendLayout
  *   The Legend layout owner's canvas padding and drag affordances.
  * @property {{ applyPaletteDraftToPreview: () => void, syncPaletteDraftState: () => void }} resultsManager
  *   The Results owner's palette draft projections.
  * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
- * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any>) | null} [refreshCircularRecordOrder]
+ * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any> | SessionBusy) | null} [refreshCircularRecordOrder]
  * @property {((options?: { suppress?: boolean }) => Promise<any>) | null} [refreshLinearRecordSelectors]
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} [resetPreviewViewport] The preview owner's viewport reset.
  * @property {() => void} resetRightDrawer The right drawer owner's reset.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
+ * @property {() => void} closeHiddenLabelTextDialog The label owner's port: closes the Label Not Shown dialog as Cancel.
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
  * @property {WatchersPreviewRuntime} previewRuntime The preview owner's mounted-Result binding.
  * @property {(() => Promise<any>) | null} [preparePaletteDefinitions] The palette loader's load of the browser palette definitions.
@@ -91,6 +100,7 @@ export const setupWatchers = ({
   resetRightDrawer,
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
+  closeHiddenLabelTextDialog,
   clearLabelBuildNotices,
   previewRuntime,
   preparePaletteDefinitions = null
@@ -118,7 +128,6 @@ export const setupWatchers = ({
     isFeatureDrawerMounted,
     clickedPairwiseMatch,
     clickedLabel,
-    hiddenLabelTextDialog,
     files,
     paletteInstantPreviewEnabled,
     semanticFileWatchersSuppressed,
@@ -144,11 +153,7 @@ export const setupWatchers = ({
     syncPaletteDraftState
   } = resultsManager;
 
-  const normalizeLegendPosition = (value, fallback = 'left') => {
-    const normalized = String(value || '').trim().toLowerCase();
-    return normalized || fallback;
-  };
-
+  /** @param {unknown} value */
   const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
   /** @param {DrawingState} drawing */
@@ -217,10 +222,8 @@ export const setupWatchers = ({
 
       if (enabled && !hasStoredCircularMultiRecordLayout(drawing)) {
         if (suppressCircularMultiRecordDefaults.value) {
-          drawing.layoutPreferences.circular.multi.legend = normalizeLegendPosition(
-            drawing.form.legend,
-            'left'
-          );
+          drawing.layoutPreferences.circular.multi.legend =
+            legendPositionOrDefault(drawing.form.legend, 'circular');
           drawing.layoutPreferences.circular.multi.plotTitlePosition =
             normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
         } else {
@@ -331,9 +334,7 @@ export const setupWatchers = ({
     clickedPairwiseMatch.value = null;
     clickedLabel.value = null;
     closeLabelTextScopeDialog();
-    hiddenLabelTextDialog.show = false;
-    hiddenLabelTextDialog.featureId = '';
-    hiddenLabelTextDialog.reason = '';
+    closeHiddenLabelTextDialog();
     resetRightDrawer();
     linearReorderNotice.value = '';
   };
@@ -347,10 +348,26 @@ export const setupWatchers = ({
     const busy = state.sessionOperationAvailability?.();
     return busy || (canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false);
   };
+  /** @type {Map<FileLike, Promise<boolean>>} */
   const pendingFileImports = window.Vue.reactive(new Map());
   /** @type {Promise<any>} */
   let fileImportApplications = Promise.resolve();
+  /** @type {Map<string, FileLike | null | undefined>} */
   const restoredFileSelections = new Map();
+  /**
+   * Applies the text of an auxiliary file to its drawing; false rejects the file.
+   * @callback FileImportApply
+   * @param {string} text
+   * @param {() => boolean} isCurrent
+   * @returns {unknown}
+   */
+  /**
+   * @param {string} key The `files` member the watcher follows.
+   * @param {FileImportApply} apply
+   * @param {FileLike | null | undefined} file
+   * @param {FileLike | null | undefined} previousFile
+   * @returns {Promise<boolean> | undefined}
+   */
   const applyFileImport = (key, apply, file, previousFile) => {
     const restored = restoredFileSelections.has(key) && restoredFileSelections.get(key) === file;
     restoredFileSelections.delete(key);
@@ -402,16 +419,19 @@ export const setupWatchers = ({
     });
     return pending;
   };
+  /**
+   * @param {string} key
+   * @param {FileImportApply} apply
+   */
   const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => applyFileImport(key, apply, file, previousFile));
+  /** @param {FileLike} file */
   const waitForAuxiliaryFileImport = (file) => pendingFileImports.get(file);
 
   watchFileImport('d_color', (text) => {
     const drawing = state.activeDrawing();
     try {
       const { colors, count } = parseColorTable(text);
-      Object.entries(colors).forEach(([key, color]) => {
-        drawing.currentColors.value[key] = color;
-      });
+      drawing.currentColors.value = { ...drawing.currentColors.value, ...colors };
       console.log(`Loaded ${count} colors from file.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
@@ -422,9 +442,9 @@ export const setupWatchers = ({
   watchFileImport('t_color', async (text, isCurrent) => {
     const drawing = state.activeDrawing();
     try {
-      const prepared = prepareSpecificColorImport(text, drawing.manualSpecificRules);
-      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { drawing, isCurrent })) return false;
-      console.log(`Loaded ${prepared.importedCount} rules from file.`);
+      const importedCount = await featureActions.importSpecificRules(text, { drawing, isCurrent });
+      if (importedCount === false) return false;
+      console.log(`Loaded ${importedCount} rules from file.`);
     } catch (e) {
       if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
       return false;
@@ -436,7 +456,7 @@ export const setupWatchers = ({
     try {
       const { rules, count } = parsePriorityRules(text);
       rules.forEach((rule) => {
-        const idx = drawing.manualPriorityRules.findIndex((r) => r.feat === rule.feat);
+        const idx = drawing.manualPriorityRules.findIndex((/** @type {{ feat: string }} */ r) => r.feat === rule.feat);
         if (idx >= 0) {
           drawing.manualPriorityRules[idx].order = rule.order;
         } else {
@@ -516,7 +536,7 @@ export const setupWatchers = ({
       state.sessionImportPending?.value,
       mode.value,
       lInputType.value,
-      ...linearSeqs.flatMap((seq) => [
+      ...linearSeqs.flatMap((/** @type {LinearSeq} */ seq) => [
         seq.uid,
         lInputType.value === 'gff' ? seq.gff : seq.gb,
         lInputType.value === 'gff' ? seq.fasta : null

@@ -1,9 +1,32 @@
 // @ts-check
+/**
+ * One record's place in the Linear layout, as the layout writes it.
+ * @typedef {{
+ *   uid: string,
+ *   row: number,
+ *   canonicalCardinality?: 'exactly_one',
+ *   canonicalRow?: number,
+ *   canonicalColumn?: number
+ * }} LinearRecordRow
+ */
+/** @typedef {{ uid?: unknown } | null | undefined} LayoutSequence A record slot; the layout reads only its uid. */
+/** @typedef {{ records: { sequence?: LayoutSequence | null }[] }} LinearSourceGroup One File's records, as the Record Layout groups them. */
+/** @typedef {Partial<Omit<LinearRecordRow, 'uid' | 'row'>> & { uid?: unknown, row?: unknown }} LayoutEntry A saved layout row. */
+
+/**
+ * @param {unknown} value
+ * @param {number} [fallback]
+ */
 const positiveRow = (value, fallback = 1) => {
   const row = Number(value);
   return Number.isInteger(row) && row > 0 ? row : fallback;
 };
 
+/**
+ * @param {LayoutSequence[] | null | undefined} sequences
+ * @param {LayoutEntry[] | null | undefined} [entries]
+ * @returns {LinearRecordRow[]}
+ */
 export const reconcileLinearRecordLayout = (sequences, entries = []) => {
   const previous = new Map(
     (Array.isArray(entries) ? entries : []).map((entry) => [String(entry?.uid || ''), entry])
@@ -17,13 +40,20 @@ export const reconcileLinearRecordLayout = (sequences, entries = []) => {
       ...(saved?.canonicalCardinality === 'exactly_one'
         ? { canonicalCardinality: 'exactly_one' } : {}),
       ...(saved?.canonicalRow === row && Number.isInteger(saved?.canonicalColumn)
-        && saved.canonicalColumn > 0
+        // `Number.isInteger` above rejects undefined.
+        && /** @type {number} */ (saved.canonicalColumn) > 0
         ? { canonicalRow: row, canonicalColumn: saved.canonicalColumn }
         : {})
     };
   });
 };
 
+/**
+ * @param {LayoutSequence[] | null | undefined} sequences
+ * @param {LayoutEntry[] | null | undefined} [entries]
+ * @param {{ enabled?: boolean }} [options]
+ * @returns {{ uid: string, row: number }[]}
+ */
 export const resolveEffectiveLinearRecordRows = (
   sequences,
   entries = [],
@@ -37,11 +67,17 @@ export const resolveEffectiveLinearRecordRows = (
       }))
 );
 
+/**
+ * @param {LayoutSequence[] | null | undefined} sequences
+ * @param {LayoutEntry[] | null | undefined} [entries]
+ * @param {{ enabled?: boolean }} [options]
+ */
 export const linearRecordLayoutHasSharedRow = (
   sequences,
   entries = [],
   { enabled = true } = {}
 ) => {
+  /** @type {Set<number>} */
   const seenRows = new Set();
   return resolveEffectiveLinearRecordRows(sequences, entries, { enabled }).some(({ row }) => {
     if (seenRows.has(row)) return true;
@@ -53,6 +89,15 @@ export const linearRecordLayoutHasSharedRow = (
 // File moves exchange whole row blocks. Each File must use its own
 // consecutive rows (rendered rows are compacted, so empty row numbers between
 // blocks do not count); one row per File is the block size 1 case.
+/**
+ * @param {{
+ *   sourceGroups: LinearSourceGroup[] | null | undefined,
+ *   entries: LayoutEntry[] | null | undefined,
+ *   sourceIndex: number,
+ *   direction: number
+ * }} move
+ * @returns {{ allowed: boolean, reason: string, rows: { uid: string, row: number }[] }}
+ */
 export const planLinearSourceRowMove = ({
   sourceGroups,
   entries,
@@ -68,15 +113,17 @@ export const planLinearSourceRowMove = ({
   const offset = direction;
 
   const rowByUid = new Map(layout.map((entry) => [entry.uid, entry.row]));
+  /** @param {LinearSourceGroup} group */
   const recordUids = (group) => group.records.map(({ sequence }) => String(sequence?.uid || ''));
   const sourceRows = groups.map((group) => (
-    [...new Set(recordUids(group).map((uid) => rowByUid.get(uid)))].sort((left, right) => left - right)
+    // Every uid of a group is a uid of `layout`, which reconciles these same sequences.
+    [...new Set(/** @type {number[]} */ (recordUids(group).map((uid) => rowByUid.get(uid))))].sort((left, right) => left - right)
   ));
   const rowSlots = sourceRows.flat().sort((left, right) => left - right);
   const slotIndex = new Map(rowSlots.map((row, slot) => [row, slot]));
   // A group without rows has no slot; the subtraction is then NaN and the comparison false.
   const consecutiveBlocks = slotIndex.size === rowSlots.length && sourceRows.every((rows) => (
-    /** @type {number} */ (slotIndex.get(rows.at(-1))) - /** @type {number} */ (slotIndex.get(rows[0])) === rows.length - 1
+    /** @type {number} */ (slotIndex.get(/** @type {number} */ (rows.at(-1)))) - /** @type {number} */ (slotIndex.get(rows[0])) === rows.length - 1
   ));
   if (!consecutiveBlocks) {
     return { allowed: false, reason: 'custom-layout', rows: layout };
@@ -96,12 +143,17 @@ export const planLinearSourceRowMove = ({
     nextSlot += blockRows.length;
     return recordUids(groups[groupIndex]).map((uid) => ({
       uid,
-      row: slots[blockRows.indexOf(rowByUid.get(uid))]
+      row: slots[blockRows.indexOf(/** @type {number} */ (rowByUid.get(uid)))]
     }));
   });
   return { allowed: true, reason: '', rows };
 };
 
+/**
+ * @param {LayoutSequence[] | null | undefined} sequences
+ * @param {LayoutEntry[] | null | undefined} entries
+ * @returns {string[]}
+ */
 export const linearRecordPositionTokens = (sequences, entries) => {
   const rows = new Map(reconcileLinearRecordLayout(sequences, entries).map((entry) => [entry.uid, entry.row]));
   return (Array.isArray(sequences) ? sequences : [])
@@ -110,11 +162,23 @@ export const linearRecordPositionTokens = (sequences, entries) => {
     .map((entry) => `#${entry.index + 1}@${entry.row}`);
 };
 
+/**
+ * @param {{ uid?: unknown, row: number }[] | null | undefined} entries
+ * @param {string} uid
+ * @param {unknown} row
+ */
 export const setLinearRecordRow = (entries, uid, row) => {
   const target = (Array.isArray(entries) ? entries : []).find((entry) => entry.uid === uid);
   if (target) target.row = positiveRow(row, target.row);
 };
 
+/**
+ * @param {{ uid?: unknown }[] | null | undefined} sequences swapped in place with the record's row neighbour
+ * @param {LayoutEntry[] | null | undefined} entries
+ * @param {string} uid
+ * @param {number} direction
+ * @returns {LinearRecordRow[]}
+ */
 export const moveLinearRecordInRow = (sequences, entries, uid, direction) => {
   const layout = reconcileLinearRecordLayout(sequences, entries);
   const target = layout.find((entry) => entry.uid === uid);

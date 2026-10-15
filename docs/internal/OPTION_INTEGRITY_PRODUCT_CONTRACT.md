@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `39`
+- Contract revision: `53`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -37,7 +37,9 @@ Status: active Product authority
   `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
-  `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, and `PD-OI-091`
+  `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
+  `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
+  `PD-OI-097`, `PD-OI-098`, and `PD-OI-099`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -533,6 +535,613 @@ Status: active Product authority
     The receipt is recorded as approved.
   - The scenario-revision-`2` receipt keeps its full scope; scenario revision
     `3` adds the regrouping outcome and retires nothing.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 40 changes: `PD-OI-085` gains scenario revision `2`
+  (`RENAME_ROTATION_APPLY_BUTTONS`), `PD-OI-089` gains scenario revision `2`,
+  and `PD-OI-061` gains scenario revision `3`. Each renames visible labels
+  and changes no behavior. They come from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-11` on the redesigned feature popup
+  and choice dialogs of the Web app.
+  - Reply 1, to the review questions on the Before/After pairs of the
+    redesign, one of which recommended the two new rotation button names:
+    「全部推奨通りでいいです。」
+  - Reply 2, to the question 「回転ボタンと合わせて、この内容でよいか確認をお願いします。」
+    asked with the receipt fields recorded below for the three records:
+    「変えていいです。」
+  - Reply 3, to the question 「受領の文面に、私の書き間違いが 1 か所あります。確認をお願いします。」
+    asked with one corrected sentence of the `PD-OI-061` receipt: 「承認します。」
+    The sentence Reply 2 was asked with said that **Merge** kept its name.
+    Before this revision that button read
+    `Merge into existing "<name>" and adopt its color`, so the `Choice` field
+    of the receipt below carries the corrected sentence in its place. No other
+    field of any receipt differs from the text Reply 2 confirmed.
+  - `PD-OI-085`: the rotation buttons **Apply on Generate** and **Apply and
+    regenerate** are named **Apply when I Generate** and **Apply now**. The
+    record title and the concern key keep their wording.
+  - `PD-OI-089` and `OIC-029`: the Color/Stroke Change Scope option
+    `Apply to all "<legend name>" (N)` is named
+    `Legend item "<legend name>" (N)`. The default-color line of `OIC-029` is
+    unchanged.
+  - `PD-OI-061` and `OIC-028`: the Legend Name Conflict choices **Suffix** and
+    **Merge** are named `Keep both: name it "<name 2>"` and
+    `Merge into "<name>"`. `PD-OI-088`, whose acceptance contract is
+    `OIC-028`, is unchanged; the row changes only those two names.
+  - The confirmed fields of each receipt are its choice, rationale,
+    preservation, retirement scope, and accepted residual risk; the three
+    receipts share the owner and the decision date of that confirmation. The
+    concern key is the record's and the scenario revision is its next one.
+    The confirmed fields for `PD-OI-089` and `PD-OI-061` name no choice code;
+    their `Choice` field carries the confirmed statement of the label change,
+    and no code is added. Wrapped lines of the confirmed text are joined; no
+    other character differs.
+  - Each earlier receipt keeps its text and its full scope. Where it or an
+    earlier revision entry names an old label, it means the control that now
+    carries the new label. The new receipts retire the old visible labels
+    only.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that show the new labels are in the same pull request, and
+    the Review is `REQUIRED`.
+- Revision 41 changes: `PD-OI-067` gains scenario revision `2`
+  (`B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card`)
+  from the Product Decision Owner `satoshikawato`'s replies of `2026-10-11`
+  and `2026-10-12` on the names area of a Linear File card of the Web app.
+  Each quotation below is the part of a reply that carries the answer; what
+  it leaves out is stated.
+  - Reply 1 (`2026-10-11`), to the review questions on the Before/After
+    images of the redesigned Input Genomes sidebar, one of which recommended
+    that a File with one record hide the File-level names block and show the
+    record's name fields on its card. The reply first says that the Owner had
+    looked at the images, then: 「推奨通りでいいです。」
+  - Reply 2 (`2026-10-11`), to the request to confirm the draft receipt for a
+    File with one record. The message before that request had named the
+    draft file that holds the nine fields recorded below and had summarized
+    what changes, what stays and the accepted risk; it did not show the nine
+    fields themselves. The reply answered two requests, each with
+    「承認します。」; the other one confirmed a correction of the `PD-OI-061`
+    receipt (Revision 40).
+  - Reply 3 (`2026-10-12`), to three questions asked with Before/After images
+    of a prototype of this outcome. The reply also covers other matters; its
+    line for these questions begins with the address of the page that asked
+    them and continues:
+    「A か B か:B.空のカードで先に入力した名前: 消さない; BGC の Gallery Session の保存し直し:保存し直す」
+    - Its first answer selects option B of the question 「A か B か」. The
+      question gave the rule of option B as:
+      「カードに出す名前のブロックは常に 1 つ。File の名前があるあいだは dev と同じカード（File のブロックがカード、レコードの欄は Record options の中）で、File の名前が空ならレコードの欄をカードに出す。」
+      In it `dev` is the Web app before this change. The option's text went
+      on with one sentence that compared card heights; that sentence is a
+      statement by the question's author, not part of the rule, and is not
+      reproduced.
+    - Its second answer keeps a name that was typed on a File card before
+      its file is chosen. It is implemented in the same pull request and adds
+      no term to this record.
+    - Its third answer is about a Gallery example Session and adds no term to
+      this record.
+  - The scenario-2 receipt holds the nine fields of the draft that Reply 2
+    approved, with no character changed. The first selection of Reply 3 is recorded in
+    `PD-OI-067` below its receipts, in the words of its question. It is not a
+    receipt field, and no rationale, preservation, retirement scope, or
+    residual risk is added for it.
+  - The scenario-1 receipt keeps its text and its SHA-256.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 42 change: `PD-OI-039` is replaced for scenario revision `3`
+  (`A / DOCKED-REVIEW-AT-EVERY-WIDTH`) from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-12` on the Review alignment panel of
+  the Web app. Each quotation below is the part of a reply that carries the
+  answer; what it leaves out is stated.
+  - Reply 1 (`2026-10-12`), to four questions asked with same-state
+    Before/After images of a mock of the redesigned panel: strips in the
+    panel that show each record after Apply, rings and arrows on the figure
+    in place of the candidate numbers, the panel docked at the right of the
+    figure, and the records that need a choice first. The reply, complete,
+    with the questions it quotes (its line breaks are shown as ` / `):
+    「>どこまで変えるか。 / 全部。 / >右に固定する間、遺伝子のポップアップを隠してよいか。 / 隠していいです。 / >英語の文言。 / 任せます。 / >時期。 / 0.14.0に入れる。」
+    Its first answer selects the whole proposal, which docks the panel. Its
+    second answer lets the feature popup be hidden while the panel is docked.
+    Its third and fourth answers add no term to this record.
+  - Reply 2 (`2026-10-12`), to the request to approve the receipt recorded
+    below. The request showed the nine fields in full, twice: a first
+    wording, and a second wording that was named as the current one and
+    differed in two passages about the feature popup (in Must preserve, that
+    a click on the figure neither opens, switches nor closes the popup during
+    the review and that the search **Open** switches the popup's target and
+    shows it when the review ends; in May retire, the matching split). The
+    reply: 「文面を承認します」
+    The shown text had a placeholder for the decision date; the date recorded
+    is the day of this reply.
+  - The receipt below holds the nine fields of the second wording, with no
+    character changed apart from that date.
+  - The runtime that realizes this outcome merged before this amendment, as
+    pull request `#1020` (merge commit `d8af5a7f`), which the Owner merged on
+    `2026-10-12` before Reply 2. This amendment contains no runtime.
+  - Scope: scenario revision `2` (`A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH`,
+    receipt SHA-256
+    `06a9d2fe9b1d1406f6f8e04c23a9ca031133b9fae24b0683403ec2c6cae55270`) is
+    retained in Git history, and what it retired stays retired. `PD-OI-035`
+    keeps its text; only its reference to the governing `PD-OI-039` scenario
+    revision now reads `3`. The `OIC-026` row is reworded to the receipt's
+    dock, Editor, popup and view terms. `PD-OI-031`, `PD-OI-037`,
+    `PD-OI-038`, `PD-OI-054` and all four accepted issue `#598` decisions
+    are unchanged.
+- Revision 43 changes: `PD-OI-092` is added
+  (`A / PINNED-ICON-SECTION-INDEX`, concern `web.settings-pane.section-index`).
+  It comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-12` on reaching a settings section in the left settings pane of
+  the Web app. Each quotation below is the part of a reply that carries the
+  answer.
+  - Reply 1, to a measurement shown with images of the pane: in Linear with
+    five records the Labels section was 4,009 px and the Comparison section
+    2,070 px down the pane.
+    「これも重要だね。もしかすると「今」もこの部分は改善が必要かも。」
+  - Reply 2, to images of the pane with one pinned row above it: a section
+    index whose icons jump to a section and open it, with an entry of its own
+    for the Linear Comparison section. 「この形で進めていいです。」
+    The same images showed a button that switches the pane to a second
+    display; that part is not in this record.
+  - Reply 3, to the question whether the index shows icons only or icons with
+    names.
+    「目次はアイコンでいいです。マウスオーバーすると説明(あるいはタイトル）が浮かび上がるようにしてほしい。」
+  - Reply 4, to the request to approve the receipt text as written or to name
+    what to change, asked with Before/After images of the built index.
+    「そのまま承認します。」
+    The page that asked showed the Rationale and the Accepted residual risk as
+    recorded below, the Must preserve text as a list whose `〔…〕` headings were
+    set in bold without the brackets, the Choice as its identifier with a
+    description, May retire as 「なし（none）」, and the Owner. It gave the
+    decision date as the day of the confirmation and did not show the concern
+    key or the scenario revision. The receipt is recorded byte for byte.
+  - The distances in the Rationale (3,909 px and 1,972 px) are those of the
+    Web app on the day of the confirmation; a change to the Linear File cards
+    had shortened the pane since Reply 1.
+  - No other record is amended or retired. The record names what it leaves
+    unchanged in its Must preserve.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 44 changes: `PD-OI-093` is added
+  (`A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`, concern
+  `web.settings-pane.display`). It comes from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-12` on a second display of the left
+  settings pane of the Web app. Each quotation below is the part of a reply
+  that carries the answer.
+  - Reply 1, to images of today's pane beside three other places for the
+    settings: `A` a column of icons with one section beside it, `B` a grid of
+    options with a floating popup, `C` a toolbar above the Result.
+    「今とAを行き来できるようにするのがいい気がする。デフォは今のままで、ボタンひとつで切り替えられる形。」
+  - Reply 2, to images of the pane with a button at the right end of the
+    section index row that switches it to the column of icons, a button on
+    top of the column that switches back, and the choice remembered by the
+    browser and not stored in the Session. 「この形で進めていいです。」
+    This is Reply 2 of the Revision 43 entry; `PD-OI-092` recorded its section
+    index part.
+  - Reply 3, given on a page of Before/After images of the built display,
+    after the Owner asked where the button that folds the pane is and was
+    told that it is at the right end of the section index row.
+    「OKOK,これでいきましょう。全部承認します。」
+  - Reply 4, to the three requests of the same page: approve the receipt text
+    as written or name what to change, choose one of three outcomes for the
+    figure while Review alignment is open, and confirm the four English
+    button names. 「推奨通りでいきます。Product Decisionも承認します」
+    The page showed the nine fields of the receipt as recorded below, the
+    Must preserve text as a list whose `〔…〕` headings were set in bold
+    without the brackets, and the decision date as the day of the
+    confirmation. The receipt is recorded byte for byte.
+  - The recommended outcome that Reply 4 selects for the figure while Review
+    alignment is open (fit the figure again whenever the room of the Result
+    changes) is not part of this record. It is a later change; until it
+    lands, the last sentences of the Accepted residual risk below describe
+    the Web app.
+  - `PD-OI-092` keeps its text. The receipt below places the section
+    index row of `PD-OI-092` in the stacked display (「今の表示」),
+    which stays the default, and keeps it unchanged there (`〔変えないもの〕`).
+    The Accepted residual risk of `PD-OI-092` gives the index buttons
+    as 22 × 26 px; this record's Accepted residual risk states that the
+    Linear ones become 21.2 px wide (20.5 px in a browser that always shows
+    its scrollbar) to make room for the switch button.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 45 change: `PD-OI-061` is replaced for scenario revision `4`
+  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`, extended to the names of color rules
+  and to the list under the feature popup's **Legend name**). It comes from
+  the Product Decision Owner `satoshikawato`'s replies of `2026-10-13` on a
+  user report (OV-580, OV-581, OV-582): in the feature popup of the Web app,
+  choosing another color rule's name from the list under **Legend name** kept
+  the feature's own color, so one Legend name had two colors and both rows
+  were drawn as `<name> [#<hex>]`; renaming a color rule's row onto another
+  color rule's row ended the same way without asking. Each quotation below is
+  the part of a reply that carries the answer.
+  - Reply 1, on the reported Legend:
+    「凡例に色のIDがつくのは許されないので直して。Ownership couplingとか境界型付けの問題でもあると思う。」
+  - Reply 2, on the list under **Legend name**:
+    「Select legend listがまずバグってる気がする」
+  - Reply 3, on merging a whole Legend item into another one:
+    「前は普通にマージできたんだよ全部Transcription regulationに。」
+    Release `0.13.0` asked the Legend Name Conflict dialog for every rename
+    onto an existing name of another color. The scenario-1 receipt
+    (`2026-09-30`) preserved the `PD-OI-042` naming for a target that is a
+    color rule's caption, the scenario-2 receipt kept that term, and the
+    runtime has carried it since commit `4b7b8825` (`2026-10-02`).
+  - Reply 4, to the request to confirm the ready-to-copy `PRODUCT_DECISION`
+    response for this concern and scenario revision, prepared with the
+    decision pack for the report:
+    「Web の操作(PD-OI-061 改訂 4): それでいいです」
+  - The receipt below is that response, byte for byte.
+  - The decision pack described the same outcome in English, with one phrase
+    the receipt does not repeat: a typed rename onto a color rule's name asks
+    the dialog "also when the target is a color rule's name, listed in the
+    legend or not". That phrase is the pack's description, not a receipt
+    field. The receipt's 「衝突先が色ルールの名前でも」 names a color rule's name
+    without a condition on a drawn row, and its Accepted residual risk names
+    a color rule that the figure does not draw.
+  - Reply 5, after the review of the implementation, to the question
+    「全 feature type 向けのルール(`*`)の扱い」 asked with the recommended fix
+    「一覧に出る項目は必ず入れる。`*` のルールはどの type の一覧にも出す」:
+    「全 feature type 向けのルール(*)の扱い: 推奨通りなおしましょう」
+    No field of the receipt differs from the text Reply 4 confirmed.
+  - Scope: scenario revision `4` keeps the outcome
+    `B / MERGE-SAME-FEATURE-TYPE-ONLY` of scenario revision `2` and the
+    choice names of scenario revision `3`. It retires one preservation term
+    of the scenario-2 receipt, 「衝突先が色ルールの caption のときの PD-OI-042 の区別」,
+    and adds the outcome of a pick from the popup's list. The scenario-2 and
+    scenario-3 receipts keep their text and their SHA-256.
+  - `PD-OI-042` is unchanged. One Legend name written with several colors in
+    a color table, by **Add rule**, or on the command line is still drawn as
+    `<name> [#<hex>]` rows; the Owner's decision on that concern is not part
+    of this revision. `PD-OI-088` and `OIC-028` are unchanged.
+  - This change is a static Product Contract co-change: the runtime and tests
+    that implement it are in the same pull request, and the Review is
+    `REQUIRED`.
+- Revision 46 changes: `PD-OI-094` is added
+  (`A / FOLDABLE-FILE-CARD, FOLDED-AFTER-LOAD`, concern
+  `web.linear.file-card-fold`). It comes from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-12` and `2026-10-13` on folding the
+  File cards of Linear mode in the Web app to one line each. Each quotation
+  below is the part of a reply that carries the answer.
+  - Reply 1 (`2026-10-12`), to mock images of the settings pane in which the
+    five File cards of a Linear Session are one line each.
+    「ファイルのカードを畳む案を入れる。」
+  - Reply 2 (`2026-10-13`), to a page of Before/After images of the built
+    cards that asked for one choice: `A`, a card that holds its files is
+    folded after **Load Session** or **Load example** (recommended, built), or
+    `B`, no card folds by itself. 「PR-B: 推奨通り。」
+  - Reply 3 (`2026-10-13`), to the request to approve the receipt text of
+    that page as written or to name what to change.
+    「PR-B の文面の承認: 承認します。」
+    The page showed the nine fields of the receipt as recorded below, the
+    Must preserve text as a list whose `〔…〕` headings were set in bold
+    without the brackets, and the decision date as the day of the approval.
+    The receipt is recorded byte for byte.
+  - `PD-OI-018`, `PD-OI-025`, and `PD-OI-067` keep their text. They describe
+    the contents of a File card, which the receipt below leaves as they are
+    in an open card (`〔畳んでも変わらないもの〕`). A folded card shows its
+    header line only; the Accepted residual risk below states what is then
+    out of sight until the card is opened, the common Depth TSV assignment
+    of `PD-OI-025` included.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 47 changes: `PD-OI-042` is replaced for scenario revision `2`
+  (`B / NUMBERED-NAMES`, concern
+  `styles.specific-color-caption-multiplicity`), and `PD-OI-095` is added
+  (concern `legend.row-name-multiplicity`; its receipt names no choice code).
+  They come from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-13` on the user report of the Revision 45 entry and on three
+  findings made with it (OV-583, OV-584, OV-585): one Legend name written
+  with several colors was drawn as `<name> [#<hex>]` rows by the CLI, the
+  Python API, and the Web app; the rule list, the popup, and the downloaded
+  color table held the rewritten captions; and the second track row of one
+  label was named `<label> (2)` by another mechanism. Each quotation below is
+  the part of a reply that carries the answer.
+  - Reply 1, on the reported Legend. This is Reply 1 of the Revision 45
+    entry.
+    「凡例に色のIDがつくのは許されないので直して。Ownership couplingとか境界型付けの問題でもあると思う。」
+  - Reply 2, to the question on one Legend name written with several colors,
+    asked with three outcomes: `A`, one row per color, each drawn with the
+    name as written; `B`, numbered names (`name (1)`, `name (2)`), which the
+    question described as still rewriting the names and the rule captions;
+    `C`, one row with a swatch per color.
+    「1 つの名前に複数の色があるとき(PD-OI-042 改訂 2):色が違う場合はB.色が一緒の場合はマージ。てかそうだったでしょ今まで？前はPharokkaでもできたんだから。」
+  - Reply 3, on the report that two mechanisms make a Legend name unique
+    (numbers and color IDs): 「これはだめだろ。」
+  - Reply 4, to the question whether the first color keeps the name without
+    a number while later colors get `(2)`, `(3)`:
+    「2色目が出るなら全部番号アリがいいのでは？今までそうだっただろ？」
+  - Reply 5, to the question whether the Legend Name Conflict choice
+    **Keep both** starts at `(2)` instead of `(1)`:
+    「何言ってるのかわからないけど、(1), (2), ってなるべきでは？」
+    That choice belongs to `PD-OI-061`, which this revision does not change.
+  - Reply 6, to the question whether track rows with one label, drawn
+    `GC content` and `GC content (2)` since release `0.13.0`, follow the same
+    rule:
+    「色が同じなら凡例は1個のままでいいよね。色が違うならGC content (1) / GC content (2) に揃える」
+  - Reply 7, to the question on the feature popup's **Legend name** field,
+    whose suggestions and the list under it offered the same names with two
+    results (OV-587), asked with two options: remove the field's suggestions
+    (recommended), or make a chosen suggestion join the group.
+    「入力欄の候補と一覧の食い違い(OV-587)：候補を消す(推奨)でいきましょう」
+    The removal is implemented in the same pull request and adds no term to
+    a record.
+  - Reply 8, to the request to confirm three receipt texts (`PD-OI-042`
+    scenario revision `2`; the new concern `legend.row-name-multiplicity`,
+    scenario revision `1`; `PD-OI-061` scenario revision `5`) and two
+    choices: 「選択 1: 保存済みの色 ID の扱い」 with
+    「A（推奨）読み込むときに外す / B そのまま読む」, and 「選択 2: OV-587」 with
+    「A（推奨）入力候補を外す / B 入力候補を選んでも一覧と同じ動作にする」. The request offered
+    the reply form 「文面 1〜3 は承認。選択 1 は A。選択 2 は A。」
+    「すべて推奨通り。」
+  - The two receipts recorded below are the first and the second of those
+    three texts, byte for byte. Option `A` of 選択 1 is in the Accepted
+    residual risk of the `PD-OI-042` receipt (「読み込むときにその ID を外す」).
+    Unlike the description of `B` in the question of Reply 2, the
+    `PD-OI-042` receipt keeps a rule's caption as written
+    (「rule の caption は書かれたとおりに保つ」). The third text is not recorded by this revision: `PD-OI-061` keeps its
+    text and its scenario revision `4`.
+  - Scope: scenario revision `2` of `PD-OI-042` replaces scenario revision
+    `1` (`A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS`) as a whole. The
+    scenario-1 outcome fields, its receipt, and its Acceptance IDs (`CLR-01`
+    to `CLR-05`) are not carried into the record; Git history retains them.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 48 changes: `PD-OI-096` is added
+  (`B / MODE-DEFAULT-LISTED-AT-LOAD`, concern `web.legend.position-of-mode`). It comes from the
+  Product Decision Owner `satoshikawato`'s replies of `2026-10-13` on a legend
+  position that is not one of its diagram mode's positions in the Web app:
+  the Legend position setting, and the side a loaded Result's Legend was laid
+  out with. Each quotation below is the part of a reply that carries the
+  answer.
+  - Reply 1, to a report line that named three outcomes for such a setting:
+    「選択肢は、モードの集合に正規化、Load で拒否、現状維持の 3 つです。」
+    「推奨どおりでよろしくです」
+  - Reply 2, to the question 「OV-652(BA-D07)の確認: そのモードの集合に無い凡例位置(例: Linear で "upper_left" や "banana")は、どう扱いますか?」
+    with the options 「モードの既定値にする(推奨)」 (「プロットタイトル位置と同じ扱いです。集合に無い値はそのモードの既定の凡例位置になります。」)
+    and 「近い位置へ対応付ける」. The Owner selected 「モードの既定値にする(推奨)」.
+  - Reply 3, a message on loading older files:
+    「てか古いファイルを拒否するよりもさ、「これこれこういう不具合というか、バグがあるから一部完全には復元できないけどいい？次回保存するときは細心のフォーマットになるから」っていうひとことnoticeを出して読み込めるようにするのがいいんじゃないかな。」
+  - Reply 4, to four questions that confirmed Reply 3. The three answers this
+    record uses:
+    - 「一言 notice の出し方はどちらにしますか?」: the Owner selected
+      「読み込む前に確認(推奨)」 (a dialog before the load, with Load and
+      Cancel; Cancel leaves the current screen unchanged).
+    - 「拒否をやめて「読めるところだけ読んで notice」にする範囲はどこまでですか?」:
+      the Owner selected 「gbdraw のファイルなら全部(推奨)」.
+    - 「意味が変わらない自動変換(古いスキーマの昇格、"RBH" を "rbh" にするような綴りの正規化)でも notice を出しますか?」:
+      the Owner selected 「出さない(推奨)」.
+  - Reply 5, to three outcomes for the side a loaded Result's Legend was laid
+    out with when that side is not one of the Result's mode's positions (`A`,
+    `none`; `B`, the mode's default; `C`, keep the stored corner). The Owner
+    quoted the recommended line: "B (recommended): use the mode's default, so
+    the legend moves below the figure, and list it in the dialog. This is the
+    same handling as OV-652, and Sessions 31 and later already read it this
+    way."
+  - Reply 6, to the request to approve the receipt text below as written or to
+    name what to change. The request showed the nine fields of the receipt as
+    recorded below and said that one meaning differs from an earlier draft: a
+    Legend position setting outside its mode reads as an unset value does
+    (usually the mode's default).
+    「この文面のまま承認します」
+    The receipt is recorded byte for byte.
+  - `OIPC-C01` keeps its text. The values this record decides are stored in a
+    file that is being loaded, not supplied in a control or a request; the
+    receipt lists them before the load, and its Accepted residual risk states
+    the interim in which they are replaced without a notice.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 49 changes: `PD-OI-061` is replaced for scenario revision `5`
+  (concern `web.legend.rename-collision`; its receipt names no choice code).
+  It comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-13` on the Legend Name Conflict choice **Keep both** after
+  Revision 47: `PD-OI-042` scenario revision `2` numbers every drawn row of a
+  name shared by rows of different swatches, while **Keep both** gave the
+  renamed row alone a numbered name and left the other row's name without a
+  number. Each quotation below is the part of a reply that carries the
+  answer.
+  - Reply 1, to the request to confirm three receipt texts (`PD-OI-042`
+    scenario revision `2`; the new concern `legend.row-name-multiplicity`,
+    scenario revision `1`; `PD-OI-061` scenario revision `5`) and two
+    choices. This is Reply 8 of the Revision 47 entry, which records the
+    request in full.
+    「すべて推奨通り。」
+    The receipt recorded below is the third of those texts, byte for byte.
+  - Reply 2, to three options for this change:
+    「A（推奨）PR 3 を 0.14.0 から外して止める / B 小さい PR 3（色ルールと feature の改名だけ rev 5）/ C Session の形式変更まで含めて全部やる（一番大きい）」
+    「C: Session の形式変更まで含めて全部やります（一番大きい）。もう始めたんでしょ？あとどれくらいかかるの？」
+  - Reply 3, to the question
+    「P-8（Session の版）: 推奨は、この PR で version 47 にすることです。ただし、複数 drawing の決定（PD-OI-090）の文面が「47」を予定しているので、そちらを 48 に読み替える必要があります。」
+    「P-8（Session の版）: 推奨通り」
+    Session version `47` is written by this change.
+  - Reply 4, to the question
+    「P-9（同じ色の行で Keep both を選んだとき）: 推奨は、「同名同色は 1 行」の規則どおり 1 行にまとめることです。保留中の P-5 も同じ扱いになります。」
+    「P-9：推奨通り」
+    P-5 is the item of that name in the change's decision record
+    (`pharokka-legend-merge-20261013/DECISIONS.md`); this entry does not
+    restate it.
+  - Reply 5, to the question
+    「P-10（feature を 1 つだけ切り出して Keep both にしたときの新しい行の位置）: 推奨は、同じ名前の行のすぐ後ろに置くことです。こうすると、ダイアログに出る (2) が凡例の表示と一致します。」
+    「P-10:　推奨通り」
+  - Reply 6 (`2026-10-14`), to the question
+    「残る制限（D-33）: 同じ名前・同じ色の 2 グループは 1 行にまとめて描きます。その行の色を変えると、変わるのは見えている方のグループだけです。もう一方は元の色のまま別の行として戻り、凡例は「名前 (1)」「名前 (2)」の 2 行になります。また、Generate の後にこれが起きると、戻った行が凡例タブの一覧に出るのは次の描画のときです。どうしますか？」
+    the selected option and its description:
+    「PR 3 の中で直す (Recommended)」
+    「まとめた行の色を変えると、その行にまとめたすべてのグループの色が変わり、1 行のまま残る。凡例タブもすぐ更新される。PR 3 のマージは半日ほど遅れますが、0.14.0 は boundary-audit を待つので、リリース日は変わりません。」
+  - Scope: scenario revision `5` keeps the outcome
+    `B / MERGE-SAME-FEATURE-TYPE-ONLY`, the choices of the dialog, and the
+    conditions of **Merge**. The scenario-2, scenario-3, and scenario-4
+    receipts keep their text and their SHA-256.
+  - `PD-OI-042`, `PD-OI-095`, and `PD-OI-090` keep their text. No other
+    record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 50 changes: `PD-OI-097` is added
+  (concern `product.circular-outer-label-fit`, scenario revision `7`). It comes
+  from the Product Decision Owner `satoshikawato`'s replies of `2026-10-13` and
+  `2026-10-14` on Circular and Linear labels that do not fit: labels that
+  overlap, leader lines that cross, and labels over the definition text in the
+  middle of a Circular map. Each quotation below is the part of a reply that
+  carries the answer.
+  - Reply 1 (scenario revision 1): 「決めていただくこと: DEF-CROSS、DO-ASK、TIGHT-FIX-FIRST。」
+  - Reply 2 (scenario revision 2): 「SHOW-ALL,、REL-0140だと思うけど、 >0.13 では既定設定で描けていた WSSV、153 kb
+    プラスミドの 8 pt、Epifagus が、0.14.0 では止まります なんで？WSSVはかけてたじゃん。」
+    「今まで描けてたものは今まで通り描けるべきだろ。」
+  - Reply 3 (scenario revision 3): 「CROSS-WARN、っていうか引き出し線が交差しているってどういうこと？」
+    「owner-seen-fit-def_crossing_n4-20261013.png これはダメだね。WSSVは問題ないけどこれはダメ。これは警告入りしていい」
+  - Reply 4 (scenario revision 4): the selected options 「開いてよい (推奨)」, 「通知の帯 (推奨)」,
+    「時間を区切る (推奨)」 and 「全部この PR に」, and the reply 「まあええよ」.
+  - Reply 5 (scenario revision 5): 「全部推奨」
+  - Reply 6 (scenario revision 6, `2026-10-13`): 「E-ROW（推奨）」
+  - Reply 7 (`2026-10-14`), to four questions on the receipt fields, each
+    answered by option: Rationale 「案のままでよい (推奨)」, Must preserve
+    「案のままでよい (推奨)」, May retire 「案のままでよい (推奨)」, and Accepted
+    residual risk 「交差したりラベルが定義文にかかるのも、やっぱりラベルの配置を微調整することで直すことを提案してほしい」.
+  - Reply 8 (scenario revision 7, `2026-10-14`), to the automatic repair of
+    slight defects and to a fix row that leaves crossings: 「入れる、上限 100 (推奨)」
+    (`REPAIR-100`) and 「交差が残る行も出す (推奨)」 (`CROSS-LEFT-ROW`).
+  - Reply 9 (`2026-10-14`), to the rewritten Accepted residual risk
+    「微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒、描けない図なら 30 秒まで探し、間に合わない候補は『未計算』と示す。」:
+    「これでよい (推奨)」.
+  - Reply 10 (`2026-10-14`), to two questions after the review of this
+    change. To the question whether to record Reply 9's sentence on search
+    times as written or to correct it to the option text of Reply 4's
+    「時間を区切る (推奨)」, which says 「重なりで止まる場合は値を必ず出す」:
+    「Q9 に合わせて直す (推奨)」, whose option text replaces that sentence with
+    「CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。」.
+    To the question what Apply and Cancel do while a fix row is being
+    computed in the Web: 「1 候補 30 秒まで (推奨)」, whose option text adds
+    「Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。」.
+  - The receipt below combines these replies: Choice lists the options of
+    scenario revisions 1 to 7, Rationale, Must preserve, and May retire are the
+    texts of Reply 7, and Accepted residual risk is the text of Reply 9 as
+    corrected by Reply 10.
+  - `PD-OI-088` (a dialog choice is one History step, Cancel records none, the
+    dialog is busy while applying) applies to the new dialog unchanged. No
+    other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 51 changes: `PD-OI-098` is added
+  (`A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED`, concern
+  `diagram-generation.diagram-font`), and `PD-OI-092` (concern
+  `web.settings-pane.section-index`) and `PD-OI-093` (concern
+  `web.settings-pane.display`) are replaced for scenario revision `2`. They
+  come from the Product Decision Owner `satoshikawato`'s reply of
+  `2026-10-13` on choosing the font of the diagram text in the Web app, the
+  CLI, and the Python API, asked with the three receipt texts below: the
+  new concern, and the two settings pane records that gain a Font section and
+  a Font item.
+  - Reply, to the request to approve the three receipt texts as written or to
+    name what to change:
+    「お願い（1 つ）: 三つとも承認します」
+  - The receipts recorded below are those three texts, byte for byte. The
+    SHA-256 of each is over its UTF-8 bytes without the final newline:
+    `PD-OI-098` `14dc5e981573dce50e9815f4457d34de6786c819ae31a5b4672e178359af3675`,
+    `PD-OI-092` `0fba5433eeb10e8c606b967f142c4a33b938d23db7fc3d6dc7fde5396e636c92`,
+    `PD-OI-093` `81bf15fcf9788503b438545f62256e6eb72f8e21f9e0f1213245ea3f858316c0`.
+  - Scope: scenario revision `2` of `PD-OI-092` keeps the outcome
+    `A / PINNED-ICON-SECTION-INDEX` and adds the **Font** section (icon
+    `Aa`, between Layout and Titles & Record Labels) to the index, so the
+    Circular index has 12 buttons and the Linear index 13. Scenario revision
+    `2` of `PD-OI-093` keeps the outcome
+    `A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH` and adds the Font item to the
+    icon rail and the Linear index button width of its Accepted residual
+    risk. Each replaces scenario revision `1` as a whole; Git history retains
+    the former receipt.
+  - `PD-OI-098` does not supersede another decision. Sessions already kept
+    the font name as the preserved override `objects.text.font_family`; the
+    Web setting is saved as `modes.<mode>.config.adv.font_family` in Session
+    47 (see `docs/internal/SESSION_FORMAT_HISTORY.md`), and no Session stores
+    a font file.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 52 changes: `PD-OI-099` is added
+  (`A / CONFIRM-REPAIRS-BEFORE-LOAD`, concern
+  `web.session.load-repair-confirmation`), with acceptance contract `OIC-031`.
+  It comes from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-13` and `2026-10-14` on how the Web app loads a gbdraw file that is
+  old or holds values it cannot use. Each quotation below is the part of a
+  reply that carries the answer.
+  - Reply 1 (`2026-10-13`), a message on loading older files. It is Reply 3 of
+    the Revision 48 entry.
+    「てか古いファイルを拒否するよりもさ、「これこれこういう不具合というか、バグがあるから一部完全には復元できないけどいい？次回保存するときは細心のフォーマットになるから」っていうひとことnoticeを出して読み込めるようにするのがいいんじゃないかな。」
+  - Reply 2 (`2026-10-13`), to four questions that confirmed Reply 1, each with
+    the recommended option first. Reply 4 of the Revision 48 entry quotes the
+    questions of (a), (b), and (d).
+    - (a) how the notice is shown: the Owner selected
+      「読み込む前に確認(推奨)」.
+    - (b) the scope of loading as far as possible instead of refusing: the
+      Owner selected 「gbdraw のファイルなら全部(推奨)」.
+    - (c) files the Web refused and Python reads: the Owner selected
+      「Web も notice 付きで読む(推奨)」.
+    - (d) a notice for conversions that do not change a meaning: the Owner
+      selected 「出さない(推奨)」.
+  - Reply 3 (`2026-10-14`), to the status line
+    「PR-N（Load の修復ダイアログ）の receipt は Owner の承認待ちです」 of another
+    Claude Code session, which relayed the reply; the reply is in that
+    session's transcript.
+    「承認します」
+    The status line names this pull request by its working name. The receipt
+    approved is draft v3.6 of the receipt text, recorded below byte for byte.
+    That session did not show the receipt text. Earlier, the session that
+    drafted the receipt had shown the full text of draft v3.1 on `2026-10-13`.
+    For drafts v3.2 to v3.6 it gave a summary of each draft's changes, not the
+    full text, and with drafts v3.2, v3.3, and v3.5 the path of the draft file.
+    It had not yet asked for approval of v3.6. After the reply, the relaying
+    session told the Owner that a later change to the text needs a new
+    approval.
+  - `OIPC-C01` and `OIPC-C03` keep their text. The values this record decides
+    are stored in a file that is being loaded, not supplied in a control or a
+    request; the receipt lists them before the load, except the values its
+    〔出さないもの〕 names, and its Accepted residual risk states the interim.
+  - `PD-OI-096` keeps its text; the confirmation dialog its Accepted residual
+    risk names is the dialog of this record. No other record is amended or
+    retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 53 changes: `PD-OI-097` is replaced for scenario revision `8`
+  (concern `product.circular-outer-label-fit`). It comes from the Product
+  Decision Owner `satoshikawato`'s reply of `2026-10-14` on where the labels
+  around a repaired defect yield room after the automatic repair of scenario
+  revision `7`. Each quotation below is the part of a reply that carries the
+  answer; Replies 1 to 10 are those of the Revision 50 entry.
+  - Reply 11 (scenario revision `8`, `2026-10-14`), to the question
+    「【譲り合いを効かせる範囲】今収まっている Epifagus 14 pt に、譲り合いを効かせた場合を 4 つ並べました（logs/owner-seen-P1_epifagus14_scope-20261014.png。tobacco は P2）。1 は今の #1053、2 は接点の規則だけ（ラベルは動かず、見た目はほぼ同じ。追加 0.01 s）、3 は譲り合い（50 個が動き、追加 2.0 s）、4 は譲り合い＋上へ譲る（51 個が動き、追加 2.8 s）です。小さな図でも、譲り合いを効かせると全ラベルが動き、約 1 s 増えます。4 では maturase の線が tRNA-His の文字を貫いています（拡大：owner-seen-P1_panel4_maturase_through_tRNA-His-20261014.png）。この種類の欠陥は、どの選択肢でも起きないようにします。譲り合いをどこに効かせますか？」
+    the selected option and its description:
+    「微調整した図だけ (推奨)」
+    「修正が入った図（N4 など）だけ、修正の後で周りを整える。収まっている図は 0.13.0 と同じまま（②を変えない）。速さも変わらない」
+    (`YIELD-REPAIRED-ONLY`)
+  - Reply 12 (`2026-10-14`), approving the receipt text below:
+    「Contract 受領文の案をOKします」
+  - The receipt of this change (SHA-256, UTF-8, excluding the final newline:
+    `38b212f4fa546885f1edf3767718cb8b15811b6dc30b195b1f7f4312c57eba3b`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 8
+    Choice: YIELD-REPAIRED-ONLY
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-14
+    ```
+
+  - Scope: the record's receipt for scenario revision `8` is recorded below;
+    the scenario revision `7` receipt keeps its text and its SHA-256.
+    `PD-OI-088` applies unchanged. No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -1951,7 +2560,7 @@ Decision date: 2026-10-04
   正確な feature identity に基づく選択、候補一覧からの keyboard radio 選択と Skip、390 px での操作と適切な focus、描画されない候補の一覧からの選択、図上位置だけによる自動選択の禁止、デスクトップでの canvas 選択と手動 pan／zoom、レビューを閉じた後のプレビュー、ガイド・番号・draft が Result・download・Session に混入しないこと。
 
   The compact review presentation, visible canvas and simultaneous canvas
-  interaction are governed by `PD-OI-039`, scenario revision `2`, in full.
+  interaction are governed by `PD-OI-039`, scenario revision `3`, in full.
   This record and `PD-OI-039` are jointly required; presentation does not
   replace identity, keyboard/Skip, non-rendered-candidate, desktop canvas,
   focus, or overlay-exclusion guarantees. No candidate may be selected from
@@ -2061,40 +2670,61 @@ Decision date: 2026-10-04
 ### PD-OI-039: Compact review with exclusive alignment directions
 
 - Concern key: `web.similarity-alignment.review-presentation`
-- Scenario revision: `2`
+- Scenario revision: `3`
 - Status: `ACCEPTED`
-- Selected outcome: `A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH`
-- Supersedes: `PD-OI-039`, scenario revision `1`
-  (`A / DOCKED-COMPACT-ALIGNMENT-REVIEW`), replacing its Match retention
-  with the explicitly approved exclusive direction controls. All independent
-  identity, keyboard/Skip, non-rendered-candidate, canvas, focus, Editor,
-  validation/retry, artifact, Session and History requirements remain.
-  The scenario-2 mobile coverage exception and close-review continuation in
-  `PD-OI-035` remain superseded; its scenario-3 independent guarantees remain
-  jointly required. Narrow free drag and concurrent Editor opening during
-  review may retire only as stated in this receipt. Wide drag and non-modal
-  canvas interaction remain required.
+- Selected outcome: `A / DOCKED-REVIEW-AT-EVERY-WIDTH`
+- Supersedes: `PD-OI-039`, scenario revision `2`
+  (`A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH`), replacing its place of the
+  review (docked below the figure only on a narrow Preview, free to drag on a
+  wide one) and its Editor rule (closed only for the narrow review, then an
+  explicit reopen) with the review docked at every width, and adding the
+  feature-popup and view terms of the receipt below. The exclusive direction
+  controls and all independent identity, keyboard/Skip,
+  non-rendered-candidate, canvas, focus, validation/retry, artifact, Session
+  and History requirements remain, as the receipt restates. What scenario
+  revision `2` retired stays retired. The scenario-2 mobile coverage
+  exception and close-review continuation in `PD-OI-035` remain superseded;
+  its scenario-3 independent guarantees remain jointly required. Free drag of
+  the review, concurrent Editor opening during a review, and showing the
+  feature popup or opening or switching it from the figure during a review
+  may retire only as stated in this receipt. Non-modal canvas interaction
+  remains required.
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   below. The four issue `#598` decisions are unchanged.
-- Decision source: `satoshikawato` selected A and explicitly approved all nine
-  fields of the displayed receipt on `2026-09-26`, then authorized this
-  authority-only update through dev. Receipt UTF-8 SHA-256:
-  `06a9d2fe9b1d1406f6f8e04c23a9ca031133b9fae24b0683403ec2c6cae55270`.
-  This serialization adds no retirement or risk terms to that approval.
-  Dependent runtime requires the supersession merged into its base.
+- Decision source: the Owner replies of `2026-10-12` quoted in the Revision 42
+  entry above, which states what each quotation leaves out. The receipt and
+  JSON below reproduce all nine approved fields without translation or
+  additional terms. The runtime that realizes this outcome merged before this
+  record (pull request `#1020`); this amendment supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `3d1ec79f071f7f6f5ea1c407853d8550df2491085954f253f1b00aa9cb62eb44`.
 - Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-026`.
+
+```text
+PRODUCT_DECISION
+Concern: web.similarity-alignment.review-presentation
+Scenario revision: 3
+Choice: A / DOCKED-REVIEW-AT-EVERY-WIDTH
+Rationale: 候補の番号はrecordごとに振り直されて図上の位置と対応せず、浮動panelは候補を隠すため、reviewをすべての幅でResult内に固定する（広い幅では図の右、狭い幅では図の下）。Apply後の並びをrecordごとの帯で示し、図上では番号の代わりにリング・矢印・reference線で候補を示し、選択が必要なrecordを先頭に置く。
+Must preserve: PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、Issue #598で承認済みの排他的Keep/right/left/Custom、referenceを含むselected known-strand anchorsの方向選択と各recordのbefore/after矢印、unknown/skipped/missing/unusableの理由付き不変、canvas操作（図上の候補選択と手動pan/zoom）、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。すべての幅で、review開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisableし、開始時に開いていたEditorは終了時に同じtabで開き直す。review中はfeature popupを隠し、終了時（Cancel・閉じる・Escape・Apply成功）に戻す。review中、図のクリックはpopupを開かず、切り替えず、閉じない。検索のOpenは表示位置を動かしてpopupの対象を切り替え、そのpopupは終了時に表示する。review開始時に図を残りの領域へFitし、終了時に開始前のzoomと位置へ戻す。review中に保存したSessionとApplyのHistoryには開始前のzoomと位置を残す。リング・矢印・reference線・帯・draftはResult・download・Sessionに混入しない。非モーダルcanvasを維持する。
+May retire: review panelの自由drag（すべての幅）、review中にEditorを同時openする継続（すべての幅）、review中にfeature popupを表示する継続、review中に図のクリックでpopupを開く・切り替える継続、候補の番号バッジ、review中に変えたzoomと位置を終了後に残すこと。これ以外のPD-OI-035/039の独立要求とIssue #598の承認済み4決定は退役しない。
+Accepted residual risk: 広い幅でもreview中はEditorとfeature popupを使えず、panelを動かせない。review中に変えたzoomと位置は終了時に失われる。候補は番号ではなく名前・座標・図上のリングで見分けるため、同名の候補は座標と図上の位置で区別する必要がある。
+Owner: satoshikawato
+Decision date: 2026-10-12
+```
 
 ```json
 {
   "concern": "web.similarity-alignment.review-presentation",
-  "scenarioRevision": 2,
-  "choice": "A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH",
-  "rationale": "狭いPreviewでもalignment候補をcanvasで確認できるよう、reviewを図の下段に固定し、候補比較へ操作を集中させる。表示方向はIssue #598のKeep/right/left/Customへ統一し、reference相対のMatch操作による結果との混同を避ける。",
-  "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、Issue #598で承認済みの排他的Keep/right/left/Custom、referenceを含むselected known-strand anchorsの方向選択と各recordのbefore/after矢印、unknown/skipped/missing/unusableの理由付き不変、canvas操作、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。狭いreview開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisable、終了後は明示reopen可能。wideのdragと非モーダルcanvasを維持する。",
-  "mayRetire": "旧Match reference direction checkbox・flag・操作affordance。狭いPreviewでreviewを自由にdragする操作、およびreview中にEditorを同時openする継続。これ以外のPD-OI-035/039の独立要求とIssue #598の承認済み4決定は退役しない。",
-  "acceptedResidualRisk": "狭いreviewではlist scrollが増え、自由に位置を動かせなくなる。開始時Editorは閉じるがtabは保持し、終了後再openできる。位置変更で候補draftやResultを変えないことをbrowserで確認する。旧Match利用者はright/leftまたはCustomで表示方向を明示的に選ぶ必要がある。",
+  "scenarioRevision": 3,
+  "choice": "A / DOCKED-REVIEW-AT-EVERY-WIDTH",
+  "rationale": "候補の番号はrecordごとに振り直されて図上の位置と対応せず、浮動panelは候補を隠すため、reviewをすべての幅でResult内に固定する（広い幅では図の右、狭い幅では図の下）。Apply後の並びをrecordごとの帯で示し、図上では番号の代わりにリング・矢印・reference線で候補を示し、選択が必要なrecordを先頭に置く。",
+  "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、Issue #598で承認済みの排他的Keep/right/left/Custom、referenceを含むselected known-strand anchorsの方向選択と各recordのbefore/after矢印、unknown/skipped/missing/unusableの理由付き不変、canvas操作（図上の候補選択と手動pan/zoom）、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。すべての幅で、review開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisableし、開始時に開いていたEditorは終了時に同じtabで開き直す。review中はfeature popupを隠し、終了時（Cancel・閉じる・Escape・Apply成功）に戻す。review中、図のクリックはpopupを開かず、切り替えず、閉じない。検索のOpenは表示位置を動かしてpopupの対象を切り替え、そのpopupは終了時に表示する。review開始時に図を残りの領域へFitし、終了時に開始前のzoomと位置へ戻す。review中に保存したSessionとApplyのHistoryには開始前のzoomと位置を残す。リング・矢印・reference線・帯・draftはResult・download・Sessionに混入しない。非モーダルcanvasを維持する。",
+  "mayRetire": "review panelの自由drag（すべての幅）、review中にEditorを同時openする継続（すべての幅）、review中にfeature popupを表示する継続、review中に図のクリックでpopupを開く・切り替える継続、候補の番号バッジ、review中に変えたzoomと位置を終了後に残すこと。これ以外のPD-OI-035/039の独立要求とIssue #598の承認済み4決定は退役しない。",
+  "acceptedResidualRisk": "広い幅でもreview中はEditorとfeature popupを使えず、panelを動かせない。review中に変えたzoomと位置は終了時に失われる。候補は番号ではなく名前・座標・図上のリングで見分けるため、同名の候補は座標と図上の位置で区別する必要がある。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-26"
+  "decisionDate": "2026-10-12"
 }
 ```
 
@@ -2171,35 +2801,46 @@ Decision date: 2026-10-04
 ### PD-OI-042: Specific-color caption disambiguation
 
 - Concern key: `styles.specific-color-caption-multiplicity`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-042`, scenario revision `1`
+  (`A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS`
-- Normative outcome: 同 caption・異色 rule を受け付け、全色に lowercase normalized hex を付けた caption を canonical rule として採用する（例 Transporter [#112233] / Transporter [#445566]）。同名同色は共有、空 caption は凡例なし。既存 literal caption/legend key に衝突する場合は予約後に決定的な追加 suffix で区別。first/last-wins は廃止。各実際に使用された色を別の solid 凡例行で示す。
-- User access / feedback: import/manual edit の正常完了時に caption 変更を通知。利用者は生成した solid 行を既存 editor から編集できる。
-- Session / regeneration: admitted caption は普通の文字列として保存。Load は preview/draft を保ち自動 Generate しない。過去の同名異色 draft は次の rule edit/Generate の通常 preparation で通知付き正規化。
-- Export / artifact: 新 TSV は区別した canonical caption。SVG/PNG/PDF は各色の solid 行。元ファイルの同名 caption のままの lossless 復元は約束しない。
-- Failure / recovery: 自動区別後すぐ図を使える。必要なら caption を編集して再生成。stale/preparation failure は直前 rules/Result に戻す。
-- Approval receipt: 「すべて推奨案で承認します。」, selecting exactly this
-  complete Choice A outcome, approved by `satoshikawato` on `2026-09-26`.
-- Decision source: The complete outcome and `PRODUCT_DECISION` receipt in
-  [`APPROVED_PRODUCT_DECISIONS.md`](./issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md),
-  reproduced without inferred rationale, preservation, retirement, or risk
-  terms. This is an inert serialization in the existing static authority;
-  it cannot authorize dependent runtime until merged into its base.
-- Acceptance IDs: `CLR-01`, `CLR-02`, `CLR-03`, `CLR-04`, `CLR-05`; their definitions remain owned by
-  [`MASTER_PLAN.md`](./issue-600-implementation-20260926/MASTER_PLAN.md).
+- Selected outcome: `B / NUMBERED-NAMES`, as the Choice field of the receipt
+  below states it
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-13` quoted verbatim in the
+  Revision 47 entry above. The receipt and JSON below reproduce all nine
+  supplied fields without translation or additional terms. The runtime,
+  tests, and documentation that implement it merge with it (static Product
+  Contract co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `506a9f6df4ebd2536a70714ff666ccf1e1acaffa0eb17ac78b115d2b0766350b`.
+
+```text
+PRODUCT_DECISION
+Concern: styles.specific-color-caption-multiplicity
+Scenario revision: 2
+Choice: B / NUMBERED-NAMES。同じ名前で見本（塗りと線）が同じ行は 1 つの凡例行にまとめる。同じ名前で見本が違う行が 2 つ以上描かれるときは、その全部の名前に、凡例に並ぶ順で (1), (2), … を付ける（例 Packaging (1) / Packaging (2)）。描画が名付けた行（feature type、other …、track）と同じ名前の rule の行にも同じ規則を使う（例 tRNA (1) / tRNA (2)）。番号は凡例に描く名前だけに付け、rule の caption は書かれたとおりに保つ。
+Rationale: 凡例の名前に色の ID を付けない。名前を区別する仕組みは番号付けの 1 つだけにする。利用者が書いた名前を gbdraw が書き換えない。
+Must preserve: feature の色、rule の順序と precedence、同名同色の共有、空 caption は凡例なし、使われていない rule を凡例に出さないこと、使った色をすべて凡例に示すこと、Undo/Redo、Session と Generate での保持、CLI・Python API・Web で同じ規則。
+May retire: 名前に hex suffix を付ける区別（同名異色の caption、描画が名付けた行と同じ名前の rule）。rule の caption の書き換えとその通知（Updated N specific-color caption(s) to distinguish their colors.）。区別済みの caption を色表の TSV に書き出すこと（書かれたとおりの caption を書き出す）。
+Accepted residual risk: 番号は凡例に並ぶ順なので、行が増える・減る・並び替わると番号が変わる。1 行だけになった名前は番号なしに戻る。保存済みの Session と色表で、caption の末尾がその rule 自身の色の ID のとき（例: 色が #ffe700 の rule の Packaging [#ffe700]）は、読み込むときにその ID を外す。利用者が自分でその形の名前を書いていた場合も外れる。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
 
 ```json
 {
   "concern": "styles.specific-color-caption-multiplicity",
-  "scenarioRevision": 1,
-  "choice": "A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS",
-  "rationale": "近い色を使う rule を拒否せず、実際の各色を凡例に表示する。今回は既存 solid 行を再利用する自動 caption 区別を採用し、複数 swatch 用の renderer・editor・保存形式を追加せずに fresh/live/native の意味を揃える。",
-  "mustPreserve": "feature 色、rule 順序/precedence、同名同色共有、single-color caption、unused rule の凡例除外、既存 solid editor・保存 preview・failure/History 契約。 rule order/regex/precedence/visibility を変えない。使用色の忠実な図示、stable identity、file/manual provenance、Result rollback、既存 SVG sanitizer を維持。",
-  "mayRetire": "caption 衝突による Web 拒否、過去の last-wins/上書き。退役は specific-color rule の同名異色 scope に限定。",
-  "acceptedResidualRisk": "凡例が長くなり元の同名文字列は変わる。multi-swatch grouping を望む利用者には複数行になる。hex suffix、既存 edit、layout 再計測で扱いを明確にする。",
+  "scenarioRevision": 2,
+  "choice": "B / NUMBERED-NAMES。同じ名前で見本（塗りと線）が同じ行は 1 つの凡例行にまとめる。同じ名前で見本が違う行が 2 つ以上描かれるときは、その全部の名前に、凡例に並ぶ順で (1), (2), … を付ける（例 Packaging (1) / Packaging (2)）。描画が名付けた行（feature type、other …、track）と同じ名前の rule の行にも同じ規則を使う（例 tRNA (1) / tRNA (2)）。番号は凡例に描く名前だけに付け、rule の caption は書かれたとおりに保つ。",
+  "rationale": "凡例の名前に色の ID を付けない。名前を区別する仕組みは番号付けの 1 つだけにする。利用者が書いた名前を gbdraw が書き換えない。",
+  "mustPreserve": "feature の色、rule の順序と precedence、同名同色の共有、空 caption は凡例なし、使われていない rule を凡例に出さないこと、使った色をすべて凡例に示すこと、Undo/Redo、Session と Generate での保持、CLI・Python API・Web で同じ規則。",
+  "mayRetire": "名前に hex suffix を付ける区別（同名異色の caption、描画が名付けた行と同じ名前の rule）。rule の caption の書き換えとその通知（Updated N specific-color caption(s) to distinguish their colors.）。区別済みの caption を色表の TSV に書き出すこと（書かれたとおりの caption を書き出す）。",
+  "acceptedResidualRisk": "番号は凡例に並ぶ順なので、行が増える・減る・並び替わると番号が変わる。1 行だけになった名前は番号なしに戻る。保存済みの Session と色表で、caption の末尾がその rule 自身の色の ID のとき（例: 色が #ffe700 の rule の Packaging [#ffe700]）は、読み込むときにその ID を外す。利用者が自分でその形の名前を書いていた場合も外れる。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-26"
+  "decisionDate": "2026-10-13"
 }
 ```
 
@@ -3046,19 +3687,68 @@ Decision date: 2026-09-30
 ### PD-OI-061: Legend rename collisions for every entry
 
 - Concern key: `web.legend.rename-collision`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-061`, scenario revision `1` (`A / DIALOG-FOR-ALL-ENTRIES`).
+- Scenario revision: `5`
+- Supersedes: `PD-OI-061`, scenario revision `4`. Scenario revision `5`
+  keeps the outcome `B / MERGE-SAME-FEATURE-TYPE-ONLY`, the choices, and the
+  conditions of **Merge**, and retires the naming in which the original row
+  keeps its name without a number and only the renamed row gets a numbered
+  name. Scenario revision `4`
+  keeps the outcome `B / MERGE-SAME-FEATURE-TYPE-ONLY` and the choice names,
+  retires the scenario-2 preservation term
+  「衝突先が色ルールの caption のときの PD-OI-042 の区別」, and adds the outcome of a
+  pick from the list under the feature popup's **Legend name**. Scenario
+  revision `3` superseded scenario revision `2` only by renaming the two
+  choices of the Legend Name Conflict dialog. Scenario revision `2`
+  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`) superseded scenario revision `1`
+  (`A / DIALOG-FOR-ALL-ENTRIES`).
 - Status: `ACCEPTED`
-- Selected outcome: `B / MERGE-SAME-FEATURE-TYPE-ONLY`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Owner replies of `2026-10-06` quoted verbatim in the
-  Revision 32 entry above. The Owner approved the receipt text below as
-  written ("OKです"). Dependent runtime (OV-62) is changed in the same pull
-  request, by the static Product Contract co-change route; this record supplies
-  no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Selected outcomes: `B / MERGE-SAME-FEATURE-TYPE-ONLY` (scenario revision
+  `2`, and scenario revision `4` with the names of color rules and the
+  popup's list), the label change of scenario revision `3`, and the naming of
+  **Keep both** of scenario revision `5`; the receipts of scenario revisions
+  `3` and `5` name no choice code
+- Normative outcome: exactly the four approved `PRODUCT_DECISION` receipts
+  and their nine-field JSON representations below, read together, and the
+  Owner's Replies 4, 5, and 6 of the Revision 49 entry with their questions.
+  Where the scenario-5 receipt differs from an earlier receipt, the
+  scenario-5 receipt governs: **Keep both** keeps the typed name, and every
+  row of that name is numbered in legend order. Where the scenario-4 receipt
+  differs from an earlier receipt, the scenario-4 receipt
+  governs: a rename onto the name of a color rule asks the same dialog as a
+  rename onto any other name, and the scenario-2 preservation of the
+  `PD-OI-042` naming for such a target is retired. Where the scenario-2
+  receipt names **Suffix** and **Merge**, it means the choices now labelled
+  `Keep both: name it "<name 2>"` and `Merge into "<name>"`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-06`
+  quoted verbatim in the Revision 32 entry above. The Owner approved the
+  receipt text below as written ("OKです"). Dependent runtime (OV-62) is
+  changed in the same pull request, by the static Product Contract co-change
+  route; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `783436b02c70f043f89dc07b4bf8d56e0869e996507f72fedbbecd0301c8f322`.
+- Decision source (scenario revision `3`): the Owner replies of `2026-10-11`
+  quoted verbatim in the Revision 40 entry above. The second receipt and JSON
+  below reproduce the confirmed fields without translation or additional
+  terms. The runtime that shows the new names merges with it (static Product
+  Contract co-change).
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `eb19efb8436cfee30d6955f19fc9b50433c24b5112ef20a7088d4a988a3f5da2`.
+- Decision source (scenario revision `4`): the Owner replies of `2026-10-13`
+  quoted verbatim in the Revision 45 entry above. The third receipt and JSON
+  below reproduce all nine supplied fields without translation or additional
+  terms. The runtime and tests that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `4`; UTF-8, excluding the final newline):
+  `3f96ff5e0e94f2689233e2bde57b17ff945130e3ad92f04070eced277d80bf74`.
+- Decision source (scenario revision `5`): the Owner replies of `2026-10-13`
+  quoted verbatim in the Revision 49 entry above. The fourth receipt and JSON
+  below reproduce all nine supplied fields without translation or additional
+  terms. The runtime, tests, and documentation that implement it merge with
+  it (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (scenario revision `5`; UTF-8, excluding the final newline):
+  `fe82de9744104885fea0d9f44209565f879373c6b9462ae6f44df99f06247f63`.
 - Acceptance contracts: `OIC-006`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -3087,6 +3777,93 @@ Decision date: 2026-10-06
   "acceptedResidualRisk": "別の feature type の項目に同じ名前を付けたいときは、Suffix の付いた名前（例: \"CDS (1)\"）になる。描画が名付けた項目（例: \"other proteins\"）は、その feature type が分かるまで Suffix と Cancel だけを示す。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-06"
+}
+```
+
+Scenario revision `3` receipt, confirmed by `satoshikawato` on `2026-10-11`:
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.rename-collision
+Scenario revision: 3
+Choice: Legend Name Conflict choice "Suffix" -> "Keep both: name it "<name 2>"" (shows the resulting name); "Merge" は `Merge into existing "<name>" and adopt its color` から `Merge into "<name>"` に変える（引き継ぐ色はボタンの色見本で示す）。選択肢と効果は変えない。
+Rationale: UX-A10 (show what the suffix is).
+Must preserve: Options and effects unchanged.
+May retire: the old visible labels only.
+Accepted residual risk: older docs/videos show the old labels.
+Owner: satoshikawato
+Decision date: 2026-10-11
+```
+
+```json
+{
+  "concern": "web.legend.rename-collision",
+  "scenarioRevision": 3,
+  "choice": "Legend Name Conflict choice \"Suffix\" -> \"Keep both: name it \"<name 2>\"\" (shows the resulting name); \"Merge\" は `Merge into existing \"<name>\" and adopt its color` から `Merge into \"<name>\"` に変える（引き継ぐ色はボタンの色見本で示す）。選択肢と効果は変えない。",
+  "rationale": "UX-A10 (show what the suffix is).",
+  "mustPreserve": "Options and effects unchanged.",
+  "mayRetire": "the old visible labels only.",
+  "acceptedResidualRisk": "older docs/videos show the old labels.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
+}
+```
+
+Scenario revision `4` receipt, confirmed by `satoshikawato` on `2026-10-13`:
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.rename-collision
+Scenario revision: 4
+Choice: B / MERGE-SAME-FEATURE-TYPE-ONLY。色ルールの名前も同じ扱いにする。Feature のポップアップの一覧（Choose from color rules…）から選んだ項目には、名前と色の両方を引き継いで入る。
+Rationale: 凡例の名前に色の ID を付けない。一覧から既存の項目を選ぶのは「その項目に入れる」操作なので、色も引き継いで 1 つの項目にまとめる。名前を入力して既存の名前に変えたときは、衝突先が色ルールの名前でも、ほかの項目と同じ選択のダイアログ（Merge into "<name>" / Keep both: name it "<name> (1)" / Cancel）を示す。
+Must preserve: 衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと、Merge は同じ track の同じ feature type の項目どうしだけ、This feature only / All N の範囲の選択、Undo/Redo、Generate と Session での保持。
+May retire: 衝突先が色ルールの caption のときに確認なしで名前だけを変え、PD-OI-042 の色 ID で区別する動作。一覧に別の feature type の色ルールを示すこと。
+Accepted residual risk: 一覧から選ぶと feature の色が変わる（Undo で戻せる）。図に描かれていない色ルール（例: Connector）を選んだときも、そのルールの色になる。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.legend.rename-collision",
+  "scenarioRevision": 4,
+  "choice": "B / MERGE-SAME-FEATURE-TYPE-ONLY。色ルールの名前も同じ扱いにする。Feature のポップアップの一覧（Choose from color rules…）から選んだ項目には、名前と色の両方を引き継いで入る。",
+  "rationale": "凡例の名前に色の ID を付けない。一覧から既存の項目を選ぶのは「その項目に入れる」操作なので、色も引き継いで 1 つの項目にまとめる。名前を入力して既存の名前に変えたときは、衝突先が色ルールの名前でも、ほかの項目と同じ選択のダイアログ（Merge into \"<name>\" / Keep both: name it \"<name> (1)\" / Cancel）を示す。",
+  "mustPreserve": "衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと、Merge は同じ track の同じ feature type の項目どうしだけ、This feature only / All N の範囲の選択、Undo/Redo、Generate と Session での保持。",
+  "mayRetire": "衝突先が色ルールの caption のときに確認なしで名前だけを変え、PD-OI-042 の色 ID で区別する動作。一覧に別の feature type の色ルールを示すこと。",
+  "acceptedResidualRisk": "一覧から選ぶと feature の色が変わる（Undo で戻せる）。図に描かれていない色ルール（例: Connector）を選んだときも、そのルールの色になる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+Scenario revision `5` receipt, confirmed by `satoshikawato` on `2026-10-13`:
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.rename-collision
+Scenario revision: 5
+Choice: Legend Name Conflict の "Keep both" を選ぶと、名前を変えた行は入力した名前をそのまま持ち、同じ名前の行はすべて凡例に並ぶ順で番号付きになる（"<name> (1)" と "<name> (2)"）。ボタンは今の形のまま、名前を変えた行が受け取る名前を示す（例 Keep both: name it "<name> (2)"）。ダイアログの説明に、もう一方の行の新しい名前を 1 文で示す（The existing "<name>" becomes "<name> (1)".）。番号付きで表示されている名前（例 "<name> (2)"）を入力したときは、その行を衝突先として同じダイアログを示す。選択肢（Merge / Keep both / Cancel）と Merge の条件は変えない。
+Rationale: 凡例の名前の番号付けを 1 つの仕組みに揃える。
+Must preserve: scenario revision 4 の内容すべて。
+May retire: 元の行を番号なしのまま残し、名前を変えた行だけを "<name> (1)" にする名前の付け方。
+Accepted residual risk: 以前の付け方で保存した名前（例 "CDS (1)"）は、その文字列のまま読む。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.legend.rename-collision",
+  "scenarioRevision": 5,
+  "choice": "Legend Name Conflict の \"Keep both\" を選ぶと、名前を変えた行は入力した名前をそのまま持ち、同じ名前の行はすべて凡例に並ぶ順で番号付きになる（\"<name> (1)\" と \"<name> (2)\"）。ボタンは今の形のまま、名前を変えた行が受け取る名前を示す（例 Keep both: name it \"<name> (2)\"）。ダイアログの説明に、もう一方の行の新しい名前を 1 文で示す（The existing \"<name>\" becomes \"<name> (1)\".）。番号付きで表示されている名前（例 \"<name> (2)\"）を入力したときは、その行を衝突先として同じダイアログを示す。選択肢（Merge / Keep both / Cancel）と Merge の条件は変えない。",
+  "rationale": "凡例の名前の番号付けを 1 つの仕組みに揃える。",
+  "mustPreserve": "scenario revision 4 の内容すべて。",
+  "mayRetire": "元の行を番号なしのまま残し、名前を変えた行だけを \"<name> (1)\" にする名前の付け方。",
+  "acceptedResidualRisk": "以前の付け方で保存した名前（例 \"CDS (1)\"）は、その文字列のまま読む。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
 }
 ```
 
@@ -3330,20 +4107,35 @@ Decision date: 2026-09-30
 ### PD-OI-067: Per-record inferred Linear definitions
 
 - Concern key: `web.linear.file-default-definition`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-067`, scenario revision `1`
+  (`B / PER-RECORD-INFERRED-DEFINITION`), only for the names area of the
+  card of a File with one record; every scenario-1 term stays in force.
 - Status: `ACCEPTED`
-- Selected outcome: `B / PER-RECORD-INFERRED-DEFINITION`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the complete `D-12` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+- Selected outcomes: `B / PER-RECORD-INFERRED-DEFINITION` (scenario revision
+  `1`) and
+  `B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card`
+  (scenario revision `2`)
+- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  their nine-field JSON representations below, read together, and the Owner
+  selection of `2026-10-12` recorded below them.
+- Decision source (scenario revision `1`): the complete `D-12` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
   `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
   Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
   JSON below reproduce all nine supplied fields without translation or
   additional terms. This record does not supersede another decision.
   Dependent runtime requires this authority merged into its base; this
   amendment supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `daf932cb4892019717ea3ae082d1c799b58a436f909738fbc6239df5d43d265b`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-11`
+  and `2026-10-12` quoted in the Revision 41 entry above, which states what
+  each quotation leaves out. The second
+  receipt and JSON below reproduce all nine fields of the approved draft
+  without translation or additional terms. The runtime that implements it merges with
+  it (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `93b14a1df028f81ff573dc9c1a60f312b8160e6a7416fe14d0bce8c85be67ee2`.
 - Acceptance contracts: `OIC-015`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -3374,6 +4166,44 @@ Decision date: 2026-09-30
   "decisionDate": "2026-09-30"
 }
 ```
+
+Scenario revision `2` receipt (the draft approved by `satoshikawato` on
+`2026-10-11`; Reply 2 of the Revision 41 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.file-default-definition
+Scenario revision: 2
+Choice: B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card
+Rationale: record が 1 つの File では「この File の全 record の名前」と record の名前が同じものを指すので、2 か所に分けず File カードに record の名前を直接出す（UX 監査 UX-C06）。
+Must preserve: revision 1 の Must preserve すべて（record ごとの Definition の編集、File に入力した Definition を全 record に適用すること、全 record が同じ生物のときの表示、Reset で推定値に戻ること、Session の往復、Circular の挙動、優先順位 record → file → 推定値）。record が 2 つ以上の File では今の File 全体の名前欄をそのまま出す。
+May retire: record が 1 つの File で、値の入っていない File 全体の名前欄（Organism / strain, Subtitle）を表示すること。
+Accepted residual risk: record が 1 つの File で File 全体の名前を入力するには、File の値の入った Session を読み込む以外の入口がなくなる（record の欄で同じ結果になる）。古いドキュメントと動画は今の配置を示す。
+Owner: satoshikawato
+Decision date: 2026-10-11
+```
+
+```json
+{
+  "concern": "web.linear.file-default-definition",
+  "scenarioRevision": 2,
+  "choice": "B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card",
+  "rationale": "record が 1 つの File では「この File の全 record の名前」と record の名前が同じものを指すので、2 か所に分けず File カードに record の名前を直接出す（UX 監査 UX-C06）。",
+  "mustPreserve": "revision 1 の Must preserve すべて（record ごとの Definition の編集、File に入力した Definition を全 record に適用すること、全 record が同じ生物のときの表示、Reset で推定値に戻ること、Session の往復、Circular の挙動、優先順位 record → file → 推定値）。record が 2 つ以上の File では今の File 全体の名前欄をそのまま出す。",
+  "mayRetire": "record が 1 つの File で、値の入っていない File 全体の名前欄（Organism / strain, Subtitle）を表示すること。",
+  "acceptedResidualRisk": "record が 1 つの File で File 全体の名前を入力するには、File の値の入った Session を読み込む以外の入口がなくなる（record の欄で同じ結果になる）。古いドキュメントと動画は今の配置を示す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
+}
+```
+
+Owner selection of `2026-10-12` within scenario revision `2` (Reply 3 of the
+Revision 41 entry above; not a receipt field):
+
+- A File with one record that holds a File-level name: option B of the
+  question 「A か B か」, whose rule the question gave as
+  「カードに出す名前のブロックは常に 1 つ。File の名前があるあいだは dev と同じカード（File のブロックがカード、レコードの欄は Record options の中）で、File の名前が空ならレコードの欄をカードに出す。」
+  In it `dev` is the Web app before this change.
 
 ### PD-OI-068: GFF3+FASTA record universe
 
@@ -4167,21 +4997,36 @@ Decision date: 2026-09-30
 ### PD-OI-085: Feature-popup record rotation Apply on Generate
 
 - Concern key: `web.feature-popup.record-rotation-apply-on-generate`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-085`, scenario revision `1` (`A / APPLY_ON_GENERATE`),
+  only by renaming the two rotation buttons; every scenario-1 term stays in
+  force.
 - Status: `ACCEPTED`
-- Selected outcome: `A / APPLY_ON_GENERATE`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Owner answers of `2026-10-04` quoted verbatim in the
-  Revision 30 entry above (`OD-2`, `OD-3`, `OD-4`), and Appendix A of
+- Selected outcomes: `A / APPLY_ON_GENERATE` (scenario revision `1`) and
+  `RENAME_ROTATION_APPLY_BUTTONS` (scenario revision `2`)
+- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  their nine-field JSON representations below, read together. Where the
+  scenario-1 receipt names **Apply on Generate** and **Apply and regenerate**,
+  it means the buttons now labelled **Apply when I Generate** and
+  **Apply now**.
+- Decision source (scenario revision `1`): the Owner answers of `2026-10-04`
+  quoted verbatim in the Revision 30 entry above (`OD-2`, `OD-3`, `OD-4`), and
+  Appendix A of
   [`POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md`](./POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md).
   The receipt fields restate those answers and the plan presented in that
   session; the Owner did not separately review the receipt wording. This record
   does not supersede another decision; `PD-OI-032` retains its scope. Dependent
   runtime requires this authority merged into its base; this amendment supplies
   no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `38f89876744c098aa5695b570a0250c6f672272594aafc6c1e1e739b69712f40`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-11`
+  quoted verbatim in the Revision 40 entry above. The second receipt and JSON
+  below reproduce the confirmed fields without translation or additional
+  terms. The runtime that shows the new names merges with it (static Product
+  Contract co-change).
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `2942593046d32fe65bc3ed1c858fc57073518154adaa961be45e2f0b9b23c66d`.
 - Acceptance contracts: `OIC-021`, `OIC-024`. These obligations and the
   complete selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -4210,6 +5055,35 @@ Decision date: 2026-10-04
   "acceptedResidualRisk": "予約したまま Generate しないと、表示中の Result と設定がずれたままになる。既存の pending Generate 通知と popup での予約値表示で補う。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-04"
+}
+```
+
+Scenario revision `2` receipt, confirmed by `satoshikawato` on `2026-10-11`:
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-popup.record-rotation-apply-on-generate
+Scenario revision: 2
+Choice: RENAME_ROTATION_APPLY_BUTTONS — "Apply on Generate" -> "Apply when I Generate"; "Apply and regenerate" -> "Apply now"
+Rationale: 「regenerate」が Generate ボタンと紛らわしい（UX 監査 UX-B09）。ボタン名でそれぞれの結果を示す。
+Must preserve: 両ボタンの動作は変えない（Apply when I Generate は sidebar と同じ未適用の record display 設定に予約するだけで Result を再生成しない。Apply now は最後の committed request から対象 record だけの candidate を作り、他の record の予約は予約のまま残す）。PD-OI-032 の対象特定・anchor・offset・orientation・feature-end・適用前 preview・理由表示。各ボタンのアクセシブル名は表示名と同じ。
+May retire: 旧ボタン名「Apply on Generate」「Apply and regenerate」の表示のみ（動作は退役しない）。
+Accepted residual risk: 旧ボタン名で書かれた既存の資料（v0.14.0 リリースノートの記述、収録済みのチュートリアル動画）と画面の表記が一致しない。
+Owner: satoshikawato
+Decision date: 2026-10-11
+```
+
+```json
+{
+  "concern": "web.feature-popup.record-rotation-apply-on-generate",
+  "scenarioRevision": 2,
+  "choice": "RENAME_ROTATION_APPLY_BUTTONS — \"Apply on Generate\" -> \"Apply when I Generate\"; \"Apply and regenerate\" -> \"Apply now\"",
+  "rationale": "「regenerate」が Generate ボタンと紛らわしい（UX 監査 UX-B09）。ボタン名でそれぞれの結果を示す。",
+  "mustPreserve": "両ボタンの動作は変えない（Apply when I Generate は sidebar と同じ未適用の record display 設定に予約するだけで Result を再生成しない。Apply now は最後の committed request から対象 record だけの candidate を作り、他の record の予約は予約のまま残す）。PD-OI-032 の対象特定・anchor・offset・orientation・feature-end・適用前 preview・理由表示。各ボタンのアクセシブル名は表示名と同じ。",
+  "mayRetire": "旧ボタン名「Apply on Generate」「Apply and regenerate」の表示のみ（動作は退役しない）。",
+  "acceptedResidualRisk": "旧ボタン名で書かれた既存の資料（v0.14.0 リリースノートの記述、収録済みのチュートリアル動画）と画面の表記が一致しない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
 }
 ```
 
@@ -4308,18 +5182,32 @@ Decision date: 2026-10-09
 ### PD-OI-089: Default colors a user edits win over the palette
 
 - Concern key: `web.default-colors-over-palette`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-089`, scenario revision `1`
+  (`A / USER_DEFAULT_COLORS_OVER_PALETTE`), only by renaming one option of
+  the Color/Stroke Change Scope dialog; every scenario-1 term stays in force.
 - Status: `ACCEPTED`
-- Selected outcome: `A / USER_DEFAULT_COLORS_OVER_PALETTE`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Owner replies of `2026-10-09` quoted verbatim in the
-  Revision 36 entry above. The receipt and JSON below reproduce all nine
-  fields without translation or additional terms. This record does not
-  supersede or narrow another decision. The runtime that implements it merges
-  with it (static Product Contract co-change).
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Selected outcomes: `A / USER_DEFAULT_COLORS_OVER_PALETTE` (scenario revision
+  `1`) and the label change of scenario revision `2`, whose receipt names no
+  choice code
+- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  their nine-field JSON representations below, read together. Where the
+  scenario-1 receipt names **Apply to all** on a Legend row, it means the
+  option now labelled `Legend item "<legend name>" (N)`.
+- Decision source (scenario revision `1`): the Owner replies of `2026-10-09`
+  quoted verbatim in the Revision 36 entry above. The receipt and JSON below
+  reproduce all nine fields without translation or additional terms. This
+  record does not supersede or narrow another decision. The runtime that
+  implements it merges with it (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `131d1bb0cacdcdc031387e6bff6c35672c4cb468a64220dba04dc70460e0ef78`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-11`
+  quoted verbatim in the Revision 40 entry above. The second receipt and JSON
+  below reproduce the confirmed fields without translation or additional
+  terms. The runtime that shows the new name merges with it (static Product
+  Contract co-change).
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `68eb7c40ac71b1363789062e85b82f7171603a9a026a331fc4019d862346c07d`.
 - Acceptance contracts: `OIC-029`. These obligations and the complete selected
   outcome are jointly required.
 
@@ -4347,6 +5235,35 @@ Decision date: 2026-10-09
   "acceptedResidualRisk": "利用者の色は保存せず導出するので、新しいパレットの色と同じになった色はそれ以降パレットに従う。パレットの定義が版で変わると、以前の既定値と同じ色も利用者の色として数える。Specific color rule と既定の色の feature が同じ色で一つの行にあるときと、その型の feature が一つだけのとき（Apply to all が出ない）は、今までどおり rule を書く。Apply to all は画面にない（非表示や他の record・Result の）その型の feature の色も変える。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-09"
+}
+```
+
+Scenario revision `2` receipt, confirmed by `satoshikawato` on `2026-10-11`:
+
+```text
+PRODUCT_DECISION
+Concern: web.default-colors-over-palette
+Scenario revision: 2
+Choice: Color/Stroke Change Scope option "Apply to all "<legend name>" (N)" on a Legend row -> "Legend item "<legend name>" (N)" under the group heading for features that share it.
+Rationale: UX-A05 (one label per group, no repeated "Apply to all").
+Must preserve: Options and effects unchanged; OIC-029's default-colour line ("Sets the <type> default color …" / "Replaces your <type> default color ■ #hex.") kept verbatim.
+May retire: the old visible labels only.
+Accepted residual risk: older docs/videos show the old labels.
+Owner: satoshikawato
+Decision date: 2026-10-11
+```
+
+```json
+{
+  "concern": "web.default-colors-over-palette",
+  "scenarioRevision": 2,
+  "choice": "Color/Stroke Change Scope option \"Apply to all \"<legend name>\" (N)\" on a Legend row -> \"Legend item \"<legend name>\" (N)\" under the group heading for features that share it.",
+  "rationale": "UX-A05 (one label per group, no repeated \"Apply to all\").",
+  "mustPreserve": "Options and effects unchanged; OIC-029's default-colour line (\"Sets the <type> default color …\" / \"Replaces your <type> default color ■ #hex.\") kept verbatim.",
+  "mayRetire": "the old visible labels only.",
+  "acceptedResidualRisk": "older docs/videos show the old labels.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-11"
 }
 ```
 
@@ -4447,6 +5364,406 @@ Decision date: 2026-10-10
 }
 ```
 
+### PD-OI-092: Settings pane section index
+
+- Concern key: `web.settings-pane.section-index`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-092`, scenario revision `1` (`A / PINNED-ICON-SECTION-INDEX`).
+- Status: `ACCEPTED`
+- Selected outcome: `A / PINNED-ICON-SECTION-INDEX`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
+  Revision 51 entry above. The Owner approved the receipt text below as
+  written. The receipt reproduces its fields without translation or
+  additional terms. Scenario revision `2` keeps the outcome and adds the Font section of the Revision 51 entry to the index. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `0fba5433eeb10e8c606b967f142c4a33b938d23db7fc3d6dc7fde5396e636c92`.
+
+```text
+PRODUCT_DECISION
+Concern: web.settings-pane.section-index
+Scenario revision: 2
+Choice: A / PINNED-ICON-SECTION-INDEX
+Rationale: 設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。図の文字の font の設定は図全体にかかるので、section を 1 つ加えて置く。Titles & Record Labels の Default font size は record label の大きさだけなので、その横に置くと図全体の設定に見えない。
+Must preserve: 〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 13 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔Font section〕図の文字の font の設定（Font）は、Layout と Titles & Record Labels のあいだの新しい section「Font」に置く。目次のアイコンは Aa。〔変えないもの〕Font section を加えること以外の card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。
+May retire: none
+Accepted residual risk: 設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 12、Linear で 13 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture は、目次のアイコンと section が 1 つ増えるので撮り直すまで古い。設定ペインが 1 section ぶん長くなる。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.settings-pane.section-index",
+  "scenarioRevision": 2,
+  "choice": "A / PINNED-ICON-SECTION-INDEX",
+  "rationale": "設定ペインは長く、下の section までのスクロールが長い（Linear で record が 5 つのとき、Labels は 3,909 px、Comparison は 1,972 px 下）。今の縦並びのまま、どの section にも 1 回のクリックで届くようにする。図の文字の font の設定は図全体にかかるので、section を 1 つ加えて置く。Titles & Record Labels の Default font size は record label の大きさだけなので、その横に置くと図全体の設定に見えない。",
+  "mustPreserve": "〔目次〕設定ペインの一番上に、設定をスクロールしても動かない目次の行を置く。目次は section ごとのアイコンのボタンで、card と同じ順に並ぶ。Circular は Input Genomes、Region Annotations、Pairwise Comparisons、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 12 個。Linear は Input Genomes、Comparison、Advanced comparison and layout、Region Annotations、Layout、Font、Titles & Record Labels、Legend、Colors、Features、Labels、Axis & Scale、Dinucleotide content/skew の 13 個。Basic（Input Genomes のすぐ下）と About & Citation は目次に入れない。〔押したとき〕その section が閉じていれば開き、設定の表示範囲の上端までスクロールし（設定の終わり近くの section は、スクロールできるところまで）、キーボードのフォーカスをその section の見出しに移す。目次は section を閉じない。〔名前と印〕ボタンにマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前がボタンの下に浮かび上がる。ボタンのアクセシブル名は「Go to ＜section の名前＞」。表示範囲の上端にある section のボタンに印が付く（押した直後は、次にスクロールするまで押したボタンに印が付く）。〔Font section〕図の文字の font の設定（Font）は、Layout と Titles & Record Labels のあいだの新しい section「Font」に置く。目次のアイコンは Aa。〔変えないもの〕Font section を加えること以外の card の順と中身、既定で開いている section、Generate Diagram が設定の最後の Tab stop で下に固定されていること、設定ペインの幅のドラッグ変更。目次の操作は設定の値、Session、Undo の履歴、図を変えない。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "設定の表示範囲が 44 px 低くなる。Tab stop が Circular で 12、Linear で 13 増える（設定の最初の入力まで Tab が長くなる）。ボタンは 22 × 26 px と小さい。設定ペインを狭めると目次は 2 行になる。スマートフォンの幅では目次は固定されず、設定の先頭に置かれる。設定ペインの上端が写っている Gallery と docs の capture は、目次のアイコンと section が 1 つ増えるので撮り直すまで古い。設定ペインが 1 section ぶん長くなる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+### PD-OI-093: Settings pane display switch and icon rail
+
+- Concern key: `web.settings-pane.display`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-093`, scenario revision `1` (`A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`).
+- Status: `ACCEPTED`
+- Selected outcome: `A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
+  Revision 51 entry above. The Owner approved the receipt text below as
+  written. The receipt reproduces its fields without translation or
+  additional terms. Scenario revision `2` keeps the outcome and adds the Font item of the Revision 51 entry to the icon rail. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `81bf15fcf9788503b438545f62256e6eb72f8e21f9e0f1213245ea3f858316c0`.
+
+```text
+PRODUCT_DECISION
+Concern: web.settings-pane.display
+Scenario revision: 2
+Choice: A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH
+Rationale: 設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。
+Must preserve: 〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。Circular の layout の警告は、列だけのときは Generate の上の印（Layout warning という名前のボタン）になり、その文は Generate Diagram の説明として読み上げられ、印にマウスを載せる、フォーカスする、押す、タップすると表示される（印を押しても Generate は始まらない）。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。
+May retire: none
+Accepted residual risk: Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.settings-pane.display",
+  "scenarioRevision": 2,
+  "choice": "A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH",
+  "rationale": "設定ペインが図の幅を取る（1600 px の窓で 320 px）。図を広く見たいときに、設定をアイコンの列だけ、または 1 つの section だけに絞れるようにする。今の表示に慣れた人のために、既定は今の表示のままにする。図の文字の font の設定のために加えた Font section も、目次と同じ順で列に置く。",
+  "mustPreserve": "〔2 つの表示〕設定ペインは「今の表示（縦に並んだ card と目次の行）」か「アイコンの列の表示（アイコンと短い名前の縦の列と、その横に開いた 1 つの section）」のどちらか。既定は今の表示。目次の行の右端のボタン（Collapse settings to icons）でアイコンの列の表示に、列の一番上のボタン（Expand settings）で今の表示に切り替える。設定の値と section の中身はどちらの表示でも同じ 1 つのもので、切り替えても入力途中の値と section の開閉は変わらない。〔アイコンの列〕列は 60 px、横に開く section は 320 px。項目は上から Input（Input Genomes と Basic。Linear では Comparison を除く）、Linear では Compare（Comparison だけ）と Advanced、Regions、Circular では Compare（Pairwise Comparisons）、Layout、Font、Titles、Legend、Colors、Features、Labels、Axis、GC / skew、一番下に About。項目を押すと、その section を横に開き（閉じていれば開く）、キーボードのフォーカスを見出しに移し、その項目に印を付ける。開いている項目をもう一度押しても開いたまま。Close section のボタンで列だけにし、フォーカスは開いていた項目に戻る。項目にマウスを載せたとき、またはキーボードでフォーカスしたときに、section の名前が項目の右に出る。項目のアクセシブル名は目次と同じ「Go to ＜section の名前＞」。section 自身の開閉は、横に開いた状態でも使える。窓が低くて項目が収まらないときは列がスクロールし、細いスクロールバーが出る。〔切り替えたとき〕アイコンの列の表示にすると、目次で印の付いていた section が横に開く。今の表示に戻すと、開いていた section が設定の一番上に来る（列だけだったときは、スクロール位置はそのまま）。フォーカスは新しい表示の切り替えボタンに移る。Circular と Linear を切り替えたとき、開いていた section と同じ名前の section が新しいモードにあればそれを開いたままにし（Axis & Scale）、無ければ（Compare、Advanced）Input を開く。列だけのときは列だけのまま。〔設定へ案内する操作〕比較のエラーの原因を示す操作、比較の問題で Generate が止まったときの案内、レコードのポップアップから設定の欄へ移る操作、Circular の canvas の設定、Record Labels の表示の設定、色ルールのエラーの Edit pattern は、アイコンの列の表示ではその section を横に開いてから欄にフォーカスする。〔Generate〕Generate Diagram は 1 つのボタンで、どの表示でも設定の最後の Tab stop で、下に固定する。section を開いているときは列と section を合わせた幅、列だけのときは 60 px の正方形（アクセシブル名は Generate Diagram のまま）。処理中はローダーだけを表示する。Circular の layout の警告は、列だけのときは Generate の上の印（Layout warning という名前のボタン）になり、その文は Generate Diagram の説明として読み上げられ、印にマウスを載せる、フォーカスする、押す、タップすると表示される（印を押しても Generate は始まらない）。〔記憶〕選んだ表示（今の表示か、アイコンの列の表示か）だけをブラウザの保存領域に書き、次に開いたときにその表示にする（アイコンの列の表示で開いたときは Input を開く）。開いていた section、設定ペインの幅、設定、ファイルは書かない。Session の保存と読み込み、example の読み込み、Reset Settings は表示を変えない。表示の切り替え、項目、Close section は Undo の履歴に入らない。保存領域が使えないときは既定の表示で動き、メッセージは出さない。〔スマートフォンの幅〕幅 768 px 以下では常に今の表示で、切り替えボタンは出ない。覚えている選択は変えない。〔変えないもの〕今の表示での目次の項目、順、名前、押したときの動き、印、浮かび上がる名前。card の順と中身、既定で開いている section、設定の値と既定値、Session、図。今の表示での設定ペインの幅のドラッグ変更。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "Web アプリが初めてブラウザの保存領域に書く（表示の選択 1 つだけ）。選択はブラウザごと、アドレスごとで、gbdraw gui は起動のたびにポートが変わるため、ローカルではサーバーを止めると選択は消える。アイコンの列の表示で section を開くと図の幅は今より 62 px 狭い（1600 px の窓で 1,228 → 1,166 px。section を閉じると 1,494 px）。アイコンの列の表示では設定ペインの幅をドラッグで変えられない。今の表示の Tab stop が 1 つ増える（切り替えボタン）。Linear の目次のボタンは、切り替えボタンの場所を空けるために幅が 22 px から 21.2 px（スクロールバーが常に出るブラウザでは 20.5 px）になる。列の短い名前のうち Regions、Compare、GC / skew はアクセシブル名に含まれない。列だけのとき、layout の警告は印だけになり、文は印を開くまで見えない。高さ 800 px 以下の窓では列の項目が小さくなる（1280 × 720 で高さ 34〜39 px、名前は 9 px）。さらに低い窓では列がスクロールする（1366 × 650 の Linear で section を開いたとき）。設定へ案内する操作は、今の表示でも 1 つの規則になる（欄がすでに見えていれば動かさず、見えていなければ設定の中央に出す。これまでは操作ごとに違った）。横に開いた section をスクロールすると、右端の部品が Close section のボタンの下を通る。Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。幅が約 1280 px の窓で section を開くと、Review alignment のパネルは図の下に移る。設定ペインが写っている Gallery と docs の capture は、撮り直すまで古い。列の項目が 1 つ（Font）増えるので、低い窓では列がスクロールしやすくなる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+### PD-OI-094: Linear File cards fold to one line
+
+- Concern key: `web.linear.file-card-fold`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / FOLDABLE-FILE-CARD, FOLDED-AFTER-LOAD`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 46 entry
+  above. The Owner approved the receipt text below as written. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base, or merged together
+  with it through the reviewed static Product Contract co-change route; this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `633f30bac2795b4df63eca6f2fc82fedf3a199af14f9eaf4bd7f94bde8f93026`.
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.file-card-fold
+Scenario revision: 1
+Choice: A / FOLDABLE-FILE-CARD, FOLDED-AFTER-LOAD
+Rationale: Linear の File カードは 1 枚が長く、ファイルが増えると Comparison や下の section までのスクロールが長くなる（ファイル 5 つのとき、ファイルの一覧は 1,778 px、Comparison は 1,972 px 下）。カードを 1 行に畳めるようにして、ファイルの一覧を 1 画面で見渡せるようにする（畳むと一覧は 218 px、Comparison は 412 px 下）。
+Must preserve: 〔畳む・開く〕各 File カードの見出しの行を押すとカードを 1 行に畳み、もう一度押すと開く。上下の移動ボタンを押したときは畳まれない。畳んだ行には File の番号、ファイル名、上下の移動ボタンが出る。〔最初の状態〕Session または example を読み込んだとき、ファイルがそろっているカードは畳んだ状態で出る。ファイルのないカードと、GFF3 + FASTA の片方だけのカードは開いている。自分で追加したカードは開いている。ファイルを選んでもカードは畳まれない。〔畳んでも変わらないもの〕カードの中身（ファイル、名前、Depth TSV の割り当て、Record options、レコードの一覧）と設定の値。開いたカードの中身は今と同じ（入力欄からはみ出す長いファイル名だけは、両端で切れる代わりに末尾を「…」で省略する）。畳んだ状態は Session に保存せず、Undo の履歴と図にも入らない。カードを上下に移動すると、畳んだ状態も一緒に動く。〔問題の表示〕畳んだカードに直すべき問題（読み取れなかったファイル、足りないファイル、Gencode required）があるときは、畳んだ行にも出る。設定へ案内する操作（レコードのポップアップの Show in settings）は、行き先のカードを開く。
+May retire: none
+Accepted residual risk: 畳んだカードでは、名前、Depth TSV の割り当て（付いているかどうかを含む）、Record options、レコードの一覧は、開くまで見えない（1 回押す手間が増える）。Session や example を読み込んだ直後はカードが畳まれている。一番狭い設定ペイン（240 px）では、畳んだ行のファイル名は数文字まで省略される。File カードが写っている Gallery と docs の capture は、撮り直すまで見出しの行に開閉の印がない。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.linear.file-card-fold",
+  "scenarioRevision": 1,
+  "choice": "A / FOLDABLE-FILE-CARD, FOLDED-AFTER-LOAD",
+  "rationale": "Linear の File カードは 1 枚が長く、ファイルが増えると Comparison や下の section までのスクロールが長くなる（ファイル 5 つのとき、ファイルの一覧は 1,778 px、Comparison は 1,972 px 下）。カードを 1 行に畳めるようにして、ファイルの一覧を 1 画面で見渡せるようにする（畳むと一覧は 218 px、Comparison は 412 px 下）。",
+  "mustPreserve": "〔畳む・開く〕各 File カードの見出しの行を押すとカードを 1 行に畳み、もう一度押すと開く。上下の移動ボタンを押したときは畳まれない。畳んだ行には File の番号、ファイル名、上下の移動ボタンが出る。〔最初の状態〕Session または example を読み込んだとき、ファイルがそろっているカードは畳んだ状態で出る。ファイルのないカードと、GFF3 + FASTA の片方だけのカードは開いている。自分で追加したカードは開いている。ファイルを選んでもカードは畳まれない。〔畳んでも変わらないもの〕カードの中身（ファイル、名前、Depth TSV の割り当て、Record options、レコードの一覧）と設定の値。開いたカードの中身は今と同じ（入力欄からはみ出す長いファイル名だけは、両端で切れる代わりに末尾を「…」で省略する）。畳んだ状態は Session に保存せず、Undo の履歴と図にも入らない。カードを上下に移動すると、畳んだ状態も一緒に動く。〔問題の表示〕畳んだカードに直すべき問題（読み取れなかったファイル、足りないファイル、Gencode required）があるときは、畳んだ行にも出る。設定へ案内する操作（レコードのポップアップの Show in settings）は、行き先のカードを開く。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "畳んだカードでは、名前、Depth TSV の割り当て（付いているかどうかを含む）、Record options、レコードの一覧は、開くまで見えない（1 回押す手間が増える）。Session や example を読み込んだ直後はカードが畳まれている。一番狭い設定ペイン（240 px）では、畳んだ行のファイル名は数文字まで省略される。File カードが写っている Gallery と docs の capture は、撮り直すまで見出しの行に開閉の印がない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+### PD-OI-095: One naming rule for Legend rows that share a name
+
+- Concern key: `legend.row-name-multiplicity`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: the Choice field of the receipt below, which names no
+  choice code
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-13` quoted verbatim in the
+  Revision 47 entry above. The receipt and JSON below reproduce all nine
+  supplied fields without translation or additional terms. This record does
+  not supersede another decision. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `52dc43606bf87dfd8b1dd53395522fb9d52f43e7b7ac36cd781a3efb8e0db9bc`.
+
+```text
+PRODUCT_DECISION
+Concern: legend.row-name-multiplicity
+Scenario revision: 1
+Choice: 凡例のすべての行に 1 つの規則を使う。同じ名前で見本（塗りと線）が同じ行は 1 つにまとめる。同じ名前で見本が違う行が 2 つ以上描かれるときは、その全部の名前に、凡例に並ぶ順で (1), (2), … を付ける。1 回だけ使う名前には番号を付けない。track の行（GC content、GC skew、Depth、Conservation）と region annotation の行にも使う（例: 同じ label の GC content が 2 つあり、色が同じなら GC content の 1 行、色が違えば GC content (1) / GC content (2)）。
+Rationale: 凡例の名前を区別する仕組みを番号付けの 1 つに揃える。同じ見本の行を 2 つに分けない。
+Must preserve: track と annotation の legend_label、slot の順、見本の色と線、保存済みの Session（0.13.0 を含む）が読めて、凡例の行に付けた編集が同じ track の行に残ること。
+May retire: 同じ label の 2 つ目以降の行だけに (2), (3) を付け、1 つ目を番号なしにする名前の付け方。色が同じでも行を分ける動作。
+Accepted residual risk: 0.13.0 が GC content / GC content (2) と描いた図は、色が違えば GC content (1) / GC content (2) に、色が同じなら GC content の 1 行に変わる。1 行にまとめられた 2 つ目の行に付けていた編集は使われなくなる。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "legend.row-name-multiplicity",
+  "scenarioRevision": 1,
+  "choice": "凡例のすべての行に 1 つの規則を使う。同じ名前で見本（塗りと線）が同じ行は 1 つにまとめる。同じ名前で見本が違う行が 2 つ以上描かれるときは、その全部の名前に、凡例に並ぶ順で (1), (2), … を付ける。1 回だけ使う名前には番号を付けない。track の行（GC content、GC skew、Depth、Conservation）と region annotation の行にも使う（例: 同じ label の GC content が 2 つあり、色が同じなら GC content の 1 行、色が違えば GC content (1) / GC content (2)）。",
+  "rationale": "凡例の名前を区別する仕組みを番号付けの 1 つに揃える。同じ見本の行を 2 つに分けない。",
+  "mustPreserve": "track と annotation の legend_label、slot の順、見本の色と線、保存済みの Session（0.13.0 を含む）が読めて、凡例の行に付けた編集が同じ track の行に残ること。",
+  "mayRetire": "同じ label の 2 つ目以降の行だけに (2), (3) を付け、1 つ目を番号なしにする名前の付け方。色が同じでも行を分ける動作。",
+  "acceptedResidualRisk": "0.13.0 が GC content / GC content (2) と描いた図は、色が違えば GC content (1) / GC content (2) に、色が同じなら GC content の 1 行に変わる。1 行にまとめられた 2 つ目の行に付けていた編集は使われなくなる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+### PD-OI-096: Legend position of a diagram mode at Load
+
+- Concern key: `web.legend.position-of-mode`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / MODE-DEFAULT-LISTED-AT-LOAD`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 48 entry
+  above. The Owner approved the receipt text below as written. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base, or merged together
+  with it through the reviewed static Product Contract co-change route; this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `f64d28435244831cadbbad3e09d6a92849729ed495379d6955b7b6f13a3a9622`.
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.position-of-mode
+Scenario revision: 1
+Choice: B / MODE-DEFAULT-LISTED-AT-LOAD
+Rationale: 0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。
+Must preserve: 〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置なら値がないときと同じ位置（ふつうはその mode の既定の位置。Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。
+May retire: 集合の外の凡例の位置をそのまま保持し、Generate が "Input validation failed" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。
+Accepted residual risk: 確認 dialog は、読み込みの修復の PR で入る。それまでの dev では、集合の外の値は知らせずに既定値になる（0.14.0 の tag の前にそろえる）。0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る（Linear を表示したまま保存した Session の場合）。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.legend.position-of-mode",
+  "scenarioRevision": 1,
+  "choice": "B / MODE-DEFAULT-LISTED-AT-LOAD",
+  "rationale": "0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。",
+  "mustPreserve": "〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置なら値がないときと同じ位置（ふつうはその mode の既定の位置。Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。",
+  "mayRetire": "集合の外の凡例の位置をそのまま保持し、Generate が \"Input validation failed\" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。",
+  "acceptedResidualRisk": "確認 dialog は、読み込みの修復の PR で入る。それまでの dev では、集合の外の値は知らせずに既定値になる（0.14.0 の tag の前にそろえる）。0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る（Linear を表示したまま保存した Session の場合）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+### PD-OI-097: Labels that do not fit
+
+- Concern key: `product.circular-outer-label-fit`
+- Scenario revision: `8`
+- Supersedes: `PD-OI-097`, scenario revision `7`. Scenario revision `8`
+  keeps every outcome and field of scenario revision `7` and adds
+  `YIELD-REPAIRED-ONLY`.
+- Status: `ACCEPTED`
+- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY`
+- Normative outcome: exactly the complete approved scenario revision `8`
+  `PRODUCT_DECISION` receipt and its JSON representation below. The
+  scenario revision `7` receipt is kept as it was approved.
+- Decision source (scenario revision `7`): the Owner replies quoted verbatim in
+  the Revision 50 entry above. The receipt reproduces the approved field texts
+  without translation or additional terms. Dependent runtime requires this
+  authority merged into its base, or merged together with it through the
+  reviewed static Product Contract co-change route; this record supplies no
+  runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `7`; UTF-8, excluding the final newline):
+  `e77d81603000fc47273f5bc86fc1331bf27b666be988cef11cc388301a7324e8`.
+- Decision source (scenario revision `8`): the Owner replies of `2026-10-14`
+  quoted verbatim in the Revision 53 entry above. The second receipt and JSON
+  below reproduce all nine approved fields without translation or additional
+  terms. The runtime, tests, and documentation that implement it merge with it
+  (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (scenario revision `8`; UTF-8, excluding the final newline):
+  `405597f512e865299b743d4307924a44955721a391917fa7360230ba4004417b`.
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 7
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。
+Owner: satoshikawato
+Decision date: 2026-10-14
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 7,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-14"
+}
+```
+
+Scenario revision `8` receipt, confirmed by `satoshikawato` on `2026-10-14`:
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 8
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。
+Owner: satoshikawato
+Decision date: 2026-10-14
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 8,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-14"
+}
+```
+
+### PD-OI-098: Font of the diagram text
+
+- Concern key: `diagram-generation.diagram-font`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner reply of `2026-10-13` quoted verbatim in the
+  Revision 51 entry above. The Owner approved the receipt text below as
+  written. The receipt reproduces its fields without translation or
+  additional terms. This record does not supersede another decision. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `14dc5e981573dce50e9815f4457d34de6786c819ae31a5b4672e178359af3675`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.diagram-font
+Scenario revision: 1
+Choice: A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED
+Rationale: 図の文字の font を、システムにインストールされた font も含めて自由に選べるようにする。Web UI では font file の読み込み（A）とインストール済み font の選択（B）の両方を出す。読み込んだ font は Session に保存せず、gbdraw に含まれない font は警告する。システムにない font を使う Session は読み込むときに警告し、読み込む場合は近い font に置き換える。SVG には PowerPoint などと同じように font を埋め込む。
+Must preserve: 〔設定〕図の文字の font は 1 つの設定にする（Python の font_family、CLI の --font_family、Web の Font section の Font）。Web では Circular と Linear の drawing がそれぞれ持つ。既定は Liberation Sans で、font を選ばない図は今と同じ。〔Web での選び方〕Font の欄に Liberation Sans（既定）、Liberation Serif、Liberation Mono、この page で読み込んだ font、Load font file…（.ttf と .otf を選ぶ）を出す。Chrome と Edge では Choose installed font… も出し、インストール済みの font を名前で検索して選べる（ブラウザが許可を求める）。Firefox と Safari では Choose installed font… は出さない。Font は Applies on Generate（Generate で図に入る）。Undo、Redo、Reset Settings は他の設定と同じ。〔測り方と表示〕label の配置、legend、title の文字の幅と高さは、選んだ font そのもので測る。preview も選んだ font で表示する。〔Session〕Session には font の名前（CSS の font-family の並び）だけを保存し、font file は保存しない。Session に入る preview にも font を埋め込まない。〔警告〕gbdraw に含まれない font を選ぶと、Font の欄の下に注意を出す（Session には font の名前だけが残る。別の環境で開くには同じ font が必要で、ないときは近い font に置き換わる）。Web で Session を保存したときも、保存の通知に同じ注意を出す。CLI は --save_session のときに同じ注意を log に出す。〔読み込むとき〕Session の font がその環境にないとき、Web は Session を開く前に dialog で知らせる。ボタンは Load font file…、Use installed font…（Chrome と Edge だけ）、Load with ＜近い font の名前＞、Cancel。font を読み込めばその font で開く。Load with … では Session を開き、文字を近い font で描く。Font の設定には Session の font の名前が残り、あとでその font を読み込めばその font で描く。保存すると元の名前のまま保存する。Cancel では何も変えない。この確認では描画用の Worker を起動しない。CLI と Python は警告を log に出し、近い font で描く。〔近い font〕名前の並びの中で、その環境で使える最初の font。どれも使えないときは、その font の種類（serif、sans-serif、monospace）に合う Liberation（Serif、Sans、Mono）。〔書き出し〕SVG と Interactive SVG は、gbdraw に含まれない font を使っていれば、その font の使った文字だけ（subset）を埋め込む。既定でオンで、Web と CLI のどちらでも切れる。埋め込みを禁止している font（fsType）は埋め込まず、そう知らせる。Liberation は埋め込まない。PNG も同じ埋め込みを使い、選んだ font で描く。PDF も選んだ font で描く。〔変えないもの〕font を選ばない図の文字の配置と出力、Session の保存と読み込みの手順、Gallery の Session。
+May retire: Web で font_family を GUI で編集できない設定（読み取り専用の表示）として扱うこと。
+Accepted residual risk: 別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "diagram-generation.diagram-font",
+  "scenarioRevision": 1,
+  "choice": "A+B / CHOSEN-FONT-MEASURED-AND-EMBEDDED",
+  "rationale": "図の文字の font を、システムにインストールされた font も含めて自由に選べるようにする。Web UI では font file の読み込み（A）とインストール済み font の選択（B）の両方を出す。読み込んだ font は Session に保存せず、gbdraw に含まれない font は警告する。システムにない font を使う Session は読み込むときに警告し、読み込む場合は近い font に置き換える。SVG には PowerPoint などと同じように font を埋め込む。",
+  "mustPreserve": "〔設定〕図の文字の font は 1 つの設定にする（Python の font_family、CLI の --font_family、Web の Font section の Font）。Web では Circular と Linear の drawing がそれぞれ持つ。既定は Liberation Sans で、font を選ばない図は今と同じ。〔Web での選び方〕Font の欄に Liberation Sans（既定）、Liberation Serif、Liberation Mono、この page で読み込んだ font、Load font file…（.ttf と .otf を選ぶ）を出す。Chrome と Edge では Choose installed font… も出し、インストール済みの font を名前で検索して選べる（ブラウザが許可を求める）。Firefox と Safari では Choose installed font… は出さない。Font は Applies on Generate（Generate で図に入る）。Undo、Redo、Reset Settings は他の設定と同じ。〔測り方と表示〕label の配置、legend、title の文字の幅と高さは、選んだ font そのもので測る。preview も選んだ font で表示する。〔Session〕Session には font の名前（CSS の font-family の並び）だけを保存し、font file は保存しない。Session に入る preview にも font を埋め込まない。〔警告〕gbdraw に含まれない font を選ぶと、Font の欄の下に注意を出す（Session には font の名前だけが残る。別の環境で開くには同じ font が必要で、ないときは近い font に置き換わる）。Web で Session を保存したときも、保存の通知に同じ注意を出す。CLI は --save_session のときに同じ注意を log に出す。〔読み込むとき〕Session の font がその環境にないとき、Web は Session を開く前に dialog で知らせる。ボタンは Load font file…、Use installed font…（Chrome と Edge だけ）、Load with ＜近い font の名前＞、Cancel。font を読み込めばその font で開く。Load with … では Session を開き、文字を近い font で描く。Font の設定には Session の font の名前が残り、あとでその font を読み込めばその font で描く。保存すると元の名前のまま保存する。Cancel では何も変えない。この確認では描画用の Worker を起動しない。CLI と Python は警告を log に出し、近い font で描く。〔近い font〕名前の並びの中で、その環境で使える最初の font。どれも使えないときは、その font の種類（serif、sans-serif、monospace）に合う Liberation（Serif、Sans、Mono）。〔書き出し〕SVG と Interactive SVG は、gbdraw に含まれない font を使っていれば、その font の使った文字だけ（subset）を埋め込む。既定でオンで、Web と CLI のどちらでも切れる。埋め込みを禁止している font（fsType）は埋め込まず、そう知らせる。Liberation は埋め込まない。PNG も同じ埋め込みを使い、選んだ font で描く。PDF も選んだ font で描く。〔変えないもの〕font を選ばない図の文字の配置と出力、Session の保存と読み込みの手順、Gallery の Session。",
+  "mayRetire": "Web で font_family を GUI で編集できない設定（読み取り専用の表示）として扱うこと。",
+  "acceptedResidualRisk": "別の環境で同じ font がないと、近い font で描くので文字の幅が変わり、label の配置や legend の大きさが変わる。保存した preview は、font がない環境では Generate するまでブラウザの代わりの font で表示される。Web で読み込んだ font は page を閉じると消え、毎回読み込み直す必要がある。インストール済み font の選択は Chrome と Edge だけ。埋め込んだ SVG と PNG は font の subset のぶん大きくなる。font の license は利用者の責任になる（埋め込みを禁止している font は埋め込まない）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
+}
+```
+
+### PD-OI-099: Confirm what Load cannot restore before it loads
+
+- Concern key: `web.session.load-repair-confirmation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / CONFIRM-REPAIRS-BEFORE-LOAD`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 52 entry
+  above. The Owner approved the receipt text below in Reply 3 of that entry.
+  The receipt reproduces its fields without translation or additional terms.
+  Dependent runtime requires this authority merged into its base, or merged
+  together with it through the reviewed static Product Contract co-change
+  route.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `d646d6704e71e3066315abdba14cf762e847653a7041982359bdb98711452245`.
+- Acceptance contracts: `OIC-031`. These obligations and the complete selected
+  outcome are jointly required; their citation does not claim completed
+  dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.session.load-repair-confirmation
+Scenario revision: 1
+Choice: A / CONFIRM-REPAIRS-BEFORE-LOAD
+Rationale: 古いファイルや、バグなどで不正な値を含むファイルを拒否すると、ユーザーは何も取り戻せない。拒否するよりも、読み込めるところまで読み込み、一部を完全には復元できないことを読み込む前に一言知らせ、次に保存すると最新の形式になると伝える。
+Must preserve: 〔拒否〕次のファイルだけは今までどおり読み込まずにエラーを示す。JSON として読めないファイル（壊れた圧縮ファイル、UTF-8 でない文字を含むファイルを含む）。gbdraw の Session でも設定ファイルでもないファイル（開発版だけの Session 34〜38、43、45 と、開発版だけの request の形式 3、4 を含む）。版 26 以下の Session（gbdraw 0.11.0 以前と、0.12.0 より前の gbdraw.app が保存したもの）。このときはエラーで古い版だと示す。新しい版の Session や request の形式。大きすぎるファイル（200 MB、展開して 512 MB を超えるもの）。読み込みに要る機能（gzip の展開、module Worker）がない browser で開いたファイル。安全でない名前（__proto__、constructor、prototype）を含むファイル。何も復元できないファイル（ファイルにある設定、request、Result、入力ファイル、編集、cache のすべてを捨てることになるもの）。読み込みの途中で browser の機能や Worker が失敗したときも、読み込まずにエラーを示す。〔確認〕それ以外の Session と古い設定ファイルは、読み込めるところまで読む。値を捨てる、既定値にする、意味を変えて読むところが 1 つでもあれば、読み込む前に 1 つの dialog でその一覧（何をどう読んだか。設定の値の行はファイルの中の場所も示す）を示し、次に Save Session すると最新の形式で保存されることを伝える。[Load] で読み込み、[Cancel] では設定、Result、入力ファイル、History、画面を何も変えない。ファイル自体は変えない。〔出さないもの〕古い版の形式からの変換や、大文字、前後の空白、別名の違いのように、意味を変えずに読めるものでは dialog を出さない。計算し直せる cache の項目、同じ Legend の行に後の編集が上書きしていた Session 46 の色や線の編集、Result にない group の名前や説明の編集、Instant Preview が on のときの当てていない palette の選択、画面の表示の状態、もう一方の図の型（Circular か Linear）だけで使う設定、ファイルの中の別の有効な値で置き換わる値のように、図に効いていなかった値を捨てるだけのときも dialog を出さない。何も捨てずに読めるファイル（Gallery の Session、現在の Web が保存した Session を含む）では今までどおり dialog を出さない。〔今までの知らせ〕今は読み込んだ後の知らせに出ている、合わせられずに捨てた feature の編集、範囲を狭めた Feature visibility の編集、hash= を付け替えられなかった値、読み替えたり捨てたりした表の行、色を受け付けずに捨てた Legend の項目は、この dialog に移す。意味を変えない変換の知らせ（annotation の hash= を source で指す形に変えた数）と、古い設定ファイルを読んだという知らせは、今までどおり読み込んだ後に出す。Linear の Comparisons 欄の、保存された比較を読み取り専用で残した、または決定が要るという枠（選ぶ操作つき）は、今までどおり読み込んだ後に出す。feature の情報を復元できないときは、dialog の一覧に示し、Features 欄の表示（SVG の preview は残る）も今までどおり出す。〔ほかの確認〕読み込む前の「Replace the current work?」の確認は今までどおり先に出す。〔読み込んだ後〕Session を読み込んだ状態が Undo の起点になり、変更のない状態として始まる。保存すると直した値が最新の形式で書かれる。〔Python と CLI〕CLI と Python API は、request の形式が定めない値（文字や真偽値や名前の欄の null や別の種類の値、形式 9 では定義にない key や名前の別の綴り）、比較の表のファイルの path（以前の Python API が一部の request に書いたもの。今は表を resource として保存する）、ASCII でない数字を使った record の selector を拒否する。それ以外に Session を読む範囲は変えない（古い形式の request の大文字や別名などは今までどおり読む）。
+May retire: Web が、上の〔拒否〕に当たらない Session（古い Session、不正な値を含む Session、Python は読める Session）と古い設定ファイルを、読み込みのときに拒否する動作。完全には復元できなかったことを、読み込んだ後の知らせで伝える動作。知らせずに捨てたり既定値にしたりする動作（凡例の位置を既定値にする今の暫定の動作を含む）。
+Accepted residual risk: 直した部分は保存された Result（図）と合わないことがあり、次の Generate で直した設定の図になる。dialog の一覧には、ファイルの中の場所（modes.circular.config.adv.depth_tracks[0].height など）をそのまま示す行がある。一覧が長いときは 12 行までを示し、残りの数を示す。Web では dialog を出して読めるが、CLI では拒否される Session がある（手で書き換えた Session の不正な値、request の形式が定めない値）。request を直せない Session は、設定だけの Session として読み、保存された Result、GenBank、GFF、FASTA の入力ファイル、feature の一覧、cache を捨てて一覧に示すことがある。この動作はいくつかの変更に分けて入る。最初の変更（この dialog）より後の変更が入るまでは、次のことが残る。古い版の Session や古い設定ファイルの一部の値や不正な値（track の並びの設定の値、受け付けない Legend の色の編集、設定ファイルの図の型に合わない Legend の位置や知らない key など）は、今までどおり dialog に示さずに直されるか、そのまま読み込まれる（知らない track の型など）。不正な値を含む Session や設定ファイルの一部（定義にない key や欄、知らない値、図の型にない値、範囲外の値、種類の違う値、足りない resource や欄、読めない track の並びや cache、確認を通らない保存された Result を含むもの）は、今までどおり拒否される。何も復元できないファイルを拒否する確認はまだなく、後の変更で入る。保存された request に形式が定めない値を含む Session のうち、今までの Web が読めたものは、その値を dialog に示さずに読み込まれ、Generate や、保存された request で描き直す操作（label の配置し直し、alignment、record の変換）で「An input value is invalid」と出る。それ以外（feature の編集の表や grouping が null のもの、layout に定義にない key があるものなど）は今までどおり拒否される。
+Owner: satoshikawato
+Decision date: 2026-10-14
+```
+
+```json
+{
+  "concern": "web.session.load-repair-confirmation",
+  "scenarioRevision": 1,
+  "choice": "A / CONFIRM-REPAIRS-BEFORE-LOAD",
+  "rationale": "古いファイルや、バグなどで不正な値を含むファイルを拒否すると、ユーザーは何も取り戻せない。拒否するよりも、読み込めるところまで読み込み、一部を完全には復元できないことを読み込む前に一言知らせ、次に保存すると最新の形式になると伝える。",
+  "mustPreserve": "〔拒否〕次のファイルだけは今までどおり読み込まずにエラーを示す。JSON として読めないファイル（壊れた圧縮ファイル、UTF-8 でない文字を含むファイルを含む）。gbdraw の Session でも設定ファイルでもないファイル（開発版だけの Session 34〜38、43、45 と、開発版だけの request の形式 3、4 を含む）。版 26 以下の Session（gbdraw 0.11.0 以前と、0.12.0 より前の gbdraw.app が保存したもの）。このときはエラーで古い版だと示す。新しい版の Session や request の形式。大きすぎるファイル（200 MB、展開して 512 MB を超えるもの）。読み込みに要る機能（gzip の展開、module Worker）がない browser で開いたファイル。安全でない名前（__proto__、constructor、prototype）を含むファイル。何も復元できないファイル（ファイルにある設定、request、Result、入力ファイル、編集、cache のすべてを捨てることになるもの）。読み込みの途中で browser の機能や Worker が失敗したときも、読み込まずにエラーを示す。〔確認〕それ以外の Session と古い設定ファイルは、読み込めるところまで読む。値を捨てる、既定値にする、意味を変えて読むところが 1 つでもあれば、読み込む前に 1 つの dialog でその一覧（何をどう読んだか。設定の値の行はファイルの中の場所も示す）を示し、次に Save Session すると最新の形式で保存されることを伝える。[Load] で読み込み、[Cancel] では設定、Result、入力ファイル、History、画面を何も変えない。ファイル自体は変えない。〔出さないもの〕古い版の形式からの変換や、大文字、前後の空白、別名の違いのように、意味を変えずに読めるものでは dialog を出さない。計算し直せる cache の項目、同じ Legend の行に後の編集が上書きしていた Session 46 の色や線の編集、Result にない group の名前や説明の編集、Instant Preview が on のときの当てていない palette の選択、画面の表示の状態、もう一方の図の型（Circular か Linear）だけで使う設定、ファイルの中の別の有効な値で置き換わる値のように、図に効いていなかった値を捨てるだけのときも dialog を出さない。何も捨てずに読めるファイル（Gallery の Session、現在の Web が保存した Session を含む）では今までどおり dialog を出さない。〔今までの知らせ〕今は読み込んだ後の知らせに出ている、合わせられずに捨てた feature の編集、範囲を狭めた Feature visibility の編集、hash= を付け替えられなかった値、読み替えたり捨てたりした表の行、色を受け付けずに捨てた Legend の項目は、この dialog に移す。意味を変えない変換の知らせ（annotation の hash= を source で指す形に変えた数）と、古い設定ファイルを読んだという知らせは、今までどおり読み込んだ後に出す。Linear の Comparisons 欄の、保存された比較を読み取り専用で残した、または決定が要るという枠（選ぶ操作つき）は、今までどおり読み込んだ後に出す。feature の情報を復元できないときは、dialog の一覧に示し、Features 欄の表示（SVG の preview は残る）も今までどおり出す。〔ほかの確認〕読み込む前の「Replace the current work?」の確認は今までどおり先に出す。〔読み込んだ後〕Session を読み込んだ状態が Undo の起点になり、変更のない状態として始まる。保存すると直した値が最新の形式で書かれる。〔Python と CLI〕CLI と Python API は、request の形式が定めない値（文字や真偽値や名前の欄の null や別の種類の値、形式 9 では定義にない key や名前の別の綴り）、比較の表のファイルの path（以前の Python API が一部の request に書いたもの。今は表を resource として保存する）、ASCII でない数字を使った record の selector を拒否する。それ以外に Session を読む範囲は変えない（古い形式の request の大文字や別名などは今までどおり読む）。",
+  "mayRetire": "Web が、上の〔拒否〕に当たらない Session（古い Session、不正な値を含む Session、Python は読める Session）と古い設定ファイルを、読み込みのときに拒否する動作。完全には復元できなかったことを、読み込んだ後の知らせで伝える動作。知らせずに捨てたり既定値にしたりする動作（凡例の位置を既定値にする今の暫定の動作を含む）。",
+  "acceptedResidualRisk": "直した部分は保存された Result（図）と合わないことがあり、次の Generate で直した設定の図になる。dialog の一覧には、ファイルの中の場所（modes.circular.config.adv.depth_tracks[0].height など）をそのまま示す行がある。一覧が長いときは 12 行までを示し、残りの数を示す。Web では dialog を出して読めるが、CLI では拒否される Session がある（手で書き換えた Session の不正な値、request の形式が定めない値）。request を直せない Session は、設定だけの Session として読み、保存された Result、GenBank、GFF、FASTA の入力ファイル、feature の一覧、cache を捨てて一覧に示すことがある。この動作はいくつかの変更に分けて入る。最初の変更（この dialog）より後の変更が入るまでは、次のことが残る。古い版の Session や古い設定ファイルの一部の値や不正な値（track の並びの設定の値、受け付けない Legend の色の編集、設定ファイルの図の型に合わない Legend の位置や知らない key など）は、今までどおり dialog に示さずに直されるか、そのまま読み込まれる（知らない track の型など）。不正な値を含む Session や設定ファイルの一部（定義にない key や欄、知らない値、図の型にない値、範囲外の値、種類の違う値、足りない resource や欄、読めない track の並びや cache、確認を通らない保存された Result を含むもの）は、今までどおり拒否される。何も復元できないファイルを拒否する確認はまだなく、後の変更で入る。保存された request に形式が定めない値を含む Session のうち、今までの Web が読めたものは、その値を dialog に示さずに読み込まれ、Generate や、保存された request で描き直す操作（label の配置し直し、alignment、record の変換）で「An input value is invalid」と出る。それ以外（feature の編集の表や grouping が null のもの、layout に定義にない key があるものなど）は今までどおり拒否される。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-14"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -4476,11 +5793,12 @@ Decision date: 2026-10-10
 | `OIC-023` | `PD-OI-024`: only Web fresh/reset selects Lock ON; explicit OFF, saved values and supported omission meanings, saved Result on Load, CLI/Python defaults, accepted anchors, D2-P and D3-A remain supported. ON/OFF and Generate application are always explained in Linear Layout. |
 | `OIC-024` | `PD-OI-037` revision 2: operation-level Live edit, Applies on Generate, and Apply required remain truthful, including Palette Instant Preview and Alignment review. No always-on derived Pending/Applied status or its computation remains. Live applying/error, Processing/Canceling, real errors, and recovery are shown when they occur, with no status-only Worker, genome-byte read/hash, canonical request projection, generated-table build, or SVG/checkpoint clone. |
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
-| `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. Narrow review closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then permits explicit reopen; wide drag remains. Browser verification must show presentation changes leave draft and Result unchanged. |
+| `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. At every width the review is docked in the Result, closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then reopens an Editor that was open on the same tab; the review cannot be dragged. During the review the feature popup is hidden, a click on the figure neither opens, switches nor closes it, search Open switches its target, and it returns when the review ends. The figure is fitted when the review opens and the earlier zoom and pan return when it ends; a Session saved during the review and the History of its Apply keep the earlier zoom and pan. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066`: a live-edited Result agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element, including after Session load and export. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
-| `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (Merge/Suffix), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
-| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. Apply to all on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
+| `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (`Merge into "<name>"` or `Keep both: name it "<name 2>"`), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
+| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
 | `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; a drawing switch writes no setting and is not an Undo step; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown; each Session 27-44 fixture and each Session 46 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a Session 46 or 47 preview-only Load starts no Python Worker; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
+| `OIC-031` | `PD-OI-099`: a Load of a file with something it cannot fully restore lists it in one dialog before any setting, Result, input file, History, or screen changes, and Cancel changes none of them. Every Gallery Session, and every Session fixture that loses nothing, loads with no row; a fixture that is lossy on purpose lists exactly its loss. A refusal of the Web Load comes before the dialog, never after [Load]. No file the Web loaded before the dialog existed is refused. The receipt's 〔拒否〕 classes are refused; once the interim of its Accepted residual risk ends, they are the only refusals of the Web Load. |
 
 These new acceptance entries are obligations for dependent runtime work, not
 claims of completed runtime or browser verification by this authority amendment.
@@ -4579,6 +5897,18 @@ checking an `All` label or counting uploaded files is insufficient. Restoring
 first-record truncation, zipped Adjacent pairing, or positional endpoint
 coercion must fail the corresponding regression test. Source changes to these
 boundaries require this coverage in the normal PR gate.
+
+### OIC-031 required regression coverage
+
+These tests protect the outcome; they do not supply Product authority.
+
+| Observation | Executable regression owners |
+| --- | --- |
+| The dialog lists what Load cannot restore before anything changes; Cancel changes nothing. | [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `a lossy Load asks once before it changes anything, and Cancel leaves everything as it was (PLAN 12.7 (1), (2))`; [`session-loading-feedback.playwright.spec.js`](../../tests/web/session-loading-feedback.playwright.spec.js), `a lossy Session asks before it loads: Cancel changes nothing, Load loads it`. |
+| Every Gallery Session, and every Session fixture that loses nothing, loads with no row; a fixture that is lossy on purpose lists exactly its loss. | [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `every Gallery Session and Session fixture loads without a repair (G3)`. |
+| A refusal comes before the dialog, never after [Load]. | [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `a configuration field Load refuses is refused before the dialog (BA-OD96)`. |
+| No file the Web loaded before the dialog existed is refused. | [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `no file the Web loaded before the dialog existed is refused (BA-OD100)`. |
+| The 〔拒否〕 classes are refused. | [`session-import-codec.test.mjs`](../../tests/web/session-import-codec.test.mjs), `malformed JSON/gzip and fatal UTF-8 stay structured failures`, `unsafe own keys remain untrusted after the production whole-object reply`, and `codec rejects exact file and expanded caps before reading/decoding oversize data`; [`session-import-client.test.mjs`](../../tests/web/session-import-client.test.mjs), `Worker unavailable, constructor and postMessage failures have no main parser fallback`; [`session-authority.test.mjs`](../../tests/web/session-authority.test.mjs), the `readSessionInput` refusals; [`mode-scoped-session.test.mjs`](../../tests/web/mode-scoped-session.test.mjs), `a file that is not a gbdraw Session is refused as such before its contents are read`; [`session-losat-cache-validation.test.mjs`](../../tests/web/session-losat-cache-validation.test.mjs), `session import rejects branch-internal version 34` to `38`; [`load-repair-dialog.test.mjs`](../../tests/web/load-repair-dialog.test.mjs), `a Session older than 27 is refused as an old version (B51)`; [`session-import-worker.playwright.spec.js`](../../tests/web/session-import-worker.playwright.spec.js), `unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve the old document and History`. Request formats 3, 4 and newer: no test yet. |
 
 ## Residual-risk boundary
 

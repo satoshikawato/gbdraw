@@ -134,6 +134,11 @@ def _small_radial_canvas():
     return canvas_config
 
 
+def _small_radial_inputs() -> dict[str, object]:
+    canvas_config = _small_radial_canvas()
+    return {"geometry": canvas_config.geometry(), "cfg": canvas_config.profile.config}
+
+
 _NUMERIC_STACK = (
     CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
     CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
@@ -174,7 +179,7 @@ def test_track_fit_failure_reports_row_and_band_without_slot_id(
     with pytest.raises(ValidationError) as caught:
         resolve_circular_radial_layout(
             total_length=1000,
-            canvas_config=_small_radial_canvas(),
+            **_small_radial_inputs(),
             slots=list(slots),
             definition_reserved_radius_px=70.0 if cause is not None else 30.0,
             center_reserved_radius_explicit=explicit_radius,
@@ -275,7 +280,7 @@ def test_radial_layout_conflicts_report_track_row_without_slot_id(
     with pytest.raises(ValidationError) as caught:
         resolve_circular_radial_layout(
             total_length=1000,
-            canvas_config=_small_radial_canvas(),
+            **_small_radial_inputs(),
             slots=list(slots),
             definition_reserved_radius_px=definition_px,
             center_reserved_radius_explicit=explicit_radius,
@@ -423,10 +428,13 @@ def test_output_prefix_length_limit_counts_utf8_bytes():
     assert RenderOutputRequest(output_prefix="é" * 100).output_prefix == "é" * 100
 
 
-def test_radial_inner_label_fit_failure_reports_the_fixed_track_row(tmp_path: Path):
+def test_radial_inner_labels_without_room_report_the_label_fit(tmp_path: Path):
+    # LP-D49 RADIAL-JOIN: radial labels that fixed rows leave no room for stop
+    # with the label fit error and its rows, not a Track row error.
     from gbdraw.circular import _get_args, run_circular_from_namespace
+    from gbdraw.exceptions import LabelsDoNotFitError
 
-    with pytest.raises(ValidationError) as caught:
+    with pytest.raises(LabelsDoNotFitError) as caught:
         run_circular_from_namespace(_get_args([
             "--gbk", str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"),
             "-o", str(tmp_path / "radial"),
@@ -434,10 +442,10 @@ def test_radial_inner_label_fit_failure_reports_the_fixed_track_row(tmp_path: Pa
             "--circular_track_slot", "features:features@r=330px,w=40px",
             "--circular_track_slot", "gc_content:dinucleotide_content@side=inside,r=290px,w=40px",
         ]))
-    assert str(caught.value).startswith("radial inner labels cannot fit the fixed circular geometry")
-    payload = _web(caught.value)
-    assert payload["code"] == "TRACK_LAYOUT"
-    assert payload["context"] == {"reason": "CANNOT_FIT", "slotIndex": 0}
+    (record,) = caught.value.report.records
+    assert (record.label_kind, record.refused) == ("circular_inner", True)
+    assert [row.kind for row in caught.value.report.rows] == ["smaller_font", "labels_out"]
+    assert _web(caught.value)["code"] == "LABEL_LAYOUT"
 
 
 def test_specific_color_table_failure_reports_row_without_value(tmp_path: Path):
@@ -534,3 +542,27 @@ def test_linear_record_region_beyond_the_record_keeps_its_region_diagnostic():
         gff_keep_all_features=False,
     )
     assert len(resolved.records[0]) == 31
+
+
+def test_circular_labels_that_do_not_fit_reach_the_web_as_label_layout():
+    from gbdraw.exceptions import LabelsDoNotFitError
+    from gbdraw.labels.fit import LabelFit, LabelFitRecord, LabelFitReport
+
+    report = LabelFitReport(
+        records=(
+            LabelFitRecord("PRIVATE_RECORD", "circular_outer", 111, 14.0, LabelFit(20, 21)),
+            LabelFitRecord("second", "circular_outer", 50, 14.0, LabelFit(0, 3)),
+        ),
+        rows=(),
+        drawn=False,
+    )
+
+    payload = _web(LabelsDoNotFitError("PRIVATE_MESSAGE", report=report))
+
+    assert payload == {
+        "code": "LABEL_LAYOUT",
+        "operation": "generate",
+        "stage": "render",
+        # Python words the counts (one wording owner); the Web shows the sentence as sent.
+        "context": {"labelFitCounts": "Overlapping label pairs: 20. Crossing leader pairs: 24."},
+    }

@@ -158,4 +158,24 @@ search.refreshSearch();
 assert.equal(metricTotal('featureSearchIndexBuildCount'), 2);
 assert.equal(metricTotal('featureDomFullScanCount'), 2);
 
+// OV-554: the bulk label table is read by label text, so a feature labelled
+// `constructor` must not find the text of Object.prototype.constructor.
+const inheritedLabel = {
+  id: 'record-1\u0000inherited',
+  svg_id: 'stable-inherited',
+  type: 'CDS',
+  record_id: 'record-1',
+  start: 40,
+  end: 49,
+  strand: 1,
+  qualifiers: { product: ['constructor'] },
+  product: 'constructor'
+};
+state.labelTextBulkOverrides = {};
+state.featureList.value.rows.push(inheritedLabel);
+watchers[1].callback();
+state.previewFeatureSearchInput.value = 'native code';
+search.applySearch();
+assert.deepEqual(state.previewFeatureSearchMatches.value, []);
+
 console.log('preview feature search tests passed');

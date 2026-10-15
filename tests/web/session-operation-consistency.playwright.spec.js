@@ -85,7 +85,8 @@ for (const operation of ['save', 'load']) {
       let release;
       const gate = new Promise(resolve => { release = resolve; });
       window.releaseSession = release;
-      const options = { beforeExport: () => gate, beforeImport: () => gate };
+      // The file is refused before the Load dialog; a dialog would cancel the Load.
+      const options = { beforeExport: () => gate, beforeImport: () => gate, confirmLoadRepairs: async () => false };
       window.sessionOperation = operation === 'save'
         ? service.exportSession('exclusive-save', options)
         : service.importSession({ target: { files: [new File(['{invalid'], 'invalid.json')], value: '' } }, options);
@@ -106,7 +107,7 @@ for (const operation of ['save', 'load']) {
       values.push(['history action', await history.runUndoable('forbidden', () => { throw new Error('ran'); })]);
       const service = await import('/gbdraw/web/js/services/config.js');
       values.push(['cross operation', app.sessionSavePending
-        ? await service.importSession({ target: { files: [new File(['{}'], 'other.json')], value: '' } })
+        ? await service.importSession({ target: { files: [new File(['{}'], 'other.json')], value: '' } }, { confirmLoadRepairs: async () => false })
         : await service.exportSession('cross-save')]);
       return values;
     }, blockedActions);
@@ -168,6 +169,7 @@ test('failed adoption restores source before transients and preserves all admitt
   const outcome = await evaluateWithRetainedPromise(page, async text => {
     const service = await import('/gbdraw/web/js/services/config.js');
     return service.importSession({ target: { files: [new File([text], 'replacement.json')], value: '' } }, {
+      confirmLoadRepairs: async () => false,
       beforePreviewMount: () => { throw new Error('controlled adoption failure'); }
     });
   }, replacement);
@@ -263,7 +265,7 @@ test('teardown releases pending and canceled Save cannot download or clear a new
     const newGate = new Promise(resolve => { releaseNew = resolve; });
     const newer = service.importSession({ target: {
       files: [new File(['{invalid'], 'newer.json')], value: ''
-    } }, { beforeImport: () => newGate });
+    } }, { beforeImport: () => newGate, confirmLoadRepairs: async () => false });
     release();
     const canceled = await saving;
     const newerStillPending = state.sessionImportPending.value;

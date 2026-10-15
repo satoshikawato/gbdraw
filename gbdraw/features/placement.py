@@ -33,6 +33,14 @@ from .source import (
 from .visibility import should_render_feature
 
 
+# The sides of a lane in each mode. FeaturePlacementTarget checks them and the
+# canonical request description (gbdraw.session_request_codec) names them.
+_LANE_SIDES: Mapping[str, tuple[str, ...]] = {
+    "circular": ("outward", "inward"),
+    "linear": ("above", "below"),
+}
+
+
 @dataclass(frozen=True)
 class FeaturePlacementTarget:
     kind: Literal["main", "lane"]
@@ -44,7 +52,7 @@ class FeaturePlacementTarget:
             if self.side is not None or self.level is not None:
                 raise ValidationError("Main placement must omit side and level.")
         elif self.kind == "lane":
-            if self.side not in ("outward", "inward", "above", "below"):
+            if not any(self.side in sides for sides in _LANE_SIDES.values()):
                 raise ValidationError(
                     "Lane placement requires a supported directional side."
                 )
@@ -61,10 +69,11 @@ class FeaturePlacementTarget:
             )
 
     def validate_mode(self, mode: str) -> None:
-        if mode not in ("circular", "linear"):
+        # A tuple, not the mapping: a mode that is not text (an array from a
+        # Session file) is refused here and never hashed.
+        if mode not in tuple(_LANE_SIDES):
             raise ValidationError("Placement mode must be circular or linear.")
-        allowed = ("outward", "inward") if mode == "circular" else ("above", "below")
-        if self.kind == "lane" and self.side not in allowed:
+        if self.kind == "lane" and self.side not in _LANE_SIDES[mode]:
             raise ValidationError(
                 f"Placement side {self.side!r} is unsupported in {mode} mode."
             )
@@ -179,7 +188,7 @@ def _table_target(row: Mapping[str, str], mode: str) -> FeaturePlacementTarget |
         if level:
             raise ValidationError("Auto/Main placement must omit level.")
         return None if token == "auto" else FeaturePlacementTarget("main")
-    if token not in ("outward", "inward", "above", "below"):
+    if not any(token in sides for sides in _LANE_SIDES.values()):
         raise ValidationError(f"Unsupported placement token {token!r}.")
     if level not in ("", "1"):
         raise ValidationError("Only feature lane level 1 is supported.")
@@ -363,7 +372,7 @@ class FeaturePlacementSlot:
         """Expose requested targets using the same resolved-slot validity owner."""
         targets: list[dict[str, object]] = [{"kind": "main"}]
         if self.bidirectional:
-            for side in (("outward", "inward") if self.mode == "circular" else ("above", "below")):
+            for side in _LANE_SIDES[self.mode]:
                 targets.append({"kind": "lane", "side": side, "level": 1})
         return targets
 

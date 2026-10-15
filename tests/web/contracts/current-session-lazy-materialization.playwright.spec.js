@@ -6,6 +6,7 @@ const { gunzipSync } = require('node:zlib');
 const {
   CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
+  expectNoLoadRepairDialog,
   getDiagramWorkerActivity,
   openApp
 } = require('../helpers/app-lifecycle.cjs');
@@ -1074,6 +1075,18 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     const mutationColor = currentColor === '#123456' ? '#654321' : '#123456';
     const editApplied = await app.setFeatureColorValue(editableFeature, mutationColor);
     const editedState = snapshotResultState();
+    // The Worker runs are counted once the edit's automatic rerender ends.
+    // Undo and Redo of the edit ask for the rerender again (rule-actions.js
+    // followRestoredRules), and a rerender still drawing when Undo reverts its
+    // edit runs again (OV-351), so a count taken after them depends on timing
+    // (OV-731).
+    const idle = () => !app.processing && !app.labelReflowProcessing && !app.ruleMatchingPending;
+    for (let idleFrames = 0; idleFrames < 2;) {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      idleFrames = idle() ? idleFrames + 1 : 0;
+    }
+    const runsAfterEdit = (window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__?.instances || [])
+      .reduce((total, instance) => total + (instance.runs?.length || 0), 0);
     const undoEdit = await history.undo();
     const afterUndoEdit = snapshotResultState();
     const undoGenerate = await history.undo();
@@ -1102,6 +1115,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       undoCountAfterSecond,
       redoCountAfterSecond,
       generateProbe,
+      runsAfterEdit,
       mutationIsolation: {
         editApplied,
         editedState,
@@ -1206,9 +1220,12 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect(worker.constructions).toBe(1);
   expect(worker.initializations).toBe(1);
   expect(worker.helpers).toBeGreaterThanOrEqual(1);
+  // No font is loaded, so no request reaches the Worker for fonts.
+  expect(worker.instances[0].helpers.map(({ operation }) => operation)
+    .filter((operation) => ['registerFonts', 'embedFonts', 'pdfFonts'].includes(operation))).toEqual([]);
   // Two Generates, and the automatic rerender of the color edit, which adds a
   // Legend row (OV-42, OV-43, #857).
-  expect(worker.runs).toBe(3);
+  expect(generated.runsAfterEdit).toBe(3);
   expect(worker.instances).toHaveLength(1);
   expect(worker.instances[0].terminated).toBe(false);
 });
@@ -1309,8 +1326,7 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     parsedSourceParseCount: 1,
     resolvedRecordCacheMissCount: 1,
     resolvedRecordBuildCount: 1,
-    interactiveContextCacheMissCount: 1,
-    interactiveContextBuildCount: 1,
+    'renderStageBuild:interactive_context': 1,
     interactiveFeatureTraversalCount: 1,
     preparedInputCacheMutationViolationCount: 0
   });
@@ -1319,8 +1335,7 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     parsedSourceParseCount: 0,
     resolvedRecordCacheHitCount: 1,
     resolvedRecordBuildCount: 0,
-    interactiveContextCacheHitCount: 1,
-    interactiveContextBuildCount: 0,
+    'renderStageHit:interactive_context': 1,
     interactiveFeatureTraversalCount: 0,
     preparedInputCacheMutationViolationCount: 0,
     featureCatalogSvgParseCount: 1,
@@ -1495,9 +1510,10 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
     resolvedRecordCacheHitCount: 0,
     resolvedRecordCacheMissCount: 1,
     resolvedRecordBuildCount: 1,
-    interactiveContextCacheHitCount: 0,
-    interactiveContextCacheMissCount: 1,
-    interactiveContextBuildCount: 1
+    // The retry starts a new worker: no render stage hits, and the
+    // interactive context stage builds once.
+    renderStageHitCount: 0,
+    'renderStageBuild:interactive_context': 1
   });
   const afterRetryWorker = await getDiagramWorkerActivity(page);
   expect(afterRetryWorker.constructions).toBe(2);
@@ -1614,6 +1630,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
   );
   await input.setInputFiles(frozenV39Session);
+  await expectNoLoadRepairDialog(page);
   await page.waitForFunction(
     () => window.__GBDRAW_LAZY_SESSION_PROBE__?.historyLoaded === true,
     null,

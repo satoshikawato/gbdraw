@@ -5,13 +5,14 @@ from collections.abc import Mapping
 
 from gbdraw.svg.elements import Group, LinearGradient, Path
 
-from ....config.models import GbdrawConfig
 from ....configurators.legend import LegendMeasurement
 from ....legend.linear_layout import (
     LinearFeatureLegendLayout,
     LinearGradientLegendLayout,
     LinearOrientationLegendLayout,
 )
+from ....legend.table import LegendRowKey, LegendTable, write_legend_row_names
+from ....render.group_content import GroupContent
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
 
@@ -21,23 +22,17 @@ class LegendGroup:
 
     def __init__(
         self,
-        canvas_config,
         legend_measurement: LegendMeasurement,
-        legend_table,
-        *,
-        cfg: GbdrawConfig,
-    ):
+        legend_table: LegendTable,
+    ) -> None:
         self.legend_group = Group(id="legend")
-        self._cfg = cfg
-        self.canvas_config = canvas_config
         self.legend_measurement = legend_measurement
         self.legend_table = legend_table
+        self._name_entry = write_legend_row_names(legend_table)
         self.font_family: str = legend_measurement.font_family
         self.font_weight: str = legend_measurement.font_weight
         self.font_size: float = legend_measurement.font_size
         self.rect_size: float = legend_measurement.color_rect_size
-        self.legend_position = self.canvas_config.legend_position
-        self.dpi: int = cfg.canvas.dpi
         self.layout = legend_measurement.linear_layout
         if self.layout is None:
             if legend_table:
@@ -88,7 +83,7 @@ class LegendGroup:
 
     @staticmethod
     def _build_pairwise_gradient_id(
-        key: str,
+        key: LegendRowKey,
         properties: Mapping[str, object],
         orientation: str,
     ) -> str:
@@ -111,7 +106,7 @@ class LegendGroup:
         path_desc = self.create_rectangle_path_for_legend()
         for entry in layout.entries:
             entry_group = Group()
-            entry_group.attribs["data-legend-key"] = str(entry.key)
+            drawn_name = self._name_entry(entry_group.attribs, entry.key)
             rect_path = Path(
                 d=path_desc,
                 fill=entry.properties["fill"],
@@ -122,7 +117,7 @@ class LegendGroup:
             entry_group.add(rect_path)
 
             legend_path = generate_text_path(
-                entry.key,
+                drawn_name,
                 0,
                 0,
                 0,
@@ -190,7 +185,7 @@ class LegendGroup:
                 orientation,
             )
             entry_group = Group()
-            entry_group.attribs["data-legend-key"] = str(entry.key)
+            drawn_name = self._name_entry(entry_group.attribs, entry.key)
 
             gradient = LinearGradient(
                 start=(0, 0),
@@ -208,7 +203,7 @@ class LegendGroup:
             entry_group.add(gradient)
 
             title_path = generate_text_path(
-                entry.key,
+                drawn_name,
                 0,
                 0,
                 0,
@@ -305,4 +300,10 @@ class LegendGroup:
         return self.vertical_legend_width, self.vertical_legend_height
 
 
-__all__ = ["LegendGroup"]
+def linear_legend_content(legend_measurement: LegendMeasurement, legend_table: LegendTable) -> GroupContent:
+    """The ``legend_content`` stage of a Linear canvas."""
+
+    return GroupContent.of(LegendGroup(legend_measurement, legend_table).get_group())
+
+
+__all__ = ["LegendGroup", "linear_legend_content"]

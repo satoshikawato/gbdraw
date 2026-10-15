@@ -50,10 +50,9 @@ test('feature list, popup, hover, and Location search use 1-based INSDC location
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === id), null);
   }, ids.LOC_0002);
-  await expect(page.getByRole('dialog', { name: /^Feature details:/ }))
-    .toContainText(`LOCTEST: ${SPLIT}`);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature.detailRows
-    .find((row) => row.key === 'location').value)).toBe(SPLIT);
+  // The header line names the record and the location with grouped digits.
+  await expect(page.locator('[data-feature-popup-summary]')).toHaveText('LOCTEST · 1,101..1,200; 1..200 (+)');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature.location)).toBe(SPLIT);
   // The CDS has a gene and a locus tag but no protein_id, so Details has no
   // Protein ID row (GX-08); before, the row showed the locus tag.
   const details = page.getByRole('dialog', { name: /^Feature details:/ });
@@ -78,11 +77,11 @@ test('feature list, popup, hover, and Location search use 1-based INSDC location
     await search.press('Enter');
   };
   await find('location', '300');
-  await expect(status).toHaveText('0 / 0 features');
+  await expect(status).toHaveText('No matches');
   await find('location', '1..200');
-  await expect(status).toHaveText('1 / 1 features');
+  await expect(status).toHaveText('1 of 1 match');
   await find('all', 'CYTB');
-  await expect(status).toHaveText('1 / 1 features');
+  await expect(status).toHaveText('1 of 1 match');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches))
     .toEqual([ids.LOC_0003]);
   await find('nucleotide', 'CYTB');
@@ -220,7 +219,7 @@ test('a none Specific Table color survives Generate, Save, and Load', async ({ p
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(FIXTURE);
   const table = testInfo.outputPath('none-color.tsv');
   fs.writeFileSync(table, 'CDS\tproduct\tduplicate\tNONE\thollow\n');
-  await page.getByLabel('Specific Table (-t)', { exact: true }).setInputFiles(table);
+  await page.getByLabel('Specific rules file', { exact: true }).setInputFiles(table);
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     await app.waitForAuxiliaryFileImport(app.files.t_color);

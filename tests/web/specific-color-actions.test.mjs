@@ -3,16 +3,26 @@ import { test } from 'node:test';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
+import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
+import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { readFileSync } from 'node:fs';
 import {
-  diffLegendIntents, generatedLegendRow, legendRowRules, ruleCommitLegendRows, ruleLegendCaptions
+  createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, prepareSpecificColorImport,
+  rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, savedRuleCaption, savedSpecificRules
 } from '../../gbdraw/web/js/services/specific-color-rules.js';
+import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
-const setup = (evaluate = evaluatePythonRules) => {
+/**
+ * @param {typeof evaluatePythonRules} [evaluate]
+ * @param {{ createHistory?: ((state: Record<string, any>) => Record<string, any>) | null } & Record<string, any>} [options]
+ *   `createHistory`: the History manager the rule owner commits through (a recorder of its steps by default);
+ *   the other options go to the rule owner (`askChoice`).
+ */
+const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...options } = {}) => {
   const state = {
     manualSpecificRules: [], extractedFeatures: { value: [
       { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
@@ -21,7 +31,8 @@ const setup = (evaluate = evaluatePythonRules) => {
     featureColorOverrides: {}, featureOverrides: {}, results: { value: [{name:'figure',content:'before'}] },
     svgResultIdentity: { value:'before' }, fileLegendCaptions: { value:new Set() }, addedLegendCaptions: { value:new Set() },
     legendEntries: { value:[] }, files: {t_color:null}, legendColorOverrides: {},
-    newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}, labelReflowProcessing: { value:false }
+    newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}, labelReflowProcessing: { value:false },
+    editableLabels: { value: [] }, manualPriorityRules: []
   };
   // The automatic rerender's busy flag, with the Vue `watch` the owner waits on.
   const watchers = new Set();
@@ -30,8 +41,8 @@ const setup = (evaluate = evaluatePythonRules) => {
     state.labelReflowProcessing.value = busy;
     [...watchers].filter(entry => entry.source === state.labelReflowProcessing).forEach(entry => entry.callback(busy));
   };
-  const notices = [], transactions = [], transactionScopes = [];
-  const preparation = createRulePreparation({state: withDrawings(state), evaluate, notify:message=>notices.push(message)});
+  const transactions = [], transactionScopes = [];
+  const preparation = createRulePreparation({state: withDrawings(state), evaluate});
   let prepareLegend = async () => {};
   let previousIntents = [];
   let openTransaction = null;
@@ -46,9 +57,10 @@ const setup = (evaluate = evaluatePythonRules) => {
       transactionScopes.push(scope);
     }
   };
+  const history = createHistory?.(state);
   const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: withDrawings(state), rulePreparation:preparation,
-    runUndoableCheckpoint: transact('checkpoint'),
-    runUndoable: transact('intent'),
+    runUndoableCheckpoint: history?.runUndoableCheckpoint || transact('checkpoint'),
+    runUndoable: history?.runUndoable || transact('intent'),
     prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents}) => {
     previousIntents=previousFileIntents;
     await prepareLegend(intents);
@@ -58,8 +70,8 @@ const setup = (evaluate = evaluatePythonRules) => {
       state.legendEntries.value=intents;
       state.results.value=[{name:'figure',content:'after'}];
     } };
-  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch});
-  return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
+  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch, ...options});
+  return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders, setRerendering};
 };
 // Review 3 (OV-262 in the Features drawer): with the type's default color
 // Auto, the drawer's color input shows the applied palette's color, as
@@ -83,7 +95,7 @@ test('rule action admits full canonical rules and legend in one transaction afte
   let release, started;
   const ready=new Promise(resolve=>{started=resolve;});
   s.setLegendPreparation(()=>new Promise(resolve=>{release=resolve;started();}));
-  const pending=s.actions.commitSpecificRules(rules);
+  const pending=s.actions.commitSpecificRules(() => rules);
   await ready;
   assert.deepEqual(s.state.manualSpecificRules,[]);
   assert.equal(s.state.results.value[0].content,'before');
@@ -91,16 +103,16 @@ test('rule action admits full canonical rules and legend in one transaction afte
   release();
   assert.equal(await pending,true);
   s.setLegendPreparation(async () => {});
-  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
+  // A caption written in two colors stays as written (PD-OI-042 scenario revision 2).
+  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared','Shared']);
   assert.equal(s.state.manualSpecificRules[0].fromFile,true);
-  assert.deepEqual([...s.state.fileLegendCaptions.value],['Shared [#112233]']);
+  assert.deepEqual([...s.state.fileLegendCaptions.value],['Shared']);
   assert.equal(s.transactions.length,1);
-  assert.deepEqual(s.legendApplies,[{transaction:'Change specific color rules',rules:['Shared [#112233]','Shared [#445566]']}],
+  assert.deepEqual(s.legendApplies,[{transaction:'Change specific color rules',rules:['Shared','Shared']}],
     'the legend rows apply after the rule transition, inside its History step (R13)');
-  assert.match(s.notices[0],/Updated 2/);
   await s.actions.setSpecificRuleField(1,'cap','Renamed');
   assert.equal(s.state.manualSpecificRules[1].cap,'Renamed');
-  assert.equal(s.state.manualSpecificRules[0].cap,'Shared [#112233]');
+  assert.equal(s.state.manualSpecificRules[0].cap,'Shared');
   await s.actions.moveSpecificRuleUp(1);
   assert.equal(s.state.manualSpecificRules[0].cap,'Renamed');
   s.state.addedLegendCaptions.value.add('Independent manual legend');
@@ -112,7 +124,7 @@ test('rule action admits full canonical rules and legend in one transaction afte
 for (const outcome of ['stale','error']) {
   test(`legend ${outcome} candidate leaves canonical rules, provenance, Result and History unchanged`, async () => {
     const s=setup();
-    await s.actions.commitSpecificRules(rules);
+    await s.actions.commitSpecificRules(() => rules);
     s.state.addedLegendCaptions.value.add('Independent manual legend');
     const before=JSON.stringify(s.state.manualSpecificRules), result=s.state.results.value;
     const captions=[...s.state.fileLegendCaptions.value], count=s.transactions.length;
@@ -123,8 +135,8 @@ for (const outcome of ['stale','error']) {
       s.state.svgResultIdentity.value=`replacement-${++replacements}`;
     });
     const candidate=rules.map(r=>({...r,cap:'Changed'}));
-    if(outcome==='error') await assert.rejects(()=>s.actions.commitSpecificRules(candidate),/measurement failed/);
-    else assert.equal(await s.actions.commitSpecificRules(candidate),false);
+    if(outcome==='error') await assert.rejects(()=>s.actions.commitSpecificRules(() => candidate),/measurement failed/);
+    else assert.equal(await s.actions.commitSpecificRules(() => candidate),false);
     assert.equal(JSON.stringify(s.state.manualSpecificRules),before);
     assert.equal(s.state.results.value,result);
     assert.deepEqual([...s.state.fileLegendCaptions.value],captions);
@@ -148,9 +160,9 @@ test('a rule commit whose preparation spans the rerendered Result binding prepar
     // The binder's extraction of the rerendered Result, once.
     if(preparations===1) s.state.legendEntries.value=[{caption:'CDS',originalCaption:'CDS',color:'#808080'}];
   });
-  assert.equal(await s.actions.commitSpecificRules(rules),true);
+  assert.equal(await s.actions.commitSpecificRules(() => rules),true);
   assert.equal(preparations,2,'one more preparation, against the bound Result');
-  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
+  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared','Shared']);
   assert.equal(s.transactions.length,1);
   assert.notEqual(results,s.state.results.value,'the Legend rows applied');
 });
@@ -179,25 +191,26 @@ test('a rule run waits for the automatic rerender in flight before it prepares (
   assert(s.preparation.isPrepared([saved,candidate]));
 });
 
-test('historical caption ownership retains every source color before normalization',async()=>{
+test('a caption written in two colors keeps a row per color, each under its own key, and stays as written',async()=>{
   const s=setup();s.state.manualSpecificRules.push(...rules.map(rule=>({...rule})));
   await s.actions.setSpecificRuleField(0,'val','a');
-  assert.deepEqual(s.previousIntents(),[{caption:'Shared',color:'#112233'},{caption:'Shared',color:'#445566'}]);
-  assert.deepEqual(s.state.manualSpecificRules.map(rule=>rule.cap),['Shared [#112233]','Shared [#445566]']);
+  // The rows the rules had: one caption in two colors is two rows, each under its own key.
+  assert.deepEqual(s.previousIntents(),[{caption:'Shared [#112233]',color:'#112233'},{caption:'Shared [#445566]',color:'#445566'}]);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule=>rule.cap),['Shared','Shared']);
 });
 
 test('complete caption recolor uses bounded intent while caption replacement retains checkpoint History', async () => {
   const s = setup();
   s.state.legendEntries.value = [{ caption: 'Shared', color: '#012345' }];
   const recolor = [{ feat: 'CDS', qual: 'gene', val: 'a', color: '#abcdef', cap: 'Shared' }];
-  assert.equal(await s.actions.commitSpecificRules(recolor, 'Recolor', {
+  assert.equal(await s.actions.commitSpecificRules(() => recolor, 'Recolor', {
     previousLegendIntents: [{ caption: 'Shared', color: '#012345' }]
   }), true);
   assert.deepEqual(s.transactionScopes, ['intent']);
   assert.deepEqual(s.state.legendEntries.value, [{ caption: 'Shared', color: '#abcdef' }]);
   assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap), ['Shared']);
   assert.equal(s.transactions.length, 1);
-  assert.equal(await s.actions.commitSpecificRules(recolor.map(rule => ({ ...rule, cap: 'Renamed' }))), true);
+  assert.equal(await s.actions.commitSpecificRules(() => recolor.map(rule => ({ ...rule, cap: 'Renamed' }))), true);
   assert.deepEqual(s.transactionScopes, ['intent', 'checkpoint']);
   assert.deepEqual(s.state.legendEntries.value, [{ caption: 'Renamed', color: '#abcdef' }]);
 });
@@ -216,15 +229,14 @@ test('biological safety rows and hidden rendered features do not create unused l
   };
   let intents = null;
   s.setLegendPreparation(async (next) => { intents = next; });
-  assert.equal(await s.actions.commitSpecificRules([
+  assert.equal(await s.actions.commitSpecificRules(() => [
     { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' },
     { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Shared' },
     { feat: 'CDS', qual: 'gene', val: 'c', color: '#778899', cap: 'Shared' },
     { feat: 'CDS', qual: 'gene', val: 'absent', color: '#aabbcc', cap: 'Shared' }
   ]), true);
-  assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap),
-    ['Shared [#112233]', 'Shared [#445566]', 'Shared [#778899]', 'Shared [#aabbcc]']);
-  assert.deepEqual(intents, [{ caption: 'Shared [#112233]', color: '#112233' }]);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap), ['Shared', 'Shared', 'Shared', 'Shared']);
+  assert.deepEqual(intents, [{ caption: 'Shared [#112233]', color: '#112233', name: 'Shared' }]);
 });
 
 // F-2 (release D-39): a hash rule names the feature's hash in its source
@@ -243,7 +255,7 @@ test('a This feature only rule on a cropped record paints its feature live as Ge
   assert.deepEqual(qualifier, { qual: 'hash', val: 'f3ccacda4' });
   let intents = null;
   s.setLegendPreparation(async (next) => { intents = next; });
-  assert.equal(await s.actions.commitSpecificRules([
+  assert.equal(await s.actions.commitSpecificRules(() => [
     { feat: 'CDS', ...qualifier, color: '#c83366', cap: 'duplicate protein' }
   ]), true);
   assert.deepEqual(Object.values(s.state.featureColorOverrides), [{ color: '#c83366', caption: 'duplicate protein' }]);
@@ -258,10 +270,11 @@ test('a This feature only rule on a cropped record paints its feature live as Ge
 const resultSvg = (rows) => {
   const element = (attributes, children = []) => ({
     getAttribute: (name) => attributes[name] ?? null,
+    hasAttribute: (name) => name in attributes,
     querySelector: () => null,
     querySelectorAll: () => children
   });
-  const legend = element({}, rows.map(([key, fill]) => element({ 'data-legend-key': key }, [element({ fill })])));
+  const legend = element({}, rows.map(([key, fill, attributes = {}]) => element({ 'data-legend-key': key, ...attributes }, [element({ fill })])));
   return { getElementById: (id) => (id === 'legend' ? legend : null) };
 };
 const mounted = (rows) => {
@@ -315,8 +328,9 @@ test('a rule captioned like a generated row commits, and is edited through, its 
   let intents = null;
   s.setLegendPreparation(async (next) => { intents = next; });
   const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
-  assert.equal(await s.actions.commitSpecificRules([rule]), true);
-  assert.deepEqual(intents, [{ caption: 'CDS [#ff0000]', color: '#ff0000' }]);
+  assert.equal(await s.actions.commitSpecificRules(() => [rule]), true);
+  // The row's key is never drawn: the row is named by the rule's caption.
+  assert.deepEqual(intents, [{ caption: 'CDS [#ff0000]', color: '#ff0000', name: 'CDS' }]);
   assert.deepEqual(s.state.manualSpecificRules.map((row) => row.cap), ['CDS'], 'the rule keeps its caption');
 
   // The Result Generate drew: the generated CDS row and the rule's row.
@@ -331,9 +345,28 @@ test('a rule captioned like a generated row commits, and is edited through, its 
   assert.deepEqual(s.actions.getLegendRowRules('CDS [#ff0000]'), s.state.manualSpecificRules);
 
   // Recoloring the rule retires the drawn row and adds the row for the new color.
-  assert.equal(await s.actions.commitSpecificRules([{ ...rule, color: '#00ff00' }]), true);
+  assert.equal(await s.actions.commitSpecificRules(() => [{ ...rule, color: '#00ff00' }]), true);
   assert.deepEqual(s.previousIntents(), [{ caption: 'CDS [#ff0000]', color: '#ff0000' }]);
-  assert.deepEqual(intents, [{ caption: 'CDS [#00ff00]', color: '#00ff00' }]);
+  assert.deepEqual(intents, [{ caption: 'CDS [#00ff00]', color: '#00ff00', name: 'CDS' }]);
+});
+
+// A caption written in two colors is two rows, each under its own key. A
+// feature belongs to the row of its rule, and a feature with only a color edit
+// of that caption and color (its rule match not known) to the same row.
+test('a feature of a caption written in two colors belongs to the row of its color', () => {
+  const s = setup();
+  s.state.manualSpecificRules.push(...rules.map((rule) => ({ ...rule })));
+  const [a, b] = s.state.extractedFeatures.value;
+  const edited = { type: 'CDS', svg_id: 'c', qualifiers: { gene: ['c'] } };
+  s.state.extractedFeatures.value.push(edited);
+  const keys = s.state.manualSpecificRules.map(ruleKey);
+  const matches = [[0], [1], []];
+  recordRuleMatches([a, b, edited], keys, (index) => ({ matched: matches[index], priorities: matches[index].map(() => 0), declined: [] }));
+  s.state.featureColorOverrides.c = { color: '#445566', caption: 'Shared' };
+  s.state.originalLegendOrder = { value: ['Shared [#112233]', 'Shared [#445566]'] };
+  s.state.svgContainer = mounted([['Shared [#112233]', '#112233'], ['Shared [#445566]', '#445566']]);
+  const captionOf = s.actions.effectiveLegendCaptions();
+  assert.deepEqual([a, b, edited].map(captionOf), ['Shared [#112233]', 'Shared [#445566]', 'Shared [#445566]']);
 });
 
 // OV-308 (OV-306 on the commit path): Python draws no row for a feature type
@@ -348,7 +381,7 @@ test('a rule captioned with its own feature type commits the type\'s row in its 
   let intents = null;
   s.setLegendPreparation(async (next) => { intents = next; });
   const rule = { feat: 'CDS', qual: 'gene', val: '.', color: '#c83366', cap: 'CDS' };
-  assert.equal(await s.actions.commitSpecificRules([rule]), true);
+  assert.equal(await s.actions.commitSpecificRules(() => [rule]), true);
   assert.deepEqual(intents, [{ caption: 'CDS', color: '#c83366' }]);
   assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#54bcf8' }], 'the commit owns the type\'s row');
 });
@@ -368,7 +401,7 @@ test('a rule captioned with its own feature type commits while the type\'s row s
   let intents = null;
   s.setLegendPreparation(async (next) => { intents = next; });
   const rule = { feat: 'CDS', qual: 'gene', val: '.', color: '#c83366', cap: 'CDS' };
-  assert.equal(await s.actions.commitSpecificRules([rule]), true);
+  assert.equal(await s.actions.commitSpecificRules(() => [rule]), true);
   assert.deepEqual(intents, [{ caption: 'CDS', color: '#c83366' }]);
   assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#ff8800' }], 'the listed row, by its key');
   // The Legend preparation owns that row and updates it.
@@ -396,7 +429,7 @@ test('a rule commit owns no type row of the displayed Result for a feature it do
   s.state.legendEntries.value = [{ caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' }];
   s.setLegendPreparation(async () => {});
   const rule = { feat: 'CDS', qual: 'locus_tag', val: '^(FL2|A2)$', color: '#2266aa', cap: 'Group' };
-  assert.equal(await s.actions.commitSpecificRules([rule]), true);
+  assert.equal(await s.actions.commitSpecificRules(() => [rule]), true);
   assert.deepEqual(s.previousIntents(), [], 'Python keeps the CDS row of the displayed Result');
 });
 
@@ -417,7 +450,7 @@ test('a rule commit draws no row for a rule that only features the displayed Res
   s.state.displayedResultMetadata = () => ({ renderedFeatureIdentities: { renderedIds: new Set(['b1', 'b2']) } });
   let intents = null;
   s.setLegendPreparation(async (next) => { intents = next; });
-  assert.equal(await s.actions.commitSpecificRules([
+  assert.equal(await s.actions.commitSpecificRules(() => [
     { feat: 'CDS', qual: 'locus_tag', val: '^A2$', color: '#7b2cbf', cap: 'other Result' },
     { feat: 'CDS', qual: 'locus_tag', val: '^B2$', color: '#264653', cap: 'hidden' },
     { feat: 'CDS', qual: 'locus_tag', val: '^B1$', color: '#c83366', cap: 'shown' }
@@ -426,7 +459,7 @@ test('a rule commit draws no row for a rule that only features the displayed Res
 });
 
 // L1: a rule captioned with a track's row (Python's own rows,
-// `_generated_legend_fills`) is no rule of that row, also in the track's
+// `_generated_legend_rows`) is no rule of that row, also in the track's
 // color: Python draws it in "<caption> [<hex>]" and keeps the track's row.
 test('a rule captioned with a track row draws its own row, and the commit leaves the track row alone', () => {
   const rows = (entries) => new Map(entries.map(([key, color]) => [key, { key, color }]));
@@ -443,15 +476,17 @@ test('a rule captioned with a track row draws its own row, and the commit leaves
   assert.deepEqual([...ruleCommitLegendRows({ ...context, rules: [live, next] }).takenKeys], []);
 });
 
-// The Python rows the Web app reads from their keys, with the palette key of
-// their fill, are those Python generates (tests/test_legend_row_facts.py).
+// The Python rows the Web app reads from their keys are those Python
+// generates (tests/test_legend_row_facts.py): a present type's row with the
+// palette key of its fill, or a track's row, whose fill the track rows of the
+// request give (tests/web/track-legend-row-colors.test.mjs).
 test('the generated Legend rows read from their keys are Python\'s', () => {
   const { cases } = JSON.parse(readFileSync(new URL('../fixtures/legend_generated_rows.json', import.meta.url), 'utf8'));
   for (const { name, features_present: types, rows } of cases) {
     for (const [key, paletteKey] of rows) {
       const row = generatedLegendRow(key);
-      assert.equal(row.paletteKey, paletteKey, `${name}: ${key}`);
-      assert.ok(row.track || types.includes(row.paletteKey), `${name}: ${key} is a track row or a present type's row`);
+      assert.equal(row.track, !types.includes(paletteKey), `${name}: ${key} is a track row or a present type's row`);
+      assert.equal(row.paletteKey, row.track ? '' : paletteKey, `${name}: ${key}`);
     }
   }
   assert.deepEqual(generatedLegendRow('Group'), { track: false, paletteKey: 'Group' }, 'any other key names a type\'s row');
@@ -471,8 +506,8 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
     legendStrokeOverrides: {}, legendColorOverrides: {}, adv: {}
   };
   const committed = [];
-  const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: (next, label) => {
-    committed.push({ rules: next, label });
+  const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: (build, label) => {
+    committed.push({ rules: build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch })), label });
     return true;
   }, readShownLegendColor: (entry) => entry?.color });
   assert.equal(legend.updateLegendEntryColor(1, '#00ff00'), true);
@@ -483,6 +518,103 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   assert.deepEqual(state.legendColorOverrides, { CDS: '#123456' }, 'a Legend-only color');
 });
 
+// D-35: a Legend color edit of a row that merges a rule's row (one name, one
+// swatch, D-28) revises that rule and writes the Legend color of the other
+// keys in the rule commit's one step, so the row stays one row.
+test('the Legend editor recolors every row a merged row stands for, a rule row through its rule, in one step (D-35)', () => {
+  const ref = (value) => ({ value });
+  const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
+  const state = {
+    manualSpecificRules: [rule],
+    // Python drew CDS in its palette color; its Legend color makes it the rule's swatch.
+    svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000', { display: 'none', 'data-legend-merged': 'CDS' }]]),
+    results: ref([]), selectedResultIndex: ref(0),
+    legendEntries: ref([
+      { caption: 'CDS', originalCaption: 'CDS', color: '#ff0000' },
+      { caption: 'CDS [#ff0000]', originalCaption: 'CDS [#ff0000]', color: '#ff0000' }
+    ]),
+    originalLegendOrder: ref(['CDS', 'CDS [#ff0000]']), deletedLegendEntries: ref([]), originalLegendColors: ref({}),
+    legendStrokeOverrides: {}, legendColorOverrides: { CDS: '#ff0000' }, adv: {}
+  };
+  const committed = [];
+  const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: (build, label, options) => {
+    committed.push({ rules: build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch })), label });
+    options?.afterCommit?.([]);
+    return true;
+  }, readShownLegendColor: (entry) => entry?.color });
+  assert.equal(legend.legendRowHasRules(0), true, 'the shown row stands for a rule row');
+  assert.equal(legend.updateLegendEntryColor(0, '#00ff00'), true);
+  assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
+  assert.deepEqual(state.legendColorOverrides, { CDS: '#00ff00' }, 'the other key\'s Legend color, in the rule commit');
+  assert.equal(state.legendEntries.value[0].color, '#00ff00');
+});
+
+// Review N-1 of #1051 (D-35): the feature popup's "Legend item" scope edits the
+// row the Legend draws, so on a merged row it reaches every row the row stands
+// for, through the Legend owner's writers, and the row stays one row.
+test('the popup\'s Legend item scope recolors and restrokes every row a merged row stands for (D-35, review N-1)', async () => {
+  const ref = (value) => ({ value });
+  const cds = { id: 'c1', svg_id: 'c1', type: 'CDS', qualifiers: {} };
+  // CDS renamed `Shared` in the color of the tRNA rule row `Shared`: one row.
+  const fixture = (defaultColorType) => {
+    const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#445566', cap: 'Shared' };
+    const state = {
+      manualSpecificRules: [rule],
+      svgContainer: mounted([['CDS', '#445566'], ['Shared', '#445566', { display: 'none', 'data-legend-merged': 'CDS' }]]),
+      results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ CDS: '#445566' }),
+      extractedFeatures: ref([cds]), biologicalFeatures: ref([cds]), clickedFeature: ref(null),
+      featureStyleScopeDialog: { show: true, kind: 'fill', feat: cds, color: '#ff0000', strokeColor: null, strokeWidth: null,
+        legendName: 'CDS', matchingRule: null, siblingCount: 1, ruleMatchCount: 0, defaultColorType },
+      resetColorDialog: {}, legendRenameDialog: {},
+      legendEntries: ref([
+        { caption: 'Shared', originalCaption: 'CDS', color: '#445566' },
+        { caption: 'Shared', originalCaption: 'Shared', color: '#445566' }
+      ]),
+      originalLegendOrder: ref(['CDS', 'Shared']), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+      originalLegendColors: ref({}), featureColorOverrides: {}, featureStrokeOverrides: {},
+      legendStrokeOverrides: {}, legendColorOverrides: { CDS: '#445566' }, adv: {}
+    };
+    const committed = [];
+    const defaults = [];
+    const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: () => assert.fail('no Legend editor commit'),
+      readShownLegendColor: (entry) => entry?.color });
+    const popup = createFeatureColorActions({
+      state: withDrawings(state), readDrawnTracks: () => [], getFeatureElements: () => [], getFeatureFillElements: () => [],
+      readUserDefaultColor: () => null, setDefaultColor: (_drawing, type, color) => { defaults.push([type, color]); },
+      writeLegendRowColor: legend.writeLegendRowColor,
+      ruleActions: {
+        commitSpecificRules: async (build, label, options = {}) => {
+          state.manualSpecificRules = build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+          committed.push(label);
+          options.afterCommit?.([]);
+          return true;
+        },
+        getLegendRowRules: (key) => (key === 'Shared' ? state.manualSpecificRules : []),
+        effectiveLegendCaptions: () => () => 'CDS',
+        findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
+        findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
+        getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }), getLabelSpecificRule: () => null,
+        runWithRuleMatches: (_rules, commit) => commit()
+      }
+    });
+    return { state, popup, committed, defaults };
+  };
+  for (const defaultColorType of [null, 'CDS']) {
+    const { state, popup, committed, defaults } = fixture(defaultColorType);
+    await popup.handleColorScopeChoice('caption');
+    assert.deepEqual(state.manualSpecificRules.map(({ cap, color }) => [cap, color]), [['Shared', '#ff0000']],
+      `the merged rule row's rule (${defaultColorType})`);
+    assert.equal(committed.length, 1, 'one rule commit');
+    if (defaultColorType) assert.deepEqual(defaults, [['CDS', '#ff0000']], 'the palette row\'s default color');
+    else assert.deepEqual(state.legendColorOverrides, { CDS: '#ff0000' }, 'the other key\'s Legend color, in the rule commit');
+  }
+  const { state, popup } = fixture(null);
+  Object.assign(state.featureStyleScopeDialog, { kind: 'stroke', color: null, strokeColor: '#00aa00', strokeWidth: 2 });
+  assert.equal(await popup.handleFeatureStyleScopeChoice('caption'), true);
+  assert.deepEqual(Object.keys(state.legendStrokeOverrides).sort(), ['CDS', 'Shared'], 'the stroke of every key');
+  assert.deepEqual([state.legendStrokeOverrides.Shared.strokeColor, state.legendStrokeOverrides.Shared.strokeWidth], ['#00aa00', 2]);
+});
+
 test('a color action prepares the color matches of its rules without the caption evaluation, and a prepared table answers at once', async () => {
   const kinds = [];
   const s = setup(async (payload, options) => { kinds.push(payload.kind); return evaluatePythonRules(payload, options); });
@@ -491,7 +623,7 @@ test('a color action prepares the color matches of its rules without the caption
   assert.ok(pending instanceof Promise, 'unprepared rules are prepared first');
   assert.deepEqual(commits, []);
   assert.equal(await pending, 'cold');
-  assert.deepEqual(kinds, ['color'], 'the matches only; commitSpecificRules evaluates the captions');
+  assert.deepEqual(kinds, ['color'], 'the matches only');
   assert.equal(s.actions.runWithRuleMatches(rules, () => { commits.push('warm'); return 'warm'; }), 'warm');
   assert.deepEqual(commits, ['cold', 'warm']);
   assert.deepEqual(kinds, ['color']);
@@ -518,9 +650,9 @@ test('a rule commit retires the Legend color a popup edit left on a row it recol
   s.state.manualSpecificRules.push({ ...rule });
   s.state.legendColorOverrides.Shared = '#112233';
   s.state.legendColorOverrides.Other = '#abcdef';
-  assert.equal(await s.actions.commitSpecificRules([{ ...rule }]), true);
+  assert.equal(await s.actions.commitSpecificRules(() => [{ ...rule }]), true);
   assert.equal(s.state.legendColorOverrides.Shared, '#112233', 'the same color keeps the row\'s Legend color');
-  assert.equal(await s.actions.commitSpecificRules([{ ...rule, color: '#445566' }]), true);
+  assert.equal(await s.actions.commitSpecificRules(() => [{ ...rule, color: '#445566' }]), true);
   assert.equal(Object.hasOwn(s.state.legendColorOverrides, 'Shared'), false, 'the recolored row drops the stale Legend color');
   assert.equal(s.state.legendColorOverrides.Other, '#abcdef', 'a row the commit does not draw keeps its Legend color');
 });
@@ -552,7 +684,7 @@ test('a rule commit that removes a rule row retires the Legend color copied from
   // Rules that recolor a whole type keep its caption; removing the last of
   // them asks Python to draw the type's default row again.
   const typeRule = { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'CDS' };
-  assert.equal(await s.actions.commitSpecificRules([{ ...typeRule }, { ...typeRule, val: 'b' }]), true);
+  assert.equal(await s.actions.commitSpecificRules(() => [{ ...typeRule }, { ...typeRule, val: 'b' }]), true);
   const before = s.rerenders();
   assert.equal(await s.actions.removeSpecificRule(0), true);
   assert.equal(s.rerenders(), before, 'a rule of the type row remains');
@@ -609,19 +741,19 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
     projectPaletteAndRules: () => true, ports: { requestAutomaticRerender: () => { rerenders += 1; return true; } }
   });
   const tagRule = (pattern, cap) => ({ feat: 'CDS', qual: 'locus_tag', val: `^(${pattern})$`, color: '#112233', cap });
-  assert.equal(await actions.commitSpecificRules([tagRule('A|B', 'alpha')]), true);
+  assert.equal(await actions.commitSpecificRules(() => [tagRule('A|B', 'alpha')]), true);
   shownKeys = ['alpha'];
   const first = rerenders;
   const alpha = state.manualSpecificRules.map(rule => ({ ...rule }));
   // A rename in the Rules panel appends the new row, where Python keeps the
   // row in the old row's place; the Legend rename places it (OV-158).
   const rulesPanel = state.manualSpecificRules.map(rule => ({ ...rule }));
-  assert.equal(await actions.commitSpecificRules([tagRule('A|B', 'beta')]), true);
+  assert.equal(await actions.commitSpecificRules(() => [tagRule('A|B', 'beta')]), true);
   assert.equal(rerenders, first + 1, 'an appended relabeled row asks Python');
   state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...rulesPanel);
   state.legendEntries.value = [{ caption: 'alpha', color: '#112233' }];
-  assert.equal(await actions.commitSpecificRules([tagRule('A|B', 'beta')], 'Rename legend item',
-    { legendPlacement: { caption: 'beta', at: 'alpha' } }), true);
+  assert.equal(await actions.commitSpecificRules(() => [tagRule('A|B', 'beta')], 'Rename legend item',
+    { legendPlacement: { name: 'beta', color: '#112233', at: 'alpha', replaces: true } }), true);
   assert.equal(rerenders, first + 1, 'the renamed row is shown at once in its place');
   shownKeys = ['beta'];
   const beta = state.manualSpecificRules.map(rule => ({ ...rule }));
@@ -633,6 +765,350 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   shownKeys = ['beta'];
   actions.followRestoredRules(alpha);
   assert.equal(rerenders, first + 1, 'Undo and Redo of the rename ask no rerender');
-  assert.equal(await actions.commitSpecificRules([tagRule('A', 'gamma'), tagRule('B', 'beta')]), true);
+  assert.equal(await actions.commitSpecificRules(() => [tagRule('A', 'gamma'), tagRule('B', 'beta')]), true);
   assert.equal(rerenders, first + 2, 'a rename of part of the row asks Python');
+});
+
+// OV-445, OV-443: a rule commit runs once its rules are prepared, and a newer
+// commit supersedes a pending one. An Add is never dropped that way: a second
+// Add, or an edit made while an Add is pending, waits for it and applies to
+// the table that holds its rule; an Add waits for a pending edit the same way.
+// Each write is its own History step (R11).
+/** @param {Parameters<typeof setup>[1]} [options] */
+const queuedRuleWrites = (options) => {
+  const s=setup(undefined, options);
+  s.state.errorLog={value:null};
+  s.state.manualSpecificRules.push(
+    {feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''},
+    {feat:'CDS',qual:'gene',val:'zz',color:'#778899',cap:''});
+  // Holds the first commit's Legend preparation; later commits run at once.
+  let release, started;
+  const ready=new Promise(resolve=>{started=resolve;});
+  s.setLegendPreparation(()=>new Promise(resolve=>{release=resolve;started();}));
+  const held=async(pending)=>{ await ready; s.setLegendPreparation(async()=>{}); return [pending,()=>release()]; };
+  const table=()=>s.state.manualSpecificRules.map(rule=>`${rule.val} ${rule.color} ${rule.cap}`);
+  return {s,held,table};
+};
+const withDocument=async(run)=>{
+  const previousDocument=globalThis.document;
+  globalThis.document={querySelector:()=>null};
+  try { await run(); } finally { globalThis.document=previousDocument; }
+};
+const added='a #112233 Shared';
+const ruleEdits={
+  color:{run:s=>s.actions.setSpecificRuleField(0,'color','#000000'),label:'Edit specific color rule',
+    table:['b #000000 ','zz #778899 ']},
+  caption:{run:s=>s.actions.setSpecificRuleField(0,'cap','Edited'),label:'Edit specific color rule',
+    table:['b #445566 Edited','zz #778899 ']},
+  pattern:{run:s=>s.actions.setSpecificRuleField(0,'val','b|c'),label:'Edit specific color rule',
+    table:['b|c #445566 ','zz #778899 ']},
+  move:{run:s=>s.actions.moveSpecificRuleUp(1),label:'Move specific color rule',table:['zz #778899 ','b #445566 ']},
+  remove:{run:s=>s.actions.removeSpecificRule(0),label:'Remove specific color rule',table:['zz #778899 ']}
+};
+for (const second of ['a', 'b']) {
+  test(`a second Add while the first is pending adds both rules, one History step each (OV-445, pattern ${second})`, () => withDocument(async () => {
+    const {s,held,table}=queuedRuleWrites();
+    const [first,release]=await held(s.actions.addSpecificRule());
+    s.state.newSpecRule.val=second;
+    const next=s.actions.addSpecificRule();
+    release();
+    assert.deepEqual(await Promise.all([first,next]),[true,true]);
+    assert.deepEqual(table(),['b #445566 ','zz #778899 ',added,`${second} #112233 Shared`]);
+    assert.deepEqual(s.transactions,['Add specific color rule','Add specific color rule']);
+    assert.equal(s.state.newSpecRule.val,'','the pattern of the last Add is cleared');
+  }));
+}
+// An Add whose pattern may match slowly asks first. Its write takes its turn
+// at the answer, so it also applies to the table an earlier Add wrote.
+test('an Add that asks about a slow pattern applies after a pending Add, to the table with its rule', () => withDocument(async () => {
+  let answer;
+  const {s,held,table}=queuedRuleWrites({askChoice:()=>new Promise(resolve=>{answer=resolve;})});
+  const [first,release]=await held(s.actions.addSpecificRule());
+  s.state.newSpecRule.val='(a+)+';
+  const asked=s.actions.addSpecificRule();
+  assert.deepEqual(table(),['b #445566 ','zz #778899 '],'nothing is written before the answer');
+  answer('add');
+  release();
+  assert.deepEqual(await Promise.all([first,asked]),[true,true]);
+  assert.deepEqual(table(),['b #445566 ','zz #778899 ',added,'(a+)+ #112233 Shared']);
+  assert.deepEqual(s.transactions,['Add specific color rule','Add specific color rule']);
+}));
+// The question is asked before the Add's History step (the real manager): the
+// step is recorded once, at the answer, under the Add's name, and "Edit
+// pattern" records none. An edit made while the question is asked is a step
+// of its own, before the Add's.
+test('an Add that asks about a slow pattern is one History step recorded at the answer; Edit pattern records none', () => withDocument(async () => {
+  let answer;
+  const s=setup(undefined,{askChoice:()=>new Promise(resolve=>{answer=resolve;}),createHistory:state=>createHistoryManager({
+    buildIntent:()=>structuredClone({rules:state.manualSpecificRules}),
+    applyIntent:({rules})=>{state.manualSpecificRules.splice(0,Infinity,...structuredClone(rules));},
+    buildCheckpoint:()=>({}),applyCheckpoint:()=>{}})});
+  s.state.errorLog={value:null};
+  s.state.manualSpecificRules.push({feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:''});
+  Object.assign(s.state.newSpecRule,{val:'(a+)+',cap:''});
+  const table=()=>s.state.manualSpecificRules.map(rule=>`${rule.val} ${rule.color}`);
+  await s.history.initializeIntentBaseline();
+  const ask=async()=>{
+    const asked=s.actions.addSpecificRule();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(s.history.mutationPending(),false,'no step is open while the question is asked');
+    return [asked];
+  };
+  let [asked]=await ask();
+  answer('cancel');
+  await asked;
+  assert.deepEqual([table(),s.history.getUndoCount()],[['b #445566'],0]);
+
+  [asked]=await ask();
+  assert.equal(await s.actions.setSpecificRuleField(0,'color','#000000'),true);
+  assert.deepEqual([s.history.getUndoCount(),s.history.undoLabel()],[1,'Edit specific color rule']);
+  answer('add');
+  assert.equal(await asked,true);
+  assert.deepEqual([table(),s.history.getUndoCount(),s.history.undoLabel()],[['b #000000','(a+)+ #112233'],2,'Add specific color rule']);
+  await s.history.undo();
+  assert.deepEqual([table(),s.history.undoLabel()],[['b #000000'],'Edit specific color rule']);
+  await s.history.redo();
+  assert.deepEqual(table(),['b #000000','(a+)+ #112233']);
+}));
+for (const [kind, edit] of Object.entries(ruleEdits)) {
+  test(`a ${kind} edit made while an Add is pending applies after it, to the table with its rule (OV-443)`, () => withDocument(async () => {
+    const {s,held,table}=queuedRuleWrites();
+    const [add,release]=await held(s.actions.addSpecificRule());
+    const edited=edit.run(s);
+    release();
+    assert.deepEqual(await Promise.all([add,edited]),[true,true]);
+    assert.deepEqual(table(),[...edit.table,added]);
+    assert.deepEqual(s.transactions,['Add specific color rule',edit.label]);
+  }));
+  if (kind === 'pattern') continue;
+  test(`an Add made while a ${kind} edit is pending applies after it (OV-443)`, () => withDocument(async () => {
+    const {s,held,table}=queuedRuleWrites();
+    const [edited,release]=await held(edit.run(s));
+    const add=s.actions.addSpecificRule();
+    release();
+    assert.deepEqual(await Promise.all([edited,add]),[true,true]);
+    assert.deepEqual(table(),[...edit.table,added]);
+    assert.deepEqual(s.transactions,[edit.label,'Add specific color rule']);
+  }));
+}
+// OV-448: a pending pattern edit is the one write a newer write cancels. Its
+// draft stays, and the newer write does not wait for it, however long its
+// evaluation takes.
+const afterHeldPattern={
+  add:{run:s=>s.actions.addSpecificRule(),label:'Add specific color rule',table:['b #445566 ','zz #778899 ',added]},
+  color:{run:s=>s.actions.setSpecificRuleField(1,'color','#000000'),label:'Edit specific color rule',table:['b #445566 ','zz #000000 ']},
+  move:ruleEdits.move,
+  remove:{run:s=>s.actions.removeSpecificRule(1),label:'Remove specific color rule',table:['b #445566 ']},
+  clear:{run:s=>s.actions.clearAllSpecificRules(),label:'Clear specific color rules',table:[]}
+};
+for (const [kind, later] of Object.entries(afterHeldPattern)) {
+  test(`a later ${kind} does not wait for a held pattern edit, which stays as a draft (OV-448)`, () => withDocument(async () => {
+    const {s,held,table}=queuedRuleWrites();
+    const row=s.state.manualSpecificRules[0];
+    const [edited,release]=await held(ruleEdits.pattern.run(s));
+    assert.equal(await later.run(s),true,'while the pattern edit is still held');
+    assert.deepEqual(table(),later.table);
+    release();
+    assert.equal(await edited,false);
+    assert.deepEqual(table(),later.table);
+    assert.deepEqual(s.transactions,[later.label]);
+    if (kind !== 'clear') assert.deepEqual([s.actions.specificRulePattern(row),s.actions.specificRulePatternDraft(row).pending],['b|c',false]);
+  }));
+}
+
+// OV-444: every writer of the rule table, inside the rule owner or not,
+// builds its rules from the table at its turn, so a write never drops a
+// pending Add. A pattern keystroke or a drawer close cancels only pattern
+// commits, never a pending color edit.
+const popupFor=(s,ports={})=>{
+  Object.assign(s.state,{clickedFeature:{value:null},svgContainer:{value:null},biologicalFeatures:{value:[]},
+    featureStyleScopeDialog:{},resetColorDialog:{},legendRenameDialog:{},originalLegendOrder:{value:[]},
+    originalLegendColors:{value:{}},deletedLegendEntries:{value:[]},legendStrokeOverrides:{},featureStrokeOverrides:{},
+    selectedResultIndex:{value:0},appliedPaletteColors:{value:{CDS:'#cccccc'}}});
+  return createFeatureColorActions({state:s.state,ruleActions:s.actions,getFeatureElements:()=>[],getFeatureFillElements:()=>[],
+    readUserDefaultColor:()=>null,setDefaultColor:()=>{},...ports});
+};
+test('a popup recolor of a rule made while an Add is pending applies after it (OV-444)', () => withDocument(async () => {
+  const {s,held,table}=queuedRuleWrites();
+  const popup=popupFor(s);
+  const [add,release]=await held(s.actions.addSpecificRule());
+  Object.assign(s.state.featureStyleScopeDialog,{show:true,feat:s.state.extractedFeatures.value[1],color:'#000000',
+    matchingRule:s.state.manualSpecificRules[0]});
+  const recolored=popup.handleColorScopeChoice('rule');
+  release();
+  await Promise.all([add,recolored]);
+  assert.deepEqual(table(),['b #000000 ','zz #778899 ',added]);
+  assert.deepEqual(s.transactions,['Add specific color rule','Change specific color rule']);
+}));
+// OV-460: a color action's rule write is a second `runUndoable` call, made
+// after the Python preparation, on the step its action runs on. It joins that
+// step (`joinsOpenStep`, set by color-actions.js and passed to History by
+// rule-actions.js): one step, under the name the step had when the action
+// started, here the color input's.
+test('a popup recolor of a rule and its rule write are one History step under the step\'s name', () => withDocument(async () => {
+  const {s,held,table}=queuedRuleWrites({createHistory:state=>createHistoryManager({
+    buildIntent:()=>JSON.parse(JSON.stringify(state.manualSpecificRules)),
+    applyIntent:()=>{},buildCheckpoint:()=>({}),applyCheckpoint:()=>{}})});
+  await s.history.initializeIntentBaseline();
+  const popup=popupFor(s);
+  Object.assign(s.state.featureStyleScopeDialog,{show:true,feat:s.state.extractedFeatures.value[1],color:'#000000',
+    matchingRule:s.state.manualSpecificRules[0]});
+  // app/history-inputs.js: the control begins the step. app-setup.js: the action runs on it.
+  await s.history.begin('Change color',{source:'input-adapter',owner:{tagName:'INPUT'}});
+  const [recolored,release]=await held(s.history.runUndoable('Change feature color',()=>popup.handleColorScopeChoice('rule')));
+  assert.equal(s.history.mutationPending(),true,'the step is open while the rule write is prepared');
+  release();
+  await recolored;
+  assert.deepEqual(table(),['b #000000 ','zz #778899 ']);
+  assert.equal(s.history.getUndoCount(),1);
+  assert.equal(s.history.undoLabel(),'Change color');
+}));
+test('a Legend recolor of a rule row made while an Add is pending applies after it (OV-444)', () => withDocument(async () => {
+  const {s,held,table}=queuedRuleWrites();
+  s.state.manualSpecificRules[0].cap='B';
+  Object.assign(s.state,{svgContainer:mounted([['CDS','#54bcf8'],['B','#445566']]),selectedResultIndex:{value:0},
+    originalLegendOrder:{value:['CDS','B']},deletedLegendEntries:{value:[]},originalLegendColors:{value:{}},
+    legendStrokeOverrides:{},adv:{}});
+  s.state.legendEntries.value=[{caption:'CDS',originalCaption:'CDS',color:'#54bcf8'},{caption:'B',originalCaption:'B',color:'#445566'}];
+  assert.equal(await s.preparation.prepare(s.state.manualSpecificRules),true);
+  const legend=createLegendManager({state:s.state,commitLegendRowRules:s.actions.commitSpecificRules,readShownLegendColor:entry=>entry?.color});
+  assert.equal(legend.legendRowHasRules(1),true);
+  const [add,release]=await held(s.actions.addSpecificRule());
+  const recolored=legend.updateLegendEntryColor(1,'#000000');
+  release();
+  await Promise.all([add,recolored]);
+  assert.deepEqual(table(),['b #000000 B','zz #778899 ',added]);
+  assert.deepEqual(s.transactions,['Add specific color rule','Change legend color']);
+}));
+test('a rules TSV import made while an Add is pending applies after it (OV-444)', () => withDocument(async () => {
+  const {s,held,table}=queuedRuleWrites();
+  const [add,release]=await held(s.actions.addSpecificRule());
+  const imported=s.actions.importSpecificRules('CDS\tgene\tb\t#000000\tFile\n');
+  release();
+  assert.deepEqual(await Promise.all([add,imported]),[true,1]);
+  assert.deepEqual(table(),['b #445566 ','zz #778899 ',added,'b #000000 File']);
+  assert.deepEqual(s.transactions,['Add specific color rule','Import specific color rules']);
+}));
+for (const [kind, cancel] of [
+  ['a pattern keystroke', s => s.actions.editSpecificRulePattern(s.state.manualSpecificRules[1], 'typing')],
+  ['a drawer close', s => s.actions.suspendSpecificRulePatternDrafts()]
+]) {
+  test(`${kind} cancels only pattern commits, not a pending color edit (OV-444)`, async () => {
+    const {s,held,table}=queuedRuleWrites();
+    const [edited,release]=await held(s.actions.setSpecificRuleField(0,'color','#000000'));
+    cancel(s);
+    release();
+    assert.equal(await edited,true);
+    assert.deepEqual(table(),['b #000000 ','zz #778899 ']);
+    assert.deepEqual(s.transactions,['Edit specific color rule']);
+  });
+}
+
+// The key of the row a rule draws (PD-OI-042 scenario revision 2): Python's answer is
+// gbdraw/legend/table.py::rule_legend_keys (tests/test_specific_color_captions.py).
+for (const { name, rules, renderer_rows: rendererRows, rule_stroke: ruleStroke = [], keys } of JSON.parse(
+  readFileSync(new URL('../fixtures/legend_rule_keys.json', import.meta.url), 'utf8')
+).cases) {
+  test(`rule row keys: ${name}`, () => {
+    // A renderer row is its key and fill, then its line; `rule_stroke` is the line of a rule row.
+    const rows = rendererRows.map(([caption, color, stroke, width]) => ({
+      caption, color: legendColorIdentity(color), ruleLine: sameLegendLine({ stroke, width }, { stroke: ruleStroke[0], width: ruleStroke[1] })
+    }));
+    const keyOf = createRuleLegendCaptions(rules, rows);
+    assert.deepEqual(rules.map(keyOf), keys);
+    assert.deepEqual(rules.map(createRuleLegendCaptions([...rules].reverse(), rows)), keys);
+    // The lazy reader of a Result's rows allocates the same keys.
+    const pythonRows = new Map(rows.map((row) => [row.caption, { key: row.caption, color: row.color, ruleLine: row.ruleLine }]));
+    const lazy = ruleLegendCaptions({ rules, pythonRows, features: [], originalLegendOrder: rows.map((row) => row.caption) });
+    assert.deepEqual(rules.map(lazy), keys);
+  });
+}
+
+// OV-645: the rules of one caption and one fill draw one Legend row, and its key
+// changes when the caption starts or stops being written in several colors.
+// The Legend owner keeps such a row in its place, so the mirror names it: the
+// old key and the new key of each row both rule tables hold.
+test('rule row keys: a rule table change re-keys the rows whose caption starts or stops being shared (OV-645)', () => {
+  const red = { feat: 'CDS', qual: 'gene', val: 'a', color: '#e63946', cap: 'alpha' };
+  const teal = { feat: 'CDS', qual: 'gene', val: 'b', color: '#2a9d8f', cap: 'alpha' };
+  const rekeyed = (before, after, rows) => [...rekeyedRuleRows(before, after, rows)];
+  assert.deepEqual(rekeyed([red, teal], [red, { ...teal, cap: 'gamma' }]), [['alpha [#e63946]', 'alpha']], 'a name stops being shared');
+  assert.deepEqual(rekeyed([red, { ...teal, cap: 'beta' }], [red, teal]), [['alpha', 'alpha [#e63946]']], 'a name becomes shared');
+  assert.deepEqual(rekeyed([red, teal], [red]), [['alpha [#e63946]', 'alpha']], 'the other rule of the name is removed');
+  assert.deepEqual(rekeyed([red, teal], [teal, { ...red, color: 'rgb(230, 57, 70)' }]), [], 'the same rows in another order and spelling');
+  // A recolored or renamed rule draws another row; a row no table change touches keeps its key.
+  assert.deepEqual(rekeyed([red, teal], [red, { ...teal, color: '#000000' }]), []);
+  assert.deepEqual(rekeyed([red], [{ ...red, cap: 'beta' }]), []);
+  const typeRow = [{ caption: 'alpha', color: '#54bcf8', ruleLine: true }];
+  assert.deepEqual(rekeyed([red], [red, { ...teal, cap: 'beta' }], typeRow), [], 'a rule named like a renderer row keeps its allocated key');
+});
+
+// OV-640 (D-15): a feature's row is read by its key ("Shared [#112233]" for a
+// caption written in two colors). A caption written from that reading is the
+// row's name, taken through the Legend owner's port; no rule is captioned
+// with a key, and "Reset all" resets the rules of the row, not of the name.
+const twoColorPopup=()=>{
+  const s=setup();
+  s.state.errorLog={value:null};
+  s.state.manualSpecificRules.push(...rules.map(rule=>({...rule})));
+  const [a,b]=s.state.extractedFeatures.value;
+  recordRuleMatches([a,b],s.state.manualSpecificRules.map(ruleKey),index=>({matched:[index],priorities:[0],declined:[]}));
+  s.setLegendPreparation(async()=>{});
+  const popup=popupFor(s,{legendRowName:caption=>(/^Shared \[#[0-9a-f]{6}\]$/.test(caption)?'Shared':caption)});
+  const table=()=>s.state.manualSpecificRules.map(rule=>`${rule.qual} ${rule.color} ${rule.cap}`);
+  return {s,a,b,popup,table};
+};
+test('a color for one feature of a keyed row captions its rule with a name, never the row key (OV-640)', () => withDocument(async () => {
+  const {s,a,popup,table}=twoColorPopup();
+  assert.equal(s.actions.effectiveLegendCaptions()(a),'Shared [#112233]');
+  Object.assign(s.state.featureStyleScopeDialog,{show:true,kind:'fill',feat:a,color:'#c83366',legendName:'Shared [#112233]',
+    matchingRule:s.state.manualSpecificRules[0],siblingCount:0,ruleMatchCount:2});
+  await popup.handleColorScopeChoice('single');
+  assert.deepEqual(table().filter(row=>row.includes(' [#')),[],'no caption is a row key');
+  assert.deepEqual(table().filter(row=>row.startsWith('hash ')).map(row=>row.split(' ')[1]),['#c83366']);
+  assert.equal(table().filter(row=>row.endsWith(' Shared')).length,2,'the feature left its rule\'s row: it is named by itself');
+}));
+test('the existing color of a keyed row and a hollow fill caption the feature with the row\'s name (OV-640)', () => withDocument(async () => {
+  const {s,a,popup,table}=twoColorPopup();
+  Object.assign(s.state.featureStyleScopeDialog,{show:true,kind:'fill',feat:a,color:'#c83366',legendName:'Shared [#445566]',
+    existingCaptionColor:'#445566',matchingRule:null,siblingCount:0,ruleMatchCount:0});
+  await popup.handleColorScopeChoice('useExisting');
+  assert.deepEqual(table().filter(row=>row.startsWith('hash ')),['hash #445566 Shared']);
+  await popup.setFeatureColorValue(a,'none');
+  assert.deepEqual(table().filter(row=>row.startsWith('hash ')),['hash none Shared']);
+}));
+test('Reset all on a keyed row removes the rules of that row only (OV-640)', () => withDocument(async () => {
+  const {s,a,popup,table}=twoColorPopup();
+  s.state.clickedFeature.value={feat:a,svg_id:a.svg_id};
+  await popup.handleResetColorChoice('all');
+  assert.deepEqual(table(),['gene #445566 Shared']);
+}));
+
+// The compatibility reading of PD-OI-042 scenario revision 2 (accepted residual
+// risk): a caption that ends in its own rule's color ID is read without it from
+// a saved Session and from a color table file. Python's answer is
+// gbdraw/legend/table.py::saved_rule_caption (tests/test_specific_color_captions.py).
+const savedCaptions = JSON.parse(
+  readFileSync(new URL('../fixtures/saved_rule_captions.json', import.meta.url), 'utf8')
+).cases;
+for (const { name, caption, color, read } of savedCaptions) {
+  test(`saved rule caption: ${name}`, () => {
+    assert.equal(savedRuleCaption(caption, color), read);
+  });
+}
+
+test('saved rules and an imported color table are read without the color IDs of their own rules', () => {
+  const saved = [
+    { feat: 'CDS', qual: 'gene', val: '^cox1$', color: '#ffe700', cap: 'Complex IV [#ffe700]', fromFile: true },
+    { feat: 'CDS', qual: 'gene', val: '^cox2$', color: '#1f77b4', cap: 'Complex IV [#1f77b4]' },
+    { feat: 'CDS', qual: 'gene', val: '^nad1$', color: '#2ca02c', cap: 'Complex I [#ffe700]' }
+  ];
+  const read = savedSpecificRules(saved);
+  assert.deepEqual(read, [
+    { ...saved[0], cap: 'Complex IV' }, { ...saved[1], cap: 'Complex IV' }, saved[2]
+  ]);
+  // The rows are the keys the older build drew as text, so Legend edits saved under them stay on their rows.
+  assert.deepEqual(read.map(createRuleLegendCaptions(read)), ['Complex IV [#ffe700]', 'Complex IV [#1f77b4]', 'Complex I [#ffe700]']);
+  const text = saved.map((rule) => [rule.feat, rule.qual, rule.val, rule.color, rule.cap].join('\t')).join('\n');
+  assert.deepEqual(prepareSpecificColorImport(text).nextRules.map((rule) => rule.cap), ['Complex IV', 'Complex IV', 'Complex I [#ffe700]']);
 });

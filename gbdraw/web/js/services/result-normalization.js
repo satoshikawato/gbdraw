@@ -1,10 +1,12 @@
 // @ts-check
+/** @param {unknown} name */
 const interactivePairName = (name) => {
   const normalized = String(name || '').trim();
   const match = normalized.match(/^(.*)\.interactive\.svg$/i);
   return match ? `${match[1]}.svg` : null;
 };
 
+/** @param {unknown} results */
 export const normalizeLogicalResults = (results) => {
   if (!Array.isArray(results)) return [];
   const normalized = [];
@@ -65,7 +67,8 @@ export const keepResultNames = (response, names) => {
     metadata.legendRows,
     metadata.trackSlotGeometry?.records,
     metadata.annotationWarnings,
-    metadata.comparisonWarnings
+    metadata.comparisonWarnings,
+    metadata.labelFitReports
   ].forEach((rows) => {
     if (!Array.isArray(rows)) return;
     rows.forEach((row) => {

@@ -427,6 +427,96 @@ def test_shared_linear_preview_fit_centers_the_complete_rendered_diagram() -> No
     assert "pan_left" not in source
 
 
+class _FakePreviewControl:
+    def __init__(self, page: "_FakePreviewPage", name: str) -> None:
+        self._page = page
+        self._name = name
+
+    def inner_text(self) -> str:
+        return f"{round(self._page.zoom * 100)}%"
+
+    def click(self) -> None:
+        self._page.clicks.append(self._name)
+        if self._name == "Zoom out":
+            self._page.zoom = round(self._page.zoom - 0.1, 1)
+        elif self._name == "Fit to preview":
+            # The app's Fit: the largest whole-percent zoom that shows the diagram, centred.
+            fit = int(100 * self._page.canvas_width / self._page.diagram_width) / 100
+            self._page.zoom = max(self._page.min_zoom, fit)
+            self._page.centered = True
+
+
+class _FakePreviewCanvas:
+    def __init__(self, page: "_FakePreviewPage") -> None:
+        self._page = page
+        self.first = self
+
+    def locator(self, _selector: str) -> "_FakePreviewCanvas":
+        return self
+
+    def evaluate(self, _script: str) -> dict[str, float]:
+        page = self._page
+        width = page.diagram_width * page.zoom
+        center = 890.0 if page.centered else 1708.75
+        return {
+            "canvasLeft": 357.0,
+            "canvasRight": 357.0 + page.canvas_width,
+            "canvasWidth": page.canvas_width,
+            "canvasCenterX": 357.0 + page.canvas_width / 2,
+            "wrapperLeft": center - width / 2,
+            "wrapperRight": center + width / 2,
+            "wrapperWidth": width,
+            "wrapperCenterX": center,
+        }
+
+
+class _FakePreviewPage:
+    """The zoom controls and the measured preview of a Linear Result, nothing else."""
+
+    canvas_width = 1066.0
+
+    def __init__(self, diagram_width: float, min_zoom: float = 0.1) -> None:
+        self.diagram_width = diagram_width
+        self.min_zoom = min_zoom
+        self.zoom = 1.0
+        self.centered = False
+        self.clicks: list[str] = []
+
+    def get_by_role(self, _role: str, *, name: str, exact: bool = True) -> object:
+        if name == "Result Preview":
+            return _FakePreviewCanvas(self)
+        return _FakePreviewControl(self, name)
+
+    def wait_for_timeout(self, _milliseconds: float) -> None:
+        return None
+
+    def evaluate(self, _script: str) -> None:
+        return None
+
+
+def test_shared_linear_preview_fit_uses_fit_when_the_documented_zoom_is_too_wide() -> None:
+    from docs.capture import run_all  # noqa: F401  (puts the capture flows on the import path)
+    from flows.web_capture import fit_complete_linear_preview
+
+    # Five short-class BGC records: 1075 px wide at 40% in a 1066 px preview.
+    wide = _FakePreviewPage(diagram_width=2687.5)
+    fit_complete_linear_preview(wide, target_zoom="40%")
+    assert wide.clicks == ["Zoom out"] * 6 + ["Fit to preview"]
+    assert wide.zoom == 0.39
+
+    # A diagram that fits at the documented zoom keeps that zoom.
+    narrow = _FakePreviewPage(diagram_width=2000.0)
+    narrow.centered = True
+    fit_complete_linear_preview(narrow, target_zoom="40%")
+    assert narrow.clicks == ["Zoom out"] * 6
+    assert narrow.zoom == 0.4
+
+    # A diagram that Fit cannot show whole still stops the capture.
+    endless = _FakePreviewPage(diagram_width=2687.5, min_zoom=0.4)
+    with pytest.raises(AssertionError, match="does not fit the complete diagram"):
+        fit_complete_linear_preview(endless, target_zoom="40%")
+
+
 def test_first_linear_flow_uses_accessible_real_actions_without_state_shortcuts() -> None:
     source = LINEAR_FLOW_PATH.read_text(encoding="utf-8")
 
@@ -622,7 +712,8 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
         "select_linear_losat_mode(",
         'label="LOSATN"',
         'mode_key="blastn"',
-        '"Advanced comparison and layout"',
+        "raw_result = linear_raw_result(page, 1, 2)",
+        "open_linear_raw_filename(raw_result)",
         'name="LOSAT execution", exact=True',
         'name="LOSAT total threads", exact=True',
         'name="LOSAT parallel runs", exact=True',
@@ -1227,10 +1318,10 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
     for value in (
         "`NC_001416.1` (48,502 bp)",
         "`NC_042057.1` (42,925 bp)",
-        "| Settings / Runtime and reproducibility | Execution | Serial |",
-        "| Settings / Runtime and reproducibility | Total threads | 1 |",
-        "| Settings / Runtime and reproducibility | Parallel runs | 1 run |",
-        "| Settings / Runtime and reproducibility | Threads per run | Fixed at 1 |",
+        "| Settings / Performance | Execution | Serial |",
+        "| Settings / Performance | Total threads | 1 |",
+        "| Settings / Performance | Parallel runs | 1 run |",
+        "| Settings / Performance | Threads per run | Fixed at 1 |",
         "| Settings | LOSAT Mode | LOSATN |",
         "| Settings | LOSATN task | `megablast` |",
         "| Settings / Comparison appearance | Match height | `120` |",
@@ -1241,7 +1332,8 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
     ):
         assert value in tutorial
 
-    assert "Raw LOSAT results" in tutorial
+    assert "Raw LOSAT results" not in tutorial
+    assert "| Selected pairs / File name | Raw LOSAT filename |" in tutorial
 
     next_steps = tutorial.index("## Next steps")
     for related_target in (

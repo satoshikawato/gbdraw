@@ -51,7 +51,7 @@ Linear comparison, so set **Curve** directly after selecting the intended
 LOSATP mode.
 
 Similarity groups always uses all-vs-all search results across the loaded
-records and does not read the Collinear **Evidence scope** field. For Collinear
+records and does not read the Collinear **Search between** field. For Collinear
 blocks, fresh state and **Reset Settings** use **Adjacent pairs**. A saved
 **All records** value is restored from a session. Search scope and display
 topology are separate, so an all-record search can still produce links
@@ -148,8 +148,9 @@ files and raw-result names do not reactivate an edge.
 
 A selected or mixed plan can use LOSATN, TLOSATX, or LOSATP Pairwise matches.
 When **LOSAT Mode** is LOSATP, its **Similarity groups** and **Collinear
-blocks** presentation options are disabled. Select **Use all adjacent LOSAT**
-to change to the compatible all-adjacent topology; opening or closing
+blocks** presentation options are disabled and marked **(all pairs only)**.
+Select **Run LOSAT** at the top of the Comparison card, or **Run LOSAT for all
+pairs** in its issue list, to change to the compatible all-adjacent topology; opening or closing
 **Settings** does not change the plan.
 
 Search scope and display topology are separate. A Similarity group can include

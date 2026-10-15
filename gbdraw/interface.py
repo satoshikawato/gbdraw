@@ -619,8 +619,12 @@ class Diagram:
             )
         return self._interactive_context
 
-    def to_bytes(self, format: str = "svg") -> bytes:
-        """Return the diagram in SVG or a supported binary format."""
+    def to_bytes(self, format: str = "svg", *, embed_fonts: bool = True) -> bytes:
+        """Return the diagram in SVG or a supported binary format.
+
+        With ``embed_fonts``, SVG carries a subset of each font it uses that
+        gbdraw does not bundle.
+        """
 
         return render_to_bytes(
             self._drawing,
@@ -630,13 +634,14 @@ class Diagram:
                 if normalize_format_token(format) == INTERACTIVE_SVG_FORMAT
                 else None
             ),
+            embed_fonts=embed_fonts,
         )
 
-    def to_svg(self, *, interactive: bool = False) -> str:
+    def to_svg(self, *, interactive: bool = False, embed_fonts: bool = True) -> str:
         """Return SVG text, optionally with interactive feature metadata."""
 
         format = "interactive_svg" if interactive else "svg"
-        return self.to_bytes(format).decode("utf-8")
+        return self.to_bytes(format, embed_fonts=embed_fonts).decode("utf-8")
 
     def save(
         self,
@@ -644,6 +649,7 @@ class Diagram:
         *,
         format: str | None = None,
         overwrite: bool = False,
+        embed_fonts: bool = True,
     ) -> Path:
         """Write exactly one output file and return its path."""
 
@@ -661,7 +667,7 @@ class Diagram:
             raise ExportError(
                 f"Could not prepare output directory: {output_path.parent}"
             ) from exc
-        payload = self.to_bytes(resolved_format)
+        payload = self.to_bytes(resolved_format, embed_fonts=embed_fonts)
         if overwrite and (output_path.exists() or output_path.is_symlink()):
             try:
                 output_path.unlink()

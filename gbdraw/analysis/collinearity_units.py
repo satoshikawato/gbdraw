@@ -7,16 +7,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Literal, Sequence, cast
+from typing import Literal, Sequence, cast, get_args
 
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.protein_colinearity import CdsProtein, ProteinExtractionResult
+from gbdraw.contract_shapes import Spellings, read_spelling
 from gbdraw.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
 CollinearityUnitMode = Literal["auto", "cds", "locus"]
+_COLLINEARITY_UNIT_MODES: tuple[CollinearityUnitMode, ...] = get_args(CollinearityUnitMode)
+# The other spellings normalize_collinearity_unit_mode reads (gbdraw.contract_shapes.read_spelling).
+COLLINEARITY_UNIT_MODE_SPELLINGS: Spellings = {"blank": "auto"}
 
 
 @dataclass(frozen=True)
@@ -51,9 +55,11 @@ class CollinearityUnitIndex:
 
 
 def normalize_collinearity_unit_mode(mode: str | None) -> CollinearityUnitMode:
-    normalized = str(mode or "auto").strip().lower()
-    if normalized not in {"auto", "cds", "locus"}:
-        raise ValidationError("collinear_unit_mode must be one of: auto, cds, locus")
+    normalized = read_spelling(mode, _COLLINEARITY_UNIT_MODES, COLLINEARITY_UNIT_MODE_SPELLINGS)
+    if normalized is None:
+        raise ValidationError(
+            "collinear_unit_mode must be one of: " + ", ".join(_COLLINEARITY_UNIT_MODES)
+        )
     return cast(CollinearityUnitMode, normalized)
 
 

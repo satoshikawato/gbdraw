@@ -1,9 +1,19 @@
 // @ts-check
+import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
 export const normalizeOptionalText = (value) => {
   const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
 };
 
+/**
+ * @param {unknown} value
+ * @param {number} [digits]
+ */
 const roundDisplayNumber = (value, digits = 1) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
@@ -11,7 +21,46 @@ const roundDisplayNumber = (value, digits = 1) => {
   return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 };
 
+/** @param {unknown} value */
 export const isManualSlotValue = (value) => normalizeOptionalText(value) !== null;
+
+/**
+ * The packaged labels.length_threshold of gbdraw/data/config.toml, by diagram mode.
+ * @type {Readonly<Record<'circular' | 'linear', number>>}
+ */
+const SIZE_CLASS_THRESHOLD_BP = MODE_PROFILE_DATA.autoSizes.sizeClassThresholdBp;
+
+/**
+ * What the size class reads from a drawing: the configuration values its
+ * Session stored that the Web does not manage, by dotted config path.
+ * @typedef {object} SizeClassDrawing
+ * @property {Readonly<Record<string, unknown>>} unmanagedConfigOverrides
+ */
+
+/**
+ * The short/long boundary the next Generate of a drawing uses: the
+ * labels.length_threshold its Session stored, otherwise the packaged one.
+ * @param {'circular' | 'linear'} mode
+ * @param {SizeClassDrawing} drawing the drawing of that mode
+ * @returns {number}
+ */
+const sizeClassThresholdBp = (mode, drawing) => {
+  const stored = drawing.unmanagedConfigOverrides[`labels.length_threshold.${mode}`];
+  return typeof stored === 'number' ? stored : SIZE_CLASS_THRESHOLD_BP[mode];
+};
+
+/**
+ * The size class that picks the short or long Auto sizes of a drawing: that
+ * of the longest record.
+ * @param {'circular' | 'linear'} mode
+ * @param {number[]} recordLengths
+ * @param {SizeClassDrawing} drawing the drawing of that mode
+ * @returns {'short' | 'long' | null} null when no length is known
+ */
+export const sizeClassForRecordLengths = (mode, recordLengths, drawing) => {
+  if (recordLengths.length === 0) return null;
+  return Math.max(...recordLengths) < sizeClassThresholdBp(mode, drawing) ? 'short' : 'long';
+};
 
 /**
  * The note an Auto field shows: a value measured in the last render, or,
@@ -48,6 +97,7 @@ export const formatRadiusFactorAuto = (value, { estimate = false, awayFromAxis =
 // tick_sides_for_tick_label_layout (gbdraw/tracks/circular.py): the side of
 // the anchor the tick marks grow to. tick_only follows the row's side;
 // label_only draws no marks.
+/** @type {Readonly<Partial<Record<string, 'inside' | 'outside'>>>} */
 const TICK_SIDE_BY_LAYOUT = Object.freeze({ label_out_tick_in: 'inside', label_in_tick_out: 'outside' });
 
 /**
@@ -76,8 +126,30 @@ export const tickAnchorRadiusFactor = (slotGeometry, axisRadiusPx, tickLabelLayo
 };
 
 /**
+ * One rendered slot of the Python track geometry.
+ * @typedef {object} TrackSlotGeometry
+ * @property {unknown} [slotId]
+ * @property {unknown} [radiusFactor]
+ * @property {unknown} [widthPx]
+ * @property {unknown} [side]
+ * @property {unknown} [innerGapPx]
+ * @property {unknown} [outerGapPx]
+ * @property {unknown} [heightPx]
+ * @property {unknown} [spacingAfterPx]
+ */
+
+/**
+ * One rendered record of the Python track geometry.
+ * @typedef {object} TrackSlotGeometryRecord
+ * @property {unknown} [resultIndex]
+ * @property {unknown} [recordIndex]
+ * @property {unknown} [axisRadiusPx]
+ * @property {TrackSlotGeometry[]} [slots]
+ */
+
+/**
  * @typedef {object} FindTrackSlotGeometryOptions
- * @property {{ records?: any[] } | null} [geometry] The Python track geometry.
+ * @property {{ records?: TrackSlotGeometryRecord[] } | null} [geometry] The Python track geometry.
  * @property {number} [resultIndex]
  * @property {number} [recordIndex]
  * @property {string | null} [slotId]

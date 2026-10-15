@@ -36,6 +36,7 @@ from Bio.SeqFeature import SeqFeature
 from pandas import DataFrame
 
 from gbdraw.analysis.ortholog_paths import OrthologPath, OrthologPathCollection, ortholog_edge_id
+from gbdraw.contract_shapes import Spellings, read_spelling
 from gbdraw.comparisons.losat_jobs import (
     LosatBatch,
     RecordPair,
@@ -47,6 +48,7 @@ from gbdraw.comparisons.losat_jobs import (
     split_losat_batch_result,
 )
 from gbdraw.comparisons.losat_runtime import (
+    LosatCacheWrite,
     LosatRawCache,
     LosatRuntimeCallback,
     LosatSearchArgs,
@@ -141,6 +143,19 @@ ProteinBlastpMode = Literal["none", "pairwise", "orthogroup", "collinear"]
 ORTHOGROUP_INFERENCE_VERSION = "anchor_core_v1"
 ORTHOGROUP_MEMBERSHIP_MODES = (ORTHOGROUP_INFERENCE_VERSION,)
 _LEGACY_ORTHOGROUP_MEMBERSHIP_MODES = ("rbh", "family_merge", "distribution_split")
+# Legacy user and Session values that normalize_orthogroup_membership_mode reads
+# as the active model (gbdraw.contract_shapes.read_spelling).
+ORTHOGROUP_MEMBERSHIP_MODE_SPELLINGS: Spellings = {
+    "aliases": {
+        alias: ORTHOGROUP_INFERENCE_VERSION
+        for alias in (
+            "legacy", "rbh", "rbh_only", "merge", "family", "family_merge", "local_split",
+            "density_split", "outparalog_split", "distribution_split", "orthogroups", "anchor_core",
+        )
+    },
+    "foldHyphens": True,
+    "blank": ORTHOGROUP_INFERENCE_VERSION,
+}
 OrthogroupMembershipMode = Literal["anchor_core_v1"]
 OrthogroupScope = Literal["cross_record", "record_local"]
 OrthogroupMemberRole = Literal["anchor", "coortholog", "inparalog", "low_confidence", "local_paralog"]
@@ -2273,6 +2288,19 @@ def promote_legacy_protein_raw_cache_entries(
     )
 
 
+@dataclass(frozen=True)
+class LosatpCacheState:
+    """What a protein raw cache holds; the protein analysis is keyed by it."""
+
+    entries: tuple[tuple[str, Mapping[str, object]], ...]
+    display: tuple[tuple[str, str], ...]
+    legacy_entries: tuple[Mapping[str, object], ...]
+    identity_manifest: ProteinIdentityManifest | None
+    proteins_by_instance: tuple[tuple[str, tuple[CdsProtein, ...]], ...]
+    threads_per_job: str | int
+    runtime_compatibility: str
+
+
 class LosatpCacheManager(LosatRawCache):
     """Validated schema-4 protein raw-cache lookup and collection."""
 
@@ -2338,6 +2366,42 @@ class LosatpCacheManager(LosatRawCache):
             ):
                 continue
             self._add_loaded_entry(key, normalized, entry)
+
+    def state(self) -> LosatpCacheState:
+        entries, display = self._raw_state()
+        return LosatpCacheState(
+            entries=entries,
+            display=display,
+            legacy_entries=tuple(self._legacy_entries),
+            identity_manifest=self.identity_manifest,
+            proteins_by_instance=tuple(self._proteins_by_instance.items()),
+            threads_per_job=self.threads_per_job,
+            runtime_compatibility=self.runtime_compatibility,
+        )
+
+    @classmethod
+    def from_state(cls, state: LosatpCacheState) -> LosatpCacheManager:
+        """A cache in ``state`` whose writes do not reach the cache it came from."""
+
+        cache = cls(
+            threads_per_job=state.threads_per_job,
+            runtime_compatibility=state.runtime_compatibility,
+        )
+        cache.identity_manifest = state.identity_manifest
+        cache._restore_raw_state(state.entries, state.display)
+        cache._legacy_entries = [copy.deepcopy(dict(entry)) for entry in state.legacy_entries]
+        cache._proteins_by_instance = dict(state.proteins_by_instance)
+        return cache
+
+    def _apply_write(self, write: LosatCacheWrite) -> None:
+        if write.kind == "retire-legacy":
+            self._retire_legacy(write.index)
+        else:
+            super()._apply_write(write)
+
+    def _retire_legacy(self, index: int) -> None:
+        del self._legacy_entries[index]
+        self._writes.append(LosatCacheWrite("retire-legacy", index=index))
 
     @property
     def has_legacy_candidates(self) -> bool:
@@ -2535,7 +2599,7 @@ class LosatpCacheManager(LosatRawCache):
             return None
         promotion = scan.promotion
         self.add_promoted_entry(promotion.entry)
-        del self._legacy_entries[promotion.candidate_index]
+        self._retire_legacy(promotion.candidate_index)
         if display:
             self._mark_display(cache_key, filename)
         return promotion.rewritten_tsv
@@ -3134,23 +3198,8 @@ def normalize_orthogroup_membership_mode(mode: str | None) -> OrthogroupMembersh
     load without reactivating the removed inference modes.
     """
 
-    normalized = str(mode or ORTHOGROUP_INFERENCE_VERSION).strip().lower().replace("-", "_")
-    aliases = {
-        "legacy": ORTHOGROUP_INFERENCE_VERSION,
-        "rbh": ORTHOGROUP_INFERENCE_VERSION,
-        "rbh_only": ORTHOGROUP_INFERENCE_VERSION,
-        "merge": ORTHOGROUP_INFERENCE_VERSION,
-        "family": ORTHOGROUP_INFERENCE_VERSION,
-        "family_merge": ORTHOGROUP_INFERENCE_VERSION,
-        "local_split": ORTHOGROUP_INFERENCE_VERSION,
-        "density_split": ORTHOGROUP_INFERENCE_VERSION,
-        "outparalog_split": ORTHOGROUP_INFERENCE_VERSION,
-        "distribution_split": ORTHOGROUP_INFERENCE_VERSION,
-        "orthogroups": ORTHOGROUP_INFERENCE_VERSION,
-        "anchor_core": ORTHOGROUP_INFERENCE_VERSION,
-    }
-    normalized = aliases.get(normalized, normalized)
-    if normalized not in ORTHOGROUP_MEMBERSHIP_MODES:
+    normalized = read_spelling(mode, ORTHOGROUP_MEMBERSHIP_MODES, ORTHOGROUP_MEMBERSHIP_MODE_SPELLINGS)
+    if normalized is None:
         raise ValidationError(
             "orthogroup_membership_mode must be "
             f"{ORTHOGROUP_INFERENCE_VERSION} or a legacy alias: "
@@ -6550,6 +6599,7 @@ __all__ = [
     "LegacyProteinRawCachePromotionScan",
     "LegacyProteinRawCacheRejection",
     "LosatpCacheManager",
+    "LosatpCacheState",
     "ORTHOGROUP_INFERENCE_VERSION",
     "ORTHOGROUP_MEMBERSHIP_MODES",
     "PROTEIN_BLASTP_MODES",

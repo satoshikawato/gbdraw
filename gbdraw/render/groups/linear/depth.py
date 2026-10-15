@@ -6,7 +6,6 @@ from pandas import DataFrame
 from gbdraw.svg.elements import Group
 
 from ....analysis.depth import depth_df as build_depth_df
-from ....config.models import GbdrawConfig
 from ....configurators import DepthConfigurator
 from ...drawers.linear.depth import DepthDrawer
 
@@ -24,7 +23,7 @@ class DepthGroup:
         alignment_width: float,
         depth_config: DepthConfigurator,
         *,
-        cfg: GbdrawConfig,
+        normalize_length: bool,
         depth_table: DataFrame | None = None,
         start_x: float = 0,
         start_y: float = 0,
@@ -45,7 +44,7 @@ class DepthGroup:
         self.alignment_width = (
             float(sequence_width) if sequence_width is not None else float(alignment_width)
         )
-        self.bool_normalize_length = cfg.canvas.linear.normalize_length
+        self.bool_normalize_length = normalize_length
         self.record_len = len(self.gb_record.seq)
         self.axis_group_id = str(axis_group_id)
         self.genome_size_normalization_factor = (

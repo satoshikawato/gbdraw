@@ -1,6 +1,7 @@
 // @ts-check
 import { getDepthTrackFallbackLabel } from '../depth-tracks.js';
 
+/** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
 
 /**
@@ -24,13 +25,14 @@ export const trackDataLegendCaptions = ({
   sourcedDepthTrackIndexes = []
 } = {}) => {
   const captions = new Set();
+  /** @param {unknown} value */
   const add = (value) => {
     const caption = text(value);
     if (caption) captions.add(caption);
   };
   (Array.isArray(annotationSets) ? annotationSets : []).forEach((set) => {
     add(set?.legendLabel);
-    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((annotation) => add(annotation?.legendLabel));
+    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((/** @type {{ legendLabel?: unknown } | null | undefined} */ annotation) => add(annotation?.legendLabel));
   });
   const sourced = new Set(sourcedDepthTrackIndexes);
   sourced.forEach((index) => add(depthTracks?.[index]?.label || getDepthTrackFallbackLabel(index)));
@@ -46,8 +48,8 @@ export const trackDataLegendCaptions = ({
  * The one rule for Legend edits of track data: styles and names follow the
  * caption. Returns the port that runs a data change and then, for every
  * caption the track data named before the change and no longer names, retires
- * the Legend color and stroke stored under it, and the Legend rename of its
- * row with the color and stroke stored under the new name (OV-87). A caption
+ * the Legend color and stroke stored under it (the row's key) and the Legend
+ * rename of its row (OV-87). A caption
  * the new data still names keeps its rename and styles; a deleted row stays
  * deleted. The change and the retirement happen in the History step of the
  * caller, so Undo restores them together. `projectLegendEntries` shows the
@@ -83,18 +85,11 @@ export const buildLegendStyleRetirement = ({
       const original = text(entry?.originalCaption);
       const caption = text(entry?.caption);
       if (!retired.has(original) || !caption || caption === original) return entry;
-      if (!after.has(caption)) retireStyles(caption);
       renameRetired = true;
       return { ...entry, caption: original };
     });
     if (dormantLegendEntries && Array.isArray(dormantLegendEntries.value)) {
-      const dormant = dormantLegendEntries.value.filter((entry) => {
-        const original = text(entry?.originalCaption);
-        if (!retired.has(original)) return true;
-        const caption = text(entry?.caption);
-        if (caption && !after.has(caption)) retireStyles(caption);
-        return false;
-      });
+      const dormant = dormantLegendEntries.value.filter((entry) => !retired.has(text(entry?.originalCaption)));
       if (dormant.length !== dormantLegendEntries.value.length) dormantLegendEntries.value = dormant;
     }
     if (renameRetired) {

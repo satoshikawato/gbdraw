@@ -14,8 +14,15 @@ from gbdraw.layout.circular import (
     CircularResolvedSlot,
     RadialBand,
 )
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+
+from gbdraw.canvas import CircularCanvasConfigurator, CircularCanvasGeometry
+from gbdraw.render.groups.circular.axis import AxisGroup
+from gbdraw.render.groups.circular.definition import DefinitionGroup
 from gbdraw.render.groups.circular.labels import LabelsGroup
 from gbdraw.render.groups.circular.seq_record import SeqRecordGroup
+from gbdraw.render.groups.circular.ticks import TickGroup
 
 
 def _profile() -> CircularRenderProfile:
@@ -102,3 +109,85 @@ def test_circular_record_render_groups_require_explicit_context(group_type: type
     render_context = signature(group_type).parameters["render_context"]
 
     assert render_context.default is Parameter.empty
+
+
+@pytest.mark.parametrize("group_type", [AxisGroup, TickGroup, DefinitionGroup, LabelsGroup, SeqRecordGroup])
+def test_circular_group_classes_read_the_canvas_geometry_not_the_configurator(group_type: type) -> None:
+    parameters = signature(group_type).parameters
+
+    assert "canvas_config" not in parameters
+    assert parameters["geometry"].annotation in {CircularCanvasGeometry, "CircularCanvasGeometry"}
+
+
+def test_circular_canvas_geometry_is_a_frozen_value_of_the_configurator() -> None:
+    record = SeqRecord(Seq("ATGC" * 250), id="NC_TEST.1")
+    canvas = CircularCanvasConfigurator("test", _profile(), "none", record)
+    geometry = canvas.geometry()
+
+    assert (geometry.radius, geometry.track_ratio, geometry.dpi, geometry.length_param) == (
+        canvas.radius, canvas.track_ratio, canvas.dpi, canvas.length_param,
+    )
+    assert geometry.track_ratio_factors == tuple(canvas.track_ratio_factors)
+    assert hash(geometry) == hash(canvas.geometry())
+    with pytest.raises(FrozenInstanceError):
+        geometry.radius = 1.0  # type: ignore[misc]
+    canvas.radius += 10.0
+    assert canvas.geometry().radius == geometry.radius + 10.0
+
+
+def test_circular_track_groups_are_placed_contents_with_their_slot_ids_inside() -> None:
+    """Axis, features, ticks, GC, skew and annotation groups are contents of render stages (PR 4).
+
+    A slot group's DOM ids are given inside its stage, so the stored content
+    already holds them and the placed group only adds its position and slot tags.
+    """
+
+    from pathlib import Path
+
+    from Bio import SeqIO
+
+    from gbdraw.api.diagram import assemble_circular_diagram_from_record
+    from gbdraw.render.group_content import ContentGroup, GroupKind, group_manifest
+
+    record = SeqIO.read(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk", "genbank")
+    drawing = assemble_circular_diagram_from_record(
+        record,
+        cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
+        circular_track_slots=["features:features", "ticks:ticks", "gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"],
+    )
+    kinds = {entry.key.kind for entry in group_manifest(drawing)}
+    assert {GroupKind.AXIS_CIRCLE, GroupKind.FEATURES, GroupKind.TICKS, GroupKind.GC_CONTENT, GroupKind.GC_SKEW} <= kinds
+    for element in drawing.elements:
+        if isinstance(element, ContentGroup) and element.key.kind in {GroupKind.GC_CONTENT, GroupKind.GC_SKEW}:
+            # The slot DOM id (not the slot id) is already the stored content's id.
+            assert element.content.attributes["id"] == element.attribs["id"] != element.key.slot
+            assert element.attribs["data-gbdraw-slot-id"] == element.key.slot
+            assert "data-gbdraw-slot-id" not in element.content.attributes
+
+
+def test_circular_conservation_ring_is_a_placed_content_of_its_track() -> None:
+    """A conservation ring is the content of a render stage over its track (PR 4)."""
+
+    from pathlib import Path
+
+    from Bio import SeqIO
+
+    from gbdraw.api.diagram import assemble_circular_diagram_from_record
+    from gbdraw.render.group_content import ContentGroup, GroupKind
+
+    examples = Path(__file__).parent.parent / "examples"
+    record = SeqIO.read(examples / "MjeNMV.gb", "genbank")
+    drawing = assemble_circular_diagram_from_record(
+        record,
+        cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
+        conservation_blast_files=[str(examples / "MjeNMV.MelaMJNV.tblastx.out")],
+        conservation_labels=["MelaMJNV"],
+    )
+    rings = [
+        element
+        for element in drawing.elements
+        if isinstance(element, ContentGroup) and element.key.kind is GroupKind.CONSERVATION
+    ]
+    assert len(rings) == 1
+    assert rings[0].attribs["data-track-label"] == "MelaMJNV"
+    assert rings[0].holds_content_children()

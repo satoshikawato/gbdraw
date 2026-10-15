@@ -12,10 +12,77 @@ import {
 } from './depth-file-codec.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 
+/** @import { DepthFilePayload } from './depth-file-codec.js' */
+
+/**
+ * A Session resource as the Session file stores it, before any check: every
+ * field is unvalidated.
+ * @typedef {{
+ *   kind?: unknown, name?: unknown, type?: unknown, encoding?: unknown, data?: unknown,
+ *   size?: unknown, lastModified?: unknown, checksum?: unknown
+ * }} RawSessionResourceDescriptor
+ */
+/**
+ * A Session resource after `validateDescriptor`: a base64 text, or an encoded
+ * depth table (`encoding` names which `data` holds).
+ * @typedef {{
+ *   kind?: unknown, name?: unknown, type?: unknown, encoding: string, data: string | DepthFilePayload,
+ *   size: number, lastModified?: number, checksum?: unknown
+ * }} SessionResourceDescriptor
+ */
+/**
+ * The stand-in for a `File` that a Session resource backs.
+ * @typedef {Readonly<{ name: string, type: string, size: number, lastModified: number }>} SessionResourceFileView
+ */
+/**
+ * A `File` or a Session resource view, the two things a file slot holds.
+ * @typedef {{
+ *   name?: string, type?: string, size?: number, lastModified?: number,
+ *   arrayBuffer?: () => Promise<ArrayBuffer>, text?: () => Promise<string>
+ * }} FileLike
+ */
+/**
+ * @typedef {object} BackingFields
+ * @property {string} resourceId
+ * @property {string} name
+ * @property {string} type
+ * @property {number} size
+ * @property {number} lastModified
+ * @property {Promise<Uint8Array> | null} bytesPromise
+ * @property {Promise<string> | null} textPromise
+ * @property {null} filePromise
+ * @property {boolean} dirty
+ */
+/**
+ * The backing of one resource: its descriptor and the content it decoded.
+ * @typedef {BackingFields & {
+ *   descriptor: SessionResourceDescriptor, kind: string, encoding: string, checksum: string | null,
+ *   descriptors?: undefined, sourceBackings?: undefined, readBytes?: undefined, readText?: undefined
+ * }} LeafBacking
+ */
+/**
+ * One component of a combined view: the part's descriptor and a reader of its bytes.
+ * @typedef {Readonly<{
+ *   resourceId: string, descriptor: SessionResourceDescriptor, name: string, type: string,
+ *   lastModified: number, readBytes: () => Promise<Uint8Array>
+ * }>} CompositePart
+ */
+/**
+ * The backing of a combined view of several base64 resources. Its `descriptor`
+ * stays null until `matchesSessionResourceDescriptor` verifies a serialized form.
+ * @typedef {BackingFields & {
+ *   checksum: null, descriptor: SessionResourceDescriptor | null, descriptors: ReadonlyArray<CompositePart>,
+ *   sourceBackings: LeafBacking[], readBytes?: () => Promise<Uint8Array>, readText?: () => Promise<string>
+ * }} CompositeBacking
+ */
+
+/** @type {WeakMap<SessionResourceTable, Map<string, LeafBacking>>} */
 const tableBackings = new WeakMap();
+/** @type {WeakMap<WeakKey, LeafBacking | CompositeBacking>} */
 const fileViewBackings = new WeakMap();
 const LF_BYTE = 0x0A;
 
+/** @param {unknown} value */
 const normalizedChecksum = (value) => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value !== 'string') {
@@ -28,27 +95,34 @@ const normalizedChecksum = (value) => {
   return normalized;
 };
 
+/**
+ * @param {string} resourceId
+ * @param {RawSessionResourceDescriptor | null | undefined} descriptor Unvalidated; the first check proves an object.
+ * @returns {LeafBacking}
+ */
 const validateDescriptor = (resourceId, descriptor) => {
   if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) {
     throw new Error(`Session resource ${resourceId} must be an object.`);
   }
   const supportedPayload = descriptor.encoding === 'base64'
     ? typeof descriptor.data === 'string'
-    : isEncodedDepthFileEntry(descriptor);
+    // A `data` that is not an object (a string, or nothing) has no `schema`, so the guard reads false.
+    : isEncodedDepthFileEntry(/** @type {{ encoding?: unknown, data?: { schema?: unknown } | null }} */ (descriptor));
   if (!supportedPayload) {
     throw new Error(`Session resource ${resourceId} has an unsupported encoded payload.`);
   }
-  if (!Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
+  if (typeof descriptor.size !== 'number' || !Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
     throw new Error(`Session resource ${resourceId} has an invalid declared byte size.`);
   }
   if (
     descriptor.lastModified !== undefined
-    && (!Number.isFinite(descriptor.lastModified) || descriptor.lastModified < 0)
+    && (typeof descriptor.lastModified !== 'number' || !Number.isFinite(descriptor.lastModified) || descriptor.lastModified < 0)
   ) {
     throw new Error(`Session resource ${resourceId} has an invalid lastModified value.`);
   }
   return {
-    descriptor,
+    // The checks above establish `encoding`, `data` and `size`.
+    descriptor: /** @type {SessionResourceDescriptor} */ (descriptor),
     resourceId,
     kind: String(descriptor.kind || 'web-file'),
     name: String(descriptor.name || 'file'),
@@ -64,24 +138,62 @@ const validateDescriptor = (resourceId, descriptor) => {
   };
 };
 
+/**
+ * A file binding after `validateWebFileBindings`: an object with no own `kind`
+ * or `components` that names a resource (schema 2 also proves the metadata).
+ * @typedef {Readonly<{ resourceId: unknown, kind?: undefined, components?: undefined, [field: string]: unknown }>} WebFileLeafBinding
+ */
+/**
+ * The schema 2 `c_gb` binding that reads two or more base64 resources as one file.
+ * @typedef {Readonly<{
+ *   kind: 'composite', name: string, type: string, lastModified: number,
+ *   components: Array<{ resourceId: string, name: string, type: string, lastModified: number }>
+ * }>} WebFileCompositeBinding
+ */
+/**
+ * A row of `linearSeqs` or of a comparison list: only its file slots are checked.
+ * @typedef {Readonly<Record<string, unknown>> | null | undefined} WebFileBindingRow
+ */
+/**
+ * `webFiles.bindings` after `validateWebFileBindings`. Each file slot holds null,
+ * a leaf, or a list of them (a JSON list has no `kind`); only `c_gb` may hold a composite.
+ * @typedef {Readonly<{
+ *   schema: 1 | 2,
+ *   c_gb?: WebFileCompositeBinding | WebFileLeafBinding | (ReadonlyArray<unknown> & { readonly kind?: undefined }) | null,
+ *   [field: string]: unknown
+ * }>} WebFileBindings
+ */
+
 // Binding grammar belongs beside the File backing; envelope/version and
 // comparison-plan authority remain with their existing owners.
+/**
+ * @param {{ bindings?: unknown } | null | undefined} webFiles
+ * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
+ *   The Session's `resources`, unvalidated: read by the id of each binding, and each entry read is checked.
+ * @returns {WebFileBindings | undefined} the `webFiles.bindings` object, checked
+ */
 export const validateWebFileBindings = (webFiles, resources = {}) => {
   if (!webFiles || !Object.hasOwn(webFiles, 'bindings')) return undefined;
   const bindings = webFiles.bindings;
+  /**
+   * @param {unknown} value
+   * @returns {value is Record<string, unknown>}
+   */
   const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
   if (!object(bindings)) throw new Error('Session webFiles.bindings must be an object.');
-  if (![1, 2].includes(bindings.schema)) throw new Error('Unsupported Web file binding schema.');
+  if (!(/** @type {unknown[]} */ ([1, 2])).includes(bindings.schema)) throw new Error('Unsupported Web file binding schema.');
   const current = bindings.schema === 2;
   if (current && !Object.hasOwn(bindings, 'c_gb')) {
     throw new Error('Web binding schema 2 requires c_gb.');
   }
+  /** @param {Record<string, unknown>} value */
   const metadata = value => {
     if (typeof value.name !== 'string' || typeof value.type !== 'string'
-      || !Number.isFinite(value.lastModified) || value.lastModified < 0) {
+      || typeof value.lastModified !== 'number' || !Number.isFinite(value.lastModified) || value.lastModified < 0) {
       throw new Error('Invalid Web file binding metadata.');
     }
   };
+  /** @param {unknown} value */
   const leaf = value => {
     if (!object(value)) throw new Error('Web file bindings must be objects or null.');
     if (Object.hasOwn(value, 'kind') || Object.hasOwn(value, 'components')) {
@@ -91,7 +203,8 @@ export const validateWebFileBindings = (webFiles, resources = {}) => {
     if (typeof id !== 'string' || !id || id !== id.trim()) {
       throw new Error('A Web file binding requires a canonical resourceId.');
     }
-    if (!Object.hasOwn(resources, id)) throw new Error(`Missing canonical resource: ${id}`);
+    // A `resources` that is null holds no resource, like any other value without this id (OV-636).
+    if (resources === null || !Object.hasOwn(resources, id)) throw new Error(`Missing canonical resource: ${id}`);
     if (current) {
       if (Object.keys(value).some(key => !['resourceId', 'name', 'type', 'lastModified'].includes(key))) {
         throw new Error('Unknown Web file binding field.');
@@ -100,6 +213,11 @@ export const validateWebFileBindings = (webFiles, resources = {}) => {
       validateDescriptor(id, resources[id]);
     }
   };
+  /**
+   * @param {unknown} binding
+   * @param {boolean} [compositeAllowed]
+   * @returns {void}
+   */
   const value = (binding, compositeAllowed = false) => {
     if (binding === null || binding === undefined) return;
     if (Array.isArray(binding)) {
@@ -115,9 +233,11 @@ export const validateWebFileBindings = (webFiles, resources = {}) => {
       if (!Array.isArray(binding.components) || binding.components.length < 2) {
         throw new Error('A composite binding requires at least two components.');
       }
-      binding.components.forEach(component => {
+      // `leaf` checks each component's `resourceId`, so it is a string here.
+      binding.components.forEach((/** @type {{ resourceId: string }} */ component) => {
         leaf(component);
-        if (resources[component.resourceId].encoding !== 'base64') {
+        // `leaf` proved that `resources` holds this id and, for these schema 2 bindings, that its entry is an object.
+        if (/** @type {Record<string, RawSessionResourceDescriptor>} */ (resources)[component.resourceId].encoding !== 'base64') {
           throw new Error('Composite components require base64 resources.');
         }
       });
@@ -134,15 +254,21 @@ export const validateWebFileBindings = (webFiles, resources = {}) => {
     'schema', ...slots, 'c_conservation_blasts_source', 'linearSeqs', 'linearComparisons'
   ].includes(key))) throw new Error('Unknown Web binding inventory field.');
   slots.forEach(slot => value(bindings[slot], slot === 'c_gb'));
-  (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach(sequence => {
+  (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((/** @type {WebFileBindingRow} */ sequence) => {
     ['gb', 'gff', 'fasta', 'depth', 'blast'].forEach(slot => value(sequence?.[slot]));
   });
   ['linearComparisons', 'linearCanonicalComparisons'].forEach(slot => {
     (Array.isArray(bindings[slot]) ? bindings[slot] : []).forEach(row => value(row?.file));
   });
-  return bindings;
+  // The checks above prove the schema and each file slot.
+  return /** @type {WebFileBindings} */ (bindings);
 };
 
+/**
+ * @param {SessionResourceTable | null | undefined} table
+ * @param {unknown} resourceId
+ * @returns {LeafBacking}
+ */
 const requireBacking = (table, resourceId) => {
   const backings = table && tableBackings.get(table);
   if (!backings) {
@@ -154,17 +280,26 @@ const requireBacking = (table, resourceId) => {
   return backing;
 };
 
+/**
+ * @param {LeafBacking} backing
+ * @returns {Promise<Uint8Array>}
+ */
 const decodedResourceBytes = async (backing) => {
-  if (isEncodedDepthFileEntry(backing.descriptor)) {
-    return textToBytes(decodeDepthText(backing.descriptor.data));
+  // `validateDescriptor` paired `encoding` with `data`: a depth table when the guard holds, base64 text otherwise.
+  if (isEncodedDepthFileEntry(/** @type {DepthEntryProbe} */ (backing.descriptor))) {
+    return textToBytes(decodeDepthText(/** @type {DepthFilePayload} */ (backing.descriptor.data)));
   }
   recordStructuralMetric('base64DecodeCount', 1, {
     resourceId: backing.resourceId,
     resourceName: backing.name
   });
-  return base64ToBytesInTasks(backing.descriptor.data);
+  return base64ToBytesInTasks(/** @type {string} */ (backing.descriptor.data));
 };
 
+/**
+ * @param {LeafBacking} backing
+ * @returns {Promise<Uint8Array>}
+ */
 const materializeBytes = (backing) => {
   if (!backing.bytesPromise) {
     recordStructuralMetric('resourceByteReadCount', 1, {
@@ -172,6 +307,7 @@ const materializeBytes = (backing) => {
       resourceName: backing.name
     });
     backing.bytesPromise = Promise.resolve().then(async () => {
+      /** @type {Uint8Array} */
       let bytes;
       try {
         bytes = await decodedResourceBytes(backing);
@@ -204,6 +340,10 @@ const materializeBytes = (backing) => {
   return backing.bytesPromise;
 };
 
+/**
+ * @param {LeafBacking} backing
+ * @returns {Promise<string>}
+ */
 const materializeText = (backing) => {
   if (!backing.textPromise) {
     recordStructuralMetric('resourceTextReadCount', 1, {
@@ -215,10 +355,15 @@ const materializeText = (backing) => {
   return backing.textPromise;
 };
 
+/**
+ * @param {Record<string, RawSessionResourceDescriptor> | null | undefined} resources
+ * @returns {SessionResourceTable}
+ */
 export const adoptCurrentSessionResources = (resources) => {
   if (!resources || typeof resources !== 'object' || Array.isArray(resources)) {
     throw new Error('Current session resources must be an object.');
   }
+  /** @type {Map<string, LeafBacking>} */
   const backings = new Map();
   Object.entries(resources).forEach(([rawResourceId, descriptor]) => {
     const resourceId = String(rawResourceId || '').trim();
@@ -227,11 +372,16 @@ export const adoptCurrentSessionResources = (resources) => {
     }
     backings.set(resourceId, validateDescriptor(resourceId, descriptor));
   });
+  /** @type {SessionResourceTable} */
   const table = Object.freeze({});
   tableBackings.set(table, backings);
   return table;
 };
 
+/**
+ * @param {SessionResourceTable | null | undefined} table
+ * @param {unknown} resourceId
+ */
 export const adoptedSessionResourceDescriptor = (table, resourceId) => (
   requireBacking(table, resourceId).descriptor
 );
@@ -239,12 +389,14 @@ export const adoptedSessionResourceDescriptor = (table, resourceId) => (
 /**
  * @typedef {Readonly<Record<string, never>>} SessionResourceTable Opaque handle from adoptCurrentSessionResources
  * @typedef {{ name?: unknown, type?: unknown, lastModified?: unknown }} SessionResourceFileMetadata
+ * @typedef {{ encoding?: unknown, data?: { schema?: unknown } | null }} DepthEntryProbe The part of a descriptor `isEncodedDepthFileEntry` reads; a string `data` has no `schema`.
  */
 
 /**
  * @param {SessionResourceTable} table
  * @param {string} resourceId
  * @param {SessionResourceFileMetadata} [metadata]
+ * @returns {SessionResourceFileView}
  */
 export const createSessionResourceFileView = (table, resourceId, metadata = {}) => {
   const backing = requireBacking(table, resourceId);
@@ -264,6 +416,7 @@ export const createSessionResourceFileView = (table, resourceId, metadata = {}) 
  * @param {SessionResourceTable} table
  * @param {Array<SessionResourceFileMetadata & { resourceId: string }>} components
  * @param {SessionResourceFileMetadata} [metadata]
+ * @returns {SessionResourceFileView | null}
  */
 export const createCombinedSessionResourceFileView = (
   table,
@@ -273,7 +426,8 @@ export const createCombinedSessionResourceFileView = (
   const views = (Array.isArray(components) ? components : []).map(component => (
     createSessionResourceFileView(table, component.resourceId, component)
   ));
-  const backings = views.map(view => fileViewBackings.get(view));
+  // Each view above was created by `createSessionResourceFileView`, so it maps to a leaf backing.
+  const backings = /** @type {LeafBacking[]} */ (views.map(view => fileViewBackings.get(view)));
   if (backings.length === 0) return null;
   if (backings.length === 1) {
     return createSessionResourceFileView(table, backings[0].resourceId, { ...components[0], ...metadata });
@@ -281,9 +435,11 @@ export const createCombinedSessionResourceFileView = (
   const appendedLineFeeds = backings.reduce((count, backing) => (
     count + Number(
       backing.size > 0
-      && base64DecodedLastByte(backing.descriptor.data, backing.size) !== LF_BYTE
+      // A combined view holds base64 resources only (`validateWebFileBindings`).
+      && base64DecodedLastByte(/** @type {string} */ (backing.descriptor.data), backing.size) !== LF_BYTE
     )
   ), 0);
+  /** @type {CompositeBacking} */
   const composite = {
     resourceId: backings.map(({ resourceId }) => resourceId).join('+'),
     name: metadata.name === undefined ? 'canonical-circular-records.gb' : String(metadata.name),
@@ -304,7 +460,7 @@ export const createCombinedSessionResourceFileView = (
       readBytes: () => materializeBytes(backing)
     }))),
     sourceBackings: backings,
-    bytesPromise: /** @type {Promise<Uint8Array> | null} */ (null),
+    bytesPromise: null,
     textPromise: null,
     filePromise: null,
     dirty: false
@@ -335,7 +491,8 @@ export const createCombinedSessionResourceFileView = (
         resourceId: composite.resourceId,
         resourceName: composite.name
       });
-      composite.textPromise = composite.readBytes().then((bytes) => bytesToText(bytes));
+      // `readBytes` was assigned just above.
+      composite.textPromise = /** @type {() => Promise<Uint8Array>} */ (composite.readBytes)().then((bytes) => bytesToText(bytes));
     }
     return composite.textPromise;
   };
@@ -349,28 +506,42 @@ export const createCombinedSessionResourceFileView = (
   return view;
 };
 
+/**
+ * @param {unknown} file
+ * @returns {file is SessionResourceFileView}
+ */
 export const isSessionResourceFileView = (file) => Boolean(
   file && (typeof file === 'object' || typeof file === 'function')
   && fileViewBackings.has(file)
 );
 
+/**
+ * @param {FileLike | null | undefined} file
+ * @param {SessionResourceDescriptor | null | undefined} descriptor the saved descriptor
+ * @returns {boolean}
+ */
 export const matchesSessionResourceDescriptor = (file, descriptor) => {
-  const backing = fileViewBackings.get(file);
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   // Native Files remain bound by the successful run's object identity.
   if (!backing || backing.dirty) return true;
   if (!descriptor) return false;
-  const matches = (entry) => entry?.encoding === descriptor.encoding
-    && entry?.data === descriptor.data;
+  // A combined view has no descriptor of its own until one is verified below: it equals none (OV-574).
+  /** @param {SessionResourceDescriptor | null} entry */
+  const matches = (entry) => entry !== null && entry.encoding === descriptor.encoding
+    && entry.data === descriptor.data;
   if (matches(backing.descriptor)) return true;
   if (!backing.sourceBackings) return false;
   if (backing.sourceBackings.some((part) => matches(part.descriptor))) return true;
   if (descriptor.encoding !== 'base64' || descriptor.size !== backing.size) return false;
 
+  /** @param {{ resourceId: string, name: string, descriptor: SessionResourceDescriptor }} entry */
   const decode = (entry) => {
     recordStructuralMetric('base64DecodeCount', 1, {
       resourceId: entry.resourceId, resourceName: entry.name
     });
-    const binary = atob(entry.descriptor.data);
+    // The parts of a combined view are base64 text (`validateWebFileBindings`).
+    const binary = atob(/** @type {string} */ (entry.descriptor.data));
     recordStructuralMetric('decodedByteCount', binary.length, {
       resourceId: entry.resourceId, resourceName: entry.name
     });
@@ -394,8 +565,11 @@ export const matchesSessionResourceDescriptor = (file, descriptor) => {
   return true;
 };
 
+/** @param {unknown} file A file slot's value; only a clean Session resource view has a source. */
 export const sessionResourceSource = (file) => {
-  const backing = fileViewBackings.get(file);
+  // The lookup is by identity. A value that is no key (a missing file, a
+  // descriptor, a `File`) has no backing: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing || backing.dirty) return null;
   if (Array.isArray(backing.descriptors)) {
     return Object.freeze({ descriptors: backing.descriptors });
@@ -403,27 +577,46 @@ export const sessionResourceSource = (file) => {
   return Object.freeze({
     resourceId: backing.resourceId,
     descriptor: backing.descriptor,
-    readBytes: () => materializeBytes(backing)
+    // Only a combined view has `descriptors`, so this is a leaf backing.
+    readBytes: () => materializeBytes(/** @type {LeafBacking} */ (backing))
   });
 };
 
+/**
+ * @param {FileLike | null | undefined} file
+ * @returns {Promise<Uint8Array> | null}
+ */
 export const readSessionResourceBytes = (file) => {
-  const backing = fileViewBackings.get(file);
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return null;
   if (typeof backing.readBytes === 'function') return backing.readBytes();
-  return materializeBytes(backing);
+  // Every combined view defines `readBytes`, so this is a leaf backing.
+  return materializeBytes(/** @type {LeafBacking} */ (backing));
 };
 
+/**
+ * @param {FileLike | null | undefined} file
+ * @returns {Promise<string> | null}
+ */
 export const readSessionResourceText = (file) => {
-  const backing = fileViewBackings.get(file);
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return null;
   if (typeof backing.readText === 'function') return backing.readText();
-  return materializeText(backing);
+  // Every combined view defines `readText`, so this is a leaf backing.
+  return materializeText(/** @type {LeafBacking} */ (backing));
 };
 
+/** @param {FileLike | null | undefined} file */
 export const releaseSessionResourceContent = (file) => {
-  const backing = fileViewBackings.get(file);
+  // A missing file is no key: `get` returns undefined for it.
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
   if (!backing) return false;
+  /**
+   * @param {LeafBacking | CompositeBacking} candidate
+   * @returns {void}
+   */
   const releaseBacking = (candidate) => {
     candidate.bytesPromise = null;
     candidate.textPromise = null;

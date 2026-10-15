@@ -46,7 +46,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install locked CI test dependencies
@@ -79,6 +79,29 @@ jobs:
           CI_IMPACT_ARCHITECTURE_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'architecture-change') && 'true' || 'false' }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node .ci-trusted-base/tools/ci-impact.mjs plan
+
+      # The dev push that merges this pull request with the same tree inherits the planned jobs
+      # that dev also runs (docs/internal/SELECTIVE_CI.md "Merged pull request inheritance").
+      - name: Record the tested tree and planned jobs
+        if: github.event_name == 'pull_request'
+        id: pr_record
+        env:
+          CI_IMPACT_PLAN_JSON: ${{ steps.pr_plan.outputs.plan }}
+        # Artifact name: ci-impact-pr-plan.<tested tree>, then .<job ID> for each planned job.
+        run: |
+          tree="$(git rev-parse "${GITHUB_SHA}^{tree}")"
+          jobs="$(node -e 'for (const job of JSON.parse(process.env.CI_IMPACT_PLAN_JSON).requiredJobs) process.stdout.write(`.${job}`)')"
+          echo "name=ci-impact-pr-plan.${tree}${jobs}" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$CI_IMPACT_PLAN_JSON" > "$RUNNER_TEMP/ci-impact-plan.json"
+
+      - name: Upload the tested tree and planned jobs
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pr_record.outputs.name }}
+          path: ${{ runner.temp }}/ci-impact-plan.json
+          overwrite: true
+          retention-days: 30
 
       - name: Build dev CI impact plan
         if: github.event_name != 'pull_request'
@@ -117,7 +140,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
 
       - name: Check Web change budget
         env:
@@ -143,6 +166,19 @@ jobs:
 
       - name: Check Web architecture contracts
         run: node --test tests/web/architecture-contracts.test.mjs
+
+      - name: Replay the owner-graph detectors on history
+        env:
+          OWNER_GRAPH_REPLAY_HISTORY: required
+        run: |
+          # This checkout holds no old file contents (filter: blob:none). Fetch every
+          # version of the Web modules in one request; the replay would otherwise
+          # fetch them one file at a time.
+          git rev-list --objects --missing=print HEAD -- gbdraw/web/js tools/web-owner-graph.json \
+            | sed -n 's/^?//p' \
+            | git -c fetch.negotiationAlgorithm=noop fetch origin --no-tags --no-write-fetch-head \
+              --recurse-submodules=no --filter=blob:none --stdin
+          node --test tests/web/owner-graph-replay.test.mjs
 
   core:
     name: Core (Python ${{ matrix.python-version }})
@@ -290,7 +326,7 @@ jobs:
         if: env.GBDRAW_GALLERY_PR_PARITY == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install Gallery parity dependencies
@@ -376,7 +412,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install browser test dependencies
@@ -419,12 +455,11 @@ jobs:
         run: python tools/prepare_browser_wheel.py
 
       - name: Run Web JavaScript tests
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
-          find tests/web -maxdepth 1 -type f \
+          find tests/web -type f \
             -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs' \
             -print0 | xargs -0 node --test
-          node --test --test-concurrency=1 tests/web/contracts/vibrio-sequence-source-coverage.test.mjs
           node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz
           node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json
 
@@ -474,7 +509,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install Web contract dependencies
@@ -517,11 +552,10 @@ jobs:
         run: python tools/prepare_browser_wheel.py
 
       - name: Run fast Web JavaScript contracts
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: >-
-          find tests/web -maxdepth 1 -type f
+          find tests/web -type f
           -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs'
-          ! -name 'gallery-session-publication.test.mjs'
           -print0 | xargs -0 node --test
 
       - name: Run non-slow Python browser tests
@@ -555,7 +589,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install Web PR smoke dependencies
@@ -634,7 +668,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       # A leaf-test plan runs only the changed specs; a shard without one skips its setup and
@@ -742,7 +776,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install Playwright performance dependencies
@@ -828,7 +862,7 @@ jobs:
         if: matrix.surface == 'browser'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install acceptance dependencies
@@ -948,7 +982,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install browser dependencies
@@ -1047,7 +1081,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install build and browser dependencies
@@ -1215,7 +1249,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install audit dependencies
@@ -1318,7 +1352,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install audit dependencies
@@ -1411,7 +1445,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
 
       - name: Install audit dependencies
@@ -1492,7 +1526,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
 
       - name: Download audit evidence
         uses: actions/download-artifact@v4
@@ -1553,6 +1587,20 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout trusted Node version
+        uses: actions/checkout@v4
+        with:
+          ref: refs/heads/${{ github.base_ref }}
+          path: .ci-node-version
+          sparse-checkout: .node-version
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .ci-node-version/.node-version
+
       - name: Validate required PR evidence
         env:
           CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
@@ -1591,6 +1639,11 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
       - name: Validate required dev staging evidence
         env:
           CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
@@ -1627,6 +1680,11 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
 
       - name: Validate exhaustive release evidence
         env:

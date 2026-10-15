@@ -67,7 +67,7 @@ test('Python label TSV syntax is validated before replacing live overrides', asy
     await window.__GBDRAW_APP__.loadLabelOverrideTable({ target: input });
   }, { pattern, label });
   await importLabel('(?i)NADH', 'MATCHED');
-  expect(messages.at(-1)).toMatch(/Applied to 7 label/);
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Applied to 7 label(s).');
   await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(0);
   await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());
@@ -109,21 +109,36 @@ test('late Python evaluation cannot replace a newer rule or a loaded Session', a
   await page.evaluate(async () => { window.__RELEASE_RULES__(); await window.__OLD_RULE_EDIT__; });
   expect(await fills(page)).toEqual(newer);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0].val)).toBe('(?i)ATP');
-  // A caption edit that gives one caption two colors asks Python to
-  // normalize the captions before the matches (U3a 1e); the Load runs while
-  // that request is late. A pending match would make the Load wait instead.
+  // No late evaluation crosses a Load: a rule edit's only request is its
+  // match (a pattern not matched before, so the edit asks), and Load waits
+  // for it (OV-377). A Load chosen while the match is held is refused and
+  // changes nothing. Once the edit is applied, the loaded Session replaces
+  // the rules and their fills. (The caption normalization request that a
+  // Load used to take over is gone with the caption rewrite.)
+  const sessionFile = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
   await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
-    Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
-    await a.addSpecificRule();
     window.__RELEASE_RULES__ = null;
     window.__HOLD_RULES__ = true;
-    window.__OLD_RULE_EDIT__ = a.setSpecificRuleField(0, 'cap', 'Shared');
+    window.__OLD_RULE_EDIT__ = a.setSpecificRuleField(0, 'val', '(?i)nadh');
   });
   await page.waitForFunction(() => window.__RELEASE_RULES__);
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
-  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && !window.__GBDRAW_APP__.manualSpecificRules.length);
+  const held = () => page.evaluate(() => {
+    const a = window.__GBDRAW_APP__;
+    return { available: a.sessionLoadAvailable, importing: a.sessionImportPending, rules: JSON.stringify(a.manualSpecificRules) };
+  });
+  const beforeLoad = await held();
+  expect(beforeLoad).toMatchObject({ available: false, importing: false });
+  await page.locator('input[accept^=".json,"]').setInputFiles(sessionFile);
+  expect(await held()).toEqual(beforeLoad);
   await page.evaluate(async () => { window.__RELEASE_RULES__(); await window.__OLD_RULE_EDIT__; });
+  expect(await page.evaluate(() => {
+    const a = window.__GBDRAW_APP__;
+    return [a.sessionLoadAvailable, a.manualSpecificRules.map((rule) => rule.val)];
+  })).toEqual([true, ['(?i)nadh']]);
+  expect((await fills(page)).length).toBeGreaterThan(0);
+  await page.locator('input[accept^=".json,"]').setInputFiles(sessionFile);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && !window.__GBDRAW_APP__.manualSpecificRules.length);
   expect(await fills(page)).toEqual([]);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules)).toEqual([]);
 });
@@ -132,7 +147,7 @@ test('Session preview stays lazy and saved Python rules remain editable and rege
   test.setTimeout(180000);
   page.on('dialog', dialog => dialog.accept());
   await loadSession(page);
-  await page.getByLabel('Specific Table (-t)', { exact: true }).setInputFiles({ name: 'python.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?P<enzyme>NADH)\t#f01234\t\n') });
+  await page.getByLabel('Specific rules file', { exact: true }).setInputFiles({ name: 'python.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?P<enzyme>NADH)\t#f01234\t\n') });
   await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
   expect(await fills(page)).toHaveLength(7);
   const download = page.waitForEvent('download');
@@ -219,7 +234,7 @@ test('invalid color TSV preserves the selected file, preview, rules and History'
   const messages = [];
   page.on('dialog', async dialog => { messages.push(dialog.message()); await dialog.accept(); });
   await loadSession(page);
-  const upload = page.getByLabel('Specific Table (-t)', { exact: true });
+  const upload = page.getByLabel('Specific rules file', { exact: true });
   await upload.setInputFiles({ name: 'valid.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?i)NADH\t#f01234\t\n') });
   await waitForColorTableImport(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);

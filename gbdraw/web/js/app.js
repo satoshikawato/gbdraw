@@ -9,7 +9,14 @@ import {
   AutoValueField,
   ColorValueControl,
   HelpTip,
-  FileUploader
+  FileUploader,
+  GbdrawLoader,
+  LinearRecordNames,
+  MarkupPreview,
+  RecordName,
+  SettingsSectionIndex,
+  SettingsSectionTitle,
+  settingsSection
 } from './components.js';
 import { CircularMeasureInput } from './app/circular-track-slots/measure-input.js';
 import { DepthTrackIndexInput } from './app/circular-track-slots/track-index-input.js';
@@ -19,11 +26,12 @@ import { formatFeatureLocation } from './services/feature-utils.js';
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, HelpTip },
+  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, RecordName, SettingsSectionIndex, SettingsSectionTitle },
   methods: { formatFeatureLocation },
   setup: createAppSetup
 });
 app.directive('dialog-focus', dialogFocus);
+app.directive('settings-section', settingsSection);
 
 const mountedApp = app.mount('#app');
 window.__GBDRAW_APP__ = mountedApp;

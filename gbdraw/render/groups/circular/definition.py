@@ -6,27 +6,30 @@ from __future__ import annotations
 import math
 import re
 from functools import lru_cache
-from typing import Callable, Dict, List, Literal, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Callable, Dict, List, Literal, NamedTuple, Optional, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
 
 from ....analysis.gc import calculate_gc_percent
-from ....canvas import CircularCanvasConfigurator
+from ....canvas import CircularCanvasGeometry
 from ....config.models import GbdrawConfig
-from ....core.record_metadata import infer_record_source_metadata
+from ....core.record_metadata import RecordSourceMetadata, infer_record_source_metadata
 from ....core.numeric import compensated_sum
 from ....core.text import (
     calculate_bbox_dimensions,
     calculate_svg_bbox_dimensions,
     parse_mixed_content_text,
 )
-from ....layout.spatial import Aabb
+from ....layout.spatial import Aabb, union_aabbs
 from ....svg.ids import definition_group_svg_id
 from ...drawers.circular.definition import DefinitionDrawer
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 CircularDefinitionProfile = Literal["full", "record_summary", "shared_common"]
 _SUPPORTED_DEFINITION_PROFILES = {"full", "record_summary", "shared_common"}
@@ -177,6 +180,31 @@ def wrap_definition_line_parts(
     return [line_parts(start, end) for start, end in zip(bounds, bounds[1:])]
 
 
+class DefinitionRecordFacts(NamedTuple):
+    """What a circular definition reads of its record.
+
+    A plot title shows neither the length nor the GC content: it takes these
+    facts without the GC (``gc_percent`` None) instead of the record, so a
+    render stage that builds a title holds no record.
+    """
+
+    record_id: str
+    metadata: RecordSourceMetadata
+    length: int
+    gc_percent: float | None
+
+
+def definition_record_facts(record: SeqRecord, *, gc_percent: bool = True) -> DefinitionRecordFacts:
+    """The facts a circular definition reads of ``record`` (the GC only when asked)."""
+
+    return DefinitionRecordFacts(
+        record_id=str(record.id),
+        metadata=infer_record_source_metadata(record),
+        length=len(record.seq),
+        gc_percent=calculate_gc_percent(record.seq) if gc_percent else None,
+    )
+
+
 class DefinitionGroup:
     """
     Responsible for creating and managing a group for displaying genomic definition information on a circular canvas.
@@ -184,8 +212,8 @@ class DefinitionGroup:
 
     def __init__(
         self,
-        gb_record: SeqRecord,
-        canvas_config: CircularCanvasConfigurator,
+        gb_record: SeqRecord | DefinitionRecordFacts,
+        geometry: CircularCanvasGeometry,
         *,
         cfg: GbdrawConfig,
         species: Optional[str] = None,
@@ -197,11 +225,17 @@ class DefinitionGroup:
         record_count: int = 1,
         record_transform: RecordDisplayTransform | None = None,
         species_line_count: int = 1,
+        record_presentation: RecordPresentation | None = None,
     ) -> None:
         self.record_transform = record_transform
+        self.record_presentation = record_presentation
         self.species_line_count = max(1, int(species_line_count))
-        self.gb_record: SeqRecord = gb_record
-        self.canvas_config: CircularCanvasConfigurator = canvas_config
+        self.record_facts: DefinitionRecordFacts = (
+            gb_record
+            if isinstance(gb_record, DefinitionRecordFacts)
+            else definition_record_facts(gb_record)
+        )
+        self.geometry = geometry
         self.species: str | None = species
         self.strain: str | None = strain
         self.plot_title: str | None = plot_title
@@ -218,7 +252,7 @@ class DefinitionGroup:
         self.font_size = cfg.objects.definition.circular.font_size
         self.plot_title_font_size = cfg.objects.definition.circular.plot_title_font_size
         self.font = cfg.objects.text.font_family
-        self.track_id: str = str(self.gb_record.id)
+        self.track_id: str = self.record_facts.record_id
         self.definition_group_id: str = (
             str(definition_group_id)
             if definition_group_id
@@ -235,13 +269,15 @@ class DefinitionGroup:
         else:
             self.definition_group.attribs["data-gbdraw-role"] = "record-definition"
             self.definition_group.attribs["data-gbdraw-definition-part"] = "main"
-            self.definition_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
+            self.definition_group.attribs["data-gbdraw-record-id"] = self.record_facts.record_id
             self.definition_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
-        self.radius: float = self.canvas_config.radius
+        self.radius: float = geometry.radius
         self.calculate_coordinates()
         self.find_organism_name()
         self.add_circular_definitions()
-        self.local_bounds = self._measure_local_bounds()
+        # Painted text bounds in group-local coordinates: one box per text line, and their union.
+        self.line_bounds = self._measure_line_bounds()
+        self.local_bounds = union_aabbs(self.line_bounds) or Aabb(0.0, 0.0, 0.0, 0.0)
 
     def calculate_coordinates(self) -> None:
         self.end_x_1: float = (self.radius) * math.cos(math.radians(360.0 * 0 - 90))
@@ -252,14 +288,12 @@ class DefinitionGroup:
         self.title_y: float = (self.end_y_1 + self.end_y_2) / 2
 
     def find_organism_name(self) -> None:
-        metadata = infer_record_source_metadata(self.gb_record)
+        metadata = self.record_facts.metadata
         strain_name = metadata.strain
         record_name = metadata.organism
-        annotations = getattr(self.gb_record, "annotations", {}) or {}
-        explicit_label = str(annotations.get("gbdraw_record_label") or "").strip()
-        explicit_subtitle = str(
-            annotations.get("gbdraw_record_subtitle") or ""
-        ).strip()
+        presentation = self.record_presentation
+        explicit_label = str((presentation.label if presentation else None) or "").strip()
+        explicit_subtitle = str((presentation.subtitle if presentation else None) or "").strip()
         self.replicon = metadata.replicon
         self.organelle = metadata.organelle
 
@@ -269,7 +303,7 @@ class DefinitionGroup:
             self.species_parts = parse_mixed_content_text(self.species)
         else:
             self.species_parts = parse_mixed_content_text(record_name)
-        self.record_name = explicit_label or str(record_name).strip() or str(self.gb_record.id)
+        self.record_name = explicit_label or str(record_name).strip() or self.record_facts.record_id
 
         if explicit_subtitle:
             self.strain_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(explicit_subtitle)
@@ -289,9 +323,8 @@ class DefinitionGroup:
             self.organelle_parts = parse_mixed_content_text("")
 
     def add_circular_definitions(self) -> None:
-        record_length: int = len(self.gb_record.seq)
-        accession: str = self.gb_record.id
-        gc_percent: float = calculate_gc_percent(self.gb_record.seq)
+        record_length: int = self.record_facts.length
+        accession: str = self.record_facts.record_id
         show_accession = True
         show_length = True
         show_gc = True
@@ -316,6 +349,9 @@ class DefinitionGroup:
             show_accession = False
             show_length = False
             show_gc = False
+        gc_percent = self.record_facts.gc_percent
+        if show_gc and gc_percent is None:
+            raise ValueError("A circular definition that shows the GC content needs the record's GC.")
         active_font_size = (
             self.plot_title_font_size if self.definition_profile == "shared_common" else self.font_size
         )
@@ -329,7 +365,7 @@ class DefinitionGroup:
                     text,
                     self.font,
                     active_font_size,
-                    int(self.canvas_config.dpi),
+                    int(self.geometry.dpi),
                 )[0],
             )
             if len(wrapped) > 1:
@@ -343,7 +379,7 @@ class DefinitionGroup:
             strain_parts,
             organelle_parts,
             replicon_parts,
-            gc_percent,
+            gc_percent if gc_percent is not None else 0.0,
             accession,
             record_length,
             show_accession=show_accession,
@@ -355,13 +391,9 @@ class DefinitionGroup:
             species_line_parts=species_line_parts,
         )
 
-    def _measure_local_bounds(self) -> Aabb:
-        """Return authoritative painted text bounds in group-local coordinates."""
-        min_x: float | None = None
-        min_y: float | None = None
-        max_x: float | None = None
-        max_y: float | None = None
-
+    def _measure_line_bounds(self) -> tuple[Aabb, ...]:
+        """Return authoritative painted bounds of each text line in group-local coordinates."""
+        line_bounds: list[Aabb] = []
         for element in getattr(self.definition_group, "elements", ()):
             attribs = getattr(element, "attribs", None)
             if not isinstance(attribs, dict):
@@ -397,7 +429,7 @@ class DefinitionGroup:
                     text,
                     font_family,
                     font_size,
-                    self._cfg.canvas.dpi,
+                    self.geometry.dpi,
                     font_weight=font_weight,
                     font_style=font_style,
                 )
@@ -427,17 +459,17 @@ class DefinitionGroup:
                 top = y - height
                 bottom = y
 
-            min_x = left if min_x is None else min(min_x, left)
-            min_y = top if min_y is None else min(min_y, top)
-            max_x = right if max_x is None else max(max_x, right)
-            max_y = bottom if max_y is None else max(max_y, bottom)
-
-        if min_x is None or min_y is None or max_x is None or max_y is None:
-            return Aabb(0.0, 0.0, 0.0, 0.0)
-        return Aabb(min_x, min_y, max_x, max_y)
+            line_bounds.append(Aabb(left, top, right, bottom))
+        return tuple(line_bounds)
 
     def get_group(self) -> Group:
         return self.definition_group
 
 
-__all__ = ["CircularDefinitionProfile", "DefinitionGroup", "wrap_definition_line_parts"]
+__all__ = [
+    "CircularDefinitionProfile",
+    "DefinitionGroup",
+    "DefinitionRecordFacts",
+    "definition_record_facts",
+    "wrap_definition_line_parts",
+]

@@ -10,13 +10,21 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
+import {
+  ANCHOR_FEATURE_CATALOG_SCHEMA,
+  FEATURE_CATALOG_SCHEMA,
+  LEGACY_FEATURE_CATALOG_SCHEMA
+} from '../contracts/schema.generated.js';
+/** @import { OrthogroupFeatureIndex } from './orthogroup-feature-metadata.js' */
+/** @import { RenderedFeatureId } from './legend-svg.js' */
+/** @import { RenderedIdentityCollection } from './session-feature-metadata.js' */
 
 const FEATURE_CATALOG_RELOAD_MESSAGE =
   'The diagram engine returned incompatible feature metadata. Reload the page and Generate again.';
 
 // Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
 // drawn selector values (`drawnSelector`), which live rule matching reads (R4).
-export const FEATURE_CATALOG_SCHEMA = 5;
+export { FEATURE_CATALOG_SCHEMA };
 
 /**
  * One catalog row the Python engine writes (a biological feature, a rendered
@@ -60,21 +68,86 @@ export const FEATURE_CATALOG_SCHEMA = 5;
  */
 
 /**
+ * @typedef {object} CatalogScalarMetrics
+ * @property {number} resultCount
+ * @property {number} itemCount
+ * @property {number} recordCount
+ * @property {number} renderedFeatureCount
+ * @property {number} biologicalFeatureCount
+ * @property {number} orthogroupRecordCount
+ * @property {number} comparisonMatchCount
+ * @property {number} annotationCount
+ * @property {number} sequenceSourceCount
+ * @property {number} sequenceCharacters
+ */
+
+/**
+ * The editor projections of one admission, derived from the catalog rows.
+ * @typedef {object} FeatureCatalogFeatureState
+ * @property {FeatureCatalogRow[]} extractedFeatures
+ * @property {FeatureCatalogRow[]} biologicalFeatures
+ * @property {string[]} featureRecordIds
+ * @property {number} selectedFeatureRecordIdx
+ * @property {FeatureCatalogRow[]} orthogroups
+ * @property {FeatureCatalogRow[]} collinearGroups
+ * @property {OrthogroupFeatureIndex} featureOrthogroupIndex
+ * @property {FeatureCatalogRow[]} annotations
+ * @property {FeatureCatalogRow[]} comparisonMatches
+ * @property {FeatureCatalogRow[]} sequenceSources Clones of the catalog rows; admission checks only `sequence`.
+ * @property {RenderedIdentityCollection[]} renderedIdentitiesByResult
+ * @property {Map<string, FeatureCatalogRow>[]} renderedFeaturesByResult Each Result's rendered features by rendered ID.
+ * @property {FeatureCatalogRow[][]} biologicalFeaturesByResult
+ * @property {Map<string, FeatureCatalogRow>[]} renderedByIdentityByResult
+ * @property {Map<string, { resultIndex: number, renderedId: RenderedFeatureId }[]>} renderedTargetsByOverrideKey
+ * @property {Map<string, Set<number>>} resultIndexesByRenderedId
+ * @property {Readonly<CatalogScalarMetrics>} scalarMetrics
+ */
+
+/**
  * The runtime admission: the validated catalog and its derived editor
  * projections. It is never persisted.
- * @typedef {{ catalog: FeatureCatalog } & Record<string, any>} FeatureCatalogAdmission
+ * @typedef {FeatureCatalogFeatureState & {
+ *   catalog: FeatureCatalog,
+ *   mode: string,
+ *   resultNames: readonly string[],
+ *   featureState: FeatureCatalogFeatureState
+ * }} FeatureCatalogAdmission
  */
-const ANCHOR_FEATURE_CATALOG_SCHEMA = 4;
-const LEGACY_FEATURE_CATALOG_SCHEMA = 3;
+
+/**
+ * The state one admission traversal builds up while it walks the catalog items.
+ * @typedef {Omit<FeatureCatalogFeatureState, 'featureRecordIds' | 'selectedFeatureRecordIdx' | 'featureOrthogroupIndex'> & {
+ *   mode: string,
+ *   recordKeys: string[],
+ *   recordIndexByKey: Map<string, number>,
+ *   publicRecordIdByKey: Map<string, string>,
+ *   orthogroupProjection: {
+ *     registerFeature: (feature: FeatureCatalogRow) => void,
+ *     addGroup: (group: FeatureCatalogRow) => void,
+ *     index: OrthogroupFeatureIndex
+ *   },
+ *   scalarMetrics: CatalogScalarMetrics
+ * }} CatalogAdmissionContext
+ */
 const adoptedFeatureCatalogs = new WeakSet();
 const featureCatalogAdmissions = new WeakMap();
 
+/**
+ * @param {unknown} value
+ * @returns {value is FeatureCatalogRow}
+ */
 const isObject = (value) => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
 );
 
+/** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
 
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
 const cloneJson = (value) => {
   if (typeof structuredClone === 'function') return structuredClone(value);
   return JSON.parse(JSON.stringify(value));
@@ -82,6 +155,10 @@ const cloneJson = (value) => {
 
 const catalogError = () => new Error(FEATURE_CATALOG_RELOAD_MESSAGE);
 
+/**
+ * @param {FeatureCatalogRow | null | undefined} feature
+ * @param {(FeatureCatalogRow | null | undefined)[]} parts
+ */
 const normalizedFeatureStrand = (feature, parts) => {
   const strands = new Set((parts.length ? parts : [feature])
     .map((part) => {
@@ -95,6 +172,7 @@ const normalizedFeatureStrand = (feature, parts) => {
   return 'unstranded';
 };
 
+/** @param {FeatureCatalogRow | null | undefined} feature */
 const legacyAnchorProfile = (feature) => {
   const rawParts = feature?.location_parts ?? feature?.locationParts;
   const parts = Array.isArray(rawParts) && rawParts.length ? rawParts : [feature];
@@ -162,9 +240,11 @@ export const migrateLegacyFeatureCatalog = (catalog) => {
       }
     });
   });
-  return migrated;
+  // `migrated` is the clone of an object whose schema was just checked; its `items` passed `requireArray`.
+  return /** @type {FeatureCatalog} */ (migrated);
 };
 
+/** @param {unknown} profile */
 const validAnchorProfile = (profile) => isObject(profile)
   && Object.keys(profile).sort().join(',') === 'operator,partOrder,precision,strand'
   && ['exact', 'fuzzy', 'unavailable'].includes(profile.precision)
@@ -172,17 +252,21 @@ const validAnchorProfile = (profile) => isObject(profile)
   && ['biological', 'source-forward', 'ambiguous'].includes(profile.partOrder)
   && ['+', '-', 'unstranded', 'mixed'].includes(profile.strand);
 
+/** @param {unknown} value */
 const requireArray = (value) => {
   if (!Array.isArray(value)) throw catalogError();
   return value;
 };
 
+/** @param {unknown} value */
 const validDrawnSelector = (value) => value === null || (isObject(value)
   && Object.keys(value).sort().join(',') === 'hash,location,recordLocation'
   && Object.values(value).every((entry) => entry === null || (typeof entry === 'string' && entry)));
 
+/** @param {unknown} value */
 const normalizeRenderedId = (value) => text(value).replace(/__(?:part|line)\d+$/, '');
 
+/** @returns {RenderedIdentityCollection} */
 const createCatalogRenderedIdentityCollection = () => ({
   byRenderedId: new Map(),
   renderedIds: new Set(),
@@ -192,12 +276,22 @@ const createCatalogRenderedIdentityCollection = () => ({
   totalRenderedCount: 0
 });
 
+/**
+ * @template T
+ * @param {Map<string, T[]>} target
+ * @param {string} key
+ * @param {T} identity
+ */
 const addToIdentityList = (target, key, identity) => {
   if (!key) return;
   if (!target.has(key)) target.set(key, []);
-  target.get(key).push(identity);
+  /** @type {T[]} */ (target.get(key)).push(identity); // set just above
 };
 
+/**
+ * @param {RenderedIdentityCollection} collection
+ * @param {{ renderedId: unknown, stableId: unknown, recordIndex: number, recordId: unknown, elementId: unknown }} identity
+ */
 const addCatalogRenderedIdentity = (collection, identity) => {
   const renderedId = normalizeRenderedId(identity.renderedId);
   const stableId = normalizeRenderedId(identity.stableId) || renderedId;
@@ -220,6 +314,10 @@ const addCatalogRenderedIdentity = (collection, identity) => {
   collection.totalRenderedCount = collection.renderedIds.size;
 };
 
+/**
+ * @param {unknown} recordKey
+ * @param {unknown} biologicalFeatureId
+ */
 export const biologicalFeatureKey = (recordKey, biologicalFeatureId) => {
   const normalizedRecordKey = text(recordKey);
   const normalizedFeatureId = text(biologicalFeatureId);
@@ -228,11 +326,17 @@ export const biologicalFeatureKey = (recordKey, biologicalFeatureId) => {
     : '';
 };
 
+/** @param {FeatureCatalogRow | null | undefined} feature */
 export const stableFeatureOverrideKey = (feature) => biologicalFeatureKey(
   feature?.record_key ?? feature?.recordKey,
   feature?.biological_feature_id ?? feature?.biologicalFeatureId
 );
 
+/**
+ * @param {readonly unknown[]} entries
+ * @param {ReadonlySet<unknown>} knownFeatures
+ * @param {[string, string][]} fields The `[record field, feature field]` pairs each entry names.
+ */
 const validateReferences = (entries, knownFeatures, fields) => {
   entries.forEach((entry) => {
     if (!isObject(entry)) throw catalogError();
@@ -247,6 +351,7 @@ const validateReferences = (entries, knownFeatures, fields) => {
   });
 };
 
+/** @param {readonly unknown[]} sequenceSources */
 const canonicalSequenceSourceStrings = (sequenceSources) => (
   sequenceSources.map((source) => {
     if (
@@ -261,23 +366,44 @@ const canonicalSequenceSourceStrings = (sequenceSources) => (
   })
 );
 
+/**
+ * @template T
+ * @param {Map<string, T[]>} target
+ * @param {string} key
+ * @param {T} value
+ */
 const rememberRenderedTarget = (target, key, value) => {
   if (!key) return;
   if (!target.has(key)) target.set(key, []);
-  target.get(key).push(value);
+  /** @type {T[]} */ (target.get(key)).push(value); // set just above
 };
 
+/**
+ * @param {Map<string, Set<number>>} target
+ * @param {string} renderedId
+ * @param {number} resultIndex
+ */
 const rememberRenderedResultIndex = (target, renderedId, resultIndex) => {
   if (!target.has(renderedId)) target.set(renderedId, new Set());
-  target.get(renderedId).add(resultIndex);
+  /** @type {Set<number>} */ (target.get(renderedId)).add(resultIndex); // set just above
 };
 
+/**
+ * @param {Pick<CatalogAdmissionContext, 'mode' | 'recordIndexByKey' | 'publicRecordIdByKey'>} context
+ * @param {string} recordKey
+ */
 const displayRecordId = (context, recordKey) => {
   const recordIndex = context.recordIndexByKey.get(recordKey) ?? 0;
   const recordId = context.publicRecordIdByKey.get(recordKey) || recordKey;
   return context.mode === 'linear' ? `File ${recordIndex + 1}: ${recordId}` : recordId;
 };
 
+/**
+ * @param {unknown} item
+ * @param {FeatureCatalogResult | null | undefined} result
+ * @param {number} resultIndex
+ * @param {CatalogAdmissionContext} context
+ */
 function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
   if (
     !isObject(item)
@@ -312,6 +438,7 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
   );
   const biologicalFeatures = requireArray(item.biologicalFeatures);
   const knownFeatures = new Set();
+  /** @type {Map<string, (number | null)[]>} */
   const sourceIndexesByStableIdentity = new Map();
   const biologicalByKey = new Map();
   const expandedBiological = [];
@@ -347,7 +474,7 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     if (!sourceIndexesByStableIdentity.has(stableIdentity)) {
       sourceIndexesByStableIdentity.set(stableIdentity, []);
     }
-    sourceIndexesByStableIdentity.get(stableIdentity).push(
+    /** @type {(number | null)[]} */ (sourceIndexesByStableIdentity.get(stableIdentity)).push( // set just above
       sourceFeatureIndex.supplied ? sourceFeatureIndex.value : null
     );
     if (feature.translationFromAminoAcidSequence !== undefined) {
@@ -438,7 +565,10 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
       feature.recordKey,
       feature.biologicalFeatureId
     );
-    if (!svgId || svgIds.has(svgId) || !knownFeatures.has(key)
+    // The key joins the record key and the feature ID by NUL, so a known key
+    // does not prove the record key: it must be one of the item's (OV-567).
+    const recordIndex = itemRecordIndexByKey.get(text(feature.recordKey));
+    if (!svgId || svgIds.has(svgId) || !knownFeatures.has(key) || recordIndex === undefined
       || !validDrawnSelector(feature.drawnSelector)) {
       throw catalogError();
     }
@@ -468,13 +598,14 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     addCatalogRenderedIdentity(renderedIdentities, {
       renderedId: svgId,
       stableId: biological.stable_feature_id || feature.biologicalFeatureId || svgId,
-      recordIndex: itemRecordIndexByKey.get(text(feature.recordKey)),
+      recordIndex,
       recordId: biological.record_id || feature.recordKey,
       elementId: svgId
     });
     rememberRenderedTarget(context.renderedTargetsByOverrideKey, key, {
       resultIndex,
-      renderedId: svgId
+      // The rendered ID is cast once, where the catalog produces it.
+      renderedId: /** @type {RenderedFeatureId} */ (svgId)
     });
     rememberRenderedResultIndex(context.resultIndexesByRenderedId, svgId, resultIndex);
     renderedFeatures.set(svgId, projectedFeature);
@@ -646,6 +777,11 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
   context.scalarMetrics.comparisonMatchCount += comparisonMatches.length;
 };
 
+/**
+ * @param {FeatureCatalogAdmission | undefined} admission
+ * @param {unknown} results
+ * @param {unknown} mode
+ */
 const cachedAdmissionMatches = (admission, results, mode) => {
   if (!admission || !Array.isArray(results)) return false;
   const normalizedMode = text(mode).toLowerCase();
@@ -659,6 +795,10 @@ const cachedAdmissionMatches = (admission, results, mode) => {
  *
  * The returned runtime object is never persisted. Its catalog-derived indexes
  * bind current Results to editor projections without rescanning catalog rows.
+ * @param {unknown} catalog
+ * @param {unknown} results
+ * @param {FeatureCatalogAdmissionOptions} [options]
+ * @returns {Generator<void, FeatureCatalogAdmission, void>}
  */
 function* catalogAdmissionSteps(
   catalog, results, { adopt = false, mode = '' } = {}
@@ -675,14 +815,16 @@ function* catalogAdmissionSteps(
     return cached;
   }
 
+  // A current-schema `catalog` is the writer's format; its `items` pass `requireArray` below.
   const validated = catalog.schema !== FEATURE_CATALOG_SCHEMA
     ? migrateLegacyFeatureCatalog(catalog)
-    : adopt ? catalog : cloneJson(catalog);
+    : /** @type {FeatureCatalog} */ (adopt ? catalog : cloneJson(catalog));
   const items = requireArray(validated.items);
   if (items.length !== logicalResults.length) throw catalogError();
 
   const normalizedMode = text(mode).toLowerCase();
   const orthogroupProjection = createOrthogroupFeatureProjection();
+  /** @type {CatalogAdmissionContext} */
   const context = {
     mode: normalizedMode,
     recordKeys: [],
@@ -816,10 +958,15 @@ export const validateFeatureCatalog = (catalog, results, options = {}) => (
   admitFeatureCatalog(catalog, results, options).catalog
 );
 
+/** @param {object | null | undefined} catalog */
 export const isAdoptedFeatureCatalog = (catalog) => (
-  Boolean(catalog) && adoptedFeatureCatalogs.has(catalog)
+  Boolean(catalog) && adoptedFeatureCatalogs.has(/** @type {object} */ (catalog)) // `Boolean(catalog)` proves it
 );
 
+/**
+ * @param {FeatureCatalogRow} feature
+ * @param {string} stableId
+ */
 const selectorForFeature = (feature, stableId) => {
   if (isObject(feature.selector)) return cloneJson(feature.selector);
   const selector = {
@@ -833,7 +980,10 @@ const selectorForFeature = (feature, stableId) => {
   return selector;
 };
 
+/** @param {unknown} sequence */
 const reverseComplementSequence = (sequence) => {
+  // Looked up by one character at a time, which can never name a prototype property.
+  /** @type {Record<string, string>} */
   const complements = {
     A: 'T', C: 'G', G: 'C', T: 'A', U: 'A', R: 'Y', Y: 'R',
     S: 'S', W: 'W', K: 'M', M: 'K', B: 'V', D: 'H', H: 'D',
@@ -846,6 +996,13 @@ const reverseComplementSequence = (sequence) => {
     .join('');
 };
 
+/**
+ * @param {FeatureCatalogRow | null | undefined} feature
+ * @param {readonly unknown[] | null | undefined} sequenceSources
+ * @param {readonly string[] | null | undefined} sourceSequences
+ * @param {number | undefined} expectedRecordIndex
+ * @returns {string}
+ */
 const reconstructCatalogNucleotideSequence = (
   feature,
   sequenceSources,
@@ -893,6 +1050,13 @@ const reconstructCatalogNucleotideSequence = (
   return sequences.join('');
 };
 
+/**
+ * @param {FeatureCatalogRow | null | undefined} feature
+ * @param {readonly unknown[] | null | undefined} sequenceSources
+ * @param {readonly string[] | null | undefined} sourceSequences
+ * @param {number | undefined} expectedRecordIndex
+ * @returns {string}
+ */
 const deriveCatalogNucleotideSequence = (
   feature,
   sequenceSources,
@@ -908,12 +1072,14 @@ const deriveCatalogNucleotideSequence = (
   )
 );
 
+/** @param {unknown} value */
 const firstQualifierValue = (value) => {
   const values = Array.isArray(value) ? value : [value];
   const selected = values.find((entry) => text(entry));
   return selected === undefined ? '' : String(selected);
 };
 
+/** @param {FeatureCatalogRow} feature */
 const restoreCompactBiologicalDefaults = (feature) => {
   const restored = feature;
   // The nested qualifiers belong to the admitted catalog; replace, never mutate.
@@ -974,6 +1140,14 @@ const restoreCompactBiologicalDefaults = (feature) => {
   return restored;
 };
 
+/**
+ * @param {FeatureCatalogRow} feature
+ * @param {number} recordIndex
+ * @param {string} displayRecordId
+ * @param {readonly unknown[]} sequenceSources
+ * @param {readonly string[]} sourceSequences
+ * @param {number} sequenceRecordIndex
+ */
 const expandBiologicalFeature = (
   feature,
   recordIndex,
@@ -1037,9 +1211,15 @@ const expandBiologicalFeature = (
   return expanded;
 };
 
+/**
+ * @param {FeatureCatalogRow} group
+ * @param {Map<string, FeatureCatalogRow>} biologicalByKey
+ * @param {Map<string, FeatureCatalogRow[]>} renderedByKey
+ * @returns {FeatureCatalogRow}
+ */
 const expandOrthogroup = (group, biologicalByKey, renderedByKey) => ({
   ...cloneJson(group),
-  members: group.members.map((member) => {
+  members: group.members.map((/** @type {FeatureCatalogRow} */ member) => {
     const key = biologicalFeatureKey(
       member.recordKey,
       member.biologicalFeatureId
@@ -1080,6 +1260,11 @@ const expandOrthogroup = (group, biologicalByKey, renderedByKey) => ({
   })
 });
 
+/**
+ * @param {object} catalog An admitted catalog.
+ * @param {{ mode?: string }} [options]
+ * @returns {FeatureCatalogFeatureState}
+ */
 export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
   const admission = featureCatalogAdmissions.get(catalog);
   const normalizedMode = text(mode).toLowerCase();
@@ -1092,6 +1277,11 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
   return admission.featureState;
 };
 
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
 const rawValue = (value) => globalThis.window?.Vue?.toRaw ? globalThis.window.Vue.toRaw(value) : value;
 
 // The catalog features of one committed Result (the displayed Result by
@@ -1099,13 +1289,28 @@ const rawValue = (value) => globalThis.window?.Vue?.toRaw ? globalThis.window.Vu
 // in source order, `rendered` by rendered ID, and `renderedByIdentity`, the
 // rendered feature of each source identity the Result draws. `results` is the
 // Result list the admission matches by name (the state's by default).
+/**
+ * The state fields this module reads; the app state and a drawing satisfy it.
+ * @typedef {object} CatalogStateView
+ * @property {{ value?: unknown }} [selectedResultIndex]
+ * @property {{ value?: unknown }} [results]
+ * @property {{ value?: FeatureCatalog | null }} [featureCatalog]
+ * @property {{ value?: string | null }} [generatedMode]
+ */
+
+/**
+ * @param {CatalogStateView | null | undefined} state
+ * @param {unknown} [resultIndex]
+ * @param {unknown} [results]
+ */
 export const resultCatalogFeatures = (state, resultIndex = state?.selectedResultIndex?.value, results = state?.results?.value) => {
   const catalog = rawValue(state?.featureCatalog?.value);
   if (!catalog) return null;
   const index = Number(resultIndex) || 0;
   try {
-    const admission = admitFeatureCatalog(catalog, rawValue(results) || [], {
-      mode: state.generatedMode?.value || ''
+    // `catalog` is set, so `state` is not null. A `results` that is not an array makes the admission throw, caught below.
+    const admission = admitFeatureCatalog(catalog, /** @type {FeatureCatalogResult[]} */ (rawValue(results) || []), {
+      mode: /** @type {CatalogStateView} */ (state).generatedMode?.value || ''
     });
     const rendered = admission.renderedFeaturesByResult[index];
     return rendered ? {
@@ -1119,6 +1324,10 @@ export const resultCatalogFeatures = (state, resultIndex = state?.selectedResult
 };
 
 // The rendered features of one committed Result by rendered ID; null without a catalog.
+/**
+ * @param {CatalogStateView | null | undefined} state
+ * @param {unknown} [resultIndex]
+ */
 export const resultRenderedFeatures = (state, resultIndex) => (
   resultCatalogFeatures(state, resultIndex)?.rendered || null
 );

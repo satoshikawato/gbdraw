@@ -415,6 +415,25 @@ test('catalog rejects dangling rendered and group references', () => {
   );
 });
 
+test('catalog rejects a rendered feature of a record the item does not have', () => {
+  // The record key and the feature ID are joined by NUL, so a NUL inside one
+  // of them makes two different pairs share a key.
+  const borrowedKey = structuredClone(catalog);
+  const [item] = borrowedKey.items;
+  item.biologicalFeatures[0].biologicalFeatureId = 'b\u0000c';
+  item.orthogroups[0].members[0].biologicalFeatureId = 'b\u0000c';
+  assert.doesNotThrow(() => validateFeatureCatalog(structuredClone({
+    ...borrowedKey,
+    items: [{ ...item, features: [{ ...item.features[0], biologicalFeatureId: 'b\u0000c' }] }]
+  }), results));
+  item.features[0].recordKey = 'record-instance-a\u0000b';
+  item.features[0].biologicalFeatureId = 'c';
+  assert.throws(
+    () => validateFeatureCatalog(borrowedKey, results),
+    /Reload the page and Generate again/
+  );
+});
+
 test('catalog validates ordered plural comparison endpoint references', () => {
   const plural = structuredClone(catalog);
   plural.items[0].features.push({

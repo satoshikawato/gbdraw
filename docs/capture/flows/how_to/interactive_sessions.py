@@ -69,7 +69,7 @@ SESSION_TITLE = "reproducible_work"
 SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
-CURRENT_SESSION_VERSION = 46
+CURRENT_SESSION_VERSION = 47
 CURRENT_RENDER_REQUEST_SCHEMA = 9
 STATIC_CAPTURE_HEADER_STYLE = """
 .app-header {
@@ -125,7 +125,10 @@ def _reset_finished_preview_viewport(page: Page, *, target_zoom: int) -> None:
     if target_zoom not in (50, 60):
         raise ValueError(f"Unsupported finished-preview zoom: {target_zoom}%")
     reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
-    page.get_by_role("button", name="Reset layout", exact=True).click()
+    # Reset layout is disabled until something moved; the search may not have panned.
+    reset_layout = page.get_by_role("button", name="Reset layout", exact=True)
+    if reset_layout.is_enabled():
+        reset_layout.click()
     expect(reset_zoom).to_have_text("100%")
     zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
     for expected_zoom in range(90, target_zoom - 1, -10):
@@ -293,14 +296,16 @@ def _search_and_open_feature(
     if qualifier_key:
         expect(qualifier).to_be_enabled()
         qualifier.fill(qualifier_key)
-    regex = page.get_by_role("checkbox", name="Regex (JavaScript, i)", exact=True)
+    regex = page.get_by_role("checkbox", name="Regular expression", exact=True)
     if use_regex:
         regex.check()
         expect(regex).to_be_checked()
     page.get_by_role("button", name="Search features", exact=True).click()
     expect(
         page.get_by_role("status", name="Feature search status", exact=True)
-    ).to_have_text(f"1 / {expected_matches} features")
+    ).to_have_text(
+        f"1 of {expected_matches} {'match' if expected_matches == 1 else 'matches'}"
+    )
     page.get_by_role("button", name="Open active feature", exact=True).click()
     popup = page.get_by_role("dialog", name=re.compile(r"^Feature details:"))
     expect(popup).to_be_visible()
@@ -1163,16 +1168,17 @@ def _save_current_session(
 
 
 def _load_current_session(page: Page, path: Path) -> None:
-    page.once("dialog", lambda dialog: dialog.accept())
-    with page.expect_event("dialog", timeout=ACTION_TIMEOUT_MS) as dialog_info:
-        with page.expect_file_chooser(timeout=ACTION_TIMEOUT_MS) as chooser_info:
-            page.get_by_role(
-                "button", name="Load Session", exact=True
-            ).click()
-        chooser_info.value.set_files(path)
-    dialog = dialog_info.value
-    if dialog.message != "Session loaded successfully!":
-        raise AssertionError(f"Session reload failed: {dialog.message}")
+    with page.expect_file_chooser(timeout=ACTION_TIMEOUT_MS) as chooser_info:
+        page.get_by_role("button", name="Load Session", exact=True).click()
+    chooser_info.value.set_files(path)
+    expect(page.locator("[data-app-notice]")).to_contain_text(
+        "Session loaded", timeout=ACTION_TIMEOUT_MS
+    )
+    if page.locator("[data-app-notice] li").count():
+        raise AssertionError(
+            "Session reload showed warnings: "
+            f"{page.locator('[data-app-notice]').inner_text()}"
+        )
 
 
 def _set_history_marker(page: Page, marker: str) -> Any:
@@ -1229,16 +1235,11 @@ def capture_gui_session_reproduction(
             page, output_paths["history-actions.png"], "Circular"
         )
 
-        page.once("dialog", lambda dialog: dialog.accept())
-        with page.expect_event("dialog", timeout=ACTION_TIMEOUT_MS) as dialog_info:
-            page.get_by_role(
-                "button", name="Reset Settings", exact=True
-            ).click()
-        reset_dialog = dialog_info.value
-        if reset_dialog.type != "confirm" or not reset_dialog.message.startswith(
-            "Reset all settings"
-        ):
-            raise AssertionError(f"Unexpected reset dialog: {reset_dialog.message}")
+        page.get_by_role("button", name="Reset Settings", exact=True).click()
+        reset_prompt = page.get_by_role("dialog", name="Reset all settings?", exact=True)
+        expect(reset_prompt).to_be_visible()
+        reset_prompt.get_by_role("button", name="Reset all settings", exact=True).click()
+        expect(reset_prompt).to_have_count(0)
         expect(page.get_by_label("Output Prefix", exact=True)).to_have_value("")
         expect(page.get_by_label("Species", exact=True)).to_have_value("")
         expect(page.get_by_label("Track Preset", exact=True)).to_have_value("tuckin")

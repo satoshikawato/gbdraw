@@ -5,7 +5,7 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -82,18 +82,15 @@ const definitionLines = (page) => page.evaluate(() => {
 });
 
 const loadDefinitionSession = async (page, path) => {
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  const dialog = await loaded;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
 };
 
 test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
   test.setTimeout(120000);
   const wheelResponses = [];
   await page.context().route(/\/gbdraw-[^/]+\.whl(?:\?|$)/, async route => {
-    const response = await route.fetch();
+    const response = await fetchRoute(route);
     const body = await response.body();
     if (route.request().method() === 'GET') {
       wheelResponses.push({url: response.url(), sha256: createHash('sha256').update(body).digest('hex')});
@@ -187,6 +184,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   expect((await definitionLines(page)).filter((line) => line.kind === 'replicon')).toEqual([]);
   expect((await definitionLines(page)).filter((line) => line.kind === 'subtitle')).toMatchObject([{ text: 'p1' }]);
   // An explicit clear returns to the file default, including after another load.
+  await openLinearFileCards(page);
   await page.getByLabel('Default subtitle for file 1').fill('File default');
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -374,8 +372,8 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await lock.focus();
   await expect(tooltip).toHaveCount(0);
   await lock.uncheck();
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await expect(lock).toBeChecked();
   await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
     name: 'definition-draft.gb', mimeType: 'text/plain',
@@ -438,8 +436,8 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   }
   const beforeReset = await measureDefinitionColumns(page);
   await lock.uncheck();
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await expect(lock).toBeChecked();
   expect(await measureDefinitionColumns(page)).toEqual(beforeReset);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -538,18 +536,14 @@ const openLinearSelectedPairs = async (page) => {
   return details;
 };
 
-const openLinearAdvancedComparison = async (page) => {
-  const details = page.locator(
-    'details[data-linear-comparison-disclosure="advanced"]'
-  );
-  await expect(details).toHaveCount(1);
+// The Raw LOSAT filename sits in a closed "File name" disclosure of its pair row.
+const openRawFilename = async (rawResult) => {
+  const details = rawResult.locator('details');
   if (!await details.evaluate((element) => element.open)) {
-    await details.locator(':scope > summary').press('Enter');
+    await details.locator('summary').click();
   }
   await expect(details).toHaveAttribute('open', '');
-  return details;
 };
-
 const expectExactEdgeKeys = async (container, expectedKeys) => {
   const pairs = container.locator('fieldset[data-edge-key]');
   await expect(pairs).toHaveCount(expectedKeys.length);
@@ -1358,7 +1352,7 @@ test('No comparison completes a real render without touching dormant comparison 
     draft: [['dormant-none-edge', true, true, true, 'dormant-comparison.tsv', 'dormant-losat-name.tsv']],
     skipped: [0, 0, 0], cacheSize: 1, losatRuntimeUrls: [], comparisonSvgNodes: 0
   });
-  await expect(page.getByText('Raw LOSAT results', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Raw LOSAT results', { exact: true })).toHaveCount(0);
 
   await openLinearSelectedPairs(page);
   const dormantPair = linearComparisonPair(page, dormantEdgeKey);
@@ -1375,7 +1369,6 @@ test('No comparison completes a real render without touching dormant comparison 
   })).toHaveCount(0);
   await expect(dormantPair).toContainText('Retained, inactive BLAST TSV: dormant-comparison.tsv');
 
-  await openLinearAdvancedComparison(page);
   const dormantRawResult = page.locator(`[data-linear-raw-result="${dormantEdgeKey}"]`);
   await expect(dormantRawResult).toContainText(
     'Retained, inactive filename: dormant-losat-name.tsv'
@@ -1406,12 +1399,14 @@ test('No comparison completes a real render without touching dormant comparison 
   await dormantRawResult.getByRole('button', {
     name: 'Reuse Raw LOSAT filename for #1 to #2'
   }).click();
+  await openRawFilename(dormantRawResult);
   await expect(dormantRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #1 to #2'
   })).toHaveValue('dormant-losat-name.tsv');
+  // Save Raw LOSAT TSV appears only once the result is cached.
   await expect(dormantRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #1 to #2'
-  })).toBeDisabled();
+  })).toHaveCount(0);
 });
 
 test('Automatic Linear renders every record from one GenBank source and survives session reload', async ({ page }) => {
@@ -1451,7 +1446,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0]).length
   ))).toBe(3);
-  await page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter');
+  await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).press('Enter');
   await expect(page.getByLabel('Arrange linear records in rows')).toBeChecked();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
     .toEqual([1, 1]);
@@ -1532,11 +1527,8 @@ test('Automatic Linear renders every record from one GenBank source and survives
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(0);
 
   await page.evaluate(() => {
@@ -1554,6 +1546,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect(await page.evaluate(() => window.__GBDRAW_AUTOMATIC_RELOAD_RUN__.error)).toBe('');
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(1);
+  await openLinearFileCards(page);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(1);
 
@@ -1631,7 +1624,7 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
     ))
   ))).toEqual([3, 3, 3, 3]);
 
-  await page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter');
+  await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).press('Enter');
   await page.getByLabel('Arrange linear records in rows').check();
   await page.getByLabel('Linear record row for sequence 1').fill('1');
   await page.getByLabel('Linear record row for sequence 2').fill('1');
@@ -1716,15 +1709,13 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
   const chooserPromise = restoredPage.waitForEvent('filechooser');
   await restoredPage.getByRole('button', { name: 'Load Session' }).click();
   const chooser = await chooserPromise;
-  const dialogPromise = restoredPage.waitForEvent('dialog', { timeout: 120000 });
   await chooser.setFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(restoredPage);
 
   await expect(restoredPage.locator('[data-linear-record-card]')).toHaveCount(4);
   await restoredPage.getByRole('button', {
-    name: 'Advanced comparison and layout'
+    name: 'Advanced comparison and layout',
+    exact: true
   }).press('Enter');
   const restoredRows = restoredPage.getByRole('spinbutton', {
     name: /^Linear record row for sequence \d+$/
@@ -1957,7 +1948,6 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     [`${uidB}->${uidC}`, 1, 2, 0]
   ]]);
   await openLinearSelectedPairs(page);
-  await openLinearAdvancedComparison(page);
   const uploadPair = linearComparisonPair(page, `${uidA}->${uidB}`);
   const losatPair = linearComparisonPair(page, `${uidB}->${uidC}`);
   const losatRawResult = page.locator(
@@ -1985,6 +1975,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
   ))).toBe('2->3');
+  await openRawFilename(losatRawResult);
   await expect(losatRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #3 to #1'
   })).toHaveValue('selected-b-to-c.tsv');
@@ -2064,11 +2055,8 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   const sessionPath = await (await sessionDownloadPromise).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.losatCacheInfo?.length === 1);
   const restored = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -2102,9 +2090,10 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       losatMode: 'blastn',
       losatpMode: 'collinear',
       filterSummary: expect.stringContaining('E-value <= '),
+      // The Settings disclosure's display order: Performance comes last.
       settings: [
-        'losat-mode', 'losat-runtime', 'blastn-task', 'upload-readiness',
-        'result-filters', 'comparison-appearance'
+        'losat-mode', 'blastn-task',
+        'result-filters', 'comparison-appearance', 'losat-runtime'
       ]
     }
   });
@@ -2122,12 +2111,12 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     'Selected pairs (2)'
   );
   await openLinearSelectedPairs(page);
-  await openLinearAdvancedComparison(page);
   const restoredUploadPair = linearComparisonPair(page, `${uidA}->${uidB}`);
   const restoredLosatRawResult = page.locator(
     `[data-linear-raw-result="${uidB}->${uidC}"]`
   );
   await expect(restoredUploadPair).toContainText('mixed-a-to-b.tsv');
+  await openRawFilename(restoredLosatRawResult);
   await expect(restoredLosatRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #3 to #1'
   })).toHaveValue('selected-b-to-c.tsv');
@@ -2186,11 +2175,10 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
     ]
   });
   await openLinearSelectedPairs(page);
-  await openLinearAdvancedComparison(page);
   const firstRawResult = page.locator(
     '[data-linear-raw-result="record-1->record-2"]'
   );
-  await expect(firstRawResult).toContainText('Raw result ready');
+  // Save Raw LOSAT TSV is shown only for a cached result.
   await expect(firstRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #1 to #2'
   })).toBeEnabled();
@@ -2791,7 +2779,7 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
   });
 
   await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
-  const idInput = page.getByPlaceholder('annotation_id');
+  const idInput = page.getByLabel('Annotation id', { exact: true });
   await idInput.selectText();
   await idInput.pressSequentially('Repeat');
 
@@ -3352,11 +3340,8 @@ test('@comparison-contract File source order moves multi-record blocks through p
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
-  const loadDialog = await loaded;
-  expect(loadDialog.message()).toBe('Session loaded successfully!');
-  await loadDialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
   await expect(page.locator('[data-linear-source-card]').nth(0)).toContainText('lower.gbff');
@@ -3595,7 +3580,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   await openApp(page);
   await uploadCompleteRecordSources(page);
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastn'));
-  await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
+  await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).click();
   const controls = page.getByRole('spinbutton', { name: /^Linear record row for sequence \d+$/ });
   await expect(controls).toHaveCount(5);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
@@ -3623,12 +3608,12 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows
     .map((entry) => entry.row))).toEqual([1, 1, 2, 2, 3]);
-  await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
+  await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).click();
   await expect(controls).toHaveCount(5);
+  await openLinearFileCards(page);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
   await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(2);
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
@@ -3762,9 +3747,8 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
-  await (await loaded).accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
@@ -3772,7 +3756,6 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
       linear: state.drawings.linear.linearRecordLayoutEnabled.value
     };
   })).toEqual({ circular: false, linear: false });
-  page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -3835,15 +3818,15 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await expect(sources).toHaveCount(2);
   await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(1);
   await sources.nth(1).getByRole('button', { name: 'Remove GenBank / DDBJ File', exact: true }).click();
-  const removalDialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
+  const removalDialog = page.getByRole('dialog', { name: /^Remove .*\?$/ });
   await expect(removalDialog).toContainText('upper.gbff');
-  await removalDialog.getByRole('button', { name: 'Delete card', exact: true }).click();
+  await removalDialog.getByRole('button', { name: 'Remove file', exact: true }).click();
   await expect(sources).toHaveCount(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['UpperA', 'UpperB']);
   await sources.first().getByRole('button', { name: 'Remove GenBank / DDBJ File', exact: true }).click();
-  await expect(removalDialog.getByRole('button', { name: 'Delete card', exact: true })).toBeDisabled();
-  await removalDialog.getByRole('button', { name: 'Clear file only', exact: true }).click();
+  await expect(removalDialog.getByRole('button', { name: 'Remove file', exact: true })).toBeDisabled();
+  await removalDialog.getByRole('button', { name: 'Empty this slot', exact: true }).click();
   await expect(sources).toHaveCount(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => ({ file: seq.gb, selector: seq.region_record_id }))))
@@ -3887,7 +3870,6 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
     const path = await (await saved).path();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppShell(page);
-    page.once('dialog', (dialog) => dialog.accept());
     await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
     await expect(settings).toHaveAttribute('open', '');
     for (const [index, name] of labels.entries()) {
@@ -3896,7 +3878,6 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
     await expect(member).toHaveValue('');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.blastp.orthogroupMemberMaxHits)).toBeNull();
   }
-  page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
   expect(await page.evaluate(() => window.__GBDRAW_APP__.losatExecution.executionMode)).toBe('threaded');
 });
@@ -3953,7 +3934,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   const popupStart = await page.evaluate(() => (
     window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
   ));
-  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await actions.getByRole('button', { name: 'Apply now' }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {
     timeout: 240000
   });
@@ -4010,9 +3991,8 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   const path = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  await (await loaded).accept();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   const restored = await run();
   expect(restored.result, JSON.stringify(restored.error)).toEqual({ status: 'ok' });
   expect(restored.jobCount).toBe(0);
@@ -4031,15 +4011,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
 
 test('@comparison-contract Total threads reallocates Auto runs and threads in real threaded LOSATP', async ({ page }) => {
   test.setTimeout(300000);
-  await page.context().route('**/*', async (route) => {
-    if (new URL(route.request().url()).hostname !== '127.0.0.1') return route.abort();
-    const response = await route.fetch();
-    return route.fulfill({ response, headers: {
-      ...response.headers(),
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp'
-    } });
-  });
+  await routeCrossOriginIsolated(page.context());
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 64 });
     window.__THREAD_DISPATCHES__ = [];
@@ -4109,7 +4081,6 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   const savedPath = await saved.path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  page.once('dialog', dialog => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await expect(total).toHaveValue('4');
   await expect(runs).toHaveValue('2');
@@ -4321,4 +4292,28 @@ FEATURES             Location/Qualifiers
   // A blank record Definition previews what Generate draws: the inferred value.
   await expect(page.getByLabel('Definition for sequence 1'))
     .toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
+});
+
+// OV-499: the open disclosure stayed in the column beside Save Raw LOSAT TSV,
+// about 75 px of a 320 px sidebar, so its label wrapped one word per line.
+test('an open pair File name disclosure takes the whole row under Save Raw LOSAT TSV', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const bytes = [...readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json')];
+  await evaluateWithRetainedPromise(page, async (sessionBytes) => {
+    const file = new File([new Uint8Array(sessionBytes)], 'BGC0000708-BGC0000713.gbdraw-session.json');
+    await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
+  }, bytes);
+  const rawResult = page.locator('[data-linear-raw-result]').first();
+  await rawResult.evaluate((element) => {
+    for (let owner = element.closest('details'); owner; owner = owner.parentElement?.closest('details')) owner.open = true;
+  });
+  await expect(rawResult.getByRole('button', { name: /^Save Raw LOSAT TSV/ })).toBeVisible();
+  await openRawFilename(rawResult);
+  const widths = await rawResult.evaluate((element) => ({
+    row: element.clientWidth,
+    field: element.querySelector('details input[type="text"]').getBoundingClientRect().width
+  }));
+  expect(widths.field).toBeGreaterThan(widths.row - 8);
 });

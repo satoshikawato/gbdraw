@@ -12,12 +12,13 @@ import {
   buildLinearLegendLayout,
   circularLegendLocalBounds,
   createLegendFontMetrics,
+  legendMeasurementFace,
   linearLegendLocalBounds,
   loadLegendFontMetrics,
   measureTextBox,
   planLegendComposition,
   pythonFloatSum,
-  resolveBundledFontFace
+  resolveLegendFontFace
 } from '../../gbdraw/web/js/services/legend-layout.js';
 import { LEGEND_FONT_METRICS } from '../../gbdraw/web/js/utils/legend-font-metrics.generated.js';
 
@@ -106,12 +107,15 @@ const circularResult = (layout) => ({
 
 const layoutCase = (vector) => {
   const options = { ...vector.options };
+  // Python's vector tables draw each row under its key (no rename), so the
+  // name the layout measures is the key.
+  const rows = vector.rows.map((row) => ({ ...row, name: row.key }));
   const result = vector.mode === 'linear'
-    ? linearResult(buildLinearLegendLayout(vector.rows, options, metrics))
-    : circularResult(buildCircularLegendLayout(vector.rows, options, metrics));
+    ? linearResult(buildLinearLegendLayout(rows, options, metrics))
+    : circularResult(buildCircularLegendLayout(rows, options, metrics));
   const legend = vector.mode === 'linear'
-    ? linearLegendLocalBounds(buildLinearLegendLayout(vector.rows, options, metrics), options.colorRectSize)
-    : circularLegendLocalBounds(buildCircularLegendLayout(vector.rows, options, metrics), options.colorRectSize);
+    ? linearLegendLocalBounds(buildLinearLegendLayout(rows, options, metrics), options.colorRectSize)
+    : circularLegendLocalBounds(buildCircularLegendLayout(rows, options, metrics), options.colorRectSize);
   const inputs = vector.composition;
   const plan = planLegendComposition({
     primary: box(inputs.primary),
@@ -151,7 +155,7 @@ test('the vectors cover every Gallery Legend, its edits, and the synthetic branc
 
 test('text measurement equals calculate_bbox_dimensions', () => {
   vectors.measurement.forEach((vector, index) => {
-    assert.equal(resolveBundledFontFace(metrics, vector.fontFamily), vector.fontFile, `measurement[${index}] face`);
+    assert.equal(resolveLegendFontFace(metrics, vector.fontFamily), vector.fontFile, `measurement[${index}] face`);
     const measured = measureTextBox(metrics, vector);
     assertExact(measured, vector.expected, `measurement[${index}] ${JSON.stringify(vector.text)} ${vector.fontFile} ${vector.fontSize}`);
   });
@@ -174,4 +178,15 @@ test('sums follow CPython float sum()', () => {
   assert.equal(pythonFloatSum([]), 0);
   assert.equal(pythonFloatSum(Array(10).fill(0.1)), 1.0);
   assert.equal(pythonFloatSum([1e16, 1.0, -1e16]), 1.0);
+});
+
+// OV-683: a Result drawn on the CLI with a system font records a face the Web
+// has no metrics for; the editor measures with the label family's bundled face.
+test('an unknown recorded face falls back to the bundled face of the family', () => {
+  assert.equal(legendMeasurementFace(metrics, 'LiberationSerif-Regular', 'sans-serif'), 'LiberationSerif-Regular');
+  assert.equal(legendMeasurementFace(metrics, 'DejaVuSans', "'DejaVu Sans', serif"), 'LiberationSerif-Regular');
+  assert.equal(legendMeasurementFace(metrics, undefined, "'DejaVu Sans', sans-serif"), 'LiberationSans-Regular');
+  assert.doesNotThrow(() => measureTextBox(metrics, {
+    text: 'CDS', fontFile: legendMeasurementFace(metrics, 'DejaVuSans', 'sans-serif'), fontSize: 14, dpi: 96
+  }));
 });

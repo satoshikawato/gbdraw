@@ -82,8 +82,8 @@ selective and the full decision, so an evidence fallback or the
 `architecture-change` label keeps it whenever one of those capabilities is
 present. Other full-tier routes do not run it before merge: `ci-only`,
 `packaging`, and fallbacks of `metadata`, `python-core`, or `renderer` plans.
-Integrated `dev` staging runs it on every push that does not inherit parent
-evidence. On pull requests it is the same job, shard matrix, and command
+Integrated `dev` staging runs it on every push that inherits neither parent
+evidence nor the evidence of the pull request it merges. On pull requests it is the same job, shard matrix, and command
 as in `dev` staging.
 
 `web-contracts-pr` groups the existing fast JS contracts and non-slow Python
@@ -129,7 +129,10 @@ Every runtime/subsystem change runs complete integrated dev and Gallery coverage
 A `dev` push that leaves the tree unchanged, or changes only metadata,
 documentation, policy documentation, and leaf tests, inherits its direct parent's
 evidence and runs only the jobs it needs
-([Light-change inheritance](#light-change-inheritance)).
+([Light-change inheritance](#light-change-inheritance)). A `dev` push that merges
+a pull request whose green run tested the same tree inherits the jobs that run
+ran with the dev-tier command
+([Merged pull request inheritance](#merged-pull-request-inheritance)).
 
 A later `dev` push does not cancel a running `Tests` or `Gallery publication`
 run. For each workflow, one run executes, the newest later push waits, and
@@ -246,6 +249,56 @@ Tests marked `slow` run only in the release tier, except the packaging checks
 that `browser` runs from `tests/test_web_packaging.py`, so a leaf-test push does
 not run them on `dev`.
 
+### Merged pull request inheritance
+
+With merge commits and no up-to-date requirement on `dev`, a pull request run
+often tests the exact tree that its merge commit later pushes to `dev`: in 26
+of 59 merges between 2026-10-11 and 2026-10-14, the last green run started
+after `dev` reached the merge commit's first parent. The `dev` run then inherits
+that run's evidence for the jobs both tiers run with the same command:
+
+| `Tests` job on `dev` | Why the pull request job is the same |
+| --- | --- |
+| `recipes-standard`, `lint` | Same steps on both events |
+| `gallery` | Same pytest step; the pull request job may add the Gallery parity steps |
+| `playwright-functional` | Same eight shard lists; a pull request plan has no leaf tests, so each shard runs its whole list |
+
+The other dev jobs always run: `core` (three Python versions; pull requests
+run `core-pr` on 3.11), `browser`, `playwright-performance`,
+`losat-cache-browser-acceptance`, and `web-change-budget` (it checks the
+`dev` push range in its integrated mode, not the pull request range). A job
+is inherited only when the pull request capabilities of the change select it,
+so the plan's required jobs follow from its capabilities
+(`pullRequestEvidenceJobsFor` in `tools/ci-impact-policy.mjs`). The basis is
+`IDENTICAL_TREE_WITH_PR_EVIDENCE`; its inherited evidence names the pull
+request run, its `PR / gate` job, and the pull request head.
+
+The `CI impact plan` job of every pull request run uploads an artifact named
+`ci-impact-pr-plan.<tree>` followed by `.<job ID>` for each planned job, where
+`<tree>` is the tree of the merge commit the run tested. The `dev` planner reads it through
+the Actions REST API with `actions: read`, and inherits only when all of these
+hold:
+
+1. The `dev` profile classifies the push as a full change with no control-plane
+   (`ci-only`) path, and the change selects at least one inheritable job.
+   Lighter pushes keep the direct-parent routes above.
+2. The push is one merge commit whose first parent is `github.event.before`.
+   Its second parent is the pull request head.
+3. The newest `Tests` `pull_request` run for that head comes from the same
+   repository, completed successfully, and its current attempt has a
+   successful `PR / gate`
+   (`verifyWorkflowEvidence` in `tools/check-promotion-readiness.mjs`).
+4. The run has exactly one record for the merge commit's tree, and that record
+   lists every inherited job.
+
+Otherwise the plan stays `FULL_CHANGE` and its summary names the missing
+evidence (`NOT_A_PULL_REQUEST_MERGE`, `TESTED_TREE_NOT_RECORDED`,
+`PULL_REQUEST_JOBS_NOT_PLANNED`, or the verifier's code). This covers a fork,
+a later head push that was not tested, a run that failed or is still running,
+a re-run that is in progress or planned differently, a tree that changed because
+`dev` moved, and unreadable evidence. `Gallery publication` keeps its own
+routes: a pull request run does not execute its jobs.
+
 ### Carrying evidence to a later commit
 
 `node tools/ci-impact.mjs classify --base <E> --head <H>` reads
@@ -345,6 +398,48 @@ reporter names the running case, and the JSON report records durations,
 retries and final results alongside traces on every completed job. A job killed
 at its limit may not reach upload; its last running case remains in the log.
 
+## Weekly CI inventory
+
+The `CI inventory` workflow (`.github/workflows/ci-inventory.yml`) runs
+`tools/ci-inventory.mjs` every Monday at 00:17 UTC and on manual dispatch. It
+checks out `dev`, needs no session, and never runs on a pull request. GitHub
+runs scheduled workflows from the default branch, so the schedule starts once
+the workflow reaches `main`. Its report covers the last 7 days:
+
+- runner-minutes by workflow and event, and by job name (matrix jobs together);
+- `Tests` wall time (run start to its last job) and queue time (job created to
+  job started), p50 and p90, for pull request and `dev` push runs;
+- the functional shards of the latest green `dev` push `Tests` run that kept
+  every shard report: test-minutes per shard, the slowest shard against the
+  mean, the case count, the 15 spec files with the most test-minutes, and the
+  plan `tools/balance-functional-shards.mjs` would write from that run;
+- changes since the previous week in functional cases, functional
+  test-minutes, runner-minutes, and jobs in `test.yml`.
+
+The report goes to the job summary and to one comment a week on the open issue
+labelled `ci-inventory`; the workflow creates the label and the issue when they
+are missing, and a second run in the same week replaces that week's comment.
+Each comment ends with a data block that the next week's run reads back; only
+the workflow's own comments (`github-actions[bot]`) count, and a block with a
+malformed field is ignored. The workflow's token is the first in this
+repository with `issues: write`. To stay within its 1,000 API requests an
+hour, the tool reads job lists only for `Tests` and `Gallery publication` runs;
+other runs, and any run left when the request budget runs low, count by their
+own duration in rows marked "(run duration)". When the API refuses the run
+listing (HTTP 403 or 429), the report covers the runs read so far and says it
+is partial.
+
+A report asks for a rebalance when the slowest shard has more than 1.2 times
+the mean test-minutes, or when a functional spec file has no recorded minutes
+in `tests/ci/functional-shards.json`. A session that reads a flagged report:
+
+1. Rebalances the shards with the reports of two green `dev` runs (above).
+2. Reviews the spec files and jobs that grew most: merges cases that repeat a
+   journey another case already proves, moves checks that need no browser to
+   node or pytest, and removes cases and jobs whose behaviour is covered
+   elsewhere. Removing an acceptance case follows "Smoke inventory and
+   regression retention".
+
 ## Trust and aggregate checks
 
 PR planning and `PR / gate` execute the PR base's helper under `.ci-trusted-base`.
@@ -377,7 +472,8 @@ A release dispatch cannot emit ordinary `Dev staging / gate` success.
 Plans use schema 3 and include the capability union. A leaf-test plan also lists
 each changed leaf test with its kind and jobs (`leafTests`; `null` in every other
 plan), and an identical-tree plan has the single capability `none` and no changed
-path. The active helper validates
+path. A merged pull request plan names a pull request run as its evidence. The
+active helper validates
 its own exact schema, profile, workflow SHA, required job list, and inherited
 evidence. It rejects missing/skipped/failed/cancelled required jobs and unexpected
 failures in optional/additional jobs. Matrix aggregates must succeed. Workflows

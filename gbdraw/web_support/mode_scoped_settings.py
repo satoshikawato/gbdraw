@@ -13,7 +13,7 @@ A row is ``{domain, path, modes, key, migrate}``:
 - ``path``: the key of the value inside ``domain``.
 - ``modes``: ``both``, or the one mode a MODE-ONLY value belongs to.
 - ``key``: for a keyed-row domain, how a row's key is formed (rows are compared
-  entry by entry by the 46 -> 47 step); otherwise ``None``.
+  entry by entry by the multi-drawing step (PD-OI-090)); otherwise ``None``.
 - ``migrate``: the token by which the split of a Session 27-44 draft fills the
   two slices (``MIGRATION_TOKENS``).
 
@@ -125,6 +125,7 @@ _ADV_ROWS = _rows(
     ("feature_shapes", "both", "copy"),
     ("arrow_head_length_ratio", "both", "copy"),
     ("arrow_shaft_width_ratio", "both", "copy"),
+    ("font_family", "both", "copy"),
     ("window_size", "both", "copy"),
     ("step_size", "both", "copy"),
     ("nt", "both", "copy"),

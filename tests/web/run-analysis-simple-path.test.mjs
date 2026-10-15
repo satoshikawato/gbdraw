@@ -464,7 +464,7 @@ test('superseded canonical execution stops before catalog and SVG admission', as
   let admissions = 0;
   let commits = 0;
   const outcome = await executeCanonicalRenderCandidate({
-    canonical: { renderRequest: { schema: 7 }, resources: {} },
+    canonical: { renderRequest: { schema: CANONICAL_REQUEST_SCHEMA }, resources: {} },
     mode: 'circular',
     kind: 'target-record-transform',
     generationExecutor: async () => ({ results: [], metadata: { annotationWarnings: ["stale-invalid-warning"] } }),
@@ -485,7 +485,7 @@ test('canonical execution carries the Worker comparison table ID warnings to the
     resultIndex: 0, resultName: 'out.svg'
   };
   const run = (metadata) => executeCanonicalRenderCandidate({
-    canonical: { renderRequest: { schema: 7 }, resources: {} },
+    canonical: { renderRequest: { schema: CANONICAL_REQUEST_SCHEMA }, resources: {} },
     mode: 'linear',
     generationExecutor: async () => ({ results: [{ name: 'out.svg', content: '<svg/>' }], metadata }),
     catalogAdmission: () => ({ catalog: null }),
@@ -504,7 +504,7 @@ test('canonical execution carries the Worker comparison table ID warnings to the
 test('a rerender admits the Results it draws again under their kept names (OV-136)', async () => {
   const admitted = [];
   const outcome = await executeCanonicalRenderCandidate({
-    canonical: { renderRequest: { schema: 7 }, resources: {} },
+    canonical: { renderRequest: { schema: CANONICAL_REQUEST_SCHEMA }, resources: {} },
     mode: 'circular',
     kind: 'reflow',
     resultNames: ['HmmtDNA_basic_circular'],

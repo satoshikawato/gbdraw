@@ -12,7 +12,8 @@ const {
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
-  waitForAppShell
+  waitForAppShell,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 
 const installDiagramRequestObserver = (page) => page.addInitScript(() => {
@@ -116,7 +117,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await search.fill('tRNA');
   await search.press('Enter');
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-  const layout = page.getByRole('region', { name: 'Layout · applies on Generate' });
+  const layout = page.getByRole('region', { name: 'Layout', exact: true });
   await expect(layout.getByLabel('Feature placement', { exact: true })).toBeVisible();
   const disclosure = layout.getByRole('button', { name: ROTATE_RECORD, exact: true });
   await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
@@ -149,7 +150,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
   ));
   expect(expectedStart).toBeGreaterThan(0);
-  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await actions.getByRole('button', { name: 'Apply now' }).click();
   await expect(actions.locator('[aria-live="polite"]')).toContainText('Regenerating');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {
     timeout: 240000
@@ -284,8 +285,8 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await page.keyboard.type('-3');
   await expect(offset).toHaveValue('-3');
   for (const control of [simpleDisclosure, reference, offset,
-    simpleActions.getByRole('button', { name: 'Apply on Generate', exact: true }),
-    simpleActions.getByRole('button', { name: 'Apply and regenerate', exact: true })]) {
+    simpleActions.getByRole('button', { name: 'Apply when I Generate', exact: true }),
+    simpleActions.getByRole('button', { name: 'Apply now', exact: true })]) {
     const box = await control.boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
@@ -317,7 +318,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
       drafts: JSON.stringify(state.activeDrawing().recordDisplayDrafts)
     };
   });
-  await staleActions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await staleActions.getByRole('button', { name: 'Apply now' }).click();
   // One reason source: the reason line states it once; the status line does not repeat it.
   await expect(staleActions.locator('#feature-record-rotation-reason')).toContainText(
     'no longer present'
@@ -414,7 +415,7 @@ test('same-file record rotation keeps chromosome targets independent', async ({ 
       identity: { ...window.__GBDRAW_APP__.featureRecordRotationDraft.identity },
       startCoordinate: window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
     }));
-    await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+    await actions.getByRole('button', { name: 'Apply now' }).click();
     await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {
       timeout: 240000
     });
@@ -531,7 +532,7 @@ test('Apply on Generate stages rotations that one Generate applies together', as
   let actions = await openRotation('dnaA');
   await expect(actions.locator('[data-record-rotation-preview]'))
     .toHaveText('chromosome_I will start at 21 · orientation unchanged');
-  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await actions.getByRole('button', { name: 'Apply when I Generate', exact: true }).click();
   await expect(actions.locator('[aria-live="polite"]'))
     .toHaveText('Record rotation will apply on the next Generate Diagram.');
   await expect(actions.locator('[data-record-rotation-pending]'))
@@ -541,7 +542,7 @@ test('Apply on Generate stages rotations that one Generate applies together', as
   actions = await openRotation('parB');
   await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
   await actions.getByRole('radio', { name: 'End of the record', exact: true }).check();
-  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await actions.getByRole('button', { name: 'Apply when I Generate', exact: true }).click();
   await expect(actions.locator('[data-record-rotation-pending]'))
     .toHaveText('Pending for Generate: chromosome_II will start at 226 · orientation unchanged');
   const staged = await snapshot();
@@ -555,7 +556,7 @@ test('Apply on Generate stages rotations that one Generate applies together', as
 
   // One Undo removes only the last staged record; Redo stages it again.
   // History restore closes the popup; reopening shows the current draft.
-  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).focus();
+  await actions.getByRole('button', { name: 'Apply when I Generate', exact: true }).focus();
   await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(async () => (await snapshot()).drafts).toEqual({ chromosome_I: 21 });
   actions = await openRotation('parB');
@@ -592,13 +593,13 @@ test('Apply on Generate stages rotations that one Generate applies together', as
   // Stage chromosome II again, then Apply and regenerate chromosome I only:
   // the staged chromosome II stays staged and is not drawn.
   actions = await openRotation('parB');
-  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await actions.getByRole('button', { name: 'Apply when I Generate', exact: true }).click();
   await expect(actions.locator('[data-record-rotation-pending]'))
     .toHaveText('Pending for Generate: chromosome_II will start at 151 · orientation unchanged');
   await closePopup();
   actions = await openRotation('dnaA');
   await actions.getByRole('radio', { name: 'End of the record', exact: true }).check();
-  await actions.getByRole('button', { name: 'Apply and regenerate', exact: true }).click();
+  await actions.getByRole('button', { name: 'Apply now', exact: true }).click();
   await expect(actions.locator('[aria-live="polite"]')).toHaveText(
     'Record rotation applied and regenerated.', { timeout: 240000 }
   );
@@ -643,7 +644,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
       identity: { ...window.__GBDRAW_APP__.featureRecordRotationDraft.identity },
       startCoordinate: window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
     }));
-    await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+    await actions.getByRole('button', { name: 'Apply now' }).click();
     await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {
       timeout: 240000
     });
@@ -699,11 +700,8 @@ const installRecordReadCounter = (page) => page.addInitScript(() => {
 });
 
 const loadSessionFile = async (page, sessionPath) => {
-  const dialogPromise = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending))
     .toBe(false);
 };
@@ -733,7 +731,7 @@ const openLoadedRecordActions = async (page, { query, recordId, reads = 1 }) => 
   await expect(actions.locator('[data-record-rotation-preview]')).toHaveText(
     `${recordId} will start at ${expectedStart.toLocaleString('en-US')} · orientation unchanged`
   );
-  await expect(actions.getByRole('button', { name: 'Apply and regenerate' })).toBeEnabled();
+  await expect(actions.getByRole('button', { name: 'Apply now' })).toBeEnabled();
   await expect(actions.getByRole('radio', { name: 'End of the record', exact: true })).toBeEnabled();
   await expect(actions).not.toContainText('stale or ambiguous');
   await expect(actions).not.toContainText('Unavailable');
@@ -758,9 +756,7 @@ test('Linear Record actions rotate a circular record of a loaded Session without
   page
 }) => {
   test.setTimeout(240000);
-  page.on('dialog', (dialog) => {
-    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
-  });
+  page.on('dialog', (dialog) => dialog.dismiss());
   await installRecordReadCounter(page);
   await installDiagramRequestObserver(page);
   await openApp(page);
@@ -784,7 +780,7 @@ test('Linear Record actions rotate a circular record of a loaded Session without
   const { actions, expectedStart } = await openLoadedRecordActions(page, {
     query: 'loaded_gene', recordId: 'loaded_linear'
   });
-  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await actions.getByRole('button', { name: 'Apply now' }).click();
   await expect(actions.locator('[aria-live="polite"]')).toContainText(
     'Record rotation applied and regenerated.', { timeout: 240000 }
   );
@@ -829,9 +825,7 @@ test('Linear Record actions rotate a multi-record File of a loaded CLI Session w
   page
 }, testInfo) => {
   test.setTimeout(300000);
-  page.on('dialog', (dialog) => {
-    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
-  });
+  page.on('dialog', (dialog) => dialog.dismiss());
   const session = await writeCliSession(testInfo, 'linear', {
     'cli-single.gbk': makeCircularRecord('cli_single', 'single_gene', 41, 125),
     'cli-multi.gbk': makeCircularRecord('cli_multi_a', 'multi_a_gene', 61, 150)
@@ -845,7 +839,7 @@ test('Linear Record actions rotate a multi-record File of a loaded CLI Session w
   const { actions, expectedStart } = await openLoadedRecordActions(page, {
     query: 'multi_b_gene', recordId: 'cli_multi_b', reads: 2
   });
-  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await actions.getByRole('button', { name: 'Apply now' }).click();
   await expect(actions.locator('[aria-live="polite"]')).toContainText(
     'Record rotation applied and regenerated.', { timeout: 240000 }
   );
@@ -862,9 +856,7 @@ test('Linear CLI Session that draws some records of a file loads and generates o
   page
 }, testInfo) => {
   test.setTimeout(300000);
-  page.on('dialog', (dialog) => {
-    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
-  });
+  page.on('dialog', (dialog) => dialog.dismiss());
   const session = await writeCliSession(testInfo, 'linear', {
     'cli-single.gbk': makeCircularRecord('cli_single', 'single_gene', 41, 125),
     'cli-multi.gbk': makeCircularRecord('cli_multi_a', 'multi_a_gene', 61, 150)
@@ -907,9 +899,7 @@ test('Linear CLI Session keeps --region and --reverse_complement through Load an
   page
 }, testInfo) => {
   test.setTimeout(300000);
-  page.on('dialog', (dialog) => {
-    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
-  });
+  page.on('dialog', (dialog) => dialog.dismiss());
   const session = await writeCliSession(testInfo, 'linear', {
     'cli-cropped.gbk': makeCircularRecord('cli_cropped', 'cropped_gene', 61, 150),
     'cli-reversed.gbk': makeCircularRecord('cli_reversed', 'reversed_gene', 41, 125)
@@ -918,11 +908,14 @@ test('Linear CLI Session keeps --region and --reverse_complement through Load an
   await openApp(page);
   await loadSessionFile(page, session);
   await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = true; });
-  const openRecordActions = async (query) => {
+  const openFeaturePopup = async (query) => {
     const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
     await search.fill(query);
     await search.press('Enter');
     await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  };
+  const openRecordActions = async (query) => {
+    await openFeaturePopup(query);
     await page.getByRole('button', { name: ROTATE_RECORD, exact: true }).click();
     return page.getByRole('region', { name: ROTATE_RECORD, exact: true });
   };
@@ -933,13 +926,15 @@ test('Linear CLI Session keeps --region and --reverse_complement through Load an
   const reversed = await openRecordActions('reversed_gene');
   await expect(reversed.locator('[data-record-rotation-preview]'))
     .toContainText('cli_reversed will start at');
-  await expect(reversed.getByRole('button', { name: 'Apply and regenerate' })).toBeEnabled();
+  await expect(reversed.getByRole('button', { name: 'Apply now' })).toBeEnabled();
   await closePopup();
-  // A cropped record cannot rotate, and says so (PD-OI-032 item 7).
-  const cropped = await openRecordActions('cropped_gene');
-  await expect(cropped.locator('#feature-record-rotation-reason'))
+  // A cropped record cannot rotate, and says so (PD-OI-032 item 7): the crop is
+  // in the Session, so the row is disabled with its reason.
+  await openFeaturePopup('cropped_gene');
+  await expect(page.getByRole('button', { name: ROTATE_RECORD, exact: true })).toBeDisabled();
+  await expect(page.locator('#feature-record-rotation-unavailable'))
     .toHaveText('Record rotation is unavailable for a cropped record.');
-  await expect(cropped.getByRole('button', { name: 'Apply and regenerate' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Apply now' })).toHaveCount(0);
   await closePopup();
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
 

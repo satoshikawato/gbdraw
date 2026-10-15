@@ -14,6 +14,8 @@
 // GX-01, GX-12: a pending Session operation disables every settings control, and a
 // disabled field looks disabled.
 // UI-08: an upload zone whose file failed inspection does not look ready.
+// Loader (Owner decision 2026-10-11): every loading place draws the logo in one stroke;
+// its finished frame is the logo, black, and white on the filled Generate button.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -360,13 +362,14 @@ for (const mode of ['circular', 'linear']) {
     }
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = true; });
     await openAllDetails(page);
-    const enabled = await page.evaluate(({ selectors, names }) => Array
+    const enabledControls = () => page.evaluate(({ selectors, names }) => Array
       .from(document.querySelectorAll('.settings-pane :is(input, select, textarea, button)'))
       .filter((control) => control.checkVisibility() && !control.closest('.help-tip')
         && !control.disabled && control.getAttribute('aria-disabled') !== 'true')
       .map((control) => ({ control, name: control.getAttribute('aria-label') || control.textContent.trim() }))
       .filter(({ control, name }) => !selectors.some((selector) => control.matches(selector)) && !names.includes(name))
       .map(({ control, name }) => name || control.outerHTML.slice(0, 80)), BUSY_ENABLED_CONTROLS);
+    const enabled = await enabledControls();
     // A disabled field, and the "(auto)" value drawn behind it, must also look disabled
     // (.form-input fades its opacity).
     await page.waitForFunction(() => document.getAnimations()
@@ -376,8 +379,19 @@ for (const mode of ['circular', 'linear']) {
         '.settings-pane .auto-value-field:has(> .form-input:disabled) > .auto-value-placeholder'].join(', ')))
       .filter((element) => element.checkVisibility() && Number(getComputedStyle(element).opacity) >= 1)
       .map((element) => element.getAttribute('aria-label') || element.textContent.trim() || element.outerHTML.slice(0, 80)));
+    // A Linear File card still folds (its header line changes only what the panel shows),
+    // and the move buttons on a folded header line are disabled too.
+    let enabledFolded = [];
+    if (mode === 'linear') {
+      const fold = page.locator('[data-linear-source-fold]').first();
+      await fold.locator(':scope > summary').click();
+      await expect(fold).toHaveJSProperty('open', false);
+      await expect(fold.locator(':scope > summary button')).toHaveCount(2);
+      enabledFolded = await enabledControls();
+    }
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = false; });
     expect(enabled).toEqual([]);
+    expect(enabledFolded, 'enabled controls with a File card folded').toEqual([]);
     expect(undimmed, 'disabled fields that look enabled').toEqual([]);
   });
 }
@@ -411,4 +425,215 @@ test('an upload zone whose file failed inspection does not look ready (UI-08)', 
   const linearZone = page.getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true }).first();
   await expect(linearZone).toHaveClass(/\bfailed\b/, { timeout: 120_000 });
   await expect(linearZone.locator('.ph-check-circle')).toHaveCount(0);
+});
+
+// OV-600: a file name wider than the zone is cut at its end with an ellipsis and the
+// icon stays, in the ready and the failed row; the whole name is the hover text.
+test('an upload zone cuts a long file name at its end and keeps its icon (OV-600)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  const longName = `${'a-very-long-genbank-file-name-'.repeat(6)}.gbk`;
+  const shown = (zone) => zone.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const inside = (child) => {
+      const rect = child.getBoundingClientRect();
+      return rect.width > 0 && rect.left >= box.left && rect.right <= box.right;
+    };
+    const name = element.querySelector('i + span');
+    return {
+      icon: inside(element.querySelector('i')), name: inside(name), cut: name.scrollWidth > name.clientWidth,
+      overflow: getComputedStyle(name).textOverflow, title: name.getAttribute('title')
+    };
+  });
+  const cutAtTheEnd = { icon: true, name: true, cut: true, overflow: 'ellipsis', title: longName };
+
+  const zone = page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
+  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
+  await expect(zone).toHaveClass(/\bfailed\b/, { timeout: 120_000 });
+  await expect(zone).toContainText(longName);
+  expect(await shown(zone), 'Circular, failed').toEqual(cutAtTheEnd);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: genbank });
+  await expect(zone).toHaveClass(/\bready\b/, { timeout: 120_000 });
+  expect(await shown(zone), 'Circular, ready').toEqual(cutAtTheEnd);
+
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  const linearZone = page.getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true }).first();
+  await page.getByTestId('linear-genbank-1')
+    .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: genbank });
+  await expect(linearZone).toHaveClass(/\bready\b/, { timeout: 120_000 });
+  expect(await shown(linearZone), 'Linear, ready').toEqual(cutAtTheEnd);
+  await page.getByTestId('linear-genbank-1')
+    .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
+  await expect(linearZone).toHaveClass(/\bfailed\b/, { timeout: 120_000 });
+  expect(await shown(linearZone), 'Linear, failed').toEqual(cutAtTheEnd);
+});
+
+// Loader (Owner decision 2026-10-11). The boot splash stays up while app.js is blocked.
+const openBootSplash = async (page) => {
+  await page.route('**/js/app.js*', (route) => route.abort());
+  await page.goto('/gbdraw/web/index.html');
+  return page.locator('#app-boot-splash .gbdraw-loader');
+};
+
+// Compares the dark pixels of two element screenshots over their common size. The loader
+// outlines each part with a 0.175-unit hairline (under 0.2 px at these sizes), and a
+// reference may sit a subpixel off, so a dark pixel counts as matching when the other
+// image is dark within 1 px. `inked` counts the reference's (the second's) dark pixels.
+const compareInk = async (context, screenshots) => {
+  const scratch = await context.newPage();
+  const result = await scratch.evaluate(async (sources) => {
+    const images = await Promise.all(sources.map(async (source) => {
+      const image = new Image();
+      image.src = source;
+      await image.decode();
+      return image;
+    }));
+    const width = Math.min(...images.map((image) => image.width));
+    const height = Math.min(...images.map((image) => image.height));
+    const dark = images.map((image) => {
+      const canvas = Object.assign(document.createElement('canvas'), { width, height });
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, width, height);
+      return Array.from({ length: width * height }, (_, index) => data[index * 4] < 128);
+    });
+    const nearDark = (pixels, index) => [-width - 1, -width, -width + 1, -1, 0, 1, width - 1, width, width + 1]
+      .some((offset) => pixels[index + offset]);
+    const unmatched = (from, to) => from.filter((value, index) => value && !nearDark(to, index)).length;
+    return { inked: dark[1].filter(Boolean).length, differing: unmatched(dark[0], dark[1]) + unmatched(dark[1], dark[0]) };
+  }, screenshots.map((png) => `data:image/png;base64,${png.toString('base64')}`));
+  await scratch.close();
+  return result;
+};
+
+test('the loader\'s finished frame is the logo asset (reduced motion)', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  const loader = await openBootSplash(page);
+  await expect(loader).toBeVisible();
+  expect(await loader.evaluate((element) => element.getAnimations().length)).toBe(0);
+  // The reference is the logo asset itself, cropped to the loader's viewBox.
+  await page.evaluate(async () => {
+    const loader = document.querySelector('#app-boot-splash .gbdraw-loader');
+    Object.assign(loader.style, { width: '128px', height: '128px' });
+    const asset = await (await fetch('./assets/gbdraw-logo.svg')).text();
+    const cropped = asset.replace(/viewBox="[^"]+"/, `viewBox="${loader.getAttribute('viewBox')}"`);
+    const logo = Object.assign(document.createElement('img'), {
+      src: URL.createObjectURL(new Blob([cropped], { type: 'image/svg+xml' })), id: 'reference-logo'
+    });
+    Object.assign(logo.style, { width: '128px', height: '128px' });
+    loader.after(logo);
+  });
+  await expect.poll(() => page.evaluate(() => document.getElementById('reference-logo').complete)).toBe(true);
+  const { inked, differing } = await compareInk(context,
+    [await loader.screenshot(), await page.locator('#reference-logo').screenshot()]);
+  expect(inked).toBeGreaterThan(1000);
+  expect(differing / inked).toBeLessThan(0.01);
+  await context.close();
+});
+
+test('the outlined title logo and the boot splash with the loader as its mark match the title artwork (reduced motion)', async ({ browser }) => {
+  // Tall enough for three logos at 3 px per unit and the splash text.
+  const context = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1400, height: 1300 } });
+  const page = await context.newPage();
+  const loader = await openBootSplash(page);
+  await expect(loader).toBeVisible();
+  // One logo: the image beside the loader shows the word only.
+  await expect(page.locator('#app-boot-splash img')).toHaveAttribute('src', './assets/gbdraw-logo-title-outlined.svg');
+  // The header and the Gallery show the whole outlined title logo, whose frame is the splash's
+  // logo row. The reference is the title logo artwork: gbdraw-logo-title.png is its drawing at
+  // 300 dpi, cropped to the ink, which starts at the mark's top left (13.106, 13.501); the
+  // frame starts at (12.7, 13.1). All are drawn at 3 px per unit.
+  await page.evaluate(async () => {
+    const unit = 3;
+    const loader = document.querySelector('#app-boot-splash .gbdraw-loader');
+    const brand = loader.parentElement;
+    // Zoom keeps the splash's own CSS sizes and crop.
+    brand.style.zoom = String(109.2 * unit / loader.getBoundingClientRect().height);
+    await brand.querySelector('img').decode();
+    const outlined = Object.assign(document.createElement('img'), { src: './assets/gbdraw-logo-title-outlined.svg', id: 'outlined-logo' });
+    outlined.style.height = `${109.2 * unit}px`;
+    await outlined.decode();
+    const { width, height } = brand.getBoundingClientRect();
+    const frame = Object.assign(document.createElement('div'), { id: 'reference-logo' });
+    Object.assign(frame.style, { position: 'relative', overflow: 'hidden', width: `${width}px`, height: `${height}px` });
+    const title = Object.assign(document.createElement('img'), { src: './assets/gbdraw-logo-title.png' });
+    await title.decode();
+    Object.assign(title.style, {
+      position: 'absolute', maxWidth: 'none', left: `${(13.106 - 12.7) * unit}px`, top: `${(13.501 - 13.1) * unit}px`,
+      width: `${title.naturalWidth / (300 / 25.4) * unit}px`
+    });
+    frame.append(title);
+    brand.after(outlined, frame);
+  });
+  const reference = await page.locator('#reference-logo').screenshot();
+  for (const subject of ['#app-boot-splash .boot-brand', '#outlined-logo']) {
+    const { inked, differing } = await compareInk(context, [await page.locator(subject).screenshot(), reference]);
+    expect(inked, subject).toBeGreaterThan(50000);
+    expect(differing / inked, subject).toBeLessThan(0.01);
+  }
+  await context.close();
+});
+
+test('the loader draws, holds, and erases the logo stroke in a 2.22 s loop', async ({ page }) => {
+  const loader = await openBootSplash(page);
+  await expect(loader).toBeVisible();
+  const frame = (time) => loader.evaluate((element, time) => {
+    const [animation] = element.getAnimations();
+    animation.pause();
+    animation.currentTime = time;
+    return [...element.querySelectorAll('.gbdraw-loader-pen')]
+      .map((pen) => getComputedStyle(pen).strokeDasharray.split(',').map((value) => parseFloat(value)));
+  }, time);
+  expect(await loader.evaluate((element) => element.getAnimations()
+    .map((animation) => animation.effect.getTiming()))).toEqual([expect.objectContaining({ duration: 2220, iterations: Infinity })]);
+  // [pen A, pen B] as `0 gap dash rest`: pen A covers 0-132.782 of the stroke, pen B
+  // starts at 124.169, so halfway through the draw (344.523 / 2) pen B shows 48.093.
+  expect(await frame(0)).toEqual([[0, 0, 0, 134], [0, 0, 0, 222]]);
+  const half = await frame(450);
+  expect(half[0]).toEqual([0, 0, 132.782, 134]);
+  expect(half[1][2]).toBeCloseTo(48.093, 1);
+  expect(await frame(1000)).toEqual([[0, 0, 132.782, 134], [0, 0, 220.354, 222]]);
+  const erasing = await frame(1600);
+  expect(erasing[0]).toEqual([0, 132.782, 0, 134]);
+  expect(erasing[1][1]).toBeGreaterThan(0);
+  expect(await frame(2100)).toEqual([[0, 132.782, 0, 134], [0, 220.354, 0, 222]]);
+});
+
+test('every Vue loading place shows the loader: black, white on the Generate button', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  const loaders = () => page.evaluate(() => [...document.querySelectorAll('#app .gbdraw-loader')]
+    .filter((loader) => loader.checkVisibility())
+    .map((loader) => ({
+      place: loader.closest('button')
+        ? loader.closest('button').getAttribute('aria-label') || loader.closest('button').textContent.trim()
+        : loader.nextElementSibling?.textContent.trim(),
+      color: getComputedStyle(loader).color,
+      ariaHidden: loader.getAttribute('aria-hidden'),
+      masks: [...loader.querySelectorAll('g[mask]')].map((group) => group.getAttribute('mask'))
+    })));
+  const set = (flags) => page.evaluate((flags) => { Object.assign(window.__GBDRAW_APP__, flags); }, flags);
+  const black = 'rgb(0, 0, 0)';
+  try {
+    await set({ sessionSavePending: true, exampleSessionPending: true });
+    await expect.poll(loaders).toEqual([
+      expect.objectContaining({ place: 'Save Session', color: black, ariaHidden: 'true' }),
+      expect.objectContaining({ place: 'Load example', color: black }),
+      expect.objectContaining({ place: 'Load an example', color: black })
+    ]);
+    await set({ sessionSavePending: false, exampleSessionPending: false, processing: true, generationCancelRequested: true });
+    await expect.poll(loaders).toEqual([
+      expect.objectContaining({ place: 'Generating Diagram...', color: black }),
+      expect.objectContaining({ place: 'Canceling...', color: black }),
+      expect.objectContaining({ place: 'Generate Diagram', color: 'rgb(255, 255, 255)' })
+    ]);
+    // Each instance masks with its own ids.
+    const masks = (await loaders()).flatMap((loader) => loader.masks);
+    expect(new Set(masks).size).toBe(masks.length);
+  } finally {
+    await set({ sessionSavePending: false, exampleSessionPending: false, processing: false, generationCancelRequested: false });
+  }
 });

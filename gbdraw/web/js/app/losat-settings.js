@@ -1,18 +1,27 @@
 // @ts-check
-import { normalizeCollinearSearchScope } from '../services/losat-normalization.js';
+import { readCollinearSearchScope } from '../services/losat-normalization.js';
 import { buildLosatJobSpecs } from '../services/linear-comparisons.js';
 import { losatRecordGencode, losatSearchSequences, planLosatSourceJobs } from '../services/linear-sources.js';
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
 import { losatThreadingPrecondition } from '../services/losat.js';
+/** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
+/** @import { LinearSeq } from '../state.js' */
 
 const { computed, ref, watch, onMounted } = window.Vue;
 
+/** @typedef {{ value: string, label: string }} IntegerOption */
+
+/** @param {unknown} value */
 const parsePositiveInteger = (value) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= 1 ? parsed : null;
 };
 
+/**
+ * @param {number} maxValue
+ * @returns {IntegerOption[]}
+ */
 const createPositiveIntegerOptions = (maxValue) =>
   Array.from({ length: Math.max(0, Math.floor(maxValue)) }, (_unused, index) => {
     const value = index + 1;
@@ -22,6 +31,11 @@ const createPositiveIntegerOptions = (maxValue) =>
     };
   });
 
+/**
+ * @param {IntegerOption[]} options
+ * @param {unknown} requestedValue
+ * @param {number} effectiveValue
+ */
 const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) => {
   const requested = parsePositiveInteger(requestedValue);
   if (requested === null) return options;
@@ -55,7 +69,7 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * The refs and reactive objects of `state.js` this module reads. A ref is
  * `{ value }` because Vue comes from `window.Vue`, which is `any`.
  * @typedef {object} LosatSettingsState
- * @property {Record<string, any>[]} linearSeqs
+ * @property {LinearSeq[]} linearSeqs
  * @property {() => LosatSettingsDrawing} activeDrawing
  * @property {LosatExecutionValues} losatExecution
  * @property {{ value?: { state?: string } }} [losatThreadingStatus]
@@ -64,7 +78,7 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
 /**
  * The members of a drawing (`DrawingState` of state.js) this module reads.
  * @typedef {object} LosatSettingsDrawing
- * @property {{ value: any }} linearComparisonResolution
+ * @property {{ value: LinearComparisonResolution }} linearComparisonResolution
  * @property {LosatSettingsValues} losat
  * @property {{ value: string }} losatProgram
  * @property {readonly string[]} [recordsOff]
@@ -111,7 +125,7 @@ export const createLosatSettings = ({ state }) => {
         program,
         blastpMode: String(drawing.losat.blastp?.mode || 'orthogroup'),
         collinearInferOrthogroups: drawing.losat.blastp?.collinearInferOrthogroups !== false,
-        collinearSearchScope: normalizeCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope)
+        collinearSearchScope: readCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope).value
       });
       return planLosatSourceJobs({
         ...search,
@@ -179,10 +193,6 @@ export const createLosatSettings = ({ state }) => {
     losatThreadingPrecondition().state === 'available' ? 'Threaded' : 'Threaded (unavailable here)'
   ));
 
-  const losatThreadingPlanSummary = computed(() =>
-    'By default, LOSAT can use up to half the number of cores available.'
-  );
-
   /** @param {LosatSettingsDrawing} drawing */
   const hasValidLosatIntent = (drawing) => {
     const resolution = readResolution(drawing);
@@ -191,6 +201,7 @@ export const createLosatSettings = ({ state }) => {
 
   watch(
     losatTotalThreadBudgetOptions,
+    /** @param {IntegerOption[]} options */
     (options) => {
       if (!hasValidLosatIntent(state.activeDrawing())) return;
       const raw = String(losatExecution.totalThreadBudget || 'safe').trim().toLowerCase();
@@ -218,7 +229,6 @@ export const createLosatSettings = ({ state }) => {
     losatEstimatedJobCount,
     losatMaxPairWorkers,
     losatAutoPairWorkers,
-    losatPairWorkerOptions,
-    losatThreadingPlanSummary
+    losatPairWorkerOptions
   };
 };

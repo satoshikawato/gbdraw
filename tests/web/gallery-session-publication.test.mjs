@@ -22,16 +22,15 @@ const {
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
   compareCanonicalRenderRequests,
-  promoteCanonicalRenderRequestToCurrent,
+  readPublishedRenderRequest,
   projectCanonicalSessionRequest
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { promoteGallerySessionToCurrent } = await import(
   '../../gbdraw/web/js/services/gallery-session-migration.js'
 );
 const { FEATURE_CATALOG_SCHEMA } = await import('../../gbdraw/web/js/services/feature-catalog.js');
-// Session 46 keeps each diagram mode's draft in `modes` (PD-OI-086).
-const { MODE_SCOPED_SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
-  '../../gbdraw/web/js/services/session-authority.js'
+const { SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
+  '../../gbdraw/web/js/contracts/schema.generated.js'
 );
 
 const {
@@ -44,7 +43,7 @@ const {
   assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
   buildRequest: buildCanonicalRenderRequest,
   buildRequestState: buildCanonicalRequestState,
-  promoteRequest: promoteCanonicalRenderRequestToCurrent,
+  readRequest: readPublishedRenderRequest,
   projectRequest: projectCanonicalSessionRequest,
   resolveComparisonPlan: resolveLinearComparisonPlan
 });
@@ -129,6 +128,22 @@ for (const name of sessionNames) {
       { feat: 'CDS', order: 'gene,old_locus_tag' }
     ], name);
   }
+}
+
+// A Session 46 is admitted as the current Session: its Legend edits move from
+// the shown caption to the row key (tests/fixtures/sessions/legend-row-key-vectors.json).
+{
+  const source = structuredClone(await loadSession(sessionNames[0]));
+  const mode = source.renderRequest.mode;
+  const slice = source.modes[mode];
+  slice.editorState = { ...slice.editorState, legend: {
+    ...slice.editorState?.legend,
+    entries: [{ caption: 'Z', originalCaption: 'GC content', color: '#a0a0a0', featureIds: [] }],
+    colorOverrides: { Z: '#ff0000' }
+  } };
+  const admitted = admitGallerySession({ ...source, version: 46 });
+  assert.equal(admitted.version, CURRENT_SESSION_VERSION);
+  assert.deepEqual(admitted.modes[mode].editorState.legend.colorOverrides, { 'GC content': '#ff0000' });
 }
 
 const lambda = await loadReleasedSession('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
@@ -289,7 +304,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 46 or historical versions 31-33\/39-44/
+    /supports current version 47 or historical versions 31-33\/39-44\/46/
   );
 }
 
@@ -320,7 +335,7 @@ assert.ok(metadataPolicyComparison.differences.some(
 ));
 
 const comparisonTableRequest = {
-  schema: 5,
+  schema: 9,
   mode: 'linear',
   grouping: 'single',
   records: [],

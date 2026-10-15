@@ -205,7 +205,12 @@ def layout_annotation_track(
         + max(0, lane_count - 1) * lane_gap
     )
     clipped = False
-    if available_extent_px is not None and required > float(available_extent_px):
+    # A to_slot span takes its extent from the two slots, not from the slot's own size.
+    if (
+        track_params.to_slot is None
+        and available_extent_px is not None
+        and required > float(available_extent_px)
+    ):
         if track_params.overflow == "error":
             raise ValidationError(
                 f"Annotation slot {slot_id!r} requires {required:.2f}px but only "

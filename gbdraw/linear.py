@@ -66,9 +66,14 @@ from .analysis.protein_colinearity import (
 )
 from .config.modify import modify_config_dict
 from .config.models.objects import normalize_pairwise_match_style
+from .config.models.canvas import linear_axis_ruler_applies
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
-from .mode_profiles import ComparisonThresholds, LINEAR_MODE_PROFILE
+from .mode_profiles import (
+    ComparisonThresholds,
+    LINEAR_MODE_PROFILE,
+    resolve_mode_profile_overrides,
+)
 from .tracks import (
     linear_track_slots_from_order,
     normalize_linear_track_slots_with_axis,
@@ -89,6 +94,8 @@ from .cli_utils.common import (
     _add_gc_skew_toggle_args,
     _add_retired_option_args,
     _add_gc_content_axis_args,
+    _add_font_args,
+    cli_font_family,
     _add_legend_size_args,
     _add_window_step_args,
     add_feature_args,
@@ -601,7 +608,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         default=None)
     parser.add_argument(
         '--axis_stroke_width',
-        help='Axis stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 2 pt for genomes >= 50 kb)',
+        help='Axis stroke width (optional; float; default: 5 pt for genomes < 100 kb, 2 pt for genomes >= 100 kb)',
         type=float)
     parser.add_argument(
         '--line_stroke_color',
@@ -609,11 +616,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--line_stroke_width',
-        help='Line stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb)',
+        help='Line stroke width (optional; float; default: 5 pt for genomes < 100 kb, 1 pt for genomes >= 100 kb)',
         type=float)
     parser.add_argument(
         '--definition_font_size',
-        help='Definition font size (optional; float; default: 24 pt for genomes <= 50 kb, 10 pt for genomes >= 50 kb)',
+        help='Definition font size (optional; float; default: 24 pt for genomes < 100 kb, 10 pt for genomes >= 100 kb)',
         type=float)
     parser.add_argument(
         '--definition_line_style',
@@ -674,7 +681,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--label_font_size',
-        help='Label font size (optional; default: 24 pt for genomes <= 50 kb, 5 pt for genomes >= 50 kb)',
+        help='Label font size (optional; default: 24 pt for genomes < 100 kb, 5 pt for genomes >= 100 kb)',
         type=float)
     parser.add_argument(
         '--label_placement',
@@ -766,7 +773,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     add_label_args(parser)
     parser.add_argument(
         '--feature_height',
-        help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb)',
+        help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes < 100 kb, 20 for genomes >= 100 kb)',
         type=float),
     parser.add_argument(
         '--gc_height',
@@ -796,7 +803,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--scale_font_size',
-        help='Scale bar/ruler font size (optional; float; default: 24 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
+        help='Scale bar/ruler font size (optional; float; default: 24 (pt) for genomes < 100 kb, 16 for genomes >= 100 kb).',
         type=float)
     parser.add_argument(
         '--ruler_label_font_size',
@@ -811,6 +818,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='Manual tick interval for "ruler" scale style (in bp; must be > 0). Overrides automatic calculation; optional',
         type=int)
     _add_legend_size_args(parser)
+    _add_font_args(parser)
     parser.add_argument(
         '--normalize_length',
         help='Normalize record length (experimental; default: False). ',
@@ -1026,6 +1034,7 @@ def replay_legacy_session(
         )
         args = _get_args(list(run_spec.args), _legacy_session=True)
         args.overwrite = session_request.overwrite
+        args.embed_fonts = session_request.embed_fonts
         args.save_session = session_request.save_session
         args.session_output = session_request.session_output
         args._gbdraw_source_session = (
@@ -1079,6 +1088,8 @@ def linear_main(cmd_args) -> None:
             overwrite=session_request.overwrite,
             save_session=session_request.save_session,
             session_output=session_request.session_output,
+            embed_fonts=session_request.embed_fonts,
+            font_files=session_request.font_files,
         ):
             if session_request.drawings:
                 document.drawing(session_request.drawings[0], mode="linear")
@@ -1405,24 +1416,13 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             "WARNING: --ruler_on_axis is ignored when --hide_scale is set."
         )
         ruler_on_axis = False
-    elif ruler_on_axis and not (scale_style == "ruler" and track_layout in {"above", "below"}):
+    elif ruler_on_axis and not linear_axis_ruler_applies(
+        show_scale=show_scale, scale_style=scale_style, track_layout=track_layout
+    ):
         logger.warning(
             "WARNING: --ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
         )
         ruler_on_axis = False
-    axis_stroke_color: str = (
-        args.axis_stroke_color
-        if args.axis_stroke_color is not None
-        else (
-            LINEAR_MODE_PROFILE.linear_ruler_axis_color or "dimgray"
-            if ruler_on_axis
-            else LINEAR_MODE_PROFILE.linear_axis_color or "lightgray"
-        )
-    )
-    if ruler_on_axis and scale_stroke_color is None:
-        scale_stroke_color = axis_stroke_color
-    if ruler_on_axis and scale_label_color is None:
-        scale_label_color = axis_stroke_color
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
     line_stroke_width: Optional[float] = args.line_stroke_width
@@ -1441,10 +1441,11 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         else gc_content_tick_interval
     )
     override_candidates: dict[str, object | None] = {
+        "objects.text.font_family": cli_font_family(args),
         "objects.features.block_stroke_color": block_stroke_color,
         "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
         "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
-        "objects.axis.linear.stroke_color": axis_stroke_color,
+        "objects.axis.linear.stroke_color": args.axis_stroke_color,
         "objects.definition.linear.show_replicon": definition_show_replicon,
         "objects.definition.linear.show_accession": definition_show_accession,
         "objects.definition.linear.show_length": definition_show_length,
@@ -1552,13 +1553,18 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.legends.font_size.long",
     ):
         override_candidates[size_path] = legend_font_size
+    # The Linear profile supplies the auto axis color, and the override owner
+    # derives unset ruler colors from it, as for API and Web requests.
     config_dict = modify_config_dict(
         config_dict,
-        {
-            path: value
-            for path, value in override_candidates.items()
-            if value is not None
-        },
+        resolve_mode_profile_overrides(
+            "linear",
+            {
+                path: value
+                for path, value in override_candidates.items()
+                if value is not None
+            },
+        ),
     )
 
     if args.records_table:
@@ -1690,6 +1696,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             ),
             formats=tuple(out_formats),
             overwrite=args.overwrite,
+            embed_fonts=args.embed_fonts,
         ),
     )
     diagram_output_paths = diagram_request_output_paths(canonical_request)

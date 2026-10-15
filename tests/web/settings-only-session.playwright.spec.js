@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 
@@ -25,12 +25,14 @@ const assertSourceFree = state => {
   expect(state.committed).toBeNull();
 };
 
-const save = async (page, testInfo, label) => {
+// `again`: the page already downloaded this Session file name, so the Save asks first.
+const save = async (page, testInfo, label, { again = false } = {}) => {
   let downloaded;
   const listener = download => { downloaded = download; };
   page.on('download', listener);
   try {
     await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+    if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
     // Await operation settlement, then assert once. Preserve the product error
     // as the red witness instead of reporting only a download timeout.
     await expect.poll(async () => Boolean(downloaded || (await snapshot(page)).error), { timeout: 180_000 }).toBe(true);
@@ -46,12 +48,12 @@ const save = async (page, testInfo, label) => {
   }
 };
 
-const loadFile = async (page, file, message = 'Session loaded successfully!') => {
-  const dialog = typeof message === 'string' ? page.waitForEvent('dialog') : null;
+const loadFile = async (page, file, message = 'Session loaded') => {
   const input = page.locator('input[accept^=".json,"]');
   await input.setInputFiles(file);
-  if (dialog) {
-    expect((await dialog).message()).toBe(message);
+  if (typeof message === 'string') {
+    await expect(page.locator('[data-app-notice]')).toContainText(message);
+    await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     return;
   }
@@ -62,12 +64,12 @@ const loadFile = async (page, file, message = 'Session loaded successfully!') =>
   const actual = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
   const expected = await page.evaluate(async field => {
     const { normalizeUserFacingError } = await import('./js/utils/error-normalization.js');
-    return normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation',
+    return normalizeUserFacingError({ code: 'INPUT_INVALID', operation: 'session-load', stage: 'request-validation',
       context: { field, reason: 'FIELDS' } });
   }, message.field);
   expect(actual).toEqual(expected);
   expect(JSON.stringify(actual)).not.toMatch(/absent|axis_stroke_color|Invalid managed flag|newer than/);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText(expected.summary);
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(expected.summary);
   return actual;
 };
 
@@ -158,9 +160,8 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     await assertDiagramWorkerIdle(page);
 
     const restored = await fresh();
-    const loaded = restored.waitForEvent('dialog');
     await restored.locator('input[accept^=".json,"]').setInputFiles(saved.file);
-    expect((await loaded).message()).toBe('Session loaded successfully!');
+    await expectSessionLoadedWithoutWarnings(restored);
     await restored.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     const after = await snapshot(restored);
     assertSourceFree(after);
@@ -252,12 +253,13 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   })).toEqual(runMetadata);
   expect((await snapshot(page)).circularSources[0]).toBe(true);
   expect((await snapshot(page)).committed.renderRequest).toEqual(promoted);
-  const full = await save(page, testInfo, 'full-control');
+  const full = await save(page, testInfo, 'full-control', { again: true });
   const before = await snapshot(page);
   const visual = await capture(page, testInfo, 'before-rejected-loads');
   await assertCoherent(visual, 'prior valid Session');
+  // A Session 47 with no `renderRequest` key loads as settings only with a
+  // row (K22, OV-785; tests/web/stored-request-read.test.mjs), so it is not here.
   const cases = [
-    ['request', d => { delete d.renderRequest; }, { field: 'schema' }],
     ['null-request-with-result', d => { d.renderRequest = null; }, { field: 'schema' }],
     ['resource', d => { d.resources = {}; }, { field: 'schema' }],
     ['config', d => { d.modes.circular.config.form = []; }, { field: 'schema' }],

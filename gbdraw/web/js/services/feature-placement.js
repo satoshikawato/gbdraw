@@ -23,17 +23,16 @@ import { cloneJsonData } from './json-clone.js';
  * @property {string} biologicalFeatureId
  */
 
+/** @import { CanonicalCircularFeaturePlacement, CanonicalFeatureOverride, CanonicalLinearFeaturePlacement, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+
 /**
- * Where a feature is drawn: the main track, or one lane beside it.
- * @typedef {{ kind: 'main' } | { kind: 'lane', side: string, level: number }} FeaturePlacementTarget
+ * A request row of `diagramOptions.featurePlacements`, of either mode.
+ * @typedef {CanonicalCircularFeaturePlacement | CanonicalLinearFeaturePlacement} FeaturePlacementRow
  */
 
 /**
- * A request row of `diagramOptions.featurePlacements`.
- * @typedef {object} FeaturePlacementRow
- * @property {string} recordKey
- * @property {string} biologicalFeatureId
- * @property {FeaturePlacementTarget} placement
+ * Where a feature is drawn: the main track, or one lane beside it. A lane has a side of its mode.
+ * @typedef {FeaturePlacementRow['placement']} FeaturePlacementTarget
  */
 
 /**
@@ -41,21 +40,12 @@ import { cloneJsonData } from './json-clone.js';
  * @typedef {FeaturePlacementRow} FeaturePlacementDraftRow
  */
 
-/**
- * A request row of `featureOverrides`. A null field keeps the rule-based result.
- * @typedef {object} FeatureOverrideRow
- * @property {string} recordKey
- * @property {string} biologicalFeatureId
- * @property {string | null} featureVisibility `on`, `off`, `exclude_matching`, or null.
- * @property {string | null} labelVisibility `on`, `off`, or null.
- * @property {string | null} labelText
- */
+// A request row of `featureOverrides` is the generated `CanonicalFeatureOverride`
+// (contracts/request.generated.js). A null field keeps the rule-based result.
 
-/**
- * A draft row: a request row that keeps the Web-only `labelSourceText`, the
- * label's text before any edit.
- * @typedef {FeatureOverrideRow & { labelSourceText: string | null }} FeatureOverrideDraftRow
- */
+// A draft row: a request row that keeps the Web-only `labelSourceText`, the
+// label's text before any edit (generated from gbdraw/session_contract.py).
+/** @import { FeatureOverrideDraftRow } from '../contracts/session.generated.js' */
 
 /** @typedef {Record<string, FeaturePlacementDraftRow>} FeaturePlacementDraft */
 /** @typedef {Record<string, FeatureOverrideDraftRow>} FeatureOverrideDraft */
@@ -69,6 +59,7 @@ const SIDES = Object.freeze({ circular: ['outward', 'inward'], linear: ['above',
 // A malformed row can come only from a Session file; the editor writes exact rows.
 const invalidRow = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 
+/** @param {unknown} value */
 const validIdentityText = (value) => typeof value === 'string' && Boolean(value.trim()) && !value.includes('\0');
 
 /**
@@ -113,9 +104,14 @@ export const parseFeatureIdentityKey = (key) => {
  */
 export const featureDraftMap = (rows) => Object.fromEntries(rows.map((row) => [featureIdentityKeyOf(row), row]));
 
+/**
+ * @param {string} left
+ * @param {string} right
+ */
 const compareSourceIdentity = (left, right) => {
-  const a = Array.from(left, (value) => value.codePointAt(0));
-  const b = Array.from(right, (value) => value.codePointAt(0));
+  // Each element of a string iteration holds at least one code point.
+  const a = Array.from(left, (value) => /** @type {number} */ (value.codePointAt(0)));
+  const b = Array.from(right, (value) => /** @type {number} */ (value.codePointAt(0)));
   for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
     if (a[index] !== b[index]) return a[index] - b[index];
   }
@@ -124,9 +120,18 @@ const compareSourceIdentity = (left, right) => {
 
 // Validates a draft map (or a request array) of identity rows with one row
 // check, and returns the rows in code-point order of their identity.
+/**
+ * @template {{ recordKey: string, biologicalFeatureId: string }} Row
+ * @template {{ recordKey: string, biologicalFeatureId: string }} Projected
+ * @param {Record<string, Row> | Row[] | null | undefined} overrides
+ * @param {(row: Row, draft: boolean) => Projected} projectRow
+ * @returns {Projected[]}
+ */
 const canonicalIdentityRows = (overrides, projectRow) => {
   const draft = !Array.isArray(overrides);
-  const rows = draft ? Object.entries(overrides || {}) : overrides.map((row) => [null, row]);
+  const rows = draft
+    ? Object.entries(overrides || {})
+    : /** @type {Row[]} */ (overrides).map((row) => /** @type {[string | null, Row]} */ ([null, row]));
   const identities = new Set();
   return rows.map(([key, row]) => {
     if (!row || typeof row !== 'object'
@@ -165,12 +170,15 @@ export const rowBelongsToRequest = (row, records = []) => recordKeyBelongsToRequ
 // Placement validation shared by the codec and editable drafts: a row takes the
 // lane sides of its request's or drawing's mode.
 /**
- * @param {FeaturePlacementDraft | FeaturePlacementRow[] | null | undefined} overrides
- *   An editor draft map, or request rows.
+ * @param {unknown} overrides An editor draft map, or request rows: unvalidated. The cast names what
+ *   `canonicalIdentityRows` and the row check below go on to prove, row by row; a value that is neither a
+ *   map nor rows gives no row or fails the first check.
  * @param {string | null} mode The mode of the request or drawing.
- * @returns {FeaturePlacementRow[]}
+ * @returns {CanonicalRenderRequest['diagramOptions']['featurePlacements']} The rows of a request of `mode`.
  */
-export const canonicalFeaturePlacements = (overrides, mode) => canonicalIdentityRows(overrides, (row) => {
+// The cast on the result: the row check below passes a lane only with a side of the one `mode` (no lane for
+// another value of `mode`), and a main row is a row of either mode.
+export const canonicalFeaturePlacements = (overrides, mode) => /** @type {CanonicalRenderRequest['diagramOptions']['featurePlacements']} */ (canonicalIdentityRows(/** @type {FeaturePlacementDraft | FeaturePlacementRow[] | null | undefined} */ (overrides), (row) => {
   if (Object.keys(row).sort().join(',') !== 'biologicalFeatureId,placement,recordKey') throw invalidRow();
   const sides = SIDES[/** @type {FeatureMode} */ (mode)] || [];
   const target = row.placement;
@@ -185,13 +193,13 @@ export const canonicalFeaturePlacements = (overrides, mode) => canonicalIdentity
     biologicalFeatureId: row.biologicalFeatureId,
     placement: { ...target }
   };
-});
+}));
 
 /**
  * @param {FeaturePlacementDraft | null | undefined} overrides
  * @param {string} mode
  * @param {FeatureRequestRecord[]} [records]
- * @returns {FeaturePlacementRow[]}
+ * @returns {CanonicalRenderRequest['diagramOptions']['featurePlacements']} The rows of a request of `mode`.
  */
 export const requestFeaturePlacements = (overrides, mode, records = []) => canonicalFeaturePlacements(
   Object.fromEntries(Object.entries(overrides || {}).filter(([, row]) => rowBelongsToRequest(row, records))),
@@ -232,8 +240,13 @@ export const normalizeFeatureOverrideLabelText = (value) => {
   return text.trim() ? text : null;
 };
 
+/** @param {Readonly<Record<string, unknown>>} row */
 const hasEdit = (row) => FEATURE_OVERRIDE_EDIT_FIELDS.some((field) => row[field] !== null);
 
+/**
+ * @param {CanonicalFeatureOverride & { labelSourceText?: string | null }} row
+ * @param {boolean} draft
+ */
 const checkedOverrideRow = (row, draft) => {
   if (Object.keys(row).sort().join(',') !== (draft ? DRAFT_OVERRIDE_FIELDS : REQUEST_OVERRIDE_FIELDS)
     || !(row.featureVisibility === null || FEATURE_VISIBILITY_VALUES.has(row.featureVisibility))
@@ -256,11 +269,14 @@ const checkedOverrideRow = (row, draft) => {
 
 // Validates request `featureOverrides` rows (an array) or the editor draft map.
 /**
- * @param {FeatureOverrideDraft | FeatureOverrideRow[] | null | undefined} overrides
- *   An editor draft map, or request rows.
- * @returns {Array<FeatureOverrideRow | FeatureOverrideDraftRow>}
+ * @param {unknown} overrides An editor draft map, or request rows: unvalidated.
+ * @returns {Array<CanonicalFeatureOverride | FeatureOverrideDraftRow>}
  */
-export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(overrides, checkedOverrideRow);
+// The cast names what the two row checks go on to prove, row by row; a value that is neither a map nor
+// rows gives no row or fails the first check.
+export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(
+  /** @type {FeatureOverrideDraft | CanonicalFeatureOverride[] | null | undefined} */ (overrides), checkedOverrideRow
+);
 
 // The request rows of the current request's records: the draft's edits, and
 // the label text that a bulk label edit gives a feature without its own
@@ -270,7 +286,7 @@ export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(ov
  * @param {FeatureOverrideDraft | null | undefined} overrides
  * @param {FeatureRequestRecord[]} [records]
  * @param {{ bulkLabelText?: Record<string, string> }} [options]
- * @returns {FeatureOverrideRow[]}
+ * @returns {CanonicalFeatureOverride[]}
  */
 export const requestFeatureOverrides = (overrides, records = [], { bulkLabelText = {} } = {}) => {
   const rows = new Map();
@@ -323,7 +339,7 @@ const emptyOverrideRow = ({ recordKey, biologicalFeatureId }) => ({
  */
 export const featureOverrideValue = (overrides, feature, field) => {
   const key = featureIdentityKeyOf(feature);
-  return key ? overrides?.[key]?.[field] ?? null : null;
+  return key ? /** @type {Record<string, unknown> | undefined} */ (overrides?.[key])?.[field] ?? null : null;
 };
 
 // Sets fields of one feature's (or draft row's) draft row and deletes a row
@@ -342,7 +358,8 @@ export const updateFeatureOverride = (overrides, feature, patch) => {
   const next = { ...(overrides[key] || emptyOverrideRow(/** @type {FeatureIdentity} */ (parseFeatureIdentityKey(key)))) };
   Object.entries(patch || {}).forEach(([field, value]) => {
     if (!(field in next) || ['recordKey', 'biologicalFeatureId'].includes(field)) return;
-    next[field] = value === undefined ? null : value;
+    // `field in next` holds, so the write stays inside the row's own fields.
+    /** @type {Record<string, unknown>} */ (next)[field] = value === undefined ? null : value;
   });
   const keep = hasEdit(next) || next.labelSourceText !== null;
   if (JSON.stringify(overrides[key] || null) === JSON.stringify(keep ? next : null)) return false;
@@ -352,6 +369,7 @@ export const updateFeatureOverride = (overrides, feature, patch) => {
 };
 
 const FEATURE_IDENTITY_NOTICE_STATUSES = new Set(['crop_excluded', 'absent', 'unresolved']);
+/** @type {Set<unknown>} */
 const FEATURE_IDENTITY_NOTICE_KINDS = new Set(['placement', 'feature_visibility', 'label_visibility', 'label_text']);
 // Python's featureIdentityNotices metadata, as Generate admitted it (design Q4 3.4).
 /**
@@ -370,7 +388,7 @@ export const validateFeatureIdentityNotices = (notices, results) => {
       || typeof notice.biologicalFeatureId !== 'string' || !notice.biologicalFeatureId
       || !FEATURE_IDENTITY_NOTICE_STATUSES.has(notice.status)
       || !Array.isArray(notice.kinds) || notice.kinds.length === 0
-      || notice.kinds.some((kind) => !FEATURE_IDENTITY_NOTICE_KINDS.has(kind))
+      || notice.kinds.some((/** @type {unknown} */ kind) => !FEATURE_IDENTITY_NOTICE_KINDS.has(kind))
       || !Number.isInteger(notice.resultIndex) || notice.resultIndex < 0 || notice.resultIndex >= resultCount) {
       throw new Error('runMetadata.featureIdentityNotices contains an invalid notice.');
     }

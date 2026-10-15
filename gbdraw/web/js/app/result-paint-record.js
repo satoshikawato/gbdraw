@@ -1,6 +1,6 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
-import { isLegendOrderEdited } from '../services/legend-svg.js';
+/** @import { DrawingState, LegendEntry } from '../state.js' */
+import { isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
 
 // Which editor state each Result's bytes show (design §5.4). A Result
 // displayed again receives a domain only when that state changed since it
@@ -44,7 +44,7 @@ export const editorPaintState = (state, drawing) => ({
   // A deleted row strokes no feature (OV-293).
   strokes: JSON.stringify([
     drawing.featureStrokeOverrides, drawing.legendStrokeOverrides,
-    drawing.deletedLegendEntries.value.map((entry) => entry.originalCaption || entry.caption)
+    drawing.deletedLegendEntries.value.map((/** @type {LegendEntry} */ entry) => entry.originalCaption || entry.caption)
   ]),
   labels: JSON.stringify([
     Object.values(drawing.featureOverrides).map((row) => [
@@ -52,9 +52,9 @@ export const editorPaintState = (state, drawing) => ({
     ]),
     drawing.labelTextBulkOverrides
   ]),
-  // An edited Legend order, or '' for the default order (D-08).
+  // An edited Legend order of row keys, or '' for the default order (D-08).
   legendOrder: isLegendOrderEdited(drawing.legendEntries.value, state.originalLegendOrder.value)
-    ? JSON.stringify(drawing.legendEntries.value.map((entry) => entry.caption))
+    ? JSON.stringify(drawing.legendEntries.value.map(legendEntryKey))
     : ''
 });
 

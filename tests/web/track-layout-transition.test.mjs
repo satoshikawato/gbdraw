@@ -207,7 +207,9 @@ const WRITES = [
   /\badv\.(?:circular|linear)_track_slots(?:\[[^\]]*\])?\.(?:splice|push|pop|shift|unshift|sort|reverse|fill|copyWithin)\(/g,
   /\badv\.(?:circular|linear)_track_slots\[[^\]]+\]\s*=(?!=)/g,
   /\b(?:form|adv)\[[^\]]+\]\s*=(?!=)/g,
-  /(?:replaceReactiveObject|replacePlainObject|safeDeepMerge|Object\.assign)\(\s*(?:(?:state|drawing)\.)?(?:form|adv)\b/g
+  /(?:replaceReactiveObject|replacePlainObject|Object\.assign)\(\s*(?:(?:state|drawing)\.)?(?:form|adv)\b/g,
+  // The merge of stored settings into a drawing (`form` and `adv` included).
+  /\binstallStoredSettings\(\s*(?:state|drawing)\b/g
 ];
 const DECLARATION = /^\s*(?:export\s+)?(?:const|let|function|async\s+function)\s+([A-Za-z_$][\w$]*)/;
 // The nearest declaration that encloses a line, by indentation.
@@ -236,7 +238,7 @@ test('every writer of a feature-slot input outside the stack editors is listed (
   const found = {};
   for (const path of sources(`${WEB}/js`)) {
     const file = relative(`${WEB}/js`, path);
-    if (file.includes('generated') || /^app\/(?:circular|linear)-track-slots\.js$/.test(file)) continue;
+    if (/^app\/(?:circular|linear)-track-slots\.js$/.test(file)) continue;
     const source = readFileSync(path, 'utf8');
     const lines = source.split('\n');
     for (const pattern of WRITES) {
@@ -291,5 +293,10 @@ test('the stack editors are created once, with the transition', () => {
   const sites = sources(`${WEB}/js`).flatMap((path) => [...readFileSync(path, 'utf8')
     .matchAll(/create(?:Circular|Linear)TrackSlotEditor\(\{([^}]*)\}\)/g)]
     .map((match) => [relative(`${WEB}/js`, path), match[1].replace(/\s+/g, ' ').trim()]));
-  assert.deepEqual(sites, [['app/app-setup.js', 'state, changeTrackLayout'], ['app/app-setup.js', 'state, changeTrackLayout']]);
+  // The Circular editor also takes the choice dialog and History's undoable step,
+  // which its Hide GC content / skew question uses.
+  assert.deepEqual(sites, [
+    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable'],
+    ['app/app-setup.js', 'state, changeTrackLayout']
+  ]);
 });

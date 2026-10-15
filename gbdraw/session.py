@@ -16,7 +16,7 @@ from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.table_text import legacy_table_rows
@@ -26,6 +26,7 @@ from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     CANONICAL_SESSION_MIN_VERSION,
     DEPTH_FILE_ENCODING,
+    MODE_SCOPED_SESSION_MIN_VERSION,
     SESSION_FORMAT,
     _read_session_text,
     _attach_current_web_file_bindings,
@@ -36,6 +37,7 @@ from gbdraw.session_io import (
     materialize_embedded_file,
     normalize_current_session_artifacts,
     safe_embedded_filename,
+    session_legend_edits_by_row_key,
     validate_session,
 )
 from gbdraw.session_drawings import (
@@ -483,6 +485,25 @@ def _active_materialization(materialized: MaterializedSession) -> None:
         )
 
 
+def _with_saved_rule_captions(request: DiagramRequest) -> DiagramRequest:
+    """The request of a saved Session with the captions of its color table read as saved.
+
+    A color table file of the request is read so by ``read_color_table``.
+    """
+
+    from gbdraw.legend.table import saved_rule_captions
+
+    colors = request.options.colors
+    if colors is None or colors.color_table is None:
+        return request
+    color_table = saved_rule_captions(colors.color_table)
+    if color_table is colors.color_table:
+        return request
+    options = replace(request.options, colors=replace(colors, color_table=color_table))
+    # Each request type takes its own options type, which mypy cannot pair.
+    return cast("DiagramRequest", replace(cast(Any, request), options=options))
+
+
 def _decode_drawing(
     materialized: MaterializedSession,
     drawing: SessionDrawingParts,
@@ -513,7 +534,7 @@ def _decode_drawing(
             output_directory=materialized.output_directory,
         )
         return promote_legacy_session_similarity_alignment_request(
-            request,
+            _with_saved_rule_captions(request),
             drawing.artifacts,
         )
     except (CanonicalRequestCodecError, ValidationError) as exc:
@@ -554,6 +575,7 @@ def _drawing_output_request(
     output_prefix: str | None,
     formats: str | tuple[str, ...] | None,
     overwrite: bool | None,
+    embed_fonts: bool | None = None,
 ) -> DiagramRequest:
     """Apply the output overrides; several drawings get ``<base>_<id>``."""
 
@@ -577,6 +599,7 @@ def _drawing_output_request(
         output_prefix=output_prefix,
         formats=formats,
         overwrite=overwrite,
+        embed_fonts=embed_fonts,
     )
 
 
@@ -587,6 +610,7 @@ def _plan_session_drawings(
     output_prefix: str | None = None,
     formats: str | tuple[str, ...] | None = None,
     overwrite: bool | None = None,
+    embed_fonts: bool | None = None,
 ) -> tuple[_SessionDrawingRender, ...]:
     """Select drawings, decode their requests and name their outputs.
 
@@ -643,6 +667,7 @@ def _plan_session_drawings(
                 output_prefix=output_prefix,
                 formats=formats,
                 overwrite=overwrite,
+                embed_fonts=embed_fonts,
             ),
         )
         for drawing in selected
@@ -1132,7 +1157,9 @@ def upgrade_session_document(
 ) -> SessionUpgrade:
     """Return a Session in the current version without rendering it.
 
-    A current document is returned unchanged. A Session 31-44 gets the
+    A current document is returned unchanged. A Session 46 keeps its
+    drawings and gets its Legend color and stroke edits keyed by row key
+    (:func:`gbdraw.session_io.legend_edits_by_row_key`). A Session 31-44 gets the
     migrations a CLI re-save applies: its request is decoded, adapted to
     current typed state (comparison frames, similarity alignment, LOSAT
     artifacts) and encoded again with the same resource IDs, and its
@@ -1151,6 +1178,10 @@ def upgrade_session_document(
     loaded = load_session_document(document)
     if loaded.version == CURRENT_SESSION_VERSION:
         return SessionUpgrade(loaded)
+    if loaded.version == MODE_SCOPED_SESSION_MIN_VERSION:
+        # Session 47 differs only in the keys of each slice's Legend edits.
+        keyed, _outcomes = session_legend_edits_by_row_key(loaded._data)
+        return SessionUpgrade(SessionDocument({**keyed, "version": CURRENT_SESSION_VERSION}))
     if loaded.version < CANONICAL_SESSION_MIN_VERSION:
         raise SessionVersionError(
             "Sessions version 27 through 30 have no canonical request; replay one with "
@@ -1267,10 +1298,26 @@ def with_request_output(
     output_directory: str | Path | None = None,
     formats: str | tuple[str, ...] | None = None,
     overwrite: bool | None = None,
+    embed_fonts: bool | None = None,
 ) -> DiagramRequest:
     """Return a request with caller-owned replay output overrides."""
 
     from gbdraw.api.requests import CircularBatchRequest, RenderOutputRequest
+
+    def updated(current: RenderOutputRequest, prefix: str) -> RenderOutputRequest:
+        return replace(
+            current,
+            output_prefix=prefix,
+            resolve_prefix_from_first_record=False,
+            output_directory=(
+                output_directory
+                if output_directory is not None
+                else current.output_directory
+            ),
+            formats=formats if formats is not None else current.formats,
+            overwrite=current.overwrite if overwrite is None else overwrite,
+            embed_fonts=current.embed_fonts if embed_fonts is None else embed_fonts,
+        )
 
     if isinstance(request, CircularBatchRequest):
         item_count = len(request.outputs)
@@ -1284,17 +1331,7 @@ def with_request_output(
                 for index in range(1, item_count + 1)
             )
         outputs = tuple(
-            RenderOutputRequest(
-                output_prefix=prefix,
-                output_directory=(
-                    output_directory
-                    if output_directory is not None
-                    else current.output_directory
-                ),
-                formats=formats if formats is not None else current.formats,
-                overwrite=current.overwrite if overwrite is None else overwrite,
-                interactive_metadata_policy=current.interactive_metadata_policy,
-            )
+            updated(current, prefix)
             for prefix, current in zip(
                 prefixes,
                 request.outputs,
@@ -1303,19 +1340,10 @@ def with_request_output(
         )
         return replace(request, outputs=outputs)
 
-    current = request.output
-    updated = RenderOutputRequest(
-        output_prefix=output_prefix or current.output_prefix,
-        output_directory=(
-            output_directory
-            if output_directory is not None
-            else current.output_directory
-        ),
-        formats=formats if formats is not None else current.formats,
-        overwrite=current.overwrite if overwrite is None else overwrite,
-        interactive_metadata_policy=current.interactive_metadata_policy,
+    return replace(
+        request,
+        output=updated(request.output, output_prefix or request.output.output_prefix),
     )
-    return replace(request, output=updated)
 
 
 def _validate_document(data: Mapping[str, Any]) -> None:

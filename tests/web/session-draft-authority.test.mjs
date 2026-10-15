@@ -535,12 +535,26 @@ const withoutStoredLayoutPreferences = () => {
   legacyLayoutFields.forEach((field) => delete payload.ui[field]);
   return payload;
 };
-const importPayload = async (payload) => importSession({
+const importPayload = async (payload, options = {}) => importSession({
   target: {
     files: [new Blob([JSON.stringify(payload)], { type: 'application/json' })],
     value: 'selected'
   }
-});
+}, options);
+
+// A Session 46 slice that kept the diagram font as a preserved override
+// (PD-OI-009, before the Font setting) loads it into the setting, so no
+// preserved override names a path the GUI manages (custom-fonts PR-2).
+const preservedFontSession = structuredClone(divergentSession);
+const preservedFontSlice = preservedFontSession.modes.linear;
+preservedFontSlice.config ||= {};
+preservedFontSlice.config.adv ||= {};
+delete preservedFontSlice.config.adv.font_family;
+preservedFontSlice.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'DejaVu Serif', serif" };
+const preservedFontImport = await importPayload(preservedFontSession);
+assert.equal(preservedFontImport.status, 'ok', preservedFontImport.error?.message);
+assert.equal(state.drawings.linear.adv.font_family, "'DejaVu Serif', serif");
+assert.deepEqual({ ...state.drawings.linear.unmanagedConfigOverrides }, {});
 
 const decisionRequiredSession = structuredClone(divergentSession);
 decisionRequiredSession.renderRequest.comparisons = [{
@@ -822,12 +836,21 @@ const expectedActiveIntent = {
   }
 };
 
-const activeIntentImport = await importPayload(activeIntentSession);
+// The draft's off Depth row names series 99, which its drawing does not have:
+// Load lists that it unbinds the row (B45) and installs the rest as saved.
+const activeIntentDialogs = [];
+const activeIntentImport = await importPayload(activeIntentSession, {
+  confirmLoadRepairs: async ({ items }) => { activeIntentDialogs.push(items); return true; }
+});
 assert.equal(
   activeIntentImport.status,
   'ok',
   activeIntentImport.error?.message || 'active-intent session import failed'
 );
+assert.deepEqual(activeIntentDialogs, [[
+  'Track stack: the Depth row "disabled-draft" (modes.circular.config.adv.circular_track_slots) names a Depth series its'
+    + ' drawing does not have; the row is turned off and no longer names that series.'
+]]);
 const afterSessionLoadIntent = compactActiveIntentSnapshot();
 const immediatelyBeforeGenerateIntent = compactActiveIntentSnapshot();
 const activeFiles = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
@@ -1000,9 +1023,9 @@ assert.deepEqual(
   )?.width,
   { value: 23, unit: 'px' }
 );
-assert.deepEqual(alerts, [
-  'Legacy configuration loaded. Save as a session to use the current format.'
-]);
+// The legacy notice belongs to the app (`Configuration loaded from an older
+// gbdraw...`); the service shows no native alert.
+assert.deepEqual(alerts, []);
 
 state.mode.value = 'circular';
 state.activeDrawing().form.multi_record_canvas = false;

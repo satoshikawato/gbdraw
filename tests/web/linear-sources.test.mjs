@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import {
+  foldLoadedLinearSources,
+  linearCardFileFields,
+  linearCardInputComplete,
   groupLinearSourceRecords,
   isPristineLinearSource,
+  linearRecordNames,
   linearSourceHasPrimaryInput,
   linearSourceDepthStatus,
   losatSearchSequences,
@@ -11,6 +15,8 @@ import {
   planLinearSourceRemoval,
   planLosatSourceJobs,
   prepareLosatSourceBatches,
+  restoreFoldedLinearSources,
+  setLinearSourceFolded,
   splitLosatSourceResult
 } from '../../gbdraw/web/js/services/linear-sources.js';
 import { readFileSync } from 'node:fs';
@@ -481,4 +487,93 @@ test('LOSAT FASTA extraction reports a region beyond the record as a region fail
   // (parseRegionText, like parse_region_spec), so the ORDER reason has no input here.
   assert.equal((await extract('31-2000')).canonicalLength, 30);
   assert.equal((await extract('2-1')).fasta, '>TINY.1\nGT\n');
+});
+
+// OV-436: two chromosomes of one File were named "Vibrio parahaemolyticus" and
+// "NC_004605.1" because only the first drew a Definition.
+test('every record of a File is named by the File definition plus its accession', () => {
+  const vp = { name: 'vp.gb' };
+  const va = { name: 'va.gb' };
+  const card = (uid, gb, definition, region_record_id) => ({ ...sourceRecord(uid, gb), definition, region_record_id });
+  const sequences = [
+    card('r1', vp, '<i>Vibrio parahaemolyticus</i>', 'NC_004603.1'),
+    card('r2', vp, '', 'NC_004605.1'),
+    card('r3', va, '', 'NC_022349.1'),
+    card('r4', { name: 'single.gb' }, '', '')
+  ];
+  const before = JSON.stringify(sequences);
+  const labels = [...linearRecordNames(sequences).values()].map(({ label }) => label);
+  assert.deepEqual(labels, [
+    'Vibrio parahaemolyticus · NC_004603.1',
+    'Vibrio parahaemolyticus · NC_004605.1',
+    'NC_022349.1',
+    'single.gb'
+  ]);
+  // The cards (and the diagram headings they draw) are not changed.
+  assert.equal(JSON.stringify(sequences), before);
+});
+
+// The folded File cards: view state keyed by source uid.
+const foldFile = (name) => ({ name });
+const foldSources = () => {
+  const a = foldFile('a.gbk');
+  const b = foldFile('b.gbk');
+  return groupLinearSourceRecords([
+    sourceRecord('a1', a), sourceRecord('a2', a), sourceRecord('b1', b), sourceRecord('empty', null)
+  ]);
+};
+
+test('a press on a File card header folds and unfolds that card alone', () => {
+  const folded = new Set();
+  setLinearSourceFolded(folded, 'a1', true);
+  setLinearSourceFolded(folded, 'a1', true);
+  assert.deepEqual([...folded], ['a1']);
+  setLinearSourceFolded(folded, 'b1', true);
+  setLinearSourceFolded(folded, 'a1', false);
+  setLinearSourceFolded(folded, 'a1', false);
+  assert.deepEqual([...folded], ['b1']);
+});
+
+test('a loaded Session folds the File cards that hold their input and leaves the others open', () => {
+  const folded = new Set(['stale', 'empty']);
+  foldLoadedLinearSources(folded, foldSources(), 'gb');
+  assert.deepEqual([...folded], ['a1', 'b1'], 'by the uid of each File, not of each record');
+  foldLoadedLinearSources(folded, groupLinearSourceRecords([sourceRecord('only', null)]), 'gb');
+  assert.deepEqual([...folded], [], 'a Session without files folds nothing');
+});
+
+test('a card holds its input when every slot its input type shows has a file', () => {
+  const card = (files) => groupLinearSourceRecords([{ uid: 'c', gb: null, gff: null, fasta: null, ...files }])[0];
+  const gff = foldFile('g.gff3');
+  const fasta = foldFile('g.fasta');
+  assert.deepEqual(linearCardFileFields('gb'), ['gb']);
+  assert.deepEqual(linearCardFileFields('gff'), ['gff', 'fasta']);
+  assert.equal(linearCardInputComplete(card({ gb: foldFile('a.gbk') }), 'gb'), true);
+  assert.equal(linearCardInputComplete(card({ gff, fasta }), 'gff'), true);
+  assert.equal(linearCardInputComplete(card({ gff }), 'gff'), false, 'GFF3 without FASTA');
+  assert.equal(linearCardInputComplete(card({ fasta }), 'gff'), false, 'FASTA without GFF3');
+  assert.equal(linearCardInputComplete(card({ gb: foldFile('a.gbk') }), 'gff'), false, 'only a file of the other input type');
+  assert.equal(linearCardInputComplete(card({ gff, fasta }), 'gb'), false);
+  // The load rule is that answer: an incomplete pair stays open like a card without a file.
+  const folded = new Set();
+  foldLoadedLinearSources(folded, [card({ gff, fasta }), { ...card({ gff }), uid: 'half' }, { ...card({ gb: foldFile('a.gbk') }), uid: 'other' }], 'gff');
+  assert.deepEqual([...folded], ['c']);
+});
+
+test('a rolled-back load returns the fold state it replaced', () => {
+  const folded = new Set(['a1']);
+  const before = [...folded];
+  foldLoadedLinearSources(folded, groupLinearSourceRecords([sourceRecord('x', foldFile('x.gbk'))]), 'gb');
+  restoreFoldedLinearSources(folded, before);
+  assert.deepEqual([...folded], ['a1']);
+});
+
+test('the fold state follows a File through Move up and Move down', () => {
+  const sequences = foldSources().flatMap(({ records }) => records.map(({ sequence }) => sequence));
+  const folded = new Set();
+  setLinearSourceFolded(folded, 'b1', true);
+  const moved = groupLinearSourceRecords(moveLinearSourceGroup(sequences, 1, -1));
+  assert.deepEqual(moved.map(({ uid }) => uid), ['b1', 'a1', 'empty']);
+  assert.deepEqual(moved.map(({ uid }) => folded.has(uid)), [true, false, false]);
+  assert.equal(moved[0].sequence.gb.name, 'b.gbk');
 });

@@ -3,7 +3,7 @@ import {
   buildLinearRegionExtractionContext,
   extractFeatureMetadataForPreview
 } from './feature-metadata-extraction.js';
-import { normalizeUserFacingError, retryCanSucceed } from '../utils/error-normalization.js';
+import { normalizeCaughtError, retryCanSucceed } from '../utils/error-normalization.js';
 import { cloneJsonValue } from './json-clone.js';
 import { enrichFeatureWithOrthogroup } from './orthogroup-feature-metadata.js';
 import {
@@ -25,6 +25,44 @@ import {
 
 export { normalizeRenderedFeatureId } from './session-feature-metadata.js';
 
+/** @import { ExtractedFeature, ExtractFeatureMetadataOptions, FeatureRecordInput, LinearRegionSeq } from './feature-metadata-extraction.js' */
+/** @import { IntegerAliasStatus, TextAliasStatus } from './feature-identity.js' */
+/** @import { OrthogroupFeatureIndex } from './orthogroup-feature-metadata.js' */
+/** @import { RenderedFeatureIdentity, RenderedIdentityCollection } from './session-feature-metadata.js' */
+/** @import { SvgResultEntry } from './svg-result-ingestion.js' */
+
+/** @typedef {readonly (SvgResultEntry | null | undefined)[]} RecoveryResults The Results a Session holds. */
+/**
+ * What the recovery reads of a feature besides its identity keys.
+ * @typedef {{ qualifiers?: Record<string, unknown> | null, selector?: { qualifiers?: Record<string, unknown> | null } | null, [key: string]: unknown }} QualifiedFeatureSource
+ */
+/** @typedef {Map<string, unknown> | Record<string, unknown>} MigrationMaps Old key to new key, as a Map or a plain object. */
+/**
+ * The feature state of a Session: the recovered metadata and the edits keyed by feature id.
+ * @typedef {{
+ *   extractedFeatures?: ExtractedFeature[],
+ *   biologicalFeatures?: ExtractedFeature[],
+ *   featureRecordIds?: string[],
+ *   selectedFeatureRecordIdx?: number,
+ *   featureColorOverrides?: unknown,
+ *   [key: string]: unknown
+ * }} RecoveryFeatureState
+ */
+/** @typedef {{ featureStrokes?: { overrides?: unknown }, [key: string]: unknown }} RecoveryEditorState */
+/**
+ * The Session data the recovery reads; the loader builds it from the candidate drawing and the saved Results.
+ * @typedef {object} FeatureRecoverySnapshot
+ * @property {string} mode
+ * @property {string} cInputType
+ * @property {string} lInputType
+ * @property {{ c_gb?: File | null }} [files]
+ * @property {(LinearRegionSeq & { gb?: unknown })[]} [linearSeqs]
+ * @property {RecoveryResults} [results]
+ * @property {unknown} [selectedResultIndex]
+ * @property {RecoveryFeatureState} [featureState]
+ * @property {RecoveryEditorState} [editorState]
+ * @property {OrthogroupFeatureIndex | null} [orthogroupIndex]
+ */
 const MISSING_INPUTS_WARNING =
   'Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.';
 const UNSUPPORTED_INPUT_WARNING =
@@ -34,10 +72,15 @@ const EXTRACTION_FAILED_WARNING =
 const MIGRATION_SKIPPED_WARNING =
   'Feature metadata was recovered, but some old feature edits could not be matched to recovered feature IDs.';
 
+/** @param {unknown} value */
 const normalizeKey = (value) => String(value || '').trim();
 
 export const normalizeRecordIndex = normalizeFeatureRecordIndex;
 
+/**
+ * @param {Set<string>} ids
+ * @param {unknown} value
+ */
 const addNormalizedId = (ids, value) => {
   const normalized = normalizeRenderedFeatureId(value);
   if (normalized) ids.add(normalized);
@@ -45,8 +88,11 @@ const addNormalizedId = (ids, value) => {
 
 export const stableRecordKey = stableRenderedFeatureRecordKey;
 
+/** @param {RecoveryResults | null | undefined} results */
 export const collectRenderedFeatureIdsFromResults = (results) => {
+  /** @type {Set<string>[]} */
   const byResultIndex = [];
+  /** @type {RenderedIdentityCollection[]} */
   const identitiesByResultIndex = [];
   const allIds = new Set();
   const allIdentities = createRenderedIdentityCollection();
@@ -75,7 +121,9 @@ export const collectRenderedFeatureIdsFromResults = (results) => {
   };
 };
 
+/** @param {ExtractedFeature[] | null | undefined} features */
 const collectExactMetadataFeatureIds = (features) => {
+  /** @type {Set<string>} */
   const ids = new Set();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     addNormalizedId(ids, feature?.rendered_svg_id);
@@ -88,6 +136,7 @@ const collectExactMetadataFeatureIds = (features) => {
   return ids;
 };
 
+/** @param {ExtractedFeature | null | undefined} feature */
 export const featureStableCandidate = (feature) =>
   normalizeRenderedFeatureId(
     feature?.stable_svg_id ||
@@ -98,6 +147,7 @@ export const featureStableCandidate = (feature) =>
     feature?.svg_id
   );
 
+/** @param {ExtractedFeature | null | undefined} feature */
 export const featureRenderedCandidate = (feature) =>
   normalizeRenderedFeatureId(
     feature?.rendered_svg_id ||
@@ -106,37 +156,136 @@ export const featureRenderedCandidate = (feature) =>
     feature?.renderedFeatureSvgId
   );
 
-export const featureRecordIndexCandidate = (feature) => {
-  const status = nonnegativeIntegerAliasStatus(feature, RECORD_INDEX_KEYS);
-  return status.valid && status.supplied ? status.value : null;
+/**
+ * A feature as the alignment reads it: `stableKey` and `recordIndex` find its
+ * drawn element, `stable` and `recordIndex` must agree with that element, and
+ * `drawnId` is the ID it is drawn under when the reader knows it.
+ * @typedef {{ stableKey: string, stable: TextAliasStatus, recordIndex: IntegerAliasStatus, drawnId: string }} AlignmentReading
+ */
+/** @typedef {(feature: ExtractedFeature | null | undefined) => AlignmentReading} AlignmentReader */
+
+/**
+ * Saved feature metadata names its drawn element by its own keys.
+ * @type {AlignmentReader}
+ */
+const readSavedFeature = (feature) => ({
+  stableKey: featureStableCandidate(feature),
+  stable: textAliasStatus(feature, STABLE_FEATURE_ID_KEYS),
+  recordIndex: nonnegativeIntegerAliasStatus(feature, RECORD_INDEX_KEYS),
+  drawnId: ''
+});
+
+const INPUT_INDEX_KEYS = Object.freeze(['fileIdx', 'file_idx']);
+const RECORD_WITHIN_INPUT_KEYS = Object.freeze(RECORD_INDEX_KEYS.filter((key) => !INPUT_INDEX_KEYS.includes(key)));
+
+/** @param {ExtractedFeature | null | undefined} feature */
+const drawnHashOf = (feature) => {
+  const selector = feature?.drawn_selector;
+  return selector && typeof selector === 'object' && 'hash' in selector
+    ? normalizeRenderedFeatureId(selector.hash)
+    : '';
 };
 
-const featureAgreesWithRenderedIdentity = (feature, identity) => {
+/**
+ * How the features read again from the sources name their elements in the SVG
+ * of a Session below 40 (OV-751). The SVG names a feature by its hash in the
+ * drawn record, which the extraction gives as `drawn_selector.hash`: a cropped,
+ * reverse-complemented or rotated record draws other hashes than its source.
+ * Only drawn features carry it; another feature takes it from the drawn
+ * feature of its source hash and record. The SVG numbers records among all
+ * drawn records; the extraction names a Linear feature by its input
+ * (`fileIdx`) and its record within that input (`record_idx`), and lists the
+ * drawn records in order (`recordInputs`). Without that list (Circular), the
+ * record index is the drawn one.
+ * @param {{ recordInputs?: readonly FeatureRecordInput[] | null, drawnFeatures?: readonly ExtractedFeature[] | null }} payload
+ * @returns {AlignmentReader}
+ */
+const extractedFeatureReader = ({ recordInputs, drawnFeatures }) => {
+  /** @type {Map<string, number>} */
+  const drawnIndexByInputRecord = new Map(
+    (Array.isArray(recordInputs) ? recordInputs : [])
+      .map(({ fileIdx, recordIdx }, drawnIndex) => /** @type {[string, number]} */ ([`${fileIdx}:${recordIdx}`, drawnIndex]))
+  );
+  /** @param {ExtractedFeature | null | undefined} feature @returns {IntegerAliasStatus} */
+  const recordIndexOf = (feature) => {
+    const input = nonnegativeIntegerAliasStatus(feature, INPUT_INDEX_KEYS);
+    const record = nonnegativeIntegerAliasStatus(feature, RECORD_WITHIN_INPUT_KEYS);
+    if (drawnIndexByInputRecord.size === 0 || !input.supplied || !record.supplied) {
+      return nonnegativeIntegerAliasStatus(feature, RECORD_INDEX_KEYS);
+    }
+    const drawnIndex = input.valid && record.valid
+      ? drawnIndexByInputRecord.get(`${input.value}:${record.value}`)
+      : undefined;
+    return drawnIndex === undefined
+      ? { valid: false, supplied: true, value: null }
+      : { valid: true, supplied: true, value: drawnIndex };
+  };
+  /** @param {IntegerAliasStatus} recordIndex @param {ExtractedFeature | null | undefined} feature */
+  const sourceKey = (recordIndex, feature) => `${recordIndex.value}\u0000${featureStableCandidate(feature)}`;
+  /** @type {Map<string, string>} */
+  const drawnHashBySource = new Map();
+  (Array.isArray(drawnFeatures) ? drawnFeatures : []).forEach((feature) => {
+    const drawnHash = drawnHashOf(feature);
+    const recordIndex = recordIndexOf(feature);
+    if (drawnHash && recordIndex.valid) drawnHashBySource.set(sourceKey(recordIndex, feature), drawnHash);
+  });
+  return (feature) => {
+    const recordIndex = recordIndexOf(feature);
+    const drawnHash = drawnHashOf(feature)
+      || (recordIndex.valid ? drawnHashBySource.get(sourceKey(recordIndex, feature)) : '')
+      || '';
+    if (!drawnHash) return { ...readSavedFeature(feature), recordIndex };
+    return {
+      stableKey: drawnHash,
+      stable: { valid: true, supplied: true, value: drawnHash },
+      recordIndex,
+      drawnId: drawnHash
+    };
+  };
+};
+
+/**
+ * Whether a feature can be the drawn element `identity`. An ID of the feature
+ * that names no drawn element (an extraction's prediction, an older render)
+ * says nothing about which element it is.
+ * @param {ExtractedFeature | null | undefined} feature
+ * @param {AlignmentReading} reading
+ * @param {RenderedFeatureIdentity | null | undefined} identity
+ * @param {ReadonlySet<string>} drawnIds
+ */
+const featureAgreesWithRenderedIdentity = (feature, reading, identity, drawnIds) => {
   if (!identity?.renderedId) return false;
-  const stable = textAliasStatus(feature, STABLE_FEATURE_ID_KEYS);
+  const { stable, recordIndex } = reading;
   const rendered = textAliasStatus(feature, RENDERED_FEATURE_ID_KEYS);
   const legacySvg = textAliasStatus(feature, ['svg_id', 'svgId']);
-  const recordIndex = nonnegativeIntegerAliasStatus(feature, RECORD_INDEX_KEYS);
   const recordId = textAliasStatus(feature, ['record_id', 'recordId']);
   if (![stable, rendered, legacySvg, recordIndex, recordId].every((status) => status.valid)) {
     return false;
   }
+  /** @param {TextAliasStatus} status */
+  const namesDrawnElement = (status) => status.supplied && drawnIds.has(normalizeRenderedFeatureId(status.value));
   if (stable.supplied && stable.value !== identity.stableId) return false;
-  if (rendered.supplied && rendered.value !== identity.renderedId) return false;
+  if (namesDrawnElement(rendered) && rendered.value !== identity.renderedId) return false;
   if (
-    legacySvg.supplied &&
+    namesDrawnElement(legacySvg) &&
     legacySvg.value !== identity.renderedId &&
     legacySvg.value !== identity.stableId
   ) return false;
+  // An element drawn without its record (every Circular figure; a Linear
+  // figure of a Session before per-element record attributes) contradicts no
+  // record: its feature hash already covers the record ID (OV-751).
   if (
     recordIndex.supplied &&
-    (identity.recordIndex === null || recordIndex.value !== identity.recordIndex)
+    identity.recordIndex !== null &&
+    recordIndex.value !== identity.recordIndex
   ) return false;
-  if (recordId.supplied && recordId.value !== identity.recordId) return false;
+  if (recordId.supplied && identity.recordId && recordId.value !== identity.recordId) return false;
   return true;
 };
 
+/** @param {ExtractedFeature[] | null | undefined} features */
 const collectAliasMetadataFeatureIds = (features) => {
+  /** @type {Set<string>} */
   const ids = new Set();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     addNormalizedId(ids, featureStableCandidate(feature));
@@ -144,6 +293,13 @@ const collectAliasMetadataFeatureIds = (features) => {
   return ids;
 };
 
+/**
+ * @param {{
+ *   results?: RecoveryResults | null,
+ *   selectedResultIndex?: unknown,
+ *   extractedFeatures?: ExtractedFeature[] | null
+ * }} input
+ */
 export const classifyFeatureMetadataState = ({
   results,
   selectedResultIndex,
@@ -202,9 +358,18 @@ export const classifyFeatureMetadataState = ({
   };
 };
 
+/** @param {ExtractedFeature | null | undefined} feature */
 const featureId = (feature) => normalizeKey(feature?.id);
+/** @param {ExtractedFeature | null | undefined} feature */
 const featureSvgId = (feature) => normalizeRenderedFeatureId(feature?.svg_id);
 
+/**
+ * @param {ExtractedFeature} feature
+ * @param {RenderedFeatureIdentity | null | undefined} identity
+ * @param {unknown} stableId
+ * @param {{ writeRenderedSvgIdToSvgId?: boolean }} [options]
+ * @returns {ExtractedFeature}
+ */
 const withRenderedFeatureIdentity = (
   feature,
   identity,
@@ -214,10 +379,15 @@ const withRenderedFeatureIdentity = (
   const renderedId = normalizeRenderedFeatureId(identity?.renderedId);
   if (!renderedId) return feature;
   const resolvedStableId = normalizeRenderedFeatureId(stableId || identity?.stableId);
+  /** @type {Record<string, unknown>} */
   const updates = {
     rendered_svg_id: renderedId,
     renderedSvgId: renderedId
   };
+  // An extraction's predicted rendered ID is replaced by the drawn one.
+  ['rendered_feature_svg_id', 'renderedFeatureSvgId'].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(feature || {}, key)) updates[key] = renderedId;
+  });
   if (writeRenderedSvgIdToSvgId) updates.svg_id = renderedId;
   if (resolvedStableId) {
     updates.stable_svg_id = feature?.stable_svg_id || resolvedStableId;
@@ -227,6 +397,7 @@ const withRenderedFeatureIdentity = (
   return changed ? { ...feature, ...updates } : feature;
 };
 
+/** @param {ExtractedFeature} feature */
 const withoutRenderedFeatureIdentity = (feature) => {
   const renderedKeys = [
     'rendered_svg_id',
@@ -240,6 +411,10 @@ const withoutRenderedFeatureIdentity = (feature) => {
   return nextFeature;
 };
 
+/**
+ * @param {...unknown} values
+ * @returns {string}
+ */
 const firstPresentValue = (...values) => {
   for (const value of values) {
     if (Array.isArray(value)) {
@@ -253,6 +428,10 @@ const firstPresentValue = (...values) => {
   return '';
 };
 
+/**
+ * @param {QualifiedFeatureSource | null | undefined} feature
+ * @param {string} key
+ */
 const qualifierValues = (feature, key) => {
   const qualifiers = feature?.qualifiers && typeof feature.qualifiers === 'object' ? feature.qualifiers : {};
   const selectorQualifiers =
@@ -266,11 +445,13 @@ const qualifierValues = (feature, key) => {
   return normalizeKey(raw);
 };
 
+/** @param {ExtractedFeature | null | undefined} feature */
 const stableFeatureKey = (feature) => {
   const key = featureStableCandidate(feature);
   return key || '';
 };
 
+/** @param {ExtractedFeature | null | undefined} feature */
 const biologicalFeatureKey = (feature) => {
   const type = normalizeKey(feature?.type);
   const start = feature?.start;
@@ -291,8 +472,14 @@ const biologicalFeatureKey = (feature) => {
   });
 };
 
+/**
+ * @param {ExtractedFeature[] | null | undefined} features
+ * @param {(feature: ExtractedFeature) => string} keyFn
+ */
 const uniqueFeatureMap = (features, keyFn) => {
+  /** @type {Map<string, number>} */
   const counts = new Map();
+  /** @type {Map<string, ExtractedFeature>} */
   const items = new Map();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     const key = keyFn(feature);
@@ -300,6 +487,7 @@ const uniqueFeatureMap = (features, keyFn) => {
     counts.set(key, (counts.get(key) || 0) + 1);
     if (!items.has(key)) items.set(key, feature);
   });
+  /** @type {Map<string, ExtractedFeature | undefined>} */
   const unique = new Map();
   counts.forEach((count, key) => {
     if (count === 1) unique.set(key, items.get(key));
@@ -307,16 +495,18 @@ const uniqueFeatureMap = (features, keyFn) => {
   return unique;
 };
 
-const countFeatureStableCandidates = (features) => {
+/** @param {readonly AlignmentReading[]} readings */
+const countFeatureStableKeys = (readings) => {
+  /** @type {Map<string, number>} */
   const counts = new Map();
-  (Array.isArray(features) ? features : []).forEach((feature) => {
-    const stableId = featureStableCandidate(feature);
-    if (!stableId) return;
-    counts.set(stableId, (counts.get(stableId) || 0) + 1);
+  readings.forEach(({ stableKey }) => {
+    if (!stableKey) return;
+    counts.set(stableKey, (counts.get(stableKey) || 0) + 1);
   });
   return counts;
 };
 
+/** @param {RenderedIdentityCollection | null | undefined} renderedIdentities */
 const identityCollectionOrEmpty = (renderedIdentities) => {
   if (renderedIdentities?.byRenderedId instanceof Map && renderedIdentities?.renderedIds instanceof Set) {
     return renderedIdentities;
@@ -324,23 +514,42 @@ const identityCollectionOrEmpty = (renderedIdentities) => {
   return createRenderedIdentityCollection();
 };
 
+/**
+ * @param {Record<string, string>} target
+ * @param {unknown} fromKey
+ * @param {unknown} toKey
+ */
 const plainMapWithEntry = (target, fromKey, toKey) => {
   const from = normalizeRenderedFeatureId(fromKey);
   const to = normalizeRenderedFeatureId(toKey);
   if (from && to && from !== to) target[from] = to;
 };
 
+/**
+ * @param {{
+ *   features?: ExtractedFeature[] | null,
+ *   renderedIdentities?: RenderedIdentityCollection | null,
+ *   writeRenderedSvgIdToSvgId?: boolean,
+ *   readFeature?: AlignmentReader
+ * }} input `readFeature` reads how a feature names its drawn element (default: saved metadata).
+ */
 export const alignRecoveredFeatureIdsToRenderedSvg = ({
   features,
   renderedIdentities,
-  writeRenderedSvgIdToSvgId = false
+  writeRenderedSvgIdToSvgId = false,
+  readFeature = readSavedFeature
 }) => {
   const sourceFeatures = Array.isArray(features) ? features : [];
   const rendered = identityCollectionOrEmpty(renderedIdentities);
-  const stableFeatureCounts = countFeatureStableCandidates(sourceFeatures);
+  const readings = sourceFeatures.map((feature) => readFeature(feature));
+  const stableFeatureCounts = countFeatureStableKeys(readings);
+  /** @type {ExtractedFeature[]} */
   const nextFeatures = [];
+  /** @type {Record<string, string>} */
   const svgIdMap = {};
+  /** @type {Record<string, string>} */
   const featureIdMap = {};
+  /** @type {{ index: number, status: string, fromSvgId: string, renderedId: string, stableId: string, recordIndex?: number | null, method: string }[]} */
   const resolutions = [];
   let exactCount = 0;
   let alignedCount = 0;
@@ -349,25 +558,25 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
   let changedCount = 0;
 
   sourceFeatures.forEach((feature, index) => {
+    const reading = readings[index];
     const oldSvgId = featureSvgId(feature);
     const explicitRenderedStatus = textAliasStatus(feature, RENDERED_FEATURE_ID_KEYS);
     const legacySvgStatus = textAliasStatus(feature, ['svg_id', 'svgId']);
     const explicitRenderedId = explicitRenderedStatus.valid ? explicitRenderedStatus.value : '';
+    /** @param {string} id */
+    const drawnOnce = (id) => Boolean(id) && rendered.renderedIds.has(id) && !rendered.ambiguousRenderedIds?.has(id);
     const exactRenderedId = (
-      explicitRenderedStatus.valid && legacySvgStatus.valid &&
-      explicitRenderedId && rendered.renderedIds.has(explicitRenderedId) &&
-      !rendered.ambiguousRenderedIds?.has(explicitRenderedId)
+      explicitRenderedStatus.valid && legacySvgStatus.valid && drawnOnce(explicitRenderedId)
         ? explicitRenderedId
         : (
           explicitRenderedStatus.valid && legacySvgStatus.valid &&
-          !explicitRenderedStatus.supplied && oldSvgId && rendered.renderedIds.has(oldSvgId) &&
-          !rendered.ambiguousRenderedIds?.has(oldSvgId)
+          !explicitRenderedStatus.supplied && drawnOnce(oldSvgId)
             ? oldSvgId
-            : ''
+            : (drawnOnce(reading.drawnId) ? reading.drawnId : '')
         )
     );
     const exactIdentity = exactRenderedId ? rendered.byRenderedId.get(exactRenderedId) : null;
-    if (exactIdentity && featureAgreesWithRenderedIdentity(feature, exactIdentity)) {
+    if (exactIdentity && featureAgreesWithRenderedIdentity(feature, reading, exactIdentity, rendered.renderedIds)) {
       const identity = exactIdentity;
       const nextFeature = withRenderedFeatureIdentity(
         feature,
@@ -387,17 +596,20 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
         fromSvgId: oldSvgId,
         renderedId: exactRenderedId,
         stableId: featureStableCandidate(feature),
-        method: explicitRenderedId === exactRenderedId ? 'rendered_svg_id' : 'legacy-svg_id'
+        method: explicitRenderedId === exactRenderedId
+          ? 'rendered_svg_id'
+          : (oldSvgId === exactRenderedId ? 'legacy-svg_id' : 'drawn-hash')
       });
       return;
     }
 
     const stableId = featureStableCandidate(feature);
-    const recordIndex = featureRecordIndexCandidate(feature);
-    const recordKey = stableRecordKey(stableId, recordIndex);
+    const { stableKey, recordIndex: recordStatus } = reading;
+    const recordIndex = recordStatus.valid && recordStatus.supplied ? recordStatus.value : null;
+    const recordKey = stableRecordKey(stableKey, recordIndex);
     const recordMatches = recordKey ? rendered.byStableRecordKey.get(recordKey) || [] : [];
-    const stableMatches = stableId ? rendered.byStableId.get(stableId) || [] : [];
-    /** @type {Record<string, any> | null} */
+    const stableMatches = stableKey ? rendered.byStableId.get(stableKey) || [] : [];
+    /** @type {RenderedFeatureIdentity | null} */
     let match = null;
     let method = '';
 
@@ -406,7 +618,7 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
       method = 'stable-record';
     }
 
-    if (match?.renderedId && featureAgreesWithRenderedIdentity(feature, match)) {
+    if (match?.renderedId && featureAgreesWithRenderedIdentity(feature, reading, match, rendered.renderedIds)) {
       const oldId = featureId(feature);
       const newFeature = withRenderedFeatureIdentity(
         feature,
@@ -433,11 +645,11 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
     }
 
     const isAmbiguous = Boolean(
-      stableId &&
+      stableKey &&
       (
         recordMatches.length > 1 ||
         stableMatches.length > 1 ||
-        (stableMatches.length === 1 && (stableFeatureCounts.get(stableId) || 0) > 1)
+        (stableMatches.length === 1 && (stableFeatureCounts.get(stableKey) || 0) > 1)
       )
     );
     if (isAmbiguous) ambiguousCount += 1;
@@ -456,6 +668,40 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
     });
   });
 
+  // Features that differ only by a record the drawn element does not carry
+  // all agree with it (OV-751): when the features claiming one element differ
+  // by record, or one's record is unknown, none is aligned. Twins of one record
+  // (one hash drawn twice) stay aligned.
+  /** @param {number} index */
+  const claimRecord = (index) => {
+    const { valid, supplied, value } = readings[index].recordIndex;
+    return valid && supplied && value !== null ? String(value) : '';
+  };
+  /** @type {Map<string, string[]>} */
+  const claims = new Map();
+  resolutions.forEach(({ renderedId }, index) => {
+    if (renderedId) claims.set(renderedId, [...(claims.get(renderedId) || []), claimRecord(index)]);
+  });
+  /** @param {string} renderedId */
+  const claimedAcrossRecords = (renderedId) => {
+    const records = claims.get(renderedId) || [];
+    return records.length > 1 && (new Set(records).size > 1 || records.includes(''));
+  };
+  resolutions.forEach((resolution, index) => {
+    const { renderedId, status } = resolution;
+    if (!renderedId || !claimedAcrossRecords(renderedId)) return;
+    const feature = sourceFeatures[index];
+    if (status === 'exact') exactCount -= 1;
+    else alignedCount -= 1;
+    ambiguousCount += 1;
+    if (nextFeatures[index] !== feature) changedCount -= 1;
+    nextFeatures[index] = withoutRenderedFeatureIdentity(feature);
+    if (nextFeatures[index] !== feature) changedCount += 1;
+    Object.keys(svgIdMap).forEach((from) => { if (svgIdMap[from] === renderedId) delete svgIdMap[from]; });
+    delete featureIdMap[featureId(feature)];
+    resolutions[index] = { ...resolution, status: 'ambiguous', renderedId: '', method: '' };
+  });
+
   return {
     features: nextFeatures,
     changedCount,
@@ -469,7 +715,9 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
   };
 };
 
+/** @param {unknown} source */
 const normalizeMigrationMap = (source) => {
+  /** @type {Record<string, string>} */
   const normalized = {};
   if (source instanceof Map) {
     source.forEach((value, key) => {
@@ -488,6 +736,14 @@ const normalizeMigrationMap = (source) => {
   return normalized;
 };
 
+/**
+ * @param {{
+ *   previousFeatures?: ExtractedFeature[] | null,
+ *   recoveredFeatures?: ExtractedFeature[] | null,
+ *   featureIdMap?: MigrationMaps | null,
+ *   svgIdMap?: MigrationMaps | null
+ * }} input
+ */
 export const buildFeatureOverrideMigration = ({
   previousFeatures,
   recoveredFeatures,
@@ -499,6 +755,10 @@ export const buildFeatureOverrideMigration = ({
   const mappedOldFeatures = new Set();
   const mappedNewFeatures = new Set();
 
+  /**
+   * @param {ExtractedFeature | undefined} oldFeature
+   * @param {ExtractedFeature | undefined} newFeature
+   */
   const addFeatureMapping = (oldFeature, newFeature) => {
     if (!oldFeature || !newFeature || mappedOldFeatures.has(oldFeature) || mappedNewFeatures.has(newFeature)) return;
     mappedOldFeatures.add(oldFeature);
@@ -512,6 +772,7 @@ export const buildFeatureOverrideMigration = ({
     if (oldSvgId && newSvgId && !Object.prototype.hasOwnProperty.call(svgIdMap, oldSvgId)) svgIdMap[oldSvgId] = newSvgId;
   };
 
+  /** @param {(feature: ExtractedFeature) => string} keyFn */
   const addUniqueMatches = (keyFn) => {
     const oldByKey = uniqueFeatureMap(previousFeatures, keyFn);
     const newByKey = uniqueFeatureMap(recoveredFeatures, keyFn);
@@ -532,8 +793,11 @@ export const buildFeatureOverrideMigration = ({
   };
 };
 
+/** @param {ExtractedFeature[] | null | undefined} features */
 const recoveredKeySets = (features) => {
+  /** @type {Set<string>} */
   const featureIds = new Set();
+  /** @type {Set<string>} */
   const svgIds = new Set();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     const id = featureId(feature);
@@ -545,6 +809,10 @@ const recoveredKeySets = (features) => {
   return { featureIds, svgIds, all };
 };
 
+/**
+ * @param {MigrationMaps | null | undefined} mapLike
+ * @param {unknown} key
+ */
 const lookupMapValue = (mapLike, key) => {
   const normalized = normalizeKey(key);
   if (!normalized) return '';
@@ -553,7 +821,14 @@ const lookupMapValue = (mapLike, key) => {
   return '';
 };
 
+/**
+ * @param {unknown} source
+ * @param {ReadonlySet<string>} preserveKeys
+ * @param {MigrationMaps[]} mappingLookups
+ * @param {{ count: number }} skipped
+ */
 const rewriteOverrideMap = (source, preserveKeys, mappingLookups, skipped) => {
+  /** @type {Record<string, unknown>} */
   const rewritten = {};
   if (!source || typeof source !== 'object' || Array.isArray(source)) return rewritten;
 
@@ -579,12 +854,21 @@ const rewriteOverrideMap = (source, preserveKeys, mappingLookups, skipped) => {
   return rewritten;
 };
 
+/**
+ * @param {{
+ *   featureState?: RecoveryFeatureState | null,
+ *   editorState?: RecoveryEditorState | null,
+ *   migration?: { featureIdMap?: MigrationMaps, svgIdMap?: MigrationMaps } | null
+ * }} input
+ */
 export const migrateFeatureOverrideState = ({
   featureState,
   editorState,
   migration
 }) => {
+  /** @type {RecoveryFeatureState} */
   const nextFeatureState = cloneJsonValue(featureState || {}, {});
+  /** @type {RecoveryEditorState} */
   const nextEditorState = cloneJsonValue(editorState || {}, {});
   const keySets = recoveredKeySets(nextFeatureState.extractedFeatures);
   const skipped = { count: 0 };
@@ -620,6 +904,7 @@ export const migrateFeatureOverrideState = ({
   };
 };
 
+/** @param {Partial<FeatureRecoverySnapshot>} [snapshot] */
 const recoverability = (snapshot = {}) => {
   const { mode, cInputType, lInputType } = snapshot;
   if (mode === 'circular' && cInputType === 'gb') {
@@ -637,6 +922,11 @@ const recoverability = (snapshot = {}) => {
   return { recoverable: false, reason: 'unsupported-input-type', warning: UNSUPPORTED_INPUT_WARNING };
 };
 
+/**
+ * @param {FeatureRecoverySnapshot} snapshot
+ * @param {{ extractedFeatures?: ExtractedFeature[], biologicalFeatures?: ExtractedFeature[],
+ *   featureRecordIds?: string[], selectedFeatureRecordIdx?: number }} payload What the extraction returned.
+ */
 const buildRecoveredFeatureState = (snapshot, payload) => ({
   ...(snapshot.featureState || {}),
   extractedFeatures: Array.isArray(payload.extractedFeatures) ? payload.extractedFeatures : [],
@@ -649,21 +939,35 @@ const buildRecoveredFeatureState = (snapshot, payload) => ({
     : 0
 });
 
+/**
+ * @param {FeatureRecoverySnapshot | null | undefined} snapshot
+ * @param {number} selectedResultIndex
+ */
 const selectedRenderedIdentities = (snapshot, selectedResultIndex) => {
   const rendered = collectRenderedFeatureIdsFromResults(snapshot?.results);
   return rendered.identitiesByResultIndex[selectedResultIndex] || createRenderedIdentityCollection();
 };
 
-const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResultIndex }) => {
+/**
+ * @param {{
+ *   snapshot: FeatureRecoverySnapshot | null | undefined,
+ *   featureState: RecoveryFeatureState | null | undefined,
+ *   selectedResultIndex: number,
+ *   readFeature?: AlignmentReader
+ * }} input
+ */
+const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResultIndex, readFeature }) => {
   const renderedIdentities = selectedRenderedIdentities(snapshot, selectedResultIndex);
   const alignment = alignRecoveredFeatureIdsToRenderedSvg({
     features: featureState?.extractedFeatures || [],
     renderedIdentities,
-    writeRenderedSvgIdToSvgId: true
+    writeRenderedSvgIdToSvgId: true,
+    readFeature
   });
   const biologicalAlignment = alignRecoveredFeatureIdsToRenderedSvg({
     features: featureState?.biologicalFeatures || featureState?.extractedFeatures || [],
-    renderedIdentities
+    renderedIdentities,
+    readFeature
   });
   const renderedFeatures = alignment.features
     .filter((feature) => Boolean(featureRenderedCandidate(feature)));
@@ -692,9 +996,11 @@ const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResult
   };
 };
 
+/** @param {{ state?: string } | null | undefined} validation */
 const isClickReadyValidation = (validation) =>
   validation?.state === 'ready' || validation?.state === 'not-needed';
 
+/** @param {RecoveryFeatureState | null | undefined} featureState */
 export const hasUsableBiologicalFeatureCatalog = (featureState) => {
   const features = featureState?.biologicalFeatures;
   if (!Array.isArray(features) || features.length === 0) return false;
@@ -704,6 +1010,7 @@ export const hasUsableBiologicalFeatureCatalog = (featureState) => {
   ));
 };
 
+/** @param {{ featureIdMap?: MigrationMaps, svgIdMap?: MigrationMaps } | null | undefined} migration */
 const hasMigrationEntries = (migration) =>
   Object.keys(migration?.featureIdMap || {}).length > 0 ||
   Object.keys(migration?.svgIdMap || {}).length > 0;
@@ -711,11 +1018,11 @@ const hasMigrationEntries = (migration) =>
 // Reads the snapshot's GenBank sources with its crops, record selectors, and
 // orientations, as the renderer drew them.
 /**
- * @param {any} snapshot
+ * @param {FeatureRecoverySnapshot} snapshot
  * @param {{
  *   featureVisibilityTsv?: string,
- *   enrichFeature?: (feature: any, recordIndex?: number) => any,
- *   readFeatureExtractionDataImpl: any,
+ *   enrichFeature?: ExtractFeatureMetadataOptions['enrichFeature'],
+ *   readFeatureExtractionDataImpl?: ExtractFeatureMetadataOptions['readFeatureExtractionDataImpl'],
  *   extractFeatureMetadataForPreviewImpl?: typeof extractFeatureMetadataForPreview
  * }} options
  */
@@ -755,6 +1062,13 @@ const extractSnapshotFeatures = (snapshot, {
  * thrown: the Load fails and keeps the previous Session instead of dropping
  * the edits as unmatched (OV-39).
  */
+/**
+ * @param {{
+ *   snapshot: FeatureRecoverySnapshot,
+ *   readFeatureExtractionDataImpl?: ExtractFeatureMetadataOptions['readFeatureExtractionDataImpl'],
+ *   extractFeatureMetadataForPreviewImpl?: typeof extractFeatureMetadataForPreview
+ * }} input
+ */
 export const extractSessionSourceFeatures = async ({
   snapshot,
   readFeatureExtractionDataImpl,
@@ -768,11 +1082,19 @@ export const extractSessionSourceFeatures = async ({
     });
     return payload?.errors?.length || !Array.isArray(payload?.extractedFeatures) ? null : payload;
   } catch (error) {
-    if (retryCanSucceed(normalizeUserFacingError(error))) throw error;
+    if (retryCanSucceed(normalizeCaughtError(error))) throw error;
     return null;
   }
 };
 
+/**
+ * @param {{
+ *   snapshot: FeatureRecoverySnapshot,
+ *   featureVisibilityTsv?: string,
+ *   readFeatureExtractionDataImpl?: ExtractFeatureMetadataOptions['readFeatureExtractionDataImpl'],
+ *   extractFeatureMetadataForPreviewImpl?: typeof extractFeatureMetadataForPreview
+ * }} input
+ */
 export const buildSessionFeatureRecoveryPlan = async ({
   snapshot,
   featureVisibilityTsv,
@@ -801,7 +1123,9 @@ export const buildSessionFeatureRecoveryPlan = async ({
       featureState: snapshot?.featureState || {},
       selectedResultIndex: validation.selectedResultIndex
     });
-    if (existingAlignment.featureStateChanged) {
+    // Saved metadata that matched every drawn feature is not replaced by an
+    // alignment that drops some of them (OV-752).
+    if (existingAlignment.featureStateChanged && isClickReadyValidation(existingAlignment.alignedValidation)) {
       const migrated = migrateFeatureOverrideState({
         featureState: existingAlignment.alignedFeatureState,
         editorState: snapshot?.editorState,
@@ -892,7 +1216,11 @@ export const buildSessionFeatureRecoveryPlan = async ({
     const recoveredAlignment = alignFeatureStateToRenderedSvg({
       snapshot,
       featureState: recoveredFeatureState,
-      selectedResultIndex: validation.selectedResultIndex
+      selectedResultIndex: validation.selectedResultIndex,
+      readFeature: extractedFeatureReader({
+        recordInputs: payload.featureRecordInputs,
+        drawnFeatures: recoveredFeatureState.extractedFeatures
+      })
     });
     const alignedRecoveredFeatureState = recoveredAlignment.alignedFeatureState;
     const recoveredValidation = recoveredAlignment.alignedValidation;

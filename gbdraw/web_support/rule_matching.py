@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from pandas import DataFrame
 
-from gbdraw.features.colors import normalize_specific_color_captions, preprocess_color_tables
+from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.selector_values import iter_specific_color_rules
 from gbdraw.features.visibility import (
     _first_matching_visibility_rule,
@@ -34,29 +34,6 @@ def _compile_visibility_rows(rules: list[dict]) -> list[dict | None]:
 def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color") -> str:
     features = json.loads(features_json)
     rules = json.loads(rules_json)
-    if kind == "color-captions":
-        table = DataFrame(
-            [
-                dict(
-                    feature_type=r["feat"],
-                    qualifier_key=r["qual"],
-                    value=r["val"],
-                    color=r["color"],
-                    caption=r.get("cap", ""),
-                )
-                for r in rules
-            ]
-        )
-        normalized = normalize_specific_color_captions(table)
-        assert normalized is not None  # a DataFrame input is never None
-        captions = list(normalized["caption"]) if len(rules) else []
-        return json.dumps(
-            {
-                "rules": [
-                    dict(rule, cap=caption) for rule, caption in zip(rules, captions)
-                ]
-            }
-        )
     if kind == "color":
         rows = [
             dict(

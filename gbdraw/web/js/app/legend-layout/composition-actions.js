@@ -5,6 +5,101 @@ import {
   replaceLeadingTranslate
 } from '../../services/svg-transform.js';
 import { planLegendComposition } from '../../services/legend-layout.js';
+import { legendPositionOfMode, readLegendPositionOfMode } from '../../services/layout-preferences.js';
+import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
+/** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy } from '../../services/legend-layout.js' */
+/** @import { LoadRepair } from '../../utils/load-repairs.js' */
+
+/**
+ * Bounds as the metadata and the editor hold them.
+ * @typedef {{ x: number, y: number, width: number, height: number }} CompositionBounds
+ */
+/** @typedef {'primary' | 'legend' | 'title'} CompositionRole */
+/**
+ * @typedef {object} CompositionTargetBase
+ * @property {number[]} automaticTranslation
+ * @property {CompositionRole} role
+ * @property {string} selector
+ */
+/** @typedef {CompositionTargetBase & { finalBounds: CompositionBounds }} CompositionPrimaryTarget */
+/** @typedef {CompositionTargetBase & { localBounds: CompositionBounds }} CompositionLocalTarget */
+/**
+ * The inputs Python laid the Legend out with exist together or not at all.
+ * @typedef {object} CompositionLegendReflow
+ * @property {number} colorRectSize
+ * @property {number} lineHeight
+ * @property {number} textXOffset
+ * @property {number} [dpi]
+ * @property {string | null} [fontFile]
+ * @property {number} [fontSize]
+ * @property {LayoutBox} [primaryLocalBounds]
+ * @property {number} [wrapWidth]
+ */
+/**
+ * @typedef {object} CompositionMetadata
+ * @property {CompositionLocalTarget | null} legend
+ * @property {CompositionLegendReflow | null} legendReflow
+ * @property {string} legendSide
+ * @property {CompositionBounds[]} overlayObstacles
+ * @property {CompositionOverlayPolicy} overlayPolicy
+ * @property {CompositionPrimaryTarget} primary
+ * @property {CompositionSpacingPx} spacing
+ * @property {CompositionLocalTarget | null} title
+ * @property {string} titleSide
+ * @property {true} [legacyNormalized]
+ */
+/**
+ * The SVG groups one role is bound to, with the metadata that names them.
+ * @typedef {{ metadata: CompositionTargetBase | null, targets: SVGGraphicsElement[] }} CompositionRoleBinding
+ */
+/**
+ * @typedef {object} CompositionBinding
+ * @property {CompositionMetadata} metadata
+ * @property {CompositionRoleBinding} primary
+ * @property {CompositionRoleBinding} legend
+ * @property {CompositionRoleBinding} title
+ */
+/** @typedef {[number, number]} CompositionDelta */
+/**
+ * @typedef {object} CompositionMatrix
+ * @property {number} a
+ * @property {number} b
+ * @property {number} c
+ * @property {number} d
+ * @property {number} e
+ * @property {number} f
+ */
+/**
+ * The saved user offsets of an older Session, as the Session config passes
+ * them; `primary` is one offset, or one per primary group.
+ * @typedef {object} LegacyUserDeltas
+ * @property {number[] | number[][] | null} [primary]
+ * @property {number[] | null} [lengthBar]
+ * @property {number[] | null} [legend]
+ * @property {number[] | null} [title]
+ */
+/**
+ * @typedef {object} CompositionEditOptions
+ * @property {string} [legendSide]
+ * @property {string} [titleSide]
+ * @property {LayoutBox | null} [legendLocalBox]
+ * @property {CompositionBounds | null} [legendLocalBounds]
+ * @property {CompositionBounds | null} [titleLocalBounds]
+ * @property {Partial<Record<string, unknown>> | null} [canvasPadding]
+ */
+/**
+ * @typedef {object} LegacyTargets
+ * @property {Element[]} primary
+ * @property {Element | null} legend
+ * @property {Element | null} title
+ */
+/**
+ * One alignment-record decision of the active plan; only the fields read here.
+ * @typedef {object} LegacyRecordDecision
+ * @property {unknown} [recordKey]
+ * @property {unknown} [status]
+ * @property {{ stableFeatureSvgId?: unknown, biologicalFeatureId?: unknown } | null} [anchor]
+ */
 
 export const COMPOSITION_SCHEMA_VERSION = 1;
 export const COMPOSITION_SCHEMA_ATTRIBUTE = 'data-gbdraw-composition-schema';
@@ -16,11 +111,13 @@ const ROLE_SELECTORS = Object.freeze({
   legend: '[data-gbdraw-composition-role="legend"]',
   title: '[data-gbdraw-composition-role="title"]'
 });
-const LEGEND_SIDES = new Set([
-  'left', 'right', 'top', 'bottom',
-  'upper_left', 'upper_right', 'lower_left', 'lower_right', 'none'
-]);
+// The legend sides of every mode. A loaded Result's side is one of its own
+// mode's (`normalizeStoredLegendSide`); the checks below hold no mode.
+/** @type {Set<unknown>} */
+const LEGEND_SIDES = new Set([...LEGEND_POSITIONS.circular, ...LEGEND_POSITIONS.linear]);
+/** @type {Set<unknown>} */
 const TITLE_SIDES = new Set(['top', 'bottom', 'center', 'none']);
+/** @type {Set<unknown>} */
 const OVERLAY_CANDIDATE_SCORE_NAMES = new Set([
   'totalAnchorDistance',
   'xAnchorDistance',
@@ -28,7 +125,9 @@ const OVERLAY_CANDIDATE_SCORE_NAMES = new Set([
   'nearEdgeX',
   'nearEdgeY'
 ]);
+/** @type {Set<unknown>} */
 const OVERLAY_CANVAS_GROWTH_CANDIDATE_NAMES = new Set(['horizontal', 'vertical']);
+/** @type {Set<unknown>} */
 const OVERLAY_CANVAS_GROWTH_SCORE_NAMES = new Set([
   'addedArea',
   'addedExtent',
@@ -67,6 +166,10 @@ const LEGACY_OVERLAY_POLICY_V0 = Object.freeze({
 });
 
 export class CompositionMetadataError extends Error {
+  /**
+   * @param {string} message
+   * @param {string} [code]
+   */
   constructor(message, code = 'INVALID_COMPOSITION_METADATA') {
     super(message);
     this.name = 'CompositionMetadataError';
@@ -74,14 +177,23 @@ export class CompositionMetadataError extends Error {
   }
 }
 
+/** @type {(message: string, code?: string) => never} */
 const fail = (message, code) => {
   throw new CompositionMetadataError(message, code);
 };
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
 
+/**
+ * @param {unknown} value
+ * @param {string} path
+ */
 const finiteNumber = (value, path) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     fail(`${path} must be a finite number.`);
@@ -89,18 +201,32 @@ const finiteNumber = (value, path) => {
   return value;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} path
+ */
 const nonNegativeNumber = (value, path) => {
   const number = finiteNumber(value, path);
   if (number < 0) fail(`${path} must be non-negative.`);
   return number;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} path
+ */
 const positiveNumber = (value, path) => {
   const number = finiteNumber(value, path);
   if (number <= 0) fail(`${path} must be positive.`);
   return number;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} path
+ * @param {{ positive?: boolean }} [options]
+ * @returns {CompositionBounds}
+ */
 const validateBounds = (value, path, { positive = false } = {}) => {
   if (!isPlainObject(value)) fail(`${path} must be an object.`);
   const bounds = {
@@ -117,8 +243,9 @@ const validateBounds = (value, path, { positive = false } = {}) => {
 
 /**
  * Python's Aabb field for field (min/max form, not x/width).
- * @param {any} value
+ * @param {unknown} value
  * @param {string} path
+ * @returns {LayoutBox}
  */
 const validateCornerBounds = (value, path) => {
   if (!isPlainObject(value)) fail(`${path} must be an object.`);
@@ -134,6 +261,11 @@ const validateCornerBounds = (value, path) => {
   return bounds;
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} path
+ * @returns {CompositionDelta}
+ */
 const validateTranslation = (value, path) => {
   if (!Array.isArray(value) || value.length !== 2) {
     fail(`${path} must contain exactly two numbers.`);
@@ -141,6 +273,14 @@ const validateTranslation = (value, path) => {
   return [finiteNumber(value[0], `${path}[0]`), finiteNumber(value[1], `${path}[1]`)];
 };
 
+/**
+ * The result carries the one bounds field named by `boundsKey`; callers narrow
+ * it to the primary or local target type.
+ * @param {unknown} value
+ * @param {CompositionRole} role
+ * @param {'finalBounds' | 'localBounds'} boundsKey
+ * @returns {CompositionTargetBase & { finalBounds?: CompositionBounds, localBounds?: CompositionBounds }}
+ */
 const validateTarget = (value, role, boundsKey) => {
   if (!isPlainObject(value)) fail(`composition.${role} must be an object.`);
   if (value.role !== role) fail(`composition.${role}.role must be "${role}".`);
@@ -162,10 +302,21 @@ const validateTarget = (value, role, boundsKey) => {
   };
 };
 
+/**
+ * @param {unknown} value
+ * @param {'legend' | 'title'} role
+ * @returns {CompositionLocalTarget | null}
+ */
 const validateOptionalTarget = (value, role) => (
-  value === null ? null : validateTarget(value, role, 'localBounds')
+  value === null
+    ? null
+    : /** @type {CompositionLocalTarget} */ (validateTarget(value, role, 'localBounds')) // carries localBounds
 );
 
+/**
+ * @param {unknown} value
+ * @returns {CompositionSpacingPx}
+ */
 const validateSpacing = (value) => {
   if (!isPlainObject(value)) fail('composition.spacing must be an object.');
   return {
@@ -180,6 +331,12 @@ const validateSpacing = (value) => {
   };
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} path
+ * @param {Set<unknown>} allowed
+ * @returns {string[]}
+ */
 const validateOrder = (value, path, allowed) => {
   if (!Array.isArray(value)) fail(`${path} must be an array.`);
   if (
@@ -192,6 +349,10 @@ const validateOrder = (value, path, allowed) => {
   return [...value];
 };
 
+/**
+ * @param {unknown} value
+ * @returns {CompositionOverlayPolicy}
+ */
 const validateOverlayPolicy = (value) => {
   if (!isPlainObject(value)) fail('composition.overlayPolicy must be an object.');
   const requiredFields = [
@@ -235,6 +396,11 @@ const validateOverlayPolicy = (value) => {
   };
 };
 
+/**
+ * @param {unknown} value
+ * @param {{ required: boolean }} options
+ * @returns {CompositionLegendReflow | null}
+ */
 const validateLegendReflow = (value, { required }) => {
   if (value === undefined) {
     fail(
@@ -270,7 +436,7 @@ const validateLegendReflow = (value, { required }) => {
   if (present.length !== LEGEND_LAYOUT_INPUT_FIELDS.length) {
     fail('composition.legendReflow has an incomplete set of Python layout inputs.');
   }
-  if (!Number.isInteger(value.dpi) || value.dpi <= 0) {
+  if (!Number.isInteger(value.dpi) || /** @type {number} */ (value.dpi) <= 0) { // an integer, so a number
     fail('composition.legendReflow.dpi must be a positive integer.');
   }
   if (value.fontFile !== null && (typeof value.fontFile !== 'string' || !value.fontFile.trim())) {
@@ -278,7 +444,7 @@ const validateLegendReflow = (value, { required }) => {
   }
   return {
     ...reflow,
-    dpi: value.dpi,
+    dpi: /** @type {number} */ (value.dpi), // checked just above
     fontFile: value.fontFile,
     fontSize: positiveNumber(value.fontSize, 'composition.legendReflow.fontSize'),
     primaryLocalBounds: validateCornerBounds(
@@ -289,6 +455,10 @@ const validateLegendReflow = (value, { required }) => {
   };
 };
 
+/**
+ * @param {Element} svg
+ * @returns {CompositionMetadata}
+ */
 export const parseCompositionMetadata = (svg) => {
   if (!svg?.getAttribute) fail('A root SVG element is required.', 'INVALID_SVG');
   const schema = svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE);
@@ -306,6 +476,7 @@ export const parseCompositionMetadata = (svg) => {
     fail(`Unsupported gbdraw composition schema ${JSON.stringify(schema)}. Regenerate the diagram.`);
   }
 
+  /** @type {unknown} */
   let source;
   try {
     source = JSON.parse(raw);
@@ -319,27 +490,105 @@ export const parseCompositionMetadata = (svg) => {
     fail('composition.overlayObstacles must be an array.');
   }
   const legend = validateOptionalTarget(source.legend, 'legend');
+  /** @type {CompositionMetadata} */
   const metadata = {
     legend,
     legendReflow: validateLegendReflow(source.legendReflow, {
       required: legend !== null
     }),
-    legendSide: source.legendSide,
+    legendSide: /** @type {string} */ (source.legendSide), // a member of LEGEND_SIDES
     overlayObstacles: source.overlayObstacles.map((bounds, index) => (
       validateBounds(bounds, `composition.overlayObstacles[${index}]`)
     )),
     overlayPolicy: validateOverlayPolicy(source.overlayPolicy),
-    primary: validateTarget(source.primary, 'primary', 'finalBounds'),
+    primary: /** @type {CompositionPrimaryTarget} */ (validateTarget(source.primary, 'primary', 'finalBounds')), // carries finalBounds
     spacing: validateSpacing(source.spacing),
     title: validateOptionalTarget(source.title, 'title'),
-    titleSide: source.titleSide
+    titleSide: /** @type {string} */ (source.titleSide) // a member of TITLE_SIDES
   };
   if (source.legacyNormalized === true) metadata.legacyNormalized = true;
   return metadata;
 };
 
-const targetsFor = (svg, selector) => Array.from(svg.querySelectorAll?.(selector) || []);
+/**
+ * Gives a loaded Result's stored composition metadata a legend side of the
+ * Result's mode: a side outside the mode's positions reads as the mode's
+ * default legend position, listed in `load.repairs` at `load.path` for the
+ * Load dialog, and case and outer spaces read as the position (OV-672,
+ * BA-D26). Metadata that is not a JSON object stays for
+ * `parseCompositionMetadata` to refuse. Returns whether it rewrote the side.
+ * @param {Element} svg The root SVG element of a loaded Result.
+ * @param {'circular' | 'linear'} mode The Result's mode.
+ * @param {{ repairs: LoadRepair[] | null, path: string }} [load]
+ * @returns {boolean}
+ */
+export const normalizeStoredLegendSide = (svg, mode, load = { repairs: null, path: '' }) => {
+  const raw = svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE);
+  /** @type {unknown} */
+  let source = null;
+  try {
+    source = raw === null ? null : JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!isPlainObject(source)) return false;
+  const { value: legendSide, repairs } = readLegendPositionOfMode(source.legendSide, mode, load.path, 'legend-side-defaulted');
+  if (source.legendSide === legendSide) return false;
+  load.repairs?.push(...repairs);
+  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify({ ...source, legendSide }));
+  return true;
+};
 
+const STORED_METADATA_ATTRIBUTE = new RegExp(`\\s${COMPOSITION_METADATA_ATTRIBUTE}=(["'])(.*?)\\1`, 's');
+/** @type {Record<string, string>} */
+const XML_ENTITIES = { quot: '"', apos: "'", amp: '&', lt: '<', gt: '>' };
+/** @param {string} text An attribute value as written in XML. */
+const decodeAttributeText = (text) => text.replace(
+  /&(?:#x([0-9a-f]+)|#([0-9]+)|(quot|apos|amp|lt|gt));/gi,
+  (_entity, hex, decimal, name) => (hex !== undefined
+    ? String.fromCodePoint(parseInt(hex, 16))
+    : decimal !== undefined ? String.fromCodePoint(Number(decimal)) : XML_ENTITIES[name.toLowerCase()])
+);
+
+/**
+ * Whether the root tag of a Result's text stores composition metadata whose
+ * legend side is, as written, one of `mode`'s positions: a Result for which it
+ * is false and that has metadata is parsed at Load for
+ * `normalizeStoredLegendSide`.
+ * @param {string} rootTag The `<svg ...>` tag of a Result's text.
+ * @param {'circular' | 'linear'} mode The Result's mode.
+ * @returns {boolean}
+ */
+export const storedLegendSideIsOfMode = (rootTag, mode) => {
+  const value = STORED_METADATA_ATTRIBUTE.exec(rootTag)?.[2];
+  if (value === undefined) return false;
+  try {
+    /** @type {unknown} */
+    const source = JSON.parse(decodeAttributeText(value));
+    return isPlainObject(source) && typeof source.legendSide === 'string'
+      && legendPositionOfMode(source.legendSide, mode) === source.legendSide;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * @param {Element} svg
+ * @param {string} selector
+ * @returns {SVGGraphicsElement[]}
+ */
+const targetsFor = (svg, selector) => (
+  // The role selectors match the composition <g> groups.
+  /** @type {SVGGraphicsElement[]} */ (Array.from(svg.querySelectorAll?.(selector) || []))
+);
+
+/**
+ * @param {Element} svg
+ * @param {CompositionMetadata} metadata
+ * @param {CompositionRole} role
+ * @param {{ multiple?: boolean }} [options]
+ * @returns {CompositionRoleBinding}
+ */
 const bindRole = (svg, metadata, role, { multiple = false } = {}) => {
   const targetMetadata = metadata[role];
   const targets = targetsFor(svg, ROLE_SELECTORS[role]);
@@ -355,6 +604,10 @@ const bindRole = (svg, metadata, role, { multiple = false } = {}) => {
   return { metadata: targetMetadata, targets };
 };
 
+/**
+ * @param {Element} svg
+ * @returns {CompositionBinding}
+ */
 export const bindCompositionMetadata = (svg) => {
   const metadata = parseCompositionMetadata(svg);
   return {
@@ -365,14 +618,26 @@ export const bindCompositionMetadata = (svg) => {
   };
 };
 
+/**
+ * @param {CompositionBounds} bounds
+ * @param {number} dx
+ * @param {number} dy
+ * @returns {CompositionBounds}
+ */
 const translated = (bounds, dx, dy) => ({
   x: bounds.x + dx,
   y: bounds.y + dy,
   width: bounds.width,
   height: bounds.height
 });
+/** @param {CompositionBounds} bounds */
 const maxX = (bounds) => bounds.x + bounds.width;
+/** @param {CompositionBounds} bounds */
 const maxY = (bounds) => bounds.y + bounds.height;
+/**
+ * @param {CompositionBounds[]} boundsList
+ * @returns {CompositionBounds | null}
+ */
 const unionBounds = (boundsList) => {
   if (!boundsList.length) return null;
   const minX = Math.min(...boundsList.map((bounds) => bounds.x));
@@ -402,10 +667,10 @@ const toPayloadBounds = (box) => ({
  * `primaryBounds`, so the planner reads those bounds exactly as Python holds
  * them.
  * @param {{
- *   primaryBounds: any, legendBounds?: any, titleBounds?: any,
+ *   primaryBounds: unknown, legendBounds?: unknown, titleBounds?: unknown,
  *   legendBox?: import('../../services/legend-layout.js').LayoutBox | null,
  *   primaryBox?: import('../../services/legend-layout.js').LayoutBox | null,
- *   legendSide?: string, titleSide?: string, spacing: any, overlayPolicy: any, overlayObstacles?: any[]
+ *   legendSide?: string, titleSide?: string, spacing: unknown, overlayPolicy: unknown, overlayObstacles?: unknown[]
  * }} request
  */
 export const planComposition = ({
@@ -460,6 +725,7 @@ export const planComposition = ({
   };
 };
 
+/** @param {CompositionMetadata} metadata */
 const localPrimaryBounds = (metadata) => translated(
   metadata.primary.finalBounds,
   -metadata.primary.automaticTranslation[0],
@@ -470,7 +736,10 @@ const localPrimaryBounds = (metadata) => translated(
 // recorded since Z1) while it is still the primary's box: rebuilt from x and
 // width, a max edge can differ from Python's by one ulp. Null for a Result
 // written before Python recorded it, or whose primary has changed since.
-/** @returns {import('../../services/legend-layout.js').LayoutBox | null} */
+/**
+ * @param {CompositionMetadata} metadata
+ * @returns {LayoutBox | null}
+ */
 const recordedPrimaryBox = (metadata) => {
   const recorded = metadata.legendReflow?.primaryLocalBounds;
   if (!recorded) return null;
@@ -479,6 +748,14 @@ const recordedPrimaryBox = (metadata) => {
   return keys.every((key) => Math.abs(recorded[key] - derived[key]) <= 1e-6) ? recorded : null;
 };
 
+/**
+ * @param {CompositionMetadata} metadata
+ * @param {{
+ *   legendSide?: string, titleSide?: string,
+ *   legendLocalBounds?: CompositionBounds | null, legendLocalBox?: LayoutBox | null,
+ *   titleLocalBounds?: CompositionBounds | null
+ * }} [options]
+ */
 export const replanCompositionMetadata = (
   metadata,
   {
@@ -509,6 +786,10 @@ export const replanCompositionMetadata = (
   });
 };
 
+/**
+ * @param {Element} target
+ * @param {string} role
+ */
 const targetLeadingTranslate = (target, role) => {
   const transform = target.getAttribute?.('transform') || '';
   const leading = readLeadingTranslate(transform);
@@ -518,6 +799,10 @@ const targetLeadingTranslate = (target, role) => {
   return leading;
 };
 
+/**
+ * @param {CompositionBinding} binding
+ * @returns {{ primary: number[][], legend: number[] | null, title: number[] | null }}
+ */
 const userDeltas = (binding) => ({
   primary: binding.primary.targets.map((target) => {
     const current = targetLeadingTranslate(target, 'primary');
@@ -546,14 +831,24 @@ const userDeltas = (binding) => ({
     : null
 });
 
+/**
+ * @param {CompositionMatrix} matrix
+ * @param {number} x
+ * @param {number} y
+ */
 const transformPoint = (matrix, x, y) => ({
   x: matrix.a * x + matrix.c * y + matrix.e,
   y: matrix.b * x + matrix.d * y + matrix.f
 });
 
+/**
+ * @param {SVGGraphicsElement} target
+ * @param {CompositionMatrix} matrix
+ * @returns {CompositionMatrix}
+ */
 const rootRelativeMatrix = (target, matrix) => {
   const rootMatrix = target.ownerSVGElement?.getCTM?.();
-  if (!rootMatrix || !['a', 'b', 'c', 'd', 'e', 'f'].every(
+  if (!rootMatrix || !(/** @type {const} */ (['a', 'b', 'c', 'd', 'e', 'f'])).every(
     (key) => Number.isFinite(rootMatrix[key])
   )) return matrix;
   const determinant = rootMatrix.a * rootMatrix.d - rootMatrix.b * rootMatrix.c;
@@ -576,11 +871,15 @@ const rootRelativeMatrix = (target, matrix) => {
   };
 };
 
+/**
+ * @param {SVGGraphicsElement} target
+ * @returns {CompositionBounds}
+ */
 const targetFinalBounds = (target) => {
   const bbox = target.getBBox();
   const sourceMatrix = target.getCTM?.();
   const matrix = sourceMatrix ? rootRelativeMatrix(target, sourceMatrix) : null;
-  if (matrix && ['a', 'b', 'c', 'd', 'e', 'f'].every((key) => Number.isFinite(matrix[key]))) {
+  if (matrix && (/** @type {const} */ (['a', 'b', 'c', 'd', 'e', 'f'])).every((key) => Number.isFinite(matrix[key]))) {
     const corners = [
       transformPoint(matrix, bbox.x, bbox.y),
       transformPoint(matrix, bbox.x + bbox.width, bbox.y),
@@ -601,11 +900,20 @@ const targetFinalBounds = (target) => {
   );
 };
 
+/**
+ * @param {SVGGraphicsElement} target
+ * @returns {CompositionBounds}
+ */
 export const measureCompositionTargetLocalBounds = (target) => {
   const leading = targetLeadingTranslate(target, target.getAttribute?.(COMPOSITION_ROLE_ATTRIBUTE) || 'unknown');
   return translated(targetFinalBounds(target), -leading.x, -leading.y);
 };
 
+/**
+ * @param {Element} target
+ * @param {number[]} automaticTranslation
+ * @param {number[]} delta
+ */
 const setLeading = (target, automaticTranslation, delta) => {
   target.setAttribute(
     'transform',
@@ -617,6 +925,13 @@ const setLeading = (target, automaticTranslation, delta) => {
   );
 };
 
+/**
+ * @param {CompositionRole} role
+ * @param {number[]} automaticTranslation
+ * @param {'finalBounds' | 'localBounds'} boundsKey
+ * @param {CompositionBounds} bounds
+ * @returns {CompositionTargetBase & { finalBounds?: CompositionBounds, localBounds?: CompositionBounds }}
+ */
 const targetPayload = (role, automaticTranslation, boundsKey, bounds) => ({
   automaticTranslation,
   [boundsKey]: bounds,
@@ -624,8 +939,11 @@ const targetPayload = (role, automaticTranslation, boundsKey, bounds) => ({
   selector: ROLE_SELECTORS[role]
 });
 
+/** @param {number} value */
 const wireNumber = (value) => Object.is(value, -0) ? 0 : value;
+/** @param {number[]} value */
 const wireTranslation = (value) => value.map(wireNumber);
+/** @param {CompositionBounds} bounds */
 const wireBounds = (bounds) => ({
   height: wireNumber(bounds.height),
   width: wireNumber(bounds.width),
@@ -635,7 +953,11 @@ const wireBounds = (bounds) => ({
 
 const CANVAS_PADDING_SIDES = Object.freeze(['top', 'right', 'bottom', 'left']);
 
-/** Normalize editor canvas padding; invalid or negative sides are 0. */
+/**
+ * Normalize editor canvas padding; invalid or negative sides are 0.
+ * @param {Partial<Record<string, unknown>> | null | undefined} value
+ * @returns {Record<string, number>}
+ */
 export const normalizeCanvasPadding = (value) => Object.fromEntries(
   CANVAS_PADDING_SIDES.map((side) => {
     const number = Number(value?.[side]);
@@ -643,10 +965,16 @@ export const normalizeCanvasPadding = (value) => Object.fromEntries(
   })
 );
 
+/** @param {Partial<Record<string, unknown>> | null | undefined} value */
 export const hasCanvasPadding = (value) => (
   Object.values(normalizeCanvasPadding(value)).some((number) => number !== 0)
 );
 
+/**
+ * @param {Element} svg
+ * @param {string} name
+ * @param {string} value
+ */
 const setRootAttribute = (svg, name, value) => {
   if (svg.getAttribute(name) === value) return false;
   svg.setAttribute(name, value);
@@ -657,21 +985,25 @@ const setRootAttribute = (svg, name, value) => {
  * Apply editor canvas padding around the unpadded canvas of one SVG root. The
  * unpadded viewBox and size are recorded once on the root, so applying the
  * same padding again changes nothing. Returns whether the root changed.
+ * @param {Element} svg
+ * @param {Partial<Record<string, unknown>> | null | undefined} value
+ * @returns {boolean}
  */
 export const applyCanvasPaddingToSvg = (svg, value) => {
   const padding = normalizeCanvasPadding(value);
   const padded = Object.values(padding).some((number) => number !== 0);
   const recordedBase = svg.getAttribute('data-original-view-box');
   if (!recordedBase && !padded) return false;
-  const base = recordedBase || svg.getAttribute('viewBox');
+  // A missing viewBox gives NaN below and throws, so `base` is a string past that check.
+  const base = /** @type {string} */ (recordedBase || svg.getAttribute('viewBox'));
   const [x, y, width, height] = String(base || '').trim().split(/[\s,]+/).map(Number);
   if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
     throw new Error('The SVG base viewBox is invalid. Regenerate the diagram.');
   }
   const baseWidth = svg.getAttribute('data-original-width')
-    || String(Number.parseFloat(svg.getAttribute('width')) || width);
+    || String(Number.parseFloat(svg.getAttribute('width') ?? '') || width);
   const baseHeight = svg.getAttribute('data-original-height')
-    || String(Number.parseFloat(svg.getAttribute('height')) || height);
+    || String(Number.parseFloat(svg.getAttribute('height') ?? '') || height);
   let changed = false;
   if (!recordedBase) {
     changed = setRootAttribute(svg, 'data-original-view-box', base) || changed;
@@ -685,6 +1017,7 @@ export const applyCanvasPaddingToSvg = (svg, value) => {
   }
   const paddedWidth = width + padding.left + padding.right;
   const paddedHeight = height + padding.top + padding.bottom;
+  /** @param {string} size @param {number} extent @param {number} paddedExtent */
   const scaled = (size, extent, paddedExtent) => {
     const number = Number.parseFloat(size);
     return number === extent ? paddedExtent : number * (paddedExtent / extent);
@@ -696,6 +1029,10 @@ export const applyCanvasPaddingToSvg = (svg, value) => {
   return setRootAttribute(svg, 'height', `${wireNumber(scaled(baseHeight, height, paddedHeight))}px`) || changed;
 };
 
+/**
+ * @param {Element} svg
+ * @param {CompositionEditOptions} [options]
+ */
 export const applyCompositionEdit = (svg, options = {}) => {
   const binding = bindCompositionMetadata(svg);
   const metadata = binding.metadata;
@@ -708,7 +1045,7 @@ export const applyCompositionEdit = (svg, options = {}) => {
   // layout port's after a Legend edit (`legendLocalBox`), never the browser's
   // text extents, so a composition edit docks them where Python would. Only a
   // legacy Session's normalized metadata is measured on the mounted SVG.
-  /** @param {Element | null} target @param {string} side @param {any} recorded */
+  /** @param {SVGGraphicsElement | null} target @param {string} side @param {CompositionBounds | null | undefined} recorded */
   const localBoundsOf = (target, side, recorded) => (
     metadata.legacyNormalized && target && side !== 'none'
       ? measureCompositionTargetLocalBounds(target)
@@ -729,9 +1066,10 @@ export const applyCompositionEdit = (svg, options = {}) => {
         ...metadata,
         primary: {
           ...metadata.primary,
-          finalBounds: wireBounds(unionBounds(
+          // bindRole rejects a Result without primary groups, so the union exists.
+          finalBounds: wireBounds(/** @type {CompositionBounds} */ (unionBounds(
             binding.primary.targets.map(measureCompositionTargetLocalBounds)
-          ))
+          )))
         }
       }
     : metadata;
@@ -761,7 +1099,7 @@ export const applyCompositionEdit = (svg, options = {}) => {
       'legend',
       wireTranslation(automatic),
       'localBounds',
-      wireBounds(legendLocalBounds)
+      wireBounds(/** @type {CompositionBounds} */ (legendLocalBounds)) // set for a bound Legend
     );
   }
 
@@ -779,7 +1117,7 @@ export const applyCompositionEdit = (svg, options = {}) => {
       'title',
       wireTranslation(automatic),
       'localBounds',
-      wireBounds(titleLocalBounds)
+      wireBounds(/** @type {CompositionBounds} */ (titleLocalBounds)) // set for a bound title
     );
   }
 
@@ -810,6 +1148,7 @@ export const applyCompositionEdit = (svg, options = {}) => {
   return bindCompositionMetadata(svg);
 };
 
+/** @param {Element} svg */
 export const resetCompositionUserDeltas = (svg) => {
   const binding = bindCompositionMetadata(svg);
   binding.primary.targets.forEach((target) => {
@@ -828,10 +1167,15 @@ export const resetCompositionUserDeltas = (svg) => {
   return binding;
 };
 
+/**
+ * @param {Element} svg
+ * @param {{ primary?: unknown[], legend?: unknown, title?: unknown }} [deltas]
+ */
 export const applyCompositionUserDeltas = (svg, deltas = {}) => {
   const binding = bindCompositionMetadata(svg);
   let changed = false;
 
+  /** @param {Element | undefined} target @param {number[]} automaticTranslation @param {unknown} requested */
   const applyDelta = (target, automaticTranslation, requested) => {
     if (!target || !Array.isArray(requested) || requested.length !== 2) return;
     const x = Number(requested[0]);
@@ -866,7 +1210,12 @@ export const applyCompositionUserDeltas = (svg, deltas = {}) => {
   return { binding, changed };
 };
 
+/** @param {Element | null | undefined} element */
 const elementTag = (element) => String(element?.tagName || '').toLowerCase().replace(/^.*:/, '');
+/**
+ * @param {SVGSVGElement} svg
+ * @returns {LegacyTargets}
+ */
 const discoverLegacyTargets = (svg) => {
   const legend = svg.getElementById?.('legend') || null;
   const title = svg.getElementById?.('plot_title') || null;
@@ -876,6 +1225,10 @@ const discoverLegacyTargets = (svg) => {
   return { primary, legend, title };
 };
 
+/**
+ * @param {unknown} value
+ * @returns {CompositionDelta}
+ */
 const legacyDelta = (value) => {
   if (!Array.isArray(value) || value.length !== 2) return [0, 0];
   const x = Number(value[0]);
@@ -883,6 +1236,10 @@ const legacyDelta = (value) => {
   return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : [0, 0];
 };
 
+/**
+ * @param {Element | null} target
+ * @returns {CompositionLegendReflow | null}
+ */
 const legacyLegendReflow = (target) => {
   if (!target) return null;
   let colorRectSize = 14;
@@ -902,6 +1259,11 @@ const legacyLegendReflow = (target) => {
   };
 };
 
+/**
+ * @param {Element} target
+ * @param {unknown} deltaValue
+ * @returns {CompositionDelta}
+ */
 const factorLegacyUserDelta = (target, deltaValue) => {
   const [dx, dy] = legacyDelta(deltaValue);
   const source = target.getAttribute?.('transform') || '';
@@ -917,6 +1279,11 @@ const factorLegacyUserDelta = (target, deltaValue) => {
   return [dx, dy];
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} label
+ * @returns {CompositionBounds}
+ */
 const legacyViewBox = (value, label) => {
   const parts = String(value || '')
     .trim()
@@ -933,6 +1300,11 @@ const legacyViewBox = (value, label) => {
   return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
 };
 
+/**
+ * @param {Element | null} target
+ * @param {unknown} deltaValue
+ * @returns {{ x: number, y: number }}
+ */
 const legacyBaseTranslation = (target, deltaValue) => {
   const [dx, dy] = legacyDelta(deltaValue);
   const leading = readLeadingTranslate(target?.getAttribute?.('transform') || '');
@@ -941,6 +1313,13 @@ const legacyBaseTranslation = (target, deltaValue) => {
     : { x: -dx, y: -dy };
 };
 
+/**
+ * @param {CompositionBounds} rootBounds
+ * @param {Element | null} target
+ * @param {string} side
+ * @param {unknown} deltaValue
+ * @returns {CompositionBounds | null}
+ */
 const legacyTitleBounds = (rootBounds, target, side, deltaValue) => {
   if (!target) return null;
   const translation = legacyBaseTranslation(target, deltaValue);
@@ -965,6 +1344,11 @@ const legacyTitleBounds = (rootBounds, target, side, deltaValue) => {
   };
 };
 
+/**
+ * @param {SVGSVGElement} svg
+ * @param {LegacyTargets} targets
+ * @param {{ legendSide: string, titleSide: string, userDeltas: LegacyUserDeltas | null }} options
+ */
 const legacyAdmissionBounds = (
   svg,
   targets,
@@ -1011,8 +1395,8 @@ const legacyAdmissionBounds = (
 };
 
 /**
- * @param {any} svg The root SVG element of a legacy Result; checked below.
- * @param {{ legendSide?: string, titleSide?: string, userDeltas?: Record<string, any> | null }} [options]
+ * @param {SVGSVGElement} svg The root SVG element of a legacy Result; checked below.
+ * @param {{ legendSide?: string, titleSide?: string, userDeltas?: LegacyUserDeltas | null }} [options]
  */
 export const normalizeLegacyComposition = (
   svg,
@@ -1044,11 +1428,13 @@ export const normalizeLegacyComposition = (
     factorLegacyUserDelta(target, primaryDeltaValues[index] || [0, 0]);
     target.setAttribute(COMPOSITION_ROLE_ATTRIBUTE, 'primary');
   });
+  /** @param {Element | null} target @param {'legend' | 'title'} role */
   const decorateLegacyTarget = (target, role) => {
     if (!target) return null;
     factorLegacyUserDelta(target, savedUserDeltas?.[role]);
     target.setAttribute(COMPOSITION_ROLE_ATTRIBUTE, role);
-    const localBounds = admissionBounds[role];
+    // The admission bounds of a role exist exactly when its target does.
+    const localBounds = /** @type {CompositionBounds} */ (admissionBounds[role]);
     return targetPayload(role, [0, 0], 'localBounds', wireBounds(localBounds));
   };
   const metadata = {
@@ -1073,8 +1459,13 @@ export const normalizeLegacyComposition = (
   return bindCompositionMetadata(svg);
 };
 
+/** @param {Element} svg */
 export const compositionUserDeltas = (svg) => userDeltas(bindCompositionMetadata(svg));
 
+/**
+ * @param {Element} target
+ * @returns {Set<string>}
+ */
 const stableFeatureIds = (target) => new Set(
   Array.from(target.querySelectorAll?.('[data-gbdraw-stable-feature-id]') || [])
     .map((feature) => String(
@@ -1083,6 +1474,10 @@ const stableFeatureIds = (target) => new Set(
     .filter(Boolean)
 );
 
+/**
+ * @param {Element} target
+ * @param {LegacyRecordDecision[]} decisions
+ */
 const legacyRecordKey = (target, decisions) => {
   const available = stableFeatureIds(target);
   if (available.size === 0) return '';
@@ -1099,6 +1494,10 @@ const legacyRecordKey = (target, decisions) => {
   return matches.length === 1 ? String(matches[0].recordKey || '') : '';
 };
 
+/**
+ * @param {Element} target
+ * @param {{ x: number, y: number }} fallbackValue
+ */
 const legacyRenderedTranslation = (target, fallbackValue) => {
   // Before record-keyed translation metadata, ordinary Linear output stored
   // the final X translation as the record group's second translate. Y was the
@@ -1110,7 +1509,8 @@ const legacyRenderedTranslation = (target, fallbackValue) => {
   if (!inner.found) {
     fail('Legacy record composition has no materializable record translation.');
   }
-  return { x: inner.x, y: fallbackValue.y };
+  // `inner` is the found result of readLeadingTranslate here.
+  return { x: /** @type {{ x: number }} */ (inner).x, y: fallbackValue.y };
 };
 
 // This is the only bridge from SVG composition placement to the record-keyed
@@ -1119,9 +1519,9 @@ const legacyRenderedTranslation = (target, fallbackValue) => {
 // DOM order, row number, rendered record ID, and array position never become
 // persisted identity.
 /**
- * @param {any} svg
- * @param {any[]} [baseTranslations]
- * @param {any[]} [recordKeys]
+ * @param {Element} svg
+ * @param {({ recordKey?: unknown, x?: unknown, y?: unknown } | null | undefined)[]} [baseTranslations]
+ * @param {unknown[]} [recordKeys]
  * @param {{ records?: unknown } | null} [activePlan] The active plan; only its `records` are read.
  */
 export const materializeRecordTranslations = (

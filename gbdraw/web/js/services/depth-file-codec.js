@@ -1,6 +1,5 @@
 // @ts-check
-const DEPTH_FILE_SCHEMA = 1;
-const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
+import { DEPTH_FILE_ENCODING, DEPTH_FILE_SCHEMA } from '../contracts/schema.generated.js';
 
 const DEPTH_COLUMNS = ['reference_name', 'position', 'depth'];
 const RUN_START = 0;
@@ -8,12 +7,27 @@ const RUN_STEP = 1;
 const RUN_COUNT = 2;
 const RUN_DEPTHS = 3;
 
+/**
+ * The encoded depth table: runs of `[start, step, count, depths]` per reference. Every field is validated on decode.
+ * @typedef {{
+ *   schema?: number,
+ *   header?: unknown,
+ *   lineEnding?: string,
+ *   finalNewline?: boolean,
+ *   records?: { id?: unknown, runs?: unknown }[]
+ * }} DepthFilePayload
+ */
+
+/** @typedef {DepthFilePayload & { schema: 1, records: NonNullable<DepthFilePayload['records']> }} ValidDepthFilePayload */
+
+/** @type {(payload: DepthFilePayload | null | undefined) => asserts payload is ValidDepthFilePayload} */
 const assertDepthPayload = (payload) => {
   if (!payload || payload.schema !== DEPTH_FILE_SCHEMA || !Array.isArray(payload.records)) {
     throw new Error('Invalid encoded depth file.');
   }
 };
 
+/** @param {unknown} header */
 const decodeHeader = (header) => {
   if (header === null || header === undefined) return null;
   if (!Array.isArray(header) || header.length !== DEPTH_COLUMNS.length) {
@@ -22,6 +36,11 @@ const decodeHeader = (header) => {
   return header.map((value) => String(value ?? '')).join('\t');
 };
 
+/**
+ * @param {string} referenceName
+ * @param {unknown} run
+ * @param {string[]} lines
+ */
 const decodeRun = (referenceName, run, lines) => {
   if (!Array.isArray(run) || run.length !== 4 || !Array.isArray(run[RUN_DEPTHS])) {
     throw new Error('Invalid encoded depth run.');
@@ -52,9 +71,11 @@ const decodeRun = (referenceName, run, lines) => {
   }
 };
 
+/** @param {DepthFilePayload | null | undefined} payload */
 export const decodeDepthText = (payload) => {
   assertDepthPayload(payload);
   const lineEnding = payload.lineEnding === '\r\n' ? '\r\n' : '\n';
+  /** @type {string[]} */
   const lines = [];
   const headerLine = decodeHeader(payload.header);
   if (headerLine !== null) lines.push(headerLine);
@@ -72,5 +93,6 @@ export const decodeDepthText = (payload) => {
   return payload.finalNewline === false ? body : `${body}${lineEnding}`;
 };
 
+/** @param {{ encoding?: unknown, data?: { schema?: unknown } | null } | null | undefined} entry */
 export const isEncodedDepthFileEntry = (entry) =>
-  Boolean(entry) && entry.encoding === DEPTH_FILE_ENCODING && entry.data?.schema === DEPTH_FILE_SCHEMA;
+  entry?.encoding === DEPTH_FILE_ENCODING && entry.data?.schema === DEPTH_FILE_SCHEMA;

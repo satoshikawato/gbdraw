@@ -70,7 +70,7 @@ const chooseLosatp = async (page, mode) => {
 };
 
 const openLayoutControls = (page) => (
-  page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter')
+  page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).press('Enter')
 );
 
 const setRows = async (page, rows) => {
@@ -214,13 +214,12 @@ const saveCliGridSession = (testInfo) => {
 const openCollinearGrid = async (page, sessionPath) => {
   await installProteinExecutor(page);
   await openApp(page);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(
     ({ row, canonicalRow, canonicalColumn }) => [row, canonicalRow, canonicalColumn]
   )), { timeout: 60000 }).toEqual([[1, 1, 1], [1, 1, 2], [2, 2, 1]]);
   await chooseLosatp(page, 'collinear');
-  await page.getByRole('combobox', { name: 'Collinear evidence scope' }).selectOption('all');
+  await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
 };
 
 test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fresh ribbons', async ({ page, browser }, testInfo) => {
@@ -303,7 +302,6 @@ test('The Web reuses every raw LOSATP search of a CLI Session over a multi-recor
   const sessionPath = saveCliMultiRecordSession(testInfo);
   await installProteinExecutor(page);
   await openApp(page);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 60000 })
     .toBe(3);

@@ -41,7 +41,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
 
       - name: Build Gallery CI impact plan
         id: plan
@@ -74,7 +74,7 @@ jobs:
           python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
       - name: Install browser dependencies
         run: |
@@ -104,7 +104,7 @@ jobs:
           python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .node-version
       - name: Install performance dependencies
         run: python -m pip install -e ".[export]" Pillow
       - name: Enforce three-trial projection gate
@@ -135,6 +135,11 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
 
       - name: Validate required Gallery readiness evidence
         env:

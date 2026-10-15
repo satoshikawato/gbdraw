@@ -80,6 +80,8 @@ from .cli_utils.common import (
     _add_retired_option_args,
     _add_gc_skew_toggle_args,
     _add_gc_content_axis_args,
+    _add_font_args,
+    cli_font_family,
     _add_legend_size_args,
     add_analysis_args,
     add_color_args,
@@ -158,6 +160,7 @@ def _render_output_request(
     formats: list[str],
     *,
     overwrite: bool,
+    embed_fonts: bool,
 ) -> RenderOutputRequest:
     """Split a CLI path prefix into the typed output directory and basename."""
 
@@ -172,6 +175,7 @@ def _render_output_request(
         output_directory=output_directory,
         formats=tuple(formats),
         overwrite=overwrite,
+        embed_fonts=embed_fonts,
     )
 
 
@@ -237,7 +241,7 @@ def _get_args(
         type=str)
     parser.add_argument(
         '--axis_stroke_width',
-        help='Axis stroke width (optional; float; default: 3 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb)',
+        help='Axis stroke width (optional; float; default: 3 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
         type=float)
     parser.add_argument(
         '--line_stroke_color',
@@ -245,7 +249,7 @@ def _get_args(
         type=str)
     parser.add_argument(
         '--line_stroke_width',
-        help='Line stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb)',
+        help='Line stroke width (optional; float; default: 5 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
         type=float)
     parser.add_argument(
         '--definition_font_size',
@@ -269,7 +273,7 @@ def _get_args(
         type=float)
     parser.add_argument(
         '--label_font_size',
-        help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
+        help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
         type=float)
     _add_format_arg(parser)
     _add_gc_skew_toggle_args(
@@ -563,6 +567,7 @@ def _get_args(
         help='GC skew track center radius for circular mode (as a ratio of base radius; must be > 0).',
         type=float)
     _add_legend_size_args(parser)
+    _add_font_args(parser)
 
     add_session_args(parser)
 
@@ -751,6 +756,7 @@ def replay_legacy_session(
             names = {run_spec.args[binding.argIndex]: binding.name for binding in run_spec.file_bindings}
             args.conservation_labels = [names.get(path, Path(path).name) for path in args.conservation_blast]
         args.overwrite = session_request.overwrite
+        args.embed_fonts = session_request.embed_fonts
         args.save_session = session_request.save_session
         args.session_output = session_request.session_output
         args._allow_legacy_track_transport = True
@@ -801,6 +807,8 @@ def circular_main(cmd_args) -> None:
             overwrite=session_request.overwrite,
             save_session=session_request.save_session,
             session_output=session_request.session_output,
+            embed_fonts=session_request.embed_fonts,
+            font_files=session_request.font_files,
         ):
             if session_request.drawings:
                 document.drawing(session_request.drawings[0], mode="circular")
@@ -1116,6 +1124,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         else gc_content_tick_interval
     )
     override_candidates: dict[str, object | None] = {
+        "objects.text.font_family": cli_font_family(args),
         "objects.features.block_stroke_color": block_stroke_color,
         "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
         "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
@@ -1371,6 +1380,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 output_prefix or "out",
                 out_formats,
                 overwrite=args.overwrite,
+                embed_fonts=args.embed_fonts,
             )
             if output_prefix is not None
             else replace(
@@ -1378,6 +1388,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                     "out",
                     out_formats,
                     overwrite=args.overwrite,
+                    embed_fonts=args.embed_fonts,
                 ),
                 resolve_prefix_from_first_record=True,
             ),
@@ -1392,6 +1403,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 output_prefix=output_prefix,
                 formats=tuple(out_formats),
                 overwrite=args.overwrite,
+                embed_fonts=args.embed_fonts,
             ),
             record_options=record_manifest.record_options,
         )

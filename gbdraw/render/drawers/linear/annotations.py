@@ -5,8 +5,9 @@ from __future__ import annotations
 import hashlib
 import re
 
-from svgwrite import Drawing
-from gbdraw.svg.elements import Group, Line, Path, Rect, Text
+from svgwrite.base import BaseElement
+
+from gbdraw.svg.elements import ClipPath, Group, Line, Path, Rect, Text
 
 from gbdraw.annotations import (
     AnnotationTrackParams,
@@ -15,7 +16,8 @@ from gbdraw.annotations import (
     effective_annotation_style,
     is_auto_feature_underlay,
 )
-from gbdraw.render.patterns import ensure_hatch_pattern
+from gbdraw.render.group_content import GroupContent
+from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
 
 
@@ -36,8 +38,7 @@ def annotation_dom_id(
     return f"gbdraw-annotation-{_dom_token(slot_id)}-{_dom_token(annotation_id)}-{digest}"
 
 
-def draw_linear_annotation_track(
-    drawing: Drawing,
+def linear_annotation_track_content(
     track: ResolvedAnnotationTrack,
     *,
     record_id: str,
@@ -51,13 +52,18 @@ def draw_linear_annotation_track(
     params: AnnotationTrackParams,
     dom_group_id: str | None = None,
     semantic_slot_id: str | None = None,
-) -> Group:
-    """Create a positioned annotation group in record-local coordinates."""
+) -> GroupContent:
+    """Build an annotation track in record-local coordinates (render stage ``annotation_content``).
+
+    The hatch patterns the marks use, in order of first use, and the clip path
+    of a clipped track are the content's definitions.
+    """
 
     group_id = dom_group_id or (
         f"gbdraw-annotation-track-{_dom_token(track.slot_id)}-{record_index + 1}"
     )
     group = Group(id=group_id)
+    definitions: dict[str, BaseElement] = {}
     if semantic_slot_id:
         group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
         group.attribs["data-gbdraw-slot-renderer"] = "annotations"
@@ -106,7 +112,9 @@ def draw_linear_annotation_track(
             cap_start = fragment is None or not fragment.artificial_start
             cap_end = fragment is None or not fragment.artificial_end
             if annotation.mark in {"band", "highlight"}:
-                fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (
+                if style.hatch:
+                    definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
+                fill = hatch_pattern_paint(style.hatch) if style.hatch else (
                     style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
                 )
                 height_factor = 1.0 if annotation.mark == "highlight" else 0.84
@@ -199,6 +207,7 @@ def draw_linear_annotation_track(
                 )
             )
         group.add(item_group)
+    clip_paths: list[BaseElement] = []
     if track.clipped:
         group.attribs["data-gbdraw-annotation-clipped"] = "true"
         clip_id = (
@@ -206,16 +215,16 @@ def draw_linear_annotation_track(
             if dom_group_id
             else f"gbdraw-annotation-clip-{_dom_token(track.slot_id)}-{record_index + 1}"
         )
-        clip_path = drawing.clipPath(id=clip_id)
+        clip_path = ClipPath(id=clip_id)
         clip_path.add(
             Rect(
                 insert=(0, float(y_offset_px)),
                 size=(float(bar_length_px), float(height_px)),
             )
         )
-        drawing.defs.add(clip_path)
+        clip_paths.append(clip_path)
         group.attribs["clip-path"] = f"url(#{clip_id})"
-    return group
+    return GroupContent.of(group, (*definitions.values(), *clip_paths))
 
 
-__all__ = ["annotation_dom_id", "draw_linear_annotation_track"]
+__all__ = ["annotation_dom_id", "linear_annotation_track_content"]

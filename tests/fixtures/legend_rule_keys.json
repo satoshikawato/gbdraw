@@ -1,0 +1,142 @@
+{
+  "description": "The key of the Legend row a color rule draws, for a rule table and the renderer's own rows of the Result (key and fill, then the stroke color and width where the row has a line) and the line a rule row is drawn with (`rule_stroke`: color and width; no line when absent): the rule's caption, or `caption [fill]` when the caption is written with several colors in the table or names a renderer row of another swatch (fill and line, as tests/fixtures/legend_names.json compares them), made unique against every caption and renderer row; a blank caption has no row (''). The key is an identity only (`data-legend-key`, stored Legend edits); the Legend draws the caption, numbered by the naming rule (tests/fixtures/legend_names.json), and nothing shows the key. Python's answer is gbdraw/legend/table.py::rule_legend_keys (tests/test_specific_color_captions.py); the Web app's is services/specific-color-rules.js::createRuleLegendCaptions (tests/web/specific-color-actions.test.mjs). Captions are as the Web app holds them (trimmed).",
+  "cases": [
+    { "name": "one captioned rule",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#112233", "cap": "NADH"}
+      ],
+      "renderer_rows": [],
+      "keys": ["NADH"] },
+    { "name": "one caption, one color, two rules",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#112233", "cap": "Shared"},
+        {"feat": "tRNA", "qual": "product", "val": "x", "color": "#112233", "cap": "Shared"}
+      ],
+      "renderer_rows": [],
+      "keys": ["Shared", "Shared"] },
+    { "name": "blank captions in several colors have no row",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#112233", "cap": ""},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#445566", "cap": ""}
+      ],
+      "renderer_rows": [],
+      "keys": ["", ""] },
+    { "name": "one caption in two colors",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#112233", "cap": "Shared"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#445566", "cap": "Shared"}
+      ],
+      "renderer_rows": [],
+      "keys": ["Shared [#112233]", "Shared [#445566]"] },
+    { "name": "one caption in two colors, in the other rule order",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#445566", "cap": "Shared"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#112233", "cap": "Shared"}
+      ],
+      "renderer_rows": [],
+      "keys": ["Shared [#445566]", "Shared [#112233]"] },
+    { "name": "one caption, a color and none",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#112233", "cap": "Shared"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "none", "cap": "Shared"}
+      ],
+      "renderer_rows": [],
+      "keys": ["Shared [#112233]", "Shared [none]"] },
+    { "name": "one caption, a named color and its hex are one color",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "red", "cap": "Shared"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#ff0000", "cap": "Shared"}
+      ],
+      "renderer_rows": [],
+      "keys": ["Shared", "Shared"] },
+    { "name": "one caption, a short hex and another color",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#123", "cap": "Shared"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#445566", "cap": "Shared"}
+      ],
+      "renderer_rows": [],
+      "keys": ["Shared [#112233]", "Shared [#445566]"] },
+    { "name": "one caption, a color and the same color padded",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#112233", "cap": "Shared"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": " #112233 ", "cap": "Shared"}
+      ],
+      "renderer_rows": [],
+      "keys": ["Shared", "Shared"] },
+    { "name": "captions that differ only in case are two captions",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#112233", "cap": "Alpha"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#445566", "cap": "alpha"}
+      ],
+      "renderer_rows": [],
+      "keys": ["Alpha", "alpha"] },
+    { "name": "a key takes the next free number after the captions written like it",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#123", "cap": "Shared"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#445566", "cap": "Shared"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#abcdef", "cap": "Shared [#112233]"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#abcdef", "cap": "Shared [#112233] (2)"}
+      ],
+      "renderer_rows": [],
+      "keys": ["Shared [#112233] (3)", "Shared [#445566]", "Shared [#112233]", "Shared [#112233] (2)"] },
+    { "name": "captions written with a color ID are captions like any other",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#c83366", "cap": "CDS [#c83366]"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#2266aa", "cap": "CDS [#2266aa]"}
+      ],
+      "renderer_rows": [],
+      "keys": ["CDS [#c83366]", "CDS [#2266aa]"] },
+    { "name": "a caption naming a renderer row of another color",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#ff0000", "cap": "tRNA"}
+      ],
+      "renderer_rows": [["tRNA", "#debc74"], ["CDS", "#47b8f8"]],
+      "keys": ["tRNA [#ff0000]"] },
+    { "name": "a caption naming a renderer row of its color shares that row's key",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#DEBC74", "cap": "tRNA"}
+      ],
+      "renderer_rows": [["tRNA", "#debc74"]],
+      "keys": ["tRNA"] },
+    { "name": "a caption in two colors, one of them a renderer row's",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#ff0000", "cap": "tRNA"},
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#debc74", "cap": "tRNA"}
+      ],
+      "renderer_rows": [["tRNA", "#debc74"]],
+      "keys": ["tRNA [#ff0000]", "tRNA [#debc74]"] },
+    { "name": "a caption naming a track row of another color",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#ff0000", "cap": "GC content"}
+      ],
+      "renderer_rows": [["GC content", "#808080"], ["GC skew (+)", "#111111"]],
+      "keys": ["GC content [#ff0000]"] },
+    { "name": "a key is unique against the renderer rows too",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#ff0000", "cap": "tRNA"}
+      ],
+      "renderer_rows": [["tRNA", "#debc74"], ["tRNA [#ff0000]", "#000000"]],
+      "keys": ["tRNA [#ff0000] (2)"] },
+    { "name": "a caption naming a track row of its fill and another line",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#808080", "cap": "GC content"}
+      ],
+      "renderer_rows": [["GC content", "#808080"]],
+      "rule_stroke": ["gray", 1],
+      "keys": ["GC content [#808080]"] },
+    { "name": "a caption naming a track row of its fill, neither with a visible line",
+      "rules": [
+        {"feat": "CDS", "qual": "product", "val": "x", "color": "#808080", "cap": "GC content"}
+      ],
+      "renderer_rows": [["GC content", "gray", "black", 0]],
+      "rule_stroke": ["gray", 0],
+      "keys": ["GC content"] },
+    { "name": "a caption naming a feature type's row of its fill and line",
+      "rules": [
+        {"feat": "tRNA", "qual": "product", "val": "x", "color": "#debc74", "cap": "tRNA"}
+      ],
+      "renderer_rows": [["tRNA", "#debc74", "gray", 1]],
+      "rule_stroke": ["#808080", 1],
+      "keys": ["tRNA"] }
+  ]
+}

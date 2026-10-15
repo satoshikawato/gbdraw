@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from svgwrite import Drawing
+from svgwrite.pattern import Pattern
 from gbdraw.svg.elements import Line
 
 from gbdraw.annotations.models import HatchStyle
@@ -26,40 +26,34 @@ def hatch_pattern_paint(hatch: HatchStyle) -> str:
     return f"url(#{hatch_pattern_id(hatch)})"
 
 
-def ensure_hatch_pattern(drawing: Drawing, hatch: HatchStyle) -> str:
-    """Return a deduplicated ``url(#...)`` paint for one hatch style."""
+def hatch_pattern(hatch: HatchStyle) -> Pattern:
+    """Build the ``<pattern>`` definition of one hatch style."""
 
-    pattern_id = hatch_pattern_id(hatch)
-    existing = {
-        str(getattr(item, "attribs", {}).get("id", ""))
-        for item in getattr(drawing.defs, "elements", ())
-    }
-    if pattern_id not in existing:
-        pattern = drawing.pattern(
-            id=pattern_id,
-            size=(hatch.spacing, hatch.spacing),
-            patternUnits="userSpaceOnUse",
-            patternTransform=f"rotate({hatch.angle:g})",
+    pattern = Pattern(
+        id=hatch_pattern_id(hatch),
+        size=(hatch.spacing, hatch.spacing),
+        patternUnits="userSpaceOnUse",
+        patternTransform=f"rotate({hatch.angle:g})",
+        debug=False,
+    )
+    pattern.add(
+        Line(
+            start=(0, 0),
+            end=(0, hatch.spacing),
+            stroke=hatch.color,
+            stroke_width=hatch.width,
         )
+    )
+    if hatch.cross:
         pattern.add(
             Line(
                 start=(0, 0),
-                end=(0, hatch.spacing),
+                end=(hatch.spacing, 0),
                 stroke=hatch.color,
                 stroke_width=hatch.width,
             )
         )
-        if hatch.cross:
-            pattern.add(
-                Line(
-                    start=(0, 0),
-                    end=(hatch.spacing, 0),
-                    stroke=hatch.color,
-                    stroke_width=hatch.width,
-                )
-            )
-        drawing.defs.add(pattern)
-    return hatch_pattern_paint(hatch)
+    return pattern
 
 
-__all__ = ["ensure_hatch_pattern", "hatch_pattern_id", "hatch_pattern_paint"]
+__all__ = ["hatch_pattern", "hatch_pattern_id", "hatch_pattern_paint"]

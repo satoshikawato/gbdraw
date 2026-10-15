@@ -1,4 +1,9 @@
 // @ts-check
+/**
+ * @param {Blob} blob A PNG.
+ * @param {number} dpi
+ * @returns {Promise<Blob>}
+ */
 export const setDpiInPng = async (blob, dpi) => {
   const pixelsPerMeter = Math.round(dpi / 0.0254);
   const buffer = await blob.arrayBuffer();
@@ -33,6 +38,7 @@ export const setDpiInPng = async (blob, dpi) => {
   dv.setUint32(0, ppm);
   dv.setUint32(4, ppm);
   physData[8] = 1;
+  /** @type {number[]} */
   const crcTable = [];
   for (let n = 0; n < 256; n++) {
     let c = n;
@@ -41,6 +47,7 @@ export const setDpiInPng = async (blob, dpi) => {
     }
     crcTable[n] = c;
   }
+  /** @param {Uint8Array} buf */
   const crc32 = (buf) => {
     let crc = 0 ^ (-1);
     for (let i = 0; i < buf.length; i++) {

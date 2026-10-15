@@ -51,11 +51,16 @@ Typed helper operations, generation-time feature extraction, and diagram
 rendering share that runtime; Python must not return to the main thread.
 The Worker may retain a bounded cache of parsed biological sources, resolved
 records, and interactive metadata. Key it only by validated resource tokens and
-the semantic fields used to prepare those values. Every Generate still decodes
-and validates the request, builds the drawing, writes the SVG, and builds the
-feature catalog. Publish cache fills only after the full render succeeds, and
-release them with the Worker; never cache drawings, catalogs, SVG, or final
-results.
+the semantic fields used to prepare those values. The same cache may also hold
+the render-stage results that the last successful render used: derived data,
+group contents with their serialized text, and feature-catalog parts, including
+the catalog item of a Result. Key each of these by the complete inputs of the
+stage that built it: resource and record identities, the settings it declares,
+and every other argument. Every Generate still decodes and validates the
+request, runs the whole render path, writes a complete SVG document, and returns
+a complete feature catalog; it rebuilds every part whose inputs changed. Publish
+cache fills only after the full render succeeds, and release them with the
+Worker; never reuse a final reply.
 
 App-shell readiness means Vue is mounted and required local UI assets and
 palette definitions are available. It is independent of diagram-Worker
@@ -174,8 +179,10 @@ update canonical state only.
 ## Design rules R1-R15
 
 Each rule names one owner and the guard that enforces it. Cite the rule id in PR
-descriptions and tests. Change the code and its guard together, and lower a
-shrink-only baseline in the change that removes the last site it counted.
+descriptions and tests. Change the code and its guard together. A count
+baseline is a ceiling: the observed count stays at or below it, lowering it is
+optional (its test names what may be lowered), and raising it is an
+authority-only change.
 
 ### R1: Three writers of the Result
 
@@ -268,14 +275,17 @@ reactive object holds display values only, never a copy of an owner's data.
 
 One projection means one call shape: a domain's projection function is called
 from outside its owner in one form, not re-implemented or re-sequenced per
-caller. The distinct call shapes per domain may only decrease (R13).
+caller. The count of distinct call shapes per domain stays at or below its
+baseline (R13): lowering an entry is optional, and adding or raising one is an
+authority-only change.
 
 A live edit shows on the Result what the next Generate draws (PD-OI-066). A
 change to a live-edit path is done when the case for its edit kind in
 `tests/web/live-generate-parity.playwright.spec.js` passes with Auto Reflow on
 and off and with the popup opened and not. A difference the Result may show
 until Generate is listed with its decision in
-`tests/web/contracts/live-generate-parity-allowed.json`. A mismatch the matrix
+`tests/web/contracts/live-generate-parity-allowed.json`; adding or changing an
+entry is an authority-only change. A mismatch the matrix
 finds is a bug: the case stays `test.fail` with its finding id until the fix
 makes it pass.
 
@@ -337,10 +347,13 @@ classifier that matches message text.
 
 Guards:
 
-- `tests/web/error-producer-coverage.test.mjs`: unclassified `throw new Error`
-  sites per validation owner and the message-table sizes are shrink-only.
-- `tests/test_web_error_producer_coverage.py`: the Python adapter tables are
-  shrink-only, and the Python vocabulary is a subset of the Web wording owner.
+- `tests/web/error-producer-coverage.test.mjs`: the total of unclassified
+  `throw new Error` sites in all modules under `js/`, workers included, and
+  each message-table size stay at or below their baselines.
+- `tests/test_web_error_producer_coverage.py`: the total of `ValidationError`
+  sites of the package that neither carry a diagnostic nor classify and each
+  Python adapter table size stay at or below their baselines, and the Python
+  vocabulary is a subset of the Web wording owner.
 - `tests/web/error-normalization.test.mjs`: table-driven producer cases and
   code, reason, and context-key parity.
 
@@ -357,7 +370,9 @@ the draft.
 Guards: `tests/web/option-input-integrity.test.mjs` (every projected numeric
 draft field either rejects `NaN`, `1e-50x`, `-5`, `0`, and `12.5` with a typed
 diagnostic or sends them literally; the count of draft assignments on the
-Generate path in `app/run-analysis.js` may only decrease) and
+Generate path in `app/run-analysis.js` stays at or below its baseline, where
+lowering the baseline is optional and raising it is an authority-only change)
+and
 `tests/fixtures/option_domain_vectors.json` with
 `tests/test_option_domain_parity.py` (the CLI, the typed request, and the Web give
 the same field and reason).
@@ -378,9 +393,32 @@ BLAST outfmt 6 tables are read only by `read_comparison_table` in
 (`normalize_comparison_dataframe`). An unreadable row raises `ValidationError`
 and is never skipped. GenBank headers follow R4.
 
-Guard: `tests/test_comparison_tables.py` (`test_outfmt_table_columns_have_one_reader`
+Logic that Python and the Web each implement (a twin: a reader, migration,
+normalizer, layout, or constant with one copy on each side) has a row in
+`tools/twins.json`: its concern, both owners, the shared vector, the reason,
+and the condition that retires it. The registry only shrinks: a row leaves
+when its retirement condition is met or one side is deleted. Adding a row,
+or adding an owner to a row (a further copy of a registered twin), is an
+authority-only change. Removing or renaming an owner, or editing a row's
+reason, retirement condition, or a vector that is not part of its id, is
+not; a `vector:` row's vector is part of its id. A new `vector:` or
+`function:` row goes in before its twin, in that authority-only pull request,
+with `"pending": true`: the guard does not require a pending row's twin to be
+detected or its owners and vector to exist. The pull request that adds the
+twin removes `pending`, which is not an authority-only change; a pending row
+whose twin is detected fails the guard, and a pending row whose twin is
+abandoned is removed.
+
+Guards: `tests/test_comparison_tables.py` (`test_outfmt_table_columns_have_one_reader`
 scans the Python and Web JavaScript sources for a second mapping onto
-`COMPARISON_COLUMNS`, and the shared vectors run through every entry point).
+`COMPARISON_COLUMNS`, and the shared vectors run through every entry point),
+`tests/web/genbank-header-reader-owner.test.mjs` (no Web module other than
+`services/genbank-header.js` matches a GenBank header keyword), and
+`tests/web/twin-registry.test.mjs` (the detector `twin.unregistered.v1` in
+`tools/web-twin-detectors.mjs` finds a JavaScript test and a Python test that
+read the same vector file, and a watch-list function name defined both in
+`gbdraw/` Python and in `js/services/`; each such twin has a row that is not
+pending, and the owners and vector of every row that is not pending exist).
 
 ### R10: A watcher does not repair state
 
@@ -437,6 +475,21 @@ or Reset Settings).
   that work: a `file-uploader` `afterChange` import, and **Add Seq**
   (`addCircularConservationComparisonFile`), whose step holds the ring record
   label read by the Python reader.
+- An undoable action started while another action still runs on the open step
+  applies at once and names that step (`runUndoable`); nothing waits. What an
+  action writes after another caller committed its step is a step of its own
+  under the action's name (`commitIntent`). That step is not recorded when the
+  action ends while a checkpoint is open (it captures the write), while an
+  artifact replacement is open, or while an Undo or Redo is being applied, nor
+  when, since its step was committed, a baseline was set, an artifact
+  replacement committed or was declined (`shouldCommit`), or a checkpoint ended
+  without committing.
+- A call the running action makes itself keeps the step: one made
+  synchronously inside its `fn`, or one that passes `joinsOpenStep` (the Label
+  Not Shown choice, and the rule table commit of a popup, Features panel, or
+  dialog color action). A `joinsOpenStep` call commits under the step name of
+  the action that started on the step with its label, and under the step's
+  current name when no action has that label.
 - Undo, Redo, and the header buttons share one reactive availability
   (`historyAvailability`), busy while an artifact replacement or checkpoint is
   open or an action owns the open intent.
@@ -480,13 +533,20 @@ Guards:
   another Result (B20).
 - `tests/web/history-config-restore.test.mjs`: catalog identity through Undo,
   Redo, and Session rollback, and unset settings that stay unset through intent
-  and checkpoint Undo and Redo (also `session-draft-authority.test.mjs` for the
-  rollback).
+  and checkpoint Undo and Redo (also
+  `tests/web/session-draft-authority.test.mjs` for the rollback).
 - `tests/web/non-edit-state-preservation.playwright.spec.js` (G-H rows): Undo^n
   Redo^n through mixed edits and a mode round trip, and Reset Settings Undo and
   Redo, leave user-owned state unchanged.
 - `tests/web/session-operation-consistency.test.mjs`: Undo availability during
   Generate.
+- `tests/web/history.test.mjs` (the action cases) and the Label TSV case in
+  `tests/web/gui-audit-regressions.playwright.spec.js`: an edit made while an
+  action runs is its own step under its own name, and Undo then Redo keeps both
+  writes; the cases where the later write is in no step.
+- `tests/web/specific-color-actions.test.mjs` and
+  `tests/web/feature-label-visual-unit.test.mjs`: the step name of each
+  `joinsOpenStep` call site through the real History manager.
 
 ### R12: Source recipe and accessibility
 
@@ -507,9 +567,9 @@ tip is a reachable disclosure).
 
 ### R13: Owner layering and ports
 
-Modules sit in layers, lowest first: leaves (`utils/`, `config.js`,
-`web-ux-profile.js`, `mode-profiles.js`, `mode-profiles.generated.js`,
-`mode-scoped-settings.generated.js`), then
+Modules sit in layers, lowest first: leaves (`utils/`, `contracts/`,
+`config.js`, `web-ux-profile.js`, `mode-profiles.js`,
+`mode-profiles.generated.js`, `mode-scoped-settings.generated.js`), then
 state-free `services/`, then
 `state.js`, then the two state-bound services (`services/config.js`,
 `services/reset.js`), the only services that import `state.js`, then owner
@@ -517,7 +577,8 @@ modules (`app/*.js` and `app/*/` factories), then the composition roots
 (`app/app-setup.js`, `app/feature-editor.js`, `app/legend.js`,
 `app/legend-layout.js`), then `app.js`, `components.js`, and the template. A
 module imports its own layer and lower ones; a state-free module never imports
-`state.js`, and an owner module never imports a composition root.
+`state.js`, and an owner module never imports a composition root. `contracts/`
+is a leaf: like every leaf its modules import only leaves.
 
 - An owner never imports, holds, or calls another owner object. It receives
   ports: a port is one function, in one direction, named for the reaction it
@@ -547,9 +608,10 @@ module imports its own layer and lower ones; a state-free module never imports
   outside its owner (R3).
 
 The baseline of the current violations is recorded in
-`tests/web/owner-graph-baseline.test.mjs` and may only shrink: a runtime change
-removes the subjects it fixes from the baseline in the same pull request, and
-an addition is an authority-only change (`tools/web-design-rule-guards.json`,
+`tests/web/owner-graph-baseline.test.mjs`: the count of a subject stays at or
+below its entry, and a subject without an entry has none. Lowering or removing
+an entry is optional (the test names what may be lowered). Adding or raising an
+entry is an authority-only change (`tools/web-design-rule-guards.json`,
 WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 `tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
 closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
@@ -572,8 +634,11 @@ a record, ask the Owner before implementing it.
 
 Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
 the baseline with a count no higher than recorded, per detector, and no module
-imports from a higher layer) and
-`tests/web/owner-graph-detectors.test.mjs` (the detectors).
+imports from a higher layer),
+`tests/web/owner-graph-detectors.test.mjs` (the detectors), and
+`tests/web/owner-graph-replay.test.mjs` (the detectors report the couplings
+that past merges introduced; it reads the revision history and runs in the
+`web-change-budget` job).
 
 ### R14: Typed boundaries
 
@@ -591,41 +656,62 @@ authority-only change. A new module is checked from its first commit.
   type naming another owner's factory result (`ReturnType<typeof createX>`) is
   a whole-object port.
 - A persisted contract (the Session, the canonical render request, the feature
-  catalog) has one typedef, in its writer beside its version constant
-  (`SESSION_VERSION`, `CANONICAL_REQUEST_SCHEMA`, `FEATURE_CATALOG_SCHEMA`),
-  for the current format only. A reader takes unvalidated data and returns that
-  typedef.
+  catalog) has one typedef of what its writer writes, for the current format
+  only. The Session and the canonical render request are declared once, in
+  Python. `tools/generate_web_contracts.py` writes their typedefs, and the
+  constants of the persisted contracts (among them `SESSION_VERSION`,
+  `CANONICAL_REQUEST_SCHEMA`, and `FEATURE_CATALOG_SCHEMA`), to the modules
+  `js/contracts/*.generated.js`. `js/contracts/` holds only the modules that
+  tool writes. They are never edited by hand, and no other module declares a
+  typedef or a constant that one of them declares. A hand-written Web copy of
+  a Python constant or schema literal that the Web does not import from the
+  generated modules is a `constant:` row of `tools/twins.json` (R9) until it
+  does. The feature catalog's
+  typedef is in its writer, `services/feature-catalog.js`.
+- A reader of an unvalidated document takes `unknown`, or the generated input
+  type whose values are `unknown` (`SessionInput`, and `SessionEnvelope` once
+  `format` and `version` are read). The validator of each part returns that
+  part's type. `GbdrawSession` is the writer's type; no reader returns it. A
+  reader that still takes `Record<string, any>` is counted in
+  `EXPLICIT_ANY_BASELINE`.
 - Types are JSDoc in the module that owns them, imported with
   `/** @import { T } from './x.js' */`, never a `.d.ts` or a types module under
-  `gbdraw/web/`. A type import follows the layers of R13. The globals of
-  vendored scripts and the test hooks are declared once, as `any`, in
+  `gbdraw/web/` other than the generated modules of `js/contracts/`. A type
+  import follows the layers of R13. The globals of vendored scripts and the
+  test hooks are declared once, as `any`, in
   `tests/web/types/web-globals.d.ts`.
 - `@ts-ignore`, `@ts-expect-error`, and `@ts-nocheck` are not used: fix the
   type, cast with JSDoc, or fix the code.
 - `noImplicitAny` is not yet on in the guard config.
   `tests/web/types/tsconfig.no-implicit-any.json` is the guard config plus
   `noImplicitAny`, and `NO_IMPLICIT_ANY_BASELINE` in
-  `tests/web/no-implicit-any-ratchet.test.mjs` caps its diagnostics across
-  `js/`. A pull request keeps the count at or below the cap and may lower the
-  cap to the new count: a new parameter or variable declares its type, or the
-  collection a callback iterates is typed. Raising the cap is an
-  authority-only change.
+  `tests/web/no-implicit-any-ratchet.test.mjs` records its diagnostics per
+  module. A module stays at or below its entry, and a module without an entry,
+  including a new module, has none: a new parameter or variable declares its
+  type, or the collection a callback iterates is typed. Lowering or removing
+  an entry is optional. Adding or raising an entry is an authority-only
+  change. When the map is empty, an authority-only pull request turns
+  `noImplicitAny` on in the guard config and deletes the ratchet.
 - Explicit `any` in JSDoc (`any`, `*`, `Object`, or a type that resolves to
   `any`, such as an alias of it) is type debt. `EXPLICIT_ANY_BASELINE` in
-  `tests/web/explicit-any-ratchet.test.mjs` records it per module and only
-  goes down: a pull request that removes some lowers the module's entry, and
-  new code declares a type or uses `unknown`. A module without an entry,
-  including a new module, has none. Adding or raising an entry is an
+  `tests/web/explicit-any-ratchet.test.mjs` records it per module: a module
+  stays at or below its entry, and new code declares a type or uses
+  `unknown`. A module without an entry, including a new module, has none.
+  Lowering or removing an entry is optional. Adding or raising an entry is an
   authority-only change.
 - Distinct identity values (a Python key, a display caption, a swatch color, a
   feature id) take distinct named types, not one shared `string` alias.
 
 Guards: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
-run, declared factory parameters, no suppression, type-import direction),
-`tests/web/no-implicit-any-ratchet.test.mjs` (the `noImplicitAny` cap), and
+run, declared factory parameters, no suppression, type-import direction, no
+second declaration of a generated typedef or constant),
+`tests/web/no-implicit-any-ratchet.test.mjs` (`noImplicitAny` diagnostics per
+module), and
 `tests/web/explicit-any-ratchet.test.mjs` (explicit `any` per module). They
 run the `typescript` version pinned in `package.json` and fail until `npm ci`
-has installed it.
+has installed it. `tests/test_web_contracts_generated.py` checks that the
+generated modules equal the tool's output and that `js/contracts/` holds
+nothing else.
 
 ### R15: Drawing context and mode-scoped settings
 
@@ -697,6 +783,9 @@ Current owners in the initial automated scope:
 - Observation uses `services/runtime-test-hooks.js` (`recordStructuralMetric`),
   History `getDiagnostics()`, and the Worker tracking in
   `tests/web/helpers/app-lifecycle.cjs`.
+
+Guards: `tests/web/computation-ownership.test.mjs` and
+`tests/web/computation-ownership.playwright.spec.js`.
 
 ## Request and session boundary
 

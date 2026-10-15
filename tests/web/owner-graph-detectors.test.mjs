@@ -473,6 +473,8 @@ const LAYER_SOURCES = new Map([
 test('webLayerOf ranks modules by the R13 layers and leaves workers unranked', () => {
   const ranks = (paths) => paths.map((path) => webLayerOf(path));
   assert.deepEqual(ranks(['utils/zip.js', 'config.js', 'web-ux-profile.js', 'mode-profiles.generated.js', 'mode-profiles.js', 'mode-scoped-settings.generated.js']), [0, 0, 0, 0, 0, 0]);
+  // Generated contract modules are leaves from their first file on.
+  assert.equal(webLayerOf('contracts/session-schema.generated.js'), 0);
   assert.deepEqual(ranks(['services/svg-serialization.js', 'services/losat.js', 'services/error-normalization.js']), [1, 1, 1]);
   assert.equal(webLayerOf('state.js'), 2);
   assert.deepEqual(ranks(['services/config.js', 'services/reset.js']), [3, 3]);
@@ -531,6 +533,16 @@ test('layer import direction reports a module that imports a higher layer, and o
     ['services/svc.js', "import { y } from '../utils/leaf.js';\n"],
     ['utils/leaf.js', 'export const y = 1;\n']
   ])).subjects, []);
+  // A module under contracts/ is a leaf: it may import a leaf and nothing above.
+  assert.deepEqual(detector.detect(new Map([
+    ['contracts/schema.generated.js', "import { y } from '../utils/leaf.js';\nimport { x } from '../services/svc.js';\nimport { state } from '../state.js';\n"],
+    ['services/svc.js', "import { SCHEMA } from '../contracts/schema.generated.js';\nexport const x = SCHEMA;\n"],
+    ['state.js', 'export const state = {};\n'],
+    ['utils/leaf.js', "import { SCHEMA } from '../contracts/schema.generated.js';\nexport const y = SCHEMA;\n"]
+  ])).countsBySubject, {
+    'contracts/schema.generated.js->services/svc.js': 1,
+    'contracts/schema.generated.js->state.js': 1
+  });
   // The summary counts importer->target pairs.
   assert.equal(summarizeWebOwnerGraph(detectWebOwnerGraph(LAYER_SOURCES)).layerImports, 12);
 });

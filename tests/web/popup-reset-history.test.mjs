@@ -53,14 +53,15 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
     signatureFor: (value) => { stages.push('history:signature'); return JSON.stringify(value); },
     applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {}
   });
-  const actions = createFeatureColorActions({
+  const actions = createFeatureColorActions({ readDrawnTracks: () => [],
     state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
     getFeatureElements: () => [], getFeatureFillElements: () => [],
     ruleActions: {
       runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
       // The rule owner's commit lands after its own preparation (a later task).
-      commitSpecificRules: async (rules) => {
+      commitSpecificRules: async (build) => {
         stages.push('commitSpecificRules');
+        const rules = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
         await new Promise((resolve) => setTimeout(resolve, 0));
         manualSpecificRules.splice(0, manualSpecificRules.length, ...rules);
         return true;

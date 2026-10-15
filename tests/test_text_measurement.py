@@ -14,12 +14,16 @@ bundled face loaded through ``@font-face``).
 
 from __future__ import annotations
 
+import os
+import uuid
 from pathlib import Path
 
 import pytest
 from fontTools.ttLib import TTFont
 
 from gbdraw.core.text import (
+    calculate_bbox_dimensions,
+    calculate_svg_bbox_dimensions,
     collapse_svg_white_space,
     font_pair_kerning_table,
     get_text_bbox_size_pixels,
@@ -122,3 +126,118 @@ CHROMIUM_TEXT_LENGTH = {
 )
 def test_svg_mode_matches_chromium_text_length(face: str, text: str) -> None:
     assert _svg_units(face, text) == CHROMIUM_TEXT_LENGTH[face][text]
+
+
+# OV-680: a family fontconfig finds is measured with its own file, even when a
+# bundled generic alias follows it in the list; fontconfig's fallback for a
+# family it does not have is not used.
+
+
+def _renamed_face(source: str, family: str, target: Path) -> str:
+    font = TTFont(_path(source))
+    name_table = font["name"]
+    name_table.names = [record for record in name_table.names if record.nameID not in {1, 4, 6, 16, 17}]
+    for name_id, value in ((1, family), (4, family), (6, family.replace(" ", "")), (16, family)):
+        name_table.setName(value, name_id, 3, 1, 0x409)
+    font.save(str(target))
+    return str(target)
+
+
+def _fake_fc_match(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, family: str, font_file: str) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "fc-match"
+    script.write_text(f"#!/bin/sh\nprintf '%s\\t%s\\t0' '{family}' '{font_file}'\n")
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+
+def test_ov680_a_named_system_family_before_a_generic_is_measured_with_its_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    family = f"Gbdraw OV680 {uuid.uuid4().hex[:8]}"
+    font_file = _renamed_face("LiberationSerif-Regular", family, tmp_path / "ov680.ttf")
+    _fake_fc_match(tmp_path, monkeypatch, family, font_file)
+    text = "Hypothetical protein"
+
+    svg_width = calculate_svg_bbox_dimensions(text, f"'{family}', sans-serif", 14, 96)
+    point_width = calculate_bbox_dimensions(text, f"'{family}', sans-serif", 14, 72)
+
+    assert svg_width == get_text_bbox_size_pixels(font_file, text, 14, 96, svg_units=True)
+    assert point_width == get_text_bbox_size_pixels(font_file, text, 14, 72)
+    assert svg_width != get_text_bbox_size_pixels(_path("LiberationSans-Regular"), text, 14, 96, svg_units=True)
+
+
+def test_ov680_fontconfig_fallback_for_another_family_is_not_used(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    family = f"Gbdraw OV680 {uuid.uuid4().hex[:8]}"
+    font_file = _renamed_face("LiberationSerif-Regular", "Some Other Family", tmp_path / "other.ttf")
+    _fake_fc_match(tmp_path, monkeypatch, "Some Other Family", font_file)
+    text = "Hypothetical protein"
+
+    assert calculate_svg_bbox_dimensions(text, f"'{family}', serif", 14, 96) == get_text_bbox_size_pixels(
+        _path("LiberationSerif-Regular"), text, 14, 96, svg_units=True
+    )
+
+
+# OV-681: a CFF (.otf) face is measured from its outlines, as the same glyphs
+# in a TrueType face are. OV-682: a face without the Windows BMP cmap (3, 1)
+# is measured with its best cmap instead of raising.
+
+
+def _box_font(path: Path, *, cff: bool) -> str:
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.t2CharStringPen import T2CharStringPen
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+    builder = FontBuilder(1000, isTTF=not cff)
+    order = [".notdef", "A", "V"]
+    builder.setupGlyphOrder(order)
+    builder.setupCharacterMap({ord("A"): "A", ord("V"): "V"})
+    boxes = {".notdef": (50, 0, 450, 700), "A": (40, -120, 610, 730), "V": (10, 0, 560, 680)}
+    advances = {".notdef": 500, "A": 650, "V": 570}
+    outlines = {}
+    for name, (x0, y0, x1, y1) in boxes.items():
+        pen = T2CharStringPen(advances[name], None) if cff else TTGlyphPen(None)
+        pen.moveTo((x0, y0))
+        pen.lineTo((x0, y1))
+        pen.lineTo((x1, y1))
+        pen.lineTo((x1, y0))
+        pen.closePath()
+        outlines[name] = pen.getCharString() if cff else pen.glyph()
+    if cff:
+        builder.setupCFF("GbdrawBox", {"FullName": "Gbdraw Box"}, outlines, {})
+    else:
+        builder.setupGlyf(outlines)
+    builder.setupHorizontalMetrics({name: (advances[name], boxes[name][0]) for name in order})
+    builder.setupHorizontalHeader(ascent=800, descent=-200)
+    builder.setupNameTable({"familyName": "Gbdraw Box", "styleName": "Regular"})
+    builder.setupOS2()
+    builder.setupPost()
+    builder.save(str(path))
+    return str(path)
+
+
+def test_ov681_a_cff_face_is_measured_from_its_outlines(tmp_path: Path) -> None:
+    truetype = _box_font(tmp_path / "box.ttf", cff=False)
+    cff = _box_font(tmp_path / "box.otf", cff=True)
+
+    for text in ("A", "AV", "VAV"):
+        assert get_text_bbox_size_pixels(cff, text, 72, 1000) == get_text_bbox_size_pixels(truetype, text, 72, 1000)
+        assert get_text_bbox_size_pixels(cff, text, 14, 96, svg_units=True) == get_text_bbox_size_pixels(
+            truetype, text, 14, 96, svg_units=True
+        )
+    assert get_text_bbox_size_pixels(cff, "A", 72, 1000)[1] == 850
+
+
+def test_ov682_a_face_without_the_bmp_cmap_is_measured_with_its_best_cmap(tmp_path: Path) -> None:
+    font = TTFont(_path("LiberationSans-Regular"))
+    font["cmap"].tables = [table for table in font["cmap"].tables if (table.platformID, table.platEncID) != (3, 1)]
+    target = tmp_path / "no-bmp-cmap.ttf"
+    font.save(str(target))
+    text = "Hypothetical protein"
+
+    assert get_text_bbox_size_pixels(str(target), text, 14, 72) == get_text_bbox_size_pixels(
+        _path("LiberationSans-Regular"), text, 14, 72
+    )

@@ -1,9 +1,14 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
+/** @import { AskChoice, ShowNotice } from './app-messages.js' */
+/** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
+/** @import { AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
+/** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { normalizeResultLabelFits } from '../services/label-fit.js';
 import { keepResultNames } from '../services/result-normalization.js';
 import {
   nameFeaturePlacementFailure,
@@ -35,7 +40,6 @@ import {
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
-  promoteCanonicalRenderRequestToCurrent,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
   requestLabelTableTsv,
@@ -94,7 +98,6 @@ import {
   serializeQualifierPriorityRules,
   serializeSpecificRules
 } from '../services/file-imports.js';
-import { rebindRuleColorOverrides } from './rule-matching.js';
 import {
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
@@ -107,7 +110,7 @@ import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
 import { bytesToBase64, bytesToText } from '../services/byte-utils.js';
-import { downloadBlob, downloadTextFile } from '../services/text-download.js';
+import { askBeforeLargeDownload, downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
@@ -142,9 +145,6 @@ import {
 } from '../services/record-discovery.js';
 import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
-  LOSAT_DERIVED_CACHE_SCHEMA,
-  NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
-  PROTEIN_LOSAT_CACHE_SCHEMA,
   buildValidatedProteinIdentityIndex,
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
@@ -160,6 +160,14 @@ import {
   validateDerivedProteinReferences,
   webLosatRuntimeRecord
 } from '../services/losat-cache.js';
+import {
+  LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, LEGACY_PROTEIN_CANDIDATE_SCHEMA,
+  LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA,
+  LOSAT_DERIVED_CACHE_SCHEMA,
+  NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+  ORTHOGROUP_INFERENCE_VERSION,
+  PROTEIN_LOSAT_CACHE_SCHEMA
+} from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
@@ -184,10 +192,48 @@ import {
   createImportedComparisonIntentState,
   inheritCommittedComparisonIntent
 } from '../services/imported-comparison-intent.js';
+/** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
+/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
+/** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { LosatJob, LosatJobResult, LosatRunOptions } from '../services/losat.js' */
+/** @import { OrderedConservationSource } from '../services/conservation-series.js' */
+/** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
+/** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
+/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
+/** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
+/** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
+/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
+/** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
+/** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
+/** @import { EditorPaintState } from './result-paint-record.js' */
+/** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
+/** @import { CircularConservationLike } from '../services/conservation-series.js' */
+/** @import { LegendEntry } from '../state.js' */
+/** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
+/** @import { RequestCanonicalComparison } from '../services/session-request.js' */
+/** @import { CanonicalFeatureOverride, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
 );
+
+const DIAGRAM_PROGRESS_MESSAGES = Object.freeze({
+  'preparing-runtime': 'Preparing diagram runtime (first use)...',
+  'preparing-resources': 'Preparing diagram input resources...',
+  rendering: 'Rendering diagram...',
+  finalizing: 'Finalizing diagram results...'
+});
+// The status line of a diagram Worker stage. The first-use runtime preparation
+// names its real step: "step 2 of 5, loading the package installer".
+/** @param {{ stage?: string, step?: number, total?: number, label?: string }} progress */
+const diagramProgressMessage = ({ stage = '', step, total, label } = {}) => {
+  const message = DIAGRAM_PROGRESS_MESSAGES[/** @type {keyof typeof DIAGRAM_PROGRESS_MESSAGES} */ (stage)] || '';
+  return stage === 'preparing-runtime' && step && total && label
+    ? `Preparing diagram runtime (first use): step ${step} of ${total}, ${label}...`
+    : message;
+};
 
 export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
   if (typeof requestFrame !== 'function') return Promise.resolve();
@@ -201,6 +247,7 @@ export const afterFrame = ({ requestFrame = globalThis.requestAnimationFrame } =
   return new Promise((resolve) => requestFrame(resolve));
 };
 
+/** @param {string} text */
 const hashText = async (text) => {
   if (globalThis.crypto?.subtle) {
     const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -223,9 +270,14 @@ const hashText = async (text) => {
 // features the request's catalog lists as rendered, which Python draws
 // (should_render_feature), so a hidden feature has none. Label text alone and
 // Off follow those settings, which may leave the feature unlabeled.
+/** @param {readonly ({ renderedId?: unknown } | null | undefined)[] | null | undefined} operations */
 const labelOperationIds = (operations) => (operations || [])
   .map((operation) => String(operation?.renderedId || '').trim())
   .filter(Boolean);
+/**
+ * @param {Pick<SvgMutationOperations, 'labelVisibility'> | null | undefined} operations
+ * @param {{ features?: readonly (LabelFeature | null | undefined)[] | null, diagramOptions: LabelDiagramOptions | null | undefined }} context
+ */
 const forcedLabelFeatureIds = (operations, { features, diagramOptions }) => {
   const featuresById = new Map((features || []).map((feature) => [String(feature?.svg_id || '').trim(), feature]));
   return Object.freeze([...new Set(labelOperationIds(
@@ -234,14 +286,37 @@ const forcedLabelFeatureIds = (operations, { features, diagramOptions }) => {
 };
 
 const getNow = () => (typeof globalThis.performance?.now === 'function' ? performance.now() : Date.now());
+/** @param {number} ms */
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
+/**
+ * One record's FASTA text as the LOSAT search reads it: the browser or Worker extraction, and for a protein
+ * search the Worker's protein map and identity fields.
+ * @typedef {object} LosatSeqEntry
+ * @property {string} fasta
+ * @property {string} recordId
+ * @property {number} canonicalLength
+ * @property {Record<string, unknown>} [proteinMap]
+ * @property {number} [proteinCount]
+ * @property {string} [proteinCacheKey]
+ * @property {string} [proteinSetHash]
+ * @property {string} [recordAnalysisId]
+ * @property {string} [recordInstanceKey]
+ * @property {string} [runtimeBindingHash]
+ * @property {string} [displayBindingHash]
+ * @property {unknown} [identityManifest]
+ * @property {string} [sequenceKey]
+ * @property {string} [hash]
+ */
+/** @type {WeakMap<FileLike, Map<string, LosatSeqEntry>>} */
 const fastaExtractionCache = new WeakMap();
 const FASTA_EXTRACTION_CACHE_LIMIT = 12;
+/** @type {WeakMap<FileLike, Map<string, LosatSeqEntry>>} */
 const proteinExtractionCache = new WeakMap();
 const PROTEIN_EXTRACTION_CACHE_LIMIT = 16;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 export const LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
+/** @param {unknown} hydratedResults */
 export const totalHydratedLosatExportBytes = (hydratedResults) => (
   (Array.isArray(hydratedResults) ? hydratedResults : []).reduce((sum, result) => {
     const reportedBytes = Number(result?.utf8Bytes);
@@ -253,27 +328,16 @@ export const totalHydratedLosatExportBytes = (hydratedResults) => (
   }, 0)
 );
 
+/** @param {unknown} totalBytes */
 export const losatExportBytesExceedLimit = (
   totalBytes,
   limitBytes = LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES
 ) => Number(totalBytes) > Number(limitBytes);
 
-export const confirmHydratedLosatExport = (
-  totalBytes,
-  confirmDownload = globalThis.confirm,
-  limitBytes = LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES
-) => (
-  !losatExportBytesExceedLimit(totalBytes, limitBytes) ||
-  typeof confirmDownload !== 'function' ||
-  Boolean(confirmDownload(
-    `Raw LOSAT TSV export will download about ${(totalBytes / (1024 * 1024)).toFixed(1)} MB. Continue?`
-  ))
-);
-
 /**
  * @typedef {object} LosatCacheMetadata
  * @property {string} [identityKind] `protein` for a BLASTP search, otherwise nucleotide.
- * @property {string} flow
+ * @property {string} [flow]
  * @property {string} program
  * @property {string} [outfmt]
  * @property {string[]} args
@@ -285,7 +349,7 @@ export const confirmHydratedLosatExport = (
  * @property {string} [subjectRuntimeBindingHash]
  * @property {string} [queryRecordInstanceKey]
  * @property {string} [subjectRecordInstanceKey]
- * @property {Record<string, any>} [searchContext]
+ * @property {string} [searchContext] The source batch's search context.
  */
 
 /** @param {LosatCacheMetadata} metadata */
@@ -322,6 +386,7 @@ export const buildLosatCachePayload = ({
       ...(searchContext ? { searchContext } : {})
     };
   }
+  /** @type {{ cacheSchema: number, program: string, outfmt: string, args: string[], queryCanonicalHash?: string, subjectCanonicalHash?: string, flow?: string, searchContext?: string }} */
   const payload = {
     cacheSchema: NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     program,
@@ -335,14 +400,57 @@ export const buildLosatCachePayload = ({
   return payload;
 };
 
+/** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
+
 /**
+ * A LOSAT search Generate queues: the fields the pool reads (`LosatJob`) and what Generate keeps on it to
+ * hash and name the result.
+ * @typedef {LosatJob & {
+ *   queryCanonicalHash?: string, subjectCanonicalHash?: string, outfmt?: string, extraArgs?: readonly unknown[]
+ * }} LosatQueuedJob
+ */
+
+/**
+ * A Linear comparison search: the job of one resolved pair, with the batch that runs it.
+ * @typedef {LosatQueuedJob & {
+ *   cacheKey: string, ordinal: number, edgeKey: string, queryUid: string, subjectUid: string, queryIndex: number,
+ *   subjectIndex: number, extraArgs: readonly unknown[], cacheMetadata: LosatCacheMetadata,
+ *   batch: LosatSourceBatch<LosatJobSpec>
+ * }} LosatLinearJob
+ */
+
+/**
+ * A LOSAT search of one source-file pair: the first job of its batch, with the record pairs it covers.
+ * @typedef {LosatLinearJob & {
+ *   queryRecordIndexes: readonly number[], subjectRecordIndexes: readonly number[],
+ *   recordPairs: number[][], members: LosatLinearJob[]
+ * }} LosatSourceJob
+ */
+
+/**
+ * One circular conservation comparison, resolved to the BLAST text the request carries.
+ * @typedef {{ name: string, text: string, sourceIndex: number, label: string, color: string }} ResolvedCircularConservation
+ */
+
+/**
+ * A match in one of Generate's cache maps, whose keys are text (`RawLosatCacheMatch` of services/losat-cache.js
+ * leaves the key open: its reader takes any `Map`).
+ * @typedef {RawLosatCacheMatch & { key: string }} TextKeyedLosatCacheMatch
+ */
+
+/**
+ * @param {Map<string, RawLosatCacheEntry> | null | undefined} cacheMap
+ * @param {string} cacheKey
+ * @param {LosatCacheMetadata} metadata
  * @param {Record<string, any> | null} [manifest]
  * @param {object | null} [identityIndex]
+ * @returns {TextKeyedLosatCacheMatch | null}
  */
 const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
   if (!cacheMap) return null;
   const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, { identityIndex });
-  if (direct) return direct;
+  // `getCurrentRawLosatCacheEntry` returns the `cacheKey` it was given (its `unknown` parameter widens the type).
+  if (direct) return /** @type {TextKeyedLosatCacheMatch} */ (direct);
   if (metadata?.identityKind === 'protein') return null;
 
   const expectedProgram = String(metadata?.program || '');
@@ -367,12 +475,19 @@ const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, id
   return null;
 };
 
+/**
+ * @param {Map<string, RawLosatCacheEntry> | null | undefined} cacheMap
+ * @param {string} cacheKey
+ * @param {TextKeyedLosatCacheMatch | null | undefined} found
+ * @param {LosatCacheMetadata} metadata
+ */
 const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
   if (!cacheMap || !found?.entry) return found?.entry || null;
   if (classifyRawLosatCacheEntry(found.entry) !== 'nucleotide-current') {
     cacheMap.set(cacheKey, found.entry);
     return found.entry;
   }
+  /** @type {RawLosatCacheEntry} */
   const promoted = {
     ...found.entry,
     program: metadata.program || found.entry.program || '',
@@ -387,6 +502,7 @@ const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
   return promoted;
 };
 
+/** @param {Map<string, unknown> | null | undefined} cacheMap */
 const pruneLosatDerivedCache = (cacheMap) => {
   if (!cacheMap || typeof cacheMap.delete !== 'function') return;
   while (cacheMap.size > LOSAT_DERIVED_CACHE_LIMIT) {
@@ -449,6 +565,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   pairPayloads
 }) => {
   const normalizedMode = String(mode || 'pairwise');
+  /** @type {Record<string, unknown>} */
   const payload = {
     cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
     semantics: 'derived-option-conformance-v1',
@@ -490,7 +607,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   if (['orthogroup', 'collinear'].includes(normalizedMode)) {
     payload.pathRepresentation = 'lossless-graph-v1';
     payload.orthogroup = {
-      membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
+      membershipMode: String(orthogroupMembershipMode || ORTHOGROUP_INFERENCE_VERSION),
       memberMaxHits: requireCurrentOrthogroupMemberMaxHits(orthogroupMemberMaxHits)
     };
   }
@@ -515,6 +632,11 @@ export const buildLosatDerivedPayloadCachePayload = ({
   return payload;
 };
 
+/**
+ * @param {Map<string, unknown> | null | undefined} cacheMap The derived cache; an entry is read as unchecked.
+ * @param {string} key
+ * @param {unknown} manifest
+ */
 const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
   if (!cacheMap || !key) return null;
   const entry = cacheMap.get(key);
@@ -528,12 +650,20 @@ const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
   return entry.payload;
 };
 
+/**
+ * @param {unknown} mode
+ * @param {Record<string, unknown> | null | undefined} payload
+ */
 export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
   const normalizedMode = String(mode || '').trim().toLowerCase();
   if (!['orthogroup', 'collinear'].includes(normalizedMode)) return true;
-  const resource = normalizedMode === 'collinear'
+  const rawResource = normalizedMode === 'collinear'
     ? payload?.collinearityResult
     : payload?.orthogroupResult;
+  // The checks below test that `resource` is a non-array object before they read its fields.
+  const resource = /** @type {{ schema?: unknown, kind?: unknown, value?: { type?: unknown, fields?: unknown } | null } | null | undefined} */ (
+    rawResource
+  );
   const expectedKind = normalizedMode === 'collinear' ? 'result' : 'orthogroupResult';
   const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupGraphResult';
   return Boolean(
@@ -549,10 +679,34 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
   );
 };
 
+// The reply of the `buildProteinLosatCacheKeys` helper is unchecked data. Generate uses each key as a raw LOSAT
+// cache key, so the reply holds one SHA-256 hex digest per pair, as text (`RegExp.test` alone would coerce).
+/**
+ * @param {unknown} reply
+ * @param {number} pairCount
+ * @returns {string[]}
+ */
+export const requireProteinLosatCacheKeys = (reply, pairCount) => {
+  /** @type {{ error?: unknown, keys?: unknown }} */
+  const result = reply !== null && typeof reply === 'object' ? reply : {};
+  const keys = Array.isArray(result.keys) ? /** @type {unknown[]} */ (result.keys) : null;
+  if (
+    result.error || !keys
+    || keys.length !== pairCount
+    || keys.some((key) => typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key))
+  ) {
+    throw result.error || new Error('Protein cache key generation failed.');
+  }
+  // Every key passed the text and pattern check above.
+  return /** @type {string[]} */ (keys);
+};
+
+/** @param {unknown} candidateLimit */
 export const resolveProteinBlastpCandidateLimit = (candidateLimit) => (
   requireCurrentProteinBlastpCandidateLimit(candidateLimit)
 );
 
+/** @param {unknown} comparisons */
 const inferredResolvedProteinMode = (comparisons) => {
   const values = Array.isArray(comparisons) ? comparisons : [];
   if (values.some((comparison) => comparison?.kind === 'collinearityResult')) {
@@ -567,8 +721,50 @@ const inferredResolvedProteinMode = (comparisons) => {
   return '';
 };
 
+/**
+ * @param {unknown} left
+ * @param {unknown} right
+ */
 const sameNumber = (left, right) => Number(left) === Number(right);
 
+/**
+ * @typedef {object} ResolvedProteinReuseActive The settings of this Generate that the committed Session must match.
+ * @property {string} featureVisibility
+ * @property {CanonicalFeatureOverride[]} featureOverrides The draft's Feature visibility rows of the compared records.
+ * @property {string} mode
+ * @property {string | number} [bitscore]
+ * @property {string | number} [evalue]
+ * @property {string | number} [identity]
+ * @property {string | number} [alignmentLength]
+ * @property {number | null} candidateLimit
+ * @property {number} maxHits
+ * @property {string} orthogroupMembershipMode
+ * @property {number | null} memberMaxHits
+ * @property {number} minAnchors
+ * @property {number} maxUnitGap
+ * @property {number} maxDiagonalDrift
+ * @property {number} maxConflicts
+ * @property {number} maxParalogLinks
+ * @property {string} colorMode
+ * @property {string} unitMode
+ * @property {string} anchorMode
+ * @property {string} mergeOrientation
+ * @property {boolean} inferOrthogroups
+ * @property {string} searchScope
+ */
+
+/**
+ * @param {object} options
+ * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `files.linearCanonicalComparisons`.
+ *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
+ *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
+ * @param options.committedSession The committed Session (`CommittedCanonicalSession` in services/session-request.js),
+ *   left untyped: its request may be a stored one whose leaves no reader has checked (`StoredRenderRequest`), and the
+ *   reads below use them as they are (a null record throws). The true type needs checks that change that result, so
+ *   the member stays an implicit `any` until Load promotes the stored request.
+ * @param {LinearSeq[]} options.sequences
+ * @param {ResolvedProteinReuseActive} options.active
+ */
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
   committedSession,
@@ -632,7 +828,7 @@ const canReuseResolvedProteinArtifacts = ({
     return sameNumber(settings.proteinBlastpMaxHits ?? 5, active.maxHits);
   }
   if (
-    String(settings.orthogroupMembershipMode || 'anchor_core_v1')
+    String(settings.orthogroupMembershipMode || ORTHOGROUP_INFERENCE_VERSION)
       !== active.orthogroupMembershipMode
     || (settings.orthogroupMemberMaxHits ?? null) !== active.memberMaxHits
   ) {
@@ -659,6 +855,7 @@ const canReuseResolvedProteinArtifacts = ({
   );
 };
 
+/** @param {Record<string, unknown>} payload */
 const stripRuntimeCacheStats = (payload) => {
   // Canonical comparison data is read-only across rendering and cache reuse.
   // Only the transient statistics owner differs; do not duplicate the full result.
@@ -668,9 +865,12 @@ const stripRuntimeCacheStats = (payload) => {
 
 const LEGACY_PROTEIN_REFERENCE_RE = /p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}(?:_[2-9][0-9]*)?/g;
 
+/** @param {unknown[]} values */
 const collectLegacyProteinReferences = (...values) => {
+  /** @type {Set<string>} */
   const references = new Set();
   const visited = new WeakSet();
+  /** @param {unknown} value */
   const visit = (value) => {
     if (typeof value === 'string') {
       for (const match of value.matchAll(LEGACY_PROTEIN_REFERENCE_RE)) {
@@ -693,23 +893,31 @@ const collectLegacyProteinReferences = (...values) => {
   return Array.from(references).sort();
 };
 
+// Rewrites strings and object keys and keeps the value's shape, so the result has the argument's type.
+/**
+ * @template T
+ * @param {T} value
+ * @param {Record<string, unknown> | null | undefined} idMap
+ * @returns {T}
+ */
 const rewriteMappedProteinReferences = (value, idMap) => {
   if (!idMap || typeof idMap !== 'object' || Array.isArray(idMap)) return cloneJsonData(value);
   if (typeof value === 'string') {
-    if (Object.prototype.hasOwnProperty.call(idMap, value)) return String(idMap[value]);
-    return value.replace(
+    if (Object.prototype.hasOwnProperty.call(idMap, value)) return /** @type {T} */ (String(idMap[value]));
+    return /** @type {T} */ (value.replace(
       LEGACY_PROTEIN_REFERENCE_RE,
       (reference) => (
         Object.prototype.hasOwnProperty.call(idMap, reference)
           ? String(idMap[reference])
           : reference
       )
-    );
+    ));
   }
   if (Array.isArray(value)) {
-    return value.map((item) => rewriteMappedProteinReferences(item, idMap));
+    return /** @type {T} */ (value.map((item) => rewriteMappedProteinReferences(item, idMap)));
   }
   if (!value || typeof value !== 'object') return value;
+  /** @type {Record<string, unknown>} */
   const rewritten = {};
   Object.entries(value).forEach(([key, item]) => {
     const nextKey = Object.prototype.hasOwnProperty.call(idMap, key) ? String(idMap[key]) : key;
@@ -718,9 +926,14 @@ const rewriteMappedProteinReferences = (value, idMap) => {
     }
     rewritten[nextKey] = rewriteMappedProteinReferences(item, idMap);
   });
-  return rewritten;
+  return /** @type {T} */ (rewritten);
 };
 
+/**
+ * @param {Map<string, LosatDerivedCacheEntry> | null | undefined} cacheMap
+ * @param {string} key
+ * @param {{ mode: unknown, payload: Record<string, unknown> | null | undefined, manifest: unknown }} entry
+ */
 const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) => {
   if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;
@@ -744,6 +957,7 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
   return entry.payload;
 };
 
+/** @param {unknown} name */
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || 'losat';
@@ -751,6 +965,12 @@ const makeSafeFilename = (name) => {
 // The deferred replay builder outlives its Generate through the CLI helper
 // files. Build it outside that scope so it retains only the published artifact,
 // not the pre-Generate rollback handle and, through it, every earlier artifact.
+/**
+ * @param {{
+ *   version: unknown, startedAtIso: unknown, renderRequest: unknown, resources: unknown,
+ *   publishedArtifact: { results: unknown, featureCatalog: unknown }
+ * }} replay Only `JSON.stringify` reads the first four.
+ */
 const createCanonicalReplayTextBuilder = ({
   version,
   startedAtIso,
@@ -779,6 +999,7 @@ const createCanonicalReplayTextBuilder = ({
   });
   return replayText;
 };
+/** @param {unknown} value */
 const normalizeRecordSelectorText = (value) => {
   const normalized = String(value ?? '').trim();
   if (!normalized || ['none', 'null', 'jsnull', 'undefined', 'jsundefined', '-'].includes(normalized.toLowerCase())) {
@@ -786,6 +1007,7 @@ const normalizeRecordSelectorText = (value) => {
   }
   return normalized;
 };
+/** @param {unknown} value */
 const parseRegionText = (value) => {
   const text = String(value || '').trim();
   if (!text) return null;
@@ -803,7 +1025,9 @@ const parseRegionText = (value) => {
   }
   return { start, end, reverse };
 };
+/** @param {unknown} sequence */
 const reverseComplementSequence = (sequence) => {
+  /** @type {Record<string, string>} */
   const complements = {
     A: 'T',
     C: 'G',
@@ -829,18 +1053,28 @@ const reverseComplementSequence = (sequence) => {
   }
   return out;
 };
+/** @param {string} sequence */
 const wrapFastaSequence = (sequence) => {
   const lines = [];
   for (let i = 0; i < sequence.length; i += 60) lines.push(sequence.slice(i, i + 60));
   return lines.join('\n');
 };
+/**
+ * @typedef {{ id: string, sequence: string }} ParsedSequenceRecord
+ */
+/** @param {ParsedSequenceRecord} record */
 const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(record.sequence)}\n`;
+/** @param {unknown} fasta */
 const getFastaSequenceLength = (fasta) =>
   String(fasta || '')
     .split(/\r?\n/)
     .filter((line) => line && !line.startsWith('>'))
     .join('')
     .replace(/\s+/g, '').length;
+/**
+ * @param {ParsedSequenceRecord[]} records
+ * @param {unknown} selectorRaw
+ */
 const selectParsedRecord = (records, selectorRaw) => {
   if (!records.length) throw new Error('No records found');
   const selector = normalizeRecordSelectorText(selectorRaw);
@@ -857,7 +1091,9 @@ const selectParsedRecord = (records, selectorRaw) => {
   if (matches.length > 1) throw new Error(`Record selector '${selector}' matched multiple records. Use #index to disambiguate.`);
   return matches[0];
 };
+/** @param {unknown} text */
 const parseFastaRecordsFast = (text) => {
+  /** @type {ParsedSequenceRecord[]} */
   const records = [];
   let current = /** @type {{ id: string, parts: string[] } | null} */ (null);
   String(text || '').split(/\r?\n/).forEach((line) => {
@@ -872,7 +1108,9 @@ const parseFastaRecordsFast = (text) => {
   if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
   return records;
 };
+/** @param {unknown} text */
 const parseGenbankRecordsFast = (text) => {
+  /** @type {ParsedSequenceRecord[]} */
   const records = [];
   const recordChunks = String(text || '').split(/^\/\/\s*$/m);
   recordChunks.forEach((chunk) => {
@@ -884,6 +1122,11 @@ const parseGenbankRecordsFast = (text) => {
   });
   return records;
 };
+/**
+ * @param {ParsedSequenceRecord} record
+ * @param {unknown} regionSpec
+ * @param {unknown} reverseFlag
+ */
 const applyLosatSequenceTransforms = (record, regionSpec, reverseFlag) => {
   const region = parseRegionText(regionSpec);
   let sequence = record.sequence;
@@ -900,10 +1143,19 @@ const applyLosatSequenceTransforms = (record, regionSpec, reverseFlag) => {
   }
   return { id: record.id, sequence };
 };
+/**
+ * @param {FileLike} file
+ * @param {string} key
+ */
 const getCachedFastaExtraction = (file, key) => {
   const byKey = fastaExtractionCache.get(file);
   return byKey?.get(key) || null;
 };
+/**
+ * @param {FileLike} file
+ * @param {string} key
+ * @param {LosatSeqEntry} value
+ */
 const setCachedFastaExtraction = (file, key, value) => {
   let byKey = fastaExtractionCache.get(file);
   if (!byKey) {
@@ -913,6 +1165,7 @@ const setCachedFastaExtraction = (file, key, value) => {
   if (byKey.size >= FASTA_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
   byKey.set(key, value);
 };
+/** @param {FileLike | null | undefined} file */
 const getFileFingerprint = (file) => {
   if (!file) return null;
   return {
@@ -921,11 +1174,20 @@ const getFileFingerprint = (file) => {
     lastModified: Number(file.lastModified || 0)
   };
 };
+/**
+ * @param {FileLike | null | undefined} file
+ * @param {string} key
+ */
 const getCachedProteinExtraction = (file, key) => {
   if (!file) return null;
   const byKey = proteinExtractionCache.get(file);
   return byKey?.get(key) || null;
 };
+/**
+ * @param {FileLike | null | undefined} file
+ * @param {string} key
+ * @param {LosatSeqEntry & { error?: unknown }} value
+ */
 const setCachedProteinExtraction = (file, key, value) => {
   if (!file || value?.error) return;
   let byKey = proteinExtractionCache.get(file);
@@ -936,12 +1198,23 @@ const setCachedProteinExtraction = (file, key, value) => {
   if (byKey.size >= PROTEIN_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
   byKey.set(key, value);
 };
+/**
+ * @typedef {{ label: string, ms: number, details?: string }} TimingEntry
+ */
+/**
+ * @template T
+ * @param {TimingEntry[]} entries
+ * @param {string} label
+ * @param {() => T} fn
+ * @returns {T}
+ */
 const measureTiming = (entries, label, fn) => {
   const startedAt = getNow();
   const result = fn();
   entries.push({ label, ms: getNow() - startedAt });
   return result;
 };
+/** @param {readonly TimingEntry[] | null | undefined} entries */
 const logPostGbdrawTimings = (entries) => {
   if (!entries || entries.length === 0) return;
   console.groupCollapsed('post-gbdraw timing');
@@ -950,6 +1223,9 @@ const logPostGbdrawTimings = (entries) => {
   });
   console.groupEnd();
 };
+/**
+ * @param {{ file?: FileLike | null, text?: string | null, fmt: string, regionSpec: unknown, recordSelector: unknown, reverseFlag: unknown }} options
+ */
 export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
@@ -972,26 +1248,41 @@ const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
     canonicalLength: records.reduce((sum, record) => sum + String(record.sequence || '').length, 0)
   };
 };
+/**
+ * @param {FileLike | FileLike[] | null | undefined} sourceFiles
+ * @param {CircularConservationLike | null | undefined} circularConservation
+ */
 const buildConservationSeries = (sourceFiles, circularConservation) => {
   return orderedConservationSources(sourceFiles, circularConservation).map((entry) => ({
     label: entry.label,
     color: entry.color
   }));
 };
+/** @param {unknown} value */
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
 };
+/** @param {unknown} value */
 const normalizeCircularConservationLosatProgram = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'tblastx' ? 'tblastx' : 'blastn';
 };
+/**
+ * @param {unknown} value
+ * @param {number} [fallback]
+ */
 const normalizePositiveInteger = (value, fallback = 1) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 };
+/**
+ * @param {unknown} value
+ * @param {{ maxRow?: number }} [options]
+ */
 const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
+  /** @type {MultiRecordPosition[]} */
   const deduped = [];
   const seen = new Set();
   value.forEach((item) => {
@@ -1019,6 +1310,7 @@ const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINIT
   });
   return deduped;
 };
+/** @param {MultiRecordPosition[]} positions */
 const sortMultiRecordPositionsByRow = (positions) => {
   if (!Array.isArray(positions)) return [];
   return positions
@@ -1031,6 +1323,10 @@ const sortMultiRecordPositionsByRow = (positions) => {
     })
     .map(({ __index, ...entry }) => entry);
 };
+/**
+ * @param {unknown} selectors
+ * @returns {MultiRecordPosition[]}
+ */
 const buildDefaultMultiRecordPositions = (selectors) => {
   const normalizedSelectors = Array.isArray(selectors)
     ? selectors.map((value) => String(value ?? '').trim()).filter(Boolean)
@@ -1042,6 +1338,10 @@ const buildDefaultMultiRecordPositions = (selectors) => {
     row: Math.floor(index / cols) + 1
   }));
 };
+/**
+ * @param {unknown} records
+ * @param {unknown} currentPositions
+ */
 const mergeCircularRecordPositions = (records, currentPositions) => {
   const availableSelectors = Array.isArray(records)
     ? records.map((entry) => String(entry?.selector || '').trim()).filter(Boolean)
@@ -1051,6 +1351,7 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
   const defaultPositions = buildDefaultMultiRecordPositions(availableSelectors);
   const defaultRowBySelector = new Map(defaultPositions.map((entry) => [entry.selector, entry.row]));
   const normalizedCurrent = normalizeMultiRecordPositions(currentPositions, { maxRow: availableSelectors.length });
+  /** @type {MultiRecordPosition[]} */
   const nextPositions = [];
   const seen = new Set();
 
@@ -1074,6 +1375,11 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
     normalizeMultiRecordPositions(nextPositions, { maxRow: availableSelectors.length })
   );
 };
+
+/**
+ * A file of the CLI reproducibility bundle: its content, or the builder that makes it when the bundle is written.
+ * @typedef {RecipeGeneratedFile & { retainedBytes?: number }} GeneratedCliFile
+ */
 
 /**
  * @typedef {object} CanonicalRenderCandidateExecutionOptions
@@ -1130,6 +1436,8 @@ export const executeCanonicalRenderCandidate = async ({
       status: /** @type {const} */ ('engine-error'),
       generationResponse,
       engineError: results.error,
+      // Overlapping labels: Python's report, for the dialog (LP-D43).
+      labelFit: generationResponse.labelFit ?? null,
       elapsedMs: getNow() - startedAt
     };
   }
@@ -1144,6 +1452,8 @@ export const executeCanonicalRenderCandidate = async ({
     : {};
   const annotationWarnings = validateAnnotationWarnings(metadata.annotationWarnings, results);
   const comparisonWarnings = validateComparisonWarnings(metadata.comparisonWarnings, results);
+  // Crossing label leaders drawn anyway: each Result's report (LP-D46).
+  const labelFitReports = normalizeResultLabelFits(metadata.labelFitReports, results);
   // Edits by source identity that a Result does not draw (design Q4 3.4).
   const featureIdentityNotices = Array.isArray(metadata.featureIdentityNotices)
     ? metadata.featureIdentityNotices : [];
@@ -1177,6 +1487,7 @@ export const executeCanonicalRenderCandidate = async ({
     annotationWarnings,
     featureIdentityNotices,
     comparisonWarnings,
+    labelFitReports,
     results,
     catalogAdmission: catalogState,
     catalog: catalogState.catalog,
@@ -1200,10 +1511,16 @@ export const executeCanonicalRenderCandidate = async ({
  */
 
 /**
+ * A built generated artifact before it replaces the shown one: the owners' values and the runtime state to publish.
+ * @typedef {{ readonly ownerSet: Readonly<Parameters<RunAnalysisOptions['installGeneratedArtifactOwnerSet']>[0]>,
+ *   readonly runtimeState: { files?: unknown, archiveName?: unknown, losatTelemetry?: unknown } | null }} GeneratedArtifactCandidate
+ */
+
+/**
  * @typedef {object} RunAnalysisOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {WebState} state App state (state.js).
  * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
- * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
@@ -1212,12 +1529,12 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(() => (Record<string, any> | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
  * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
- * @property {() => Record<string, any> | Promise<Record<string, any>>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
+ * @property {() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
  * @property {() => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
  * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
- * @property {(handle: Record<string, any>) => any} restoreGeneratedArtifactHandle
+ * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
- * @property {((label: string, execute: (handle?: Record<string, any>) => any, options: Record<string, any>) => Promise<any>) | null} [runGeneratedArtifactReplacement]
+ * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
  *   History's undoable replacement of the generated artifact.
  * @property {RunAnalysisPreviewRuntime | null} [previewRuntime]
  * @property {() => Promise<void>} [nextTick] Vue `nextTick`.
@@ -1240,6 +1557,8 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
+ * @property {AskChoice} [askChoice] The root's choice dialog: a large download asks first.
+ * @property {ShowNotice} [showNotice] The root's notice banner.
  */
 
 /** @param {RunAnalysisOptions} options */
@@ -1278,7 +1597,9 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
-  prepareCandidateCommit = prepareCandidateRenderCommit
+  prepareCandidateCommit = prepareCandidateRenderCommit,
+  askChoice = async () => 'cancel',
+  showNotice = () => {}
 }) => {
   const {
     processing,
@@ -1322,6 +1643,7 @@ export const createRunAnalysis = ({
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
+    labelFitReports,
     featureEditRemovalCount,
     featureEditorStatus,
     featureExtractionPending,
@@ -1347,19 +1669,31 @@ export const createRunAnalysis = ({
   ) {
     throw new Error('createRunAnalysis requires PreviewRuntime readiness and selection handlers.');
   }
-  const executeLosatJobs = (...args) => {
+  /**
+   * @param {LosatJob[]} jobs
+   * @param {LosatRunOptions} [options]
+   * @returns {Promise<LosatJobResult[]>}
+   */
+  const executeLosatJobs = (jobs, options) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
-    return (typeof override === 'function' ? override : runLosatPairsParallel)(...args);
+    return (typeof override === 'function' ? override : runLosatPairsParallel)(jobs, options);
   };
   // Show Depth off leaves the Depth sources out of the request, so Python cannot name
   // the Depth rows a Legend style may still address; the draft names them (OV-81).
-  /** @param {DrawingState} drawing */
-  const unrequestedDepthCaptions = (drawing, canonical) => (
-    canonical.renderRequest.diagramOptions?.depthTracks
+  /**
+   * @param {DrawingState} drawing
+   * @param {Pick<CanonicalRenderRequest, 'mode' | 'diagramOptions'>} request The candidate's request: the one
+   *   `buildCanonicalRenderRequest` built, or the committed request that `projectCommittedEditorIntent` or the record
+   *   rotation and alignment projections (`runCommittedCanonicalCandidate`) return. Only the first caller is checked:
+   *   the other two pass a value typed `any` (the `canonical` option, and the return of `projectCommittedEditorIntent`),
+   *   and for a loaded schema-9 request no reader checks `diagramOptions.depthTracks` yet (only its truth is read).
+   */
+  const unrequestedDepthCaptions = (drawing, request) => (
+    request.diagramOptions?.depthTracks
       ? []
       : depthSeriesLegendCaptions({
           depthTracks: drawing.adv.depth_tracks,
-          slots: canonical.renderRequest.mode === 'linear' ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots
+          slots: request.mode === 'linear' ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots
         })
   );
   // A target-record transform and a label reflow draw the committed Results
@@ -1390,9 +1724,11 @@ export const createRunAnalysis = ({
   let latestCliHelperFiles = Object.freeze([]);
   let latestCliHelperArchiveName = 'out-cli-files.zip';
   let latestCliHelperRetainedBytes = 0;
+  /** @param {unknown} files */
   const cloneCliHelperFiles = (files) => (
     (Array.isArray(files) ? files : []).map((file) => ({ ...file }))
   );
+  /** @param {{ files?: unknown, archiveName?: unknown, losatTelemetry?: unknown }} runtimeState */
   const publishGeneratedArtifactRuntimeState = ({ files, archiveName, losatTelemetry }) => {
     latestCliHelperFiles = Object.freeze(cloneCliHelperFiles(files));
     latestCliHelperArchiveName = String(archiveName || 'out-cli-files.zip');
@@ -1431,7 +1767,7 @@ export const createRunAnalysis = ({
   const generatedArtifactTransactionOwner = Object.freeze({
     /**
      * @param {Record<string, any>} ownerSet
-     * @param {{ runtimeState?: Record<string, any> | null }} [options]
+     * @param {{ runtimeState?: GeneratedArtifactCandidate['runtimeState'] }} [options]
      */
     build(ownerSet, { runtimeState = null } = {}) {
       recordSessionLifecycleEvent('artifact.candidate-completed');
@@ -1441,6 +1777,10 @@ export const createRunAnalysis = ({
         runtimeState
       });
     },
+    /**
+     * @param {GeneratedArtifactCandidate} candidate
+     * @param {{ selectedResultIndex?: number }} [options]
+     */
     activate(candidate, { selectedResultIndex = 0 } = {}) {
       recordSessionLifecycleEvent('artifact.activation-started', { selectedResultIndex });
       installGeneratedArtifactOwnerSet(candidate.ownerSet, {
@@ -1458,6 +1798,7 @@ export const createRunAnalysis = ({
       recordStructuralMetric('generatedArtifactFinalizeCount', 1);
       recordSessionLifecycleEvent('artifact.finalization-completed');
     },
+    /** @param {HistoryArtifactHandle} handle */
     async restore(handle) {
       recordStructuralMetric('generatedArtifactRollbackCount', 1);
       const currentAlert = errorLog.value;
@@ -1477,7 +1818,12 @@ export const createRunAnalysis = ({
     sessionImportRollbackInProgress?.value
   );
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {{ helperFiles?: readonly RecipeHelperFile[] } | null | undefined} runInfo
+   * @param {Map<string, GeneratedCliFile>} generatedCliFileMap
+   * @param {unknown} archiveBaseName
+   */
   const buildLatestCliHelperFiles = (drawing, runInfo, generatedCliFileMap, archiveBaseName) => {
     const helperFiles = Array.isArray(runInfo?.helperFiles) ? runInfo.helperFiles : [];
     if (helperFiles.length === 0) {
@@ -1515,9 +1861,9 @@ export const createRunAnalysis = ({
     };
   };
 
-  const downloadCliHelperFiles = () => {
+  const downloadCliHelperFiles = async () => {
     if (!latestCliHelperFiles.length) {
-      alert('No reproducibility files are available for the latest run.');
+      showNotice({ text: 'The latest run has no reproducibility files to download.' });
       return;
     }
     const materializedFiles = latestCliHelperFiles.map((file) => ({
@@ -1537,20 +1883,25 @@ export const createRunAnalysis = ({
       (sum, file) => sum + String(file.data ?? '').length,
       0
     );
-    if (totalChars > 50 * 1024 * 1024) {
-      const proceed = confirm(
-        `CLI helper file export will download about ${(totalChars / (1024 * 1024)).toFixed(1)} MB. Continue?`
-      );
-      if (!proceed) return;
-    }
+    if (totalChars > 50 * 1024 * 1024 && !await askBeforeLargeDownload(askChoice, {
+      title: 'Download large reproducibility files?',
+      description: `The ZIP holds about ${(totalChars / (1024 * 1024)).toFixed(1)} MB of input and helper files.`
+    })) return;
     downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
 
+  /**
+   * @param {unknown} cause A caught value or a diagnostic.
+   * @param {string} [operation]
+   * @param {string} [stage]
+   */
   const formatError = (cause, operation = 'generate', stage = 'request-validation') =>
-    normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation, stage });
+    // The argument is truthy (`cause || {...}`), so the model is not null.
+    /** @type {UserFacingError} */ (normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation, stage }));
   // UJ-08: the shown Generate failure about the source inputs, and its mode.
   /** @type {{ error: any, mode: string } | null} */
   let sourceInputFailure = null;
+  /** @type {ReadonlySet<string>} */
   const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
   /**
    * Record discovery read every source input of `drawingMode`: a shown
@@ -1604,6 +1955,9 @@ export const createRunAnalysis = ({
   /** @type {{ owner: any, entries: Map<string, any> } | null} */
   let completedLosatSearch = null;
   /**
+   * @param {Map<string, RawLosatCacheEntry> | null | undefined} cacheMap
+   * @param {string} cacheKey
+   * @param {LosatCacheMetadata} metadata
    * @param {Record<string, any> | null} [manifest]
    * @param {object | null} [identityIndex]
    */
@@ -1612,6 +1966,10 @@ export const createRunAnalysis = ({
     return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, identityIndex)
       || getRawLosatCacheEntry(completedLosatSearch?.entries, cacheKey, metadata, manifest, identityIndex);
   };
+  /**
+   * @param {Map<string, RawLosatCacheEntry>} cacheMap
+   * @param {{ cacheKey: string }[]} pairs
+   */
   const retainCompletedLosatSearch = (cacheMap, pairs) => {
     completedLosatSearch = {
       owner: losatCache.value,
@@ -1619,9 +1977,16 @@ export const createRunAnalysis = ({
     };
   };
 
+  /** @param {AbortSignal | null | undefined} signal */
   const getGenerationCancelReason = (signal) =>
     signal?.reason instanceof Error ? signal.reason : new DiagramGenerationCanceledError();
 
+  /**
+   * @template T
+   * @param {Promise<T> | null} promise
+   * @param {AbortSignal | null | undefined} signal
+   * @returns {Promise<T | null> | null}
+   */
   const waitForCancelablePromise = (promise, signal) => {
     if (!signal) return promise;
     if (signal.aborted) return Promise.reject(getGenerationCancelReason(signal));
@@ -1650,7 +2015,11 @@ export const createRunAnalysis = ({
   };
 
   // D-21: names follow the exact member set; the rest stay dormant.
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {readonly OrthogroupGroup[] | null | undefined} previousGroups
+   * @param {readonly OrthogroupGroup[] | null | undefined} candidateGroups
+   */
   const rekeyCommittedOrthogroupOverrides = (drawing, previousGroups, candidateGroups) => {
     const next = rekeyOrthogroupOverrides({
       previousGroups,
@@ -1666,6 +2035,7 @@ export const createRunAnalysis = ({
     });
   };
 
+  /** @param {{ status?: string, generationId?: number, error?: unknown, summaryCount?: number, detailsCacheSize?: number }} [updates] */
   const setFeatureEditorStatus = (updates = {}) => {
     if (!featureEditorStatus || typeof featureEditorStatus !== 'object') return;
     Object.assign(featureEditorStatus, {
@@ -1677,6 +2047,10 @@ export const createRunAnalysis = ({
     });
   };
 
+  /**
+   * @param {LinearSeq | undefined} seq
+   * @param {string} [fallback]
+   */
   const getSeqLabel = (seq, fallback) => {
     const definition = String(seq?.definition || '').trim();
     if (definition) return definition;
@@ -1695,12 +2069,19 @@ export const createRunAnalysis = ({
     return 'tlosatx';
   };
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {string} leftLabel
+   * @param {string} rightLabel
+   */
   const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
     losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix(drawing))
   );
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {unknown} edgeKey
+   */
   const getResolvedLinearEdge = (drawing, edgeKey) => {
     const normalizedKey = String(edgeKey || '').trim();
     if (!normalizedKey) return null;
@@ -1708,9 +2089,12 @@ export const createRunAnalysis = ({
     return (Array.isArray(edges) ? edges : []).find((edge) => edge.edgeKey === normalizedKey) || null;
   };
 
+  /** @param {string | number} edgeKey An edge key, or the entry's index. */
   const getLosatCacheInfoEntry = (edgeKey) => {
+    /** @type {LosatCacheInfoEntry[]} */
     const entries = Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [];
-    if (Number.isInteger(edgeKey)) return entries[edgeKey] || null;
+    // `Number.isInteger` is true only for a number.
+    if (Number.isInteger(edgeKey)) return entries[/** @type {number} */ (edgeKey)] || null;
     const normalizedKey = String(edgeKey || '').trim();
     return entries.find((entry) => String(entry?.edgeKey || '') === normalizedKey) || null;
   };
@@ -1748,6 +2132,10 @@ export const createRunAnalysis = ({
     return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
   };
 
+  /**
+   * @param {unknown} name
+   * @param {unknown} fallback
+   */
   const normalizeLosatFilename = (name, fallback) => {
     const raw = String(name || '').trim() || String(fallback || '');
     const withExt = raw.toLowerCase().endsWith('.tsv') ? raw : `${raw}.tsv`;
@@ -1790,6 +2178,10 @@ export const createRunAnalysis = ({
   };
 
 
+  /**
+   * @param {unknown} cacheKey
+   * @param {RawLosatCacheEntry} cached
+   */
   const hydrateLosatDownloadText = async (cacheKey, cached) => {
     if (classifyRawLosatCacheEntry(cached) !== 'protein-current') {
       return {
@@ -1817,6 +2209,10 @@ export const createRunAnalysis = ({
     };
   };
 
+  /**
+   * @param {string} edgeKey
+   * @param {unknown} customName
+   */
   const downloadLosatPair = async (edgeKey, customName) => {
     const drawing = state.drawings.linear;
     const entry = getLosatCacheInfoEntry(edgeKey);
@@ -1833,7 +2229,7 @@ export const createRunAnalysis = ({
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
     if (!state.sessionOperationAvailability?.()) {
-      losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
+      losatCacheInfo.value = losatCacheInfo.value.map((/** @type {LosatCacheInfoEntry} */ candidate) => (
         candidate === entry ? { ...candidate, filename } : candidate
       ));
     }
@@ -1845,6 +2241,10 @@ export const createRunAnalysis = ({
     );
   };
 
+  /**
+   * @param {string} edgeKey
+   * @param {unknown} customName
+   */
   const setLosatPairFilename = (edgeKey, customName) => {
     const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -1859,12 +2259,15 @@ export const createRunAnalysis = ({
       customName,
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
-    losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
+    losatCacheInfo.value = losatCacheInfo.value.map((/** @type {LosatCacheInfoEntry} */ candidate) => (
       candidate === entry ? { ...candidate, filename } : candidate
     ));
   };
 
-  const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(state).current;
+  // `state` is the state.js object, which holds the members the discovery reads.
+  const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(
+    /** @type {CircularDiscoveryState<unknown>} */ (state)
+  ).current;
 
   const circularDiscoveryMatchesCurrentInput = () => (
     circularRecordDiscovery.status === 'ready' &&
@@ -2061,6 +2464,7 @@ export const createRunAnalysis = ({
     }
   };
 
+  /** @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options] */
   const refreshCircularRecordOrder = (options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -2080,7 +2484,8 @@ export const createRunAnalysis = ({
         Object.is(value, inflightRefresh.fingerprint[index])
       ))
     ) {
-      return inflightRefresh.promise;
+      // An entry is activated after its promise is assigned.
+      return /** @type {NonNullable<typeof inflightRefresh.promise>} */ (inflightRefresh.promise);
     }
     const entry = { fingerprint, promise: /** @type {Promise<any> | null} */ (null) };
     entry.promise = runCircularRecordRefresh(options).finally(() => {
@@ -2094,31 +2499,23 @@ export const createRunAnalysis = ({
   // render here, the Generate compiler's one trigger of the rule preparation.
   // `isCurrent` is the run's own staleness: the candidate is null when the run
   // went stale during the preparation, and is admitted (`shouldAdmit`) while
-  // the run and the rule inputs it was prepared from stay current. The run
-  // commits the feature color overrides rebound to the normalized captions.
+  // the run and the rule inputs it was prepared from stay current.
   /**
    * @param {DrawingState} drawing
    * @param {() => boolean} isCurrent
    * @param {Record<string, any>} [options]
    */
   const prepareAndAdmitCandidate = async (drawing, isCurrent, options) => {
-    if (!rulePreparation) {
-      return { rules: drawing.manualSpecificRules, featureColorOverrides: drawing.featureColorOverrides, shouldAdmit: isCurrent, notifyChanges: () => {} };
-    }
+    if (!rulePreparation) return { rules: drawing.manualSpecificRules, shouldAdmit: isCurrent };
     const candidate = await rulePreparation.prepareCandidate(drawing.manualSpecificRules, options);
     if (!candidate || !isCurrent()) return null;
-    return {
-      rules: candidate.rules,
-      featureColorOverrides: rebindRuleColorOverrides(drawing.featureColorOverrides, drawing.manualSpecificRules, candidate.rules),
-      shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent(),
-      notifyChanges: () => rulePreparation.notifyChanges(candidate)
-    };
+    return { rules: candidate.rules, shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent() };
   };
 
   /**
    * @param {DrawingState} drawing
    * @param {{ decorationContinuity?: any, comparisonPlanSnapshot?: Record<string, any> | null,
-   *   generatedArtifactHandle?: Record<string, any> | null, comparisonExecution?: Record<string, any> | null,
+   *   generatedArtifactHandle?: HistoryArtifactHandle | null, comparisonExecution?: Record<string, any> | null,
    *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} [options]
    */
   const runAnalysisInternal = async (drawing, {
@@ -2180,6 +2577,7 @@ export const createRunAnalysis = ({
     let acceptedCandidateReadyReceipt = null;
     let workingProteinIdentityManifest = committedArtifactHandle?.ownerSet
       ?.proteinIdentityManifest ?? proteinIdentityManifest.value;
+    /** @type {LegacyProteinCandidateEnvelope | null} */
     let workingLegacyProteinRawCandidates = committedArtifactHandle?.ownerSet
       ?.legacyProteinRawCandidates ?? legacyProteinRawCandidates.value;
     let workingLegacyProteinDerivedEvidence = committedArtifactHandle?.ownerSet
@@ -2194,14 +2592,14 @@ export const createRunAnalysis = ({
       || Object.keys(drawing.featurePlacementOverrides || {}).length > 0
       || Object.keys(drawing.featureStrokeOverrides).length > 0
       || Object.keys(drawing.legendColorOverrides).length > 0 || Object.keys(drawing.legendStrokeOverrides).length > 0
-      || drawing.legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption)
+      || drawing.legendEntries.value.some((/** @type {LegendEntry} */ entry) => entry.originalCaption && /** @type {string} */ (entry.originalCaption) !== entry.caption)
       || drawing.dormantLegendEntries.value.length > 0;
     // The committed records whose source this Generate replaces or drops. The
     // metadata of a Session without a feature catalog has no record keys.
     const replacedFeatures = hasSourceBoundEditorIntent
-      ? [...new Map((workingBiologicalFeatures || []).filter(feature => feature.record_key)
-        .map(feature => [feature.record_key, feature])).values()]
-        .filter(feature => !isCurrentFeature(feature))
+      ? [...new Map((workingBiologicalFeatures || []).filter((/** @type {FeatureCatalogRow} */ feature) => feature.record_key)
+        .map((/** @type {FeatureCatalogRow} */ feature) => [feature.record_key, feature])).values()]
+        .filter((/** @type {FeatureCatalogRow} */ feature) => !isCurrentFeature(feature))
       : [];
     const sourceReplaced = replacedFeatures.length > 0;
     const previousCommittedRequest = typeof getCommittedCanonicalSession === 'function'
@@ -2248,18 +2646,15 @@ export const createRunAnalysis = ({
       generationCancelRequested.value = false;
       return { status: 'canceled' };
     };
+    /** @param {unknown} message */
     const setProcessingStatus = (message) => {
       if (generationToken === latestGenerationToken) {
         processingStatus.value = String(message || '');
       }
     };
-    const onDiagramProgress = ({ stage }) => {
-      const message = {
-        'preparing-runtime': 'Preparing diagram runtime (first use)...',
-        'preparing-resources': 'Preparing diagram input resources...',
-        rendering: 'Rendering diagram...',
-        finalizing: 'Finalizing diagram results...'
-      }[stage];
+    /** @param {Parameters<typeof diagramProgressMessage>[0]} progress */
+    const onDiagramProgress = (progress) => {
+      const message = diagramProgressMessage(progress);
       if (message) setProcessingStatus(message);
     };
     const throwIfGenerationCanceled = () => {
@@ -2354,6 +2749,7 @@ export const createRunAnalysis = ({
     const manualRunStartedAtIso = new Date().toISOString();
     /** @type {Record<string, any> | null} */
     let structuredLosatTelemetry = null;
+    /** @type {{ cacheMap: Map<string, RawLosatCacheEntry>, cacheKey: string, candidateIndex: number, proteinIdMap: Record<string, unknown> }[]} */
     const legacyPromotionTransaction = [];
     let legacyPromotionCommitted = false;
     /** @type {((candidateOwnerSet: Record<string, any>) => { ownerSet: Record<string, any>, selectedOrthogroupAlignmentFeature: any }) | null} */
@@ -2390,18 +2786,27 @@ export const createRunAnalysis = ({
         const annotationError = validateAnnotationTargets();
         if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
+      /** @type {({ file: string, displayFile: string } | null)[]} */
       let regionSpecs = [];
+      /** @type {string[]} */
       let recordSelectors = [];
       const resolvedComparisons = [];
+      /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
       const runInfoFileMap = new Map();
+      /** @type {Map<string, GeneratedCliFile>} */
       const generatedCliFileMap = new Map();
       const textEncoder = new TextEncoder();
       const textDecoder = new TextDecoder();
+      /**
+       * @param {unknown} path
+       * @param {string} [fallback]
+       */
       const getPayloadName = (path, fallback = 'input') => {
         const name = String(path || '').split('/').filter(Boolean).pop();
         return name || fallback;
       };
+      /** @param {unknown} path */
       const generatedSlotForPath = (path) => {
         const normalizedPath = String(path || '').trim();
         if (normalizedPath === '/combined_d.tsv') return 'generatedFiles.combined_d';
@@ -2418,6 +2823,10 @@ export const createRunAnalysis = ({
         if (blastMatch) return `generatedFiles.losat_blasts[${Number(blastMatch[1])}]`;
         return normalizedPath ? `generatedFiles.${getPayloadName(normalizedPath).replace(/[^\w]+/g, '_')}` : '';
       };
+      /**
+       * @param {unknown} path
+       * @param {{ name?: unknown, slot?: unknown, kind?: string }} [options]
+       */
       const registerRunInfoFile = (path, { name = '', slot = '', kind = 'uploaded' } = {}) => {
         const normalizedPath = String(path || '').trim();
         if (!normalizedPath) return;
@@ -2429,6 +2838,11 @@ export const createRunAnalysis = ({
           kind: kind === 'generated' ? 'generated' : 'uploaded'
         });
       };
+      /**
+       * @param {unknown} path
+       * @param {unknown} data
+       * @param {{ name?: unknown, slot?: unknown }} [options]
+       */
       const recordGeneratedCliFile = (path, data, { name = '', slot = '' } = {}) => {
         const normalizedPath = String(path || '').trim();
         if (!normalizedPath) return;
@@ -2440,6 +2854,11 @@ export const createRunAnalysis = ({
           data: String(data ?? '')
         });
       };
+      /**
+       * @param {unknown} path
+       * @param {NonNullable<GeneratedCliFile['buildData']>} buildData
+       * @param {{ name?: unknown, slot?: unknown, retainedBytes?: unknown }} [options]
+       */
       const recordDeferredGeneratedCliFile = (
         path,
         buildData,
@@ -2460,6 +2879,11 @@ export const createRunAnalysis = ({
           buildData
         });
       };
+      /**
+       * @param {string} path
+       * @param {unknown} text
+       * @param {{ name?: string, slot?: string }} [options]
+       */
       const stageTextFile = (
         path,
         text,
@@ -2555,6 +2979,7 @@ export const createRunAnalysis = ({
       }
       // Per-feature Feature visibility decides LOSATP's proteins as the rules do;
       // the helper resolves one record's rows as Generate does (R4).
+      /** @param {string[]} recordKeys */
       const proteinVisibilityRows = (recordKeys) => requestFeatureOverrides(
         drawing.featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
       ).filter((row) => row.featureVisibility !== null)
@@ -2603,11 +3028,13 @@ export const createRunAnalysis = ({
           if (Number(drawing.adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
         }
       };
+      /** @param {unknown} value */
       const normalizeDepthTrackValue = (value) => {
         if (value === null || value === undefined || value === '') return null;
         const numeric = Number(value);
         return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : null;
       };
+      /** @param {(FileLike | null)[][]} rows */
       const depthTrackEntriesFromRows = (rows) => Array.from(
         { length: depthTrackMatrixWidth(rows) },
         (_, index) => {
@@ -2620,6 +3047,7 @@ export const createRunAnalysis = ({
           };
         }
       );
+      /** @param {unknown} index */
       const ensureDepthTrackConfigAt = (index) => {
         const idx = Math.max(0, Number(index) || 0);
         if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
@@ -2647,6 +3075,10 @@ export const createRunAnalysis = ({
         }
         return drawing.adv.depth_tracks[idx];
       };
+      /**
+       * @param {unknown} slots
+       * @param {unknown} [trackFiles]
+       */
       const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, trackFiles = []) => {
         if (!Array.isArray(slots)) return;
         const trackCount = Array.isArray(trackFiles)
@@ -2668,6 +3100,7 @@ export const createRunAnalysis = ({
           rows.map((row) => row[trackIndex]).find(Boolean) || null
         ));
       };
+      /** @param {LinearTrackSlot | null | undefined} slot */
       const syncLinearDepthSlotHeightFromTrackConfig = (slot) => {
         if (!slot || String(slot.renderer || '') !== 'depth') return;
         const rawTrackIndex = Number(slot.params?.track_index);
@@ -2854,12 +3287,14 @@ export const createRunAnalysis = ({
           // projects the same resolution, and the draft keeps what was typed.
           resolveComparisonThresholds(drawing.adv, 'circular');
 
+          /** @param {OrderedConservationSource[]} comparisonEntries */
           const runCircularLosatConservation = async (comparisonEntries) => {
             const circularLosatProgram = normalizeCircularConservationLosatProgram(
               drawing.circularConservation.losat_program
             );
             drawing.circularConservation.losat_program = circularLosatProgram;
             const subjectGencode = normalizePositiveInteger(drawing.circularConservation.subject_gencode, 1);
+            /** @param {unknown} comparisonGencode */
             const buildExtraArgs = (comparisonGencode) => {
               if (circularLosatProgram === 'tblastx') {
                 return [
@@ -2883,8 +3318,10 @@ export const createRunAnalysis = ({
             const subjectSequenceKey = `circular-subject:${subjectHash}`;
             const sequenceEntriesByKey = new Map([[subjectSequenceKey, subjectEntry.fasta]]);
             const cacheMap = new Map(losatCache.value || []);
+            /** @type {LosatCacheInfoEntry[]} */
             const cacheInfo = [];
             const losatPairs = [];
+            /** @type {LosatQueuedJob[]} */
             const losatJobs = [];
             const pendingJobKeys = new Set();
             const executionMode = getLosatExecutionMode();
@@ -3136,7 +3573,7 @@ export const createRunAnalysis = ({
           ? requireCurrentOrthogroupMembershipMode(
               drawing.losat.blastp?.orthogroupMembershipMode
             )
-          : 'anchor_core_v1';
+          : ORTHOGROUP_INFERENCE_VERSION;
         const orthogroupMemberMaxHits = useOrthogroupBlastp || useCollinearBlastp
           ? requireCurrentOrthogroupMemberMaxHits(
               drawing.losat.blastp?.orthogroupMemberMaxHits
@@ -3263,7 +3700,9 @@ export const createRunAnalysis = ({
           }
         }
 
+        /** @type {{ reverse: boolean }[]} */
         const viewTransformSpecs = [];
+        /** @param {LinearSeq} seq */
         const buildRegionSpec = (seq) => {
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           const wantsReverse = Boolean(seq.region_reverse);
@@ -3306,6 +3745,7 @@ export const createRunAnalysis = ({
             workingSelectedOrthogroupAlignmentFeature = '';
           }
         }
+        /** @type {LosatCacheInfoEntry[]} */
         let cacheInfo = [];
         const cacheMap = new Map(losatCache.value || []);
         const derivedCacheMap = useProteinBlastp
@@ -3366,6 +3806,7 @@ export const createRunAnalysis = ({
           workingLosatCacheInfo = [];
         }
 
+        /** @type {string[]} */
         let proteinRecordInstanceKeys = [];
 
         const buildProteinRecordInstanceKeys = async () => {
@@ -3383,6 +3824,10 @@ export const createRunAnalysis = ({
           });
         };
 
+        /**
+         * @param {number} idx
+         * @returns {Promise<LosatSeqEntry>}
+         */
         const getSeqEntry = async (idx) => {
           throwIfGenerationCanceled();
           if (fastaCache.has(idx)) return fastaCache.get(idx);
@@ -3536,6 +3981,11 @@ export const createRunAnalysis = ({
           return entry;
         };
 
+        /**
+         * @param {File | null | undefined} fileObj
+         * @param {string} path
+         * @param {{ cacheText?: boolean, slot?: string }} [options]
+         */
         const prepareLinearFile = async (fileObj, path, { cacheText = false, slot = '' } = {}) => {
           return stageUploadedFile(fileObj, path, {
             cacheText,
@@ -3544,6 +3994,7 @@ export const createRunAnalysis = ({
           });
         };
 
+        /** @param {number} idx */
         const getSeqHash = async (idx) => {
           if (fastaHashCache.has(idx)) return fastaHashCache.get(idx);
           const entry = await getSeqEntry(idx);
@@ -3562,6 +4013,7 @@ export const createRunAnalysis = ({
           return hash;
         };
 
+        /** @param {number} idx */
         const getViewTransform = async (idx) => {
           const entry = await getSeqEntry(idx);
           const length = Number(entry.canonicalLength || 0) || getFastaSequenceLength(entry.fasta);
@@ -3571,6 +4023,12 @@ export const createRunAnalysis = ({
           };
         };
 
+        /**
+         * @param {string[]} argsKey
+         * @param {number} queryIdx
+         * @param {number} subjectIdx
+         * @returns {Promise<LosatCacheMetadata>}
+         */
         const buildCacheMetadata = async (argsKey, queryIdx, subjectIdx) => {
           if (useProteinBlastp) {
             const queryEntry = await getSeqEntry(queryIdx);
@@ -3600,6 +4058,10 @@ export const createRunAnalysis = ({
           };
         };
 
+        /**
+         * @param {{ cacheKey: string, metadata: LosatCacheMetadata, queryEntry: LosatSeqEntry, subjectEntry: LosatSeqEntry,
+         *   identityIndex: object | null }} candidate
+         */
         const tryPromoteLegacyProteinEntry = async ({
           cacheKey,
           metadata,
@@ -3663,7 +4125,7 @@ export const createRunAnalysis = ({
           const promoted = {
             ...result.entry,
             text: result.text,
-            migratedFromSchema: 2
+            migratedFromSchema: LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA
           };
           delete promoted.key;
           delete promoted.filename;
@@ -3692,12 +4154,18 @@ export const createRunAnalysis = ({
             candidateIndex,
             proteinIdMap: result.proteinIdMap || {}
           });
-          return verified;
+          // `getCurrentRawLosatCacheEntry` returns the `cacheKey` it was given (its `unknown` parameter widens the type).
+          return /** @type {TextKeyedLosatCacheMatch} */ (verified);
         };
 
+        /**
+         * @param {LosatJobSpec} spec
+         * @param {LosatSeqEntry} queryEntry
+         * @param {LosatSeqEntry} subjectEntry
+         */
         const buildCacheFilename = (spec, queryEntry, subjectEntry) => {
           const edge = comparisonResolution.edges.find(
-            (candidate) => candidate.edgeKey === spec.edgeKey
+            (/** @type {LinearComparisonResolvedEdge} */ candidate) => candidate.edgeKey === spec.edgeKey
           );
           const fallback = losatPairDefaultName(
             drawing,
@@ -3711,6 +4179,11 @@ export const createRunAnalysis = ({
           );
         };
 
+        /**
+         * @param {string[]} arr
+         * @param {string} flag
+         * @param {unknown} value
+         */
         const pushArg = (arr, flag, value) => {
           if (value === null || value === undefined || value === '') return;
           if (typeof value === 'number' && !Number.isFinite(value)) return;
@@ -3727,7 +4200,12 @@ export const createRunAnalysis = ({
           return blastpCandidateLimit;
         };
 
+        /**
+         * @param {number} queryIdx
+         * @param {number} subjectIdx
+         */
         const buildLosatArgs = (queryIdx, subjectIdx) => {
+          /** @type {string[]} */
           const args = [];
           if (drawing.losatProgram.value === 'blastn') {
             pushArg(args, '--task', drawing.losat.blastn.task);
@@ -3748,8 +4226,8 @@ export const createRunAnalysis = ({
           const losatRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
             ? new Set(linearSeqs.map((_, index) => index))
             : new Set(comparisonResolution.edges
-                .filter((edge) => edge.source === 'losat')
-                .flatMap((edge) => [edge.queryIndex, edge.subjectIndex]));
+                .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'losat')
+                .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.queryIndex, edge.subjectIndex]));
           for (let i = 0; i < linearSeqs.length; i++) {
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
@@ -3780,8 +4258,8 @@ export const createRunAnalysis = ({
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
             ? linearSeqs.map((_, index) => index)
             : Array.from(new Set(comparisonResolution.edges
-                .filter((edge) => edge.source === 'losat')
-                .flatMap((edge) => [edge.queryIndex, edge.subjectIndex])))
+                .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'losat')
+                .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.queryIndex, edge.subjectIndex])))
                 .sort((left, right) => left - right);
           const proteinEntries = [];
           for (const index of proteinRecordIndexes) {
@@ -3848,6 +4326,7 @@ export const createRunAnalysis = ({
         if (useLosat && losatTiming) {
           setProcessingStatus('Preparing LOSAT jobs...');
           const losatPairs = [];
+          /** @type {LosatLinearJob[]} */
           const losatJobs = [];
           const pendingJobKeys = new Set();
           const jobBuildStartedAt = getNow();
@@ -3879,7 +4358,8 @@ export const createRunAnalysis = ({
             const cacheMetadata = await buildCacheMetadata(
               losatArgs, spec.queryIndex, spec.subjectIndex
             );
-            const batch = sourcePlan.bySpec.get(spec);
+            // `prepareLosatSourceBatches` maps every spec of `jobSpecs` to its batch.
+            const batch = /** @type {LosatSourceBatch<typeof spec>} */ (sourcePlan.bySpec.get(spec));
             if (batch.searchContext) cacheMetadata.searchContext = batch.searchContext;
             preparedJobs.push({ spec, losatArgs, cacheMetadata, batch });
           }
@@ -3904,15 +4384,7 @@ export const createRunAnalysis = ({
               }
             );
             throwIfGenerationCanceled();
-            const result = response.result;
-            if (
-              result.error || !Array.isArray(result.keys)
-              || result.keys.length !== preparedJobs.length
-              || result.keys.some((key) => !/^[0-9a-f]{64}$/.test(key))
-            ) {
-              throw result.error || new Error('Protein cache key generation failed.');
-            }
-            proteinCacheKeys = result.keys;
+            proteinCacheKeys = requireProteinLosatCacheKeys(response.result, preparedJobs.length);
           }
 
           // mergeProteinIdentityManifests made a private deep copy for this run.
@@ -3976,7 +4448,7 @@ export const createRunAnalysis = ({
               if (hasCachedText) losatTiming.cacheHits += 1;
               else losatTiming.cacheMisses += 1;
               const resolvedEdge = comparisonResolution.edges.find(
-                (edge) => edge.edgeKey === spec.edgeKey
+                (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === spec.edgeKey
               );
               const isResolvedDisplayPair = canonicalGridPair
                 ? canonicalGridPair(spec.queryIndex, spec.subjectIndex)
@@ -4041,6 +4513,7 @@ export const createRunAnalysis = ({
           } finally {
             releaseValidatedProteinIdentityIndex(identityIndex);
           }
+          /** @type {LosatSourceJob[]} */
           const sourceJobs = [];
           for (const batch of sourcePlan.batches) {
             const members = losatJobs.filter((job) => job.batch === batch);
@@ -4111,6 +4584,7 @@ export const createRunAnalysis = ({
             });
             losatResults.forEach((result) => {
               const job = losatJobs.find((item) => item.cacheKey === result.cacheKey);
+              /** @type {Partial<LosatCacheMetadata>} */
               const cacheMetadata = job?.cacheMetadata || {};
               const isProteinEntry = cacheMetadata.identityKind === 'protein';
               const rawEntry = {
@@ -4399,6 +4873,7 @@ export const createRunAnalysis = ({
           if (legacyPromotionTransaction.length > 0) {
             commitProteinMigration = (candidateOwnerSet) => {
               let nextLegacyEnvelope = candidateOwnerSet.legacyProteinRawCandidates;
+              /** @type {Record<string, unknown>} */
               const promotedProteinIdMap = {};
               legacyPromotionTransaction.forEach(({
                 candidateIndex,
@@ -4418,8 +4893,8 @@ export const createRunAnalysis = ({
                 });
               });
               let nextLegacyEvidence = candidateOwnerSet.legacyProteinDerivedEvidence;
-              if (!nextLegacyEnvelope.entries.some((candidate) => candidate.state === 'pending')) {
-                nextLegacyEvidence = { schema: 1, entries: [] };
+              if (!nextLegacyEnvelope.entries.some((/** @type {LegacyProteinCandidateEnvelope['entries'][number]} */ candidate) => candidate.state === 'pending')) {
+                nextLegacyEvidence = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
               }
               let nextOrthogroups = candidateOwnerSet.orthogroups;
               let nextExtractedFeatures = candidateOwnerSet.extractedFeatures;
@@ -4602,20 +5077,11 @@ export const createRunAnalysis = ({
         if (typeof getCommittedCanonicalSession !== 'function') {
           throw new Error('The preserved comparison owner is unavailable.');
         }
-        // The candidate is a current-schema request; an older committed
-        // request (for example a v42 CLI sidecar) is promoted before reuse.
-        const committedSession = getCommittedCanonicalSession();
+        // Load read the committed request (schema 9; a schema-1 request is
+        // refused as the inherited comparison's owner).
         inheritCommittedComparisonIntent({
           candidate: canonical,
-          committed: committedSession?.renderRequest
-            ? {
-                ...committedSession,
-                renderRequest: promoteCanonicalRenderRequestToCurrent(
-                  committedSession.renderRequest,
-                  { featureCatalog: featureCatalog?.value || null }
-                )
-              }
-            : committedSession
+          committed: getCommittedCanonicalSession()
         });
       }
       recordSessionLifecycleEvent('canonical-request-construction-end');
@@ -4693,12 +5159,13 @@ export const createRunAnalysis = ({
         sourceRecipe = await buildSourceRecipe(/** @type {any} */ ({
           ...canonical,
           generatedFileNameHints,
-          readResourceRecordCount: (resourceId, kind) => (
+          readResourceRecordCount: (/** @type {string} */ resourceId, /** @type {'genbank' | 'fasta'} */ kind) => (
             readCanonicalResourceRecordCount(canonical.resources, resourceId, kind)
           )
         }));
         throwIfGenerationCanceled();
       }
+      /** @type {TimingEntry[]} */
       const postGbdrawTimingEntries = [];
       failureStage = 'render';
       const canonicalExecution = await executeCanonicalRenderCandidate({
@@ -4711,7 +5178,7 @@ export const createRunAnalysis = ({
         prepareCommit: prepareCandidateCommit,
         prepareCommitInput: {
           sourceReplaced,
-          featureColorOverrides: colorCandidate.featureColorOverrides,
+          featureColorOverrides: drawing.featureColorOverrides,
           featureStrokeOverrides: drawing.featureStrokeOverrides,
           featureOverrides: drawing.featureOverrides,
           legendEntries: drawing.legendEntries.value,
@@ -4719,7 +5186,7 @@ export const createRunAnalysis = ({
           dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: drawing.addedLegendCaptions.value,
-          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: candidateRules
@@ -4741,9 +5208,12 @@ export const createRunAnalysis = ({
       if (canonicalExecution.status === 'engine-error') {
         logPostGbdrawTimings(postGbdrawTimingEntries);
         // R6: Python names the failed placement row; the Result still shows its feature.
-        return await failOperation(nameFeaturePlacementFailure(canonicalExecution.engineError,
+        const failure = await failOperation(nameFeaturePlacementFailure(canonicalExecution.engineError,
           canonical.renderRequest, extractedFeatures.value), { handle: committedArtifactHandle,
           restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
+        // The composition root asks how to make the labels fit (LP-D43).
+        return failure.status === 'error' && canonicalExecution.labelFit
+          ? { ...failure, labelFit: canonicalExecution.labelFit } : failure;
       }
       const {
         generationResponse,
@@ -4762,7 +5232,7 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
 
-      /** @type {ReturnType<typeof buildRunInfo> | null} */
+      /** @type {(ReturnType<typeof buildRunInfo> & { losatTelemetry?: unknown }) | null} */
       let candidateRunInfo = null;
       /** @type {ReturnType<typeof buildLatestCliHelperFiles> | null} */
       let candidateCliHelpers = null;
@@ -4829,8 +5299,9 @@ export const createRunAnalysis = ({
         annotationWarnings: canonicalExecution.annotationWarnings,
         featureIdentityNotices: canonicalExecution.featureIdentityNotices,
         comparisonWarnings: canonicalExecution.comparisonWarnings,
+        labelFitReports: canonicalExecution.labelFitReports,
         specificRules: candidateRules,
-        fileLegendCaptions: new Set(candidateRules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap)),
+        fileLegendCaptions: new Set(candidateRules.filter((/** @type {SpecificColorRule} */ rule) => rule.fromFile && rule.cap).map((/** @type {SpecificColorRule} */ rule) => rule.cap)),
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
         legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
@@ -5011,7 +5482,6 @@ export const createRunAnalysis = ({
           { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
         );
       }
-      colorCandidate.notifyChanges();
       return {
         status: 'ok',
         generatedArtifactCandidate: activatedGeneratedArtifactCandidate
@@ -5046,7 +5516,7 @@ export const createRunAnalysis = ({
   let shownGenerateDraft = null;
   /**
    * @param {Record<string, any> | null} [comparisonPlanSnapshot]
-   * @param {Record<string, any> | null} [generatedArtifactHandle]
+   * @param {HistoryArtifactHandle | null} [generatedArtifactHandle]
    * @param {Record<string, any> | null} [comparisonExecution]
    * @param {{ prepareGenerate?: (() => Promise<Record<string, any>>) | null,
    *   afterGenerate?: ((outcome: Record<string, any> | null) => any) | null }} [options]
@@ -5067,7 +5537,7 @@ export const createRunAnalysis = ({
     const previousAlert = errorLog.value;
     const isCurrentAlert = () => isCurrentOperation()
       && (errorLog.value === previousAlert || errorLog.value === null);
-    /** @type {Record<string, any> | null} */
+    /** @type {HistoryArtifactHandle | null} */
     let beforeHandle = null;
     let initialResults = results.value;
     /** @type {string | null} */
@@ -5130,6 +5600,7 @@ export const createRunAnalysis = ({
         comparisonPlanSnapshot = prepared.comparisonPlanSnapshot;
         comparisonExecution = prepared.comparisonExecution;
       }
+      /** @param {HistoryArtifactHandle | null} handle */
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
         // History has settled the draft this run reads.
@@ -5153,7 +5624,8 @@ export const createRunAnalysis = ({
                 placements: cloneJsonData(drawing.featurePlacementOverrides) || {},
                 removed: Number(featureEditRemovalCount.value) || 0
               }),
-              restoreIntentCheckpoint: ({ placements, removed }) => {
+              // The checkpoint is what `captureIntentCheckpoint` above returned.
+              restoreIntentCheckpoint: (/** @type {{ placements: FeaturePlacementDraft, removed: number }} */ { placements, removed }) => {
                 restorePlacements(drawing.featurePlacementOverrides, placements);
                 featureEditRemovalCount.value = removed;
               },
@@ -5225,7 +5697,7 @@ export const createRunAnalysis = ({
 
   /**
    * @param {DrawingState} drawing
-   * @param {{ canonical: Record<string, any>, decorationContinuity?: any, generatedArtifactHandle?: Record<string, any> | null,
+   * @param {{ canonical: Record<string, any>, decorationContinuity?: any, generatedArtifactHandle?: HistoryArtifactHandle | null,
    *   commitIntent?: (() => any) | null, alignmentResetBefore?: any, alignmentResetReceipt?: any, operation?: string,
    *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} options
    */
@@ -5285,6 +5757,7 @@ export const createRunAnalysis = ({
       return { status: 'canceled' };
     };
     try {
+      /** @type {TimingEntry[]} */
       const timingEntries = [];
       const execution = await executeCanonicalRenderCandidate({
         canonical,
@@ -5293,13 +5766,8 @@ export const createRunAnalysis = ({
         kind: 'target-record-transform',
         shouldAdmit: () => generationToken === latestGenerationToken
           && !generationCancelRequested.value,
-        onProgress: ({ stage }) => {
-          const message = {
-            'preparing-runtime': 'Preparing diagram runtime (first use)...',
-            'preparing-resources': 'Preparing diagram input resources...',
-            rendering: 'Rendering diagram...',
-            finalizing: 'Finalizing diagram results...'
-          }[stage];
+        onProgress: (progress) => {
+          const message = diagramProgressMessage(progress);
           if (message && generationToken === latestGenerationToken) {
             processingStatus.value = message;
           }
@@ -5315,7 +5783,7 @@ export const createRunAnalysis = ({
           dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: drawing.addedLegendCaptions.value,
-          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: drawing.manualSpecificRules
@@ -5330,8 +5798,10 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
       if (execution.status === 'engine-error') {
-        return await failOperation(execution.engineError, { handle: committedArtifactHandle, operation,
+        const failure = await failOperation(execution.engineError, { handle: committedArtifactHandle, operation,
           restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
+        return failure.status === 'error' && execution.labelFit
+          ? { ...failure, labelFit: execution.labelFit } : failure;
       }
       processingStatus.value = 'Preparing preview...';
       const candidateCommit = execution.commit;
@@ -5340,8 +5810,9 @@ export const createRunAnalysis = ({
       const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
         ? candidateCommit.featureState.orthogroups
         : [];
+      // Only Align sets `alignmentResetBefore`, and it projects its plan onto `canonical`, so `canonical` holds the plan and the translations.
       const receipt = alignmentResetBefore
-        ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:canonical})
+        ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:/** @type {AlignmentResetPlannedCanonical} */ (canonical)})
         : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value
           : alignmentResetReceipt;
       await validateSimilarityAlignmentResetReceipt(receipt, canonical);
@@ -5366,6 +5837,7 @@ export const createRunAnalysis = ({
         annotationWarnings: execution.annotationWarnings,
         featureIdentityNotices: execution.featureIdentityNotices,
         comparisonWarnings: execution.comparisonWarnings,
+        labelFitReports: execution.labelFitReports,
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
         ) || currentOwnerSet.matchSequenceOwner,
@@ -5468,7 +5940,7 @@ export const createRunAnalysis = ({
 
   /**
    * @param {{ canonical: Record<string, any>, label?: string,
-   *   captureIntentCheckpoint?: ((...args: any[]) => any) | null, restoreIntentCheckpoint?: ((...args: any[]) => any) | null,
+   *   captureIntentCheckpoint?: HistoryStepOptions['captureIntentCheckpoint'], restoreIntentCheckpoint?: HistoryStepOptions['restoreIntentCheckpoint'],
    *   commitIntent?: (() => any) | null, alignmentResetBefore?: any, alignmentResetReceipt?: any, operation?: string }} options
    */
   const runCommittedCanonicalCandidate = async ({
@@ -5491,7 +5963,7 @@ export const createRunAnalysis = ({
     const previousAlert = errorLog.value;
     const isCurrentAlert = () => isCurrentOperation()
       && (errorLog.value === previousAlert || errorLog.value === null);
-    /** @type {Record<string, any> | null} */
+    /** @type {HistoryArtifactHandle | null} */
     let beforeHandle = null;
     let initialResults = results.value;
     /** @type {string | null} */
@@ -5509,6 +5981,7 @@ export const createRunAnalysis = ({
         initialResults = results.value;
       }
       if (!isCurrentOperation()) return { status: 'stale' };
+      /** @param {HistoryArtifactHandle | null} handle */
       const execute = (handle) => {
         beforeHandle = handle;
         return runCommittedCanonicalCandidateInternal(drawing, {
@@ -5580,6 +6053,13 @@ export const createRunAnalysis = ({
   // the diagnostic Generate raises for it (R6, OV-06). The rerender also draws
   // the Legend again, so the Legend it draws is the generated inventory, as
   // after Generate (OV-42, OV-43): the next edit compares against it.
+  /**
+   * @param {Extract<Awaited<ReturnType<typeof executeCanonicalRenderCandidate>>, { status: 'ok' }>['commit']} commit The rerender's commit.
+   * @param {number} resultIndex
+   * @param {() => boolean} isCurrentReflow
+   * @param {LabelDiagramOptions | null | undefined} diagramOptions The `diagramOptions` of the request the rerender drew.
+   * @param {EditorPaintState} drawnPaint
+   */
   const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
@@ -5619,7 +6099,11 @@ export const createRunAnalysis = ({
 
   // A label reflow re-renders the committed Session with the current editor
   // tables (R1(c), N-16): it never reads the settings draft.
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {{ requestId: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'] }} options
+   * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
+   */
   const runLabelReflowCandidate = async (drawing, { requestId, decorationContinuity }) => {
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
@@ -5650,10 +6134,6 @@ export const createRunAnalysis = ({
       const candidateRules = colorCandidate.rules;
       const canonical = projectCommittedEditorIntent({
         committed,
-        promotion: {
-          featureCatalog: featureCatalog?.value ?? null,
-          legacyOrthogroupState: { groups: cloneJsonData(orthogroups.value || []) }
-        },
         state,
         drawing: {
           ...drawing,
@@ -5662,6 +6142,7 @@ export const createRunAnalysis = ({
           manualSpecificRules: candidateRules
         }
       });
+      /** @type {TimingEntry[]} */
       const timingEntries = [];
       const execution = await executeCanonicalRenderCandidate({
         canonical,
@@ -5671,7 +6152,7 @@ export const createRunAnalysis = ({
         shouldAdmit: colorCandidate.shouldAdmit,
         prepareCommit: prepareReflowResultCommit,
         prepareCommitInput: {
-          featureColorOverrides: colorCandidate.featureColorOverrides,
+          featureColorOverrides: drawing.featureColorOverrides,
           featureStrokeOverrides: drawing.featureStrokeOverrides,
           featureOverrides: drawing.featureOverrides,
           legendEntries: drawing.legendEntries.value,
@@ -5679,7 +6160,7 @@ export const createRunAnalysis = ({
           dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: drawing.addedLegendCaptions.value,
-          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
+          unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: candidateRules
@@ -5709,6 +6190,8 @@ export const createRunAnalysis = ({
       extractedFeatures.value = execution.commit.featureState.extractedFeatures;
       biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
       results.value = execution.commit.results;
+      // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
+      labelFitReports.value = execution.labelFitReports;
       // The preview owner selects the Result (R13). It registers readiness only
       // when fewer Results leave the selection out of range; the reflow's own
       // expectation, registered next, replaces it, so the binder reports a
@@ -5720,7 +6203,6 @@ export const createRunAnalysis = ({
         execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions, drawnPaint
       );
       logPostGbdrawTimings(timingEntries);
-      colorCandidate.notifyChanges();
       return { status: 'ok' };
     } catch (e) {
       if (isDiagramGenerationCanceled(e)) {
@@ -5784,7 +6266,7 @@ export const createRunAnalysis = ({
     if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
     const cacheMap = losatCache.value;
     if (!cacheMap || cacheMap.size === 0) return;
-    const hydratedEntries = (await Promise.all(losatCacheInfo.value.map(async (entry, idx) => {
+    const hydratedEntries = (await Promise.all(losatCacheInfo.value.map(async (/** @type {LosatCacheInfoEntry} */ entry, /** @type {number} */ idx) => {
       const cached = cacheMap.get(entry.key);
       if (!isCurrentRawLosatCacheEntry(cached)) return null;
       return {
@@ -5798,7 +6280,10 @@ export const createRunAnalysis = ({
       hydratedEntries.map((item) => item.hydrated)
     );
 
-    if (!confirmHydratedLosatExport(totalBytes)) return;
+    if (losatExportBytesExceedLimit(totalBytes) && !await askBeforeLargeDownload(askChoice, {
+      title: 'Download large LOSAT tables?',
+      description: `The raw LOSAT TSV files total about ${(totalBytes / (1024 * 1024)).toFixed(1)} MB.`
+    })) return;
 
     for (const { entry, idx, hydrated } of hydratedEntries) {
       const filename = entry.filename || `losat_pair_${idx + 1}.tsv`;
@@ -5818,8 +6303,8 @@ export const createRunAnalysis = ({
     losatCache.value = new Map();
     losatDerivedCache.value = new Map();
     proteinIdentityManifest.value = emptyProteinIdentityManifest();
-    legacyProteinRawCandidates.value = { schema: 1, entries: [] };
-    legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
+    legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
+    legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
     losatCacheInfo.value = [];
   };
 

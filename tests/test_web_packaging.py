@@ -251,6 +251,20 @@ def test_browser_wheel_excludes_hosted_web_assets() -> None:
     )
 
 
+def test_local_web_package_data_includes_every_web_module() -> None:
+    patterns = _load_verify_module().BUILD_SUPPORT.get_package_data_patterns(
+        include_browser_wheel=True
+    )
+    package_root = WEB_ROOT.parent
+    packaged = {path for pattern in patterns for path in package_root.glob(pattern)}
+
+    assert sorted(
+        path.relative_to(package_root).as_posix()
+        for path in (WEB_ROOT / "js").rglob("*.js")
+        if path not in packaged
+    ) == []
+
+
 def test_local_web_package_data_excludes_gallery_assets() -> None:
     build_support = _load_verify_module().BUILD_SUPPORT
     package_data_patterns = build_support.get_package_data_patterns(
@@ -417,7 +431,7 @@ def test_web_config_pyodide_local_wheels_match_shared_manifest() -> None:
 
 def test_index_uses_title_logo_separately_from_icon_assets() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
-    assert "./assets/gbdraw-logo-title.png" in index_html
+    assert "./assets/gbdraw-logo-title-outlined.svg" in index_html
     assert (
         '<link rel="icon" href="./assets/gbdraw-logo.svg" type="image/svg+xml">'
         in index_html
@@ -1379,6 +1393,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo.svg",
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title.svg",
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title.png",
+        build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title-outlined.svg",
         build_root / "gbdraw" / "web" / verify_module._parse_wheel_name(),
         build_root / "gbdraw" / "web" / "vendor" / "vue" / "vue.global.js",
         build_root

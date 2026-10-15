@@ -44,7 +44,7 @@ for (const width of [1440, 390]) {
       sets[0].annotations.forEach((row) => { row.target = { ...featureTarget({ selector: 'gene=PRIVATE-MISSING' }), record }; });
       return { mixed, invalid, all: encodeAnnotationTable(sets), count: sets[0].annotations.length };
     });
-    await panel(page).locator('summary').focus();
+    await panel(page).locator(':scope > summary').focus();
     await page.keyboard.press('Enter');
     const chooser = page.waitForEvent('filechooser');
     await panel(page).getByRole('button', { name: 'Import TSV', exact: true }).focus();

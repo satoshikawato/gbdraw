@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { WebFontEntry } from './services/font-store.js' */
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectSpecificColorQualifierSuggestions } from './services/feature-selector.js';
 import {
@@ -9,6 +10,7 @@ import {
 import { resultCatalogFeatures } from './services/feature-catalog.js';
 import {
   createDefaultLayoutPreferences,
+  legendPositionOrDefault,
   normalizeCircularPlotTitlePosition,
   resolveActiveLayoutPreference,
   updateActiveLayoutPreference
@@ -19,6 +21,11 @@ import {
   resolveLinearComparisonPlan
 } from './services/linear-comparisons.js';
 import { WEB_UX_PROFILE } from './web-ux-profile.js';
+import {
+  LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
+  LEGACY_PROTEIN_CANDIDATE_SCHEMA,
+  PROTEIN_IDENTITY_MANIFEST_SCHEMA
+} from './contracts/schema.generated.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
   getCommittedSvgContent,
@@ -27,6 +34,7 @@ import {
 } from './services/svg-result-ingestion.js';
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
 import { drawnLinearSequences } from './services/record-draw-selection.js';
+import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import {
   createDefaultAdv,
   createDefaultCircularConservation,
@@ -36,6 +44,7 @@ import {
 } from './services/session-active-config-contract.js';
 export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
+/** @type {<T>(value: T) => T} */
 const toRaw = window.Vue.toRaw || ((value) => value);
 
 // System State
@@ -64,6 +73,11 @@ const featureIdentityNotices = ref([]);
 // The edits the last source-replacing Generate removed (Q3 = A); a notice only.
 const featureEditRemovalCount = ref(0);
 const comparisonWarnings = ref([]);
+/** @import { ResultLabelFit } from './services/label-fit.js' */
+// Python's label fit report of each drawn Result with crossing label leaders
+// (LP-D46): the notice bar of the shown Result reads it. Artifact-owned like
+// comparisonWarnings; not saved in a Session.
+const labelFitReports = ref(/** @type {readonly ResultLabelFit[]} */ ([]));
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.
@@ -120,6 +134,7 @@ const generateLinearSeqUid = () => {
   return `linear-seq-${Date.now()}-${linearSeqUidCounter}`;
 };
 
+/** @param {unknown} value */
 const normalizeLinearSeqNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
@@ -135,15 +150,16 @@ const normalizeLinearSeqNumber = (value) => {
  * @property {any} gff
  * @property {any} fasta
  * @property {any} depth
- * @property {number} losat_gencode
+ * @property {number | ''} losat_gencode `v-model.number` writes an empty string when the field is cleared
  * @property {string} definition
  * @property {string} record_subtitle
  * @property {string} file_definition
  * @property {string} file_subtitle
  * @property {string} inferred_definition
  * @property {string} region_record_id
- * @property {number | null} region_start
- * @property {number | null} region_end
+ * @property {unknown} region_start a draft: `createLinearSeq` and the crop control write a number or null,
+ *   a Session load stores the saved value as it is; the request projection validates it (R7)
+ * @property {unknown} region_end a draft, as `region_start`
  * @property {boolean} region_reverse
  */
 
@@ -175,6 +191,11 @@ export const createLinearSeq = (overrides = {}) => {
   };
 };
 
+/**
+ * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
+ *   slots, or unvalidated data (a session, an import), as `createLinearSeq` takes them
+ * @returns {LinearSeq[]}
+ */
 export const normalizeLinearSeqList = (items) => {
   const baseItems = Array.isArray(items) && items.length > 0 ? items : [null];
   const seenUids = new Set();
@@ -189,8 +210,13 @@ export const normalizeLinearSeqList = (items) => {
   return normalized;
 };
 
+/** @param {LinearSeq | null | undefined} seq */
 const hasLinearSeqPrimaryInput = (seq) => Boolean(seq?.gb || seq?.gff || seq?.fasta);
 
+/**
+ * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
+ * @returns {LinearSeq[]}
+ */
 export const collapseEmptyLinearSeqList = (items) => {
   const previous = normalizeLinearSeqList(items);
   if (previous.length <= 1) return previous;
@@ -199,7 +225,7 @@ export const collapseEmptyLinearSeqList = (items) => {
   return normalizeLinearSeqList(collapsed);
 };
 
-const linearSeqs = reactive(normalizeLinearSeqList([]));
+const linearSeqs = /** @type {LinearSeq[]} */ (reactive(normalizeLinearSeqList([])));
 const selectedAnnotation = ref(null);
 
 export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
@@ -259,13 +285,13 @@ const losatThreadingStatus = ref({
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());
 const proteinIdentityManifest = ref({
-  schema: 2,
+  schema: PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   proteinSets: {},
   recordAnalyses: {},
   recordInstances: {}
 });
-const legacyProteinRawCandidates = ref({ schema: 1, entries: [] });
-const legacyProteinDerivedEvidence = ref({ schema: 1, entries: [] });
+const legacyProteinRawCandidates = ref({ schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] });
+const legacyProteinDerivedEvidence = ref({ schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] });
 const orthogroups = ref([]);
 const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
@@ -273,14 +299,20 @@ const selectedOrthogroupAlignmentFeature = ref('');
 const similarityAlignmentPlan = ref(null);
 const similarityAlignmentResetReceipt = ref(null);
 const linearRecordTranslations = ref([]);
-const legacySimilarityAlignment = ref(null);
 const selectedOrthogroupId = ref('');
 const orthogroupSearch = ref('');
 const orthogroupSortMode = ref('id');
 const showRightDrawer = ref(false);
 const rightDrawerTab = ref('features'); // 'legend' | 'features' | 'orthogroups'
 const linearReorderNotice = ref('');
+// The Linear File cards folded to their header line, by source uid: app-level
+// view state. Its transitions are in services/linear-sources.js.
+/** @import { FoldedLinearSources } from './services/linear-sources.js' */
+/** @type {FoldedLinearSources} */
+const linearFoldedSources = reactive(new Set());
 const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
+/** @import { CircularRecordDiscovery } from './services/record-discovery.js' */
+/** @type {CircularRecordDiscovery} */
 const circularRecordDiscovery = reactive({
   status: 'idle',
   error: '',
@@ -289,6 +321,12 @@ const circularRecordDiscovery = reactive({
   pairedFile: null,
   canonicalRecordIdentities: []
 });
+
+// The fonts registered in this page (custom fonts D-01, services/font-store.js):
+// frozen entries with their bytes, never saved (D-02) and not in History.
+/** @type {WebFontEntry[]} */
+const loadedFontsInitial = [];
+const loadedFonts = ref(loadedFontsInitial);
 
 // Color & Filter State
 const paletteDefinitions = ref({});
@@ -317,13 +355,26 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
 const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
-const featureCatalog = ref(null); // Validated schema-4 metadata for committed Results
+/** @import { FeatureCatalog } from './services/feature-catalog.js' */
+// Null, or the admitted catalog of the committed Results (`admittedFeatureCatalog`
+// in services/config.js; R11), held by reference.
+const featureCatalog = /** @type {{ value: FeatureCatalog | null }} */ (ref(null));
 // Whether the rule preparation (app/rule-matching.js) is matching rules; it
 // records the matches, which live on the feature objects, before this falls back.
 const ruleMatchingPending = ref(false);
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, activeDrawing().manualSpecificRules)
 );
+/**
+ * What state.js reads of a listed feature (the Features list rows and the
+ * extracted features, whose owner has no typedef).
+ * @typedef {{
+ *   id?: unknown, svg_id?: unknown, record_idx?: unknown, displayRecordId?: unknown,
+ *   rendered_svg_id?: unknown, renderedSvgId?: unknown, rendered_feature_svg_id?: unknown,
+ *   renderedFeatureSvgId?: unknown
+ * }} FeatureListRow
+ */
+/** @param {FeatureListRow | null | undefined} feature */
 const renderedFeatureSvgId = (feature) => {
   return String(
     feature?.rendered_svg_id ||
@@ -366,7 +417,7 @@ const selectedFeatures = computed(() => {
 
   const bySvgId = featuresBySvgId.value instanceof Map ? featuresBySvgId.value : new Map();
   const fallback = new Map();
-  (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
+  (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((/** @type {FeatureListRow} */ feature) => {
     const svgId = renderedFeatureSvgId(feature);
     if (svgId && !fallback.has(svgId)) fallback.set(svgId, feature);
   });
@@ -412,9 +463,14 @@ const labelReflowLastError = ref(null);
 // SVG Feature Click state
 const svgContainer = ref(null);
 const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
-const clickedFeaturePos = reactive({ x: 0, y: 0 });
+// A popup's position. A popup opened at a clicked point keeps that `anchor`
+// until it is placed with its rendered size (OV-371); `maxHeight` (0: none)
+// keeps a popup placed above the point from growing over it.
+/** @import { PopupAnchor } from './utils/popup-bounds.js' */
+/** @typedef {{ x: number, y: number, maxHeight: number, anchor: PopupAnchor | null }} PopupPosition */
+const clickedFeaturePos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
 const clickedPairwiseMatch = ref(null); // {title, subtitle, sections}
-const clickedPairwiseMatchPos = reactive({ x: 0, y: 0 });
+const clickedPairwiseMatchPos = /** @type {PopupPosition} */ (reactive({ x: 0, y: 0, maxHeight: 0, anchor: null }));
 const pairwiseMatchPopupRef = ref(null);
 const pairwiseMatchPopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
 const pairwiseMatchPopupSize = reactive({ width: 0, height: 0 });
@@ -454,6 +510,10 @@ const featureStyleScopeDialog = reactive({
   displayLabelSiblingCount: 0, // Number of other features sharing display label
   annotationLabel: null, // Feature's source annotation label (product/gene/locus_tag)
   annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
+  // OV-648: whether each label scope selects other features than the Legend
+  // item scope (the annotation label also than the display label scope).
+  displayLabelOffered: false,
+  annotationLabelOffered: false,
   existingCaptionRule: null, // Existing hash rule for same caption (already colored)
   existingCaptionColor: null, // Color of existing caption rule
   defaultColorType: null, // D-15: the feature type whose default color "Apply to all" sets
@@ -494,9 +554,12 @@ const resetColorDialog = reactive({
 const legendRenameDialog = reactive({
   show: false,
   mode: 'scope', // 'scope' | 'target'
-  oldCaption: '',
+  // The key of the renamed row and of the target row ('' for a color rule's
+  // name that no row shows); the dialog shows each row's drawn name.
+  sourceKey: /** @type {PythonLegendKey | ''} */ (''),
   newCaption: '',
-  targetCaption: '',
+  targetKey: /** @type {PythonLegendKey | ''} */ (''),
+  targetCaption: '', // the name a Merge adopts
   targetColor: '',
   currentColor: '',
   siblingCount: 0,
@@ -504,6 +567,17 @@ const legendRenameDialog = reactive({
   // R15-3 (OV-285): the Python key of the deleted row the new caption names;
   // '' when the target is listed. Its Merge restores that row first.
   deletedTargetKey: /** @type {PythonLegendKey | ''} */ (''),
+  // PD-OI-061 revision 4: the new caption is the name of a color rule that no
+  // Legend row shows.
+  targetRuleOnly: false,
+  // PD-OI-061 scenario revision 5: the name the renamed row is drawn with
+  // after "Keep both", and the target row's drawn name after it ('' when the
+  // target is not drawn or its drawn name stays).
+  keepBothName: '',
+  targetNameAfter: '',
+  // D-28: "Keep both" onto a deleted row in the renamed row's color restores
+  // that row first, as Merge does: rows of one name and one swatch are one row.
+  keepBothRestores: false,
   pendingRequest: null
 });
 
@@ -544,6 +618,15 @@ const featureVisibilityScopeDialog = reactive({
 // Sidebar resize state
 const sidebarWidth = ref(320); // Initial width in pixels
 const isResizing = ref(false);
+// The display of the settings pane and the entry docked beside its icon rail.
+// services/settings-pane-state.js holds every transition; the browser, not
+// the Session, remembers the display (app/settings-pane.js).
+/** @import { SettingsPaneDisplay } from './services/settings-pane-state.js' */
+/** @import { SettingsSectionKey } from './services/settings-sections.js' */
+/** @type {{ value: SettingsPaneDisplay }} */
+const settingsPaneDisplay = ref(DEFAULT_SETTINGS_PANE_DISPLAY);
+/** @type {{ value: SettingsSectionKey | null }} */
+const settingsPaneDocked = ref(null);
 
 // Legend Editor state
 const originalLegendOrder = ref([]); // Store original order from generation
@@ -587,14 +670,15 @@ const generatedLegendPosition = ref('left');
 const generatedMode = ref('circular');
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
-const normalizeCircularLegendPosition = (value) => String(value || '').trim().toLowerCase() || 'left';
+/** @param {unknown} value */
+const circularLegendPosition = (value) => legendPositionOrDefault(value, 'circular');
 const shouldDeferCircularPreviewUpdates = computed(() => {
   const { form, adv } = drawings.circular;
   return generatedMode.value === 'circular' &&
     mode.value === 'circular' &&
     (
       Boolean(form.multi_record_canvas) !== Boolean(generatedMultiRecordCanvas.value) ||
-      normalizeCircularLegendPosition(form.legend) !== normalizeCircularLegendPosition(generatedLegendPosition.value) ||
+      circularLegendPosition(form.legend) !== circularLegendPosition(generatedLegendPosition.value) ||
       normalizeCircularPlotTitlePosition(adv.plot_title_position) !==
         normalizeCircularPlotTitlePosition(generatedCircularPlotTitlePosition.value)
     );
@@ -683,13 +767,10 @@ const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(result
 // content (an editor edit, R1) keeps both, so it does not list the features
 // again. The rule matches the drawn state reads are recorded while
 // `ruleMatchingPending` holds, so the list follows its fall.
-/**
- * What the list reads of the displayed Result's committed metadata.
- * @typedef {{ selectedFeatureTypes?: string[] | null, renderedFeatureIdentities?: { renderedIds?: unknown } | null }} ListedResultMetadata
- */
-/** @typedef {{ list: readonly { name?: unknown }[], names: unknown[], metadata: ListedResultMetadata | null }} ListedResults */
+/** @import { CommittedSvgResultMetadata, SvgResultEntry } from './services/svg-result-ingestion.js' */
+/** @typedef {{ list: readonly SvgResultEntry[], names: unknown[], metadata: CommittedSvgResultMetadata | null }} ListedResults */
 const listedResults = computed((/** @type {ListedResults | undefined} */ previous) => {
-  /** @type {readonly { name?: unknown }[]} */
+  /** @type {readonly SvgResultEntry[]} */
   const list = results.value;
   const names = list.map((result) => result?.name);
   const metadata = displayedResultMetadata();
@@ -709,13 +790,14 @@ const featureList = computed(() => {
   const features = extractedFeatures.value;
   const renderedIds = names.length < 2 ? null : metadata?.renderedFeatureIdentities?.renderedIds;
   return {
-    rows: renderedIds instanceof Set ? features.filter((feature) => renderedIds.has(feature.svg_id)) : features,
+    rows: renderedIds instanceof Set ? features.filter((/** @type {FeatureListRow} */ feature) => renderedIds.has(feature.svg_id)) : features,
     drawn: null,
     rendered: null
   };
 });
 // A listed feature's drawn state and the rendered ID it is drawn with ('' when
 // the Result does not draw it).
+/** @param {VisibilityFeature | null | undefined} feature */
 const featureListState = (feature) => {
   const { drawn, rendered } = featureList.value;
   const raw = toRaw(feature);
@@ -726,7 +808,7 @@ const featureListState = (feature) => {
 };
 const featureRecordPickerVisible = computed(() => (
   featureRecordIds.value.length > 1
-  && new Set(featureList.value.rows.map((feature) => (
+  && new Set(featureList.value.rows.map((/** @type {FeatureListRow} */ feature) => (
     mode.value === 'circular' ? feature.record_idx : feature.displayRecordId
   ))).size > 1
 ));
@@ -762,18 +844,36 @@ const filteredFeatures = computed(() => {
   return features;
 });
 
-// The height of a Features list row (`h-[83px]` in index.html): three lines,
-// the last with the Visibility checkbox (R-5).
-const FEATURE_ROW_HEIGHT_PX = 83;
+// The height of a compact Features list row (`h-[36px]` in index.html), and
+// the extra height of the one row expanded to edit (`h-[44px]`).
+const FEATURE_ROW_HEIGHT_PX = 36;
+const FEATURE_ROW_EXPANDED_EXTRA_PX = 44;
 const FEATURE_LIST_OVERSCAN = 8;
 const featureListScrollTop = ref(0);
 const featureListViewportHeight = ref(520);
+const featureListExpandedId = ref(null);
 const isFeatureDrawerMounted = computed(
   () => Boolean(svgContent.value && showRightDrawer.value && rightDrawerTab.value === 'features')
 );
+const featureListExpandedIndex = computed(() => (
+  featureListExpandedId.value === null
+    ? -1
+    : filteredFeatures.value.findIndex((/** @type {FeatureListRow} */ feature) => feature.id === featureListExpandedId.value)
+));
+/** @param {number} index */
+const featureListRowTop = (index) => (
+  index * FEATURE_ROW_HEIGHT_PX
+  + (featureListExpandedIndex.value >= 0 && index > featureListExpandedIndex.value ? FEATURE_ROW_EXPANDED_EXTRA_PX : 0)
+);
 const featureListStartIndex = computed(() => {
   if (!isFeatureDrawerMounted.value) return 0;
-  return Math.max(0, Math.floor(featureListScrollTop.value / FEATURE_ROW_HEIGHT_PX) - FEATURE_LIST_OVERSCAN);
+  const top = featureListScrollTop.value;
+  const expanded = featureListExpandedIndex.value;
+  let index = Math.floor(top / FEATURE_ROW_HEIGHT_PX);
+  if (expanded >= 0 && index > expanded) {
+    index = Math.max(expanded, Math.floor((top - FEATURE_ROW_EXPANDED_EXTRA_PX) / FEATURE_ROW_HEIGHT_PX));
+  }
+  return Math.max(0, index - FEATURE_LIST_OVERSCAN);
 });
 const featureListEndIndex = computed(() => {
   if (!isFeatureDrawerMounted.value) return 0;
@@ -784,9 +884,9 @@ const visibleFeatureRows = computed(() => {
   if (!isFeatureDrawerMounted.value) return [];
   return filteredFeatures.value.slice(featureListStartIndex.value, featureListEndIndex.value);
 });
-const featureListTopSpacerPx = computed(() => featureListStartIndex.value * FEATURE_ROW_HEIGHT_PX);
+const featureListTopSpacerPx = computed(() => featureListRowTop(featureListStartIndex.value));
 const featureListBottomSpacerPx = computed(
-  () => Math.max(0, (filteredFeatures.value.length - featureListEndIndex.value) * FEATURE_ROW_HEIGHT_PX)
+  () => Math.max(0, featureListRowTop(filteredFeatures.value.length) - featureListRowTop(featureListEndIndex.value))
 );
 const featureEditorStatusText = computed(() => {
   const count = Number(featureEditorStatus.summaryCount || extractedFeatures.value.length || 0);
@@ -804,7 +904,7 @@ const filteredEditableLabels = computed(() => {
   const query = String(labelSearch.value || '').trim().toLowerCase();
   if (!query) return editableLabels.value;
 
-  return editableLabels.value.filter((entry) => {
+  return editableLabels.value.filter((/** @type {{ text?: unknown, sourceText?: unknown, featureId?: unknown }} */ entry) => {
     return (
       String(entry.text || '').toLowerCase().includes(query) ||
       String(entry.sourceText || '').toLowerCase().includes(query) ||
@@ -813,11 +913,14 @@ const filteredEditableLabels = computed(() => {
   });
 });
 
+/** @typedef {{ status: 'busy', reason: string }} SessionBusy What `sessionOperationAvailability` returns while a Session operation blocks edits. */
+
 // Pending is owned by the existing Session lifecycle; availability stores no lock.
 // 'history' words why History rejects Undo/Redo; History decides when (D-28).
 // `preparationBusyReason` words an edit still applying, whose owners only the
 // composition root holds: it passes it for Save and Load (R13). History words
 // its own pending edit the same way, so it passes none.
+/** @returns {SessionBusy | null} */
 export const sessionOperationAvailability = (
   operation = 'mutation',
   preparationBusyReason = /** @type {(() => string | null | undefined) | null} */ (null)
@@ -833,9 +936,11 @@ export const sessionOperationAvailability = (
   return reason ? { status: 'busy', reason } : null;
 };
 
-/** @typedef {'circular' | 'linear'} DiagramMode */
+/** @import { ModeProfileName } from './mode-profiles.js' */
+/** @typedef {ModeProfileName} DiagramMode The diagram modes; `mode-profiles.js` owns the names. */
 
 /** @import { PythonLegendKey, RenderedFeatureId } from './services/legend-svg.js' */
+/** @import { FeatureVisibilityRuleDraft, VisibilityFeature } from './services/feature-visibility.js' */
 /** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
 /**
  * The color a Legend row records, never its identity (OV-288): one the user
@@ -912,6 +1017,7 @@ const createDrawingState = (drawingMode) => {
     losatProgram: losatProgram.value,
     blastpMode: losat.blastp?.mode
   }));
+  /** @type {FeatureVisibilityRuleDraft[]} */
   const featureVisibilityManualRules = reactive([]);
   const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
   const labelFilters = createDefaultLabelFilterState();
@@ -1021,6 +1127,7 @@ export const state = {
   featureIdentityNotices,
   featureEditRemovalCount,
   comparisonWarnings,
+  labelFitReports,
   pairwiseMatchFactors,
   matchSequenceRegistry,
   svgContent,
@@ -1054,18 +1161,19 @@ export const state = {
   similarityAlignmentPlan,
   similarityAlignmentResetReceipt,
   linearRecordTranslations,
-  legacySimilarityAlignment,
   selectedOrthogroupId,
   orthogroupSearch,
   orthogroupSortMode,
   showRightDrawer,
   rightDrawerTab,
   linearReorderNotice,
+  linearFoldedSources,
   circularRecordList,
   circularRecordDiscovery,
   paletteDefinitions,
   paletteNames,
   paletteInstantPreviewEnabled,
+  loadedFonts,
   losatExecution,
   richFeaturePopup,
   appliedPaletteName,
@@ -1111,6 +1219,7 @@ export const state = {
   previewFeatureSearchRenderedCount,
   featureListScrollTop,
   featureListViewportHeight,
+  featureListExpandedId,
   isFeatureDrawerMounted,
   visibleFeatureRows,
   featureRecordPickerVisible,
@@ -1148,6 +1257,8 @@ export const state = {
   labelOnDialog,
   sidebarWidth,
   isResizing,
+  settingsPaneDisplay,
+  settingsPaneDocked,
   originalLegendOrder,
   originalLegendColors,
   legendStrokeOptionsOpen,
@@ -1191,3 +1302,10 @@ export const state = {
   filteredFeatures,
   filteredEditableLabels
 };
+
+/**
+ * The Web state, for a module that receives it as a parameter. A member whose
+ * declaration above has no type is `any` (Vue's `ref`, `reactive` and
+ * `computed` are untyped globals).
+ * @typedef {typeof state} WebState
+ */

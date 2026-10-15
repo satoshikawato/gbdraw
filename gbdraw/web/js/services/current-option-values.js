@@ -1,35 +1,71 @@
 // @ts-check
+import { DEFAULT_FEATURE_RENDERINGS, normalizeFeatureRendering, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
+import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
+import { requireComparisonSetting } from './losat-normalization.js';
+
+/**
+ * @param {unknown} value
+ * @param {string} fallback
+ */
 const normalizedValue = (value, fallback) => {
   const normalized = String(value ?? '').trim().toLowerCase();
   return normalized || fallback;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
 
+/**
+ * @param {unknown} value
+ * @param {string} key
+ */
 const hasOwn = (value, key) => (
   isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, key)
 );
 
+/**
+ * @template T
+ * @param {T} source
+ * @param {string} obsoleteName
+ * @param {string} currentName
+ * @returns {T}
+ */
 const migrateOwnField = (source, obsoleteName, currentName) => {
   if (!hasOwn(source, obsoleteName)) return source;
-  const migrated = { ...source };
+  /** @type {Record<string, unknown>} */
+  // `hasOwn` above holds only for a plain object.
+  const migrated = { .../** @type {Record<string, unknown>} */ (source) };
   if (!hasOwn(migrated, currentName)) {
     migrated[currentName] = migrated[obsoleteName];
   }
   delete migrated[obsoleteName];
-  return migrated;
+  // The copy keeps the shape of `source`, with the obsolete name moved to the current one.
+  return /** @type {T} */ (migrated);
 };
 
+/**
+ * @template {string} T
+ * @param {unknown} value
+ * @param {string} fallback
+ * @param {readonly T[]} supported
+ * @param {string} label
+ * @returns {T} One of the `supported` names.
+ */
 const requireCurrentValue = (value, fallback, supported, label) => {
   const normalized = normalizedValue(value, fallback);
-  if (!supported.includes(normalized)) {
+  if (!(/** @type {readonly string[]} */ (supported)).includes(normalized)) {
     throw new Error(`${label} must be one of: ${supported.join(', ')}.`);
   }
-  return normalized;
+  // `supported` holds it: checked above.
+  return /** @type {T} */ (normalized);
 };
 
+/** @param {unknown} value */
 export const requireCurrentCircularMultiRecordSizeMode = (value) => (
   requireCurrentValue(
     value,
@@ -39,6 +75,7 @@ export const requireCurrentCircularMultiRecordSizeMode = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const requireCurrentLinearTrackLayout = (value) => (
   requireCurrentValue(
     value,
@@ -48,6 +85,7 @@ export const requireCurrentLinearTrackLayout = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const requireCurrentLinearLabelPlacement = (value) => (
   requireCurrentValue(
     value,
@@ -57,8 +95,15 @@ export const requireCurrentLinearLabelPlacement = (value) => (
   )
 );
 
+/** The Pairwise match styles (the Load reader and Generate read this list). */
+export const PAIRWISE_MATCH_STYLES = /** @type {const} */ (['ribbon', 'curve']);
+
+/**
+ * @param {unknown} value
+ * @param {unknown} fallback
+ */
 export const normalizeCurrentPairwiseMatchStyle = (value, fallback) => {
-  const supported = ['ribbon', 'curve'];
+  const supported = /** @type {readonly string[]} */ (PAIRWISE_MATCH_STYLES);
   const normalizedFallback = String(fallback ?? '').trim().toLowerCase();
   if (!supported.includes(normalizedFallback)) {
     throw new Error('Pairwise match style fallback must be one of: ribbon, curve.');
@@ -67,6 +112,7 @@ export const normalizeCurrentPairwiseMatchStyle = (value, fallback) => {
   return supported.includes(normalized) ? normalized : normalizedFallback;
 };
 
+/** @param {unknown} value */
 export const requireCurrentProteinBlastpMode = (value) => (
   requireCurrentValue(
     value,
@@ -76,16 +122,13 @@ export const requireCurrentProteinBlastpMode = (value) => (
   )
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearSearchScope = (value) => (
-  requireCurrentValue(
-    value,
-    'adjacent',
-    ['adjacent', 'all'],
-    'Collinear search scope'
-  )
+  requireComparisonSetting('collinearitySearchScope', value, 'Collinear search scope')
 );
 
 // Older saved pipelines omit this field; fresh Web state explicitly supplies false.
+/** @param {unknown} [value] */
 export const requireCurrentCollinearInferOrthogroups = (value = true) => {
   if (typeof value !== 'boolean') {
     throw new Error('Collinear orthogroup inference must be a boolean.');
@@ -93,6 +136,7 @@ export const requireCurrentCollinearInferOrthogroups = (value = true) => {
   return value;
 };
 
+/** @param {unknown} value */
 export const requireCurrentProteinBlastpCandidateLimit = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
@@ -102,6 +146,14 @@ export const requireCurrentProteinBlastpCandidateLimit = (value) => {
   return numeric;
 };
 
+/**
+ * @template {number | null} F
+ * @param {unknown} value
+ * @param {F} fallback
+ * @param {number} minimum
+ * @param {string} label
+ * @returns {F | number}
+ */
 const requireCurrentInteger = (value, fallback, minimum, label) => {
   if (value === null || value === undefined || value === '') return fallback;
   const numeric = Number(value);
@@ -112,52 +164,52 @@ const requireCurrentInteger = (value, fallback, minimum, label) => {
   return numeric;
 };
 
+/** @param {unknown} value */
 export const requireCurrentProteinBlastpMaxHits = (value) => (
   requireCurrentInteger(value, 5, 1, 'Protein BLASTP Pairwise max hits')
 );
 
+/** @param {unknown} value */
 export const requireCurrentOrthogroupMemberMaxHits = (value) => (
   requireCurrentInteger(value, null, 1, 'Protein BLASTP member hits per protein')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMinAnchors = (value) => (
   requireCurrentInteger(value, 1, 1, 'Collinear minimum anchors')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMaxUnitGap = (value) => (
   requireCurrentInteger(value, 0, 0, 'Collinear maximum unit gap')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMaxDiagonalDrift = (value) => (
   requireCurrentInteger(value, 0, 0, 'Collinear maximum diagonal drift')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMaxConflicts = (value) => (
   requireCurrentInteger(value, 1, 0, 'Collinear maximum conflicts in merge gap')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMaxParalogLinks = (value) => (
   requireCurrentInteger(value, 2, 1, 'Collinear maximum paralog links per orthogroup')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearUnitMode = (value) => (
-  requireCurrentValue(
-    value,
-    'auto',
-    ['auto', 'cds', 'locus'],
-    'Collinear unit mode'
-  )
+  requireComparisonSetting('collinearityUnitMode', value, 'Collinear unit mode')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearAnchorMode = (value) => (
-  requireCurrentValue(
-    value,
-    'rbh',
-    ['all', 'one_to_one', 'rbh'],
-    'Collinear anchor mode'
-  )
+  requireComparisonSetting('collinearityAnchorMode', value, 'Collinear anchor mode')
 );
 
+/** @param {unknown} value */
 export const requireCurrentCollinearMergeOrientation = (value) => (
   requireCurrentValue(
     value,
@@ -167,27 +219,17 @@ export const requireCurrentCollinearMergeOrientation = (value) => (
   )
 );
 
-export const requireCurrentCollinearColorMode = (value) => {
-  const normalized = String(value ?? '').trim().toLowerCase().replace(/-/g, '_');
-  const resolved = normalized === 'identity' ? 'average_identity' : normalized;
-  if (!resolved) return 'orientation';
-  if (!['average_identity', 'orientation', 'orientation_identity'].includes(resolved)) {
-    throw new Error(
-      'Collinear color mode must be one of: average_identity, orientation, orientation_identity.'
-    );
-  }
-  return resolved;
-};
-
-export const requireCurrentOrthogroupMembershipMode = (value) => (
-  requireCurrentValue(
-    value,
-    'anchor_core_v1',
-    ['anchor_core_v1'],
-    'Protein BLASTP orthogroup membership mode'
-  )
+/** @param {unknown} value */
+export const requireCurrentCollinearColorMode = (value) => (
+  requireComparisonSetting('collinearityColorMode', value, 'Collinear color mode')
 );
 
+/** @param {unknown} value */
+export const requireCurrentOrthogroupMembershipMode = (value) => (
+  requireComparisonSetting('orthogroupMembershipMode', value, 'Protein BLASTP orthogroup membership mode')
+);
+
+/** @param {unknown} value */
 export const migratePersistedCircularMultiRecordSizeMode = (value) => {
   const normalized = normalizedValue(value, 'auto');
   return requireCurrentCircularMultiRecordSizeMode(
@@ -195,6 +237,7 @@ export const migratePersistedCircularMultiRecordSizeMode = (value) => {
   );
 };
 
+/** @param {unknown} value */
 export const migratePersistedLinearTrackLayout = (value) => {
   const normalized = normalizedValue(value, 'middle');
   if (normalized === 'spreadout') return 'above';
@@ -202,6 +245,7 @@ export const migratePersistedLinearTrackLayout = (value) => {
   return requireCurrentLinearTrackLayout(normalized);
 };
 
+/** @param {unknown} value */
 export const migratePersistedLinearLabelPlacement = (value) => {
   const normalized = normalizedValue(value, 'auto');
   return requireCurrentLinearLabelPlacement(
@@ -209,8 +253,20 @@ export const migratePersistedLinearLabelPlacement = (value) => {
   );
 };
 
+/**
+ * The sections of a Web config document that callers read after the migration. A document without a section, or
+ * with a non-object one, holds `undefined` or that value there, so callers check a section with `isPlainObject`
+ * before they write to it. The type states the shape callers rely on while `config.js` types its documents.
+ * @typedef {{ form: Record<string, unknown>, adv: Record<string, unknown> }} PersistedWebSections
+ */
+
+/**
+ * @template {{ adv?: unknown, losat?: unknown }} T
+ * @param {T} config
+ * @returns {T & PersistedWebSections}
+ */
 export const migratePersistedWebStateFieldNames = (config) => {
-  if (!isPlainObject(config)) return config;
+  if (!isPlainObject(config)) return /** @type {T & PersistedWebSections} */ (config);
 
   let adv = migrateOwnField(
     config.adv,
@@ -238,13 +294,18 @@ export const migratePersistedWebStateFieldNames = (config) => {
     }
   }
 
-  return {
+  return /** @type {T & PersistedWebSections} */ ({
     ...config,
     ...(adv === undefined ? {} : { adv }),
     ...(losat === undefined ? {} : { losat })
-  };
+  });
 };
 
+/**
+ * @template {{ adv?: { depth_tracks?: unknown } | null, losat?: { blastp?: unknown } | null } | null | undefined} T
+ * @param {T} config
+ * @returns {T}
+ */
 export const requireCurrentWebStateFieldNames = (config) => {
   const adv = isPlainObject(config) ? config.adv : null;
   for (const field of ['linear_show_accession', 'linear_show_length']) {
@@ -275,4 +336,45 @@ export const requireCurrentWebStateFieldNames = (config) => {
     );
   }
   return config;
+};
+
+// The merge of stored settings installs text or null over a text setting; a
+// value of another kind is not used, and Load lists it (`mergeStoredSettings`).
+/** @param {unknown} value */
+const installedOverText = (value) => typeof value === 'string' || value === null;
+
+// The refusals of a stored configuration's fields (BA-OD96): a retired field
+// name, a value no current option names (the Linear label visibilities
+// included), a shape of a default feature type that names no shape, and an
+// arrow ratio out of range. Only a value the merge installs is refused
+// (BA-OD100): a visibility or a default type's shape of another kind is read
+// with a dialog row, and the shape of another feature type is the shapes
+// reader's (`config-field-readers.js`), as the Web read them before.
+// The one check of the active configuration, of `applyConfigData`, and of
+// Load before its dialog (the Session prediction and the legacy configuration
+// read), so Load refuses such a file before it asks anything.
+/**
+ * @param {unknown} config
+ */
+export const requireCurrentConfigFields = (config) => {
+  if (!isPlainObject(config)) return;
+  requireCurrentWebStateFieldNames(config);
+  const { form, adv } = config;
+  if (isPlainObject(form) && hasOwn(form, 'linear_track_layout')) requireCurrentLinearTrackLayout(form.linear_track_layout);
+  if (!isPlainObject(adv)) return;
+  if (hasOwn(adv, 'label_placement')) requireCurrentLinearLabelPlacement(adv.label_placement);
+  if (hasOwn(adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode);
+  if (installedOverText(adv.linear_accession_visibility)) {
+    requireLinearLabelVisibilityMode(adv.linear_accession_visibility, 'Linear Accession visibility');
+  }
+  if (installedOverText(adv.linear_length_visibility)) {
+    requireLinearLabelVisibilityMode(adv.linear_length_visibility, 'Linear Length / Coordinates visibility');
+  }
+  // The arrow ratios and the default types' shapes `applyConfigData` installs.
+  normalizedPersistedArrowGeometryState(adv);
+  if (isPlainObject(adv.feature_shapes)) {
+    for (const [featureType, shape] of Object.entries(adv.feature_shapes)) {
+      if (Object.hasOwn(DEFAULT_FEATURE_RENDERINGS, featureType) && installedOverText(shape)) normalizeFeatureRendering(shape);
+    }
+  }
 };

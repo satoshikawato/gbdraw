@@ -236,10 +236,9 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (curre
         const offered = ['single'];
         if (style.matchingRule) offered.push('rule');
         if (style.siblingCount > 0) offered.push('caption');
-        const text = (value) => String(value || '').trim().toLowerCase();
-        if (style.displayLabelSiblingCount > 0 && text(style.displayLabel) && text(style.displayLabel) !== text(style.legendName)) offered.push('displayLabel');
-        if (style.annotationLabelSiblingCount > 0 && text(style.annotationLabel) && text(style.annotationLabel) !== text(style.legendName)
-          && text(style.annotationLabel) !== text(style.displayLabel)) offered.push('annotationLabel');
+        // OV-648: the dialog offers a label scope that selects other features.
+        if (style.displayLabelOffered) offered.push('displayLabel');
+        if (style.annotationLabelOffered) offered.push('annotationLabel');
         if (style.kind === 'fill' && style.existingCaptionColor) offered.push('useExisting');
         const choice = choose(offered);
         notes.push(`style scope ${choice} of [${offered}]`);
@@ -263,7 +262,7 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (curre
         notes.push(`hidden label text ${choice}`);
         answer(app.handleHiddenLabelTextChoice(choice));
       } else if (app.legendRenameDialog.show) {
-        const choice = choose(app.legendRenameDialog.mode === 'target' ? ['merge', 'suffix'] : ['single', 'group']);
+        const choice = choose(app.legendRenameDialog.mode === 'target' ? ['merge', 'keep-both'] : ['single', 'group']);
         notes.push(`legend rename ${app.legendRenameDialog.mode} ${choice}`);
         answer(app.handleLegendRenameChoice(choice));
       } else if (finished && outstanding === 0) {

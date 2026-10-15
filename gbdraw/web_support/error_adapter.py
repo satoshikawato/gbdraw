@@ -15,11 +15,11 @@ from gbdraw.exceptions import (
     ComparisonIdentityError, ConfigError, ExportError, GbdrawError, InputFileError, ParseError, ValidationError,
 )
 
-OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules readPdfFont
+OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules embedFonts pdfFonts
 buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertMainSessionComparisonFrame
 extractCdsProteinFasta extractFirstFasta hydrateProteinLosatTsv
 listGffFastaRecords listSequenceRecords measureLegendText promoteLegacyLosatpCache
-readComparisonSequence readFeatureOverrideTable resolveLegacyProteinReferences resolveSimilarityAlignment
+readComparisonSequence readFeatureOverrideTable registerFonts resolveLegacyProteinReferences resolveSimilarityAlignment computeLabelFitRow
 validateConfigOverrides""".split())
 STAGES = frozenset("""unknown initialization resource-staging request-validation helper
 rule-validation render result-admission cleanup export-capture export-conversion font-validation""".split())
@@ -50,14 +50,14 @@ protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collin
 # Producer ``diagnostic=`` vocabulary: bounded identifiers that the Web wording
 # owner (utils/error-normalization.js) defines, never document values.
 # tests/test_web_error_producer_coverage.py keeps it aligned with producers.
-DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE NO_RECORDS REGION_INVALID DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_INVALID TRACK_LAYOUT LOSAT_RUNTIME FEATURE_PLACEMENT FEATURE_IDENTITY MODE_SETTING".split())
+DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE NO_RECORDS REGION_INVALID DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_INVALID TRACK_LAYOUT LABEL_LAYOUT LOSAT_RUNTIME FEATURE_PLACEMENT FEATURE_IDENTITY MODE_SETTING".split())
 DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS POSITIVE_UNIT_INTERVAL
 POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CONFIG_PATH
 DINUCLEOTIDE CANNOT_FIT DEFINITION_RESERVED CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES FILENAME FILENAME_LENGTH
 REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME
 LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES CIRCULAR_SETTING LINEAR_SETTING
-ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK RECORD_ID OUTFMT7_FIELDS FEATURES_COUNT""".split())
+ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK RECORD_ID OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER""".split())
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
     "row column columnCount seriesIndex slotIndex innerPx outerPx placementIndex queryRecordIndex subjectRecordIndex".split()
 )
@@ -122,7 +122,6 @@ _EXACT = {
     "LOSATP blastp conversion payload must be an object with 'records' and 'pairs' lists.": ("HELPER_PROTOCOL", {"reason": "FIELDS"}),
     "LOSATP blastp conversion payload must contain 'records' and 'pairs' lists.": ("HELPER_PROTOCOL", {"reason": "FIELDS"}),
     "Unknown rule kind": ("HELPER_PROTOCOL", {}),
-    "Unknown PDF font": ("HELPER_PROTOCOL", {}),
 }
 
 # Anchored producer templates; private interpolations are discarded, not shown.
@@ -217,6 +216,10 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
         value = diagnostic[key]
         if type(value) is int and 0 <= value <= 10_000_000:
             context[key] = value
+    # Python words the label fit counts (gbdraw.labels.fit); the Web shows the sentence as sent.
+    counts = diagnostic.get("labelFitCounts")
+    if diagnostic["code"] == "LABEL_LAYOUT" and isinstance(counts, str):
+        context["labelFitCounts"] = counts
     return diagnostic["code"], context
 
 

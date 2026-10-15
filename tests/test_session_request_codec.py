@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import copy
 import json
-import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -11,6 +10,7 @@ from typing import Any
 import pandas as pd
 import pytest
 from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.collinearity import (
@@ -24,6 +24,7 @@ from gbdraw.annotations import (
     AnnotationOptions,
     AnnotationSet,
     CoordinateSpan,
+    FeatureIdentitySpan,
     FeatureSelector,
     FeatureSpan,
     HatchStyle,
@@ -70,12 +71,10 @@ from gbdraw.layout.similarity_alignment import (
 )
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.overrides import FeatureOverride
+from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.features.shapes import resolve_feature_rendering
-from gbdraw.session_io import (
-    CURRENT_SESSION_TOP_LEVEL_FIELDS,
-    CURRENT_SESSION_VERSION,
-    FLAT_DRAFT_TOP_LEVEL_FIELDS,
-)
+from gbdraw.features.source import build_source_feature_catalog
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -83,7 +82,6 @@ from gbdraw.session_request_codec import (
     CanonicalRequestDecodingError,
     CanonicalRequestEncodingError,
     EncodedCanonicalRequest,
-    _TOP_LEVEL_FIELDS_V5,
     _read_typed_json_resource,
     decode_canonical_request,
     encode_canonical_request,
@@ -91,8 +89,10 @@ from gbdraw.session_request_codec import (
 )
 from gbdraw.tracks import (
     CircularTrackSlot,
+    LinearTrackSlot,
     ScalarSpec,
     normalize_circular_track_slots,
+    normalize_linear_track_slots,
 )
 
 
@@ -1545,6 +1545,55 @@ def test_current_circular_writer_uses_only_canonical_layout_fields() -> None:
     assert {"spacing", "strict", "compress", "reserve"}.isdisjoint(slot)
 
 
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_spanning_annotation_slot_round_trips_with_to_slot(tmp_path: Path, mode: str) -> None:
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    params = {
+        "set_id": "regions",
+        "anchor_slot": "features",
+        "to_slot": "gc_content",
+        "layer": "underlay",
+    }
+    request: CircularDiagramRequest | LinearDiagramRequest
+    if mode == "circular":
+        slots = (
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="regions", renderer="annotations", side="overlay", z=-1, params=params),
+        )
+        request = CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(tracks=CircularTrackOptions(circular_track_slots=slots)),
+        )
+    else:
+        slots = (
+            LinearTrackSlot(id="features", renderer="features", side="overlay"),
+            LinearTrackSlot(id="gc_content", renderer="dinucleotide_content", side="below"),
+            LinearTrackSlot(id="regions", renderer="annotations", side="overlay", z=-1, params=params),
+        )
+        request = LinearDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=LinearDiagramOptions(
+                tracks=LinearTrackOptions(linear_track_slots=slots, linear_track_axis_index=0)
+            ),
+        )
+
+    encoded = encode_canonical_request(request)
+    payload_slots = encoded.payload["diagramOptions"]["tracks"][f"{mode}TrackSlots"]
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "span"),
+        output_directory=tmp_path / "output",
+    )
+    decoded_slots = getattr(decoded.options.tracks, f"{mode}_track_slots")
+    normalize = normalize_circular_track_slots if mode == "circular" else normalize_linear_track_slots
+
+    assert payload_slots[2]["params"]["to_slot"] == "gc_content"
+    assert decoded_slots == slots
+    assert normalize(decoded_slots)[2].annotation.to_slot == "gc_content"
+    assert encode_canonical_request(decoded).payload == encoded.payload
+
+
 @pytest.mark.parametrize("field", ["width", "radius"])
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
 @pytest.mark.parametrize("typed", [False, True])
@@ -2199,6 +2248,130 @@ def test_annotation_targets_and_styles_round_trip(tmp_path: Path) -> None:
     )
     assert decoded.options.annotations == annotations
     assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+def test_linear_placements_overrides_slots_and_feature_identity_round_trip(
+    tmp_path: Path,
+) -> None:
+    record = SeqRecord(Seq("ATG" * 40), id="placed", annotations={"molecule_type": "DNA"})
+    record.features = [
+        SeqFeature(SimpleLocation(2, 8, 1), type="gene", qualifiers={"locus_tag": ["early"]}),
+        SeqFeature(SimpleLocation(20, 40, 1), type="CDS", qualifiers={"locus_tag": ["alpha"]}),
+    ]
+    early, alpha = (
+        item.biological_feature_id for item in build_source_feature_catalog(record)
+    )
+    options = LinearDiagramOptions(
+        feature_placements=(
+            FeaturePlacementOverride("one", early, FeaturePlacementTarget("lane", "above", 1)),
+            FeaturePlacementOverride("one", alpha, FeaturePlacementTarget("main")),
+        ),
+        feature_overrides=(
+            FeatureOverride("one", early, feature_visibility="off", label_visibility="off"),
+            FeatureOverride("one", alpha, label_visibility="on", label_text="Alpha"),
+        ),
+        tracks=LinearTrackOptions(
+            linear_track_slots=(
+                LinearTrackSlot(
+                    id="gc_content",
+                    renderer="dinucleotide_content",
+                    side="above",
+                    height=ScalarSpec(27, "px"),
+                    spacing=ScalarSpec(4, "px"),
+                    params={"nt": "GC"},
+                ),
+                LinearTrackSlot(id="features", renderer="features", side="below", z=3),
+            ),
+            linear_track_axis_index=1,
+        ),
+        annotations=AnnotationOptions(
+            sets=(
+                AnnotationSet(
+                    "review",
+                    (
+                        RegionAnnotation(
+                            "identity",
+                            FeatureIdentitySpan(
+                                "one", alpha, envelope="segments", circular_path="forward"
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        ),
+    )
+    request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(source=InMemoryRecordSource(record), record_key=key)
+            for key in ("one", "two")
+        ),
+        options=replace(
+            options,
+            losat_search=LosatSearchOptions(
+                program="losatp", losatp_mode="pairwise", pairs=((0, 1),)
+            ),
+        ),
+    )
+
+    encoded = encode_canonical_request(request)
+    assert encoded.payload["comparisons"][0]["pairs"] == [
+        {"queryRecordIndex": 0, "subjectRecordIndex": 1}
+    ]
+    payload = encoded.payload["diagramOptions"]
+    placements = {
+        row["biologicalFeatureId"]: row["placement"] for row in payload["featurePlacements"]
+    }
+    assert placements == {
+        early: {"kind": "lane", "side": "above", "level": 1},
+        alpha: {"kind": "main"},
+    }
+    assert [slot["kind"] for slot in payload["tracks"]["linearTrackSlots"]] == [
+        "linearTrackSlot",
+        "linearTrackSlot",
+    ]
+    target = payload["annotations"]["sets"][0]["annotations"][0]["target"]
+    assert target["kind"] == "featureIdentity"
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "placed"),
+        output_directory=tmp_path / "output",
+    )
+    assert isinstance(decoded, LinearDiagramRequest)
+    for name in ("feature_placements", "feature_overrides", "tracks", "annotations"):
+        assert getattr(decoded.options, name) == getattr(options, name)
+    assert decoded.options.losat_search == request.options.losat_search
+    assert encode_canonical_request(decoded).payload == encoded.payload
+
+    # A lane side belongs to one mode: outward and inward are the Circular sides.
+    circular = CircularDiagramRequest(
+        records=request.records[:1],
+        options=CircularDiagramOptions(
+            feature_placements=(
+                FeaturePlacementOverride("one", early, FeaturePlacementTarget("lane", "outward", 1)),
+                FeaturePlacementOverride("one", alpha, FeaturePlacementTarget("main")),
+            ),
+        ),
+    )
+    encoded = encode_canonical_request(circular)
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "placed-circular"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.options.feature_placements == circular.options.feature_placements
+    with pytest.raises(CanonicalRequestDecodingError, match="unsupported in circular mode"):
+        payload = copy.deepcopy(encoded.payload)
+        next(
+            row["placement"]
+            for row in payload["diagramOptions"]["featurePlacements"]
+            if row["placement"]["kind"] == "lane"
+        )["side"] = "above"
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / "placed-circular"),
+            output_directory=tmp_path / "output",
+        )
 
 
 def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:
@@ -3040,62 +3213,6 @@ def test_feature_overrides_require_schema9_and_the_current_row_shape(
             resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
             output_directory=tmp_path / "output",
         )
-
-
-_WEB_SESSION_REQUEST_JS = (
-    Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services" / "session-request.js"
-)
-
-
-def _jsdoc_typedef_property_names(source: str, typedef_name: str) -> set[str]:
-    """Return the `@property` names of one JSDoc `@typedef`, or fail loudly."""
-    blocks = [
-        block
-        for block in re.findall(r"/\*\*.*?\*/", source, flags=re.DOTALL)
-        if re.search(rf"@typedef\s+\{{[^}}]*\}}\s+{re.escape(typedef_name)}\b", block)
-    ]
-    assert len(blocks) == 1, f"expected exactly one JSDoc @typedef {typedef_name}, found {len(blocks)}"
-    names = re.findall(
-        r"^\s*\*\s*@property\s+\{[^}]*\}\s+\[?([A-Za-z_]\w*)\]?",
-        blocks[0],
-        flags=re.MULTILINE,
-    )
-    assert names, f"JSDoc @typedef {typedef_name} declares no @property"
-    assert len(names) == len(set(names)), f"JSDoc @typedef {typedef_name} repeats a @property"
-    return set(names)
-
-
-def test_web_canonical_render_request_typedef_matches_codec_top_level_fields() -> None:
-    source = _WEB_SESSION_REQUEST_JS.read_text(encoding="utf-8")
-    assert _jsdoc_typedef_property_names(source, "CanonicalRenderRequest") == set(
-        _TOP_LEVEL_FIELDS_V5
-    )
-    assert f"export const CANONICAL_REQUEST_SCHEMA = {CANONICAL_REQUEST_SCHEMA};" in source
-
-
-_WEB_CONFIG_JS = Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services" / "config.js"
-
-
-def test_web_gbdraw_session_typedef_matches_session_io_fields_and_version() -> None:
-    source = _WEB_CONFIG_JS.read_text(encoding="utf-8")
-    # `files` is accepted only for Sessions older than version 40, and the flat
-    # `config` and `features` only for Sessions older than version 46; the
-    # current writer never writes them and the current reader rejects them.
-    assert _jsdoc_typedef_property_names(source, "GbdrawSession") == (
-        set(CURRENT_SESSION_TOP_LEVEL_FIELDS) - {"files"} - FLAT_DRAFT_TOP_LEVEL_FIELDS
-    )
-    assert f"export const SESSION_VERSION = {CURRENT_SESSION_VERSION};" in source
-
-
-def test_jsdoc_typedef_property_parser_is_strict() -> None:
-    with pytest.raises(AssertionError, match="expected exactly one"):
-        _jsdoc_typedef_property_names("/** @typedef {object} Other\n * @property {number} a\n */", "Missing")
-    with pytest.raises(AssertionError, match="declares no @property"):
-        _jsdoc_typedef_property_names("/**\n * @typedef {object} Empty\n */", "Empty")
-    assert _jsdoc_typedef_property_names(
-        "/**\n * @typedef {object} Mixed\n * @property {string} a\n * @property {number} [b]\n */",
-        "Mixed",
-    ) == {"a", "b"}
 
 
 def test_typed_tree_codec_resolves_type_hints_once_per_class(

@@ -1,11 +1,12 @@
 // @ts-check
-/** @import { LegendFontMetricsTable } from '../utils/legend-font-metrics.generated.js' */
+/** @import { LegendFontMetricsTable, LegendFontFaceTable } from '../utils/legend-font-metrics.generated.js' */
+import { FALLBACK_FACE_PREFIX, bundledFacePrefix, comparableFamilyName, isGenericFamily, parseFontFamilyList } from './font-families.js';
 
 // Python's Legend measurement and layout, ported operation for operation so
 // that the Web places an edited Legend's rows, sizes the Legend and docks it
 // exactly where Python would (zero shift). Sources:
 // - text: gbdraw/core/text.py `calculate_bbox_dimensions` → `get_text_bbox_size_pixels`
-//   and `_resolve_font_path`;
+//   and gbdraw/core/fonts.py `resolve_font_face`;
 // - rows: gbdraw/legend/metrics.py, linear_layout.py, circular_layout.py;
 // - Legend size: gbdraw/configurators/legend.py `_linear_legend_local_bounds`,
 //   `_circular_legend_local_bounds`;
@@ -14,7 +15,8 @@
 // doubles are equal only when computed the same way. The vectors in
 // tests/fixtures/legend_layout_vectors.json hold Python's results; the node
 // and Python tests require exact equality. A change to one side fails them.
-// State-free: callers pass the font metrics (`loadLegendFontMetrics`).
+// State-free: callers pass the font metrics (`loadLegendFontMetrics`, with
+// the fonts registered in the page added by `withRegisteredFontFaces`).
 
 const LEGEND_LINE_HEIGHT_RATIO = 24.0 / 14.0;
 const LEGEND_TEXT_OFFSET_RATIO = 22.0 / 14.0;
@@ -23,7 +25,6 @@ const GRADIENT_LABEL_GAP_RATIO = 0.2;
 const SINGLE_GRADIENT_TRAILING_GAP_RATIO = 0.35;
 const GLYPH_FIELDS = 5;
 const KERNING_KEY_BASE = 65536;
-const FALLBACK_FAMILY = 'LiberationSans';
 const HORIZONTAL_SIDES = new Set(['top', 'bottom']);
 const DOCK_SIDES = new Set(['left', 'right', 'top', 'bottom']);
 const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower_right']);
@@ -40,11 +41,25 @@ const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower
  */
 
 /**
- * The bundled fonts' metrics, ready for `measureTextBox`.
+ * The measured faces, ready for `measureTextBox`: the bundled ones and those of
+ * the fonts registered in the page.
  * @typedef {object} LegendFontMetrics
- * @property {ReadonlyMap<string, LegendFontFace>} faces By face stem ("LiberationSans-Regular").
- * @property {Readonly<Record<string, string>>} familyAliases
+ * @property {ReadonlyMap<string, LegendFontFace>} faces By measurement name: a bundled face stem
+ *   ("LiberationSans-Regular") or a registered face's `user-<hash>-<style>`.
  * @property {readonly string[]} bundledFaces
+ * @property {ReadonlyMap<string, readonly RegisteredLegendFace[]>} registeredFamilies By comparable
+ *   family name, in registration order.
+ */
+
+/**
+ * A face of a font registered in the page, as Python registered it
+ * (`register_font_file`, `font_metrics_table`).
+ * @typedef {object} RegisteredLegendFace
+ * @property {string} family
+ * @property {number} weight The OS/2 weight class.
+ * @property {boolean} italic
+ * @property {string} measurementName
+ * @property {LegendFontFaceTable} table
  */
 
 /**
@@ -55,7 +70,9 @@ const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower
 /**
  * One Legend row of Python's legend table, in table order.
  * @typedef {object} LegendLayoutRow
- * @property {string} key The caption.
+ * @property {string} key The row key, which places the row's layout.
+ * @property {string} name The name the row draws, which the layout measures (Python measures
+ *   `drawn_names[key].drawn`); a renamed row keeps its key and draws its new name.
  * @property {'solid' | 'gradient'} type
  * @property {string} [stroke] The swatch stroke color, `none` for no stroke.
  * @property {number} [strokeWidth]
@@ -96,21 +113,50 @@ const text = (value) => String(value ?? '');
 export const createLegendFontMetrics = (table) => {
   /** @type {Map<string, LegendFontFace>} */
   const faces = new Map();
-  Object.entries(table.faces).forEach(([name, face]) => {
-    /** @type {Map<number, number>} */
-    const glyphByCodePoint = new Map();
-    for (let index = 0; index < face.cmap.length; index += 2) {
-      glyphByCodePoint.set(face.cmap[index], face.cmap[index + 1]);
-    }
-    /** @type {Map<number, number>} */
-    const kerning = new Map();
-    for (let index = 0; index < face.kerning.length; index += 3) {
-      kerning.set(face.kerning[index] * KERNING_KEY_BASE + face.kerning[index + 1], face.kerning[index + 2]);
-    }
-    const missingGlyph = Object.freeze([face.unitsPerEm, 0, face.unitsPerEm, face.ascent, face.descent]);
-    faces.set(name, Object.freeze({ unitsPerEm: face.unitsPerEm, glyphByCodePoint, glyphs: face.glyphs, kerning, missingGlyph }));
+  Object.entries(table.faces).forEach(([name, face]) => faces.set(name, indexFace(face)));
+  return Object.freeze({ faces, bundledFaces: table.bundledFaces, registeredFamilies: new Map() });
+};
+
+/**
+ * Index one face table.
+ * @param {LegendFontFaceTable} face
+ * @returns {LegendFontFace}
+ */
+const indexFace = (face) => {
+  /** @type {Map<number, number>} */
+  const glyphByCodePoint = new Map();
+  for (let index = 0; index < face.cmap.length; index += 2) {
+    glyphByCodePoint.set(face.cmap[index], face.cmap[index + 1]);
+  }
+  /** @type {Map<number, number>} */
+  const kerning = new Map();
+  for (let index = 0; index < face.kerning.length; index += 3) {
+    kerning.set(face.kerning[index] * KERNING_KEY_BASE + face.kerning[index + 1], face.kerning[index + 2]);
+  }
+  const missingGlyph = Object.freeze([face.unitsPerEm, 0, face.unitsPerEm, face.ascent, face.descent]);
+  return Object.freeze({ unitsPerEm: face.unitsPerEm, glyphByCodePoint, glyphs: face.glyphs, kerning, missingGlyph });
+};
+
+/**
+ * The bundled metrics with the faces of the fonts registered in the page, in
+ * registration order (Python's registry order).
+ * @param {LegendFontMetrics} metrics
+ * @param {readonly RegisteredLegendFace[]} registered
+ * @returns {LegendFontMetrics}
+ */
+export const withRegisteredFontFaces = (metrics, registered) => {
+  if (registered.length === 0) return metrics;
+  const faces = new Map(metrics.faces);
+  /** @type {Map<string, RegisteredLegendFace[]>} */
+  const registeredFamilies = new Map();
+  registered.forEach((face) => {
+    if (!faces.has(face.measurementName)) faces.set(face.measurementName, indexFace(face.table));
+    // As Python's registry: a face of the same family, weight and style replaces the earlier one.
+    const key = comparableFamilyName(face.family);
+    const others = (registeredFamilies.get(key) || []).filter((other) => other.weight !== face.weight || other.italic !== face.italic);
+    registeredFamilies.set(key, [...others, face]);
   });
-  return Object.freeze({ faces, familyAliases: table.familyAliases, bundledFaces: table.bundledFaces });
+  return Object.freeze({ faces, bundledFaces: metrics.bundledFaces, registeredFamilies });
 };
 
 /** @type {Promise<LegendFontMetrics> | null} */
@@ -144,41 +190,67 @@ const collapseSvgWhiteSpace = (value) => value
   .replace(/[\t\n\r]/g, ' ')
   .replace(/ +/g, ' ');
 
-/** @param {string} value */
-const normalizeFamily = (value) => value.trim().replace(/^["']+|["']+$/g, '').trim();
-/** @param {string} value */
-const comparableName = (value) => normalizeFamily(value).toLowerCase().replaceAll(' ', '');
+/**
+ * CSS font matching for weight 400 and style normal among a family's faces:
+ * upright before italic; then 400 to 500 ascending, below 400 descending, above
+ * 500 ascending. The Legend is measured with the normal weight and style.
+ * @param {readonly RegisteredLegendFace[]} faces
+ * @returns {RegisteredLegendFace | undefined}
+ */
+const normalFace = (faces) => {
+  const upright = faces.filter((face) => !face.italic);
+  const candidates = upright.length > 0 ? upright : faces;
+  /** @param {number} weight */
+  const rank = (weight) => (weight >= 400 && weight <= 500 ? [0, weight] : weight < 400 ? [1, -weight] : [2, weight]);
+  return [...candidates].sort((left, right) => {
+    const [leftClass, leftKey] = rank(left.weight);
+    const [rightClass, rightKey] = rank(right.weight);
+    return leftClass - rightClass || leftKey - rightKey;
+  })[0];
+};
 
 /**
- * The bundled face Python measures a font family with, for the default weight
- * and style (`_resolve_font_path` without system fonts): the first family of
- * the list with an alias, else the first bundled face whose file name
- * contains a family name, else Liberation Sans. Python searches files in
- * directory order; this searches them sorted, which agrees whenever one font
- * family matches. A Result's `legendReflow.fontFile` is the authority.
+ * The face Python measures a font family with for the default weight and style
+ * (`resolve_font_face` in a browser: the fonts registered in the page, then
+ * bundled aliases; no fontconfig): the first family of the list that resolves,
+ * else Liberation Sans.
  * @param {LegendFontMetrics} metrics
  * @param {string} fontFamily A CSS-style list ("'Liberation Sans', Arial, sans-serif").
- * @returns {string} A face stem such as "LiberationSans-Regular".
+ * @returns {string} A measurement name such as "LiberationSans-Regular".
  */
-export const resolveBundledFontFace = (metrics, fontFamily) => {
-  const families = text(fontFamily).split(',').map(normalizeFamily).filter(Boolean);
+export const resolveLegendFontFace = (metrics, fontFamily) => {
   /** @param {string} prefix */
   const regular = (prefix) => {
     const stem = `${prefix}-Regular`;
     return metrics.bundledFaces.includes(stem) ? stem : null;
   };
-  for (const family of families) {
-    const prefix = metrics.familyAliases[comparableName(family)];
+  for (const family of parseFontFamilyList(fontFamily)) {
+    // A family loaded in the page wins over the bundled font of the same alias name (OV-685).
+    const registered = isGenericFamily(family) ? undefined : normalFace(metrics.registeredFamilies.get(comparableFamilyName(family)) || []);
+    if (registered) return registered.measurementName;
+    const prefix = bundledFacePrefix(family);
     const face = prefix ? regular(prefix) : null;
     if (face) return face;
   }
-  for (const family of families) {
-    const requested = comparableName(family);
-    const match = metrics.bundledFaces.find((stem) => `${stem.toLowerCase()}.ttf`.includes(requested));
-    if (match) return regular(match.split('-', 1)[0]) || match;
-  }
-  return regular(FALLBACK_FAMILY) || metrics.bundledFaces[0];
+  return regular(FALLBACK_FACE_PREFIX) || metrics.bundledFaces[0];
 };
+
+/**
+ * The face an edited Legend is measured with: the face Python recorded
+ * (`legendReflow.fontFile`) when these metrics have it, else the face the
+ * label's font family resolves to here (bundled or registered in this page).
+ * A Result drawn on the CLI with a system font records a face the Web has no
+ * metrics for (OV-683).
+ * @param {LegendFontMetrics} metrics
+ * @param {string | null | undefined} recordedFontFile
+ * @param {string} fontFamily The label's `font-family`.
+ * @returns {string}
+ */
+export const legendMeasurementFace = (metrics, recordedFontFile, fontFamily) => (
+  recordedFontFile && metrics.faces.has(recordedFontFile)
+    ? recordedFontFile
+    : resolveLegendFontFace(metrics, fontFamily)
+);
 
 /**
  * Measure text as gbdraw's Python layout does: `calculate_bbox_dimensions(text,
@@ -196,12 +268,12 @@ export const resolveBundledFontFace = (metrics, fontFamily) => {
  * character the face lacks counts as an em box (OV-165).
  * @param {LegendFontMetrics} metrics From `loadLegendFontMetrics()` or `createLegendFontMetrics()`.
  * @param {{ text: string, fontFile: string, fontSize: number, dpi: number }} request
- *   `fontFile`: a measured face stem (`resolveBundledFontFace`, or a Result's `legendReflow.fontFile`).
+ *   `fontFile`: a measurement name in `metrics` (`resolveLegendFontFace` or `legendMeasurementFace`).
  * @returns {{ width: number, height: number }}
  */
 export const measureTextBox = (metrics, { text: value, fontFile, fontSize, dpi }) => {
   const face = metrics.faces.get(fontFile);
-  if (!face) throw new Error(`No bundled font metrics for ${JSON.stringify(fontFile)}.`);
+  if (!face) throw new Error(`No font metrics for ${JSON.stringify(fontFile)}.`);
   const characters = Array.from(collapseSvgWhiteSpace(text(value)));
   if (characters.length === 0) return { width: 0.0, height: 0.0 };
   let totalWidth = 0;
@@ -363,7 +435,7 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
   const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
   const minLabelText = minGradientLabelText(gradients[0].minValue ?? 0);
   if (gradients.length > 1) {
-    const labelWidth = Math.max(...gradients.map((row) => measure(row.key).width));
+    const labelWidth = Math.max(...gradients.map((row) => measure(row.name).width));
     const barX = labelWidth + (GRADIENT_LABEL_GAP_RATIO * rect);
     const entries = gradients.map((row, index) => ({
       key: row.key,
@@ -381,7 +453,7 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
     };
   }
   const row = gradients[0];
-  const barY = measure(row.key).height + (rect / 2.0);
+  const barY = measure(row.name).height + (rect / 2.0);
   const scaleLabelY = barY + (rect / 2.0) + 2.0;
   const scaleLabelHeight = Math.max(measure(minLabelText).height, measure('100%').height);
   return {
@@ -414,7 +486,7 @@ export const buildLinearLegendLayout = (rows, options, metrics) => {
   const offset = LEGEND_TEXT_OFFSET_RATIO * rect;
   const measure = measurer(metrics, options);
   const solids = rows.filter((row) => row.type === 'solid')
-    .map((row) => ({ row, textWidth: measure(row.key).width }));
+    .map((row) => ({ row, textWidth: measure(row.name).width }));
   const gradient = linearGradientLayout(rows, measure, rect, lineHeight);
   const gradientWidth = gradient ? gradient.width : 0.0;
 
@@ -610,7 +682,7 @@ const circularGradientLayout = (gradients, measure, rect) => {
     };
   }
   const entry = gradients[0];
-  const title = measure(entry.key);
+  const title = measure(entry.row.name);
   const barY = title.height + (rect / 2);
   const scaleLabelY = barY + (rect / 2) + 2;
   const labelHeight = measure('100%').height;
@@ -650,7 +722,7 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
   const gradients = [];
   rows.forEach((row) => {
     if (row.type !== 'solid' && row.type !== 'gradient') return;
-    const textWidth = measure(row.key).width;
+    const textWidth = measure(row.name).width;
     const measured = { row, key: row.key, textWidth, entryWidth: textWidth + (2 * xMargin) };
     (row.type === 'gradient' ? gradients : solids).push(measured);
   });

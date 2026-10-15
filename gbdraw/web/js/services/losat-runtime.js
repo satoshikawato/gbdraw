@@ -13,9 +13,37 @@
  * @property {() => void} [losat_web_clear]
  */
 
+/**
+ * What this module uses of the vendored WASI shim (`vendor/browser_wasi_shim`): five classes. A
+ * file and a file descriptor are only handed back to the shim, so they are opaque here.
+ * @typedef {object} LosatWasiShim
+ * @property {new (args: string[], env: string[], fds: unknown[]) => {
+ *   wasiImport: WebAssembly.ModuleImports,
+ *   start: (instance: WebAssembly.Instance) => number,
+ *   initialize?: (instance: WebAssembly.Instance) => void
+ * }} WASI
+ * @property {new (data: Uint8Array, options?: { readonly?: boolean }) => unknown} File
+ * @property {new (file: unknown) => unknown} OpenFile
+ * @property {new (name: string, contents: Map<string, unknown>) => unknown} PreopenDirectory
+ * @property {new (write: (data: Uint8Array) => void) => unknown} ConsoleStdout
+ */
+
+/**
+ * One pair run, by the main thread or a pool worker.
+ * @typedef {object} LosatPairRun
+ * @property {string} program 'blastn', 'tblastx', or 'blastp'
+ * @property {string} queryFasta
+ * @property {string} subjectFasta
+ * @property {string} [outfmt]
+ * @property {string[]} [extraArgs]
+ * @property {LosatWasiShim} wasiShim
+ * @property {WebAssembly.Module} wasmModule
+ */
+
 /** @type {Promise<WebAssembly.Instance> | null} */
 let directInstancePromise = null;
 
+/** @param {Uint8Array[]} chunks */
 export const concatUint8Arrays = (chunks) => {
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const merged = new Uint8Array(total);
@@ -27,11 +55,16 @@ export const concatUint8Arrays = (chunks) => {
   return merged;
 };
 
+/** @param {WebAssembly.Module} wasmModule */
 export const hasDirectLosatApi = (wasmModule) =>
   WebAssembly.Module.exports(wasmModule).some(
     (entry) => entry.kind === 'function' && entry.name === 'losat_web_run_pair'
   );
 
+/**
+ * @param {LosatPairRun & { checkCanceled?: () => void }} run
+ * @returns {Promise<string>}
+ */
 export const runLosatPairWasi = async ({
   program,
   queryFasta,
@@ -49,10 +82,12 @@ export const runLosatPairWasi = async ({
     ['subject.fa', new File(encoder.encode(subjectFasta), { readonly: true })]
   ]);
   const preopen = new PreopenDirectory('.', files);
+  /** @type {Uint8Array[]} */
   const stdoutChunks = [];
+  /** @type {Uint8Array[]} */
   const stderrChunks = [];
-  const stdout = new ConsoleStdout((data) => stdoutChunks.push(data));
-  const stderr = new ConsoleStdout((data) => stderrChunks.push(data));
+  const stdout = new ConsoleStdout((/** @type {Uint8Array} */ data) => stdoutChunks.push(data));
+  const stderr = new ConsoleStdout((/** @type {Uint8Array} */ data) => stderrChunks.push(data));
   const stdin = new OpenFile(new File(new Uint8Array(), { readonly: true }));
   const args = [
     'losat',
@@ -82,7 +117,7 @@ export const runLosatPairWasi = async ({
 };
 
 /**
- * @param {Record<string, any>} wasiShim The vendored WASI shim classes.
+ * @param {LosatWasiShim} wasiShim
  * @param {WebAssembly.Module} wasmModule
  * @returns {Promise<WebAssembly.Instance>}
  */
@@ -109,6 +144,10 @@ const instantiateDirectLosat = async (
   return directInstancePromise;
 };
 
+/**
+ * @param {LosatDirectExports} exports
+ * @param {Uint8Array} bytes
+ */
 const copyBytesToWasm = (exports, bytes) => {
   if (bytes.length === 0) return { ptr: 0, len: 0 };
   const ptr = exports.losat_web_alloc(bytes.length);
@@ -116,6 +155,11 @@ const copyBytesToWasm = (exports, bytes) => {
   return { ptr, len: bytes.length };
 };
 
+/**
+ * @param {LosatDirectExports} exports
+ * @param {() => number} ptrFn
+ * @param {() => number} lenFn
+ */
 const readWasmString = (exports, ptrFn, lenFn) => {
   const ptr = ptrFn();
   const len = lenFn();
@@ -124,6 +168,10 @@ const readWasmString = (exports, ptrFn, lenFn) => {
   return new TextDecoder().decode(bytes);
 };
 
+/**
+ * @param {LosatPairRun} run
+ * @returns {Promise<string>}
+ */
 export const runLosatPairDirect = async ({
   program,
   queryFasta,

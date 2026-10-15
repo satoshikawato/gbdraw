@@ -3,9 +3,11 @@ const { readFile, writeFile } = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
 const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
-const { openApp, assertDiagramWorkerIdle, getDiagramWorkerActivity, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { openApp, assertDiagramWorkerIdle, getDiagramWorkerActivity, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const panel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
+// The card's own summary; each annotation row has a Style disclosure with a summary too.
+const panelSummary = (page) => panel(page).locator(':scope > summary');
 const effectiveRows = (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets.flatMap((set) =>
   set.annotations.map((item) => ({
     setId: set.id, id: item.id, target: item.target, mark: item.mark, label: item.label,
@@ -45,7 +47,7 @@ for (const width of [1440, 390]) {
     await openApp(page);
     const downloads = [];
     page.on('download', (download) => downloads.push(download));
-    await panel(page).locator('summary').press('Enter');
+    await panelSummary(page).press('Enter');
     const button = panel(page).getByRole('button', { name: 'Download TSV', exact: true });
     await expect(button).toBeDisabled();
     await expect(button).toHaveAccessibleDescription('Add an annotation row to download TSV.');
@@ -80,8 +82,9 @@ for (const width of [1440, 390]) {
         ] }
       ]));
     });
-    await panel(page).getByPlaceholder('Label', { exact: true }).first().fill('Edited draft α');
-    await panel(page).locator('summary').focus();
+    // The label field is in the row's Style disclosure.
+    await (await reveal(panel(page).getByPlaceholder('Label', { exact: true }).first())).fill('Edited draft α');
+    await panelSummary(page).focus();
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.capturing.value)).toBe(false);
     const expected = await effectiveRows(page);
     await expect(button).toBeEnabled();
@@ -130,7 +133,7 @@ for (const width of [1440, 390]) {
           const fresh = await context.newPage();
           await openApp(fresh);
           await context.setOffline(true);
-          await panel(fresh).locator('summary').press('Enter');
+          await panelSummary(fresh).press('Enter');
           await panel(fresh).locator('input[type=file]').setInputFiles(path);
           await expect.poll(() => effectiveRows(fresh)).toEqual(expected);
           await assertDiagramWorkerIdle(fresh);
@@ -176,7 +179,7 @@ for (const width of [1440, 390]) {
       .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
-    const summary = panel(page).locator('summary');
+    const summary = panelSummary(page);
     await summary.focus();
     await page.keyboard.press('Enter');
     await expect(panel(page)).toHaveAttribute('open', '');
@@ -251,9 +254,9 @@ for (const width of [1440, 390]) {
     // Cancel keeps the sets and records no History step (FL-14).
     const beforeEmpty = await importSnapshot(page);
     await fileInput.setInputFiles({ name: 'empty.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from('') });
-    const removeAll = page.getByRole('dialog', { name: 'Remove All Annotation Sets' });
+    const removeAll = page.getByRole('dialog', { name: 'Remove all annotation sets?' });
     await expect(removeAll).toBeVisible();
-    await expect(removeAll).toContainText(`removes all ${beforeEmpty.draft.length} annotation set(s)`);
+    await expect(removeAll).toContainText(`removes all ${beforeEmpty.draft.length} annotation ${beforeEmpty.draft.length === 1 ? 'set' : 'sets'}.`);
     await removeAll.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(removeAll).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.capturing.value)).toBe(false);

@@ -1,13 +1,23 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "rulesPath": "gbdraw/web/CLAUDE.md",
   "rules": [
     {
       "id": "R1",
       "heading": "R1: Three writers of the Result",
       "guards": [
-        "tests/web/gui-audit-20260930-editor.playwright.spec.js",
-        "tests/web/history-generated-authority.playwright.spec.js"
+        {
+          "path": "tests/web/gui-audit-20260930-editor.playwright.spec.js",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/history-generated-authority.playwright.spec.js",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": []
     },
@@ -15,13 +25,48 @@
       "id": "R2",
       "heading": "R2: Lifetime of editor intent",
       "guards": [
-        "tests/web/annotation-feature-identity.playwright.spec.js",
-        "tests/web/annotations.test.mjs",
-        "tests/web/feature-label-visual-unit.test.mjs",
-        "tests/web/mode-scoped-feature-edits.playwright.spec.js",
-        "tests/web/mode-scoped-feature-edits.test.mjs",
-        "tests/web/non-edit-state-diff.test.mjs",
-        "tests/web/non-edit-state-preservation.playwright.spec.js"
+        {
+          "path": "tests/web/annotation-feature-identity.playwright.spec.js",
+          "rootCause": "P2",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/annotations.test.mjs",
+          "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/feature-label-visual-unit.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/mode-scoped-feature-edits.playwright.spec.js",
+          "rootCause": "P2",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/mode-scoped-feature-edits.test.mjs",
+          "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/non-edit-state-diff.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/non-edit-state-preservation.playwright.spec.js",
+          "rootCause": "P7",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": []
     },
@@ -29,22 +74,79 @@
       "id": "R3",
       "heading": "R3: One projection per domain",
       "guards": [
-        "tests/web/feature-color-actions.test.mjs",
-        "tests/web/feature-visibility-actions.test.mjs",
-        "tests/web/gui-audit-20260930-editor.playwright.spec.js",
-        "tests/web/live-generate-parity-legend.playwright.spec.js",
-        "tests/web/live-generate-parity-track-data.playwright.spec.js",
-        "tests/web/live-generate-parity.playwright.spec.js"
+        {
+          "path": "tests/web/contracts/live-generate-parity-allowed.json",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "edit-unify removes the second projection (multi-drawing M4)"
+        },
+        {
+          "path": "tests/web/feature-color-actions.test.mjs",
+          "rootCause": "P1",
+          "job": "web-contracts-pr",
+          "retireWhen": "edit-unify removes the second projection (multi-drawing M4)"
+        },
+        {
+          "path": "tests/web/feature-visibility-actions.test.mjs",
+          "rootCause": "P1",
+          "job": "web-contracts-pr",
+          "retireWhen": "edit-unify removes the second projection (multi-drawing M4)"
+        },
+        {
+          "path": "tests/web/gui-audit-20260930-editor.playwright.spec.js",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/live-generate-parity-legend.playwright.spec.js",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "a seeded random walk in the pull-request shards replaces the case matrix after edit-unify (multi-drawing M4)"
+        },
+        {
+          "path": "tests/web/live-generate-parity-track-data.playwright.spec.js",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "a seeded random walk in the pull-request shards replaces the case matrix after edit-unify (multi-drawing M4)"
+        },
+        {
+          "path": "tests/web/live-generate-parity.playwright.spec.js",
+          "rootCause": "P1",
+          "job": "playwright-functional",
+          "retireWhen": "a seeded random walk in the pull-request shards replaces the case matrix after edit-unify (multi-drawing M4)"
+        }
       ],
-      "allowlists": []
+      "allowlists": [
+        {
+          "path": "tests/web/contracts/live-generate-parity-allowed.json",
+          "symbol": "entries",
+          "kind": "json-entries"
+        }
+      ]
     },
     {
       "id": "R4",
       "heading": "R4: A fast path matches the canonical reader or declines",
       "guards": [
-        "tests/fixtures/record_metadata_inference_cases.json",
-        "tests/test_record_metadata.py",
-        "tests/web/record-metadata-inference.test.mjs"
+        {
+          "path": "tests/fixtures/record_metadata_inference_cases.json",
+          "rootCause": "P4",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/test_record_metadata.py",
+          "rootCause": "P4",
+          "job": "core-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/record-metadata-inference.test.mjs",
+          "rootCause": "P4",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": []
     },
@@ -52,8 +154,18 @@
       "id": "R5",
       "heading": "R5: Comparison frames and reuse",
       "guards": [
-        "tests/web/gui-audit-20260930-comparisons.playwright.spec.js",
-        "tests/web/linear-sources.test.mjs"
+        {
+          "path": "tests/web/gui-audit-20260930-comparisons.playwright.spec.js",
+          "rootCause": "P9",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/linear-sources.test.mjs",
+          "rootCause": "P9",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": []
     },
@@ -61,20 +173,45 @@
       "id": "R6",
       "heading": "R6: The producer owns the failure meaning",
       "guards": [
-        "tests/test_web_error_producer_coverage.py",
-        "tests/web/error-normalization.test.mjs",
-        "tests/web/error-producer-coverage.test.mjs"
+        {
+          "path": "tests/test_web_error_producer_coverage.py",
+          "rootCause": "P6",
+          "job": "core-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/error-normalization.test.mjs",
+          "rootCause": "P6",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/error-producer-coverage.test.mjs",
+          "rootCause": "P6",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": [
         {
           "path": "tests/web/error-producer-coverage.test.mjs",
           "symbol": "UNCLASSIFIED_THROW_BASELINE",
-          "kind": "count-map"
+          "kind": "count"
         },
         {
           "path": "tests/web/error-producer-coverage.test.mjs",
           "symbol": "NATIVE_VALIDATION_BASELINE",
           "kind": "count-map"
+        },
+        {
+          "path": "tests/test_web_error_producer_coverage.py",
+          "symbol": "NATIVE_TABLE_BASELINE",
+          "kind": "py-count-map"
+        },
+        {
+          "path": "tests/test_web_error_producer_coverage.py",
+          "symbol": "UNPROVEN_BASELINE",
+          "kind": "py-count"
         }
       ]
     },
@@ -82,9 +219,24 @@
       "id": "R7",
       "heading": "R7: Python's typed layer owns value checks",
       "guards": [
-        "tests/fixtures/option_domain_vectors.json",
-        "tests/test_option_domain_parity.py",
-        "tests/web/option-input-integrity.test.mjs"
+        {
+          "path": "tests/fixtures/option_domain_vectors.json",
+          "rootCause": "P4",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/test_option_domain_parity.py",
+          "rootCause": "P4",
+          "job": "core-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/option-input-integrity.test.mjs",
+          "rootCause": "P4",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": [
         {
@@ -98,7 +250,12 @@
       "id": "R8",
       "heading": "R8: The Multi-Record Canvas owns placement only",
       "guards": [
-        "tests/test_circular_multi_record_parity.py"
+        {
+          "path": "tests/test_circular_multi_record_parity.py",
+          "rootCause": "new",
+          "job": "core-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": []
     },
@@ -106,20 +263,78 @@
       "id": "R9",
       "heading": "R9: One reader per input format",
       "guards": [
-        "tests/test_comparison_tables.py"
+        {
+          "path": "tests/test_comparison_tables.py",
+          "rootCause": "P4",
+          "job": "core-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/genbank-header-reader-owner.test.mjs",
+          "rootCause": "P4",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/twin-registry.test.mjs",
+          "rootCause": "P4",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
-      "allowlists": []
+      "allowlists": [
+        {
+          "path": "tests/web/genbank-header-reader-owner.test.mjs",
+          "symbol": "OUTSIDE_OWNER_BASELINE",
+          "kind": "count-map"
+        },
+        {
+          "path": "tools/twins.json",
+          "symbol": "twins",
+          "kind": "json-ids"
+        }
+      ]
     },
     {
       "id": "R10",
       "heading": "R10: A watcher does not repair state",
       "guards": [
-        "tests/web/circular-track-slots.test.mjs",
-        "tests/web/depth-slot-lifecycle.test.mjs",
-        "tests/web/feature-visibility-rule-writers.test.mjs",
-        "tests/web/track-layout-transition.playwright.spec.js",
-        "tests/web/track-layout-transition.test.mjs",
-        "tests/web/track-slot-display.test.mjs"
+        {
+          "path": "tests/web/circular-track-slots.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/depth-slot-lifecycle.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/feature-visibility-rule-writers.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "DRAWINGS typed slices give each slice one writer module, checked by tsc and the import graph (multi-drawing M3)"
+        },
+        {
+          "path": "tests/web/track-layout-transition.playwright.spec.js",
+          "rootCause": "P7",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/track-layout-transition.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "DRAWINGS typed slices give each slice one writer module, checked by tsc and the import graph (multi-drawing M3)"
+        },
+        {
+          "path": "tests/web/track-slot-display.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": [
         {
@@ -131,6 +346,11 @@
           "path": "tests/web/track-layout-transition.test.mjs",
           "symbol": "WRITERS",
           "kind": "writer-map"
+        },
+        {
+          "path": "tests/web/feature-visibility-rule-writers.test.mjs",
+          "symbol": "RULE_WRITERS",
+          "kind": "set-map"
         }
       ]
     },
@@ -138,13 +358,78 @@
       "id": "R11",
       "heading": "R11: History transaction boundaries",
       "guards": [
-        "tests/web/history-config-restore.test.mjs",
-        "tests/web/history-generated-authority.playwright.spec.js",
-        "tests/web/history-inputs.playwright.spec.js",
-        "tests/web/history-inputs.test.mjs",
-        "tests/web/multi-result-edit-matrix.playwright.spec.js",
-        "tests/web/non-edit-state-preservation.playwright.spec.js",
-        "tests/web/session-operation-consistency.test.mjs"
+        {
+          "path": "tests/web/feature-label-visual-unit.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/gui-audit-regressions.playwright.spec.js",
+          "rootCause": "P7",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/history-config-restore.test.mjs",
+          "rootCause": "P9",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/history-generated-authority.playwright.spec.js",
+          "rootCause": "P7",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/history-inputs.playwright.spec.js",
+          "rootCause": "P7",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/history-inputs.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/history.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/multi-result-edit-matrix.playwright.spec.js",
+          "rootCause": "P7",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/non-edit-state-preservation.playwright.spec.js",
+          "rootCause": "P7",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/session-draft-authority.test.mjs",
+          "rootCause": "P9",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/session-operation-consistency.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/specific-color-actions.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": []
     },
@@ -152,8 +437,18 @@
       "id": "R12",
       "heading": "R12: Source recipe and accessibility",
       "guards": [
-        "tests/web/accessibility.playwright.spec.js",
-        "tests/web/run-info.test.mjs"
+        {
+          "path": "tests/web/accessibility.playwright.spec.js",
+          "rootCause": "new",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/run-info.test.mjs",
+          "rootCause": "P8",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": []
     },
@@ -161,8 +456,24 @@
       "id": "R13",
       "heading": "R13: Owner layering and ports",
       "guards": [
-        "tests/web/owner-graph-baseline.test.mjs",
-        "tests/web/owner-graph-detectors.test.mjs"
+        {
+          "path": "tests/web/owner-graph-baseline.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "DRAWINGS typed slices and writer imports replace the owner-graph text detectors (multi-drawing M3)"
+        },
+        {
+          "path": "tests/web/owner-graph-detectors.test.mjs",
+          "rootCause": "P10",
+          "job": "web-contracts-pr",
+          "retireWhen": "DRAWINGS typed slices and writer imports replace the owner-graph text detectors (multi-drawing M3)"
+        },
+        {
+          "path": "tests/web/owner-graph-replay.test.mjs",
+          "rootCause": "P10",
+          "job": "web-change-budget",
+          "retireWhen": "DRAWINGS typed slices and writer imports replace the owner-graph text detectors (multi-drawing M3)"
+        }
       ],
       "allowlists": [
         {
@@ -181,9 +492,48 @@
       "id": "R14",
       "heading": "R14: Typed boundaries",
       "guards": [
-        "tests/web/explicit-any-ratchet.test.mjs",
-        "tests/web/no-implicit-any-ratchet.test.mjs",
-        "tests/web/typed-boundaries.test.mjs"
+        {
+          "path": "tests/test_web_contracts_generated.py",
+          "rootCause": "P4",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/explicit-any-ratchet.test.mjs",
+          "rootCause": "P5",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/no-implicit-any-ratchet.test.mjs",
+          "rootCause": "P5",
+          "job": "web-contracts-pr",
+          "retireWhen": "NO_IMPLICIT_ANY_BASELINE is empty and noImplicitAny is on in tests/web/types/tsconfig.json"
+        },
+        {
+          "path": "tests/web/typed-boundaries.test.mjs",
+          "rootCause": "P5",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/types/tsconfig.json",
+          "rootCause": "P5",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/types/tsconfig.no-implicit-any.json",
+          "rootCause": "P5",
+          "job": "web-contracts-pr",
+          "retireWhen": "NO_IMPLICIT_ANY_BASELINE is empty and noImplicitAny is on in tests/web/types/tsconfig.json"
+        },
+        {
+          "path": "tests/web/types/web-globals.d.ts",
+          "rootCause": "P5",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": [
         {
@@ -194,7 +544,7 @@
         {
           "path": "tests/web/no-implicit-any-ratchet.test.mjs",
           "symbol": "NO_IMPLICIT_ANY_BASELINE",
-          "kind": "count"
+          "kind": "count-map"
         },
         {
           "path": "tests/web/explicit-any-ratchet.test.mjs",
@@ -207,15 +557,102 @@
       "id": "R15",
       "heading": "R15: Drawing context and mode-scoped settings",
       "guards": [
-        "tests/test_mode_scoped_settings.py",
-        "tests/test_mode_split_vectors.py",
-        "tests/web/drawing-context.test.mjs",
-        "tests/web/mode-scoped-session.test.mjs",
-        "tests/web/mode-scoped-settings.playwright.spec.js",
-        "tests/web/mode-split-vectors.test.mjs",
-        "tests/web/per-mode-drawings.test.mjs"
+        {
+          "path": "tests/test_mode_scoped_settings.py",
+          "rootCause": "P2",
+          "job": "core-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/test_mode_split_vectors.py",
+          "rootCause": "P3",
+          "job": "core-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/drawing-context.test.mjs",
+          "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "DRAWINGS typed slices replace the key-class table (multi-drawing M3)"
+        },
+        {
+          "path": "tests/web/helpers/drawing-state.mjs",
+          "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "DRAWINGS typed slices replace the key-class table (multi-drawing M3)"
+        },
+        {
+          "path": "tests/web/mode-scoped-session.test.mjs",
+          "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/mode-scoped-settings.playwright.spec.js",
+          "rootCause": "P2",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/mode-split-vectors.test.mjs",
+          "rootCause": "P3",
+          "job": "web-contracts-pr",
+          "retireWhen": "services/mode-scoped-migration.js is deleted and Python alone splits a Session 27-44 (boundary-audit M2, multi-drawing X step)"
+        },
+        {
+          "path": "tests/web/per-mode-drawings.test.mjs",
+          "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        }
       ],
       "allowlists": []
+    },
+    {
+      "id": "CW",
+      "heading": "Computation ownership",
+      "rulesPath": "gbdraw/web/CLAUDE.md",
+      "guards": [
+        {
+          "path": "tests/web/computation-ownership.playwright.spec.js",
+          "rootCause": "new",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/computation-ownership.test.mjs",
+          "rootCause": "new",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/helpers/app-lifecycle.cjs",
+          "rootCause": "new",
+          "job": "playwright-functional",
+          "retireWhen": "never"
+        }
+      ],
+      "allowlists": []
+    },
+    {
+      "id": "TYPE-DEBT",
+      "heading": "Type checking",
+      "rulesPath": "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md",
+      "guards": [
+        {
+          "path": "tests/test_type_check_ratchet.py",
+          "rootCause": "new",
+          "job": "core-pr",
+          "retireWhen": "never"
+        }
+      ],
+      "allowlists": [
+        {
+          "path": "tests/test_type_check_ratchet.py",
+          "symbol": "TYPE_DEBT_BASELINE",
+          "kind": "py-count-map"
+        }
+      ]
     }
   ]
 }

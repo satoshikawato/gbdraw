@@ -2,18 +2,19 @@
 // `noImplicitAny` is not yet on in the guard config. Until it is,
 // tests/web/types/tsconfig.no-implicit-any.json is the guard config
 // (tests/web/types/tsconfig.json) plus `noImplicitAny`, and
-// NO_IMPLICIT_ANY_BASELINE caps how many diagnostics one `tsc` run with it
-// reports across gbdraw/web/js/. The guard asserts:
+// NO_IMPLICIT_ANY_BASELINE records how many diagnostics one `tsc` run with it
+// reports per module under gbdraw/web/js/ (paths relative to it). A module
+// without an entry, including a new module, has none. The guard asserts:
 //   1. the ratchet config is exactly the guard config plus `noImplicitAny`;
 //   2. every diagnostic of that run is in a module under gbdraw/web/js/;
-//   3. the run reports no more diagnostics than NO_IMPLICIT_ANY_BASELINE.
+//   3. no module reports more diagnostics than its entry.
 //
-// The cap is one number for the whole tree, so moving a module does not change
-// it. A pull request may lower it to the new count; it need not. Raising it is
-// an authority-only change: NO_IMPLICIT_ANY_BASELINE is a registered
-// design-rule allowlist (tools/web-design-rule-guards.json, R14, kind `count`).
-// Owner decision of 2026-10-07: this cap stands until typed boundaries phase 4
-// (v0.15.0) replaces it with a count per module and then turns the option on.
+// Lowering or removing an entry is optional: the test names the entries that
+// may be lowered. Adding or raising an entry is an authority-only change:
+// NO_IMPLICIT_ANY_BASELINE is a registered design-rule allowlist
+// (tools/web-design-rule-guards.json, R14, kind `count-map`). When the map is
+// empty, `noImplicitAny` is turned on in the guard config and this ratchet and
+// its config are deleted.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -22,7 +23,13 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const NO_IMPLICIT_ANY_BASELINE = 7509;
+import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
+
+const NO_IMPLICIT_ANY_BASELINE = {
+  'app/run-analysis.js': 2,
+  'services/config.js': 68,
+  'services/session-request.js': 80
+};
 
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RATCHET_CONFIG = 'tests/web/types/tsconfig.no-implicit-any.json';
@@ -58,18 +65,18 @@ test('R14: the noImplicitAny config is the guard config plus noImplicitAny', () 
   );
 });
 
-test('R14: noImplicitAny diagnostics stay at or below NO_IMPLICIT_ANY_BASELINE', (t) => {
-  assert.ok(Number.isInteger(NO_IMPLICIT_ANY_BASELINE) && NO_IMPLICIT_ANY_BASELINE >= 0);
-  const perModule = new Map();
+test('R14: no module reports more noImplicitAny diagnostics than its NO_IMPLICIT_ANY_BASELINE entry', (t) => {
+  Object.entries(NO_IMPLICIT_ANY_BASELINE).forEach(([path, count]) => {
+    assert.ok(Number.isInteger(count) && count > 0, `NO_IMPLICIT_ANY_BASELINE['${path}'] must be a positive integer`);
+  });
+  const perModule = {};
   const unparsed = [];
-  let total = 0;
   let inDiagnostic = false;
   tsc().split(/\r?\n/).forEach((line) => {
     if (!line.trim()) return;
     const match = line.match(DIAGNOSTIC);
     if (match) {
-      total += 1;
-      perModule.set(match[1], (perModule.get(match[1]) || 0) + 1);
+      perModule[match[1]] = (perModule[match[1]] || 0) + 1;
       inDiagnostic = true;
     } else if (/^\s/.test(line) && inDiagnostic) {
       // A continuation line of the diagnostic above.
@@ -77,17 +84,15 @@ test('R14: noImplicitAny diagnostics stay at or below NO_IMPLICIT_ANY_BASELINE',
   });
   assert.deepEqual(unparsed, [], `tsc -p ${RATCHET_CONFIG} printed output outside gbdraw/web/js/`);
 
-  if (total < NO_IMPLICIT_ANY_BASELINE) {
-    t.diagnostic(`noImplicitAny: ${total} diagnostics, below the cap ${NO_IMPLICIT_ANY_BASELINE}; `
-      + `NO_IMPLICIT_ANY_BASELINE may be lowered to ${total}`);
-  }
-  const counts = [...perModule].sort(([a], [b]) => a.localeCompare(b)).map(([path, count]) => `${path} ${count}`);
-  assert.ok(
-    total <= NO_IMPLICIT_ANY_BASELINE,
-    `${total} noImplicitAny diagnostics, above NO_IMPLICIT_ANY_BASELINE ${NO_IMPLICIT_ANY_BASELINE}. `
-      + 'Declare the types of the new parameters and variables (for example `@param {string} name`), '
-      + 'or type the collection a callback iterates; raising the cap is an authority-only change. '
-      + `Run \`node node_modules/typescript/bin/tsc -p ${RATCHET_CONFIG} --pretty false\` and compare with dev. `
-      + `Diagnostics per module:\n    ${counts.join('\n    ')}`
+  const { above, lowerable } = compareCountBaseline(perModule, NO_IMPLICIT_ANY_BASELINE);
+  const total = Object.values(perModule).reduce((sum, count) => sum + count, 0);
+  t.diagnostic(`noImplicitAny: ${total} diagnostics in ${Object.keys(perModule).length} modules`);
+  reportLowerable(t, 'NO_IMPLICIT_ANY_BASELINE', lowerable);
+  assert.deepEqual(
+    above.map(({ key, observed, recorded }) => `${key}: ${observed} noImplicitAny diagnostics, above its entry ${recorded}`),
+    [],
+    'Declare the types of the new parameters and variables (for example `@param {string} name`), '
+      + 'or type the collection a callback iterates; adding or raising an entry is an authority-only change. '
+      + `Run \`node node_modules/typescript/bin/tsc -p ${RATCHET_CONFIG} --pretty false\` to list the diagnostics.`
   );
 });

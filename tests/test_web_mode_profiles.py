@@ -5,13 +5,17 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from gbdraw.legend.table import configure_pairwise_identity_legend_from_comparisons
+import pytest
+
+from gbdraw.legend.table import pairwise_identity_legend_from_comparisons
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 
 
+# The `browser` marker puts this test in the jobs a Web-only pull request runs.
+@pytest.mark.browser
 def test_generated_web_mode_profiles_match_python_source() -> None:
     result = subprocess.run(
         [
@@ -77,14 +81,12 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "effectiveLinearAxisColor({" in request_source
     # The Linear axis color follows the ruler while it is the mode default.
     assert "isModeProfileDefault('linear', 'axis_stroke_color', adv.axis_stroke_color)" in request_source
-    blast_config = SimpleNamespace()
-    color_modes = configure_pairwise_identity_legend_from_comparisons(
-        blast_config,
+    identity_legend = pairwise_identity_legend_from_comparisons(
+        SimpleNamespace(),
         None,
         additional_color_modes=("orientation",),
     )
-    assert color_modes == {"orientation"}
-    assert blast_config.hide_pairwise_identity_legend is True
+    assert identity_legend is not None and identity_legend.hidden is True
     assert "shouldSuppressPairwiseIdentityLegend" not in run_source
     assert "suppressPairwiseIdentityLegend" not in candidate_source
     assert "PAIRWISE_LEGEND_SELECTOR" not in candidate_source

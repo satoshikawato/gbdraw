@@ -180,8 +180,10 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--gc_skew_width GC_SKEW_WIDTH]
               [--gc_skew_radius GC_SKEW_RADIUS]
               [--legend_box_size LEGEND_BOX_SIZE]
-              [--legend_font_size LEGEND_FONT_SIZE] [--session SESSION]
-              [--drawing ID] [--save_session] [--session_output PATH]
+              [--legend_font_size LEGEND_FONT_SIZE]
+              [--font_family FONT_FAMILY] [--font_file PATH]
+              [--no_font_embedding] [--session SESSION] [--drawing ID]
+              [--save_session] [--session_output PATH]
 
 Generate genome diagrams in PNG/PDF/SVG/PS/EPS. By default, diagrams for
 multiple entries are saved separately. Use --multi_record_canvas to place
@@ -246,17 +248,18 @@ options:
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
                         Block stroke width (optional; float; default: 2 pt for
-                        genomes <= 50 kb, 0 pt for genomes >= 50 kb)
+                        genomes shorter than the short/long boundary (75 kb
+                        circular, 100 kb linear), 0 pt otherwise)
   --axis_stroke_color AXIS_STROKE_COLOR
                         Axis stroke color (str; default: "gray")
   --axis_stroke_width AXIS_STROKE_WIDTH
                         Axis stroke width (optional; float; default: 3 pt for
-                        genomes <= 50 kb, 1 pt for genomes >= 50 kb)
+                        genomes < 75 kb, 1 pt for genomes >= 75 kb)
   --line_stroke_color LINE_STROKE_COLOR
                         Line stroke color (str; default: "gray")
   --line_stroke_width LINE_STROKE_WIDTH
                         Line stroke width (optional; float; default: 5 pt for
-                        genomes <= 50 kb, 1 pt for genomes >= 50 kb)
+                        genomes < 75 kb, 1 pt for genomes >= 75 kb)
   --definition_font_size DEFINITION_FONT_SIZE
                         Definition font size (optional; default: 18)
   --plot_title PLOT_TITLE
@@ -274,7 +277,7 @@ options:
                         track packing (in px; must be >= 0).
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 14 (pt) for
-                        genomes <= 50 kb, 8 for genomes >= 50 kb)
+                        genomes < 75 kb, 8 for genomes >= 75 kb)
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
                         interactive_svg, png, pdf, eps, ps; default: svg;
                         png/pdf/eps/ps require CairoSVG).
@@ -554,11 +557,39 @@ options:
                         ratio of base radius; must be > 0).
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
-                        96 dpi) for genomes <= 50 kb, 20 for genomes >= 50
-                        kb).
+                        96 dpi) for genomes shorter than the short/long
+                        boundary (75 kb circular, 100 kb linear), 20
+                        otherwise).
   --legend_font_size LEGEND_FONT_SIZE
                         Legend font size (optional; float; default: 20 (pt)
-                        for genomes <= 50 kb, 16 for genomes >= 50 kb).
+                        for genomes shorter than the short/long boundary (75
+                        kb circular, 100 kb linear), 16 otherwise).
+  --font_family FONT_FAMILY
+                        Font for all diagram text: one font family name (for
+                        example "DejaVu Sans"), which gets its generic family
+                        appended, or a CSS font-family list. Text is measured
+                        with the font file of the first family that is a
+                        --font_file font, a bundled Liberation font or alias,
+                        that fontconfig (fc-match) finds, or, without
+                        fontconfig, that is installed in the system font
+                        folders. A family found nowhere is replaced with the
+                        nearest Liberation font, with a warning. A Session
+                        saves the font name, not the font file (optional;
+                        default: 'Liberation Sans', 'Arial', 'Helvetica',
+                        'Nimbus Sans L', sans-serif; with --font_file, the
+                        family of the first file).
+  --font_file PATH      A TrueType or OpenType font file (.ttf, .otf, .ttc,
+                        .otc) whose family the diagram text can use
+                        (--font_family, or the font a Session names); every
+                        face of a collection is used. Repeatable. Works with
+                        --session. A Session does not store the file
+                        (optional).
+  --no_font_embedding   Do not embed fonts in SVG and interactive SVG output.
+                        By default, each font the SVG uses that gbdraw does
+                        not bundle is embedded as a subset of the characters
+                        it draws (the whole font when its license forbids
+                        subsetting), unless its license (OS/2 fsType) forbids
+                        embedding.
   --session SESSION     Regenerate a diagram from a plain or gzip-compressed
                         gbdraw GUI session JSON file.
   --drawing ID          With --session, the drawing to render, by ID or name
@@ -579,6 +610,18 @@ GC-content and Depth axes and ticks are unaffected. User-explicit
 `--circular_track_table` inputs are authoritative. An enabled `ticks` slot
 remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
+
+Small label defects of horizontal Circular labels, up to 100 per record
+(overlaps, crossing leader lines, and inner labels over the definition text),
+are first repaired by moving outer and inner labels slightly.
+If labels would still overlap, or radial labels need more room than the circular
+tracks leave, `gbdraw circular` draws nothing, prints settings that fit (such
+as `--outer_label_y_radius_offset`, `--label_font_size`, `--labels out`,
+`--label_placement radial`, or `--resolve_overlaps`), and exits with status 1. If only leader lines
+cross or labels cover the definition text, it draws the figure, prints the same
+settings as a warning, and exits with status 0. `gbdraw linear` stops the same
+way if its labels overlap. See [Labels that do not
+fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
 For fresh Circular input, output names are derived from record IDs when
 `--output` is omitted. An ID used this way must be one filename component of
@@ -646,6 +689,31 @@ Coordinates are 1-based and inclusive. Separate multiple feature selectors with 
 Bind a set to a custom slot with `set_id=<set_id>`. Without custom slots, `highlight` marks are automatically drawn as an underlay behind the feature track. Other marks receive an outside/above annotation slot while the normal default tracks remain present. Mixed sets are split automatically between those placements.
 
 `lane` is the zero-based collision-avoidance row within an annotation track. Leave it blank for deterministic automatic packing. Use `0` for the first row, `1` for the second, and so on only when a fixed row is required. Highlights always cover the full feature band, so `lane` does not apply to them.
+
+An annotation slot with `side=overlay` is drawn on another slot instead of taking a row of its own. It takes these parameters after `set_id`:
+
+- `anchor_slot=<slot id>` (required): the slot it is drawn on. The slot must be enabled and have a band: a `spacer` slot, a Circular `ticks` slot, and another `annotations` slot are rejected.
+- `layer=underlay|foreground` (default `foreground`): an underlay needs a `z` below its anchor's, a foreground overlay a `z` above it.
+- `cover_anchor=true|false` (default `false`): the overlay is centred on its anchor and as wide as its own `w` (Linear: as tall as its own `h`). With `true` it takes the anchor's band instead; Linear does this only for a `features` anchor.
+- `to_slot=<slot id>`: the overlay spans from the anchor slot to this second slot, from the innermost edge to the outermost edge of the two slots' bands in Circular and from the top edge to the bottom edge in Linear. It covers every slot between them, and the order of the two IDs does not matter. `to_slot` follows the rules of `anchor_slot`, and the `z` rule applies to both slots. It must name a slot other than `anchor_slot`. With `to_slot`, `cover_anchor`, `overflow`, and the slot's own `w` or `h` are not read, and the span adds no space between the slots. In Linear, a span with `show_labels=true` (the default) keeps room for its labels beyond its edge, above an underlay and below a foreground overlay (9 px with the default label style), so a record grows by that much when the span ends at that edge of the record. Use `show_labels=false` and name the regions in a second annotation slot to avoid it. In Circular a span adds no space.
+
+`padding_px` (default `2`) shrinks the overlay at both edges. The band of a GC content, GC skew, or Depth slot is its plot. For a span, the band of a `features` slot is all of its feature lanes in Circular and Linear, including the extra lanes from `--resolve_overlaps`. `cover_anchor=true` without `to_slot` still covers the first lane of each strand in Circular and all lanes in Linear. In Linear, a slot without data for a record (a Depth slot with no file there) has no band on that record and the span keeps to the other slot; in Circular a Depth slot keeps its empty ring, and the span covers it.
+
+```bash
+gbdraw circular --gbk genome.gb --annotation_table regions.tsv -o regions_circular \
+  --circular_track_slot "features:features" \
+  --circular_track_slot "gc_content:dinucleotide_content" \
+  --circular_track_slot "regions:annotations@set_id=regions,side=overlay,anchor_slot=features,to_slot=gc_content,layer=underlay,z=-1,padding_px=0,show_labels=false"
+
+gbdraw linear --gbk genome.gb --annotation_table regions.tsv -o regions_linear \
+  --linear_track_axis_index 0 \
+  --linear_track_slot "features:features@side=overlay" \
+  --linear_track_slot "gc_content:dinucleotide_content@side=below" \
+  --linear_track_slot "gc_skew:dinucleotide_skew@side=below" \
+  --linear_track_slot "regions:annotations@set_id=regions,side=overlay,anchor_slot=features,to_slot=gc_skew,layer=underlay,z=-1,padding_px=0,show_labels=false"
+```
+
+Both commands tint each `highlight` row of the set `regions` behind the tracks, from the feature track to the GC track named by `to_slot`.
 
 The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate column names are rejected, and relative paths resolve against the table file. Unknown columns remain errors for records and track tables. For Annotation TSV only, import discards unknown columns and warns once per table with the ignored column names and their absence from Session and TSV re-export; warnings exclude cell contents. Missing required columns, duplicate headers after normalization, malformed rows, and invalid known values still reject the whole import. Header names are trimmed and a BOM is removed before required-column and duplicate checks. Misspelled optional names such as `fill_colour` are ignored with the same warning; they are not converted to known names.
 
@@ -966,8 +1034,10 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--ruler_label_color RULER_LABEL_COLOR]
               [--scale_interval SCALE_INTERVAL]
               [--legend_box_size LEGEND_BOX_SIZE]
-              [--legend_font_size LEGEND_FONT_SIZE] [--normalize_length]
-              [--region REGION] [--record_id RECORD_ID]
+              [--legend_font_size LEGEND_FONT_SIZE]
+              [--font_family FONT_FAMILY] [--font_file PATH]
+              [--no_font_embedding] [--normalize_length] [--region REGION]
+              [--record_id RECORD_ID]
               [--reverse_complement REVERSE_COMPLEMENT] [--session SESSION]
               [--drawing ID] [--save_session] [--session_output PATH]
 
@@ -1226,22 +1296,23 @@ options:
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
                         Block stroke width (optional; float; default: 2 pt for
-                        genomes <= 50 kb, 0 pt for genomes >= 50 kb)
+                        genomes shorter than the short/long boundary (75 kb
+                        circular, 100 kb linear), 0 pt otherwise)
   --axis_stroke_color AXIS_STROKE_COLOR
                         Axis stroke color (str; default: auto: "lightgray", or
                         "dimgray" with --ruler_on_axis)
   --axis_stroke_width AXIS_STROKE_WIDTH
                         Axis stroke width (optional; float; default: 5 pt for
-                        genomes <= 50 kb, 2 pt for genomes >= 50 kb)
+                        genomes < 100 kb, 2 pt for genomes >= 100 kb)
   --line_stroke_color LINE_STROKE_COLOR
                         Line stroke color (optional; str; default:
                         "lightgray")
   --line_stroke_width LINE_STROKE_WIDTH
                         Line stroke width (optional; float; default: 5 pt for
-                        genomes <= 50 kb, 1 pt for genomes >= 50 kb)
+                        genomes < 100 kb, 1 pt for genomes >= 100 kb)
   --definition_font_size DEFINITION_FONT_SIZE
                         Definition font size (optional; float; default: 24 pt
-                        for genomes <= 50 kb, 10 pt for genomes >= 50 kb)
+                        for genomes < 100 kb, 10 pt for genomes >= 100 kb)
   --definition_line_style LINE:KEY=VALUE
                         Definition line style override (repeatable):
                         LINE:weight=bold,color=#000000,size=12. Lines:
@@ -1272,7 +1343,7 @@ options:
                         blocks (default: False).
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 24 pt for genomes
-                        <= 50 kb, 5 pt for genomes >= 50 kb)
+                        < 100 kb, 5 pt for genomes >= 100 kb)
   --label_placement {auto,above_feature}
                         Linear label placement mode ("auto" or
                         "above_feature"; default: "auto"). "above_feature"
@@ -1344,8 +1415,8 @@ options:
                         marks (optional)
   --feature_height FEATURE_HEIGHT
                         Feature vertical width (optional; float; default: 80
-                        (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes
-                        >= 50 kb)
+                        (pixels, 96 dpi) for genomes < 100 kb, 20 for genomes
+                        >= 100 kb)
   --gc_height GC_HEIGHT
                         GC content/skew vertical width (optional; float;
                         default: 20 (pixels, 96 dpi))
@@ -1365,7 +1436,7 @@ options:
                         default: 3 (pt))
   --scale_font_size SCALE_FONT_SIZE
                         Scale bar/ruler font size (optional; float; default:
-                        24 (pt) for genomes <= 50 kb, 16 for genomes >= 50
+                        24 (pt) for genomes < 100 kb, 16 for genomes >= 100
                         kb).
   --ruler_label_font_size RULER_LABEL_FONT_SIZE
                         Ruler label font size (optional; float). Overrides
@@ -1380,11 +1451,39 @@ options:
                         optional
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
-                        96 dpi) for genomes <= 50 kb, 20 for genomes >= 50
-                        kb).
+                        96 dpi) for genomes shorter than the short/long
+                        boundary (75 kb circular, 100 kb linear), 20
+                        otherwise).
   --legend_font_size LEGEND_FONT_SIZE
                         Legend font size (optional; float; default: 20 (pt)
-                        for genomes <= 50 kb, 16 for genomes >= 50 kb).
+                        for genomes shorter than the short/long boundary (75
+                        kb circular, 100 kb linear), 16 otherwise).
+  --font_family FONT_FAMILY
+                        Font for all diagram text: one font family name (for
+                        example "DejaVu Sans"), which gets its generic family
+                        appended, or a CSS font-family list. Text is measured
+                        with the font file of the first family that is a
+                        --font_file font, a bundled Liberation font or alias,
+                        that fontconfig (fc-match) finds, or, without
+                        fontconfig, that is installed in the system font
+                        folders. A family found nowhere is replaced with the
+                        nearest Liberation font, with a warning. A Session
+                        saves the font name, not the font file (optional;
+                        default: 'Liberation Sans', 'Arial', 'Helvetica',
+                        'Nimbus Sans L', sans-serif; with --font_file, the
+                        family of the first file).
+  --font_file PATH      A TrueType or OpenType font file (.ttf, .otf, .ttc,
+                        .otc) whose family the diagram text can use
+                        (--font_family, or the font a Session names); every
+                        face of a collection is used. Repeatable. Works with
+                        --session. A Session does not store the file
+                        (optional).
+  --no_font_embedding   Do not embed fonts in SVG and interactive SVG output.
+                        By default, each font the SVG uses that gbdraw does
+                        not bundle is embedded as a subset of the characters
+                        it draws (the whole font when its license forbids
+                        subsetting), unless its license (OS/2 fsType) forbids
+                        embedding.
   --normalize_length    Normalize record length (experimental; default:
                         False).
   --region REGION       Crop a region (repeatable). Format: record_id:start-
@@ -1438,9 +1537,10 @@ source binding. When a custom stack is active, enabled Depth slots are
 authoritative for the legend: entries follow slot order, `legend_label`
 overrides the series title, and series without an enabled slot are omitted.
 
-An overlay annotation's `anchor_slot` must resolve to an enabled drawable,
-non-annotation slot in the complete stack. Unknown IDs, non-drawing slots, and
-annotation-to-annotation anchor chains are rejected.
+An overlay annotation's `anchor_slot` and `to_slot` must each resolve to an
+enabled drawable, non-annotation slot in the complete stack. Unknown IDs,
+non-drawing slots, and annotation-to-annotation anchor chains are rejected.
+See [Region annotations](#region-annotations) for the overlay parameters.
 
 `--comparison_height` sets the minimum clear corridor between neighboring
 records. Comparison endpoints follow the painted feature lanes and other tracks,
@@ -1496,6 +1596,7 @@ comparisons, but its hit set is not guaranteed to be identical to LOSAT.
 usage: gbdraw render [-h] --session FILE [--drawing ID [ID ...]]
                      [--list_drawings] [-o OUTPUT] [-f FORMAT] [--overwrite]
                      [--save_session | --session_output PATH]
+                     [--font_file PATH] [--no_font_embedding]
 
 Render the drawings of a plain or gzip-compressed gbdraw Session file. Without
 --drawing, every drawing with a committed render is rendered and the others
@@ -1526,6 +1627,18 @@ options:
                         Write the Session again with the rendered drawings
                         replaced to PATH; use a .gz suffix for gzip
                         compression.
+  --font_file PATH      A TrueType or OpenType font file (.ttf, .otf, .ttc,
+                        .otc) whose family the diagram text can use
+                        (--font_family, or the font a Session names); every
+                        face of a collection is used. Repeatable. Works with
+                        --session. A Session does not store the file
+                        (optional).
+  --no_font_embedding   Do not embed fonts in SVG and interactive SVG output.
+                        By default, each font the SVG uses that gbdraw does
+                        not bundle is embedded as a subset of the characters
+                        it draws (the whole font when its license forbids
+                        subsetting), unless its license (OS/2 fsType) forbids
+                        embedding.
 ```
 
 <!-- END GENERATED RENDER HELP -->

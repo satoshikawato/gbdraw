@@ -56,6 +56,19 @@ test('inactive biological inputs cannot be classified or saved as settings-only'
   assert.ok(adoptCurrentSessionDocument(inactive, 41).canonical);
 });
 
+test('OV-566: a settings-only Session refuses a Linear row that is not an object, as Python does', () => {
+  // `validateWebFileBindings` lets such a row through; Python's
+  // `_validate_settings_only_session` refuses it with the same message.
+  for (const rows of [[null], ['x'], [[]], [{ uid: 'a' }, null]]) {
+    const document = structuredClone(settings);
+    document.webFiles.bindings.linearSeqs = rows;
+    assert.throws(() => adoptCurrentSessionDocument(document, 42), /biological sources/, JSON.stringify(rows));
+  }
+  const document = structuredClone(settings);
+  document.webFiles.bindings.linearSeqs = [{ uid: 'a' }, { uid: 'b', gb: null }];
+  assert.equal(adoptCurrentSessionDocument(document, 42).canonical, null);
+});
+
 const invalid = [
   ['missing request', d => { delete d.renderRequest; }, /canonical render request/],
   ['biological binding', d => { d.resources = full.resources; d.webFiles = full.webFiles; }, /biological sources/],

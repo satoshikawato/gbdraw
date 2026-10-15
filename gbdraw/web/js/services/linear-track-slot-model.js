@@ -9,6 +9,51 @@ import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 import { parseOptionalPixel } from './track-slot-validation.js';
 
+/**
+ * The parameters of a slot. The renderer decides which names are read; any other
+ * name a Session slot carries is kept (Python owns the option set, R7).
+ * @typedef {Record<string, unknown>} LinearTrackSlotParams
+ */
+
+/**
+ * A Linear track slot row as `normalizeLinearTrackSlots` returns it (the Web
+ * draft form: `height` and `spacing` are px text, or an invalid draft kept as typed).
+ * @typedef {object} LinearTrackSlot
+ * @property {string} id
+ * @property {string} renderer
+ * @property {boolean} enabled
+ * @property {string} [depth_binding_error]
+ * @property {string} side `above`, `below`, or `overlay`.
+ * @property {unknown} height
+ * @property {unknown} spacing
+ * @property {number} z
+ * @property {LinearTrackSlotParams} params
+ */
+
+/**
+ * A slot row before normalization: a draft row, a Session slot, or a parsed spec.
+ * @typedef {object} LinearTrackSlotInput
+ * @property {unknown} [id]
+ * @property {unknown} [renderer]
+ * @property {unknown} [enabled]
+ * @property {unknown} [depth_binding_error]
+ * @property {unknown} [side]
+ * @property {unknown} [height]
+ * @property {unknown} [spacing]
+ * @property {unknown} [z]
+ * @property {unknown} [params]
+ */
+
+/** @typedef {{ renderer?: unknown, side?: unknown }} LinearSlotPlacementInput The fields that place a slot. */
+
+/**
+ * A canonical slot spec as `canonicalLinearTrackSlotSource` reads it.
+ * @typedef {{
+ *   id: string, renderer: string, enabled: boolean, side?: string | null, height?: string,
+ *   spacing?: string, z?: unknown, params: LinearTrackSlotParams
+ * }} LinearSlotSpec
+ */
+
 const SUPPORTED_RENDERERS = [
   'features',
   'dinucleotide_content',
@@ -18,6 +63,7 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
+/** @type {Record<string, string>} */
 export const RENDERER_ALIASES = {
   gc_content: 'dinucleotide_content',
   content: 'dinucleotide_content',
@@ -25,6 +71,7 @@ export const RENDERER_ALIASES = {
   skew: 'dinucleotide_skew'
 };
 
+/** @type {Record<string, string>} */
 export const DEFAULT_SLOT_IDS = {
   features: 'features',
   dinucleotide_content: 'gc_content',
@@ -37,17 +84,23 @@ export const DEFAULT_SLOT_IDS = {
 export const LINEAR_TRACK_SLOT_SCHEMA_VERSION = 2;
 export const LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1;
 
+/**
+ * @param {unknown} [params]
+ * @returns {LinearTrackSlotParams}
+ */
 export const cloneParams = (params = {}) => {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
   return { ...params };
 };
 
+/** @param {unknown} value */
 export const normalizeColorParam = (value) => {
   const text = normalizeOptionalText(value);
   if (text === null) return null;
   return resolveColorToHex(text);
 };
 
+/** @param {LinearTrackSlotParams} params */
 const normalizeSkewColorParams = (params) => {
   if (normalizeOptionalText(params.positive_color) === null && normalizeOptionalText(params.high_color) !== null) {
     params.positive_color = params.high_color;
@@ -66,19 +119,23 @@ const normalizeSkewColorParams = (params) => {
   return params;
 };
 
+/** @param {unknown} value @param {string} [fallback] */
 export const normalizeRenderer = (value, fallback = 'features') => {
   const text = String(value || fallback).trim().toLowerCase();
   const renderer = RENDERER_ALIASES[text] || text;
   return SUPPORTED_RENDERERS.includes(renderer) ? renderer : fallback;
 };
 
+/** @param {unknown} value @param {string} [fallback] */
 const normalizeSide = (value, fallback = 'below') => {
   const text = String(value || fallback).trim().toLowerCase();
   return ['above', 'below', 'overlay'].includes(text) ? text : fallback;
 };
 
+/** @param {unknown} value @param {string} [fallback] */
 export const normalizePlacement = (value, fallback = 'below') => normalizeSide(value, fallback);
 
+/** @param {unknown} [trackLayout] */
 const sideForLinearTrackLayout = (trackLayout = 'middle') => {
   const normalized = requireCurrentLinearTrackLayout(trackLayout);
   if (normalized === 'above') return 'above';
@@ -86,11 +143,13 @@ const sideForLinearTrackLayout = (trackLayout = 'middle') => {
   return 'overlay';
 };
 
+/** @param {unknown} value @param {string} [fallback] */
 export const normalizeNt = (value, fallback = 'GC') => {
   const text = String(value || '').trim().toUpperCase();
   return text || fallback;
 };
 
+/** @param {unknown} value */
 export const normalizeTrackIndex = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
@@ -98,6 +157,7 @@ export const normalizeTrackIndex = (value) => {
   return numeric;
 };
 
+/** @param {unknown} value @param {string} field */
 const normalizePxText = (value, field) => {
   try {
     const numeric = parseOptionalPixel(value, `Linear track slot ${field}`, { allowZero: field === 'spacing' });
@@ -107,6 +167,11 @@ const normalizePxText = (value, field) => {
   }
 };
 
+/**
+ * @param {unknown} renderer
+ * @param {LinearTrackSlotInput} [overrides]
+ * @returns {LinearTrackSlot}
+ */
 export const defaultSlot = (renderer, overrides = {}) => {
   const normalizedRenderer = normalizeRenderer(renderer);
   const params = cloneParams(overrides.params);
@@ -132,12 +197,12 @@ export const defaultSlot = (renderer, overrides = {}) => {
  * @property {boolean} [showGc]
  * @property {boolean} [showSkew]
  * @property {string} [nt] dinucleotide of the GC tracks
- * @property {string} [trackLayout] linear track layout (`above`, `middle`, `below`)
+ * @property {unknown} [trackLayout] linear track layout (`above`, `middle`, `below`), checked when the side is read
  */
 
 /**
  * @param {DefaultLinearTrackSlotsOptions} [options]
- * @returns {Record<string, any>[]}
+ * @returns {LinearTrackSlot[]}
  */
 export const createDefaultLinearTrackSlots = ({
   showDepth = false,
@@ -180,6 +245,7 @@ export const createDefaultLinearTrackSlots = ({
   return slots;
 };
 
+/** @param {unknown} value @param {unknown} slotCount */
 export const clampLinearTrackAxisIndex = (value, slotCount) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
@@ -187,14 +253,23 @@ export const clampLinearTrackAxisIndex = (value, slotCount) => {
   return Math.max(0, Math.min(Number(slotCount) || 0, numeric));
 };
 
+/**
+ * @param {(LinearTrackSlotInput | null | undefined)[] | null | undefined} slots
+ * @param {string} [nt]
+ * @param {unknown} [trackLayout]
+ * @returns {LinearTrackSlot[]}
+ */
 export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middle') => {
+  /** @type {(LinearTrackSlotInput | null | undefined)[]} */
   const source = Array.isArray(slots) && slots.length > 0
     ? slots
     : createDefaultLinearTrackSlots({ showGc: true, showSkew: true, nt, trackLayout });
+  /** @type {Set<string>} */
   const usedIds = new Set();
   let hasFeature = false;
-  return source
-    .filter((slot) => slot && typeof slot === 'object' && !Array.isArray(slot))
+  // The filter keeps the slot objects, so every row of the result is one.
+  return /** @type {LinearTrackSlotInput[]} */ (source
+    .filter((slot) => slot && typeof slot === 'object' && !Array.isArray(slot)))
     .map((slot, index) => {
       const renderer = normalizeRenderer(slot.renderer);
       const params = cloneParams(slot.params);
@@ -233,7 +308,8 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
               .map((mark) => String(mark || '').trim().toLowerCase())
               .filter(Boolean)
           ));
-          if (params.marks.length === 0) delete params.marks;
+          // `params.marks` was assigned an array on the line above.
+          if (/** @type {unknown[]} */ (params.marks).length === 0) delete params.marks;
         }
         for (const [field, defaultValue] of [['lane_gap_px', 3], ['padding_px', 2]]) {
           if (params[field] === null || params[field] === undefined || params[field] === '') {
@@ -276,6 +352,7 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
     .filter((slot) => slot.renderer !== 'features' || (hasFeature && slot.id));
 };
 
+/** @param {LinearSlotPlacementInput | null | undefined} slot */
 export const effectiveLinearSlotPlacement = (slot) => {
   if (!slot) return 'below';
   const renderer = normalizeRenderer(slot.renderer);
@@ -284,6 +361,7 @@ export const effectiveLinearSlotPlacement = (slot) => {
   return side === 'above' ? 'above' : 'below';
 };
 
+/** @param {(LinearSlotPlacementInput | null | undefined)[] | null | undefined} slots */
 export const inferLinearTrackAxisIndexFromSlots = (slots) => {
   const normalizedSlots = Array.isArray(slots) ? slots : [];
   const featureIndex = normalizedSlots.findIndex((slot) => slot?.renderer === 'features');
@@ -296,13 +374,17 @@ export const inferLinearTrackAxisIndexFromSlots = (slots) => {
   return normalizedSlots.filter((slot) => effectiveLinearSlotPlacement(slot) === 'above').length;
 };
 
-/** @param {number | null} [axisIndex] */
+/**
+ * @param {(LinearSlotPlacementInput | null | undefined)[] | null | undefined} slots
+ * @param {number | null} [axisIndex]
+ */
 export const resolveLinearTrackAxisIndex = (slots, axisIndex = null) => {
   const normalizedSlots = Array.isArray(slots) ? slots : [];
   const clamped = clampLinearTrackAxisIndex(axisIndex, normalizedSlots.length);
   return clamped === null ? inferLinearTrackAxisIndexFromSlots(normalizedSlots) : clamped;
 };
 
+/** @param {LinearSlotPlacementInput | null | undefined} slot @param {unknown} placement */
 export const syncLinearSlotPlacementFromSide = (slot, placement) => {
   if (!slot) return;
   const renderer = normalizeRenderer(slot.renderer);
@@ -312,6 +394,10 @@ export const syncLinearSlotPlacementFromSide = (slot, placement) => {
     : 'below';
 };
 
+/**
+ * @param {(LinearSlotPlacementInput | null | undefined)[] | null | undefined} slots
+ * @param {number | null | undefined} axisIndex
+ */
 export const syncLinearSlotsFromAxisIndex = (slots, axisIndex) => {
   const normalizedSlots = Array.isArray(slots) ? slots : [];
   const resolvedAxis = resolveLinearTrackAxisIndex(normalizedSlots, axisIndex);
@@ -331,6 +417,10 @@ export const syncLinearSlotsFromAxisIndex = (slots, axisIndex) => {
   return resolvedAxis;
 };
 
+/**
+ * @param {(LinearSlotPlacementInput | null | undefined)[] | null | undefined} slots
+ * @param {number | null | undefined} axisIndex
+ */
 export const enforceSingleLinearOnAxisSlot = (slots, axisIndex) => {
   const normalizedSlots = Array.isArray(slots) ? slots : [];
   const onAxisIndices = normalizedSlots
@@ -354,11 +444,13 @@ export const enforceSingleLinearOnAxisSlot = (slots, axisIndex) => {
   return keepIndex;
 };
 
+/** @param {unknown} value @param {string} fieldName @param {{ allowZero: boolean }} options */
 const linearScalarPayload = (value, fieldName, { allowZero }) => {
   const numeric = parseOptionalPixel(value, fieldName, { allowZero });
   return numeric === null ? null : { value: numeric, unit: 'px' };
 };
 
+/** @param {LinearTrackSlotParams} params */
 const canonicalLinearAnnotationParams = (params) => {
   const next = { ...params };
   if (!Array.isArray(next.marks) || next.marks.length === 0) {
@@ -386,6 +478,7 @@ const canonicalLinearAnnotationParams = (params) => {
   return next;
 };
 
+/** @param {{ params?: unknown, renderer?: unknown } | null | undefined} slot */
 const canonicalLinearParams = (slot) => {
   const params = cloneParams(slot?.params);
   Object.keys(params).forEach((key) => {
@@ -399,6 +492,7 @@ const canonicalLinearParams = (slot) => {
 
 /**
  * Encode one Web draft row as the canonical LinearTrackSlot object.
+ * @param {LinearTrackSlotInput} slot
  */
 export const buildLinearTrackSlotPayload = (slot) => {
   const normalized = normalizeLinearTrackSlots([slot])[0];
@@ -424,6 +518,7 @@ export const buildLinearTrackSlotPayload = (slot) => {
   };
 };
 
+/** @param {unknown} value */
 const parseLinearTrackSlotRenderer = (value) => {
   const text = String(value ?? '').trim().toLowerCase();
   const renderer = RENDERER_ALIASES[text] || text;
@@ -433,6 +528,7 @@ const parseLinearTrackSlotRenderer = (value) => {
   return renderer;
 };
 
+/** @param {unknown} value */
 const parseLinearTrackSlotBoolean = (value) => {
   const text = String(value ?? '').trim().toLowerCase();
   if (['1', 'true', 'yes', 'on'].includes(text)) return true;
@@ -440,8 +536,10 @@ const parseLinearTrackSlotBoolean = (value) => {
   throw new Error(`Invalid linear track slot boolean: ${value}.`);
 };
 
+/** @param {string | { value?: unknown, unit?: unknown } | null | undefined} value @param {string} field */
 const parseLinearTrackSlotPx = (value, field) => {
   if (value === null || value === undefined) return '';
+  /** @type {unknown} */
   let rawValue = value;
   let rawUnit = 'px';
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -459,17 +557,23 @@ const parseLinearTrackSlotPx = (value, field) => {
   return numeric === null ? '' : `${numeric}px`;
 };
 
+/** @param {unknown} value @param {string} field */
 const parseStructuredLinearTrackSlotPx = (value, field) => {
   if (value === null) return '';
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`Canonical linear track slot ${field} must be a ScalarSpec or null.`);
   }
-  if (typeof value.value !== 'number') {
+  // `value` is an object that is not an array here.
+  if (typeof /** @type {{ value?: unknown }} */ (value).value !== 'number') {
     throw new Error(`Canonical linear track slot ${field} ScalarSpec value must be numeric.`);
   }
-  return parseLinearTrackSlotPx(value, field);
+  return parseLinearTrackSlotPx(/** @type {{ value?: unknown, unit?: unknown }} */ (value), field);
 };
 
+/**
+ * @param {Record<string, unknown>} spec
+ * @returns {LinearSlotSpec}
+ */
 const parseStructuredLinearTrackSlot = (spec) => {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec) || spec.kind !== 'linearTrackSlot') {
     throw new Error('Canonical linear track slots must be strings or linearTrackSlot objects.');
@@ -528,6 +632,10 @@ const parseStructuredLinearTrackSlot = (spec) => {
   };
 };
 
+/**
+ * @param {unknown} spec
+ * @returns {LinearSlotSpec}
+ */
 const parseStringLinearTrackSlot = (spec) => {
   if (typeof spec !== 'string') {
     throw new Error('Canonical linear track slots must be strings or linearTrackSlot objects.');
@@ -540,6 +648,7 @@ const parseStringLinearTrackSlot = (spec) => {
   if (separatorIndex < 0) {
     throw new Error(`Canonical linear track slot requires '<slot_id>:<renderer>': ${text}.`);
   }
+  /** @type {LinearSlotSpec} */
   const source = {
     id: head.slice(0, separatorIndex).trim(),
     renderer: parseLinearTrackSlotRenderer(head.slice(separatorIndex + 1)),
@@ -595,6 +704,7 @@ const GENERIC_LINEAR_TRACK_SLOT_FIELDS = new Set([
   'h', 'height', 'spacing', 'z', 'z_index', 'zindex'
 ]);
 
+/** @param {LinearSlotSpec} source */
 const validateCanonicalLinearTrackSlotSource = (source) => {
   if (
     source.side === 'overlay' &&
@@ -612,22 +722,27 @@ const validateCanonicalLinearTrackSlotSource = (source) => {
   return source;
 };
 
+/** @param {unknown} spec */
 const canonicalLinearTrackSlotSource = (spec) => validateCanonicalLinearTrackSlotSource(
   spec && typeof spec === 'object' && !Array.isArray(spec)
-    ? parseStructuredLinearTrackSlot(spec)
+    ? parseStructuredLinearTrackSlot(/** @type {Record<string, unknown>} */ (spec)) // a non-array object
     : parseStringLinearTrackSlot(spec)
 );
 
-export const parseLinearTrackSlotSpec = (spec) => {
-  const normalized = normalizeLinearTrackSlots([canonicalLinearTrackSlotSource(spec)]);
+// `nt`: the dinucleotide of a content or skew slot that names none: the
+// request's, as Python reads it (`slot_dinucleotide`; OV-490).
+/** @param {unknown} spec @param {string} [nt] */
+export const parseLinearTrackSlotSpec = (spec, nt = 'GC') => {
+  const normalized = normalizeLinearTrackSlots([canonicalLinearTrackSlotSource(spec)], nt);
   return normalized[0] || null;
 };
 
-export const parseLinearTrackSlotSpecs = (specs) => {
+/** @param {unknown} specs @param {string} [nt] */
+export const parseLinearTrackSlotSpecs = (specs, nt = 'GC') => {
   if (specs === null || specs === undefined) return [];
   if (!Array.isArray(specs)) throw new Error('Canonical linear track slots must be an array.');
   if (specs.length === 0) throw new Error('Canonical linear track slot list cannot be empty.');
-  const parsed = specs.map((spec) => parseLinearTrackSlotSpec(spec)).filter(Boolean);
+  const parsed = specs.map((spec) => parseLinearTrackSlotSpec(spec, nt)).filter(Boolean);
   const ids = new Set();
   parsed.forEach((slot) => {
     if (ids.has(slot.id)) throw new Error(`Duplicate canonical linear track slot id: ${slot.id}.`);
@@ -639,6 +754,11 @@ export const parseLinearTrackSlotSpecs = (specs) => {
   return parsed;
 };
 
+/**
+ * @param {unknown} slots Anything but an array comes back as it is; an array of rows comes back as an array.
+ * @param {number} [schemaVersion]
+ * @returns {unknown}
+ */
 export const migrateLinearTrackSlotsToCurrentSchema = (
   slots,
   schemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION
@@ -668,7 +788,12 @@ export const migrateLinearTrackSlotsToCurrentSchema = (
   });
 };
 
-/** @param {number | null} [axisIndex] */
+/**
+ * @param {(LinearTrackSlotInput | null | undefined)[] | null | undefined} slots
+ * @param {number | null} [axisIndex]
+ * @param {string} [nt]
+ * @param {unknown} [trackLayout]
+ */
 export const applyLinearTrackOrderPlacements = (slots, axisIndex = null, nt = 'GC', trackLayout = 'middle') => {
   const normalized = normalizeLinearTrackSlots(slots, nt, trackLayout);
   const resolvedAxis = syncLinearSlotsFromAxisIndex(normalized, axisIndex);

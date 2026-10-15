@@ -1,9 +1,14 @@
 // @ts-check
+
+/** @import { FileLike } from '../services/session-resource-backing.js' */
+
+/** @param {number} index */
 export const getDepthTrackFallbackLabel = (index) => {
   const numericIndex = Math.max(0, Number(index) || 0);
   return numericIndex === 0 ? 'Depth' : `Depth ${numericIndex + 1}`;
 };
 
+/** @param {FileLike | null | undefined} file */
 export const getDepthTrackFileBaseName = (file) => {
   // split always returns at least one element, so pop is not undefined.
   const rawName = /** @type {string} */ (String(file?.name || '').split(/[\\/]/).pop()).trim();
@@ -12,11 +17,20 @@ export const getDepthTrackFileBaseName = (file) => {
   return withoutExtension || rawName;
 };
 
+/**
+ * @param {FileLike | null | undefined} file
+ * @param {number} index
+ */
 export const getDepthTrackLabelFromFile = (file, index) => {
   const baseName = getDepthTrackFileBaseName(file);
   return baseName || getDepthTrackFallbackLabel(index);
 };
 
+/**
+ * @param {unknown} label
+ * @param {number} index
+ * @param {FileLike | null} [file]
+ */
 export const isDepthTrackAutoLabel = (label, index, file = null) => {
   const normalized = String(label ?? '').trim();
   if (!normalized) return true;

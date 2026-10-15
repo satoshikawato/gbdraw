@@ -9,7 +9,7 @@
 // must equal). The split writes only migrated values; `loadDefaults` lists the
 // values Session 46 Load fills for the pointers the split leaves absent, and
 // this test checks them on the drawings Load installs.
-import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -40,7 +40,7 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
   }
 };
 
-const { splitDraftIntoModes } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
+const { sessionLegendEditsByRowKey, splitDraftIntoModes } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const {
   buildModeSliceData, importSession, setUnmanagedConfigOverrideValidator
 } = await import('../../gbdraw/web/js/services/config.js');
@@ -94,7 +94,7 @@ const readFixture = (path) => {
 const load = async (session) => {
   const outcome = await importSession({
     target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  }, { transformLegacyResultSvg });
+  }, { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow });
   assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
 };
 // The drawings as Save writes them (complete slices).
@@ -121,9 +121,13 @@ const settingsOnlySession = (split) => {
   if (linear && Object.hasOwn(linear, 'linearRecordLayout') && !Object.hasOwn(linear, 'linearComparisonPlan')) {
     linear.linearComparisonPlan = { mode: 'none', defaultSource: 'losat', edges: [] };
   }
+  // A settings-only Session holds the `form` and `adv` of its shown mode, as
+  // Save writes them (OV-591); a synthetic case may hold neither.
+  const shownMode = split.ui?.mode || 'circular';
+  modes[shownMode] = { ...modes[shownMode], config: { form: {}, adv: {}, ...modes[shownMode]?.config } };
   return {
     ...session, version: 46, editorState,
-    ui: { ...ui, ...split.ui, mode: split.ui?.mode || 'circular' },
+    ui: { ...ui, ...split.ui, mode: shownMode },
     modes
   };
 };
@@ -185,3 +189,23 @@ for (const vector of VECTORS.cases) {
     assert.deepEqual(missing, []);
   });
 }
+
+// The positive Session 46 fixture (first-parent main 9839de8e): its renamed
+// rows' edits load under their row keys (tests/fixtures/sessions/README.md).
+test('a Session 46 written by main loads its renamed rows\' edits under their row keys', async () => {
+  const fixture = readFixture('tests/fixtures/sessions/legend-renamed-rows.v46.gbdraw-session.json.gz');
+  assert.equal(fixture.version, 46);
+  // The moves Load reports before it commits, as Python reports them (tests/test_session_io.py).
+  assert.deepEqual(sessionLegendEditsByRowKey(fixture, fixture.version).outcomes, [
+    ['colorOverrides', 'GC skew (+)', 'GC content'], ['colorOverrides', 'W', 'GC skew (-)'], ['strokeOverrides', 'Z', 'GC skew (+)']
+  ].map(([store, fromKey, toKey]) => ({ store, fromKey, toKey, outcome: 'moved', slice: 'circular' })));
+  await load(fixture);
+  const drawing = state.drawings.circular;
+  assert.deepEqual({ ...drawing.legendColorOverrides }, { 'GC content': '#ff0000', 'GC skew (-)': '#0000ff' });
+  assert.deepEqual(Object.keys(drawing.legendStrokeOverrides), ['GC skew (+)']);
+  assert.equal(drawing.legendStrokeOverrides['GC skew (+)'].strokeColor, '#00aa00');
+  assert.deepEqual(drawing.legendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]).slice(3),
+    [['GC skew (+)', 'GC content'], ['Z', 'GC skew (+)']]);
+  assert.deepEqual(drawing.deletedLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+    [['W', 'GC skew (-)']]);
+});

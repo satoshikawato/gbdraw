@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import math
+import re
 from numbers import Integral, Real
 from types import MappingProxyType
 from typing import Literal, Mapping, cast
 
+from gbdraw.config.models.canvas import linear_axis_ruler_applies
+from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 
 
@@ -71,19 +75,20 @@ def validate_comparison_threshold(field_name: str, value: object) -> float | int
     return normalized
 
 
-_DINUCLEOTIDE_BASES = frozenset("ACGTU")
+_DINUCLEOTIDE_BASES = "".join(sorted("ACGTU"))
+# Two bases in either case, with outer spaces (the request description names it).
+DINUCLEOTIDE_PATTERN = rf"^\s*[{_DINUCLEOTIDE_BASES}{_DINUCLEOTIDE_BASES.lower()}]{{2}}\s*$"
 
 
 def validate_dinucleotide(value: object, *, field_name: str = "dinucleotide") -> str:
     """Return an upper-case pair from A, C, G, T, and U (U is counted as T)."""
 
-    normalized = value.strip().upper() if isinstance(value, str) else ""
-    if len(normalized) != 2 or not set(normalized) <= _DINUCLEOTIDE_BASES:
+    if not isinstance(value, str) or re.search(DINUCLEOTIDE_PATTERN, value) is None:
         raise ValidationError(
             f"{field_name} must be two letters from A, C, G, T, and U.",
             diagnostic={"code": "INPUT_INVALID", "field": "dinucleotide", "reason": "DINUCLEOTIDE"},
         )
-    return normalized
+    return value.strip().upper()
 
 
 @dataclass(frozen=True)
@@ -187,12 +192,29 @@ def resolve_mode_profile_overrides(
     if (
         profile.mode == "linear"
         and explicit.get("canvas.linear.ruler_on_axis") is True
-        and explicit.get("objects.scale.show", True) is True
         and "objects.axis.linear.stroke_color" not in explicit
     ):
-        resolved["objects.axis.linear.stroke_color"] = profile.linear_ruler_axis_color
+        # A fresh request starts from the packaged config, so its values
+        # decide the leaves the request leaves unset.
+        decisive = {**_packaged_axis_ruler_leaves(), **explicit}
+        if linear_axis_ruler_applies(
+            show_scale=decisive["objects.scale.show"],
+            scale_style=decisive["objects.scale.style"],
+            track_layout=decisive["canvas.linear.track_layout"],
+        ):
+            resolved["objects.axis.linear.stroke_color"] = profile.linear_ruler_axis_color
     resolved.update(explicit)
     return resolved
+
+
+@lru_cache(maxsize=1)
+def _packaged_axis_ruler_leaves() -> dict[str, object]:
+    raw = load_config_toml("gbdraw.data", "config.toml")
+    return {
+        "objects.scale.show": raw["objects"]["scale"]["show"],
+        "objects.scale.style": raw["objects"]["scale"]["style"],
+        "canvas.linear.track_layout": raw["canvas"]["linear"]["track_layout"],
+    }
 
 
 def _camel_threshold_name(name: str) -> str:
@@ -203,8 +225,13 @@ def _camel_threshold_name(name: str) -> str:
 def mode_profiles_payload() -> dict[str, object]:
     """Return the JSON-compatible profile representation used by the web app."""
 
+    length_threshold = load_config_toml("gbdraw.data", "config.toml")["labels"]["length_threshold"]
     return {
         "version": MODE_PROFILE_VERSION,
+        # The packaged short/long boundary of each mode (rule: gbdraw/auto_sizes.py).
+        "autoSizes": {
+            "sizeClassThresholdBp": {mode: int(length_threshold[mode]) for mode in MODE_PROFILES},
+        },
         "comparisonDomains": {
             _camel_threshold_name(name): {
                 "minimum": domain.minimum,

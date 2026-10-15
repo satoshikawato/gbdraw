@@ -14,6 +14,7 @@ from svgwrite import Drawing
 
 from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as _export
+from gbdraw.render.document import write_svg_document
 from gbdraw.render.formats import (
     CAIROSVG_FORMATS,
     INTERACTIVE_SVG_FORMAT,
@@ -24,10 +25,31 @@ from gbdraw.render.formats import (
     resolve_format_output_path,
     resolve_output_paths,
 )
+from gbdraw.render.font_embedding import FontEmbedding, embed_font_css, svg_font_embedding
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 from gbdraw.render.output_paths import preflight_output_paths
 
 logger = logging.getLogger(__name__)
+
+
+def _font_embedding(svg_source: str, embed_fonts: bool) -> FontEmbedding:
+    """The fonts the SVG outputs of one drawing embed (D-05), computed once."""
+    if not embed_fonts:
+        return FontEmbedding(css="", refused_families=())
+    try:
+        embedding = svg_font_embedding(svg_source)
+    except Exception as exc:
+        raise ExportError(
+            f"Could not embed the fonts in the SVG: {exc}. Turn font embedding off to write it without them "
+            "(--no_font_embedding on the command line, embed_fonts=False in Python)."
+        ) from exc
+    if embedding.refused_families:
+        logger.warning(
+            "Font %s is not embedded in the SVG because its license (OS/2 fsType) does not allow "
+            "embedding; the SVG shows it only where it is installed.",
+            ", ".join(repr(family) for family in embedding.refused_families),
+        )
+    return embedding
 
 
 def _normalize_formats(formats: Sequence[str] | str | None) -> list[str]:
@@ -83,6 +105,7 @@ def save_figure_to(
     output_prefix: str | None = None,
     overwrite: bool = False,
     interactive_context: InteractiveSvgContext | None = None,
+    embed_fonts: bool = True,
 ) -> list[str]:
     """Save a figure to an explicit output directory/prefix.
 
@@ -90,6 +113,11 @@ def save_figure_to(
     CairoSVG. Unlike the deprecated
     :func:`gbdraw.render.export.save_figure`, explicitly requested formats are
     strict: failure to generate any one of them raises an exception.
+    With ``embed_fonts``, the SVG and interactive SVG carry a subset of each
+    font they use that gbdraw does not bundle. PNG, PDF, EPS and PS draw with
+    the registered and installed fonts whatever ``embed_fonts``; PDF, EPS and
+    PS draw a font whose license forbids embedding it in the nearest
+    Liberation font (``gbdraw.render.font_embedding``).
     """
 
     fmt_list = _normalize_formats(formats)
@@ -108,8 +136,11 @@ def save_figure_to(
 
     try:
         canvas.filename = svg_filename
+        document = write_svg_document(canvas)
+        embedding = _font_embedding(document.body, embed_fonts)
         with open(svg_filename, "x", encoding="utf-8") as svg_file:
-            canvas.write(svg_file)
+            svg_file.write(document.prolog)
+            svg_file.write(embed_font_css(document.body, embedding))
     except FileExistsError as exc:
         raise ValidationError(
             _late_output_collision_message(
@@ -117,6 +148,8 @@ def save_figure_to(
                 overwrite=overwrite,
             )
         ) from exc
+    except GbdrawError:
+        raise
     except Exception as exc:
         raise ExportError(f"Failed to generate SVG: {exc}") from exc
     if not os.path.isfile(svg_filename):
@@ -124,14 +157,16 @@ def save_figure_to(
     logger.info("Generated SVG: %s", svg_filename)
 
     classification = classify_formats(fmt_list)
-    svg_source = canvas.tostring()
     if classification.interactive:
         interactive_filename = resolve_format_output_path(base_prefix, INTERACTIVE_SVG_FORMAT)
         try:
-            interactive_svg = enrich_svg(
-                svg_source,
-                context=interactive_context,
-                result_name=os.path.basename(interactive_filename),
+            interactive_svg = embed_font_css(
+                enrich_svg(
+                    document.body,
+                    context=interactive_context,
+                    result_name=os.path.basename(interactive_filename),
+                ),
+                embedding,
             )
         except GbdrawError:
             raise
@@ -174,7 +209,7 @@ def save_figure_to(
             "Install with: pip install gbdraw[export]"
         ) from exc
 
-    svg_bytes = svg_source.encode("utf-8")
+    svg_bytes = document.body.encode("utf-8")
     for fmt in formats_to_process:
         out_file = resolve_format_output_path(base_prefix, fmt)
         try:
@@ -218,17 +253,24 @@ def render_to_bytes(
     fmt: str,
     *,
     interactive_context: InteractiveSvgContext | None = None,
+    embed_fonts: bool = True,
 ) -> bytes:
-    """Render a canvas to bytes (SVG always; PNG/PDF/PS/EPS require CairoSVG)."""
+    """Render a canvas to bytes (SVG always; PNG/PDF/PS/EPS require CairoSVG).
+
+    ``embed_fonts`` as in :func:`save_figure_to`: SVG and interactive SVG carry
+    the custom fonts they use.
+    """
 
     fmt_norm = normalize_format_token(fmt)
     if not fmt_norm:
         raise ValidationError("Format must be specified (e.g., 'svg', 'png').")
 
-    if fmt_norm == "svg":
-        return canvas.tostring().encode("utf-8")
-    if fmt_norm == INTERACTIVE_SVG_FORMAT:
-        return enrich_svg(canvas.tostring(), context=interactive_context).encode("utf-8")
+    if fmt_norm in {SVG_FORMAT, INTERACTIVE_SVG_FORMAT}:
+        svg_source = write_svg_document(canvas).body
+        embedding = _font_embedding(svg_source, embed_fonts)
+        if fmt_norm == INTERACTIVE_SVG_FORMAT:
+            svg_source = enrich_svg(svg_source, context=interactive_context)
+        return embed_font_css(svg_source, embedding).encode("utf-8")
     if fmt_norm not in CAIROSVG_FORMATS:
         raise ValidationError(f"Unsupported format: {fmt}")
 
@@ -242,7 +284,7 @@ def render_to_bytes(
             "CairoSVG is not installed. Install with: pip install gbdraw[export]"
         ) from exc
 
-    svg_string = canvas.tostring().encode("utf-8")
+    svg_string = write_svg_document(canvas).body.encode("utf-8")
     try:
         rendered = _export.convert_svg_with_cairosvg(
             svg_string,

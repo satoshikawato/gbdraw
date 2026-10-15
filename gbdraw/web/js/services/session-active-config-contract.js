@@ -1,22 +1,29 @@
 // @ts-check
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
+/** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
 import { createDefaultLinearDefinitionLineStyles } from './definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from './circular-track-slot-model.js';
 import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from './linear-track-slot-model.js'; import { validateTrackSlotBindingInvariants } from './track-slot-validation.js';
-import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
+import { requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentConfigFields } from './current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
-import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
+import { DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION, ORTHOGROUP_INFERENCE_VERSION, SESSION_VERSION } from '../contracts/schema.generated.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
-const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value), has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+/**
+ * @template T
+ * @param {T} value
+ * @returns {value is T & Record<string, unknown>}
+ */
+const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value), has = /** @type {(value: unknown, key: string) => boolean} */ ((value, key) => Object.prototype.hasOwnProperty.call(value, key));
 /**
  * The Session's active Web configuration (`config` of the stored Session) in
  * its current writer format: the domains of `CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS`
@@ -64,7 +71,7 @@ export const createDefaultForm = () => ({
  */
 export const createDefaultAdv = (mode = 'circular') => ({
   features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
-  arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, window_size: null, step_size: null, nt: 'GC', def_font_size: null,
+  arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, font_family: null, window_size: null, step_size: null, nt: 'GC', def_font_size: null,
   circular_definition_interval: null, label_font_size: null, circular_label_spacing: null, linear_label_spacing: null, label_rendering: 'auto',
   circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
   line_stroke_width: null, line_stroke_color: null, axis_stroke_width: null, axis_stroke_color: managedAdvStateForMode(mode).axis_stroke_color,
@@ -95,7 +102,7 @@ export const createDefaultLosatExecution = () => ({
 });
 export const createDefaultLosat = () => ({
   outfmt: '6',
-  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: 'anchor_core_v1',
+  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: ORTHOGROUP_INFERENCE_VERSION,
     orthogroupMemberMaxHits: null, collinearInferOrthogroups: false, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
     collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearMergeOrientation: 'either', collinearSearchScope: 'adjacent' }
@@ -139,10 +146,12 @@ const ANNOTATION_FIELDS = ['id', 'target', 'label', 'mark', 'lane', 'style', 'le
 const OBSOLETE_SLOT_KEYS = new Set(['gapAfter', 'gap_after', 'innerRadius', 'inner_radius', 'outerRadius',
   'outer_radius', 'placement', 'spacing', 'strict', 'compress', 'reserve']);
 const OBSOLETE_SLOT_PARAM_KEYS = new Set(['side', 'radius', 'width', 'spacing', 'inner_gap_px', 'outer_gap_px', 'strict', 'compress', 'reserve']);
+/** @param {Record<string, unknown>} value @param {Set<string>} fields @param {string} path */
 const assertFields = (value, fields, path) => {
   const unknown = Object.keys(value).filter((key) => !fields.has(key));
   if (unknown.length) throw new Error(`Current session active configuration contains unknown ${path} field(s): ${unknown.join(', ')}.`);
 };
+/** @param {Record<string, unknown>} config */
 const validateDomainShapes = (config) => {
   for (const [domain, shape] of Object.entries(DOMAIN_SHAPES)) {
     if (!has(config, domain) || (config[domain] === undefined && domain === 'cliOptions')) continue;
@@ -152,10 +161,16 @@ const validateDomainShapes = (config) => {
   if (has(config, 'colorsAreOverrides') && typeof config.colorsAreOverrides !== 'boolean')
     throw new Error('Current session compatibility field config.colorsAreOverrides must be a boolean.');
 };
+/** @param {unknown[]} rows @param {string[]} fields @param {string} path */
 const assertRows = (rows, fields, path) => rows.forEach((row, index) => {
   if (!isObject(row)) throw new Error(`Current session active configuration ${path}[${index}] must be an object.`);
   assertFields(row, new Set(fields), `${path}[${index}]`);
 });
+/**
+ * The first loop checks that every annotation set is an object, which the
+ * second loop reads.
+ * @param {{ annotationSets?: { annotations?: unknown }[], [domain: string]: unknown }} config
+ */
 const validateCollections = (config) => {
   for (const [domain, fields] of Object.entries(ROW_FIELDS))
     if (Array.isArray(config[domain])) assertRows(config[domain], fields, `config.${domain}`);
@@ -164,6 +179,7 @@ const validateCollections = (config) => {
     assertRows(set.annotations, ANNOTATION_FIELDS, `config.annotationSets[${index}].annotations`);
   });
 };
+/** @param {unknown} slots */
 const obsoleteCircularSlotField = (slots) => {
   if (!Array.isArray(slots)) return null;
   for (const [slotIndex, slot] of slots.entries()) {
@@ -209,12 +225,17 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
 /**
  * Throws when `storedConfig` is not a current-writer active configuration:
  * a Session 46 slice of `mode`, or (`scopedDrafts`) the flat draft of a
- * Session 41-44, whose record display and placement rows name their mode.
- * @param {{ mode: string, storedConfig: Record<string, any>, scopedDrafts?: boolean }} input
+ * Session 40-44, whose record display and placement rows name their mode.
+ * `sessionVersion` is the version of the Session that holds the draft; the
+ * default, the current version, is for the writer's own draft and a slice.
+ * @param {{
+ *   mode: unknown, storedConfig: unknown, scopedDrafts?: boolean,
+ *   sessionVersion?: number
+ * }} input
  * @returns {void}
  */
-export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false }) => {
-  if (!['circular', 'linear'].includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
+export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false, sessionVersion = SESSION_VERSION }) => {
+  if (!(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
   assertSafeObjectKeys(config, 'Current session active configuration');
   const domains = new Set([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
@@ -229,35 +250,30 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     || new Set(config.recordsOff).size !== config.recordsOff.length
     || !config.recordsOff.every((/** @type {unknown} */ key) => isRecordDrawKey(/** @type {'circular' | 'linear'} */ (mode), key))))
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
-  validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
-  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
+  validateDomainShapes(config); validateCollections(config); requireCurrentConfigFields(config);
+  // Python checks the record display drafts of a Session from that version
+  // (`validate_session`) and refuses a row whose selector is not text
+  // (gbdraw/session_io.py:853-857). A Session 40 draft is not checked there, so
+  // here it keeps the verdict it had before OV-575.
+  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, {
+    scoped: scopedDrafts, textSelector: sessionVersion >= DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION
+  });
   if (has(config, 'featurePlacementOverrides')) {
     if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);
-    else canonicalFeaturePlacements(config.featurePlacementOverrides, mode);
+    else canonicalFeaturePlacements(config.featurePlacementOverrides, /** @type {'circular' | 'linear'} */ (mode)); // the first check
   }
   if (has(config.adv, 'feature_overlap_tolerance_bp') && (!Number.isSafeInteger(config.adv.feature_overlap_tolerance_bp)
-    || config.adv.feature_overlap_tolerance_bp < 0)) throw new Error('Feature overlap tolerance must be a non-negative integer.');
+    || /** @type {number} */ (config.adv.feature_overlap_tolerance_bp) < 0)) throw new Error('Feature overlap tolerance must be a non-negative integer.'); // a safe integer here
   assertFields(config.form, new Set(CURRENT_WRITER_FORM_FIELDS), 'config.form'); assertFields(config.adv, new Set(CURRENT_WRITER_ADV_FIELDS), 'config.adv');
   if (has(config.form, 'keep_definition_left_aligned') && typeof config.form.keep_definition_left_aligned !== 'boolean')
     throw new Error('Current session active configuration config.form.keep_definition_left_aligned must be a boolean.');
-  if (has(config.form, 'linear_track_layout')) requireCurrentLinearTrackLayout(config.form.linear_track_layout);
-  if (has(config.adv, 'label_placement')) requireCurrentLinearLabelPlacement(config.adv.label_placement);
-  if (has(config.adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(config.adv.multi_record_size_mode);
-  // A Session 46 slice may omit a field: it reads that mode's default (plan 4.1).
-  if (has(config.adv, 'linear_accession_visibility')) requireLinearLabelVisibilityMode(
-    config.adv.linear_accession_visibility,
-    'Linear Accession visibility'
-  );
-  if (has(config.adv, 'linear_length_visibility')) requireLinearLabelVisibilityMode(
-    config.adv.linear_length_visibility,
-    'Linear Length / Coordinates visibility'
-  );
   for (const [path, value] of [['config.adv.losatProgram', config.adv.losatProgram], ['config.losatProgram', config.losatProgram]]) {
-    if (value !== undefined && !['blastn', 'tblastx', 'blastp'].includes(value))
+    if (value !== undefined && !(/** @type {readonly unknown[]} */ (['blastn', 'tblastx', 'blastp'])).includes(value))
       throw new Error(`Current session active configuration ${path} is invalid.`);
   }
-  if (isObject(config.losat?.blastp)) {
-    const blastp = config.losat.blastp;
+  // `losat` is an object when present (`validateDomainShapes`); the test proves its `blastp` an object.
+  if (isObject(/** @type {{ blastp?: unknown } | undefined} */ (config.losat)?.blastp)) {
+    const blastp = /** @type {{ blastp: Record<string, unknown> }} */ (config.losat).blastp;
     if (has(blastp, 'mode')) requireCurrentProteinBlastpMode(blastp.mode);
     if (has(blastp, 'hitLimitsByMode')) {
       if (!isObject(blastp.hitLimitsByMode)) throw new Error('LOSATP mode hit limits must be an object.');
@@ -289,8 +305,9 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     requireCurrentCollinearSearchScope(blastp.collinearSearchScope);
     requireCurrentCollinearInferOrthogroups(blastp.collinearInferOrthogroups);
   }
-  if (has(config, 'filterMode') && !['None', 'Whitelist', 'Blacklist'].includes(config.filterMode)) throw new Error('Current session active configuration config.filterMode is invalid.');
-  if (has(config, 'palette') && !config.palette.trim()) throw new Error('Current session active configuration config.palette cannot be empty.');
+  if (has(config, 'filterMode') && !(/** @type {readonly unknown[]} */ (['None', 'Whitelist', 'Blacklist'])).includes(config.filterMode)) throw new Error('Current session active configuration config.filterMode is invalid.');
+  // `palette` is a string when present (`validateDomainShapes`).
+  if (has(config, 'palette') && !/** @type {string} */ (config.palette).trim()) throw new Error('Current session active configuration config.palette cannot be empty.');
   if (isObject(config.importedComparisonResolution)) {
     assertFields(
       config.importedComparisonResolution,
@@ -299,7 +316,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
     );
     if (
       config.importedComparisonResolution.action !== null
-      && !['INHERIT', 'REPLACE', 'CLEAR'].includes(config.importedComparisonResolution.action)
+      && !(/** @type {readonly unknown[]} */ (['INHERIT', 'REPLACE', 'CLEAR'])).includes(config.importedComparisonResolution.action)
     ) {
       throw new Error('Current session active configuration config.importedComparisonResolution.action is invalid.');
     }
@@ -307,47 +324,113 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, 
   validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
 };
 
+/** @param {{ scale_font_size?: unknown, ruler_label_font_size?: unknown }} [adv] */
 const linearTypographyValuesMatch = (adv = {}) => (
   Object.is(adv.scale_font_size, adv.ruler_label_font_size)
 );
 
 /**
+ * A stored Linear typography link: linked when omitted, as stored when a
+ * boolean, and unlinked for anything else.
+ * @param {unknown} value
+ * @returns {{ value: boolean, lost: boolean }}
+ */
+export const readLinearTypographyLinked = (value) => (value === undefined || value === null ? { value: true, lost: false }
+  : typeof value === 'boolean' ? { value, lost: false } : { value: false, lost: true });
+/**
  * @param {{
  *   adv: Record<string, any>,
  *   linked: any,
- *   ui?: { linearTypographyLinked?: boolean }
+ *   ui?: { readonly linearTypographyLinked?: unknown }
  * }} options
  */
 export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) => {
   if (!linked || typeof linked !== 'object' || !('value' in linked)) return false;
   // Omission takes the fresh linked default; unequal values still open unlinked.
-  linked.value = (
-    (ui.linearTypographyLinked ?? true) === true
-    && linearTypographyValuesMatch(adv)
-  );
+  linked.value = readLinearTypographyLinked(ui.linearTypographyLinked).value && linearTypographyValuesMatch(adv);
   return linked.value;
 };
 
 // Artifact metadata admission is shared by Session, History and Align/Reset.
 // The binding deliberately excludes current orientation, translations, labels and
 // row order: manual Reverse, style and stable reorder do not rewrite history.
+/** @param {unknown} value @returns {unknown} */
 const sortedValue = (value) => Array.isArray(value)
   ? value.map(sortedValue)
   : isObject(value) ? Object.fromEntries(Object.keys(value).sort()
     .map((key) => [key, sortedValue(value[key])])) : value;
 
+// The parts of a canonical request that the Alignment reset receipt reads. The
+// writer (`canonicalSimilarityAlignment` in session-request.js) owns the plan.
+/**
+ * @typedef {{
+ *   records: { recordKey: string, status?: string }[],
+ *   reference: { recordKey: string }
+ * }} AlignmentPlanView
+ */
+/**
+ * @typedef {{
+ *   recordKey: string, source: Record<string, string>, selector?: unknown,
+ *   region?: { start: number, end: number, reverseComplement?: unknown } | null,
+ *   presentation?: { reverseComplement?: unknown } | null, display?: unknown
+ * }} AlignmentResetRecord
+ */
+/**
+ * @typedef {{
+ *   mode: string, records: unknown[],
+ *   layout: { similarityAlignment?: AlignmentPlanView | null, recordTranslations?: { recordKey: string, x?: number }[], [field: string]: unknown }
+ * }} AlignmentResetRequest
+ */
+/**
+ * @typedef {{
+ *   renderRequest?: AlignmentResetRequest | null,
+ *   resources?: Record<string, RawSessionResourceDescriptor> | null
+ * }} AlignmentResetCanonical
+ */
+/**
+ * The canonical session an Align started from (`before` of a reset), as `projectCommittedSimilarityAlignment`
+ * returns it: the generated request types with a Linear layout. Its plan is null: Align materializes its
+ * baseline without a plan. Not for a Session's request, which the `AlignmentResetCanonical` view above reads.
+ * @typedef {{
+ *   renderRequest: Omit<CanonicalLinearRenderRequest, 'layout'> & { layout: CanonicalLinearLayout },
+ *   resources?: Record<string, RawSessionResourceDescriptor> | null
+ * }} AlignmentResetBaselineCanonical
+ */
+/**
+ * The canonical session an Align produced (`after` of a reset): the same, with the plan present.
+ * @typedef {AlignmentResetBaselineCanonical & {
+ *   renderRequest: { layout: { similarityAlignment: CanonicalSimilarityAlignmentPlan } }
+ * }} AlignmentResetPlannedCanonical
+ */
+/**
+ * What a reset writes beside the plan: the binding of the plan and the sources,
+ * the direction changes, and the reference record's shift (or null).
+ * @typedef {{
+ *   binding: string,
+ *   directions: { recordKey: string, before: boolean, after: boolean }[],
+ *   referenceDeltaX: { recordKey: string, deltaX: number } | null
+ * }} AlignmentResetReceipt
+ */
+
+/**
+ * @param {unknown} receipt The stored receipt, unvalidated: this function checks it.
+ * @param {AlignmentResetRequest | null | undefined} request
+ * @returns {AlignmentResetReceipt | null}
+ */
 export const validateAlignmentResetReceiptShape = (receipt, request) => {
   if (receipt === null || receipt === undefined) return null;
   // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
+  /** @type {() => never} */
   const invalid = () => { throw diagnosticError('ALIGNMENT_RESET_EVIDENCE'); };
   if (!isObject(receipt)
     || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
-    || !/^[0-9a-f]{64}$/.test(receipt.binding)
+    || typeof receipt.binding !== 'string' || !/^[0-9a-f]{64}$/.test(receipt.binding)
     || !Array.isArray(receipt.directions)
     || request?.mode !== 'linear' || !request.layout?.similarityAlignment) invalid();
   const plan = request.layout.similarityAlignment;
   const eligible = new Set(plan.records.filter(({ status }) => status !== 'skipped')
     .map(({ recordKey }) => recordKey));
+  /** @type {Set<unknown>} */
   const keys = new Set();
   receipt.directions.forEach((delta) => {
     if (!isObject(delta) || Object.keys(delta).sort().join(',') !== 'after,before,recordKey'
@@ -362,17 +445,22 @@ export const validateAlignmentResetReceiptShape = (receipt, request) => {
     || delta.recordKey !== plan.reference.recordKey
     || typeof delta.deltaX !== 'number' || !Number.isFinite(delta.deltaX)
     || delta.deltaX === 0)) invalid();
-  return receipt;
+  // Every field was checked above.
+  return /** @type {AlignmentResetReceipt} */ (receipt);
 };
 
+/** @param {AlignmentResetCanonical} canonical */
 const resetBinding = async (canonical) => {
   const request = canonical?.renderRequest;
   if (request?.mode !== 'linear' || !request.layout?.similarityAlignment) {
     throw new Error('Alignment reset receipt requires an active canonical plan.');
   }
   const table = adoptCurrentSessionResources(canonical.resources);
+  /** @type {Map<string, Promise<string>>} */
   const fingerprints = new Map();
+  /** @param {Record<string, string>} source */
   const sourceIdentity = async (source) => {
+    /** @type {Record<string, string | undefined>} */
     const identity = {};
     for (const [key, value] of Object.entries(source)) {
       if (key === 'kind') identity[key] = value;
@@ -385,7 +473,8 @@ const resetBinding = async (canonical) => {
     }
     return identity;
   };
-  const records = await Promise.all(request.records.map(async (record) => ({
+  // The mode check above admits a Linear request only; the request writer gives each of its records a `recordKey` and a `source`.
+  const records = await Promise.all(/** @type {AlignmentResetRecord[]} */ (request.records).map(async (record) => ({
     recordKey: record.recordKey, source: await sourceIdentity(record.source),
     selector: record.selector,
     region: record.region ? { start: record.region.start, end: record.region.end } : null,
@@ -398,14 +487,22 @@ const resetBinding = async (canonical) => {
   return sha256Hex(textToBytes(JSON.stringify(sortedValue({ plan, records }))));
 };
 
+/**
+ * @param {unknown} receipt The stored receipt, unvalidated.
+ * @param {AlignmentResetCanonical | null | undefined} canonical
+ */
 export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
   const validated = validateAlignmentResetReceiptShape(receipt, canonical?.renderRequest);
-  if (validated && validated.binding !== await resetBinding(canonical)) {
+  // A receipt that passed the shape check needs `request.mode === 'linear'`, so `canonical` is set.
+  if (validated && validated.binding !== await resetBinding(/** @type {AlignmentResetCanonical} */ (canonical))) {
     throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
   }
   return validated;
 };
 
+/**
+ * @param {{ before: AlignmentResetBaselineCanonical, after: AlignmentResetPlannedCanonical }} sessions
+ */
 export const buildSimilarityAlignmentResetReceipt = async ({ before, after }) => {
   const previous = new Map(before.renderRequest.records.map((record) => [record.recordKey, record]));
   const directions = after.renderRequest.records.flatMap((record) => {
@@ -417,6 +514,7 @@ export const buildSimilarityAlignmentResetReceipt = async ({ before, after }) =>
       : [{ recordKey: record.recordKey, before: beforeReverse, after: afterReverse }];
   });
   const referenceKey = after.renderRequest.layout.similarityAlignment.reference.recordKey;
+  /** @param {AlignmentResetBaselineCanonical} canonical */
   const x = (canonical) => canonical.renderRequest.layout.recordTranslations
     .find(({ recordKey }) => recordKey === referenceKey)?.x ?? 0;
   const deltaX = x(after) - x(before);

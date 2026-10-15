@@ -8,6 +8,9 @@ import {
 import { readFileText } from './file-content-cache.js';
 import { genbankHeaderIds } from './genbank-header.js';
 
+/** @import { FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
+/** @import { FileLike } from './session-resource-backing.js' */
+
 /**
  * A registered sequence source: one record whose bases a match span reads.
  * @typedef {object} SequenceSource
@@ -21,16 +24,18 @@ import { genbankHeaderIds } from './genbank-header.js';
  */
 
 /**
- * A source as callers supply it for registration; the registry normalizes it
- * into a `SequenceSource`.
+ * A source as callers supply it for registration: a row this module built, or
+ * a sequence source of a feature catalog (a Session's is checked only for its
+ * `sequence`). The registry reads every field as unvalidated and normalizes
+ * it into a `SequenceSource`, or registers nothing.
  * @typedef {object} SequenceSourceInput
- * @property {string} key
- * @property {string} [recordId]
- * @property {string[]} [aliases]
- * @property {string} sequence
- * @property {string} [origin]
- * @property {number | string | null} [recordIndex]
- * @property {number | string | null} [sourceIndex]
+ * @property {unknown} [key]
+ * @property {unknown} [recordId]
+ * @property {unknown} [aliases]
+ * @property {unknown} [sequence]
+ * @property {unknown} [origin]
+ * @property {unknown} [recordIndex]
+ * @property {unknown} [sourceIndex]
  */
 
 /**
@@ -45,6 +50,36 @@ import { genbankHeaderIds } from './genbank-header.js';
  * @typedef {object} SequenceSourceResolution
  * @property {SequenceSource | null} source
  * @property {string} reason
+ * @property {boolean} [optionalUnavailable] The source was never supplied and is optional.
+ */
+
+/**
+ * What a resolver returns, as `normalizeResolution` reads it: a resolution, or a bare source.
+ * @typedef {SequenceSourceResolution | (SequenceSource & { source?: undefined }) | null | undefined} ResolverResult
+ */
+
+/**
+ * The registry's sources by key, and the keys that two different sources claimed.
+ * @typedef {Readonly<{ sources: Map<string, SequenceSource>, ambiguousKeys: Set<string> }>} SequenceSourceOwner
+ */
+
+/**
+ * The identity fields a source is read for; every field may be absent or unnormalized.
+ * @typedef {{ key?: unknown, recordId?: unknown, origin?: unknown, recordIndex?: unknown, sourceIndex?: unknown }} SourceIdentityFields
+ */
+
+/**
+ * @typedef {object} SourceIdentity
+ * @property {string} key
+ * @property {string} recordId
+ * @property {string} origin
+ * @property {number | null} recordIndex
+ * @property {number | null} sourceIndex
+ */
+
+/**
+ * A parsed record of a sequence file.
+ * @typedef {{ recordId: string, header: string, aliases: string[], sequence: string }} InputSequenceRecord
  */
 
 /**
@@ -89,6 +124,7 @@ import { genbankHeaderIds } from './genbank-header.js';
  * @typedef {Record<string, any>} MatchSequenceFiles
  */
 
+/** @type {Readonly<Record<string, string>>} */
 const IUPAC_COMPLEMENT = Object.freeze({
   A: 'T', C: 'G', G: 'C', T: 'A', U: 'A',
   R: 'Y', Y: 'R', S: 'S', W: 'W', K: 'M', M: 'K',
@@ -96,8 +132,14 @@ const IUPAC_COMPLEMENT = Object.freeze({
   '-': '-'
 });
 
+/** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
+/** @param {unknown} value */
 const normalizedSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
+/**
+ * @param {unknown} value
+ * @returns {{ valid: boolean, supplied: boolean, value: number | null }}
+ */
 const optionalNonnegativeIntegerStatus = (value) => {
   if (value === null || value === undefined || value === '') {
     return { valid: true, supplied: false, value: null };
@@ -110,13 +152,19 @@ const optionalNonnegativeIntegerStatus = (value) => {
   const valid = Number.isSafeInteger(numeric) && numeric >= 0;
   return { valid, supplied: true, value: valid ? numeric : null };
 };
+/**
+ * @param {unknown} value
+ * @param {string} [fallback]
+ */
 const safePart = (value, fallback = 'sequence') => {
   const cleaned = text(value).replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || fallback;
 };
 
+/** @param {{ recordId?: unknown, aliases?: unknown } | null | undefined} source */
 const aliasesForSource = (source) => {
   const values = [source?.recordId, ...(Array.isArray(source?.aliases) ? source.aliases : [])];
+  /** @type {Set<string>} */
   const aliases = new Set();
   values.forEach((value) => {
     const full = text(value);
@@ -128,6 +176,10 @@ const aliasesForSource = (source) => {
   return aliases;
 };
 
+/**
+ * @param {SequenceSource} left
+ * @param {SequenceSource} right
+ */
 const sequenceSourcesAgree = (left, right) => (
   left.key === right.key
   && left.recordId === right.recordId
@@ -141,6 +193,7 @@ const sequenceSourcesAgree = (left, right) => (
   )
 );
 
+/** @param {unknown} sequence */
 export const reverseComplementNucleotide = (sequence) => {
   const input = normalizedSequence(sequence);
   let output = '';
@@ -151,6 +204,9 @@ export const reverseComplementNucleotide = (sequence) => {
 };
 
 /**
+ * @param {unknown} startRaw
+ * @param {unknown} endRaw
+ * @param {unknown} sequenceLength
  * @returns {{ valid: false, reason: string } | { valid: true, start: number, end: number, orientation: string }}
  */
 export const validateMatchCoordinates = (startRaw, endRaw, sequenceLength) => {
@@ -174,8 +230,8 @@ export const validateMatchCoordinates = (startRaw, endRaw, sequenceLength) => {
 
 /**
  * @param {string} sequence
- * @param {number | string} startRaw
- * @param {number | string} endRaw
+ * @param {unknown} startRaw
+ * @param {unknown} endRaw
  * @returns {MatchSpanExtraction}
  */
 export const extractMatchedSpan = (sequence, startRaw, endRaw) => {
@@ -196,16 +252,24 @@ export const extractMatchedSpan = (sequence, startRaw, endRaw) => {
  * @param {SequenceSourceInput[]} [initialSources]
  */
 export const createSequenceSourceRegistry = (initialSources = []) => {
+  /** @type {SequenceSourceOwner} */
   let owner = Object.freeze({
     sources: new Map(),
     ambiguousKeys: new Set()
   });
 
+  /**
+   * @param {SequenceSourceOwner} targetOwner
+   * @param {SequenceSourceInput | null | undefined} source
+   * @param {{ trusted?: boolean }} [options]
+   * @returns {SequenceSource | null}
+   */
   const registerInto = (targetOwner, source, { trusted = false } = {}) => {
     const key = text(source?.key);
     if (trusted) {
-      if (key) targetOwner.sources.set(key, source);
-      return key ? source : null;
+      // A trusted source is an entry this registry produced (Artifact History).
+      if (key) targetOwner.sources.set(key, /** @type {SequenceSource} */ (source));
+      return key ? /** @type {SequenceSource} */ (source) : null;
     }
     const sequence = normalizedSequence(source?.sequence);
     const recordIndex = optionalNonnegativeIntegerStatus(source?.recordIndex);
@@ -232,6 +296,7 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     return entry;
   };
 
+  /** @param {SequenceSourceInput | null | undefined} source */
   const register = (source) => {
     const nextOwner = Object.freeze({
       sources: new Map(owner.sources),
@@ -242,6 +307,11 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     return registered;
   };
 
+  /**
+   * @param {readonly (SequenceSourceInput | null | undefined)[] | null} [nextSources]
+   * @param {{ trusted?: boolean }} [options]
+   * @returns {SequenceSourceOwner}
+   */
   const buildOwner = (nextSources = [], { trusted = false } = {}) => {
     const nextOwner = Object.freeze({
       sources: new Map(),
@@ -253,6 +323,7 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     return nextOwner;
   };
 
+  /** @param {readonly (SequenceSourceInput | null | undefined)[] | null} [nextSources] */
   const reset = (nextSources = []) => {
     owner = buildOwner(nextSources);
   };
@@ -260,10 +331,12 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
   // Artifact History only supplies entries previously produced by this registry.
   // Re-adopt those immutable entries without normalizing or copying large sequence
   // strings a second time.
+  /** @param {readonly (SequenceSourceInput | null | undefined)[] | null} [nextSources] */
   const resetTrusted = (nextSources = []) => {
     owner = buildOwner(nextSources, { trusted: true });
   };
 
+  /** @param {SequenceSourceOwner | null | undefined} nextOwner */
   const replaceTrustedOwner = (nextOwner) => {
     if (!(nextOwner?.sources instanceof Map) || !(nextOwner?.ambiguousKeys instanceof Set)) {
       throw new Error('A trusted sequence source owner is required.');
@@ -271,6 +344,12 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     owner = nextOwner;
   };
 
+  /**
+   * @param {unknown} sourceKey
+   * @param {unknown} recordId
+   * @param {SequenceSourceContext} [context]
+   * @returns {SequenceSourceResolution}
+   */
   const resolve = (sourceKey, recordId, context = {}) => {
     const expectedSourceIndex = optionalNonnegativeIntegerStatus(context.sourceIndex);
     const expectedRecordIndex = optionalNonnegativeIntegerStatus(context.recordIndex);
@@ -279,6 +358,7 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     }
     const expectedOrigin = text(context.origin);
     const wanted = text(recordId);
+    /** @param {SequenceSource} source */
     const agrees = (source) => (
       (!expectedOrigin || source.origin === expectedOrigin)
       && (!expectedSourceIndex.supplied || source.sourceIndex === expectedSourceIndex.value)
@@ -326,9 +406,9 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
   owner = buildOwner(initialSources);
   return {
     get sources() { return owner.sources; },
-    buildTrustedOwner: (nextSources = []) => buildOwner(nextSources, { trusted: true }),
+    buildTrustedOwner: (/** @type {readonly (SequenceSourceInput | null | undefined)[] | null} */ nextSources = []) => buildOwner(nextSources, { trusted: true }),
     // E1: the owner `reset` would install, for a mode's artifact slot.
-    buildSourceOwner: (/** @type {Record<string, any>[]} */ nextSources) => buildOwner(nextSources),
+    buildSourceOwner: (/** @type {readonly (SequenceSourceInput | null | undefined)[]} */ nextSources) => buildOwner(nextSources),
     captureTrustedOwner: () => owner,
     register,
     replaceTrustedOwner,
@@ -339,6 +419,11 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
   };
 };
 
+/**
+ * @param {SourceIdentityFields | null | undefined} source
+ * @param {SourceIdentityFields} [overrides]
+ * @returns {SourceIdentity}
+ */
 const sourceIdentity = (source, overrides = {}) => {
   const recordIndex = optionalNonnegativeIntegerStatus(
     overrides.recordIndex ?? source?.recordIndex
@@ -355,6 +440,7 @@ const sourceIdentity = (source, overrides = {}) => {
   };
 };
 
+/** @param {SourceIdentity} identity */
 const sourceIdentityKey = (identity) => JSON.stringify([
   identity.origin,
   identity.recordIndex,
@@ -363,6 +449,11 @@ const sourceIdentityKey = (identity) => JSON.stringify([
   identity.key
 ]);
 
+/**
+ * @param {Readonly<Record<string, unknown>> | null | undefined} value
+ * @param {readonly string[]} keys
+ * @param {string} [fallback]
+ */
 const consistentTextAlias = (value, keys, fallback = '') => {
   const values = new Set(
     keys
@@ -376,6 +467,10 @@ const consistentTextAlias = (value, keys, fallback = '') => {
   };
 };
 
+/**
+ * @param {Readonly<Record<string, unknown>> | null | undefined} value
+ * @param {readonly string[]} keys
+ */
 const consistentIntegerAlias = (value, keys) => {
   const statuses = keys
     .filter((key) => Object.prototype.hasOwnProperty.call(value || {}, key))
@@ -389,12 +484,20 @@ const consistentIntegerAlias = (value, keys) => {
   };
 };
 
+/**
+ * @param {SourceIdentity} identity
+ * @returns {SequenceSourceContext}
+ */
 const sourceResolutionContext = (identity) => ({
   origin: identity.origin,
   ...(identity.recordIndex === null ? {} : { recordIndex: identity.recordIndex }),
   ...(identity.sourceIndex === null ? {} : { sourceIndex: identity.sourceIndex })
 });
 
+/**
+ * @param {{ sequence?: unknown, recordIndex?: unknown, sourceIndex?: unknown } | null | undefined} source
+ * @param {SourceIdentity} identity
+ */
 const invalidCatalogSourceReason = (source, identity) => {
   if (!source || typeof source !== 'object' || Array.isArray(source)) {
     return 'The catalog sequence source is not an object.';
@@ -460,6 +563,11 @@ export const resolveCircularComparisonSequenceAvailability = ({
   }));
 };
 
+/**
+ * @param {unknown} inventory
+ * @param {number | null} sourceIndex
+ * @returns {{ valid: false, reason: string } | { valid: true, availability: string }}
+ */
 const comparisonSourceAvailabilityAt = (inventory, sourceIndex) => {
   if (!Array.isArray(inventory)) {
     return {
@@ -534,9 +642,11 @@ export const analyzeCatalogSequenceSourceCoverage = ({
   const displayedIndexByKey = new Map(
     displayedRecords.map((record) => [record.recordKey, record.recordIndex])
   );
+  /** @type {FeatureCatalogItem[] | null} */
   const items = Array.isArray(catalogFeatureState?.items)
     ? catalogFeatureState.items
     : null;
+  /** @type {{ reason: string, itemIndex?: number, sequenceSourceIndex?: number, source?: SourceIdentity }[]} */
   const invalidCatalogSources = [];
   if (!['linear', 'circular'].includes(normalizedMode)) {
     invalidCatalogSources.push({ reason: 'The diagram mode is invalid.' });
@@ -546,6 +656,7 @@ export const analyzeCatalogSequenceSourceCoverage = ({
   }
 
   const catalogItems = items || [];
+  /** @type {{ itemIndex: number, sequenceSourceIndex: number, source: FeatureCatalogRow }[]} */
   const sourceEntries = [];
   catalogItems.forEach((item, itemIndex) => {
     const sources = Array.isArray(item?.sequenceSources) ? item.sequenceSources : [];
@@ -553,8 +664,10 @@ export const analyzeCatalogSequenceSourceCoverage = ({
       sourceEntries.push({ itemIndex, sequenceSourceIndex, source });
     });
   });
+  // Catalog rows are untrusted: the registry reads a row with optional chaining and
+  // skips one it cannot register, and the loop below reports each such row.
   const registry = createSequenceSourceRegistry(
-    sourceEntries.map((entry) => entry.source)
+    /** @type {SequenceSourceInput[]} */ (sourceEntries.map((entry) => entry.source))
   );
   sourceEntries.forEach(({ itemIndex, sequenceSourceIndex, source }) => {
     const identity = sourceIdentity(source);
@@ -577,14 +690,31 @@ export const analyzeCatalogSequenceSourceCoverage = ({
     }
   });
 
+  /**
+   * @type {Map<string, {
+   *   expectedSource: SourceIdentity, consumerCount: number, biologicalFeatureCount: number,
+   *   matchEndpointCount: number, exampleConsumers: { kind: string, id: string }[]
+   * }>}
+   */
   const requirements = new Map();
+  /** @type {Set<string>} */
   const failedRequirementKeys = new Set();
+  /** @type {Map<string, Set<string>>} */
   const failureReasons = new Map();
+  /** @type {Set<string>} */
   const optionalUnavailableRequirementKeys = new Set();
+  /** @type {Map<string, Set<string>>} */
   const optionalUnavailableReasons = new Map();
+  /** @type {Set<string>} */
   const usedDisplayedRecordKeys = new Set();
   const consumerCounts = { biologicalFeatures: 0, matchEndpoints: 0 };
 
+  /**
+   * @param {{
+   *   kind: 'biological-feature' | 'match-endpoint', id: string, recordKey?: string,
+   *   expectedSource: SourceIdentity, resolution?: SequenceSourceResolution
+   * }} consumer
+   */
   const addConsumer = ({ kind, id, recordKey = '', expectedSource, resolution }) => {
     const key = sourceIdentityKey(expectedSource);
     if (!requirements.has(key)) {
@@ -596,7 +726,8 @@ export const analyzeCatalogSequenceSourceCoverage = ({
         exampleConsumers: []
       });
     }
-    const requirement = requirements.get(key);
+    // The block above makes sure the key has its requirement.
+    const requirement = /** @type {NonNullable<ReturnType<typeof requirements.get>>} */ (requirements.get(key));
     requirement.consumerCount += 1;
     if (kind === 'biological-feature') {
       requirement.biologicalFeatureCount += 1;
@@ -615,14 +746,14 @@ export const analyzeCatalogSequenceSourceCoverage = ({
       if (!optionalUnavailableReasons.has(key)) {
         optionalUnavailableReasons.set(key, new Set());
       }
-      optionalUnavailableReasons.get(key).add(
+      /** @type {Set<string>} */ (optionalUnavailableReasons.get(key)).add(
         text(resolution.reason) || 'The optional comparison FASTA was never supplied.'
       );
       return;
     }
     failedRequirementKeys.add(key);
     if (!failureReasons.has(key)) failureReasons.set(key, new Set());
-    failureReasons.get(key).add(
+    /** @type {Set<string>} */ (failureReasons.get(key)).add(
       text(resolution?.reason) || 'The required sequence source is unavailable.'
     );
   };
@@ -654,6 +785,7 @@ export const analyzeCatalogSequenceSourceCoverage = ({
           origin: expectedPrimaryOrigin,
           recordIndex: itemRecordIndex
         });
+        /** @type {SequenceSourceResolution} */
         let resolution = { source: null, reason: '' };
         if (
           !Number.isInteger(sequenceSourceIndex)
@@ -720,6 +852,7 @@ export const analyzeCatalogSequenceSourceCoverage = ({
             recordIndex: expectedOrigin === 'linear-record' ? recordIndex.value : null,
             sourceIndex: expectedOrigin === 'homology-comparison' ? sourceIndex.value : null
           });
+          /** @type {SequenceSourceResolution} */
           let resolution = { source: null, reason: '' };
           if (!matchId.valid || !matchKind.valid || !recordId.valid) {
             resolution.reason = 'The match endpoint has conflicting sequence identity aliases.';
@@ -814,6 +947,10 @@ export const analyzeCatalogSequenceSourceCoverage = ({
   };
 };
 
+/**
+ * @param {ResolverResult} resolved
+ * @returns {SequenceSourceResolution}
+ */
 const normalizeResolution = (resolved) => {
   if (!resolved) return { source: null, reason: '' };
   if (resolved.source !== undefined) return resolved;
@@ -842,6 +979,7 @@ export const buildMatchSequenceEntry = (
     molecule: 'nucleotide',
     displayRole: text(span?.displayRole) || (text(span?.role) === 'subject' ? 'Subject' : 'Query')
   };
+  /** @param {string} [reason] */
   const unavailable = (reason) => ({
     span: normalizedSpan,
     orientation: Number(normalizedSpan.start) <= Number(normalizedSpan.end) ? '+' : '-',
@@ -918,8 +1056,10 @@ export const buildMatchSequenceBundle = (
   };
 };
 
+/** @param {unknown} value */
 export const parseSequenceRecords = (value) => {
   const input = String(value ?? '');
+  /** @type {{ recordId: string, header: string, parts: string[], sequence: string }[]} */
   const records = [];
   // Assigned in the forEach callback, which tsc does not follow, so the initializer carries the declared type.
   let current = /** @type {{ recordId: string, header: string, parts: string[] } | null} */ (null);
@@ -936,7 +1076,12 @@ export const parseSequenceRecords = (value) => {
   return records.filter((record) => record.sequence);
 };
 
+/**
+ * @param {unknown} value
+ * @returns {InputSequenceRecord[]}
+ */
 const parseGenbankSequenceRecords = (value) => {
+  /** @type {InputSequenceRecord[]} */
   const records = [];
   String(value ?? '').split(/^\/\/\s*$/m).forEach((chunk) => {
     const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
@@ -955,6 +1100,11 @@ const parseGenbankSequenceRecords = (value) => {
   return records;
 };
 
+/**
+ * @param {string} fileText
+ * @param {unknown} inputType
+ * @returns {InputSequenceRecord[]}
+ */
 const parseInputSequenceRecords = (fileText, inputType) => (
   text(inputType).toLowerCase() === 'gb'
     ? parseGenbankSequenceRecords(fileText)
@@ -964,6 +1114,10 @@ const parseInputSequenceRecords = (fileText, inputType) => (
       }))
 );
 
+/**
+ * @param {readonly InputSequenceRecord[]} records
+ * @param {unknown} selectorValue
+ */
 const selectInputSequenceRecord = (records, selectorValue) => {
   if (!records.length) return null;
   const selector = text(selectorValue);
@@ -979,6 +1133,10 @@ const selectInputSequenceRecord = (records, selectorValue) => {
   return matches.length === 1 ? matches[0] : null;
 };
 
+/**
+ * @param {InputSequenceRecord | null} record
+ * @param {{ region_start?: unknown, region_end?: unknown, region_reverse?: unknown } | null | undefined} sequenceState
+ */
 const materializeLinearSequenceRecord = (record, sequenceState) => {
   if (!record) return null;
   const startRaw = sequenceState?.region_start;
@@ -1009,6 +1167,10 @@ const materializeLinearSequenceRecord = (record, sequenceState) => {
   };
 };
 
+/**
+ * @param {FileLike | null | undefined} file
+ * @param {unknown} inputType
+ */
 const readInputSequenceRecords = async (file, inputType) => {
   if (!file) return [];
   return parseInputSequenceRecords(await readFileText(file), inputType);
@@ -1039,6 +1201,7 @@ export const buildRestoredMatchSequenceSources = async ({
   linearSeqs = [],
   circularConservation
 } = {}) => {
+  /** @type {SequenceSourceInput[]} */
   const sources = [];
   if (text(mode).toLowerCase() === 'linear') {
     const inputType = text(lInputType).toLowerCase() === 'gff' ? 'fasta' : 'gb';

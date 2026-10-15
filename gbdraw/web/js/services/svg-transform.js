@@ -7,11 +7,16 @@ const ANY_TRANSLATE = new RegExp(
   `translate\\(\\s*(${SVG_NUMBER})(?:\\s*,\\s*|\\s+)(${SVG_NUMBER})?\\s*\\)`
 );
 
+/**
+ * @param {unknown} value
+ * @param {number} [fallback]
+ */
 const finiteNumber = (value, fallback = 0) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 };
 
+/** @param {unknown} transformStr */
 export const readLeadingTranslate = (transformStr) => {
   const source = String(transformStr || '');
   const match = source.match(LEADING_TRANSLATE);
@@ -27,6 +32,11 @@ export const readLeadingTranslate = (transformStr) => {
   };
 };
 
+/**
+ * @param {unknown} transformStr
+ * @param {unknown} x
+ * @param {unknown} y
+ */
 export const replaceLeadingTranslate = (transformStr, x, y) => {
   const source = String(transformStr || '');
   const leading = readLeadingTranslate(source);
@@ -37,12 +47,18 @@ export const replaceLeadingTranslate = (transformStr, x, y) => {
   return `${leading.prefix}${translation}${leading.tail}`;
 };
 
+/**
+ * @param {unknown} transformStr
+ * @param {unknown} x
+ * @param {unknown} y
+ */
 export const prependTranslate = (transformStr, x, y) => {
   const source = String(transformStr || '');
   const translation = `translate(${finiteNumber(x)},${finiteNumber(y)})`;
   return `${translation}${source.trim() ? ` ${source}` : ''}`;
 };
 
+/** @param {unknown} transformStr */
 export const parseTransform = (transformStr) => {
   const source = String(transformStr || '');
   const leading = readLeadingTranslate(source);
@@ -51,4 +67,23 @@ export const parseTransform = (transformStr) => {
   return match
     ? { x: finiteNumber(match[1]), y: finiteNumber(match[2]) }
     : { x: 0, y: 0 };
+};
+
+/**
+ * Ends a press on a drag target: true when its translate is no longer the
+ * pressed one. A target that did not move gets its `transform` attribute back
+ * as it was written, so a press that moves nothing changes nothing.
+ * @param {Element} element
+ * @param {string | null} pressedTransform The attribute when the press began.
+ */
+export const releasePressedTransform = (element, pressedTransform) => {
+  const pressed = parseTransform(pressedTransform);
+  const released = parseTransform(element.getAttribute('transform'));
+  if (pressed.x !== released.x || pressed.y !== released.y) return true;
+  if (pressedTransform === null) {
+    element.removeAttribute('transform');
+  } else {
+    element.setAttribute('transform', pressedTransform);
+  }
+  return false;
 };

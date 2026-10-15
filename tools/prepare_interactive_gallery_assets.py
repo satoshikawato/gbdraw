@@ -182,7 +182,7 @@ BGC_COMMAND = (
     "--keep_definition_left_aligned --identity 30 --block_stroke_width 2 "
     "--block_stroke_color '#262626' --line_stroke_width 2 --axis_stroke_width 5 "
     "--legend_box_size 20 --legend_font_size 20 --label_font_size 18 --feature_height 75 "
-    "--arrow_shaft_width_ratio 0.6 "
+    "--arrow_shaft_width_ratio 0.6 --arrow_head_length_ratio 0.64 "
     "--ruler_label_font_size 20 --definition_line_style name:size=20,weight=bold "
     "--definition_line_style subtitle:size=20 "
     "--definition_line_style 'accession:size=20,color=#7b7c7d' "

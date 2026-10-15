@@ -5,11 +5,10 @@ import math
 
 from gbdraw.svg.elements import Group, Line, Text
 
-from ....auto_sizes import linear_tick_interval
-from ....canvas import LinearCanvasConfigurator
+from ....auto_sizes import SizeClass, linear_tick_interval
 from ....core.numeric import scaled_tick_text
 from ....core.text import calculate_bbox_dimensions
-from ....config.models import GbdrawConfig
+from ....config.models.objects import ObjectsScaleConfig
 from ....layout.spatial import Aabb
 
 RULER_TICK_LENGTH = 10.0 * (2.0 / 3.0)
@@ -68,37 +67,35 @@ class LengthBarGroup:
 
     def __init__(
         self,
-        fig_width: int,
         alignment_width: float,
         longest_genome: int,
-        canvas_config: LinearCanvasConfigurator,
+        length_param: SizeClass,
         group_id="length_bar",
         *,
-        cfg: GbdrawConfig,
+        scale: ObjectsScaleConfig,
+        font_family: str,
+        dpi: int,
         ruler_width: float | None = None,
     ) -> None:
         """
         Initializes the LengthBarGroup with the given parameters.
         """
-        self._cfg = cfg
-
         # --- 1. Load all settings from the 'scale' section of the config ---
-        scale_config = cfg.objects.scale
-        self.canvas_config = canvas_config
-        self.length_param = self.canvas_config.length_param
+        scale_config = scale
+        self.length_param = length_param
         self.stroke_color = scale_config.stroke_color
         self.label_color = scale_config.label_color
         self.stroke_width = scale_config.stroke_width
         self.font_size = scale_config.font_size.for_length_param(self.length_param)
         self.ruler_label_font_size = scale_config.ruler_label_font_size.for_length_param(self.length_param)
         self.font_weight = scale_config.font_weight
-        self.font_family = cfg.objects.text.font_family
+        self.font_family = font_family
         self.style = scale_config.style
         self.manual_interval = scale_config.interval
         self.scale_group_width: float = 0
         self.scale_group_height: float = 0
         self.local_bounds = Aabb(0.0, 0.0, 0.0, 0.0)
-        self.dpi = cfg.canvas.dpi
+        self.dpi = dpi
         # --- 2. Set other properties ---
         self.longest_genome: int = longest_genome
         self.alignment_width: float = alignment_width

@@ -229,9 +229,7 @@ test.describe('active Result Feature fill transaction', () => {
   const assertNoUnexpectedErrors = async (page, diagnostics) => {
     expect(diagnostics.pageErrors).toEqual([]);
     expect(diagnostics.consoleErrors).toEqual([]);
-    expect(diagnostics.dialogs.every(({ message }) => (
-      message === 'Session loaded successfully!'
-    ))).toBe(true);
+    expect(diagnostics.dialogs).toEqual([]);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog || null)).toBeNull();
   };
 
@@ -275,7 +273,7 @@ test.describe('active Result Feature fill transaction', () => {
     const scopeDialog = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
     await expect(scopeDialog).toBeVisible();
     const applyScopeButton = scopeDialog.getByRole('button').filter({
-      hasText: `Apply to all "${TARGET_CAPTION}" (${inventory.targets.length})`
+      hasText: `Legend item "${TARGET_CAPTION}" (${inventory.targets.length})`
     }).last();
     await expect(applyScopeButton).toBeVisible();
     expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
@@ -470,7 +468,7 @@ test.describe('active Result Feature fill transaction', () => {
     await expect(scopeDialog).toBeVisible();
     await expect(scopeDialog.locator('[data-default-color-scope-line]')).toHaveCount(0);
     await scopeDialog.getByRole('button').filter({
-      hasText: `Apply to all "${TARGET_CAPTION}" (${inventory.targets.length})`
+      hasText: `Legend item "${TARGET_CAPTION}" (${inventory.targets.length})`
     }).last().click();
     await page.waitForFunction(() => !window.__GBDRAW_APP__.featureStyleScopeDialog.show);
     await expect.poll(
@@ -546,7 +544,7 @@ test.describe('active Result Feature fill transaction', () => {
     const scopeDialog = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
     await expect(scopeDialog).toBeVisible();
     await scopeDialog.getByRole('button').filter({
-      hasText: `Apply to all "${TARGET_CAPTION}" (${inventory.targets.length})`
+      hasText: `Legend item "${TARGET_CAPTION}" (${inventory.targets.length})`
     }).last().click();
     expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(true);
     await expect(page.getByRole('dialog', { name: 'Color Change Scope' }).getByRole('status'))

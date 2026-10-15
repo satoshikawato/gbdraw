@@ -12,6 +12,7 @@ from gbdraw.diagrams.circular.assemble import (
 )
 from gbdraw.layout.composition import LegendPlacement, TitlePlacement
 from gbdraw.layout.spatial import Aabb, union_aabbs
+from gbdraw.render.group_content import ContentGroup, GroupContent
 
 
 def _center_x(bounds: Aabb) -> float:
@@ -72,6 +73,7 @@ def _plot(
             primary_targets=(primary_target,),
             legend_target=legend_target,
             track_slot_geometry={"slots": ()},
+            label_layout=None,
         ),
         primary_target,
     )
@@ -135,15 +137,16 @@ def test_circular_composition_uses_exact_dock_gap_and_edge_padding(
 @pytest.mark.circular
 def test_circular_composition_omits_empty_legend_and_places_title_once() -> None:
     plot, _primary_target = _plot(LegendPlacement.RIGHT, legend_bounds=None)
-    title_target = Group(id="plot-title")
-    title_bounds = Aabb(-80.0, -10.0, 80.0, 10.0)
+    title_content = GroupContent.of(Group(id="plot-title"), local_bounds=Aabb(-80.0, -10.0, 80.0, 10.0))
 
     result = _compose_circular_plot(
         plot,
-        title_target=title_target,
-        title_bounds=title_bounds,
+        title_content=title_content,
         title_placement=TitlePlacement.TOP,
     )
+    title_target = result.title_target
+    assert isinstance(title_target, ContentGroup)
+    assert title_target.content is title_content
 
     assert result.legend_target is None
     assert result.composition_plan.placement_for("legend") is None

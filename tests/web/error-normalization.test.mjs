@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
-import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { diagnosticError, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 globalThis.self = {};
 const { serializeError, callJsonHelper, resolveGenerationCleanupOutcome } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
@@ -20,7 +20,28 @@ const source = { code: 'REGEX_SYNTAX', operation: 'evaluateRules', stage: 'rule-
 const normalized = normalizeUserFacingError(source);
 assert.deepEqual(roundtrip(source), normalized);
 assert.deepEqual(normalizeUserFacingError(normalized), normalized);
-assert.match(normalized.summary, /Python character position 1/);
+// People count characters from one; the context keeps Python's zero-based index.
+assert.match(normalized.summary, /^Not a valid regular expression\..* At character 2\.$/);
+assert.equal(normalized.context.position, 1);
+// A file chosen in Load Session that is not JSON says so, without "Field: schema".
+const notSession = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } },
+  { operation: 'session-load' });
+assert.equal(notSession.summary, 'This file is not a gbdraw Session: it is not valid JSON.');
+// Every other Session reason keeps its known correction.
+const obsoleteSlots = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'TRACK_SCHEMA' } },
+  { operation: 'session-load' });
+assert.match(obsoleteSlots.summary, /Recreate Custom Track Slots with the current schema\..*Load a supported Session file/);
+assert.equal(operationErrorTitle('session-load'), 'Session not loaded');
+// The LOSATP-mode reason is true with and without an Upload pair: a Selected
+// plan whose pairs all run LOSAT raises it too.
+const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage: 'request-validation',
+  context: { reason: 'SELECTED_PAIRS_NEED_PAIRWISE' } });
+assert.match(selectedPairs.summary, / Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs\. Choose Run LOSAT for all pairs, or choose Pairwise matches\.$/);
+assert.doesNotMatch(selectedPairs.summary, /does not run LOSAT/);
+// A PNG export never names the SVG embedding opt-out, which does not change PNG.
+const pngFont = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'helper', context: { reason: 'FONT_RASTER' } });
+assert.match(pngFont.summary, /Choose another font/);
+assert.doesNotMatch(pngFont.summary, /Embed font/);
 assert.equal(normalized.context.row, 2);
 assert.deepEqual(normalized.actions, ['edit-pattern', 'retry']);
 assert.doesNotMatch(JSON.stringify(normalized), /PRIVATE_SENTINEL/);
@@ -220,7 +241,7 @@ assert.equal(alignCause.operation,'align');
 assert.deepEqual(alignCause.context,normalized.context);
 assert.deepEqual(alignCause.secondary,normalized.secondary);
 assert.deepEqual(normalizeUserFacingError(alignCause),alignCause);
-assert.equal((alignCause.summary.match(/Python regular expression is invalid/g)||[]).length,1);
+assert.equal((alignCause.summary.match(/Not a valid regular expression/g)||[]).length,1);
 
 // Native boundary diagnostics retain corrections while discarding private IDs.
 for (const [message, code, context] of [
@@ -330,6 +351,16 @@ test('every operation error panel action is a small secondary button', () => {
 });
 
 // R6: locators the producer keeps are shown in the summary, wording only here.
+test('the label fit counts are Python\'s sentence; the wording owner holds no counts words of its own', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/utils/error-normalization.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /Overlapping label pairs|Crossing leader pairs|overlapPairs|crossingPairs/);
+  const model = roundtrip({ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'Overlapping label pairs: 2. Crossing leader pairs: 0.' } });
+  assert.match(model.summary, / Overlapping label pairs: 2\. Crossing leader pairs: 0\.$/);
+  // A value that is not one line of printable text is dropped.
+  assert.equal(roundtrip({ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'a\nb' } }).context.labelFitCounts, undefined);
+  assert.equal(roundtrip({ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'x'.repeat(81) } }).context.labelFitCounts, undefined);
+});
+
 test('summary shows Sequence, Line, Track row, Depth series, band and setting locators', () => {
   for (const [source, pattern] of [
     [diagnosticError('INPUT_REQUIRED', { inputOrdinal: 2 }), /^Supply GenBank input or matching GFF3 and FASTA inputs\. Sequence 2\.$/],
@@ -340,6 +371,10 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
     [{ code: 'TRACK_LAYOUT', context: { reason: 'CANNOT_FIT', slotIndex: 1, innerPx: 181, outerPx: 209 } },
       /^A circular track does not fit\. Track row 2\. Move the track.*the other side of the Axis\. Available band: 181–209 px\.$/],
     [{ code: 'DEPTH_INVALID', context: { reason: 'DEPTH_VALUES', seriesIndex: 0 } }, / Depth series 1\. Use integer positions/],
+    // Python's sentence of the counts, shown as sent (one wording owner, LP-D60).
+    [{ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'Overlapping label pairs: 20. Crossing leader pairs: 21.' } },
+      // Every label kind and both modes (SCOPE-ALL-LABELS), not only Circular outer labels (OV-723).
+      /^Labels do not fit\. Generate again to choose a fix, or change the label settings\. Overlapping label pairs: 20\. Crossing leader pairs: 21\.$/],
     [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/]
   ]) assert.match(roundtrip(source).summary, pattern);
   for (const configPath of ['PRIVATE VALUE', 'a', 'Objects.scale', `objects.${'x'.repeat(80)}`, 7]) {
@@ -647,4 +682,15 @@ test('a drawing with every record OFF names the fix (record selection)', () => {
   const model = normalizeUserFacingError(diagnosticError('RECORD_SELECTION', { reason: 'NONE_DRAWN' }));
   assert.equal(model.code, 'RECORD_SELECTION');
   assert.match(model.summary, /Turn on at least one record to draw\./);
+});
+
+// OV-644: a rule commit that would draw a Legend row whose key another listed
+// row of another color already holds is refused with wording the user can act
+// on, without the row key, and without a Retry that fails the same way.
+test('a refused rule commit names what to change and offers no Retry (OV-644)', () => {
+  const refused = normalizeUserFacingError(diagnosticError('LEGEND_ROW_CONFLICT', {}, { stage: 'rule-validation', operation: 'evaluateRules' }));
+  assert.deepEqual([refused.code, refused.operation, refused.stage, refused.actions],
+    ['LEGEND_ROW_CONFLICT', 'evaluateRules', 'rule-validation', ['edit-input']]);
+  assert.equal(refused.summary, 'A color rule would draw a Legend item that already exists in another color.'
+    + ' Change the rule\'s Legend name or color, or rename that Legend item.');
 });

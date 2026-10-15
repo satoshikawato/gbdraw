@@ -15,7 +15,13 @@ import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.session_io as session_io
 from gbdraw.api.options import LinearDiagramOptions
-from gbdraw.api.requests import GffFastaInputSource, LinearDiagramRequest, RecordInput, RenderOutputRequest
+from gbdraw.api.requests import (
+    GffFastaInputSource,
+    LinearDiagramRequest,
+    RecordInput,
+    RecordPresentation,
+    RenderOutputRequest,
+)
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -25,14 +31,11 @@ from gbdraw.definition_line_styles import (
     parse_definition_line_style_overrides,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.render.groups.linear import DefinitionGroup
+from gbdraw.render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 
 
-def _record(label: str = "", record_id: str = "record_a") -> SeqRecord:
-    record = SeqRecord(Seq("A" * 100), id=record_id)
-    if label:
-        record.annotations["gbdraw_record_label"] = label
-    return record
+def _record(record_id: str = "record_a") -> SeqRecord:
+    return SeqRecord(Seq("A" * 100), id=record_id)
 
 
 def _canvas_config() -> SimpleNamespace:
@@ -100,7 +103,6 @@ def test_replicon_switch_preserves_explicit_subtitle_and_line_styles(
     import xml.etree.ElementTree as ET
 
     record = _record()
-    record.annotations["gbdraw_record_subtitle"] = subtitle
     record.features = [SeqFeature(FeatureLocation(0, 100), type="source", qualifiers=qualifiers)]
     config = _linear_definition_config()
     config["objects"]["definition"]["linear"].update(
@@ -108,7 +110,12 @@ def test_replicon_switch_preserves_explicit_subtitle_and_line_styles(
         line_styles={"replicon": {"fill": "red", "font_weight": "bold", "font_size": 15},
                      "subtitle": {"fill": "blue", "font_weight": "normal", "font_size": 11}},
     )
-    group = DefinitionGroup(record, _canvas_config(), cfg=GbdrawConfig.from_dict(config))
+    group = DefinitionGroup(
+        record,
+        (_canvas_config()).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config)),
+        record_presentation=RecordPresentation(subtitle=subtitle),
+    )
     root = ET.fromstring(group.get_group().tostring())
     lines = list(root.iter("text"))
     assert [(t.get("data-definition-line-kind"), "".join(t.itertext())) for t in lines] == (
@@ -190,7 +197,7 @@ def test_linear_cli_definition_line_style_validation(cmd_args: list[str]) -> Non
 
 
 def test_linear_cli_definition_line_style_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    record = _record("Top Label")
+    record = _record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
@@ -340,13 +347,15 @@ def test_definition_group_emits_line_specific_styles_and_data_attrs() -> None:
     line_styles["subtitle"] = {"font_weight": "bold", "fill": "#334455"}
     line_styles["accession"] = {"fill": "rgb(1,2,3)"}
     line_styles["length"] = {"font_size": 8}
-    record = _record("Alpha <i>Beta</i>", "AC123")
-    record.annotations["gbdraw_record_subtitle"] = "A <i>neo</i> cluster"
+    record = _record("AC123")
 
     definition_group = DefinitionGroup(
         record,
-        _canvas_config(),
-        cfg=GbdrawConfig.from_dict(config_dict),
+        (_canvas_config()).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
+        record_presentation=RecordPresentation(
+            label="Alpha <i>Beta</i>", subtitle="A <i>neo</i> cluster"
+        ),
     )
     svg = definition_group.get_group().tostring()
 
@@ -387,9 +396,10 @@ def test_definition_line_specific_font_size_affects_layout(monkeypatch: pytest.M
     )
 
     definition_group = DefinitionGroup(
-        _record("AA", "BBBB"),
-        _canvas_config(),
-        cfg=GbdrawConfig.from_dict(config_dict),
+        _record("BBBB"),
+        (_canvas_config()).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
+        record_presentation=RecordPresentation(label="AA"),
     )
 
     assert definition_group.definition_bounding_box_width == pytest.approx(40.0)

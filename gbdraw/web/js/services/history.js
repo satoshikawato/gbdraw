@@ -19,22 +19,45 @@ const HISTORY_EDIT_BUSY = Object.freeze({
  * @returns {{ value: T }}
  */
 const makeBox = (value) => ({ value });
+/**
+ * @param {Record<string, unknown>} value
+ * @param {string} key
+ */
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
+/**
+ * @template T
+ * @param {T | PromiseLike<T>} value
+ * @returns {value is PromiseLike<T>}
+ */
 const isPromiseLike = (value) => (
-  Boolean(value) && typeof value.then === 'function'
+  Boolean(value) && typeof (/** @type {{ then?: unknown }} */ (value)).then === 'function'
 );
 
+/**
+ * A deep copy of plain data, with the same shape.
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
 const cloneIntentValue = (value) => {
-  if (Array.isArray(value)) return value.map((entry) => cloneIntentValue(entry));
+  if (Array.isArray(value)) return /** @type {T} */ (value.map((entry) => cloneIntentValue(entry)));
   if (!isPlainObject(value)) return value;
-  return Object.fromEntries(
+  return /** @type {T} */ (Object.fromEntries(
     Object.entries(value).map(([key, entry]) => [key, cloneIntentValue(entry)])
-  );
+  ));
 };
 
+/**
+ * @param {unknown} left
+ * @param {unknown} right
+ */
 const sameJsonValue = (left, right) => {
   if (Object.is(left, right)) return true;
   if (typeof left !== typeof right) return false;
@@ -43,6 +66,13 @@ const sameJsonValue = (left, right) => {
   return JSON.stringify(left) === JSON.stringify(right);
 };
 
+/**
+ * @param {unknown} before
+ * @param {unknown} after
+ * @param {string[]} [path]
+ * @param {HistoryIntentChange[]} [changes]
+ * @returns {HistoryIntentChange[]}
+ */
 const buildIntentPatch = (before, after, path = [], changes = []) => {
   if (Object.is(before, after)) return changes;
 
@@ -80,7 +110,14 @@ const buildIntentPatch = (before, after, path = [], changes = []) => {
   return changes;
 };
 
+/**
+ * @param {HistoryIntent | null | undefined} source
+ * @param {readonly HistoryIntentChange[]} changes
+ * @param {'undo' | 'redo'} direction
+ * @returns {HistoryIntent}
+ */
 const applyIntentPatch = (source, changes, direction) => {
+  /** @type {HistoryIntent} */
   const target = cloneIntentValue(source || {});
   const valueKey = direction === 'undo' ? 'before' : 'after';
   const presentKey = direction === 'undo' ? 'beforeHas' : 'afterHas';
@@ -105,6 +142,7 @@ const applyIntentPatch = (source, changes, direction) => {
   return target;
 };
 
+/** @param {Record<string, unknown>} event */
 const emitHistoryDiagnostic = (event) => {
   const callback = globalThis.__GBDRAW_TEST_HOOKS__?.onHistoryDiagnostic;
   if (typeof callback !== 'function') return;
@@ -129,14 +167,68 @@ const artifactRetentionKey = (handle) => {
     : handle;
 };
 
+/** @param {HistoryCheckpoint | null | undefined} checkpoint */
 const checkpointSvgBytes = (checkpoint) => (
   Array.isArray(checkpoint?.results)
     ? checkpoint.results.reduce(
-        (total, result) => total + String(result?.content || '').length * 2,
+        (/** @type {number} */ total, /** @type {{ content?: unknown } | null | undefined} */ result) =>
+          total + String(result?.content || '').length * 2,
         0
       )
     : 0
 );
+
+/**
+ * What one History step captures about the intent: the intent, its signature, and the files it names.
+ * @typedef {{ intent: HistoryIntent, signature: string, fileIds: Set<string> }} IntentRecord
+ * @typedef {{ checkpoint: HistoryCheckpoint, signature: string, byteSize: number, fileIds: Set<string> }} CheckpointRecord
+ * @typedef {{ enabled: boolean, value: unknown }} ReplacementIntentCheckpoint
+ *   The intent a replacement step also restores (`value` is the caller's own capture).
+ * @typedef {{ type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string> }} IntentEntry
+ * @typedef {{ type: 'checkpoint', label: string, before: CheckpointRecord, after: CheckpointRecord, byteSize: number, fileIds: Set<string> }} CheckpointEntry
+ * @typedef {{
+ *   type: 'artifact-replacement',
+ *   label: string,
+ *   before: HistoryArtifactHandle,
+ *   after: HistoryArtifactHandle,
+ *   byteSize: number,
+ *   fileIds: Set<string>,
+ *   intentCheckpoint?: {
+ *     before: ReplacementIntentCheckpoint,
+ *     after: ReplacementIntentCheckpoint,
+ *     restore: HistoryStepBase['restoreIntentCheckpoint']
+ *   }
+ * }} ArtifactReplacementEntry
+ * @typedef {{ type: 'command', label: string, apply: () => unknown, revert: () => unknown, byteSize: number, fileIds: Set<string> }} CommandEntry
+ * @typedef {IntentEntry | CheckpointEntry | ArtifactReplacementEntry | CommandEntry} HistoryEntry
+ *   One Undo or Redo step.
+ * @typedef {{ noop?: boolean, label?: string, apply: () => unknown, revert: () => unknown, estimateBytes?: () => number, metadata?: unknown }} UndoableCommand
+ *   A reversible command; `apply` or `revert` returning `false` means it did not run.
+ * @typedef {{
+ *   capture(context: { phase: 'before' | 'after' }): unknown,
+ *   restore(checkpoint: unknown): unknown
+ * }} IntentCheckpointHooks
+ *   The two intent checkpoint hooks a caller may also pass as `null`.
+ * @typedef {{
+ *   onCheckpointCapture?: ((event: { phase: string, diagnostics: Record<string, number> }) => void) | null,
+ *   label?: string,
+ *   source?: string,
+ *   owner?: unknown,
+ *   joinsOpenStep?: boolean,
+ *   captureIntentCheckpoint?: IntentCheckpointHooks['capture'] | null,
+ *   restoreIntentCheckpoint?: IntentCheckpointHooks['restore'] | null,
+ *   compareIntentCheckpoints?(before: unknown, after: unknown): boolean,
+ *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown
+ * }} HistoryStepBase
+ *   What a step reads from its caller; a hook that is not a function is not called. The intent
+ *   checkpoint is the caller's own value, so the three hooks take and return it opaque (they are
+ *   declared as methods); a caller names its type on its own parameter.
+ */
+/**
+ * @template [R=unknown]
+ * @typedef {HistoryStepBase & { shouldCommit?: (result: R) => boolean }} HistoryStepOptions
+ *   A step that runs `fn` commits only when `shouldCommit(result)` allows it.
+ */
 
 /**
  * @typedef {Record<string, any>} HistoryIntent
@@ -147,6 +239,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   label: string,
  *   before: any,
  *   closed: boolean,
+ *   committedAt?: number,
+ *   actions?: { label: string, stepLabel?: string }[],
  *   source: string,
  *   owner?: any,
  *   deferAdapterCommit?: boolean,
@@ -155,6 +249,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   beforeIntentCheckpoint?: any
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
+ *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
+ *   calls that ran on it, each with the step name it started with.
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {{
@@ -237,9 +333,9 @@ export const createHistoryManager = ({
     throw new Error('createHistoryManager requires applyCheckpoint.');
   }
 
-  /** @type {any[]} */
+  /** @type {HistoryEntry[]} */
   const undoStack = [];
-  /** @type {any[]} */
+  /** @type {HistoryEntry[]} */
   const redoStack = [];
   const revision = makeRef(0);
   // Transaction open/close notifies mutationPending() without a document revision.
@@ -267,11 +363,20 @@ export const createHistoryManager = ({
     artifactFingerprintComparisonCount: 0,
     artifactReplacementHistoryEntryCount: 0
   };
+  /** @type {HistoryIntent | null} */
   let currentIntent = null;
   let currentIntentSignature = '';
+  /** @type {HistoryCheckpoint | null} */
   let currentCheckpoint = null;
   let currentCheckpointSignature = '';
+  /** @type {Set<string>} */
   let currentFileIds = new Set();
+  // OV-463: advanced where the intent changes outside the intent steps: an
+  // artifact replacement commits or ends without committing (the last
+  // recorded intent is not refreshed) or a baseline replaces the stacks. An
+  // action's later write is recorded from the last recorded intent only
+  // within the generation of its step.
+  let intentGeneration = 0;
   let totalEntryBytes = 0;
   // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
   // is entry k+1's `before`), so its bytes count once while any live entry
@@ -291,9 +396,10 @@ export const createHistoryManager = ({
   const touchTransaction = () => {
     transactionRevision.value += 1;
   };
-  const intentCommitOwnedByAction = () => Boolean(
-    activeTransaction && !activeTransaction.closed && activeTransaction.deferAdapterCommit
+  const openTransaction = () => (
+    activeTransaction && !activeTransaction.closed ? activeTransaction : null
   );
+  const intentCommitOwnedByAction = () => Boolean(openTransaction()?.deferAdapterCommit);
 
   // D-28 (PD-OI-082): an open artifact replacement or checkpoint, or an action
   // that still owns its intent commit, owns the current state. Undo, Redo, and
@@ -307,6 +413,10 @@ export const createHistoryManager = ({
     return mutationAvailability('history') || HISTORY_EDIT_BUSY;
   };
 
+  /**
+   * @param {unknown} value
+   * @param {string} scope
+   */
   const computeSignature = (value, scope) => {
     diagnostics.signatureComputations += 1;
     if (scope === 'artifact-checkpoint') {
@@ -319,6 +429,10 @@ export const createHistoryManager = ({
     return signature;
   };
 
+  /**
+   * @param {string} signature
+   * @param {string} scope
+   */
   const estimateSignedBytes = (signature, scope) => {
     diagnostics.byteEstimateComputations += 1;
     const bytes = String(signature || '').length * 2;
@@ -326,6 +440,10 @@ export const createHistoryManager = ({
     return bytes;
   };
 
+  /**
+   * @param {HistoryStepBase | undefined} options
+   * @param {string} phase
+   */
   const notifyCheckpointCapture = (options, phase) => {
     const callback = options?.onCheckpointCapture;
     if (typeof callback !== 'function') return;
@@ -336,6 +454,7 @@ export const createHistoryManager = ({
     }
   };
 
+  /** @param {HistoryIntent} intent */
   const collectIntentFileIds = (intent) => {
     const fileIds = collectHistoryFileIds(intent, new Set());
     if (typeof collectCurrentFileIds !== 'function') return fileIds;
@@ -363,6 +482,10 @@ export const createHistoryManager = ({
     }
   };
 
+  /**
+   * @param {HistoryCheckpoint} checkpoint
+   * @returns {CheckpointRecord}
+   */
   const finishCheckpointCapture = (checkpoint) => {
     const signature = computeSignature(checkpoint, 'artifact-checkpoint');
     const svgBytes = checkpointSvgBytes(checkpoint);
@@ -399,12 +522,14 @@ export const createHistoryManager = ({
     }
   };
 
+  /** @param {{ intent: HistoryIntent | null, signature: string, fileIds?: Iterable<string> | null }} record */
   const setCurrentIntent = ({ intent, signature, fileIds }) => {
     currentIntent = intent;
     currentIntentSignature = signature;
     currentFileIds = fileIds instanceof Set ? fileIds : new Set(fileIds || []);
   };
 
+  /** @param {{ checkpoint: HistoryCheckpoint, signature: string }} record */
   const setCurrentCheckpoint = ({ checkpoint, signature }) => {
     currentCheckpoint = checkpoint;
     currentCheckpointSignature = signature;
@@ -415,6 +540,10 @@ export const createHistoryManager = ({
     currentCheckpointSignature = '';
   };
 
+  /**
+   * @param {HistoryEntry | null | undefined} entry
+   * @returns {Set<string>}
+   */
   const entryFileIds = (entry) => (
     entry?.fileIds instanceof Set ? entry.fileIds : new Set()
   );
@@ -437,7 +566,7 @@ export const createHistoryManager = ({
 
   /**
    * The handles whose bytes an entry names in addition to its own `byteSize`.
-   * @param {any} entry
+   * @param {HistoryEntry | null | undefined} entry
    * @returns {HistoryArtifactHandle[]}
    */
   const entryArtifactHandles = (entry) => (
@@ -472,21 +601,25 @@ export const createHistoryManager = ({
     totalEntryBytes = Math.max(0, totalEntryBytes - retained.bytes);
   };
 
+  /** @param {HistoryEntry} entry */
   const addEntryBytes = (entry) => {
     totalEntryBytes += Number(entry?.byteSize) || 0;
     entryArtifactHandles(entry).forEach(retainArtifactBytes);
   };
 
+  /** @param {HistoryEntry | undefined} entry */
   const removeEntryBytes = (entry) => {
     totalEntryBytes = Math.max(0, totalEntryBytes - (Number(entry?.byteSize) || 0));
     entryArtifactHandles(entry).forEach(releaseArtifactBytes);
   };
 
+  /** @param {HistoryEntry[]} stack */
   const clearStack = (stack) => {
     stack.forEach(removeEntryBytes);
     stack.splice(0, stack.length);
   };
 
+  /** @param {HistoryEntry} entry */
   const pushUndoEntry = (entry) => {
     undoStack.push(entry);
     addEntryBytes(entry);
@@ -497,15 +630,16 @@ export const createHistoryManager = ({
   // UJ-09: the History position of the last Save or Load. Work is unsaved
   // when an Undo or Redo step was added or traversed since then, or when an
   // open control transaction already changed the intent it began with.
-  /** @param {any[]} stack */
+  /** @param {HistoryEntry[]} stack */
   const topEntry = (stack) => stack[stack.length - 1] || null;
+  /** @type {{ undo: HistoryEntry | null, redo: HistoryEntry | null }} */
   let savePoint = { undo: null, redo: null };
   const markSavePoint = () => {
     savePoint = { undo: topEntry(undoStack), redo: topEntry(redoStack) };
   };
   const hasChangesSinceSavePoint = async () => {
     if (topEntry(undoStack) !== savePoint.undo || topEntry(redoStack) !== savePoint.redo) return true;
-    const open = activeTransaction && !activeTransaction.closed ? activeTransaction : null;
+    const open = openTransaction();
     if (!open) return false;
     // A text control begins on focus; focus alone changes nothing.
     return (await captureIntent()).signature !== open.beforeSignature;
@@ -536,6 +670,7 @@ export const createHistoryManager = ({
     const intentRecord = await captureIntent();
     clearStack(undoStack);
     clearRedo();
+    intentGeneration += 1;
     setCurrentCheckpoint(checkpointRecord);
     setCurrentIntent(intentRecord);
     enforceLimits();
@@ -545,10 +680,15 @@ export const createHistoryManager = ({
   // R11: a transaction belongs to one owner (a control or a gesture). An
   // ownerless action, the same owner, or an action that owns the open commit
   // joins it; another owner first settles it.
+  /**
+   * @param {string} [label]
+   * @param {HistoryStepBase} [options]
+   * @returns {Promise<HistoryTransaction | null>}
+   */
   const begin = async (label = 'Edit', options = {}) => {
     if (mutationAvailability()) return null;
     if (restoring.value || capturing.value) return null;
-    const open = activeTransaction && !activeTransaction.closed ? activeTransaction : null;
+    const open = openTransaction();
     if (open) {
       if (
         options.owner === undefined
@@ -556,7 +696,8 @@ export const createHistoryManager = ({
         || open.deferAdapterCommit
       ) return open;
       await settlePendingIntent();
-      if (activeTransaction && !activeTransaction.closed) return activeTransaction;
+      const reopened = openTransaction();
+      if (reopened) return reopened;
     }
 
     const before = await captureIntent();
@@ -577,19 +718,22 @@ export const createHistoryManager = ({
     return tx;
   };
 
+  /** @param {HistoryTransaction | null | undefined} transaction */
   const cancel = (transaction) => {
     if (!transaction) return;
     transaction.closed = true;
     if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
   };
 
+  /** @param {string} [_label] @param {{ isCurrent?: () => boolean }} [options] */
   const initializeIntentBaseline = async (_label = 'Intent baseline', { isCurrent = () => true } = {}) => {
     if (restoring.value) return false;
-    if (activeTransaction && !activeTransaction.closed) cancel(activeTransaction);
+    cancel(openTransaction());
     const intentRecord = await captureIntent();
     if (!isCurrent()) return false;
     clearStack(undoStack);
     clearRedo();
+    intentGeneration += 1;
     markSavePoint();
     currentCheckpoint = null;
     currentCheckpointSignature = '';
@@ -599,6 +743,12 @@ export const createHistoryManager = ({
     return true;
   };
 
+  /**
+   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds'>} transaction
+   * @param {IntentRecord} afterRecord
+   * @param {{ label?: string }} [options]
+   * @returns {IntentEntry | null}
+   */
   const buildPatchEntry = (transaction, afterRecord, options = {}) => {
     if (afterRecord.signature === transaction.beforeSignature) return null;
     const changes = buildIntentPatch(transaction.before, afterRecord.intent);
@@ -617,20 +767,19 @@ export const createHistoryManager = ({
     };
   };
 
-  const commit = async (transaction, options = {}) => {
-    if (!transaction || transaction.closed) return false;
-    const afterRecord = await captureIntent();
-    // A concurrent settlement may have committed it during the capture.
-    if (transaction.closed) return false;
-    const busy = mutationAvailability();
-    if (busy) { cancel(transaction); return busy; }
-    transaction.closed = true;
-    if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
+  /**
+   * The bookkeeping of every intent step.
+   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds'>} from
+   *   The transaction, or the last recorded intent when an action records its remainder.
+   * @param {Awaited<ReturnType<typeof captureIntent>>} afterRecord
+   * @param {{ label?: string }} options
+   */
+  const recordIntentStep = (from, afterRecord, options) => {
     setCurrentIntent(afterRecord);
 
-    const entry = buildPatchEntry(transaction, afterRecord, options);
+    const entry = buildPatchEntry(from, afterRecord, options);
     if (!entry) {
-      emitHistoryDiagnostic({ type: 'commit', scope: 'intent', label: transaction.label, created: false });
+      emitHistoryDiagnostic({ type: 'commit', scope: 'intent', label: from.label, created: false });
       releaseUnreferencedFiles();
       touch();
       return false;
@@ -651,12 +800,72 @@ export const createHistoryManager = ({
     return true;
   };
 
+  /**
+   * @param {HistoryTransaction | null} transaction
+   * @param {{ label?: string }} [options]
+   * @param {{ label: string, stepLabel?: string } | null} [action]
+   *   The `runUndoable` action whose `fn` has ended: its own label, and the name of the step it commits.
+   */
+  const commitIntent = async (transaction, options = {}, action = null) => {
+    if (!transaction) return false;
+    // OV-460: a joined action, a drag end, or a settlement may commit an
+    // action's transaction while its `fn` awaits. What `fn` wrote afterwards
+    // is the action's remainder, recorded as a step of its own. A cancelled
+    // transaction has none, an open checkpoint captures it, and a restore
+    // owns the stacks while it runs. OV-463: nor is there one under an open
+    // artifact replacement or in a later intent generation, where the last
+    // recorded intent also lacks what the replacement or the baseline changed.
+    const recordsRemainder = () => Boolean(
+      action && transaction.committedAt === intentGeneration
+      && !activeCheckpoint && !activeReplacement && !restoring.value
+    );
+    const settled = () => transaction.closed && !recordsRemainder();
+    if (settled()) return false;
+    const afterRecord = await captureIntent();
+    // A concurrent settlement may have committed it during the capture.
+    if (settled()) return false;
+    const busy = mutationAvailability();
+    if (busy) { cancel(transaction); return busy; }
+    if (!transaction.closed) {
+      transaction.closed = true;
+      transaction.committedAt = intentGeneration;
+      if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
+      return recordIntentStep(
+        action ? { ...transaction, label: action.stepLabel ?? transaction.label } : transaction,
+        afterRecord,
+        options
+      );
+    }
+    if (!action || afterRecord.signature === currentIntentSignature) return false;
+    const remainder = {
+      label: action.label,
+      before: currentIntent,
+      beforeSignature: currentIntentSignature,
+      beforeFileIds: currentFileIds
+    };
+    // A transaction opened meanwhile (a control the user is typing in)
+    // continues from here, so its step does not repeat the remainder.
+    const open = openTransaction();
+    if (open) {
+      open.before = afterRecord.intent;
+      open.beforeSignature = afterRecord.signature;
+      open.beforeFileIds = afterRecord.fileIds;
+    }
+    return recordIntentStep(remainder, afterRecord, options);
+  };
+
+  /**
+   * @param {HistoryTransaction | null} transaction
+   * @param {{ label?: string }} [options]
+   */
+  const commit = (transaction, options = {}) => commitIntent(transaction, options);
+
   // R11: the one path that commits the open intent before another owner, a
   // checkpoint, an artifact replacement, a command, Undo, or Redo takes the
   // state. The input adapter skips its own commit of a settled transaction.
   const settlePendingIntent = async () => {
-    const pending = activeTransaction;
-    if (!pending || pending.closed) return;
+    const pending = openTransaction();
+    if (!pending) return;
     const previousDeferred = Boolean(pending.deferAdapterCommit);
     pending.deferAdapterCommit = true;
     try {
@@ -667,21 +876,49 @@ export const createHistoryManager = ({
     }
   };
 
+  // The `runUndoable` calls whose `fn` is being called (not awaited) now.
+  let actionCallDepth = 0;
+  /** @param {() => unknown} fn */
+  const callAction = (fn) => {
+    actionCallDepth += 1;
+    try { return fn(); } finally { actionCallDepth -= 1; }
+  };
+
+  /**
+   * One undoable step around `fn`, committed when `fn` ends.
+   * @param {string} label
+   * @param {() => unknown} fn
+   * @param {{ joinsOpenStep?: boolean, owner?: unknown, source?: string, label?: string }} [options]
+   *   `joinsOpenStep`: the call is part of the action that runs on the open step.
+   */
   const runUndoable = async (label, fn, options = {}) => {
     const sessionBusy = mutationAvailability();
     if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
     if (restoring.value || capturing.value || activeCheckpoint) return fn();
 
-    const usesActiveTransaction = Boolean(activeTransaction && !activeTransaction.closed);
-    const tx = usesActiveTransaction ? activeTransaction : await begin(label, options);
+    const open = openTransaction();
+    const tx = open || await begin(label, options);
     if (tx) { tx.deferAdapterCommit = true; touchTransaction(); }
+    // OV-460: an edit made while another action is still running on the open
+    // step applies at once and is a step under its own name: it names the
+    // step from here on. A call the running action makes itself keeps the
+    // name: one made synchronously inside its `fn`, or one that says so
+    // (`joinsOpenStep`). Each action commits under the name it started with.
+    // OV-464: a call that joins belongs to the action that started on the
+    // step with its label, and commits under the name that action started
+    // with, whatever a later action has named the step since.
+    if (open?.actions && !actionCallDepth && !options.joinsOpenStep) open.label = label;
+    const joined = options.joinsOpenStep ? open?.actions?.find((started) => started.label === label) : null;
+    const action = { label, stepLabel: joined ? joined.stepLabel : tx?.label };
 
     try {
       const busy = mutationAvailability();
       if (busy) { cancel(tx); return busy; }
-      const result = await fn();
-      await commit(tx, options);
+      // The step closes when an action on it ends, so the list is never cleared.
+      if (tx) (tx.actions ??= []).push(action);
+      const result = await callAction(fn);
+      await commitIntent(tx, options, action);
       return result;
     } catch (error) {
       cancel(tx);
@@ -689,8 +926,17 @@ export const createHistoryManager = ({
     }
   };
 
+  /**
+   * @param {string} [label]
+   * @param {HistoryStepBase} [options]
+   * @returns {HistoryTransaction | Promise<HistoryTransaction> | null}
+   */
   const beginCheckpoint = (label = 'Artifact change', options = {}) => {
     if (restoring.value || capturing.value) return null;
+    /**
+     * @param {CheckpointRecord} before
+     * @returns {HistoryTransaction}
+     */
     const createTransaction = (before) => {
       if (currentCheckpoint !== null) setCurrentCheckpoint(before);
       emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-checkpoint', label });
@@ -717,10 +963,14 @@ export const createHistoryManager = ({
           })();
     };
 
-    if (!activeTransaction || activeTransaction.closed) return captureBefore();
+    if (!openTransaction()) return captureBefore();
     return settlePendingIntent().then(captureBefore);
   };
 
+  /**
+   * @param {HistoryTransaction | null | undefined} transaction
+   * @param {HistoryStepBase} [options]
+   */
   const commitCheckpoint = async (transaction, options = {}) => {
     if (!transaction || transaction.closed) return false;
     notifyCheckpointCapture(options, 'after-start');
@@ -745,6 +995,7 @@ export const createHistoryManager = ({
 
     const fileIds = new Set(transaction.before.fileIds);
     after.fileIds.forEach((id) => fileIds.add(id));
+    /** @type {CheckpointEntry} */
     const entry = {
       type: 'checkpoint',
       label: transaction.label || options.label || 'Artifact change',
@@ -768,11 +1019,18 @@ export const createHistoryManager = ({
     return true;
   };
 
+  /**
+   * @template R
+   * @param {string} label
+   * @param {() => R | Promise<R>} fn
+   * @param {HistoryStepOptions<Awaited<R>>} [options]
+   */
   const runUndoableCheckpoint = (label, fn, options = {}) => {
     const sessionBusy = mutationAvailability();
     if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
     if (restoring.value || capturing.value || activeCheckpoint) return fn();
+    /** @param {HistoryTransaction | null} tx */
     const execute = async (tx) => {
       const busy = mutationAvailability();
       if (busy) { cancel(tx); return busy; }
@@ -785,6 +1043,7 @@ export const createHistoryManager = ({
           && !options.shouldCommit(result)
         ) {
           if (tx) tx.closed = true;
+          intentGeneration += 1;
           releaseUnreferencedFiles();
           return result;
         }
@@ -792,6 +1051,7 @@ export const createHistoryManager = ({
         return result;
       } catch (error) {
         if (tx) tx.closed = true;
+        intentGeneration += 1;
         releaseUnreferencedFiles();
         throw error;
       } finally {
@@ -805,6 +1065,10 @@ export const createHistoryManager = ({
       : execute(transaction);
   };
 
+  /**
+   * @param {HistoryArtifactHandle} handle
+   * @param {'before' | 'after'} phase
+   */
   const finishArtifactHandleCapture = (handle, phase) => {
     if (!handle || typeof handle !== 'object') {
       throw new Error('Generated artifact capture did not return a handle.');
@@ -822,6 +1086,7 @@ export const createHistoryManager = ({
     return handle;
   };
 
+  /** @param {'before' | 'after'} phase */
   const captureArtifactHandle = (phase) => {
     if (typeof captureGeneratedArtifactHandle !== 'function') {
       throw new Error('Generated artifact replacement requires a capture owner.');
@@ -847,6 +1112,11 @@ export const createHistoryManager = ({
     }
   };
 
+  /**
+   * @param {HistoryStepBase | undefined} options
+   * @param {'before' | 'after'} phase
+   * @returns {Promise<ReplacementIntentCheckpoint>}
+   */
   const captureReplacementIntentCheckpoint = async (options, phase) => {
     if (typeof options?.captureIntentCheckpoint !== 'function') {
       return { enabled: false, value: undefined };
@@ -857,6 +1127,10 @@ export const createHistoryManager = ({
     };
   };
 
+  /**
+   * @param {ReplacementIntentCheckpoint | undefined} checkpoint
+   * @param {HistoryStepBase['restoreIntentCheckpoint'] | null | undefined} restore
+   */
   const restoreReplacementIntentCheckpoint = async (checkpoint, restore) => {
     if (!checkpoint?.enabled || typeof restore !== 'function') return;
     restoring.value = true;
@@ -867,6 +1141,11 @@ export const createHistoryManager = ({
     }
   };
 
+  /**
+   * @param {string} [label]
+   * @param {HistoryStepBase} [options]
+   * @returns {Promise<HistoryTransaction | null>}
+   */
   const beginArtifactReplacement = async (label = 'Generate diagram', options = {}) => {
     if (restoring.value || capturing.value) return null;
     const capturesIntent = typeof options.captureIntentCheckpoint === 'function';
@@ -896,6 +1175,10 @@ export const createHistoryManager = ({
     };
   };
 
+  /**
+   * @param {HistoryArtifactHandle} before
+   * @param {HistoryArtifactHandle} after
+   */
   const sameArtifactHandles = (before, after) => {
     diagnostics.artifactFingerprintComparisonCount += 1;
     const same = typeof compareGeneratedArtifactHandles === 'function'
@@ -913,8 +1196,16 @@ export const createHistoryManager = ({
     return same;
   };
 
+  /**
+   * @param {HistoryArtifactHandle | undefined} handle
+   * @returns {Set<string>}
+   */
   const artifactHandleFileIds = (handle) => new Set(handle?.fileIds || []);
 
+  /**
+   * @param {HistoryTransaction | null | undefined} transaction
+   * @param {HistoryStepBase} [options]
+   */
   const commitAppliedArtifactReplacement = async (transaction, options = {}) => {
     if (!transaction || transaction.closed) return false;
     notifyCheckpointCapture(options, 'after-start');
@@ -924,6 +1215,7 @@ export const createHistoryManager = ({
       'after'
     );
     transaction.closed = true;
+    intentGeneration += 1;
     currentFileIds = artifactHandleFileIds(after);
     clearCurrentCheckpoint();
 
@@ -966,6 +1258,7 @@ export const createHistoryManager = ({
     const namedBytes = intentCheckpointBytes
       + (Number(transaction.before.retainedBytes) || 0)
       + (Number(after.retainedBytes) || 0);
+    /** @type {ArtifactReplacementEntry} */
     const entry = {
       type: 'artifact-replacement',
       label: transaction.label || options.label || 'Generate diagram',
@@ -1005,6 +1298,10 @@ export const createHistoryManager = ({
     return true;
   };
 
+  /**
+   * @param {HistoryArtifactHandle} handle
+   * @param {{ refreshIntent?: boolean }} [options]
+   */
   const restoreArtifactHandle = async (handle, { refreshIntent = true } = {}) => {
     if (typeof restoreGeneratedArtifactHandle !== 'function') {
       throw new Error('Generated artifact replacement requires a restore owner.');
@@ -1021,6 +1318,12 @@ export const createHistoryManager = ({
     if (refreshIntent) await refreshCurrentIntent();
   };
 
+  /**
+   * @template R
+   * @param {string} label
+   * @param {(before: HistoryArtifactHandle | null) => R | Promise<R>} fn
+   * @param {HistoryStepOptions<Awaited<R>>} [options]
+   */
   const runUndoableArtifactReplacement = async (label, fn, options = {}) => {
     const sessionBusy = mutationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -1038,6 +1341,7 @@ export const createHistoryManager = ({
         && !options.shouldCommit(result)
       ) {
         if (transaction) transaction.closed = true;
+        intentGeneration += 1;
         releaseUnreferencedFiles();
         touch();
         return result;
@@ -1078,6 +1382,11 @@ export const createHistoryManager = ({
     }
   };
 
+  /**
+   * @param {string | undefined} label
+   * @param {UndoableCommand | null | undefined} command
+   * @returns {CommandEntry | null}
+   */
   const normalizeCommand = (label, command) => {
     if (!command || typeof command !== 'object' || command.noop) return null;
     if (typeof command.apply !== 'function') {
@@ -1101,8 +1410,13 @@ export const createHistoryManager = ({
     };
   };
 
+  /** @param {unknown} result */
   const commandSucceeded = (result) => result !== false;
 
+  /**
+   * @param {{ label?: string } | null | undefined} entry
+   * @param {string} action
+   */
   const warnCommandNotApplied = (entry, action) => {
     const label = entry?.label ? ` "${entry.label}"` : '';
     console.warn(`Undo/redo command${label} could not ${action}; history was left unchanged.`);
@@ -1112,6 +1426,10 @@ export const createHistoryManager = ({
     setCurrentIntent(await captureIntent());
   };
 
+  /**
+   * @param {string} label
+   * @param {() => UndoableCommand | null | undefined | Promise<UndoableCommand | null | undefined>} buildCommand
+   */
   const runUndoableCommand = async (label, buildCommand) => {
     const sessionBusy = mutationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -1142,6 +1460,10 @@ export const createHistoryManager = ({
     return true;
   };
 
+  /**
+   * @param {IntentEntry} entry
+   * @param {'undo' | 'redo'} direction
+   */
   const applyIntentEntry = async (entry, direction) => {
     const nextIntent = applyIntentPatch(currentIntent || {}, entry.changes, direction);
     restoring.value = true;
@@ -1158,6 +1480,7 @@ export const createHistoryManager = ({
     });
   };
 
+  /** @param {CheckpointRecord} record */
   const applyCheckpointEntry = async (record) => {
     restoring.value = true;
     try {
@@ -1169,6 +1492,10 @@ export const createHistoryManager = ({
     await refreshCurrentIntent();
   };
 
+  /**
+   * @param {ArtifactReplacementEntry} entry
+   * @param {'undo' | 'redo'} direction
+   */
   const applyArtifactReplacementEntry = async (entry, direction) => {
     const handle = direction === 'undo' ? entry.before : entry.after;
     if (!entry.intentCheckpoint) {
@@ -1186,6 +1513,10 @@ export const createHistoryManager = ({
     await refreshCurrentIntent();
   };
 
+  /**
+   * @param {CommandEntry} entry
+   * @param {'undo' | 'redo'} direction
+   */
   const applyCommandWithFlag = async (entry, direction) => {
     restoring.value = true;
     try {

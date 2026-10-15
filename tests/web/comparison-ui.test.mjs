@@ -159,7 +159,8 @@ test('adjacent upload summary uses only resolver-active uploads', () => {
     key: 'upload', losat: 0, upload: 2, label: '2 upload'
   });
   assert.equal(projection.topologyPairLabel, '2 adjacent pairs');
-  assert(projection.sectionKeys.settings.includes('upload-readiness'));
+  // The pair rows and the issue list say which upload pairs lack a file.
+  assert(!projection.sectionKeys.settings.includes('upload-readiness'));
   assert(!projection.sectionKeys.settings.includes('losat-mode'));
 });
 
@@ -201,7 +202,7 @@ test('selected upload and mixed plans project custom intent and active source co
     key: 'mixed', losat: 1, upload: 1, label: '1 LOSAT, 1 upload'
   });
   assert(mixed.sectionKeys.settings.includes('losat-mode'));
-  assert(mixed.sectionKeys.settings.includes('upload-readiness'));
+  assert(!mixed.sectionKeys.settings.includes('upload-readiness'));
 });
 
 test('LOSAT and LOSATP modes project only their active Settings and Advanced controls', () => {
@@ -212,7 +213,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       blastpMode: 'orthogroup',
       losatKey: 'blastn',
       losatpKey: 'orthogroup',
-      settings: ['losat-mode', 'losat-runtime', 'blastn-task', 'result-filters', 'comparison-appearance'],
+      settings: ['losat-mode', 'blastn-task', 'result-filters', 'comparison-appearance', 'losat-runtime'],
       absent: [
         'losatp-mode', 'record-genetic-codes', 'blastp-max-hits',
         'member-hits', 'collinear-primary'
@@ -223,7 +224,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       blastpMode: 'orthogroup',
       losatKey: 'tblastx',
       losatpKey: 'orthogroup',
-      settings: ['losat-mode', 'losat-runtime', 'record-genetic-codes', 'result-filters', 'comparison-appearance'],
+      settings: ['losat-mode', 'record-genetic-codes', 'result-filters', 'comparison-appearance', 'losat-runtime'],
       absent: [
         'losatp-mode', 'blastn-task', 'blastp-max-hits',
         'member-hits', 'collinear-primary'
@@ -235,8 +236,8 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'pairwise',
       settings: [
-        'losat-mode', 'losat-runtime', 'losatp-mode', 'losatp-candidate', 'blastp-max-hits',
-        'result-filters', 'comparison-appearance'
+        'losat-mode', 'losatp-mode', 'blastp-max-hits',
+        'result-filters', 'comparison-appearance', 'losatp-candidate', 'losat-runtime'
       ],
       absent: ['blastn-task', 'record-genetic-codes', 'member-hits', 'collinear-primary']
     },
@@ -246,8 +247,8 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'orthogroup',
       settings: [
-        'losat-mode', 'losat-runtime', 'losatp-mode', 'losatp-candidate', 'member-hits',
-        'result-filters', 'comparison-appearance'
+        'losat-mode', 'losatp-mode',
+        'result-filters', 'comparison-appearance', 'losatp-candidate', 'member-hits', 'losat-runtime'
       ],
       absent: ['blastn-task', 'record-genetic-codes', 'blastp-max-hits', 'collinear-primary']
     },
@@ -257,8 +258,8 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'collinear',
       settings: [
-        'losat-mode', 'losat-runtime', 'losatp-mode', 'losatp-candidate', 'member-hits', 'collinear-primary',
-        'result-filters', 'comparison-appearance'
+        'losat-mode', 'losatp-mode', 'collinear-primary',
+        'result-filters', 'comparison-appearance', 'losatp-candidate', 'member-hits', 'losat-runtime'
       ],
       absent: [
         'blastn-task', 'record-genetic-codes', 'blastp-max-hits'
@@ -345,7 +346,7 @@ test('selected topology blocks only grouping and collinear LOSATP modes without 
   assert(!grouping.sectionKeys.settings.includes('member-hits'));
   assert(grouping.sectionKeys.settings.includes('comparison-appearance'));
   assert(grouping.sectionKeys.settings.includes('losatp-candidate'));
-  assert.equal(grouping.errorDisclosureKey, 'settings');
+  assert.equal(grouping.issues[0]?.disclosureKey, 'settings');
 
   for (const modeKey of ['orthogroup', 'collinear']) {
     const selection = projectLinearComparisonLosatpModeSelection({ plan, modeKey });
@@ -426,9 +427,9 @@ test('retained dormant draft count does not become an active pair count', () => 
   const dormant = project(dormantPlan);
   assert.equal(dormant.activePairCount, 0);
   assert.equal(dormant.retainedDormantDraftCount, 1);
-  assert.equal(dormant.retainedRawResultDraftCount, 1);
   assert.deepEqual(dormant.sectionKeys.selectedPairs, ['pair-editor', 'retained-drafts']);
-  assert(dormant.sectionKeys.advanced.includes('raw-results'));
+  // A retained Raw LOSAT filename sits in its pair row, not in a second list.
+  assert(!dormant.sectionKeys.advanced.includes('raw-results'));
 
   const activeUploadPlan = {
     mode: 'selected',
@@ -441,7 +442,6 @@ test('retained dormant draft count does not become an active pair count', () => 
   const activeUpload = project(activeUploadPlan);
   assert.equal(activeUpload.activePairCount, 1);
   assert.equal(activeUpload.retainedDormantDraftCount, 0);
-  assert.equal(activeUpload.retainedRawResultDraftCount, 0);
 
   activeUploadPlan.edges[0].losatFilename = 'alternate.raw.tsv';
   activeUploadPlan.edges[0].losatFilenameActive = false;
@@ -450,7 +450,7 @@ test('retained dormant draft count does not become an active pair count', () => 
   assert.equal(alternatePayload.retainedDormantDraftCount, 1);
 });
 
-test('structured resolver issue codes project badges and disclosure focus targets', () => {
+test('structured resolver issue codes project one issue list with focus targets and fixing actions', () => {
   const issueCodes = [
     'missing-upload',
     'selected-losat-requires-pairwise',
@@ -484,41 +484,94 @@ test('structured resolver issue codes project badges and disclosure focus target
     filters: linearDefaults
   });
 
-  assert.deepEqual(projection.errorBadge, {
-    count: 7,
-    label: '7 comparison issues'
-  });
-  assert.equal(projection.errorTargets.length, 7);
-  assert.deepEqual(projection.errorDisclosureKeys, ['selected-pairs', 'settings']);
-  assert.equal(projection.errorDisclosureKey, 'selected-pairs');
+  // One list entry per routed issue, with its text and the actions that fix it.
+  assert.equal(projection.issues.length, 7);
+  const missing = projection.issues.find((issue) => issue.issueCode === 'missing-upload');
   assert.deepEqual(
-    projection.errorTargets.find((target) => target.issueCode === 'missing-upload'),
+    { ...missing, actions: missing.actions.map((action) => action.key) },
     {
+      key: '0-missing-upload',
       issueCode: 'missing-upload',
       disclosureKey: 'selected-pairs',
       focusTargetKey: 'pair-upload',
       edgeId: 'problem',
-      edgeKey: 'a->b'
+      edgeKey: 'a->b',
+      text: 'wording must not route missing-upload',
+      pairText: '',
+      actions: ['choose-file']
     }
   );
-  assert.deepEqual(
-    projection.errorTargets.find(
-      (target) => target.issueCode === 'selected-losat-requires-pairwise'
-    ),
-    {
-      issueCode: 'selected-losat-requires-pairwise',
-      disclosureKey: 'settings',
-      focusTargetKey: 'losatp-mode',
-      edgeId: 'problem',
-      edgeKey: 'a->b'
-    }
-  );
+  assert.equal(missing.actions[0].ariaLabel, 'Choose file');
+  const topology = projection.issues.find((issue) => issue.issueCode === 'selected-losat-requires-pairwise');
+  assert.equal(topology.disclosureKey, 'settings');
+  assert.equal(topology.focusTargetKey, 'losatp-mode');
+  assert.deepEqual(topology.actions.map((action) => action.key), ['all-losat', 'pairwise']);
   ['duplicate', 'missing-uid', 'self', 'same-row', 'non-adjacent'].forEach((code) => {
-    const target = projection.errorTargets.find((entry) => entry.issueCode === code);
+    const target = projection.issues.find((entry) => entry.issueCode === code);
     assert.equal(target.disclosureKey, 'selected-pairs');
     assert.equal(target.focusTargetKey, 'pair-row');
+    assert.deepEqual(target.actions.map((action) => action.key), ['show']);
   });
-  assert(!projection.errorTargets.some((target) => target.issueCode === 'unowned-error'));
+  assert(!projection.issues.some((target) => target.issueCode === 'unowned-error'));
+});
+
+test('a pair issue names its pair once in the list and marks the pair row', () => {
+  const projection = projectLinearComparisonUi({
+    plan: { mode: 'selected', defaultSource: 'upload', edges: [createLinearComparisonEdge({ id: 'p', queryUid: 'a', subjectUid: 'b', source: 'upload' })] },
+    resolution: {
+      edges: [{ id: 'p', edgeKey: 'a->b', queryIndex: 0, subjectIndex: 1, source: 'upload' }],
+      errors: [{ code: 'missing-upload', edgeId: 'p', edgeKey: 'a->b', message: 'Every selected uploaded comparison requires an active BLAST TSV file.' }]
+    },
+    filters: linearDefaults
+  });
+  assert.equal(projection.issues[0].text, '#1 → #2: No BLAST file.');
+  assert.deepEqual(projection.pairIssueText, { 'a->b': 'No BLAST file' });
+  // The action's accessible name carries its pair (repeated buttons stay distinct).
+  assert.deepEqual(projection.issues[0].actions.map(({ label, ariaLabel }) => [label, ariaLabel]),
+    [['Choose file', 'Choose file for #1 → #2']]);
+});
+
+test('the LOSATP-mode issue names the pairs set to Upload BLAST TSV', () => {
+  const projection = projectLinearComparisonUi({
+    plan: { mode: 'selected', defaultSource: 'losat', edges: [] },
+    resolution: {
+      edges: [
+        { id: 'p', edgeKey: 'a->b', queryIndex: 0, subjectIndex: 1, source: 'upload' },
+        { id: 'q', edgeKey: 'b->c', queryIndex: 1, subjectIndex: 2, source: 'losat' }
+      ],
+      errors: [
+        { code: 'selected-losat-requires-pairwise', edgeId: '', edgeKey: '', message: 'unused' },
+        { code: 'missing-upload', edgeId: 'p', edgeKey: 'a->b', message: 'unused' },
+        { code: 'duplicate', edgeId: 'p', edgeKey: 'a->b', message: 'Duplicate pair' }
+      ]
+    },
+    losatProgram: 'blastp',
+    blastpMode: 'collinear',
+    filters: linearDefaults
+  });
+  assert.equal(projection.issues[0].text, 'Pair #1 → #2 is set to Upload BLAST TSV, so not every pair runs LOSAT. '
+    + 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT.');
+  // Every issue of a pair reaches its row, and list keys stay distinct.
+  assert.deepEqual(projection.pairIssueText, { 'a->b': 'No BLAST file; Duplicate pair' });
+  assert.equal(new Set(projection.issues.map((issue) => issue.key)).size, 3);
+});
+
+test('the LOSATP-mode issue of a Selected plan whose pairs all run LOSAT states its cause', () => {
+  const projection = projectLinearComparisonUi({
+    plan: { mode: 'selected', defaultSource: 'losat', edges: [] },
+    resolution: {
+      edges: [
+        { id: 'p', edgeKey: 'a->b', queryIndex: 0, subjectIndex: 1, source: 'losat' },
+        { id: 'q', edgeKey: 'b->c', queryIndex: 1, subjectIndex: 2, source: 'losat' }
+      ],
+      errors: [{ code: 'selected-losat-requires-pairwise', edgeId: '', edgeKey: '', message: 'unused' }]
+    },
+    losatProgram: 'blastp',
+    blastpMode: 'collinear',
+    filters: linearDefaults
+  });
+  assert.equal(projection.issues[0].text, 'The pairs are set one by one in Selected pairs. '
+    + 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT.');
 });
 
 test('projection does not mutate plan, resolution, filters, or retained file references', () => {
@@ -550,7 +603,7 @@ test('projection does not mutate plan, resolution, filters, or retained file ref
   assert.equal(plan.edges[0].losatFilename, 'immutable.raw.tsv');
   assert(Object.isFrozen(projection));
   assert(Object.isFrozen(projection.sectionKeys.settings));
-  assert(Object.isFrozen(projection.errorTargets));
+  assert(Object.isFrozen(projection.issues));
 });
 
 test('an adjacent plan that resolves no pair says why Generate draws no comparison (CI-07a, CI-07b)', () => {

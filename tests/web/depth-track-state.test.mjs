@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -7,10 +7,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const sourceUrl = new URL('../../gbdraw/web/js/services/depth-track-state.js', import.meta.url);
 const displaySourceUrl = new URL('../../gbdraw/web/js/services/track-slot-display.js', import.meta.url);
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-depth-track-state-'));
-const tempModulePath = join(tempDir, 'depth-track-state.mjs');
+const tempModulePath = join(tempDir, 'services', 'depth-track-state.mjs');
+await mkdir(join(tempDir, 'services'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n');
 await writeFile(tempModulePath, await readFile(sourceUrl, 'utf8'));
-await writeFile(join(tempDir, 'track-slot-display.js'), await readFile(displaySourceUrl, 'utf8'));
+await writeFile(join(tempDir, 'services', 'track-slot-display.js'), await readFile(displaySourceUrl, 'utf8'));
+// The series reader reads colors and numbers with the shared leaves.
+await cp(new URL('../../gbdraw/web/js/utils', import.meta.url), join(tempDir, 'utils'), { recursive: true });
+// track-slot-display.js reads the generated size-class boundaries.
+await writeFile(
+  join(tempDir, 'mode-profiles.generated.js'),
+  await readFile(new URL('../../gbdraw/web/js/mode-profiles.generated.js', import.meta.url), 'utf8')
+);
 
 const {
   activeDepthTrackIndices,
@@ -25,6 +33,8 @@ const {
   dropInvalidManagedDepthSlots,
   isRecordMajorDepthFileMatrix,
   normalizeDepthTrackConfig,
+  readDepthTrackConfig,
+  readDepthTracks,
   normalizeRecordMajorDepthFileRows,
   padDepthFileSlots,
   representativeDepthFiles,
@@ -50,6 +60,22 @@ const depthIndexes = (slots) => slots
     25,
     'fresh depth-track normalization must not read the obsolete tick_interval field'
   );
+}
+
+{
+  // One reader for a stored series and a new one: a color name reads as its
+  // hex, and a value it cannot use is a loss named by its place (B45, BA-OD89).
+  assert.deepEqual(readDepthTrackConfig({ label: 'A', color: 'red', height: -1 }, 1), {
+    value: { label: 'A', color: '#FF0000', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null },
+    lost: true,
+    leaves: [{ at: '.height', stored: -1, used: null }]
+  });
+  assert.deepEqual(readDepthTracks([{ label: 'A' }, 5, { height: 'x' }]).leaves.map(({ at, stored }) => [at, stored]),
+    [['[1]', 5], ['[2].height', 'x']]);
+  // A drawing's single-series settings belong to its first series; every series takes the height.
+  const legacy = { depth_color: '#111111', depth_height: 30, depth_large_tick_interval: 100 };
+  assert.deepEqual(readDepthTracks([{}, {}], legacy).value.map(({ color, height, large_tick_interval }) => [color, height, large_tick_interval]),
+    [['#111111', 30, 100], ['#E45756', 30, null]]);
 }
 
 {
@@ -141,7 +167,15 @@ const depthIndexes = (slots) => slots
     targetCount: 2
   });
 
-  assert.deepEqual(labels(reconciled), ['24 hpi SRR14027705)', '6 hpi (SRR14027721)']);
+  assert.deepEqual(labels(reconciled.tracks), ['24 hpi SRR14027705)', '6 hpi (SRR14027721)']);
+  // A series whose config another series took takes the first config no
+  // series took, so no config is lost (BA-OD94).
+  const swapped = reconcileDepthTracksToFiles({
+    files: [file('b.depth.tsv'), file('a.depth.tsv')],
+    depthTracks: [{ label: 'a' }, { label: 'b' }],
+    targetCount: 2
+  });
+  assert.deepEqual([labels(swapped.tracks), swapped.sources], [['b', 'a'], [1, 0]]);
 }
 
 console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
@@ -160,6 +194,16 @@ console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
   const loaded = dropInvalidManagedDepthSlots({ slots: stack, activeCount: 1 });
   assert.deepEqual(loaded.map((slot) => slot.id), ['features', 'ticks', 'gc_content', 'depth']);
   assert.equal(loaded[3].enabled, false);
+  // BA-OD94: a row of a series without a source keeps it as the source
+  // change does (reconcileManagedDepthSlots): a managed row goes, a manual
+  // row stays; a row that names no series is dropped (managed) or turned off.
+  const managed = { id: 'depth', renderer: 'depth', params: { track_index: 0 } };
+  const manual = { id: 'mine', renderer: 'depth', width: '10px', params: { track_index: 1 } };
+  const named = { id: 'gone', renderer: 'depth', width: '10px', params: { track_index: 3 } };
+  const fitted = dropInvalidManagedDepthSlots({ slots: [managed, manual, named], activeCount: 2, sourced: [] });
+  assert.deepEqual(fitted.map(({ id, enabled, params }) => [id, enabled ?? true, params.track_index ?? null]),
+    [['mine', true, 1], ['gone', false, null]]);
+  assert.deepEqual(reconcileManagedDepthSlots({ slots: [managed, manual], previousSourced: [0, 1], sourced: [] }).slots, [manual]);
 }
 
 {

@@ -1,0 +1,1534 @@
+{
+ "description": [
+  "Shared vectors of the structural checker of a gbdraw.contract_shapes description:",
+  "Python's gbdraw.contract_shapes.shape_violations (tests/test_contract_shape_vectors.py) and",
+  "its Web twin shapeViolations in gbdraw/web/js/utils/contract-shape.js",
+  "(tests/web/contract-shape.test.mjs). Each vector checks value against shape, with",
+  "the named shapes of types, from the root path \"value\"; violations lists each {path, reason}",
+  "in order, and reasons lists every reason code both checkers report. A reason never repeats",
+  "the value. Only values JSON.parse and Python's json read alike are vectors; jsonDifferences",
+  "lists the JSON texts the two read differently, with each checker's violations.",
+  "spellings lists, for a literal with spellings, the name each value reads as (read; null when",
+  "none): Python's gbdraw.contract_shapes.read_spelling and the Web's readSpelling.",
+  "requestTypes lists values of a named type of the canonical request description",
+  "(gbdraw.session_request_codec.describe_canonical_request and the Web's generated",
+  "CANONICAL_REQUEST_DESCRIPTION), checked by both against that description's types."
+ ],
+ "types": {
+  "Point": {
+   "kind": "object",
+   "fields": {
+    "x": {
+     "kind": "integer"
+    },
+    "y": {
+     "kind": "integer"
+    }
+   },
+   "optional": [],
+   "open": false
+  }
+ },
+ "vectors": [
+  {
+   "id": "closed-object-unknown-field",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "value": {
+    "a": 1
+   },
+   "violations": [
+    {
+     "path": "value.a",
+     "reason": "unknown-key"
+    }
+   ]
+  },
+  {
+   "id": "open-object-other-field",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": true
+   },
+   "value": {
+    "a": 1
+   },
+   "violations": []
+  },
+  {
+   "id": "required-field-absent",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     }
+    },
+    "optional": [],
+    "open": false
+   },
+   "value": {},
+   "violations": [
+    {
+     "path": "value.a",
+     "reason": "missing-key"
+    }
+   ]
+  },
+  {
+   "id": "optional-field-absent",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     }
+    },
+    "optional": [
+     "a"
+    ],
+    "open": false
+   },
+   "value": {},
+   "violations": []
+  },
+  {
+   "id": "field-of-another-kind",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     }
+    },
+    "optional": [],
+    "open": true
+   },
+   "value": {
+    "a": "x",
+    "b": 1
+   },
+   "violations": [
+    {
+     "path": "value.a",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "boolean-is-not-integer",
+   "shape": {
+    "kind": "integer"
+   },
+   "value": true,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "fraction-is-not-integer",
+   "shape": {
+    "kind": "integer"
+   },
+   "value": 0.5,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "non-integer"
+    }
+   ]
+  },
+  {
+   "id": "integer-is-number",
+   "shape": {
+    "kind": "number"
+   },
+   "value": 7,
+   "violations": []
+  },
+  {
+   "id": "boolean-is-not-number",
+   "shape": {
+    "kind": "number"
+   },
+   "value": false,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "null-is-not-string",
+   "shape": {
+    "kind": "string"
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "integer-is-not-boolean",
+   "shape": {
+    "kind": "boolean"
+   },
+   "value": 0,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "literal-of-another-kind",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     true
+    ]
+   },
+   "value": 1,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "not-in-set"
+    }
+   ]
+  },
+  {
+   "id": "literal-text-is-not-the-number",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     1,
+     "a"
+    ]
+   },
+   "value": "1",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "not-in-set"
+    }
+   ]
+  },
+  {
+   "id": "literal-null",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     null
+    ]
+   },
+   "value": null,
+   "violations": []
+  },
+  {
+   "id": "array-item-of-another-kind",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "integer"
+    }
+   },
+   "value": [
+    1,
+    "a"
+   ],
+   "violations": [
+    {
+     "path": "value[1]",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "object-is-not-an-array",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "integer"
+    }
+   },
+   "value": {},
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "tuple-length",
+   "shape": {
+    "kind": "tuple",
+    "items": [
+     {
+      "kind": "integer"
+     },
+     {
+      "kind": "string"
+     }
+    ]
+   },
+   "value": [
+    1
+   ],
+   "violations": [
+    {
+     "path": "value",
+     "reason": "tuple-length"
+    }
+   ]
+  },
+  {
+   "id": "tuple-item",
+   "shape": {
+    "kind": "tuple",
+    "items": [
+     {
+      "kind": "integer"
+     },
+     {
+      "kind": "string"
+     }
+    ]
+   },
+   "value": [
+    1,
+    2
+   ],
+   "violations": [
+    {
+     "path": "value[1]",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "empty-tuple",
+   "shape": {
+    "kind": "tuple",
+    "items": []
+   },
+   "value": [],
+   "violations": []
+  },
+  {
+   "id": "record-value",
+   "shape": {
+    "kind": "record",
+    "values": {
+     "kind": "string"
+    }
+   },
+   "value": {
+    "k": 1,
+    "l": "x"
+   },
+   "violations": [
+    {
+     "path": "value.k",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "array-is-not-an-object",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "value": [],
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "null-is-not-a-record",
+   "shape": {
+    "kind": "record",
+    "values": {
+     "kind": "string"
+    }
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "nullable-null",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "string"
+     },
+     {
+      "kind": "null"
+     }
+    ]
+   },
+   "value": null,
+   "violations": []
+  },
+  {
+   "id": "union-reports-the-closest-option",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "object",
+      "fields": {
+       "kind": {
+        "kind": "literal",
+        "values": [
+         "a"
+        ]
+       },
+       "x": {
+        "kind": "string"
+       }
+      },
+      "optional": [],
+      "open": false
+     },
+     {
+      "kind": "object",
+      "fields": {
+       "kind": {
+        "kind": "literal",
+        "values": [
+         "b"
+        ]
+       }
+      },
+      "optional": [],
+      "open": false
+     }
+    ]
+   },
+   "value": {
+    "kind": "a",
+    "x": 1
+   },
+   "violations": [
+    {
+     "path": "value.x",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "union-reports-the-first-of-equals",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "string"
+     },
+     {
+      "kind": "integer"
+     }
+    ]
+   },
+   "value": 0.5,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "ref",
+   "shape": {
+    "kind": "ref",
+    "name": "Point"
+   },
+   "value": {
+    "x": 1,
+    "y": "2"
+   },
+   "violations": [
+    {
+     "path": "value.y",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "nested-path",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "array",
+      "items": {
+       "kind": "ref",
+       "name": "Point"
+      }
+     }
+    },
+    "optional": [],
+    "open": false
+   },
+   "value": {
+    "a": [
+     {
+      "x": 1,
+      "y": 2
+     },
+     {
+      "x": 1
+     }
+    ]
+   },
+   "violations": [
+    {
+     "path": "value.a[1].y",
+     "reason": "missing-key"
+    }
+   ]
+  },
+  {
+   "id": "unknown-accepts-anything",
+   "shape": {
+    "kind": "unknown"
+   },
+   "value": {
+    "any": [
+     1,
+     null
+    ]
+   },
+   "violations": []
+  },
+  {
+   "id": "null-is-not-a-literal-without-null",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "a"
+    ]
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "null-is-not-an-array",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "integer"
+    }
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "null-is-not-a-tuple",
+   "shape": {
+    "kind": "tuple",
+    "items": [
+     {
+      "kind": "integer"
+     }
+    ]
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "null-is-not-an-object",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "null-in-a-union-without-null",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "string"
+     },
+     {
+      "kind": "integer"
+     }
+    ]
+   },
+   "value": null,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "string-is-not-integer",
+   "shape": {
+    "kind": "integer"
+   },
+   "value": "1",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "string-is-not-an-array",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "integer"
+    }
+   },
+   "value": "a",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "tuple-too-long",
+   "shape": {
+    "kind": "tuple",
+    "items": [
+     {
+      "kind": "integer"
+     }
+    ]
+   },
+   "value": [
+    1,
+    2
+   ],
+   "violations": [
+    {
+     "path": "value",
+     "reason": "tuple-length"
+    }
+   ]
+  },
+  {
+   "id": "inherited-name-is-not-a-field",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "toString": {
+      "kind": "string"
+     }
+    },
+    "optional": [],
+    "open": false
+   },
+   "value": {},
+   "violations": [
+    {
+     "path": "value.toString",
+     "reason": "missing-key"
+    }
+   ]
+  },
+  {
+   "id": "inherited-name-is-an-unknown-key",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "value": {
+    "constructor": 1,
+    "hasOwnProperty": 2
+   },
+   "violations": [
+    {
+     "path": "value.constructor",
+     "reason": "unknown-key"
+    },
+    {
+     "path": "value.hasOwnProperty",
+     "reason": "unknown-key"
+    }
+   ]
+  },
+  {
+   "id": "inherited-name-at-a-record",
+   "shape": {
+    "kind": "record",
+    "values": {
+     "kind": "integer"
+    }
+   },
+   "value": {
+    "toString": "x"
+   },
+   "violations": [
+    {
+     "path": "value.toString",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "optional-field-of-another-kind",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     }
+    },
+    "optional": [
+     "a"
+    ],
+    "open": false
+   },
+   "value": {
+    "a": null
+   },
+   "violations": [
+    {
+     "path": "value.a",
+     "reason": "null-not-declared"
+    }
+   ]
+  },
+  {
+   "id": "violations-in-order",
+   "shape": {
+    "kind": "object",
+    "fields": {
+     "a": {
+      "kind": "integer"
+     },
+     "b": {
+      "kind": "integer"
+     },
+     "c": {
+      "kind": "integer"
+     }
+    },
+    "optional": [],
+    "open": false
+   },
+   "value": {
+    "c": "x",
+    "z": 1,
+    "a": 0.5
+   },
+   "violations": [
+    {
+     "path": "value.z",
+     "reason": "unknown-key"
+    },
+    {
+     "path": "value.b",
+     "reason": "missing-key"
+    },
+    {
+     "path": "value.c",
+     "reason": "wrong-kind"
+    },
+    {
+     "path": "value.a",
+     "reason": "non-integer"
+    }
+   ]
+  },
+  {
+   "id": "number-minimum-equal",
+   "shape": {
+    "kind": "number",
+    "minimum": 1
+   },
+   "value": 1,
+   "violations": []
+  },
+  {
+   "id": "number-below-minimum",
+   "shape": {
+    "kind": "number",
+    "minimum": 1
+   },
+   "value": 0.5,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "number-at-exclusive-minimum",
+   "shape": {
+    "kind": "number",
+    "exclusiveMinimum": 0
+   },
+   "value": 0,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "number-above-exclusive-minimum",
+   "shape": {
+    "kind": "number",
+    "exclusiveMinimum": 0
+   },
+   "value": 0.001,
+   "violations": []
+  },
+  {
+   "id": "integer-above-maximum",
+   "shape": {
+    "kind": "integer",
+    "minimum": 1,
+    "maximum": 1
+   },
+   "value": 2,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "number-at-maximum",
+   "shape": {
+    "kind": "number",
+    "minimum": 0,
+    "maximum": 1
+   },
+   "value": 1,
+   "violations": []
+  },
+  {
+   "id": "bounded-number-of-wrong-kind",
+   "shape": {
+    "kind": "number",
+    "minimum": 0
+   },
+   "value": "1",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "bounded-option-of-nullable-number",
+   "shape": {
+    "kind": "union",
+    "options": [
+     {
+      "kind": "number",
+      "exclusiveMinimum": 0
+     },
+     {
+      "kind": "null"
+     }
+    ]
+   },
+   "value": -1,
+   "violations": [
+    {
+     "path": "value",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "array-shorter-than-min-items",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "string"
+    },
+    "minItems": 1
+   },
+   "value": [],
+   "violations": [
+    {
+     "path": "value",
+     "reason": "too-short"
+    }
+   ]
+  },
+  {
+   "id": "array-too-short-before-its-items",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "string"
+    },
+    "minItems": 2
+   },
+   "value": [
+    1
+   ],
+   "violations": [
+    {
+     "path": "value",
+     "reason": "too-short"
+    },
+    {
+     "path": "value[0]",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "array-at-min-items",
+   "shape": {
+    "kind": "array",
+    "items": {
+     "kind": "string"
+    },
+    "minItems": 1
+   },
+   "value": [
+    "a"
+   ],
+   "violations": []
+  },
+  {
+   "id": "text-matching-pattern",
+   "shape": {
+    "kind": "string",
+    "pattern": "^\\s*[ACGTUacgtu]{2}\\s*$"
+   },
+   "value": " gc ",
+   "violations": []
+  },
+  {
+   "id": "text-not-matching-pattern",
+   "shape": {
+    "kind": "string",
+    "pattern": "^\\s*[ACGTUacgtu]{2}\\s*$"
+   },
+   "value": "GCA",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "blank-text-against-non-space-pattern",
+   "shape": {
+    "kind": "string",
+    "pattern": "\\S"
+   },
+   "value": "  ",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "literal-spelling-is-still-a-violation",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "RBH",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "not-in-set"
+    }
+   ]
+  }
+ ],
+ "reasons": [
+  "unknown-key",
+  "missing-key",
+  "wrong-kind",
+  "null-not-declared",
+  "non-integer",
+  "not-in-set",
+  "tuple-length",
+  "out-of-range",
+  "too-short",
+  "pattern"
+ ],
+ "jsonDifferences": [
+  {
+   "id": "integral-fraction-at-an-integer",
+   "note": "JSON.parse reads 1.0 as the integer 1; Python's json reads a float.",
+   "shape": {
+    "kind": "integer"
+   },
+   "text": "1.0",
+   "python": [
+    {
+     "path": "value",
+     "reason": "non-integer"
+    }
+   ],
+   "web": []
+  },
+  {
+   "id": "integer-above-2^53-at-an-integer",
+   "note": "Both accept it; JSON.parse rounds it to 9007199254740992.",
+   "shape": {
+    "kind": "integer"
+   },
+   "text": "9007199254740993",
+   "python": [],
+   "web": []
+  },
+  {
+   "id": "integer-above-2^53-at-a-literal",
+   "note": "JSON.parse rounds the value to the literal; Python compares the exact integer.",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     9007199254740992
+    ]
+   },
+   "text": "9007199254740993",
+   "python": [
+    {
+     "path": "value",
+     "reason": "not-in-set"
+    }
+   ],
+   "web": []
+  },
+  {
+   "id": "proto-as-an-own-key",
+   "note": "JSON.parse makes __proto__ an own key, so both report it; a reader must not copy it with assignment.",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "text": "{\"__proto__\": 1}",
+   "python": [
+    {
+     "path": "value.__proto__",
+     "reason": "unknown-key"
+    }
+   ],
+   "web": [
+    {
+     "path": "value.__proto__",
+     "reason": "unknown-key"
+    }
+   ]
+  },
+  {
+   "id": "integer-like-keys-come-first",
+   "note": "A JavaScript object lists integer-like keys first, in ascending order; Python keeps the text's order.",
+   "shape": {
+    "kind": "object",
+    "fields": {},
+    "optional": [],
+    "open": false
+   },
+   "text": "{\"b\": 1, \"1\": 2}",
+   "python": [
+    {
+     "path": "value.b",
+     "reason": "unknown-key"
+    },
+    {
+     "path": "value.1",
+     "reason": "unknown-key"
+    }
+   ],
+   "web": [
+    {
+     "path": "value.1",
+     "reason": "unknown-key"
+    },
+    {
+     "path": "value.b",
+     "reason": "unknown-key"
+    }
+   ]
+  }
+ ],
+ "spellings": [
+  {
+   "id": "spelling-name",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "rbh",
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-case-and-spaces",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": " RBH ",
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-hyphen-and-alias",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "Reciprocal-Best",
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-alias-after-folding",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "TOP-1",
+   "read": "one_to_one"
+  },
+  {
+   "id": "spelling-empty-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "",
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-null-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": null,
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-false-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": false,
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-zero-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": 0,
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-empty-array-reads-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": [],
+   "read": "rbh"
+  },
+  {
+   "id": "spelling-spaces-only-read-nothing",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "   ",
+   "read": null
+  },
+  {
+   "id": "spelling-unknown",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": "banana",
+   "read": null
+  },
+  {
+   "id": "spelling-number",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": 5,
+   "read": null
+  },
+  {
+   "id": "spelling-true",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "all",
+     "one_to_one",
+     "rbh"
+    ],
+    "spellings": {
+     "aliases": {
+      "reciprocal_best": "rbh",
+      "top_1": "one_to_one"
+     },
+     "foldHyphens": true,
+     "blank": "rbh"
+    }
+   },
+   "value": true,
+   "read": null
+  },
+  {
+   "id": "spelling-without-hyphen-folding",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "auto",
+     "cds",
+     "locus"
+    ],
+    "spellings": {
+     "blank": "auto"
+    }
+   },
+   "value": "lo-cus",
+   "read": null
+  },
+  {
+   "id": "spelling-without-folding-case",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "auto",
+     "cds",
+     "locus"
+    ],
+    "spellings": {
+     "blank": "auto"
+    }
+   },
+   "value": " LOCUS ",
+   "read": "locus"
+  },
+  {
+   "id": "spelling-without-blank",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "a_b"
+    ],
+    "spellings": {
+     "foldHyphens": true
+    }
+   },
+   "value": "",
+   "read": null
+  },
+  {
+   "id": "spelling-folded-hyphen",
+   "shape": {
+    "kind": "literal",
+    "values": [
+     "a_b"
+    ],
+    "spellings": {
+     "foldHyphens": true
+    }
+   },
+   "value": "A-B",
+   "read": "a_b"
+  }
+ ],
+ "requestTypes": [
+  {
+   "id": "annotation-color-name",
+   "type": "CanonicalAnnotationColor",
+   "value": "navy",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-name-in-another-case",
+   "type": "CanonicalAnnotationColor",
+   "value": "Navy",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-name-in-capitals",
+   "type": "CanonicalAnnotationColor",
+   "value": "RED",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-name-with-outer-spaces",
+   "type": "CanonicalAnnotationColor",
+   "value": " red ",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-short-hex-in-capitals",
+   "type": "CanonicalAnnotationColor",
+   "value": "#ABC",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-hex-with-outer-spaces",
+   "type": "CanonicalAnnotationColor",
+   "value": " #aabbcc ",
+   "violations": []
+  },
+  {
+   "id": "annotation-color-unknown-name",
+   "type": "CanonicalAnnotationColor",
+   "value": "notacolor",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "annotation-color-hex-of-eight-digits",
+   "type": "CanonicalAnnotationColor",
+   "value": "#aabbccdd",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  },
+  {
+   "id": "annotation-color-name-with-inner-space",
+   "type": "CanonicalAnnotationColor",
+   "value": "dark blue",
+   "violations": [
+    {
+     "path": "value",
+     "reason": "pattern"
+    }
+   ]
+  }
+ ]
+}

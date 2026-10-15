@@ -182,7 +182,12 @@ def test_fresh_python_request_and_cli_threshold_defaults_match(
 def test_mode_resolution_preserves_explicit_values_and_applies_track_defaults() -> None:
     explicit = LinearDiagramOptions(
         evalue=0.25,
-        config_overrides={"canvas.show_gc": True, "canvas.linear.ruler_on_axis": True},
+        config_overrides={
+            "canvas.show_gc": True,
+            "canvas.linear.ruler_on_axis": True,
+            "canvas.linear.track_layout": "above",
+            "objects.scale.style": "ruler",
+        },
     )
 
     resolved = resolve_linear_diagram_options(explicit)
@@ -195,7 +200,31 @@ def test_mode_resolution_preserves_explicit_values_and_applies_track_defaults() 
         "canvas.show_skew": False,
         "objects.axis.linear.stroke_color": "dimgray",
         "canvas.linear.ruler_on_axis": True,
+        "canvas.linear.track_layout": "above",
+        "objects.scale.style": "ruler",
     }
+
+
+@pytest.mark.parametrize(
+    "ignored",
+    [
+        {},
+        {"canvas.linear.track_layout": "above"},
+        {"objects.scale.style": "ruler"},
+        {"canvas.linear.track_layout": "middle", "objects.scale.style": "ruler"},
+        {"canvas.linear.track_layout": "below", "objects.scale.style": "bar"},
+    ],
+)
+def test_ignored_ruler_on_axis_keeps_the_plain_linear_axis_color(
+    ignored: dict[str, object],
+) -> None:
+    resolved = resolve_linear_diagram_options(
+        LinearDiagramOptions(
+            config_overrides={"canvas.linear.ruler_on_axis": True, **ignored},
+        )
+    )
+
+    assert resolved.config_overrides["objects.axis.linear.stroke_color"] == "lightgray"
 
 
 def test_hidden_linear_scale_does_not_apply_ruler_axis_managed_color() -> None:

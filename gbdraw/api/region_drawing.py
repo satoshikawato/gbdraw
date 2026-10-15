@@ -208,7 +208,7 @@ def derive_region_drawing(
         dropped.append("The feature placement table.")
         values.update(feature_placement_table=None, feature_placement_table_file=None)
 
-    records = tuple(_record_input(source, collection, region, reverse_complement) for region in selected)
+    records = tuple(_record_input(source, region, reverse_complement) for region in selected)
     output = getattr(source, "output", None) or RenderOutputRequest()
     request: DiagramRequest
     if target_mode == "linear":
@@ -298,7 +298,6 @@ def _resolve_regions(
 
 def _record_input(
     source: DiagramRequest,
-    collection: ResolvedRecordCollection,
     region: _Region,
     reverse_complement: bool | None,
 ) -> RecordInput:
@@ -312,8 +311,6 @@ def _record_input(
         if reverse_complement is None
         else reverse_complement
     )
-    annotations = collection.records[item.resolved_index].annotations
-    label, subtitle = annotations.get("gbdraw_record_label"), annotations.get("gbdraw_record_subtitle")
     crop = None
     if not region.whole:
         crop = RegionSpec(
@@ -331,8 +328,6 @@ def _record_input(
         region=crop,
         presentation=replace(
             item.presentation,
-            label=None if label is None else str(label),
-            subtitle=None if subtitle is None else str(subtitle),
             reverse_complement=reverse and region.whole,
             grid_row=None,
             grid_column=None,

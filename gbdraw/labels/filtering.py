@@ -16,6 +16,7 @@ from ..io.table_text import (
     read_table_lines,
     table_text_stream,
 )
+from ..render_stages import render_stage
 from ..features.selector_values import (
     _matches_constraint,
     get_feature_hash as _get_feature_hash,
@@ -398,7 +399,9 @@ def _resolve_label_override(
     return None
 
 
-def preprocess_label_filtering(label_filtering: dict):
+def preprocess_label_filtering(label_filtering: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return a new mapping with the whitelist, priority and override maps compiled."""
+
     # If already processed, return as-is unless label override rules still need compilation.
     override_df = label_filtering.get("label_override_df")
     if isinstance(override_df, str):
@@ -427,10 +430,22 @@ def preprocess_label_filtering(label_filtering: dict):
 
     label_override_rules = _build_label_override_rules(override_df)
 
-    label_filtering["whitelist_map"] = whitelist_map
-    label_filtering["priority_map"] = priority_map
-    label_filtering["label_override_rules"] = label_override_rules
-    return label_filtering
+    return {
+        **label_filtering,
+        "whitelist_map": whitelist_map,
+        "priority_map": priority_map,
+        "label_override_rules": label_override_rules,
+    }
+
+
+def label_filter_maps(label_filtering: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return ``labels.filtering`` with its compiled maps (render stage ``label_filter_maps``).
+
+    The config's own mapping is never written; every reader takes the mapping
+    returned here.
+    """
+
+    return render_stage("label_filter_maps", preprocess_label_filtering, label_filtering)
 
 
 def has_forced_label_overrides(label_filtering: dict) -> bool:
@@ -591,6 +606,7 @@ __all__ = [
     "DERIVED_LABEL_FILTERING_KEYS",
     "get_label_text",
     "has_forced_label_overrides",
+    "label_filter_maps",
     "preprocess_label_filtering",
     "read_filter_list_file",
     "read_label_override_file",

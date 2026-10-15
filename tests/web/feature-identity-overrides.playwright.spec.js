@@ -9,7 +9,9 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const {
+  generateAndWaitForResult, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs
+} = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
 
@@ -303,8 +305,10 @@ test('OV-12: after reordering records the popup shows the edit of the same featu
 
 // A Session before feature catalogs may restore no feature metadata until
 // Generate, so the load waits for the committed Result only.
-const loadSession = async (page, file) => {
+// `repairs`: the lines the Load dialog lists, answered with [Load] (BA-D25).
+const loadSession = async (page, file, repairs = null) => {
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  if (repairs) await answerLoadRepairs(page, repairs);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
   await settle(page);
@@ -371,6 +375,177 @@ for (const { session, rule, identity, color } of [
   });
 }
 
+// PD-OI-042 scenario revision 2, accepted residual risk: the Web app of
+// first-parent main 9839de8e saved one caption written in two colors as
+// `Complex IV [#ffe700]` and `Complex IV [#1f77b4]`
+// (rule-captions-with-color-id.provenance.json). Load reads each caption
+// without its own rule's color ID. The row keys are the texts that build drew,
+// so the Legend stroke it saved stays on its row. Load names the rule rows of
+// the saved figure by the loaded captions (D-19): the figure, the Legend tab,
+// and an Undo back to the loaded state show the numbered names before the
+// first Generate, as Generate draws them.
+test('a Session that saved rule captions with their color IDs loads without them and keeps its Legend row edit', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSession(page, 'tests/fixtures/sessions/rule-captions-with-color-id.v46.gbdraw-session.json.gz');
+  const read = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/services/legend-svg.js');
+    const svg = new DOMParser().parseFromString(
+      state.results.value[state.selectedResultIndex.value].content, 'image/svg+xml'
+    ).documentElement;
+    return {
+      captions: state.activeDrawing().manualSpecificRules.map((rule) => rule.cap),
+      rows: Object.fromEntries([...getVisibleFeatureLegendGroup(svg).querySelectorAll('g[data-legend-key]')].map((row) => [
+        row.getAttribute('data-legend-key'),
+        [row.querySelector('text').textContent, row.querySelector('path').getAttribute('stroke'),
+          Number(row.querySelector('path').getAttribute('stroke-width'))]
+      ]))
+    };
+  });
+  // The names the mounted figure draws and the Legend tab shows, by row key.
+  const shown = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      figure: Object.fromEntries([...app.svgContainer.querySelectorAll('svg g[data-legend-key]')]
+        .filter((row) => row.getAttribute('display') !== 'none')
+        .map((row) => [row.getAttribute('data-legend-key'), row.querySelector('text').textContent])),
+      tab: Object.fromEntries(app.legendEntries.map((entry) => [entry.caption, app.shownLegendName(entry.caption)]))
+    };
+  });
+  const expectNumberedNames = async (label) => {
+    const state = await read();
+    expect(state.rows['Complex IV [#ffe700]'], `${label}: the saved stroke stays on its row`).toEqual(['Complex IV (1)', '#d62728', 2]);
+    expect(state.rows['Complex IV [#1f77b4]'][0], label).toBe('Complex IV (2)');
+    expect(state.rows['Complex I'][0], label).toBe('Complex I');
+    const { figure, tab } = await shown();
+    for (const names of [figure, tab]) {
+      expect([names['Complex IV [#ffe700]'], names['Complex IV [#1f77b4]'], names['Complex I']], label)
+        .toEqual(['Complex IV (1)', 'Complex IV (2)', 'Complex I']);
+    }
+    expect([...Object.values(state.rows).map(([name]) => name), ...Object.values(figure), ...Object.values(tab)]
+      .filter((name) => name.includes(' [#')), `${label}: no name carries a color ID`).toEqual([]);
+    return state;
+  };
+  const loaded = await expectNumberedNames('after Load, before Generate');
+  expect(loaded.captions).toEqual(['Complex IV', 'Complex IV', 'Complex I']);
+  // A Legend edit and its Undo return the loaded figure, not the saved texts.
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'Complex I'));
+  });
+  await settle(page);
+  expect((await shown()).tab['Complex I']).toBeUndefined();
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  await expectNumberedNames('after a Legend edit and its Undo');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const generated = await expectNumberedNames('after Generate');
+  expect(generated.captions).toEqual(loaded.captions);
+});
+
+// PD-OI-061 revision 5 (Session 47): first-parent main 9839de8e saved this
+// Session 46 after renaming GC skew (+) to Z and GC content to GC skew (+)
+// (then red), stroking Z, and renaming GC skew (-) to W (blue, deleted)
+// (legend-renamed-rows.provenance.json). Session 46 stored the edits under the
+// shown captions; Load reads them under the row keys, so each stays on the row
+// it was made on, after Load and after Generate.
+test('a Session 46 with renamed Legend rows keeps each color and stroke on its row', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSession(page, 'tests/fixtures/sessions/legend-renamed-rows.v46.gbdraw-session.json.gz');
+  const read = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const drawing = state.activeDrawing();
+    const rows = Object.fromEntries([...window.__GBDRAW_APP__.svgContainer.querySelectorAll('svg g[data-legend-key]')]
+      .filter((row) => row.getAttribute('display') !== 'none')
+      .map((row) => {
+        const swatch = row.querySelector('path, rect');
+        return [row.querySelector('text').textContent,
+          [swatch.getAttribute('fill'), swatch.getAttribute('stroke'), Number(swatch.getAttribute('stroke-width'))]];
+      }));
+    return {
+      colors: { ...drawing.legendColorOverrides },
+      strokes: Object.keys(drawing.legendStrokeOverrides),
+      rows
+    };
+  });
+  const expectRowsKeepTheirEdits = async (label) => {
+    const { colors, strokes, rows } = await read();
+    expect(colors, label).toEqual({ 'GC content': '#ff0000', 'GC skew (-)': '#0000ff' });
+    expect(strokes, label).toEqual(['GC skew (+)']);
+    expect(rows['GC skew (+)'][0], `${label}: the GC content row, drawn GC skew (+)`).toBe('#ff0000');
+    expect(rows.Z[0], `${label}: the GC skew (+) row, drawn Z`).not.toBe('#ff0000');
+    expect(rows.Z.slice(1), label).toEqual(['#00aa00', 2]);
+    expect(rows.W, `${label}: the deleted row`).toBeUndefined();
+  };
+  await expectRowsKeepTheirEdits('after Load');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await expectRowsKeepTheirEdits('after Generate');
+});
+
+// F2: the same Session where `Complex IV [#ffe700]` is the only rule of its
+// caption (the other rule is `Complex III`; the older build kept such a
+// caption once the other color's rule was gone). Its read caption has one
+// color, so its row's key changes to `Complex IV` at Load: the figure, the
+// Legend tab, the stored stroke, and the per-feature color edit move with it,
+// before and after Generate, and Generate admits its Result.
+test('saved rule captions with their color IDs: a caption left with one color keeps its row and its Legend edit (F2)', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const OLD = 'Complex IV [#1f77b4]';
+  const rename = (text) => text.split(OLD).join('Complex III');
+  const session = JSON.parse(rename(gunzipSync(readFileSync(
+    'tests/fixtures/sessions/rule-captions-with-color-id.v46.gbdraw-session.json.gz'
+  )).toString('utf8')));
+  for (const resource of Object.values(session.resources)) {
+    const bytes = Buffer.from(resource.data, 'base64').toString('latin1');
+    if (!bytes.includes(OLD)) continue;
+    const renamed = Buffer.from(rename(bytes), 'latin1');
+    Object.assign(resource, { data: renamed.toString('base64'), size: renamed.length });
+  }
+  const file = testInfo.outputPath('one-color-rule-caption.gbdraw-session.json');
+  writeFileSync(file, JSON.stringify(session));
+  await openFresh(page);
+  await loadSession(page, file);
+  const read = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const app = window.__GBDRAW_APP__;
+    const drawing = state.activeDrawing();
+    const row = [...app.svgContainer.querySelectorAll('svg g[data-legend-key]')]
+      .find((each) => each.getAttribute('data-legend-key') === 'Complex IV');
+    return {
+      captions: drawing.manualSpecificRules.map((rule) => rule.cap),
+      figure: [...app.svgContainer.querySelectorAll('svg g[data-legend-key]')]
+        .filter((each) => each.getAttribute('display') !== 'none')
+        .map((each) => [each.getAttribute('data-legend-key'), each.querySelector('text').textContent]),
+      tab: app.legendEntries.map((entry) => [entry.caption, app.shownLegendName(entry.caption)]),
+      stroke: row ? [row.querySelector('path').getAttribute('stroke'), Number(row.querySelector('path').getAttribute('stroke-width'))] : null,
+      strokeKeys: Object.keys(drawing.legendStrokeOverrides),
+      featureCaption: drawing.featureColorOverrides['record-1\u0000f48b7bf2f']?.caption ?? null
+    };
+  });
+  const expectRow = async (label) => {
+    const state = await read();
+    expect(state.figure.filter(([key]) => key.startsWith('Complex')), label)
+      .toEqual([['Complex IV', 'Complex IV'], ['Complex III', 'Complex III'], ['Complex I', 'Complex I']]);
+    expect(state.tab.filter(([key]) => key.startsWith('Complex')), label)
+      .toEqual([['Complex IV', 'Complex IV'], ['Complex III', 'Complex III'], ['Complex I', 'Complex I']]);
+    expect(state.stroke, `${label}: the saved stroke stays on its row`).toEqual(['#d62728', 2]);
+    expect(state.strokeKeys, label).toEqual(['Complex IV']);
+    expect([...state.figure, ...state.tab].flat().filter((name) => name.includes(' [#')), `${label}: no color ID`).toEqual([]);
+    return state;
+  };
+  const loaded = await expectRow('after Load, before Generate');
+  expect(loaded.captions).toEqual(['Complex IV', 'Complex III', 'Complex I']);
+  expect(loaded.featureCaption).toBe('Complex IV');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const generated = await expectRow('after Generate');
+  expect(generated.captions).toEqual(loaded.captions);
+});
+
 test('a Session 33 without a feature catalog keeps its feature edits', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
@@ -413,12 +588,11 @@ const committedRecordKeys = (page) => page.evaluate(async () => {
 // metadata no longer lists.
 test('a Linear Session 33 with crop and reverse complement keeps its feature edits', async ({ page }) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   await loadSession(page, LINEAR_V33);
   const [testa, testb] = await committedRecordKeys(page);
-  expect(alerts).toEqual(['Session loaded successfully!']);
+  await expectSessionLoadedWithoutWarnings(page);
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   expect(await featureOverrideRows(page)).toEqual([
     [testa, 'fef810304', null, 'off', null],
     [testa, 'ffa1f4c4a', 'off', null, null],
@@ -437,6 +611,8 @@ test('a Linear Session 33 with crop and reverse complement keeps its feature edi
   expect(shown[unlabeled.svgId]).toEqual({ drawn: true, labels: [] });
 });
 
+const UNMATCHED_EDIT_LINE = '1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.';
+
 // The Linear Session 33 with one more edit that names no feature.
 const writeUnmatchedEditSession = (testInfo) => {
   const session = JSON.parse(gunzipSync(readFileSync(LINEAR_V33)));
@@ -446,17 +622,13 @@ const writeUnmatchedEditSession = (testInfo) => {
   return file;
 };
 
-// Design 4.3 rule 3: the Load notice counts exactly the edits it drops.
+// Design 4.3 rule 3: the Load dialog counts exactly the edits it drops.
 test('loading an older Session counts only the feature edits it drops', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const file = writeUnmatchedEditSession(testInfo);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
-  await loadSession(page, file);
-  expect(alerts).toEqual([
-    'Session loaded successfully! 1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
-  ]);
+  await loadSession(page, file, [UNMATCHED_EDIT_LINE]);
+  await expectSessionLoadedWithoutWarnings(page);
   expect((await featureOverrideRows(page)).length).toBe(4);
 });
 
@@ -467,8 +639,6 @@ test('loading an older Session counts only the feature edits it drops', async ({
 test('an older Session whose sources cannot be read again fails to load and keeps the previous Session', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const file = writeUnmatchedEditSession(testInfo);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   const runtimeAssets = /pyodide\.asm\.(?:js|wasm)(?:\?|$)/;
   await page.context().route(runtimeAssets, (route) => route.abort());
@@ -483,11 +653,10 @@ test('an older Session whose sources cannot be read again fails to load and keep
   });
   const previous = await loaded();
   expect(previous.rows.length).toBe(3);
-  alerts.length = 0;
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await settle(page);
-  expect(alerts).toEqual([]);
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const { code, stage, actions } = state.errorLog.value || {};
@@ -499,10 +668,8 @@ test('an older Session whose sources cannot be read again fails to load and keep
     window.__GBDRAW_APP__.sessionLoadAvailable])).toEqual([true, true]);
   // Retry once the runtime can start: the Load drops only the unmatched edit.
   await page.context().unroute(runtimeAssets);
-  await loadSession(page, file);
-  expect(alerts).toEqual([
-    'Session loaded successfully! 1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
-  ]);
+  await loadSession(page, file, [UNMATCHED_EDIT_LINE]);
+  await expectSessionLoadedWithoutWarnings(page);
   expect((await featureOverrideRows(page)).length).toBe(4);
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
@@ -522,14 +689,11 @@ const previewLabelCount = (page, text) => page.locator('.origin-top svg text').f
 // `record_location` row matches the source values there.
 test('a Label TSV record_location row applies to a catalog 4 Result drawn with source coordinates', async ({ page }) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   await loadSession(page, 'tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
-  alerts.length = 0;
   await importLabelTsv(page, 'NC_001416.1\tCDS\trecord_location\t^NC_001416\\.1:190\\.\\.736:\\+$\tTSV_RL\n');
   await settle(page);
-  expect(alerts).toEqual(['Loaded 1 row(s). Applied to 1 label(s).']);
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
   expect(await previewLabelCount(page, /^TSV_RL$/)).toBe(1);
 });
 
@@ -538,25 +702,21 @@ test('a Label TSV record_location row applies to a catalog 4 Result drawn with s
 // label edits it would have replaced; after Generate it applies.
 test('a Label TSV location row waits for Generate on a catalog 4 Result of cropped records', async ({ page }) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
   await loadSession(page, 'tests/fixtures/sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz');
   const before = await featureOverrideRows(page);
-  alerts.length = 0;
   const row = '*\ttRNA\trecord_location\t^TESTA:\tTSV_TRNA\n';
   await importLabelTsv(page, row);
   await settle(page);
-  expect(alerts).toHaveLength(1);
-  expect(alerts[0]).toMatch(/^Loaded 1 row\(s\)\. Not applied: .*Generate/);
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Not applied.');
+  await expect(page.locator('[data-app-notice] li')).toHaveText([/Generate the diagram again, then load the table\.$/]);
   expect(await featureOverrideRows(page)).toEqual(before);
   expect(await previewLabelCount(page, /^PROBE_A_TRNA$/)).toBe(1);
   await generateAndWaitForResult(page);
   await settle(page);
-  alerts.length = 0;
   await importLabelTsv(page, row);
   await settle(page);
-  expect(alerts).toEqual(['Loaded 1 row(s). Applied to 1 label(s).']);
+  await expect(page.locator('[data-app-notice] p')).toHaveText('Loaded 1 row(s). Applied to 1 label(s).');
   expect(await previewLabelCount(page, /^TSV_TRNA$/)).toBe(1);
 });
 
@@ -565,13 +725,11 @@ test('a Label TSV location row waits for Generate on a catalog 4 Result of cropp
 // the copy that was edited, and Load says the next Generate draws the others.
 test('loading a Session 44 says which Feature visibility edits now apply to one copy', async ({ page }) => {
   test.setTimeout(300_000);
-  const alerts = [];
-  page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
-  await loadSession(page, 'tests/fixtures/sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz');
-  expect(alerts).toEqual([
-    'Session loaded successfully! 1 Feature visibility edit(s) from an older Session hid every feature with '
+  await loadSession(page, 'tests/fixtures/sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz', [
+    '1 Feature visibility edit(s) from an older Session hid every feature with '
       + 'the same hash, such as each copy of a duplicated record. Each now applies only to the feature that '
       + 'was edited, so the next Generate draws the others.'
   ]);
+  await expectSessionLoadedWithoutWarnings(page);
 });

@@ -6,7 +6,6 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
 
 from ....analysis.skew import skew_df
-from ....config.models import GbdrawConfig
 from ...drawers.linear.gc_content import GcContentDrawer
 from ....configurators import GcContentConfigurator
 
@@ -35,7 +34,7 @@ class GcContentGroup:
         alignment_width: float,
         gc_config: GcContentConfigurator,
         *,
-        cfg: GbdrawConfig,
+        normalize_length: bool,
         start_x: float = 0,
         start_y: float = 0,
         gc_df: DataFrame | None = None,
@@ -71,8 +70,7 @@ class GcContentGroup:
             float(sequence_width) if sequence_width is not None else alignment_width
         )
         self.sequence_width = sequence_width
-        self._cfg = cfg
-        self.bool_normalize_length = cfg.canvas.linear.normalize_length
+        self.bool_normalize_length = normalize_length
         self.normalize_length()
         self.generate_gc_df(gc_df)
         self.add_elements_to_group()

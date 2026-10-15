@@ -79,6 +79,26 @@ const expectRow = async (page, caption, style) => {
   expect(current.result).toEqual(current.result.map(() => style));
   expect(current.mounted).toEqual(current.result);
 };
+// The name the row of `key` draws in each Legend group of the selected Result
+// and of the mounted SVG. A renamed row keeps its key (D-25) and draws the new name.
+const expectDrawnName = async (page, key, name) => {
+  const current = await page.evaluate(async target => {
+    const { state: s } = await import('./js/state.js');
+    const { getAllFeatureLegendGroups, drawnLegendRowName } = await import('./js/services/legend-svg.js');
+    const names = svg => getAllFeatureLegendGroups(svg).map(group => {
+      const row = group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`);
+      return row && drawnLegendRowName(row);
+    });
+    const content = s.results.value[s.selectedResultIndex.value].content;
+    return {
+      result: names(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
+      mounted: names(s.svgContainer.value.querySelector('svg'))
+    };
+  }, key);
+  expect(current.result.length).toBeGreaterThan(0);
+  expect(current.result).toEqual(current.result.map(() => name));
+  expect(current.mounted).toEqual(current.result);
+};
 
 // OV-86: a style on a row the Legend editor added failed every later Generate.
 for (const mode of ['linear', 'circular']) {
@@ -118,20 +138,22 @@ for (const mode of ['linear', 'circular']) {
       }, await page.evaluate(legendIndex, 'Manual row'));
       await expect.poll(() => page.evaluate(legendIndex, 'Manual renamed')).toBeGreaterThanOrEqual(0);
       await generate(page);
-      await expectRow(page, 'Manual renamed', styled);
-      await expectRow(page, 'Manual row', null);
+      // The renamed row keeps its key, under which its style stays (D-25).
+      await expectRow(page, 'Manual row', styled);
+      await expectDrawnName(page, 'Manual row', 'Manual renamed');
       const saved = testInfo.outputPath(`added-row-style-${mode}.gbdraw-session.json.gz`);
       await download(page, 'Save Session', saved);
       fresh = await load(browser, saved);
-      await expectRow(fresh, 'Manual renamed', styled);
+      await expectRow(fresh, 'Manual row', styled);
       await generate(fresh);
-      await expectRow(fresh, 'Manual renamed', styled);
+      await expectRow(fresh, 'Manual row', styled);
+      await expectDrawnName(fresh, 'Manual row', 'Manual renamed');
       await fresh.evaluate(caption => {
         const app = window.__GBDRAW_APP__;
         app.deleteLegendEntry(app.legendEntries.findIndex(e => e.caption === caption));
       }, 'Manual renamed');
       await generate(fresh);
-      await expectRow(fresh, 'Manual renamed', null);
+      await expectRow(fresh, 'Manual row', null);
       expect(page.externalRequests).toEqual([]);
       expect(fresh.externalRequests).toEqual([]);
     } finally {
@@ -576,11 +598,13 @@ for (const mode of ['linear', 'circular']) {
       await deleteLegendRow(page, 'Manual renamed');
       await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
       await settleLive(page);
-      const { mounted } = await rowStroke(page, 'Manual renamed');
+      // The renamed row keeps its key (D-25).
+      const { mounted } = await rowStroke(page, 'Manual row');
       expect(mounted.length).toBeGreaterThan(0);
       expect(mounted).toEqual(mounted.map(() => drawn));
       await generate(page);
-      await expectStroke(page, 'Manual renamed', drawn);
+      await expectStroke(page, 'Manual row', drawn);
+      await expectDrawnName(page, 'Manual row', 'Manual renamed');
       expect(page.externalRequests).toEqual([]);
     } finally {
       await page.context().close();
@@ -603,9 +627,11 @@ const legendRowsByCaption = page => page.evaluate(() => {
 const oneRowEach = ({ editor }) => Object.fromEntries(editor.map(caption => [caption, 1]));
 
 // OV-151 (GUI audit FL-04, PD-OI-061 revision 2): GC skew (+) and GC skew (-)
-// draw no features, so renaming one onto the other offers Suffix and Cancel,
-// never Merge, and a forced Merge changes nothing. After Suffix each caption has
-// one drawn row, live and at Generate, and the editor order stays. The renamed
+// draw no features, so renaming one onto the other offers Keep both and
+// Cancel, never Merge, and a forced Merge changes nothing. After Keep both the
+// renamed row keeps the typed name and the two rows of the name are drawn
+// `(1)` and `(2)` (PD-OI-061 scenario revision 5), live and at Generate, and
+// the editor order stays. The renamed
 // row is the last row; in Linear a renamed row before it moves at Generate
 // (OV-156, owned by the Legend layout port).
 for (const mode of ['linear', 'circular']) {
@@ -632,8 +658,8 @@ for (const mode of ['linear', 'circular']) {
 
       await rename();
       await expect(dialog).toBeVisible();
-      await expect(dialog.getByRole('button', { name: /^Merge into existing/ })).toHaveCount(0);
-      await expect(dialog.getByRole('button', { name: 'Keep current color and add a suffix' })).toHaveCount(1);
+      await expect(dialog.getByRole('button', { name: /^Merge into "/ })).toHaveCount(0);
+      await expect(dialog.getByRole('button', { name: /^Keep both: name it "/ })).toHaveCount(1);
       await expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveCount(1);
       await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleLegendRenameChoice('merge'));
       await expect(dialog).toHaveCount(0);
@@ -641,13 +667,16 @@ for (const mode of ['linear', 'circular']) {
       expect(await legendRowsByCaption(page), 'a forced Merge changes nothing').toEqual(before);
 
       await rename();
-      await dialog.getByRole('button', { name: 'Keep current color and add a suffix' }).click();
-      await expect.poll(() => page.evaluate(legendIndex, 'GC skew (+) (1)')).toBeGreaterThanOrEqual(0);
+      await dialog.getByRole('button', { name: /^Keep both: name it "/ }).click();
+      await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.legendEntries
+        .find(e => e.originalCaption === 'GC skew (-)')?.caption)).toBe('GC skew (+)');
       await settleLive(page);
       const renamed = await legendRowsByCaption(page);
-      expect(renamed.editor).toEqual([...before.editor.slice(0, -1), 'GC skew (+) (1)']);
-      expect(renamed.drawn, 'one drawn row per caption, live').toEqual(oneRowEach(renamed));
-      await expectGenerateKeepsLegend(page, 'Generate after the Suffix');
+      expect(renamed.editor).toEqual([...before.editor.slice(0, -1), 'GC skew (+)']);
+      const { 'GC skew (+)': _shared, ...others } = oneRowEach(renamed);
+      expect(renamed.drawn, 'the two rows of the name are numbered, live')
+        .toEqual({ ...others, 'GC skew (+) (1)': 1, 'GC skew (+) (2)': 1 });
+      await expectGenerateKeepsLegend(page, 'Generate after Keep both');
       expect(await legendRowsByCaption(page), 'one drawn row per caption at Generate, editor order kept').toEqual(renamed);
       expect(page.externalRequests).toEqual([]);
     } finally {

@@ -2,7 +2,6 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { promoteRequest } = require('./helpers/request-schema.cjs');
 const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { promisify } = require('node:util');
@@ -12,7 +11,8 @@ const {
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
-  openApp
+  openApp,
+  expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -22,18 +22,11 @@ const sessionInput = 'input[accept^=".json,"]';
 const readSession = async file => JSON.parse(gunzipSync(await fs.readFile(file)));
 
 const load = async (page, file) => {
-  const dialogs = [];
-  const accept = async dialog => { dialogs.push(dialog.message()); await dialog.accept(); };
-  page.on('dialog', accept);
-  try {
-    await page.locator(sessionInput).setInputFiles(file);
-    await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
-    const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
-    expect(error, `Load ${path.basename(file)} failed`).toBeNull();
-    expect(dialogs).toContain('Session loaded successfully!');
-  } finally {
-    page.off('dialog', accept);
-  }
+  await page.locator(sessionInput).setInputFiles(file);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
+  const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
+  expect(error, `Load ${path.basename(file)} failed`).toBeNull();
+  await expectSessionLoadedWithoutWarnings(page);
 };
 
 const save = async (page, file) => {
@@ -120,7 +113,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(restored.generatedMode).toBe('circular');
     expect(restored.circularSource).toEqual(before.circularSource);
     expect(restored.linearSource).toEqual(before.linearSource);
-    expect(restored.request).toEqual(await promoteRequest(fresh, circular.request));
+    expect(restored.request).toEqual(circular.request);
     expect(restored.results).toEqual(circular.results);
     expect(restored.selectedResultIndex).toBe(circular.selectedResultIndex);
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
@@ -295,6 +288,8 @@ test('failed import after draft application restores the prior mode, profiles, s
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
     const { importSession } = await import('./js/services/config.js');
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
+      // A Gallery Session loads without a dialog; one would cancel the Load.
+      confirmLoadRepairs: async () => false,
       beforePreviewMount: () => { throw new Error('S02 forced rollback'); }
     });
     return { status: result.status, error: result.error };

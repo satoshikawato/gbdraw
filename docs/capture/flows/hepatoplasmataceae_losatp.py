@@ -132,16 +132,13 @@ def _set_source_inputs(page: Page) -> None:
         selector = page.get_by_label(
             f"Record selector for sequence {index}", exact=True
         )
+        # The select is enabled, and lists the record, only once the file's
+        # records have been read.
         expect(selector).to_be_enabled(timeout=PYTHON_OPERATION_TIMEOUT_MS)
         expect(selector).to_contain_text(
             fixture[3], timeout=PYTHON_OPERATION_TIMEOUT_MS
         )
         expect(selector).to_have_value("")
-        expect(
-            page.get_by_role(
-                "group", name=f"Linear sequence {index}", exact=True
-            )
-        ).not_to_contain_text("Loading records...")
         expect(
             page.get_by_label(f"Region start for sequence {index}", exact=True)
         ).to_have_value("")
@@ -209,7 +206,7 @@ def _configure_all_record_collinear(
     )
     final_boundary = selected_pairs.get_by_role(
         "region",
-        name="Comparison boundary from display row 4 to 5",
+        name="Pairs between rows 4 and 5",
         exact=True,
     )
     expect(final_boundary).to_be_visible()
@@ -265,7 +262,7 @@ def _configure_all_record_collinear(
     settings.get_by_label("Collinear color mode", exact=True).select_option(
         "orientation_identity"
     )
-    settings.get_by_label("Collinear evidence scope", exact=True).select_option(
+    settings.get_by_label("Collinear search between", exact=True).select_option(
         evidence_scope
     )
     settings.get_by_label(
@@ -595,10 +592,14 @@ def _assert_input_capture_framing(page: Page) -> None:
 
 
 def _frame_collinear_settings(settings: Any) -> None:
-    """Show LOSATP, Collinear blocks, inference, hit limits, and scope together."""
+    """Show LOSATP, Collinear blocks, inference, and scope together.
+
+    Search limits (Max target seqs, Member hits per protein) sit below the
+    result filters, so they are outside this frame.
+    """
 
     losat_mode = settings.get_by_role("group", name="LOSAT Mode", exact=True)
-    evidence_scope = settings.get_by_label("Collinear evidence scope", exact=True)
+    evidence_scope = settings.get_by_label("Collinear search between", exact=True)
     settings_pane = _center_span_in_scroll_pane(
         losat_mode, evidence_scope, include_first_heading=True
     )
@@ -612,14 +613,6 @@ def _frame_collinear_settings(settings: Any) -> None:
             settings.get_by_role("combobox", name="LOSATP mode", exact=True),
         ),
         (
-            "Max target seqs",
-            settings.get_by_label("LOSATP Max target seqs", exact=True),
-        ),
-        (
-            "Member hits per protein",
-            settings.get_by_label("Member hits per protein", exact=True),
-        ),
-        (
             "orthogroup inference",
             settings.get_by_role(
                 "checkbox",
@@ -627,7 +620,7 @@ def _frame_collinear_settings(settings: Any) -> None:
                 exact=True,
             ),
         ),
-        ("Evidence scope", evidence_scope),
+        ("Search between", evidence_scope),
     ):
         _assert_box_unclipped(
             name, _require_bounding_box(locator, name), settings_pane
@@ -920,7 +913,9 @@ def _move_popup_opposite_match(page: Page, popup: Any, first_match: Any) -> None
         if match_center_x < VIEWPORT_WIDTH / 2
         else POPUP_MARGIN_PX
     )
-    target_y = POPUP_MARGIN_PX
+    # A popup stays below the app header, so its top corner is the header's bottom edge plus the popup margin.
+    header_box = _require_bounding_box(page.get_by_role("banner").first, "app header")
+    target_y = header_box["y"] + header_box["height"] + POPUP_MARGIN_PX
 
     drag_x = popup_box["x"] + 24
     drag_y = popup_box["y"] + 24

@@ -14,20 +14,23 @@ from svgwrite import Drawing
 
 from gbdraw.api import LinearMultiRecordOptions, LinearRecordTranslation, save_figure_to
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
+from gbdraw.api.requests import RecordPresentation
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
-from gbdraw.core import text as text_module
+from gbdraw.core import fonts as fonts_module
 from gbdraw.diagrams.linear import precalc as linear_precalc
 from gbdraw.diagrams.linear import assemble as linear_assemble
 from gbdraw.diagrams.linear.builders import add_record_definition_group
-from gbdraw.render.groups.linear import DefinitionGroup
+from gbdraw.render.groups.linear import DefinitionGroup, LinearDefinitionStyle
 
 
-def _record(label: str = "Record A", record_id: str = "record_a") -> SeqRecord:
-    record = SeqRecord(Seq("A" * 100), id=record_id)
-    record.annotations["gbdraw_record_label"] = label
-    return record
+def _record(record_id: str = "record_a") -> SeqRecord:
+    return SeqRecord(Seq("A" * 100), id=record_id)
+
+
+def _label(label: str = "Record A") -> RecordPresentation:
+    return RecordPresentation(label=label)
 
 
 def _canvas_config(
@@ -75,11 +78,17 @@ def _definition_text_anchors(canvas: Drawing) -> set[str]:
     }
 
 
-def _definition_width(record: SeqRecord, config_dict: dict, canvas_config: SimpleNamespace) -> float:
+def _definition_width(
+    record: SeqRecord,
+    config_dict: dict,
+    canvas_config: SimpleNamespace,
+    presentation: RecordPresentation,
+) -> float:
     return DefinitionGroup(
         record,
-        canvas_config,
-        cfg=GbdrawConfig.from_dict(config_dict),
+        (canvas_config).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
+        record_presentation=presentation,
     ).definition_bounding_box_width
 
 
@@ -154,7 +163,7 @@ def _linear_definition_canvas(
     definition_gap: float = 20,
     output_prefix: str = "linear_definition_gap",
 ) -> Drawing:
-    record = _record(label, record_id="record_a")
+    record = _record()
     cfg = GbdrawConfig.from_dict(
         _definition_only_config(
             font_weight=font_weight,
@@ -165,6 +174,7 @@ def _linear_definition_canvas(
         [record],
         cfg=cfg,
         selected_features_set=[],
+        _record_presentations=[_label(label)],
         output_prefix=output_prefix,
         legend="none",
     )
@@ -179,17 +189,21 @@ def test_linear_definition_group_follows_record_offset_by_default() -> None:
         canvas_a,
         _record(),
         record_offset_y=10,
+        record_presentation=_label(),
         record_offset_x=0,
         canvas_config=_canvas_config(keep_definition_left_aligned=False),
         max_def_width=0,
+        record_key="record-0",
     )
     add_record_definition_group(
         canvas_b,
         _record(),
         record_offset_y=10,
+        record_presentation=_label(),
         record_offset_x=30,
         canvas_config=_canvas_config(keep_definition_left_aligned=False),
         max_def_width=0,
+        record_key="record-0",
     )
 
     assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) + 30)
@@ -201,15 +215,15 @@ def _definition_row_canvas(
     translations: tuple[float, ...] | None = None,
 ) -> Drawing:
     records = []
+    presentations = []
     positions = []
     for row, count in enumerate(row_sizes):
         for _ in range(count):
-            record = _record(
-                "Aeromonas hydrophila" if row == 0 else "Aeromonas sp.",
-                f"record_{len(records)}",
-            )
-            if subtitles:
-                record.annotations["gbdraw_record_subtitle"] = "A1" if row == 0 else "B"
+            record = _record(f"record_{len(records)}")
+            presentations.append(RecordPresentation(
+                label="Aeromonas hydrophila" if row == 0 else "Aeromonas sp.",
+                subtitle=("A1" if row == 0 else "B") if subtitles else None,
+            ))
             # Unequal row lengths make centered sequence alignment move one row.
             record.seq = Seq("ATGC" * (250 if row == 0 else 150))
             record.features = [SeqFeature(
@@ -227,6 +241,7 @@ def _definition_row_canvas(
     )
     return assemble_linear_diagram_from_records(
         records, cfg=GbdrawConfig.from_dict(config), selected_features_set=[],
+        _record_presentations=presentations,
         layout=LinearMultiRecordOptions(
             multi_record_positions=tuple(positions),
             record_translations=tuple(
@@ -403,11 +418,13 @@ def test_browser_definition_column_matches_collision_bounds(
 def test_linear_definition_group_can_stay_in_left_column() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     canvas_config = _canvas_config(keep_definition_left_aligned=True)
-    short_record = _record("Short")
-    long_record = _record("A much longer definition label", "record_a")
+    short_record = _record()
+    long_record = _record()
+    short_label = _label("Short")
+    long_label = _label("A much longer definition label")
     max_def_width = max(
-        _definition_width(short_record, config_dict, canvas_config),
-        _definition_width(long_record, config_dict, canvas_config),
+        _definition_width(short_record, config_dict, canvas_config, short_label),
+        _definition_width(long_record, config_dict, canvas_config, long_label),
     )
     canvas_a = Drawing()
     canvas_b = Drawing()
@@ -415,18 +432,22 @@ def test_linear_definition_group_can_stay_in_left_column() -> None:
     add_record_definition_group(
         canvas_a,
         short_record,
+        record_presentation=short_label,
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=canvas_config,
         max_def_width=max_def_width,
+        record_key="record-0",
     )
     add_record_definition_group(
         canvas_b,
         long_record,
+        record_presentation=long_label,
         record_offset_y=10,
         record_offset_x=45,
         canvas_config=canvas_config,
         max_def_width=max_def_width,
+        record_key="record-0",
     )
 
     assert _definition_translate_x(canvas_a) == pytest.approx(_definition_translate_x(canvas_b))
@@ -456,15 +477,17 @@ def test_locked_linear_definition_column_uses_rendered_svg_text_width(
         rendered_svg_bbox,
     )
 
-    definition_width = _definition_width(_record("Wide Label"), config_dict, canvas_config)
+    definition_width = _definition_width(_record(), config_dict, canvas_config, _label("Wide Label"))
     canvas = Drawing()
     add_record_definition_group(
         canvas,
-        _record("Wide Label"),
+        _record(),
+        record_presentation=_label("Wide Label"),
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=canvas_config,
         max_def_width=definition_width,
+        record_key="record-0",
     )
 
     definition_x = _definition_translate_x(canvas)
@@ -493,15 +516,17 @@ def test_locked_linear_definition_column_uses_configured_definition_gap(
         lambda *_args, **_kwargs: (64.0, 12.0),
     )
 
-    definition_width = _definition_width(_record("Wide Label"), config_dict, canvas_config)
+    definition_width = _definition_width(_record(), config_dict, canvas_config, _label("Wide Label"))
     canvas = Drawing()
     add_record_definition_group(
         canvas,
-        _record("Wide Label"),
+        _record(),
+        record_presentation=_label("Wide Label"),
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=canvas_config,
         max_def_width=definition_width,
+        record_key="record-0",
     )
 
     definition_x = _definition_translate_x(canvas)
@@ -516,25 +541,29 @@ def test_locked_linear_definition_column_follows_global_horizontal_shift() -> No
     record = _record()
     base_config = _canvas_config(keep_definition_left_aligned=True, horizontal_offset=120)
     shifted_config = _canvas_config(keep_definition_left_aligned=True, horizontal_offset=150)
-    definition_width = _definition_width(record, config_dict, base_config)
+    definition_width = _definition_width(record, config_dict, base_config, _label())
     canvas_a = Drawing()
     canvas_b = Drawing()
 
     add_record_definition_group(
         canvas_a,
         record,
+        record_presentation=_label(),
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=base_config,
         max_def_width=definition_width,
+        record_key="record-0",
     )
     add_record_definition_group(
         canvas_b,
         record,
+        record_presentation=_label(),
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=shifted_config,
         max_def_width=definition_width,
+        record_key="record-0",
     )
 
     assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) + 30)
@@ -546,18 +575,21 @@ def test_locked_linear_definition_column_follows_global_horizontal_shift() -> No
 def test_locked_linear_definition_column_gap_uses_records_column_left() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     canvas_config = _canvas_config(keep_definition_left_aligned=True, horizontal_offset=120)
-    record = _record("A much longer definition label")
-    definition_width = _definition_width(record, config_dict, canvas_config)
+    record = _record()
+    long_label = _label("A much longer definition label")
+    definition_width = _definition_width(record, config_dict, canvas_config, long_label)
     leftmost_record_offset_x = -10.0
     canvas = Drawing()
 
     add_record_definition_group(
         canvas,
         record,
+        record_presentation=long_label,
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=canvas_config,
         max_def_width=definition_width - leftmost_record_offset_x,
+        record_key="record-0",
     )
 
     records_column_left = canvas_config.horizontal_offset + leftmost_record_offset_x
@@ -567,7 +599,7 @@ def test_locked_linear_definition_column_gap_uses_records_column_left() -> None:
 
 @pytest.mark.linear
 def test_precalculated_max_definition_width_is_ceiled(monkeypatch: pytest.MonkeyPatch) -> None:
-    records = [_record("A", "record_a"), _record("B", "record_b")]
+    records = [_record("record_a"), _record("record_b")]
     widths = {"record_a": 12.01, "record_b": 7.5}
 
     class FakeDefinitionGroup:
@@ -582,6 +614,7 @@ def test_precalculated_max_definition_width_is_ceiled(monkeypatch: pytest.Monkey
         records,
         canvas_config,
         cfg=canvas_config.profile.config,
+        record_presentations=[_label("A"), _label("B")],
     )
 
     assert max_width == 13
@@ -615,7 +648,8 @@ def test_linear_definition_band_matches_resolved_feature_center(
     track_layout: str,
     direction: int,
 ) -> None:
-    record = _record("Definition follows resolved feature lane")
+    record = _record()
+    presentation = _label("Definition follows resolved feature lane")
     record.annotations["molecule_type"] = "DNA"
     record.features = [
         SeqFeature(FeatureLocation(20, 80, strand=1), type="CDS")
@@ -631,14 +665,16 @@ def test_linear_definition_band_matches_resolved_feature_center(
     )
     definition_height = DefinitionGroup(
         record,
-        canvas_config,
-        cfg=cfg,
+        (canvas_config).length_param,
+        style=LinearDefinitionStyle.of(cfg),
+        record_presentation=presentation,
     ).definition_bounding_box_height
 
     drawing = assemble_linear_diagram_from_records(
         [record],
         cfg=cfg,
         selected_features_set=["CDS"],
+        _record_presentations=[presentation],
         legend="none",
     )
     elements = {
@@ -674,9 +710,9 @@ def test_linear_definition_band_matches_resolved_feature_center(
 def test_liberation_sans_bundled_fonts_preferred_over_system_fontconfig(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    text_module._font_path_cache.clear()
+    fonts_module.resolve_font_face.cache_clear()
     monkeypatch.setattr(
-        text_module.subprocess,
+        fonts_module.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("fc-match should not be used for bundled Liberation Sans"),
     )
@@ -688,15 +724,14 @@ def test_liberation_sans_bundled_fonts_preferred_over_system_fontconfig(
         ("bold", "italic", "LiberationSans-BoldItalic.ttf"),
     ]
     for font_weight, font_style, expected_name in cases:
-        font_path = text_module._resolve_font_path(
+        face = fonts_module.resolve_font_face(
             "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
-            allow_system=True,
-            font_weight=font_weight,
-            font_style=font_style,
+            font_weight,
+            font_style,
         )
 
-        assert font_path is not None
-        assert Path(font_path).name == expected_name
+        assert face is not None
+        assert Path(face.path).name == expected_name
 
 
 @pytest.mark.linear
@@ -721,12 +756,13 @@ def test_definition_plain_lines_use_definition_font_weight(
     )
 
     DefinitionGroup(
-        _record("", "record_a"),
-        _canvas_config(
+        _record(),
+        (_canvas_config(
             keep_definition_left_aligned=True,
             config_dict=config_dict,
-        ),
-        cfg=GbdrawConfig.from_dict(config_dict),
+        )).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
+        record_presentation=_label(""),
     )
 
     assert ("record_a", "bold", "normal") in calls
@@ -759,12 +795,13 @@ def test_definition_mixed_content_width_sums_style_aware_parts(
     )
 
     definition_group = DefinitionGroup(
-        _record("Alpha <i>Beta</i> Gamma"),
-        _canvas_config(
+        _record(),
+        (_canvas_config(
             keep_definition_left_aligned=True,
             config_dict=config_dict,
-        ),
-        cfg=GbdrawConfig.from_dict(config_dict),
+        )).length_param,
+        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
+        record_presentation=_label("Alpha <i>Beta</i> Gamma"),
     )
 
     assert definition_group.definition_bounding_box_width == pytest.approx(62.0)

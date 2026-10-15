@@ -1,18 +1,26 @@
 // @ts-check
-/**
- * @import { AnnotationRecordCatalog } from './record-catalog.js'
- */
 import {
   annotationRecordSelectorValue,
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.js';
 
+/**
+ * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './record-catalog.js'
+ * @import { AnnotationItem, AnnotationRecordSelector, AnnotationSet } from '../../services/annotation-state.js'
+ */
+
+/** @param {unknown} value */
 const cleanText = (value) => String(value ?? '').trim();
 
+/** @param {AnnotationItem | null | undefined} annotation */
 const bindingFor = (annotation) => cleanText(annotation?.metadata?.[ANNOTATION_RECORD_BINDING_KEY]);
 export const annotationRecordBinding = bindingFor;
 
+/**
+ * @param {AnnotationItem | null | undefined} annotation
+ * @returns {{ selector: AnnotationRecordSelector | null, error: string }}
+ */
 const selectorFromTarget = (annotation) => {
   const raw = annotation?.target?.record;
   if (raw == null) return { selector: null, error: '' };
@@ -33,6 +41,10 @@ const selectorFromTarget = (annotation) => {
 };
 export const annotationRecordSelectorFromTarget = selectorFromTarget;
 
+/**
+ * @param {AnnotationCatalogRecord[]} records
+ * @param {AnnotationRecordSelector | null} selector
+ */
 const recordForSelector = (records, selector) => {
   if (!selector) return null;
   if (selector.kind === 'recordIndex') return records[selector.index] || null;
@@ -40,6 +52,10 @@ const recordForSelector = (records, selector) => {
   return matches.length === 1 ? matches[0] : null;
 };
 
+/**
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ * @param {AnnotationItem | null | undefined} annotation
+ */
 const resolvedRecord = (catalog, annotation) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   const binding = bindingFor(annotation);
@@ -49,6 +65,10 @@ const resolvedRecord = (catalog, annotation) => {
 };
 export const resolveAnnotationRecord = resolvedRecord;
 
+/**
+ * @param {AnnotationItem | null | undefined} annotation
+ * @param {string} key
+ */
 const setBinding = (annotation, key) => {
   if (!annotation || typeof annotation !== 'object') return;
   if (!annotation.metadata || typeof annotation.metadata !== 'object' || Array.isArray(annotation.metadata)) {
@@ -58,6 +78,10 @@ const setBinding = (annotation, key) => {
   else delete annotation.metadata[ANNOTATION_RECORD_BINDING_KEY];
 };
 
+/**
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ * @param {AnnotationItem | null | undefined} annotation
+ */
 export const annotationRecordValue = (catalog, annotation) => {
   const binding = bindingFor(annotation);
   if (binding) return binding;
@@ -67,6 +91,11 @@ export const annotationRecordValue = (catalog, annotation) => {
   return saved ? `saved:${saved}` : '';
 };
 
+/**
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ * @param {AnnotationItem | null | undefined} annotation
+ * @param {unknown} value
+ */
 export const setAnnotationRecordValue = (catalog, annotation, value) => {
   if (!annotation?.target) return;
   const key = cleanText(value);
@@ -82,10 +111,14 @@ export const setAnnotationRecordValue = (catalog, annotation, value) => {
   setBinding(annotation, record.key);
 };
 
+/**
+ * @param {readonly AnnotationSet[] | null | undefined} sets
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ */
 export const reconcileAnnotationRecordBindings = (sets, catalog) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   (Array.isArray(sets) ? sets : []).forEach((set) => {
-    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((annotation) => {
+    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((/** @type {AnnotationItem} */ annotation) => {
       if (!annotation?.target || annotation.target.kind === 'featureIdentity') return;
       const binding = bindingFor(annotation);
       const record = binding
@@ -98,6 +131,12 @@ export const reconcileAnnotationRecordBindings = (sets, catalog) => {
   });
 };
 
+// The select shows only for a ready catalog (`showsSelect`), so its options
+// need no wording for a catalog that is not ready.
+/**
+ * @param {AnnotationRecordCatalog | null | undefined} catalog
+ * @param {AnnotationItem | null | undefined} annotation
+ */
 export const annotationRecordOptions = (catalog, annotation) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   const currentValue = annotationRecordValue(catalog, annotation);
@@ -109,19 +148,19 @@ export const annotationRecordOptions = (catalog, annotation) => {
   const selectedIsMissing = Boolean(currentValue) && !options.some((option) => option.value === currentValue);
   const savedSelector = annotationRecordSelectorValue(annotation?.target?.record) || 'saved target';
   return [
-    {
-      value: '',
-      label: catalog?.status !== 'ready'
-        ? 'Record list unavailable'
-        : (records.length > 1 ? 'Select target record' : 'Automatic (single record)'),
-      synthetic: false
-    },
+    { value: '', label: records.length > 1 ? 'Select target record' : 'Automatic (single record)', synthetic: false },
     ...(selectedIsMissing
       ? [{ value: currentValue, label: `${savedSelector} (target record unavailable)`, synthetic: true }]
       : []),
     ...options
   ];
 };
+
+// OV-373: a loaded Session reads no record bytes, so a catalog can wait for
+// discovery; a record an annotation names is then not inspected, not unavailable.
+/** @param {AnnotationRecordCatalog} catalog */
+const discoveryPending = (catalog) => (Array.isArray(catalog?.issues) ? catalog.issues : [])
+  .some((issue) => issue?.context?.reason === 'DISCOVERY_PENDING');
 
 /**
  * @typedef {object} AnnotationRecordSelectorOptions
@@ -135,6 +174,7 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
   const catalog = () => getCatalog?.() || {
     status: 'error', records: [], issues: [], requiresSelection: false
   };
+  /** @param {AnnotationItem | null | undefined} annotation */
   const isMissing = (annotation) => {
     const current = catalog();
     if (current.status !== 'ready') return false;
@@ -143,13 +183,40 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
     if (!parsed.selector) return Boolean(current.requiresSelection);
     return !resolvedRecord(current, annotation);
   };
+  // A single-record input needs no record select: the row names
+  // its record in a caption, and only several records or a missing target
+  // show the select.
+  /** @param {AnnotationItem} annotation */
+  const showsSelect = (annotation) => {
+    const current = catalog();
+    return current.status === 'ready' && (current.records.length > 1 || isMissing(annotation));
+  };
+  /** @param {AnnotationItem} annotation */
+  const captionFor = (annotation) => {
+    if (showsSelect(annotation)) return '';
+    const current = catalog();
+    const named = bindingFor(annotation) || annotation?.target?.record;
+    if (!named) return '';
+    const record = current.status === 'ready' ? resolvedRecord(current, annotation) : null;
+    const name = record?.recordId || annotationRecordSelectorValue(annotation?.target?.record);
+    if (!name) return '';
+    const unread = current.status !== 'ready' && !discoveryPending(current) ? ' (record list unavailable)' : '';
+    return `Record: ${name}${unread}`;
+  };
   return {
+    showsSelect,
+    captionFor,
+    /** @param {AnnotationItem | null | undefined} annotation */
     optionsFor: (annotation) => annotationRecordOptions(catalog(), annotation),
+    /** @param {AnnotationItem | null | undefined} annotation */
     valueFor: (annotation) => annotationRecordValue(catalog(), annotation),
+    /**
+     * @param {AnnotationItem | null | undefined} annotation
+     * @param {unknown} value
+     */
     setValue: (annotation, value) => setAnnotationRecordValue(catalog(), annotation, value),
     isRequired: () => Boolean(catalog().requiresSelection),
     isMissing,
-    isDisabled: () => catalog().status !== 'ready',
     missingMessage: () => 'Choose the record that this annotation targets.'
   };
 };

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from pandas import DataFrame
 from gbdraw.svg.elements import Group, Path
 
-from ....analysis.conservation import conservation_track_gradient_colors
+from ....analysis.conservation import ConservationTrack, conservation_track_gradient_colors
 from ....config.models import GbdrawConfig
 from ....render.drawers.circular.conservation import (
     ConservationDrawer,
@@ -20,12 +19,8 @@ class ConservationGroup:
     def __init__(
         self,
         *,
-        hits: DataFrame,
+        track: ConservationTrack,
         total_length: int,
-        track_label: str,
-        track_color: str | None,
-        source_index: int,
-        track_index: int,
         inner_radius_px: float,
         outer_radius_px: float,
         min_identity: float,
@@ -35,6 +30,10 @@ class ConservationGroup:
         record_transform: RecordDisplayTransform | None = None,
         record_index: int = 0,
     ) -> None:
+        track_label = track.track_label
+        track_color = track.track_color
+        source_index = track.source_index
+        track_index = track.track_index
         safe_label = _safe_id_fragment(track_label)
         resolved_group_id = group_id or stable_svg_id(
             "conservation_ring",
@@ -53,7 +52,7 @@ class ConservationGroup:
         self.group.attribs["data-track-label"] = str(track_label)
         if track_color:
             self.group.attribs["data-track-color"] = str(track_color)
-        self.hits = hits
+        self.hits = track.hits
         self.record_transform = record_transform
         self.record_index = record_index
         self.total_length = int(total_length)

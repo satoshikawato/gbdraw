@@ -6,6 +6,7 @@
 // removes the ID.
 const { test, expect } = require('@playwright/test');
 const {
+  answerChoicePrompt,
   expectNoSilentStateChange,
   generateAndWaitForResult,
   observeNonEditOperation,
@@ -74,7 +75,10 @@ const openCustomStack = async (page) => {
 
 const toggleHideGcContent = async (page) => {
   const hide = await reveal(page.getByRole('checkbox', { name: 'Hide GC Content', exact: true }));
-  await hide.check();
+  // The custom stack draws a GC content row, so the hide asks first.
+  await hide.click();
+  await answerChoicePrompt(page, 'Hide GC content?', 'hide');
+  await expect(hide).toBeChecked();
   await settle(page);
   await hide.uncheck();
   await settle(page);
@@ -247,8 +251,9 @@ const ROWS = [
       await openWithGenBank(page, HMMT, labelsOut);
       await generateAndWaitForResult(page);
       await editFirstCdsLabel(page, 'RESET_LABEL');
-      // openWithGenBank accepts the confirmation dialog.
+      // Reset Settings asks first; its reset action confirms.
       await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+      await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
       await settle(page);
     },
     operation: async (page) => {

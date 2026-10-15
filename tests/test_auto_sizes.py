@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from functools import reduce
+from operator import getitem
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -45,10 +47,16 @@ def _config_value(cfg: GbdrawConfig, path: str) -> object:
 
 @pytest.mark.parametrize(
     ("length", "expected"),
-    [(1, "short"), (49_999, "short"), (50_000, "long"), (13_000_000, "long")],
+    [(1, "short"), (99_999, "short"), (100_000, "long"), (13_000_000, "long")],
 )
 def test_size_class_threshold(length: int, expected: str) -> None:
-    assert determine_length_parameter(length, 50_000) == expected
+    assert determine_length_parameter(length, 100_000) == expected
+
+
+@pytest.mark.parametrize(("mode", "boundary"), [("circular", 75_000), ("linear", 100_000)])
+def test_packaged_size_class_boundary(cfg: GbdrawConfig, mode: DiagramMode, boundary: int) -> None:
+    assert DrawnExtent(mode, (boundary - 1,)).size_class(cfg) == "short"
+    assert DrawnExtent(mode, (boundary,)).size_class(cfg) == "long"
 
 
 @pytest.mark.parametrize(
@@ -164,14 +172,36 @@ def test_circular_track_width_per_renderer(renderer: str, factor_index: int, sca
     )
 
 
-def test_linear_label_font_takes_the_largest_size_over_the_records(cfg: GbdrawConfig) -> None:
-    assert linear_label_font_size([200_000], cfg) == 5.0
-    assert linear_label_font_size([200_000, 20_000], cfg) == 24.0
+@pytest.mark.parametrize(
+    ("scope_lengths", "size"),
+    [
+        ((200_000, 20_000), "long"),
+        ((20_000, 200_000), "long"),
+        ((20_000, 99_999), "short"),
+        ((200_000, 100_000), "long"),
+    ],
+)
+def test_linear_label_font_follows_the_longest_record_in_the_label_scope(
+    cfg: GbdrawConfig, scope_lengths: tuple[int, ...], size: str
+) -> None:
+    assert linear_label_font_size(scope_lengths, cfg) == getattr(cfg.labels.font_size.linear, size)
+
+
+def test_linear_label_font_of_a_scope_limited_to_the_short_record_stays_short(cfg: GbdrawConfig) -> None:
+    lengths = (20_000, 200_000)
+    profile = LinearRenderProfile(apply_config_overrides(cfg, {"labels.linear.scope": "first"}))
+    canvas = LinearCanvasConfigurator(
+        num_of_entries=len(lengths), longest_genome=max(lengths), profile=profile, legend="none"
+    )
+    assert canvas.length_param == "long"
+    assert _resolve_linear_diagram_label_font_size(
+        [_record(length) for length in lengths], canvas_config=canvas, profile=profile
+    ) == cfg.labels.font_size.linear.short
 
 
 def test_drawn_extent_size_class_follows_the_longest_record(cfg: GbdrawConfig) -> None:
-    assert DrawnExtent("linear", (49_999, 3_000)).size_class(cfg) == "short"
-    assert DrawnExtent("circular", (3_000, 50_000)).size_class(cfg) == "long"
+    assert DrawnExtent("linear", (99_999, 3_000)).size_class(cfg) == "short"
+    assert DrawnExtent("circular", (3_000, 75_000)).size_class(cfg) == "long"
 
 
 def test_drawn_extent_rejects_an_empty_or_unknown_extent() -> None:
@@ -208,7 +238,7 @@ def test_circular_auto_values_equal_render_time_resolution(cfg: GbdrawConfig, le
         "tuckin",
         CircularPresetContext(
             cfg=cfg,
-            canvas_config=canvas,
+            geometry=canvas.geometry(),
             total_length=length,
             strandedness=False,
             show_features=True,
@@ -216,6 +246,7 @@ def test_circular_auto_values_equal_render_time_resolution(cfg: GbdrawConfig, le
             show_depth=True,
             show_gc=True,
             show_skew=True,
+            track_ids=tuple(canvas.track_ids.items()),
         ),
     )
     widths = {slot.id: slot.width.value for slot in slots if slot.width is not None}
@@ -278,6 +309,7 @@ def test_mixed_circular_canvas_reports_the_harmonized_long_styles(cfg: GbdrawCon
         canvas = CircularCanvasConfigurator(output_prefix="t", profile=profile, legend="none", gb_record=_record(length))
         for path in (
             "labels.font_size",
+            "labels.stroke_width",
             "objects.axis.circular.stroke_width",
             "objects.features.block_stroke_width",
             "objects.features.line_stroke_width",
@@ -287,7 +319,7 @@ def test_mixed_circular_canvas_reports_the_harmonized_long_styles(cfg: GbdrawCon
             "tuckin",
             CircularPresetContext(
                 cfg=harmonized,
-                canvas_config=canvas,
+                geometry=canvas.geometry(),
                 total_length=length,
                 strandedness=False,
                 show_features=True,
@@ -295,11 +327,43 @@ def test_mixed_circular_canvas_reports_the_harmonized_long_styles(cfg: GbdrawCon
                 show_depth=True,
                 show_gc=True,
                 show_skew=True,
+                track_ids=tuple(canvas.track_ids.items()),
             ),
         )
         for slot in slots:
             assert slot.width is not None
             assert values[f"circularSlot.{slot.id}.width"] == slot.width.value, (length, slot.id)
+
+
+def _short_long_paths(node: object, path: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+    if not isinstance(node, dict):
+        return []
+    found = [path] if {"short", "long"} <= node.keys() else []
+    return found + [hit for key, value in node.items() for hit in _short_long_paths(value, (*path, key))]
+
+
+@pytest.mark.parametrize("lengths", [(306_008, 50_466), (30_000, 200_000)])
+def test_mixed_circular_canvas_gives_every_record_the_long_class(cfg: GbdrawConfig, lengths: tuple[int, ...]) -> None:
+    """OV-492: the canvas config resolves the long value of every short/long node for every record.
+
+    This checks the config, not its readers; the render check of the readers is
+    test_multi_record_canvas_draws_a_short_record_beside_a_long_one_as_long.
+    """
+    canvas_cfg = diagram_api._harmonize_multi_record_circular_style_cfg(cfg, record_lengths=lengths)
+    packaged, resolved = asdict(cfg), asdict(canvas_cfg)
+    paths = _short_long_paths(packaged)
+    assert ("labels", "radius_factor", "tuckin", "single") in paths
+    assert ("canvas", "circular", "track_dict") in paths
+    for length in lengths:
+        size = determine_length_parameter(length, int(canvas_cfg.labels.length_threshold.circular))
+        assert size == DrawnExtent("circular", lengths).size_class(cfg)
+        for path in paths:
+            assert reduce(getitem, path, resolved)[size] == reduce(getitem, path, packaged)["long"], (length, path)
+
+
+@pytest.mark.parametrize("lengths", [(30_000,), (30_000, 60_000), (200_000, 80_000), (200_000,)])
+def test_circular_canvas_of_one_size_class_keeps_its_config(cfg: GbdrawConfig, lengths: tuple[int, ...]) -> None:
+    assert diagram_api._harmonize_multi_record_circular_style_cfg(cfg, record_lengths=lengths) is cfg
 
 
 def test_dependent_tick_fonts_follow_a_given_track_thickness(cfg: GbdrawConfig) -> None:

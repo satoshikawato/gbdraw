@@ -12,7 +12,7 @@ import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/service
 import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
 const source = {};
 const records = [
@@ -105,7 +105,20 @@ test('record display drafts use one exact transform and provenance contract', ()
     { ...draft, scope: 'linear' },
     { ...draft, reverseComplementOverride: 'true' },
     { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } }
-  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]));
+  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]), JSON.stringify(invalid));
+  // OV-575: a row's selector is text, as gbdraw/session_io.py:853-857 requires.
+  const refusedDraft = /^Error: Invalid record display draft; only source-bound requested intent is supported\.$/;
+  for (const selector of [['#1'], 1]) assert.throws(
+    () => validateRecordDisplayDrafts([{ ...draft, selector }]), refusedDraft, JSON.stringify(selector)
+  );
+  // A row of a Session Python does not check (Session 40) keeps the verdict it
+  // had: only the match of the selector against `#N` (OV-634 for the number).
+  const uncheckedRows = [{ scope: 'linear', ...draft, selector: ['#1'] }];
+  assert.equal(validateRecordDisplayDrafts(uncheckedRows, { scoped: true, textSelector: false }), uncheckedRows);
+  assert.throws(
+    () => validateRecordDisplayDrafts([{ ...draft, selector: 1 }], { textSelector: false }),
+    /^Error: Record display requires a source UID and exact record selector\.$/
+  );
 });
 
 test('complete orientation override has one owner while cropped reverse stays region-owned', () => {
@@ -174,6 +187,11 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
   const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
   return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
+    // The committed request with every record naming one saved resource id.
+    recommitSources: (resourceId) => {
+      committed = { ...committed, renderRequest: { ...committed.renderRequest,
+        records: committed.renderRequest.records.map((record) => ({ ...record, source: { kind: 'genbank', resourceId } })) } };
+    },
     commitCombined: async () => {
       const bytes = await readFileBytes(file);
       const combined = { ...descriptor(file.name, ''), size: bytes.byteLength,
@@ -381,6 +399,30 @@ test('isCurrentFeature is a pure check of the committed record, its bound source
   assert.equal(current('seq-b:1', { matchesSavedSource: (file, resourceId) => resourceId !== 'b-fasta' }), false);
 });
 
+// A feature row of a Session before 40 is stored unchecked: it can lack `record_key` or hold a value that is
+// not text. Such a key names no committed record, also when the request draws a source whole.
+test('a feature whose record key is not text is not current, with a source drawn whole (OV-618)', () => {
+  const file = {};
+  const request = { mode: 'linear', records: [
+    { recordKey: 'card', cardinality: 'all', source: { kind: 'genbank', resourceId: 'a' }, selector: null }
+  ] };
+  const sources = [{ scope: 'linear', sourceUid: 'card', source: file, paired: null }];
+  const binding = { request, sources, boundSources: sources.map((entry) => ({ ...entry })), matchesSavedSource: () => true };
+  assert.equal(isCurrentFeature({ record_key: 'card:1' }, binding), true);
+  for (const feature of [{}, { record_key: null }, { recordKey: 'card:1' }, { record_key: 5 }, { record_key: ['card:1'] },
+    { record_key: new String('card:1') }]) {
+    assert.equal(isCurrentFeature(feature, binding), false, JSON.stringify(feature));
+  }
+  // The placement control reads a feature's identity from either spelling; the check reads `record_key`.
+  const state = { mode: { value: 'linear' }, form: createDefaultForm(), adv: createDefaultAdv('linear'),
+    featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['card:1'] }] } } };
+  const actions = createFeaturePlacementActions({ state: withDrawings(state), runUndoable: (_label, fn) => fn(),
+    getCommittedRequest: () => request, isCurrentFeature: (feature) => isCurrentFeature(feature, binding) });
+  const enabled = (feature) => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value);
+  assert.ok(enabled({ record_key: 'card:1', biological_feature_id: 'gene' }).includes('auto'));
+  assert.deepEqual(enabled({ recordKey: 'card:1', biologicalFeatureId: 'gene' }), []);
+});
+
 test('the record display binding is refreshed for the committed request before the check reads it', async () => {
   const model = compositeControls();
   const before = model.controls.sourceBinding();
@@ -394,6 +436,22 @@ test('the record display binding is refreshed for the committed request before t
   assert.notEqual(after.request, before.request);
   assert.equal(after.boundSources[0].source, model.state.files.c_gb);
   assert.equal(isCurrentFeature(model.feature, after), true);
+});
+
+// OV-557: a resource id is Session data. A record that names an id the Session
+// does not hold has no saved source, also when the id names an inherited member.
+test('a record that names a missing resource id matches no saved source', () => {
+  const model = compositeControls();
+  const { matchesSavedSource } = model.controls.sourceBinding();
+  // The combined view of two resources is no saved resource by itself.
+  for (const missing of ['missing', 'constructor', 'toString', '__proto__', undefined]) {
+    assert.equal(matchesSavedSource(model.file, missing), false, String(missing));
+  }
+  assert.equal(isCurrentFeature(model.feature, model.controls.sourceBinding()), true);
+  model.recommitSources('constructor');
+  assert.equal(isCurrentFeature(model.feature, model.controls.sourceBinding()), false,
+    'the feature of a record whose saved source is missing is not current');
+  assert.deepEqual(model.enabled(), []);
 });
 
 test('unsupported draft lanes remain unavailable independently of current placement value', () => {
@@ -425,6 +483,32 @@ test('alignment intent changes only its target direction and preserves pending d
   assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:false},model.state.recordDisplayDrafts[0]),false);
   model.controls.restoreAlignmentOrientationIntent(checkpoint);
   assert.deepEqual(model.state.recordDisplayDrafts,pending);
+});
+
+// OV-579: each mode has its own drawing, and a draft names no mode. The
+// alignment checkpoint is of the Linear drawing's drafts.
+test('an alignment checkpoint restores the Linear drafts and leaves the Circular drawing as it is', () => {
+  const model = compositeControls({ linear: true });
+  const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), featurePlacementOverrides: {},
+    // Not yet on its record's row (OV-278): only an edit of the Circular drawing moves it.
+    recordDisplayDrafts: [{ sourceUid: 'circular', selector: '#1', recordId: 'second', topologyOverride: null,
+      startCoordinate: 7, reverseComplementOverride: null, anchorIntent: null }] };
+  withModeDrawings(model.state, { circular, linear: model.state });
+  const circularBefore = structuredClone(circular.recordDisplayDrafts);
+  const rows = model.controls.allRows.value.filter((row) => row.scope === 'linear');
+  model.controls.setStart(rows[0], 25);
+  // A row override, as a card that drew several records wrote it.
+  model.state.recordDisplayDrafts[0].reverseComplementOverride = true;
+  const pending = structuredClone(model.state.recordDisplayDrafts);
+  const directions = [{ recordKey: 'record-1', reverseComplement: true }];
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(directions);
+  model.controls.commitAlignmentOrientations(directions);
+  assert.equal(model.state.linearSeqs[0].region_reverse, true);
+  assert.equal(model.state.recordDisplayDrafts[0].reverseComplementOverride, null);
+  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  assert.equal(model.state.linearSeqs[0].region_reverse, false);
+  assert.deepEqual({ linear: model.state.recordDisplayDrafts, circular: circular.recordDisplayDrafts },
+    { linear: pending, circular: circularBefore });
 });
 
 
@@ -482,4 +566,35 @@ test('a loaded draft selected by record ID is read and edited on its own record 
   model.controls.setStart(second, 12);
   assert.deepEqual(model.state.recordDisplayDrafts.map(({ selector, recordId, startCoordinate }) => [selector, recordId, startCoordinate]),
     [['#1', 'first', 7], ['#2', 'second', 12]]);
+});
+
+// OV-579, review U1: a draft that names its record by ID and is not yet on its row (as a Load projects a
+// request that selects by record ID, OV-278) is settled before the checkpoint looks for it.
+test('an alignment checkpoint holds a draft that its own capture moves onto its row (OV-579)', () => {
+  const resources = { both: descriptor('both.gb', 'LOCUS       first 100 bp DNA circular\n//\nLOCUS       second 100 bp DNA circular\n//\n') };
+  const table = adoptCurrentSessionResources(resources);
+  const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
+    source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' } }] } };
+  const state = { mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null },
+    linearSeqs: [{ uid: 'record-1', gb: createSessionResourceFileView(table, 'both'), region_record_id: 'second', region_reverse: false }],
+    form: createDefaultForm(), adv: createDefaultAdv('linear'),
+    recordDisplayDrafts: [{ sourceUid: 'record-1', selector: '#1', recordId: 'second', topologyOverride: null,
+      startCoordinate: 25, reverseComplementOverride: true, anchorIntent: null }],
+    featurePlacementOverrides: {}, circularRecordList: { value: [] },
+    circularRecordDiscovery: { status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null },
+    featureCatalog: { value: { items: [] } } };
+  const controls = createRecordDisplayControls({ state: withDrawings(state), computed: (fn) => ({ get value() { return fn(); } }),
+    watch: () => {}, linearRecordsFor: () => [
+      { selector: '#1', recordId: 'first', recordLength: 100, detectedTopology: 'circular' },
+      { selector: '#2', recordId: 'second', recordLength: 100, detectedTopology: 'circular' }],
+    linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '',
+    runUndoable: (_label, fn) => fn(), getCommittedRequest: () => committed.renderRequest, getCommittedSession: () => committed });
+  const directions = [{ recordKey: 'record-1', reverseComplement: true }];
+  const checkpoint = controls.captureAlignmentOrientationIntent(directions);
+  assert.equal(state.recordDisplayDrafts[0].selector, '#2', 'the capture settled the draft onto its row');
+  controls.commitAlignmentOrientations(directions);
+  assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, null);
+  controls.restoreAlignmentOrientationIntent(checkpoint);
+  assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, true, 'the row override comes back');
+  assert.equal(state.linearSeqs[0].region_reverse, false);
 });

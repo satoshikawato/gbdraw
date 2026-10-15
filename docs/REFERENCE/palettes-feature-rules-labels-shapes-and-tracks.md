@@ -161,11 +161,38 @@ restores it. Other feature types use `other <feature type>s` for the same remain
 a **This feature only** color edit creates a specific rule: the default caption
 changes because its category now contains only the remaining members.
 
-A used specific rule whose caption equals a generated legend row (a feature
-type, an `other <feature type>s` row, or a GC content, skew, or depth row)
-keeps its color. The generated row keeps its name and the rule row gets the
-lowercase hex suffix, for example `rRNA [#ff0000]`. A rule with the same color
-as the generated row shares that row.
+Legend rows that have one name follow one rule in the CLI, the Python API, and
+the Web app:
+
+- Rows with the same name and the same swatch (fill and line) are one legend
+  row.
+- When two or more rows with the same name and different swatches are drawn,
+  every one of them is numbered in legend order, for example `Packaging (1)`
+  and `Packaging (2)`. A name drawn once has no number.
+
+The rule covers every row: specific rules that give one caption several
+colors, a used specific rule whose caption equals a generated row (a feature
+type such as `tRNA`, an `other <feature type>s` row, or a track row), and
+track and region-annotation rows with one `legend_label`. Two depth tracks
+labelled `Coverage` draw one row when their colors are equal, and
+`Coverage (1)` and `Coverage (2)` when they differ. Release 0.13.0 drew
+`Coverage` and `Coverage (2)` in both cases. Two GC content tracks always have
+the palette's GC content color, so they draw one `GC content` row.
+
+The numbers belong to the drawn legend only. They follow the legend order, so
+they change when a row is added, removed, or moved, and a name left with one
+row loses its number. gbdraw does not rewrite a rule's caption: the color
+table, the Web app's rule list and popup, the downloaded color-table TSV, and
+a saved Session keep it as written, and no legend name carries a color ID.
+One compatibility reading applies when a color table file or a saved Session
+is read: a caption that ends in its own rule's color ID, such as
+`Packaging [#ffe700]` on a rule colored `#ffe700`, loses that ID, also when
+you typed that name yourself. The ID is the form older builds saved: a space,
+then the rule's color as lower-case `#rrggbb` (or `none`) in square brackets.
+Another spelling of the color (`[#FFE700]`, a color name), the ID of another
+color, and a caption that is only the ID stay as written. A caption typed in
+the Web app is drawn as typed until its Session is saved and loaded, and a
+color table passed to the Python API as a `DataFrame` is used as written.
 
 Whitelist and blacklist label filters are mutually exclusive. An ordinary
 label override cannot restore a label removed by the active filter. Exact-match
@@ -226,6 +253,109 @@ position, feature shape, stroke, or another redundant cue.
 The schemas for default-color, specific-color, qualifier-priority,
 label-filter, label-override, and visibility tables are in [Input formats and
 TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
+
+## Labels that do not fit
+
+After a figure is laid out, gbdraw checks every drawn label: Circular outer,
+inner, and embedded labels in either placement, and Linear labels. Two
+horizontal Circular labels overlap when their boxes come within 1 px
+horizontally and 0.1 px vertically; radial, embedded, and Linear labels
+overlap when their text areas intersect. Two leader lines cross when they
+intersect; lines that only touch do not cross. A Circular label with a leader
+covers the definition text in the centre when its box overlaps a line of that
+text by more than 0.5 px in both directions.
+
+Before the check, gbdraw repairs small defects of horizontal Circular labels.
+When a record has 1 to 100 overlapping label pairs, crossing leader pairs, and
+labels over the definition text in total, counted over its outer, inner, and
+embedded labels, gbdraw moves outer and inner labels by up to 24 px, bends
+their leader lines by up to 12 px, and may move the point where a leader meets
+its label; embedded labels do not move. One move can shift up to 24 following
+labels of the same side, or a run of up to 12 neighbouring labels that reaches
+4 labels beyond the defects. Labels keep their side and order. The repaired
+layout is kept only if it leaves no defect; otherwise the record keeps its
+layout and the rules below apply. Records without a defect, and records with
+radial labels, are not changed.
+
+After a successful repair, the labels around the repaired defects make room:
+the labels of the defects and up to 12 neighbouring labels on each side of
+them, on the same side of the circle, may move within the same limits toward
+shorter, more radial leader lines, and labels next to a crowded run may move
+away from it along the circle. Each leader in the window meets its label at the
+point its direction of arrival selects. This step never adds a defect or a
+leader line through another label's text; if it would, the repaired layout is
+kept. It can enlarge the canvas by up to about 24 px and adds about 1 to 8 s to
+the drawing of a repaired map. Records the repair does not change are not
+affected.
+
+- If any labels overlap, or radial labels need more room than the circular
+  tracks leave, nothing is drawn. The command line prints `ERROR:` with the
+  message and exits with status 1. Python raises `LabelsDoNotFitError`, a
+  `GbdrawError`.
+- If leader lines cross or labels cover the definition text, but no labels
+  overlap, the figure is drawn as before. The command line prints the same
+  message after `WARNING:` and exits with status 0. Python warns with
+  `LabelLeadersCrossWarning`, a `UserWarning`.
+
+The message counts the overlapping label pairs, crossing leader pairs, and
+labels over the definition text of each record and side, and lists settings
+that make the labels fit. Each setting changes one thing and is checked by
+drawing the whole figure again. The rows depend on which labels do not fit:
+
+| Row | Change | Offered for |
+|---|---|---|
+| outward, both directions | `--outer_label_x_radius_offset` and `--outer_label_y_radius_offset` together, in steps of 0.025, up to 2 | outer labels |
+| outward, vertical only | `--outer_label_y_radius_offset`, in steps of 0.025, up to 2 | outer labels |
+| outward, horizontal only | `--outer_label_x_radius_offset`, in steps of 0.025, up to 2 | outer labels |
+| smaller font | `--label_font_size`, in steps of 0.5 pt, down to 6 pt | all labels |
+| tighter rows | `--circular_label_spacing`: 2.5, 2, 1.5, 1, 0.5, 0.25, or 0.1 px, below the current value | outer labels |
+| combination | the font reduced by half the smaller-font change (at least 0.5 pt), with the smallest Y offset that then fits | outer labels |
+| all labels outside | `--labels out` | records with inner labels, in either placement |
+| radial labels | `--label_placement radial` | inner and embedded labels |
+| separate overlapping features | `--resolve_overlaps` | labels drawn on features that are drawn on top of each other, Circular and Linear |
+
+Each row gives the mildest value that fits, or says that none fits within its
+limit. When nothing was drawn and a row has no value that fits, it gives the
+mildest value that leaves no overlapping labels, if there is one, and says how
+many leader pairs still cross or labels still cover the definition text. Such
+a row comes after the others; running again with it draws the figure with the
+warning. With several records, one value must fit every record. The outer-label
+rows do not move inner, embedded, or radial labels. For inner, embedded, or radial
+labels, the switches are tried first; the smaller font is then the first
+font size, going down from the current one, at which the whole figure fits, so
+a smaller size than the one offered may not fit.
+
+When the figure is drawn anyway, gbdraw searches for 5 seconds and names the
+rows it did not reach. When nothing is drawn, every outer-label row is
+searched; for inner, embedded, or radial labels the switches and then the font
+search share 30 seconds, and a setting is tried only if drawing the figure once
+more ends within that time. Linear labels get only the separate overlapping
+features row, because the Linear layout keeps its other labels apart.
+
+In the Web app, the rows appear in the **Labels do not fit** dialog. Generate
+searches no row of a figure drawn anyway; the dialog computes each row that
+Generate did not reach, one after another, for at most 30 seconds each. A row
+that finds no value in that time shows "No value found within 30 seconds."
+The next time the dialog opens, that row is searched again for up to 30
+seconds, continuing from where it stopped, so it can still find a value.
+While a row is being computed, Apply and Cancel first wait for it to finish,
+at most 30 seconds, and the dialog shows "Finishing the choice being
+computed…".
+
+With 50 or more outer labels, gbdraw packs the labels in rows with
+`--circular_label_spacing` between them. If those rows do not fit, the labels
+are packed 0.1 px apart, as in 0.13, so a map that fit in 0.13 still draws.
+
+In Python, `LabelsDoNotFitError.report` and `LabelLeadersCrossWarning.report`
+hold a `LabelFitReport`: the records that do not fit, by label kind
+(`circular_outer`, `circular_inner`, `circular_embedded`, or `linear`), with
+their label counts, font sizes, and counts, and `refused` for radial labels
+without room; and the rows. A row's `values` maps config paths to the values
+that fit, and its `status` is `found`, `found_with_notice` (the figure then
+draws with the warning; `remaining` holds what is left), `not_found`, or
+`not_computed`.
+`RequestRenderResult.label_fit_report` returns the report of a figure drawn
+anyway.
 
 ## Manual feature placement
 

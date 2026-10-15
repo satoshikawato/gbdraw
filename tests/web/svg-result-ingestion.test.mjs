@@ -30,7 +30,7 @@ import {
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
 import { LEGEND_ORDER_RECORD, stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
 import {
-  getLegendEntrySwatch as legendSwatch, legendRowTakesPlace, shownPythonLegendRow
+  getLegendEntrySwatch as legendSwatch, legendRowKeys, legendRowTakesPlace, shownPythonLegendRow
 } from '../../gbdraw/web/js/services/legend-svg.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
@@ -579,6 +579,153 @@ test('the mounted executor is idempotent', () => {
   assert.equal(serializeNode(mounted), once);
 });
 
+// PD-OI-042 scenario revision 2 (D-09): the executor names the rows the Legend
+// shows by the naming rule, from each row's name and the swatch it shows. A
+// row's key (`data-legend-key`, here `Shared [#112233]`) is never its text.
+test('the executor draws Legend names by the naming rule and never a row key', () => {
+  const texts = (root) => root.querySelectorAll('g[data-legend-key]')
+    .filter((row) => row.getAttribute('display') !== 'none').map((row) => row.querySelector('text').textContent);
+  const operations = (legend) => ({ ...createEmptySvgMutationPlan(1).operationsByResult[0], ...legend });
+  const rule = (color) => ({ caption: `Shared [${color}]`, name: 'Shared', color, xPos: null, yPos: null, ifAbsent: true });
+  const mounted = buildSvgRoot();
+  // One caption in two colors: two rows, numbered in legend order.
+  const two = operations({ legendAdds: [rule('#112233'), rule('#445566')] });
+  assert.deepEqual(reconcileMountedResult(mounted, two), { changed: true, legendChanged: true });
+  assert.deepEqual(texts(mounted), ['CDS', 'Shared (1)', 'Shared (2)']);
+  assert.deepEqual(mounted.querySelectorAll('g[data-legend-key]').map((row) => row.getAttribute('data-legend-name')), [null, 'Shared', 'Shared']);
+  assert.deepEqual(reconcileMountedResult(mounted, two), { changed: false, legendChanged: false }, 'named once');
+  // A rename onto the shared name joins the numbering; its own key stays its record.
+  const renamed = operations({ ...two, legendRenames: [{ from: 'CDS', to: 'Shared', allowMissing: false }] });
+  reconcileMountedResult(mounted, renamed);
+  assert.deepEqual(texts(mounted), ['Shared (1)', 'Shared (2)', 'Shared (3)']);
+  // A literal `Shared (1)` keeps its text, and the numbers of the two rows skip it.
+  reconcileMountedResult(mounted, operations({
+    ...two, legendRenames: [{ from: 'CDS', to: 'Shared (1)', allowMissing: false }]
+  }));
+  assert.deepEqual(texts(mounted), ['Shared (1)', 'Shared (2)', 'Shared (3)']);
+  // A name left with one row has no number again.
+  reconcileMountedResult(mounted, operations({
+    ...two, legendDeletes: [{ caption: 'Shared [#445566]', allowMissing: true, retire: true }]
+  }));
+  assert.deepEqual(texts(mounted), ['CDS', 'Shared']);
+});
+
+// The Legend tab, the popups, and the dialogs show a row by the name the
+// Legend draws for it, never by its key (PD-OI-042 scenario revision 2), and
+// typing a row's own name or drawn name into its name field is no rename.
+test('the Legend owner shows a row by its drawn name and reads which typed names are the row itself', async () => {
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const mounted = buildSvgRoot();
+  const rule = (color) => ({ caption: `Shared [${color}]`, name: 'Shared', color, xPos: null, yPos: null, ifAbsent: true });
+  const two = { ...createEmptySvgMutationPlan(1).operationsByResult[0], legendAdds: [rule('#112233'), rule('#445566')] };
+  const legendRowNames = { value: new Map() };
+  const owner = createLegendEntryActions({
+    state: {
+      results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
+      originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
+      activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
+    },
+    readShownLegendColor: (entry) => String(entry?.color || ''),
+    legendRowNames
+  });
+  reconcileMountedResult(mounted, two);
+  // A row the displayed Result does not hold (not read yet, deleted, or dormant)
+  // is named as the color rules that draw it are captioned, never by its key (D-15).
+  assert.deepEqual(['Shared [#112233]', 'Shared [#445566]', 'No such row'].map(owner.shownLegendName), ['Shared', 'Shared', 'No such row']);
+  assert.deepEqual(['Shared [#112233]', 'Typed name'].map(owner.legendRowName), ['Shared', 'Typed name']);
+  owner.readLegendRowNames();
+  assert.deepEqual(['CDS', 'Shared [#112233]', 'Shared [#445566]', 'No such row'].map(owner.shownLegendName),
+    ['CDS', 'Shared (1)', 'Shared (2)', 'No such row']);
+  assert.deepEqual(['Shared [#112233]', 'Shared', 'Shared (1)', 'Shared (2)', 'Other'].map((typed) => owner.legendRowIsNamed('Shared [#112233]', typed)),
+    [true, true, true, false, false]);
+  assert.equal(owner.legendRowIsNamed('No such row', 'No such row'), true);
+  // A row the Legend no longer draws is shown by its name, without a number.
+  reconcileMountedResult(mounted, { ...two, legendDeletes: [{ caption: 'Shared [#445566]', allowMissing: true, retire: true }] });
+  owner.readLegendRowNames();
+  assert.deepEqual(['Shared [#112233]', 'Shared [#445566]'].map(owner.shownLegendName), ['Shared', 'Shared']);
+  assert.deepEqual(['Shared [#112233]', 'Shared [#445566]'].map(owner.legendRowName), ['Shared', 'Shared']);
+});
+
+// PD-OI-061 scenario revision 5: the Legend owner names each row by its key,
+// also a renamed one, and finds the row a typed name names: a drawn name
+// (a shown numbered name names that row), else a name, the row in the given
+// color first, else the first in legend order.
+test('the Legend owner finds the row a typed name names, by its key', async () => {
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const mounted = buildSvgRoot();
+  const rule = (color) => ({ caption: `Shared [${color}]`, name: 'Shared', color, xPos: null, yPos: null, ifAbsent: true });
+  const two = { ...createEmptySvgMutationPlan(1).operationsByResult[0], legendAdds: [rule('#112233'), rule('#445566')] };
+  const legendEntries = { value: ['CDS', 'Shared [#112233]', 'Shared [#445566]'].map((caption) => ({ caption, originalCaption: caption, color: caption === 'CDS' ? '#54bcf8' : caption.slice(8, 15) })) };
+  const owner = createLegendEntryActions({
+    state: {
+      results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
+      originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
+      activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] } })
+    },
+    readShownLegendColor: (entry) => String(entry?.color || ''),
+    legendRowNames: { value: new Map() }
+  });
+  reconcileMountedResult(mounted, two);
+  owner.readLegendRowNames();
+  assert.deepEqual(['Shared (2)', 'shared (1)', 'Shared', 'SHARED', 'Nothing'].map((typed) => owner.findLegendRowNamed(typed, '#445566')),
+    ['Shared [#445566]', 'Shared [#112233]', 'Shared [#445566]', 'Shared [#445566]', null]);
+  assert.equal(owner.findLegendRowNamed('Shared', '#000000'), 'Shared [#112233]', 'no row in the color: the first in legend order');
+  // A renamed row is shown and found by its key.
+  reconcileMountedResult(mounted, { ...two, legendRenames: [{ from: 'CDS', to: 'Gamma', allowMissing: false }] });
+  legendEntries.value[0].caption = 'Gamma';
+  owner.readLegendRowNames();
+  assert.deepEqual(['CDS', 'Gamma'].map(owner.shownLegendName), ['Gamma', 'Gamma']);
+  assert.equal(owner.legendRowIsNamed('CDS', 'Gamma'), true);
+  assert.equal(owner.findLegendRowNamed('gamma', '#000000'), 'CDS');
+  assert.deepEqual(legendEntries.value.map(owner.shownLegendEntryName), ['Gamma', 'Shared (1)', 'Shared (2)']);
+});
+
+// PR 3 (D-25): the Legend owner stores a row's color, stroke, and open Stroke
+// options under the row's key, so two rows of one name keep their own edits;
+// a deleted row returns in the color stored under its key.
+test('the Legend owner keeps the edits of two rows of one name under their keys', async () => {
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const { createLegendStrokeActions } = await import('../../gbdraw/web/js/app/legend/stroke-actions.js');
+  const mounted = buildSvgRoot();
+  const added = { caption: 'GC content', color: '#aaaaaa', xPos: null, yPos: null };
+  reconcileMountedResult(mounted, { ...createEmptySvgMutationPlan(1).operationsByResult[0], legendAdds: [added] });
+  const drawing = {
+    manualSpecificRules: [],
+    legendEntries: { value: [
+      { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
+      { caption: 'CDS', originalCaption: 'GC content', color: '#aaaaaa' }
+    ] },
+    deletedLegendEntries: { value: [] },
+    dormantLegendEntries: { value: [] },
+    addedLegendCaptions: { value: new Set() },
+    legendColorOverrides: {},
+    legendStrokeOverrides: {}
+  };
+  const strokeOptionsOpen = new Set();
+  const state = {
+    results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
+    originalLegendOrder: { value: ['CDS', 'GC content'] }, originalLegendColors: { value: {} },
+    legendStrokeOptionsOpen: strokeOptionsOpen,
+    activeDrawing: () => drawing
+  };
+  const owner = createLegendEntryActions({ state, readShownLegendColor: (entry) => String(entry?.color || '') });
+  const strokes = createLegendStrokeActions({ state });
+  assert.equal(owner.updateLegendEntryColor(1, '#ff0000'), true);
+  assert.equal(owner.updateLegendEntryColor(0, '#0000ff'), true);
+  assert.deepEqual(drawing.legendColorOverrides, { 'GC content': '#ff0000', CDS: '#0000ff' });
+  assert.equal(strokes.updateLegendEntryStrokeColor(1, '#123456'), true);
+  assert.deepEqual(Object.keys(drawing.legendStrokeOverrides), ['GC content']);
+  assert.deepEqual([strokes.getLegendEntryStrokeColor(0), strokes.getLegendEntryStrokeColor(1)], ['', '#123456']);
+  strokes.toggleLegendStrokeOptions(drawing.legendEntries.value[1]);
+  assert.deepEqual([...strokeOptionsOpen], ['GC content']);
+  assert.deepEqual(drawing.legendEntries.value.map((entry) => strokes.isLegendStrokeOptionsOpen(entry)), [false, true]);
+  owner.deleteLegendEntry(1);
+  drawing.deletedLegendEntries.value[0].color = '#aaaaaa';
+  owner.restoreDeletedLegendEntries();
+  assert.deepEqual(drawing.legendEntries.value.map(({ originalCaption, color }) => [originalCaption, color]),
+    [['CDS', '#0000ff'], ['GC content', '#ff0000']], 'a row returns in the color stored under its key');
+});
+
 // OV-345: a reconcile says whether it changed the Result, so a display,
 // History restore, or Reset that changes nothing keeps the Result's bytes.
 test('a reconcile reports whether it changed the Result and whether the Legend rows changed', () => {
@@ -607,7 +754,7 @@ test('Load keeps a saved Result\'s bytes when its records change nothing', () =>
     const plan = createSavedResultPlan(results, admission, {
       featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#aaaaaa' },
       featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
-      originalLegendColors: {}, originalLegendOrder: [], mode: 'linear', sessionVersion: 44
+      originalLegendColors: {}, originalLegendOrder: [], rules: [], mode: 'linear', sessionVersion: 44
     });
     assert.equal(plan.kind, 'MUTATING');
     return captureMetrics(() => admitCurrentSessionResults(createCurrentSessionResultSource(results, admission), {
@@ -630,7 +777,10 @@ test('a mounted batch Result skips the features and Legend rows it does not draw
   }).operationsByResult[0];
   [mountedPaint(admission), renamed].forEach((operations) => {
     const mounted = buildSvgRoot({ missingFeature: true });
-    mounted.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'tRNA');
+    // The Result's one row is another category's, drawn with its own name.
+    const row = mounted.querySelector('g[data-legend-key]');
+    row.setAttribute('data-legend-key', 'tRNA');
+    row.querySelector('text').textContent = 'tRNA';
     const drawn = serializeNode(mounted);
     reconcileMountedResult(mounted, operations);
     assert.equal(serializeNode(mounted), drawn);
@@ -1115,7 +1265,7 @@ test('Load records Python\'s paint on a Session 44 Result saved without records'
   resetPaint(svg);
   const python = paint();
   assert.equal(python.f38ba7c3f, '#54bcf8 gray 2.0', 'the stroke of the blocks no edit reached');
-  ['f841fb8a8', 'f2f7a48cf__instance_4_4b227777d4dd1fc6', 'f2f7a48cf__instance_5_ef2d127de37b942b', 'CDS']
+  ['f841fb8a8', 'f970830ef__instance_4_4b227777d4dd1fc6', 'f970830ef__instance_5_ef2d127de37b942b', 'CDS']
     .forEach((name) => assert.equal(python[name], saved[name], `${name} has no edit`));
   assert.equal(python.repeat_region, '#d3d3d3 gray 2.0');
 });
@@ -1129,6 +1279,117 @@ test('Load records Python\'s paint only on the Result of a Session older than 46
   const edits = savedResultEdits(session, 'circular', session.editorState, session.version);
   assert.equal(createSavedResultPlan(results, admission, edits).kind, 'MUTATING');
   assert.deepEqual(createSavedResultPlan(results, admission, { ...edits, sessionVersion: 46 }), createEmptySvgMutationPlan(1));
+});
+
+// D-19: a build of first-parent main drew a color rule's row under its key
+// (`Complex IV [#ffe700]`) and wrote no `data-legend-name`
+// (tests/fixtures/sessions/rule-captions-with-color-id.provenance.json). Load
+// names such a row once, by the caption of the loaded rule whose row has that
+// key, and draws the names; the keys, and the edits stored under them, stay.
+const RULE_CAPTIONS = 'rule-captions-with-color-id.v46.gbdraw-session.json.gz';
+const savedLegendRows = (svg) => svg.querySelectorAll('g[data-legend-key]').map((row) => [
+  row.getAttribute('data-legend-key'), row.getAttribute('data-legend-name'), row.querySelector('text').textContent
+]);
+test('Load names the color-rule rows of a Result an older build saved, by the loaded rules (D-19)', () => {
+  const session = sessionFixture(RULE_CAPTIONS);
+  const results = normalizeLogicalResults(session.results);
+  const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, session.modes.circular.config.rules);
+  const svg = parseSvgText(results[0].content);
+  const ruleRows = () => savedLegendRows(svg).filter(([key]) => key.startsWith('Complex'));
+  const stroke = () => svg.querySelectorAll('g[data-legend-key]')
+    .find((row) => row.getAttribute('data-legend-key') === 'Complex IV [#ffe700]').querySelector('path').getAttribute('stroke');
+  // `parseSvgText` reads no text node: the saved texts are the keys (the Playwright case reads them).
+  const keysAndNames = (rows) => rows.map(([key, name]) => [key, name]);
+  assert.deepEqual(keysAndNames(ruleRows()), [['Complex IV [#ffe700]', null], ['Complex IV [#1f77b4]', null], ['Complex I', null]], 'as saved');
+  const saved = keysAndNames(savedLegendRows(svg));
+  const { callerTransforms } = createSavedResultPlan(results, admission, edits).operationsByResult[0];
+  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [true]);
+  assert.deepEqual(ruleRows(), [
+    ['Complex IV [#ffe700]', 'Complex IV', 'Complex IV (1)'], ['Complex IV [#1f77b4]', 'Complex IV', 'Complex IV (2)'],
+    ['Complex I', null, 'Complex I']
+  ]);
+  assert.deepEqual(keysAndNames(savedLegendRows(svg)).filter(([key]) => !key.startsWith('Complex IV')), saved.filter(([key]) => !key.startsWith('Complex IV')));
+  assert.deepEqual(savedLegendRows(svg).filter(([key, , drawn]) => !key.startsWith('Complex IV') && drawn !== key), [], 'every other row is drawn by its key');
+  assert.equal(stroke(), '#d62728', 'the stroke saved under the key stays on its row');
+  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [false], 'a named Result is named once');
+  assert.equal(reconcileMountedResult(svg, createEmptySvgMutationPlan(1).operationsByResult[0]).legendChanged, false, 'the naming pass keeps the names');
+  // Without rules, and for a Result that shows no color ID, Load reads no Result.
+  assert.deepEqual(createSavedResultPlan(results, admission, { ...edits, rules: [] }), createEmptySvgMutationPlan(1));
+  assert.deepEqual(createSavedResultPlan([{ ...results[0], content: '<svg/>' }], admission, edits), createEmptySvgMutationPlan(1));
+});
+
+// The other allocated key: a rule named like a renderer row of another swatch
+// (`tRNA` in red beside the tRNA type row). A row this build named, a row a
+// rename shows under another key, and a row no loaded rule draws stay as saved.
+test('Load names a saved rule row keyed for a renderer row of another swatch, and no other row (D-19)', () => {
+  const ruleRow = (key, y, attributes = {}) => {
+    const row = legendRow(key, y, attributes);
+    row.querySelector('path').setAttribute('fill', '#ff0000');
+    return row;
+  };
+  const savedFigure = (...rows) => {
+    const svg = legendSvg(rows);
+    // The block stroke of the figure: a rule row is drawn with it.
+    svg.appendChild(new FakeElement('path', { id: 'f1', stroke: '#000000', 'stroke-width': '0.5' }));
+    return svg;
+  };
+  const edits = {
+    featureColorOverrides: {}, featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
+    originalLegendColors: {}, originalLegendOrder: ['tRNA', 'tRNA [#ff0000]', 'rRNA [#ff0000]'], mode: 'circular', sessionVersion: 46,
+    rules: [{ feat: 'CDS', qual: 'gene', val: '^a$', color: '#ff0000', cap: 'tRNA' }]
+  };
+  const name = (svg) => {
+    const results = [{ name: 'figure.svg', content: serializeNode(svg) }];
+    const { callerTransforms } = createSavedResultPlan(results, null, edits).operationsByResult[0];
+    return callerTransforms.map((transform) => transform(svg));
+  };
+  const older = savedFigure(legendRow('tRNA', 7), ruleRow('tRNA [#ff0000]', 31), ruleRow('rRNA [#ff0000]', 55));
+  assert.deepEqual(name(older), [true]);
+  assert.deepEqual(savedLegendRows(older), [
+    ['tRNA', null, 'tRNA (1)'], ['tRNA [#ff0000]', 'tRNA', 'tRNA (2)'], ['rRNA [#ff0000]', null, 'rRNA [#ff0000]']
+  ], 'a key no loaded rule is allocated stays a name');
+  const named = savedFigure(legendRow('tRNA', 7), ruleRow('tRNA [#ff0000]', 31, { 'data-legend-name': 'Mine' }));
+  const renamed = savedFigure(legendRow('tRNA', 7), ruleRow('tRNA [#ff0000]', 31, { 'data-gbdraw-base-data-legend-key': 'CDS' }));
+  for (const svg of [named, renamed]) {
+    const before = serializeNode(svg);
+    assert.deepEqual(name(svg), [false]);
+    assert.equal(serializeNode(svg), before);
+  }
+});
+
+// F2: a caption saved with its own color ID whose rule is the only rule of
+// that caption (the older build kept `Complex IV [#ffe700]` once the other
+// color's rule was gone; here that rule is `Complex III`) is read as
+// `Complex IV`, so its row's key changes from the saved text to the caption.
+// Load moves the row of the saved figure and every Legend record saved under
+// the old key to the new key, so the row shows its name and keeps its edits;
+// a per-feature color edit saved with the old caption is read the same way.
+// A caption that keeps several colors keeps its key.
+const ONE_COLOR_CAPTION = (session) => JSON.parse(JSON.stringify(session).split('Complex IV [#1f77b4]').join('Complex III'));
+test('Load moves a one-color rule row saved under its color ID, with its stored Legend edits, to the key of the read caption (F2)', () => {
+  const full = sessionFixture(RULE_CAPTIONS);
+  assert.equal(savedResultEdits(full, 'circular', full.editorState, full.version, full.modes.circular.config.rules).legendRekeys.size, 0,
+    'a caption in two colors keeps its keys');
+  const session = ONE_COLOR_CAPTION(full);
+  const results = normalizeLogicalResults(session.results);
+  const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, session.modes.circular.config.rules);
+  assert.deepEqual([...edits.legendRekeys], [['Complex IV [#ffe700]', 'Complex IV']]);
+  assert.deepEqual(edits.rules.map((rule) => rule.cap), ['Complex IV', 'Complex III', 'Complex I']);
+  assert.deepEqual(Object.keys(edits.legendStrokeOverrides), ['Complex IV'], 'the stroke moves to the new key');
+  assert.deepEqual(edits.originalLegendOrder.slice(1, 4), ['rRNA', 'Complex IV', 'Complex III'], 'in its place');
+  assert.deepEqual(edits.legendEntries.slice(2, 3).map(({ caption, originalCaption }) => [caption, originalCaption]), [['Complex IV', 'Complex IV']]);
+  assert.equal(edits.featureColorOverrides['record-1\u0000f48b7bf2f'].caption, 'Complex IV', 'item 3: the feature edit is read like its rule');
+  const svg = parseSvgText(results[0].content);
+  const { callerTransforms } = createSavedResultPlan(results, admission, edits).operationsByResult[0];
+  callerTransforms.forEach((transform) => transform(svg));
+  assert.deepEqual(savedLegendRows(svg).filter(([key]) => key.startsWith('Complex')), [
+    ['Complex IV', null, 'Complex IV'], ['Complex III', null, 'Complex III'], ['Complex I', null, 'Complex I']
+  ]);
+  const row = svg.querySelectorAll('g[data-legend-key]').find((each) => each.getAttribute('data-legend-key') === 'Complex IV');
+  assert.equal(row.querySelector('path').getAttribute('stroke'), '#d62728', 'the saved stroke stays on its row');
+  assert.equal(reconcileMountedResult(svg, createEmptySvgMutationPlan(1).operationsByResult[0]).legendChanged, false);
 });
 
 // OV-288 (R15-4): the stroked repeat_region row has a Legend color of its
@@ -1216,7 +1477,7 @@ const previewPlan = (admission, {
     catalogAdmission: admission,
     legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' }],
     originalLegendOrder: ['CDS'],
-    livePreview: { domains, paletteColors, drawnContext, pythonRows, features: [...admission.renderedFeaturesByResult[0].values()] },
+    livePreview: { drawnTracks: [], domains, paletteColors, drawnContext, pythonRows, features: [...admission.renderedFeaturesByResult[0].values()] },
     ...options
   }).operationsByResult[0]
 );
@@ -1278,7 +1539,7 @@ test('a Legend fill reconcile shows the rule or palette color of a row whose own
 });
 
 // OV-306: Python draws no row under a feature type's name once a captioned
-// rule of that type colors a feature (`_generated_legend_fills`), so a rule
+// rule of that type colors a feature (`_generated_legend_rows`), so a rule
 // captioned with its type's name that colors a feature draws that row in its
 // color, whatever color Python drew the row in before the rule.
 test('a rule captioned with its type that colors a feature draws the type row', () => {
@@ -1303,11 +1564,11 @@ test('a palette reconcile keeps the Legend color of a row renamed live', () => {
   const mounted = buildSvgRoot();
   reconcileMountedResult(mounted, previewPlan(admission, { legendColorOverrides: { CDS: '#ff0000' } }), { domains: ['legendFills'] });
   reconcileMountedResult(mounted, previewPlan(admission, {
-    ...RENAMED_ROW, legendColorOverrides: { Proteins: '#ff0000' }, domains: RENAME_DOMAINS
+    ...RENAMED_ROW, legendColorOverrides: { CDS: '#ff0000' }, domains: RENAME_DOMAINS
   }), { domains: RENAME_DOMAINS });
   assert.equal(mounted.querySelector('g[data-legend-key]').getAttribute('data-legend-key'), 'Proteins');
   reconcileMountedResult(mounted, previewPlan(admission, {
-    ...RENAMED_ROW, legendColorOverrides: { Proteins: '#ff0000' }, paletteColors: { CDS: '#00ff00' }
+    ...RENAMED_ROW, legendColorOverrides: { CDS: '#ff0000' }, paletteColors: { CDS: '#00ff00' }
   }), { domains: ['featureFills', 'legendFills'] });
   assert.equal(swatchFill(mounted), '#ff0000', 'the renamed row keeps its Legend color');
 });
@@ -1400,7 +1661,7 @@ test('each edit kind runs exactly the compile stages of its allowlist', () => {
         legendColorOverrides: { Proteins: '#334455' },
         legendStrokeOverrides: { Proteins: { strokeColor: '#e63946' } },
         manualSpecificRules: [rule],
-        livePreview: domains && { domains, paletteColors: { CDS: '#00ff00' }, drawnContext: context }
+        livePreview: domains && { drawnTracks: [], domains, paletteColors: { CDS: '#00ff00' }, drawnContext: context }
       });
       assert.equal(ruleReads > 0, allowed.includes('rules'), `${kind}: a specific-color rule match is read only by the rules stage`);
       const compiles = metrics.filter(({ name }) => name === 'editorPlanCompile');
@@ -1421,7 +1682,7 @@ test('a Result without a feature catalog receives the editor operations of its f
   const operations = compileDirectEditorMutationPlan({
     catalogAdmission: addressing,
     featureStrokeOverrides: { [featureOverrideKey(feature)]: { strokeColor: '#e63946', strokeWidth: 3 } },
-    livePreview: { domains: ['featureStrokes', 'featureFills'], paletteColors: { CDS: '#00ff00' }, drawnContext: null }
+    livePreview: { drawnTracks: [], domains: ['featureStrokes', 'featureFills'], paletteColors: { CDS: '#00ff00' }, drawnContext: null }
   }).operationsByResult[0];
   const mounted = buildSvgRoot();
   reconcileMountedResult(mounted, operations, { domains: ['featureStrokes', 'featureFills'] });
@@ -1442,7 +1703,7 @@ test('a Result without a feature catalog takes Python\'s fills from the displaye
     catalogAdmission: displayedFeatureAddressing([feature], ['diagram.svg'], 0, mounted),
     legendEntries: [{ caption: 'CDS', color: '#aaaaaa' }],
     legendStrokeOverrides: { CDS: { strokeColor: '#e63946' } },
-    livePreview: { domains, paletteColors: { CDS: '#AAAAAA' }, drawnContext: null }
+    livePreview: { drawnTracks: [], domains, paletteColors: { CDS: '#AAAAAA' }, drawnContext: null }
   }).operationsByResult[0];
   assert.deepEqual(operations.featureFills, []);
   reconcileMountedResult(mounted, operations, { domains });
@@ -1535,7 +1796,7 @@ test('the Load normalizer records no fill Python is not known to have drawn', ()
   const plan = createSavedResultPlan(response.results, admission, {
     featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#112233' },
     featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
-    originalLegendColors: {}, originalLegendOrder: [], mode: 'linear', sessionVersion: 44
+    originalLegendColors: {}, originalLegendOrder: [], rules: [], mode: 'linear', sessionVersion: 44
   });
   plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
   assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-fill/);
@@ -1569,6 +1830,39 @@ const legendOperations = (operations = {}) => ({ ...createEmptySvgMutationPlan(1
 const legendRows = (svg) => svg.querySelectorAll('g[data-legend-key]').map((row) => [
   row.getAttribute('data-legend-key'), row.querySelector('text').textContent, row.getAttribute('display')
 ]);
+
+// D-28 (PD-OI-061 scenario revision 5): rows of one name and one swatch are
+// one row. The naming pass hides the later of them and shows it again once its
+// swatch differs; a delete of the merged row keeps it hidden, and a reconcile
+// without the delete returns it to the merge.
+test('rows of one name and one swatch are one row: the later row is hidden until it differs (D-28)', () => {
+  const svg = legendSvg();
+  const merged = () => svg.querySelectorAll('g[data-legend-key]').filter((row) => row.hasAttribute('data-legend-merged'))
+    .map((row) => row.getAttribute('data-gbdraw-base-data-legend-key'));
+  const renamed = legendOperations({ legendRenames: [{ from: 'tRNA', to: 'CDS', allowMissing: false }] });
+  assert.deepEqual(reconcileMountedResult(svg, renamed), { changed: true, legendChanged: true });
+  // A hidden row keeps the text it last showed.
+  assert.deepEqual(legendRows(svg), [['CDS', 'CDS', null], ['CDS', 'tRNA', 'none'], ['rRNA', 'rRNA', null]]);
+  assert.deepEqual(merged(), ['tRNA']);
+  // D-35: the merged row records the key of the row it is drawn as, so an
+  // edit of that row reaches both keys.
+  assert.deepEqual(legendRowKeys(svg, 'CDS'), ['CDS', 'tRNA']);
+  assert.deepEqual([legendRowKeys(svg, 'tRNA'), legendRowKeys(svg, 'rRNA')], [['tRNA'], ['rRNA']]);
+  assert.deepEqual(reconcileMountedResult(svg, renamed), { changed: false, legendChanged: false }, 'merged once');
+  const recolored = legendOperations({ ...renamed, legendFills: [{ caption: 'tRNA', color: '#ff0000' }] });
+  reconcileMountedResult(svg, recolored);
+  assert.deepEqual(legendRows(svg), [['CDS', 'CDS (1)', null], ['CDS', 'CDS (2)', null], ['rRNA', 'rRNA', null]], 'another swatch: two rows');
+  assert.deepEqual(merged(), []);
+  reconcileMountedResult(svg, renamed);
+  assert.deepEqual(merged(), ['tRNA'], 'one swatch again: one row');
+  assert.deepEqual(legendRowKeys(svg, 'CDS'), ['CDS', 'tRNA']);
+  reconcileMountedResult(svg, legendOperations({ ...renamed, legendDeletes: [{ caption: 'tRNA', allowMissing: false }] }));
+  assert.deepEqual([legendRows(svg)[1][2], merged()], ['none', []], 'a deleted merged row stays hidden as deleted');
+  reconcileMountedResult(svg, renamed);
+  assert.deepEqual([legendRows(svg)[1][2], merged()], ['none', ['tRNA']], 'without the delete it is merged again');
+  reconcileMountedResult(svg, legendOperations());
+  assert.deepEqual(legendRows(svg), [['CDS', 'CDS', null], ['tRNA', 'tRNA', null], ['rRNA', 'rRNA', null]], 'without the rename, Python\'s rows');
+});
 
 // U3a H1: main's writer renamed a generated row (GC content to "GC %") by
 // rewriting its key without a record; Load records Python's key on that row
@@ -1703,7 +1997,8 @@ test('an editor row is cloned from Python\'s first row and removed by a reconcil
 test('a reconcile without an order returns Python\'s order', () => {
   const svg = legendSvg();
   const drawn = serializeNode(svg);
-  const order = { captions: ['rRNA', 'Genes', 'tRNA'] };
+  // The order names rows by their keys (PR 3, D-25).
+  const order = { captions: ['rRNA', 'CDS', 'tRNA'] };
   const renames = [{ from: 'CDS', to: 'Genes' }];
   assert.equal(legendRowsChanged(svg, legendOperations({ legendRenames: renames, legendOrder: [order] }), { domains: LEGEND_STRUCTURE }), true);
   assert.deepEqual(legendRows(svg).map(([key]) => key), ['rRNA', 'Genes', 'tRNA']);
@@ -1727,7 +2022,7 @@ test('a second Legend structure reconcile changes nothing', () => {
     legendRenames: [{ from: 'CDS', to: 'Genes' }],
     legendDeletes: [{ caption: 'rRNA' }],
     legendAdds: [{ caption: 'New', color: '#556677', xPos: null, yPos: null }],
-    legendOrder: [{ captions: ['tRNA', 'Genes', 'New'] }],
+    legendOrder: [{ captions: ['tRNA', 'CDS', 'New'] }],
     legendFills: [{ caption: 'CDS', color: '#123456' }]
   });
   const domains = [...LEGEND_STRUCTURE, 'legendFills'];
@@ -1742,7 +2037,7 @@ test('an export strips the Legend structure records and the rows a delete hid', 
   reconcileMountedResult(svg, legendOperations({
     legendRenames: [{ from: 'CDS', to: 'Genes' }],
     legendDeletes: [{ caption: 'rRNA' }],
-    legendOrder: [{ captions: ['tRNA', 'Genes'] }]
+    legendOrder: [{ captions: ['tRNA', 'CDS'] }]
   }), { domains: LEGEND_STRUCTURE });
   assert.match(serializeNode(svg), /data-gbdraw-base-legend-order=/);
   stripResultBaseAttributes(svg);

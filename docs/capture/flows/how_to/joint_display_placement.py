@@ -82,10 +82,10 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         dialog = page.get_by_role('dialog', name='Feature details: ribosomal protein S16', exact=True)
         expect(dialog).to_be_visible()
         # The header stays fixed while the Edit body scrolls: bring the Layout group
-        # (Feature placement and its "applies on Generate" heading) under the header.
+        # (its heading and Feature placement with "Applies on Generate") under the header.
         layout = dialog.locator('[data-feature-popup-group="layout"]')
         expect(layout).to_have_count(1)
-        expect(layout.get_by_role('heading', name='Layout · applies on Generate')).to_be_visible()
+        expect(layout.get_by_role('heading', name='Layout', exact=True)).to_be_visible()
         layout.scroll_into_view_if_needed()
         placement.scroll_into_view_if_needed()
         page.wait_for_timeout(250)
@@ -111,7 +111,7 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         session_path = download_dir / session.suggested_filename
         session.save_as(session_path)
         saved = json.loads(gzip.decompress(session_path.read_bytes()))
-        assert saved['version'] == 46 and saved['renderRequest']['schema'] == 9
+        assert saved['version'] == 47 and saved['renderRequest']['schema'] == 9
         assert saved['renderRequest']['records'][0]['display']['startCoordinate'] == 5500
         assert saved['renderRequest']['diagramOptions']['configOverrides']['canvas.feature_overlap_tolerance_bp'] == 1
         assert len(saved['renderRequest']['diagramOptions']['featurePlacements']) == 1

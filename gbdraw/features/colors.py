@@ -2,103 +2,46 @@
 # coding: utf-8
 
 import re
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Mapping, Optional, Tuple, cast
 
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
-
-from gbdraw.exceptions import ValidationError
 
 from .ids import compute_feature_hash as compute_feature_hash
 from .selector_values import ColorRuleList, feature_matches_specific_color_rule, find_specific_color_rule
 
 
-def normalize_specific_color_captions(
-    color_table: DataFrame | None,
-) -> DataFrame | None:
-    """Allocate captions without I/O, changing neither rule order nor selectors.
+def build_specific_color_rules(color_table: Optional[DataFrame]) -> dict[str, dict[str, ColorRuleList]]:
+    """Compile the rows of a color table into feature_type -> qualifier -> rules.
 
-    Reserve every literal first. Allocation order depends on caption/color, never
-    row order; a canonical caption is then an ordinary string on subsequent edits.
+    Each rule is ``(pattern, color, caption)``; patterns match case-insensitively.
     """
-    from gbdraw.core.color import normalize_hex_color
-    from gbdraw.io.colors import resolve_color_to_hex
-    from gbdraw.legend.table import _unique_legend_key
 
-    if color_table is None or color_table.empty or "caption" not in color_table:
-        return color_table
-    captions = [
-        str(value) if value is not None else ""
-        for value in color_table["caption"].fillna("")
-    ]
-    colors = [str(value).strip() for value in color_table["color"]]
-    normalized_colors = []
-    for row, color in enumerate(colors, start=1):
-        if color.lower() == "none":
-            normalized_colors.append("none")
-            continue
-        try:
-            normalized_colors.append(normalize_hex_color(resolve_color_to_hex(color)))
-        except (ValueError, ValidationError) as exc:  # a caption groups none, names, #RGB/#RRGGBB colors only
-            raise ValidationError(
-                f"Invalid color {color!r} in the color table (row {row}). "
-                "A color table with captions uses none, an SVG color name, #RGB, or #RRGGBB.",
-                diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": row},
-            ) from exc
-    groups: dict[str, set[str]] = {}
-    for caption, color in zip(captions, normalized_colors):
-        if caption.strip():
-            groups.setdefault(caption, set()).add(color)
-    reserved = dict.fromkeys(captions)
-    allocated = {}
-    for caption in sorted(groups):
-        if len(groups[caption]) < 2:
-            continue
-        for color in sorted(groups[caption]):
-            key = _unique_legend_key(reserved, f"{caption} [{color}]")
-            reserved[key] = None
-            allocated[caption, color] = key
-    normalized = [
-        allocated.get((caption, color), caption)
-        for caption, color in zip(captions, normalized_colors)
-    ]
-    if normalized == captions:
-        return color_table
-    result = color_table.copy()
-    result["caption"] = normalized
-    return result
-
-
-def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -> tuple[dict, dict]:
-    """
-    Preprocesses color tables to create mappings for feature coloring.
-
-    Returns:
-        (color_map, default_color_map)
-    """
-    # Create a mapping for default colors
-    default_color_map = default_colors.set_index("feature_type")["color"].to_dict()
-
-    # Create a nested dictionary for specific color rules
-    # feature_type -> qualifier_key -> list of (pattern, color, caption)
-    color_map: dict = {}
+    rows: dict[str, dict[str, list[tuple[re.Pattern[str], str, str]]]] = {}
     if isinstance(color_table, DataFrame) and not color_table.empty:
         for row in color_table.itertuples(index=False):
-            # Compile regex pattern for case-insensitive matching
             pattern = re.compile(row.value, re.IGNORECASE)
-
-            # Build nested dictionary structure
-            qualifier_rules = color_map.setdefault(row.feature_type, {})
+            qualifier_rules = rows.setdefault(row.feature_type, {})
             rule_list = qualifier_rules.setdefault(row.qualifier_key, [])
-
             # Include caption for legend tracking
             caption = getattr(row, 'caption', '') or ''
             rule_list.append((pattern, row.color, caption))
+    return {
+        feature_type: {key: ColorRuleList(rule_list) for key, rule_list in qualifier_rules.items()}
+        for feature_type, qualifier_rules in rows.items()
+    }
 
-    for qualifier_rules in color_map.values():
-        for key, rule_list in qualifier_rules.items():
-            qualifier_rules[key] = ColorRuleList(rule_list)
-    return color_map, default_color_map
+
+def build_default_color_map(default_colors: DataFrame) -> dict[str, str]:
+    """Map each feature type of the default colors to its color."""
+
+    return cast("dict[str, str]", default_colors.set_index("feature_type")["color"].to_dict())
+
+
+def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -> tuple[dict, dict]:
+    """Return ``(color_map, default_color_map)`` for feature coloring."""
+
+    return build_specific_color_rules(color_table), build_default_color_map(default_colors)
 
 
 
@@ -215,6 +158,7 @@ __all__ = [
     "get_color",
     "get_color_with_info",
     "precompute_used_color_rules",
+    "build_default_color_map",
+    "build_specific_color_rules",
     "preprocess_color_tables",
-    "normalize_specific_color_captions",
 ]

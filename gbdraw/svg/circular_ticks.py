@@ -89,37 +89,15 @@ def _tick_path_ratio_table(track_channel: str, track_type: str, strandedness: bo
     return {"small": (1.06, 1.08), "large": (0.98, 1.0)}
 
 
-def _resolve_tick_track_channel(
-    total_len: int,
-    tick_track_channel_override: str | None,
-    length_threshold: int,
-) -> Literal["short", "long"]:
-    """Resolve the tick ratio channel: the override, else the record's size class.
-
-    ``length_threshold`` is the configured ``labels.length_threshold.circular``.
-    """
-    normalized = str(tick_track_channel_override or "").strip().lower()
-    if normalized == "short":
-        return "short"
-    if normalized == "long":
-        return "long"
-    return determine_length_parameter(int(total_len), int(length_threshold))
-
-
 def get_circular_tick_path_ratio_bounds(
     total_len: int,
     track_type: str,
     strandedness: bool,
-    tick_track_channel_override: str | None = None,
     *,
     length_threshold: int,
 ) -> tuple[float, float]:
     """Return (min_ratio, max_ratio) across small/large tick path ratios."""
-    track_channel = _resolve_tick_track_channel(
-        total_len,
-        tick_track_channel_override,
-        length_threshold,
-    )
+    track_channel = determine_length_parameter(int(total_len), int(length_threshold))
     ratio_table = _tick_path_ratio_table(track_channel, track_type, strandedness)
     ratio_values = [ratio for pair in ratio_table.values() for ratio in pair]
     return min(ratio_values), max(ratio_values)
@@ -140,7 +118,6 @@ def get_circular_tick_path_radius_bounds(
     size: str,
     track_type: str,
     strandedness: bool,
-    tick_track_channel_override: str | None = None,
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
     length_reference_radius_px: float | None = None,
@@ -151,11 +128,7 @@ def get_circular_tick_path_radius_bounds(
     normalized_side = str(tick_side or "legacy").strip().lower()
     radius = float(center_radius_px)
     if normalized_side == "legacy":
-        track_channel = _resolve_tick_track_channel(
-            total_len,
-            tick_track_channel_override,
-            length_threshold,
-        )
+        track_channel = determine_length_parameter(int(total_len), int(length_threshold))
         ratio = _tick_path_ratio_table(track_channel, track_type, strandedness)
         prox, dist = ratio[size]
         prox_radius = radius * prox
@@ -230,7 +203,6 @@ def get_circular_tick_label_radius_bounds(
     font_family: str,
     dpi: int,
     manual_interval: int | None = None,
-    tick_track_channel_override: str | None = None,
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
@@ -265,7 +237,6 @@ def get_circular_tick_label_radius_bounds(
             track_type=track_type,
             strandedness=strandedness,
             dpi=dpi,
-            tick_track_channel_override=tick_track_channel_override,
             label_side=label_side,
             tick_side=tick_side,
             tick_length_px=tick_length_px,
@@ -292,7 +263,6 @@ def _raw_tick_label_base_radius(
     track_type: str,
     strandedness: bool,
     font_size: float,
-    tick_track_channel_override: str | None,
     label_side: str,
     tick_length_px: float | None,
     length_reference_radius_px: float | None,
@@ -303,11 +273,7 @@ def _raw_tick_label_base_radius(
     if normalized_side in {"none", ""}:
         return None
     if normalized_side == "legacy":
-        track_channel = _resolve_tick_track_channel(
-            total_len,
-            tick_track_channel_override,
-            length_threshold,
-        )
+        track_channel = determine_length_parameter(int(total_len), int(length_threshold))
         ratio = _tick_label_ratio_table(track_channel, track_type, strandedness)
         prox, _ = ratio[size]
         return radius * prox
@@ -388,7 +354,6 @@ def resolve_circular_tick_label_geometry(
     track_type: str,
     strandedness: bool,
     dpi: int,
-    tick_track_channel_override: str | None = None,
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
@@ -404,7 +369,6 @@ def resolve_circular_tick_label_geometry(
         track_type=track_type,
         strandedness=strandedness,
         font_size=font_size,
-        tick_track_channel_override=tick_track_channel_override,
         label_side=label_side,
         tick_length_px=tick_length_px,
         length_reference_radius_px=length_reference_radius_px,
@@ -429,7 +393,6 @@ def resolve_circular_tick_label_geometry(
         size=size,
         track_type=track_type,
         strandedness=strandedness,
-        tick_track_channel_override=tick_track_channel_override,
         tick_side=tick_side,
         tick_length_px=tick_length_px,
         length_reference_radius_px=length_reference_radius_px,
@@ -478,7 +441,6 @@ def generate_circular_tick_paths(
     tick_width: float,
     track_type: str,
     strandedness: bool,
-    tick_track_channel_override: str | None = None,
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
     length_reference_radius_px: float | None = None,
@@ -498,7 +460,6 @@ def generate_circular_tick_paths(
         size=size,
         track_type=track_type,
         strandedness=strandedness,
-        tick_track_channel_override=tick_track_channel_override,
         tick_side=tick_side,
         tick_length_px=tick_length_px,
         length_reference_radius_px=length_reference_radius_px,
@@ -573,7 +534,6 @@ def generate_circular_tick_labels(
     track_type: str,
     strandedness: bool,
     dpi: int,
-    tick_track_channel_override: str | None = None,
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
@@ -607,7 +567,6 @@ def generate_circular_tick_labels(
             track_type=track_type,
             strandedness=strandedness,
             dpi=dpi,
-            tick_track_channel_override=tick_track_channel_override,
             label_side=label_side,
             tick_side=tick_side,
             tick_length_px=tick_length_px,

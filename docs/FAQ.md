@@ -95,6 +95,18 @@ lists the format choices and what to archive.
 Small differences in label placement and legend sizing are expected. The CLI
 uses kerning-aware font metrics, while the web app uses browser text metrics.
 
+### Can I use my own font, and will others see it?
+
+Yes. Choose it in **Font** in the web app (a font file, or an installed font in
+Chrome and Edge), or use `--font_family` with `--font_file` on the command line.
+Exported SVG embeds the characters it uses of the font, so others see it
+without installing it, unless the font's license forbids embedding; then it
+shows the font only where it is installed. PNG always draws the font. PDF
+embeds it too, but draws a font whose license forbids embedding in the nearest
+Liberation font. A Session keeps only the font's
+name, so whoever opens it needs the same font or gbdraw draws the nearest
+Liberation font. See [Fonts](./REFERENCE/output-formats-and-export.md#fonts).
+
 ### How do I hide the coordinate scale without hiding the genome axis?
 
 Use `--hide_scale` on the command line or clear **Show Coordinate Scale** in
@@ -117,6 +129,18 @@ placement. [Feature
 presentation](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
 covers qualifier priority, whitelist and blacklist behavior, overrides, and
 overlap controls.
+
+### Why did gbdraw draw nothing and say my labels do not fit?
+
+Some labels would overlap, or radial labels needed more room than the circular
+tracks leave, so gbdraw stopped instead of drawing them. Run the command again
+with one of the settings the message lists, for example
+`--outer_label_y_radius_offset 1.15` to move outer labels outward,
+`--label_font_size 12` to make the labels smaller, or `--labels out` to move
+inner labels outside. If only leader lines cross or labels cover the definition
+text, the figure is drawn and the same settings are shown as a warning. See
+[Labels that do not
+fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
 ### How do I change the color of one specific gene?
 
@@ -188,7 +212,7 @@ and [Circular source records](./REFERENCE/web-app.md#circular-source-records-and
 Save and Load need the Session to stay unchanged, so edits, **Generate Diagram**,
 and the other Session button wait until **Saving session…** or **Loading
 session…** disappears. Scrolling, preview pan and zoom, and feature search stay
-available. If Load reports an **Operation error**, check that a plain Session
+available. If Load reports **Session not loaded**, check that a plain Session
 file is at most 200 MiB and that a gzip Session expands to at most 512 MiB. See
 [Save and Load Sessions](./REFERENCE/web-app.md#save-and-load-sessions).
 

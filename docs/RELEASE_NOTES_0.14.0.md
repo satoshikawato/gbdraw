@@ -25,6 +25,9 @@ published packages, and [Installation](./INSTALL.md) explains each install route
 - Draw from Python with `draw_circular()` and `draw_linear()`, which return a
   `Diagram` you can save in any format.
 - Choose which records of a multi-record file are drawn (**Choose records…**, **Draw this record**).
+- Draw diagram text in any font: **Font** in the web app, `--font_family` and
+  `--font_file` on the command line. SVG exports embed the characters they use;
+  see [Fonts](./REFERENCE/output-formats-and-export.md#fonts).
 - Install from a wheel or source package that includes the local web app's
   palettes and browser files.
 
@@ -70,6 +73,25 @@ upload, a file with more than 20 records opens the list, and turning off the
 last drawn record of a file asks whether to remove the file. In 0.13.0, a
 Linear File card drew every record or the one record named in Record ID, and
 Multi-Record Canvas drew every record.
+
+A row of icon buttons above the settings lists the sections of the current
+mode. A button opens its section and brings it to the top, so a section far
+down the panel (**Labels** in Linear mode with several files) is one click
+away. The section title shows on hover and on keyboard focus.
+
+**Collapse settings to icons** turns the settings panel into a narrow column of
+icons with one section beside it, and **Close section** leaves only the column,
+which gives the diagram about 265 px more width in a 1600 px window. **Expand
+settings** brings the full panel back. The browser remembers this choice per site
+address (with `gbdraw gui`, until the local server stops).
+
+The Linear file list is shorter after you load a Session: each File card folds to
+one line with its file name. Click the line, or press Enter or Space on it, to
+open the card; **Show in settings** opens the card it points into. A folded
+line still shows a file that could not be read, a missing file, and Gencode
+required. The fold is not saved in a Session, and Undo does not change it. A
+long file name in a file input now ends with an ellipsis instead of being cut
+at both ends.
 
 Each change of a checkbox, radio button, or button is one **Undo** step. Undo
 and Redo are unavailable while Generate runs, and the header says why. Error
@@ -181,7 +203,10 @@ To line up records on one reference feature, choose **Align…** in the feature
 popup or in the Similarity Groups drawer. When each record has one clear
 anchor, gbdraw applies the alignment at once and keeps each record's
 direction. When the choice is ambiguous, or when you choose **Review alignment
-options…**, the **Review alignment** dialog opens with one card per record:
+options…**, the **Review alignment** panel opens beside the figure (below it in
+a narrow window) with one card per record. Each card draws its record as it
+will lie after **Apply**, and rings on the figure mark the candidates; a click
+on a ring chooses that gene:
 
 - A record with several candidates lists them with how each links to the
   reference, marks one **Recommended**, and offers **Skip**. A record with one
@@ -232,7 +257,7 @@ and [typed Python alignment](./REFERENCE/python-api.md#typed-linear-similarity-g
 
 ## Sessions, Run Info, and reproducing a figure
 
-gbdraw 0.14.0 saves Sessions as session version 46, with
+gbdraw 0.14.0 saves Sessions as session version 47, with
 canonical `renderRequest` schema 9. These format numbers are separate from
 the gbdraw version. A Session now keeps
 the settings and edits of Circular and Linear mode separately, and **Save
@@ -291,6 +316,35 @@ label text for individual features. To set the display of several records, use
 a records table. The [command-line reference](./REFERENCE/command-line.md)
 has a rotation and placement example you can run, and links to the full
 option list.
+
+A region annotation drawn as an overlay can span several tracks: add
+`to_slot=<slot id>` next to `anchor_slot` on the annotation slot, and the
+overlay runs from one slot's band to the other's, for example one tint per
+region from the GC track to the feature track. It works in Circular and Linear,
+from the command line, Python, and a Session; the web app draws and saves it
+but cannot edit it yet. See
+[Region annotations](./CLI_Reference.md#region-annotations).
+
+Small label defects of horizontal Circular labels, up to 100 per record, are
+now repaired by moving outer and inner labels slightly: overlapping labels,
+crossing leader lines, and inner labels over the definition text in the centre.
+A record is changed only when the repair clears all of them. After a repair,
+the neighbouring labels make room around the repaired spot, so the leader lines
+there become shorter and straighter. A repaired map takes about 1 to 8 s
+longer to draw, and its canvas can grow by up to about 24 px; maps that fit
+without a repair are drawn as before.
+Labels that would still overlap are no longer drawn: Circular outer, inner, and
+embedded labels in either placement, and Linear labels. The command line exits
+with an error and Python raises `LabelsDoNotFitError`; the message lists
+settings that fit, such as a larger outer-label offset, a smaller font, all
+labels outside, radial labels, or `--resolve_overlaps` for labels on features
+drawn on top of each other. Radial labels that need more room than the
+circular tracks leave stop the same way instead of being drawn with crossing
+leaders or failing with a track error. Leader lines that cross, and labels over
+the definition text in the centre, are drawn as before with the same settings as
+a warning. With 50 or more outer labels, `--circular_label_spacing` now also
+sets the gap between the packed rows when those rows fit. See [Labels that do
+not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
 `gbdraw render --session FILE` draws the diagrams saved in a Session;
 `--list_drawings` lists them and `--drawing ID` picks one. In Python,
@@ -413,6 +467,9 @@ internal function `gbdraw.render.export.save_figure` now warns with
    shows GC content and GC skew by default, Linear hides them, and new repeat
    regions are drawn behind other features. Set these explicitly when the
    earlier look matters.
+   A figure whose labels overlapped in 0.13 now has those labels moved
+   slightly or stops with an error; rerun it with one of the settings the
+   message lists.
 4. Keep a copy of an old Session before you open it and save it again in
    0.14.0. Let gbdraw update the file; do not edit version numbers or resource
    IDs by hand. A Circular slot whose spacing an earlier release stored as a
@@ -466,6 +523,17 @@ Some older figures can change:
 - Every Circular figure drawn with the web app's default **Multi-Record
   Canvas** changes: it no longer reserves an empty depth slot, and its legend
   now lists custom slot labels, skew slots, annotations, and Depth labels.
+- Legend rows that share a name are numbered by one rule. Two depth tracks
+  labelled `Coverage`, which 0.13.0 drew as `Coverage` and `Coverage (2)`, now
+  draw `Coverage (1)` and `Coverage (2)` when their colors differ and one
+  `Coverage` row when the colors are equal. Two GC content tracks always share
+  the palette's GC content color, so they now draw one `GC content` row
+  instead of `GC content` and `GC content (2)`. Legend row edits of a 0.13.0
+  Session stay on the rows of the same tracks; edits saved for a second row
+  that now shares the first row are not used.
+  In the web app, **Keep both** in the **Legend Name Conflict** dialog keeps
+  the name you typed and numbers every row of that name, for example
+  `CDS (1)` and `CDS (2)`, instead of giving only the renamed row a number.
 - Label, Legend, and title widths use the font's kerning, so text measures as
   browsers draw it. PNG, PDF, EPS, and PS export place circular tick labels and
   mixed italic and roman captions where browsers do. Web PDF pages are 75% of

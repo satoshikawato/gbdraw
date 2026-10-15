@@ -1,0 +1,45 @@
+name: CI inventory
+
+# Weekly report of CI cost and functional shard balance (docs/internal/SELECTIVE_CI.md,
+# "Weekly CI inventory"). It runs on its own schedule, never on a pull request, and
+# only writes a comment on the issue labelled `ci-inventory`.
+on:
+  schedule:
+    - cron: '17 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: ci-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    name: CI inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The shard plan and the measured runs are those of dev.
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install locked CI test dependencies
+        run: npm ci
+
+      - name: Report the last 7 days
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/ci-inventory.mjs --post >> "$GITHUB_STEP_SUMMARY"

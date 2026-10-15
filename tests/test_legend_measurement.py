@@ -14,6 +14,7 @@ from gbdraw.config.models import (
 )
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import LegendDrawingConfigurator, LegendMeasurement
+from gbdraw.configurators.legend import measure_legend
 from gbdraw.layout.spatial import Aabb, union_aabbs
 from gbdraw.render.groups.circular.legend import LegendGroup as CircularLegendGroup
 from gbdraw.render.groups.linear.legend import LegendGroup as LinearLegendGroup
@@ -33,13 +34,7 @@ def _record() -> SeqRecord:
 
 def _configurator(profile, canvas_config) -> LegendDrawingConfigurator:
     return LegendDrawingConfigurator(
-        color_table=None,
-        default_colors=None,
-        selected_features_set=["CDS"],
         profile=profile,
-        gc_config=None,
-        skew_config=None,
-        feature_config=None,
         canvas_config=canvas_config,
     )
 
@@ -73,7 +68,8 @@ def test_circular_legend_measurement_carries_the_render_layout() -> None:
     )
     configurator = _configurator(profile, canvas_config)
 
-    measurement = configurator.measure_legend(
+    measurement = measure_legend(
+        configurator,
         _legend_table(),
         placement=canvas_config.legend_position,
         wrap_width=canvas_config.total_width,
@@ -96,11 +92,7 @@ def test_circular_legend_measurement_carries_the_render_layout() -> None:
     assert measurement.has_gradient is True
     assert not hasattr(configurator, "legend_width")
 
-    group = CircularLegendGroup(
-        canvas_config,
-        measurement,
-        _legend_table(),
-    )
+    group = CircularLegendGroup(measurement, _legend_table())
     assert group.layout is measurement.circular_layout
 
 
@@ -161,17 +153,13 @@ def test_linear_legend_measurement_is_the_renderer_geometry_authority(
     )
     configurator = _configurator(profile, canvas_config)
 
-    measurement = configurator.measure_legend(
+    measurement = measure_legend(
+        configurator,
         legend_table,
         placement=canvas_config.legend_position,
         wrap_width=canvas_config.total_width,
     )
-    group = LinearLegendGroup(
-        canvas_config,
-        measurement,
-        legend_table,
-        cfg=profile.config,
-    )
+    group = LinearLegendGroup(measurement, legend_table)
 
     assert measurement.circular_layout is None
     assert measurement.linear_layout is not None
@@ -225,7 +213,8 @@ def test_empty_legend_measurement_is_an_immutable_zero_value(mode: str) -> None:
         )
     configurator = _configurator(profile, canvas_config)
 
-    measurement = configurator.measure_legend(
+    measurement = measure_legend(
+        configurator,
         {},
         placement=canvas_config.legend_position,
         wrap_width=canvas_config.total_width,
@@ -258,7 +247,8 @@ def test_legend_mode_dispatch_uses_the_render_profile() -> None:
         legend="right",
     )
     configurator = _configurator(profile, canvas_config)
-    measurement = configurator.measure_legend(
+    measurement = measure_legend(
+        configurator,
         _legend_table(),
         placement="right",
         wrap_width=canvas_config.total_width,
@@ -290,7 +280,8 @@ def test_legend_local_bounds_include_stroke_at_its_painted_position(mode: str) -
     legend_table = _legend_table()
     legend_table["CDS"]["stroke"] = "#222222"
     legend_table["CDS"]["width"] = 6
-    measurement = _configurator(profile, canvas_config).measure_legend(
+    measurement = measure_legend(
+        _configurator(profile, canvas_config),
         legend_table,
         placement=canvas_config.legend_position,
         wrap_width=canvas_config.total_width,
@@ -336,7 +327,8 @@ def test_legend_measurement_rejects_invalid_wrap_width(wrap_width: float) -> Non
     )
 
     with pytest.raises(ValueError, match="wrap width"):
-        _configurator(profile, canvas_config).measure_legend(
+        measure_legend(
+            _configurator(profile, canvas_config),
             _legend_table(),
             placement="right",
             wrap_width=wrap_width,

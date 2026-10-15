@@ -138,7 +138,7 @@ test('the Legend tab help does not claim a fill color edit it lacks (PV-12)', ()
   const end = html.indexOf('v-if="isFeatureDrawerMounted"', start);
   assert.ok(start >= 0 && end > start, 'the Legend tab markup is found');
   const legendTab = html.slice(start, end);
-  const help = legendTab.match(/<p\b[^>]*>\s*(Live edit:[^<]*)<\/p>/)?.[1] || '';
+  const help = legendTab.match(/<help-tip\b[^>]*\btext="(Live edit:[^"]*)"/)?.[1] || '';
   assert.match(help, /^Live edit:/);
   assert.match(legendTab, /renameLegendEntry\(|deleteLegendEntry\(|setLegendEntryStrokeColorValue\(/);
   const claimsFillColor = /\bcolou?rs?\b/i.test(help.replace(/\bstroke colou?rs?\b/gi, ''));

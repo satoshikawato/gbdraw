@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import base64
 import gzip
+import io
 import json
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
+import tools.capture_gallery_tutorial_screenshots as capture_tool
 from tools.capture_gallery_tutorial_screenshots import (
     DEFAULT_MAX_FILE_SIZE_KB,
     DEFAULT_MAX_IMAGE_HEIGHT,
@@ -14,6 +17,7 @@ from tools.capture_gallery_tutorial_screenshots import (
     TutorialContext,
     ValidationResult,
     add_capture_contract_validation,
+    add_step_replay_validation,
     iter_operation_contexts,
     load_ready_examples,
     resolve_gallery_reference,
@@ -106,8 +110,8 @@ LAYOUT_RESULT_CAPTURES = {
         "visible_text": {"Vibrio nigripulchritudo", "AP024087.1", "AP024088.1", "pVNTG1", "pVNTG4", "GC content", "GC skew (+)"},
     },
     "vibrio-harveyi-group-collinear": {
-        "src": "./media/vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp",
-        "selector": "svg[data-capture-vibrio-overview='true']",
+        "src": "./media/vibrio-harveyi-group-collinear/manual-10-01-collinear-overview.webp",
+        "selector": "svg[data-capture-vibrio-preview='true']",
         "viewport": {"width": 1800, "height": 1100},
         "state": {
             "mode": "linear",
@@ -164,7 +168,7 @@ LINEAR_COMPARISON_PANEL_EXAMPLES = {
 
 LOSATP_MODE_CAPTURES = {
     "BGC0000708-BGC0000713": {
-        "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
+        "src": "./media/BGC0000708-BGC0000713/manual-05-02-select-losatp-orthogroups.webp",
         "selected": "Similarity groups",
         "state": "orthogroup",
     },
@@ -184,44 +188,10 @@ LOSATP_MODE_CAPTURES = {
         "state": "orthogroup",
     },
     "vibrio-harveyi-group-collinear": {
-        "src": "./media/vibrio-harveyi-group-collinear/manual-04-01-search-method-collinear.webp",
+        "src": "./media/vibrio-harveyi-group-collinear/manual-05-02-search-method-collinear.webp",
         "selected": "Collinear blocks",
         "state": "collinear",
     },
-}
-
-
-FIRST_COMPARISON_BOUNDARY_CAPTURE = {
-    "src": "./media/BGC0000708-BGC0000713/manual-03-03-first-comparison-boundary.webp",
-    "selector": "[data-edge-key='record-1->record-2']",
-    "viewport": {"width": 1600, "height": 1100},
-    "state": {
-        "mode": "linear",
-        "linearSeqs.0.uid": "record-1",
-        "linearSeqs.1.uid": "record-2",
-        "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
-        "linearComparisonResolution.edges.0.source": "losat",
-    },
-    "visible_text": {
-        "#1",
-        "Streptomyces lividus CBS 844.73",
-        "#2",
-        "Streptomyces fradiae ATCC 10745",
-        "Run LOSAT",
-    },
-}
-
-
-FIRST_RAW_RESULT_CAPTURE = {
-    "src": "./media/BGC0000708-BGC0000713/manual-03-04-first-raw-result.webp",
-    "selector": "[data-linear-raw-result='record-1->record-2']",
-    "viewport": {"width": 1600, "height": 1100},
-    "state": {
-        "mode": "linear",
-        "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
-        "linearComparisonResolution.edges.0.source": "losat",
-    },
-    "visible_text": {"Raw LOSAT filename", "Raw result", "Save Raw LOSAT TSV"},
 }
 
 
@@ -319,78 +289,80 @@ def test_linear_comparison_tutorials_do_not_use_the_retired_search_method_api() 
         assert '"label": "Search method"' not in serialized
 
 
-def test_first_linear_comparison_boundary_has_an_exact_capture_contract() -> None:
+def test_bgc_previews_replay_the_reader_steps_through_their_own_generate() -> None:
+    """D-01/D-08: each BGC preview is the result of the reader's own steps from the MIBiG files."""
+
     sample = load_ready_examples("BGC0000708-BGC0000713")[0]
     tutorial = _load_tutorial(sample)
-    matches = [
-        operation
-        for _, operation in iter_operation_contexts(sample, tutorial)
-        if operation.get("media", {}).get("src")
-        == FIRST_COMPARISON_BOUNDARY_CAPTURE["src"]
-    ]
+    steps = tutorial["manualSteps"]
+    generate_steps = set()
+    for number, step in enumerate(steps, start=1):
+        types = [action["type"] for action in step.get("replay", [])]
+        if "generate" in types:
+            generate_steps.add(number)
+            assert types[-1] == "generate", number
+    # Step 7 regenerates through Apply in the Review alignment dialog, not Generate Diagram.
+    assert generate_steps == {4, 5, 6, 8, 9, 10}
+    assert any("similarity-alignment-apply-reason" in action.get("selector", "") for action in steps[6]["replay"])
 
-    assert len(matches) == 1
-    operation = matches[0]
-    capture = operation["capture"]
-    expected = FIRST_COMPARISON_BOUNDARY_CAPTURE
-    assert operation["dataDependent"] is True
-    assert capture["source"] == "webapp"
-    assert capture["session"] == sample["session"]
-    assert capture["selector"] == expected["selector"]
-    assert capture["waitForSelector"] == expected["selector"]
-    assert capture["viewport"] == expected["viewport"]
-    assert capture["cropPadding"] == {
-        "top": 0,
-        "right": 24,
-        "bottom": 12,
-        "left": 12,
+    previews = {
+        number: operation["capture"]
+        for number, step in enumerate(steps, start=1)
+        for operation in step.get("operations", [])
+        if operation.get("capture", {}).get("selector") == "[data-capture='bgc-preview']"
     }
-    assert expected["state"].items() <= capture["assertAppState"].items()
-    assert expected["visible_text"] <= set(capture["visibleText"])
-    assert capture["openDetails"] == ["Selected pairs"]
-    assert capture["visibleControls"] == [
-        {
-            "selector": (
-                "[data-edge-key='record-1->record-2'] "
-                "input[type='radio']:checked"
-            ),
-            "checked": True,
-        },
-    ]
+    assert set(previews) == generate_steps | {7}
+    for number, capture in previews.items():
+        assert capture["replayThrough"] == number
+        assert capture["session"] == sample["session"]
+        assert capture["assertAppState"]["linearSeqs.length"] == 5
+    assert previews[5]["assertAppState"]["linearSeqs.4.region_reverse"] is False
+    assert previews[6]["assertAppState"]["linearSeqs.4.region_reverse"] is True
 
 
-def test_first_raw_result_has_an_exact_advanced_capture_contract() -> None:
+def test_bgc_session_holds_the_mibig_files_with_record_reverse_complement() -> None:
+    """D-08: the Session stores the original BGC0000713.gbk and reverses it per record."""
+
     sample = load_ready_examples("BGC0000708-BGC0000713")[0]
-    tutorial = _load_tutorial(sample)
-    expected = FIRST_RAW_RESULT_CAPTURE
-    matches = [
-        operation
-        for _, operation in iter_operation_contexts(sample, tutorial)
-        if operation.get("media", {}).get("src") == expected["src"]
+    session_path = resolve_gallery_reference(str(sample["session"]))
+    assert session_path is not None
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+    records = session["renderRequest"]["records"]
+    assert [record["presentation"]["reverseComplement"] for record in records] == [
+        False,
+        False,
+        False,
+        False,
+        True,
     ]
+    data_dir = Path("gbdraw/web/tutorial-data/aminoglycoside-bgc-five")
+    for record, name in zip(records, sorted(path.name for path in data_dir.glob("*.gbk")), strict=True):
+        resource = session["resources"][record["source"]["resourceId"]]
+        assert resource["name"].endswith(name), (resource["name"], name)
+        assert base64.b64decode(resource["data"]) == (data_dir / name).read_bytes(), name
 
-    assert len(matches) == 1
-    operation = matches[0]
-    capture = operation["capture"]
-    assert operation["dataDependent"] is True
-    assert capture["source"] == "webapp"
-    assert capture["session"] == sample["session"]
-    assert capture["selector"] == expected["selector"]
-    assert capture["waitForSelector"] == expected["selector"]
-    assert capture["viewport"] == expected["viewport"]
-    assert capture["cropPadding"] == 14
-    assert capture["openDetails"] == ["Advanced comparison and layout"]
-    assert expected["state"].items() <= capture["assertAppState"].items()
-    assert expected["visible_text"] <= set(capture["visibleText"])
-    assert capture["visibleControls"] == [
-        {
-            "selector": (
-                "[data-linear-raw-result='record-1->record-2'] "
-                "input[aria-label='Raw LOSAT filename for #1 to #2']"
-            ),
-            "value": "",
-        }
-    ]
+
+def test_bgc_finish_step_types_the_arrow_geometry_of_the_published_figure() -> None:
+    """The published figure fixes both arrow ratios, so the reader's last step types both.
+
+    Left at Auto, the head length follows the size class of the longest cluster.
+    """
+
+    sample = load_ready_examples("BGC0000708-BGC0000713")[0]
+    session_path = resolve_gallery_reference(str(sample["session"]))
+    assert session_path is not None
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+    published = session["renderRequest"]["diagramOptions"]["configOverrides"]
+    step = _load_tutorial(sample)["manualSteps"][9]
+    typed = {action["selector"]: action["value"] for action in step["replay"] if action["type"] == "fill"}
+    finished = step["operations"][-1]
+    for name, label in (("head_length_ratio", "Head Length Ratio"), ("shaft_width_ratio", "Shaft Width Ratio")):
+        value = published[f"objects.features.arrow_geometry.{name}"]
+        row = [f"Features › Arrow Geometry › {label}", str(value)]
+        assert typed[f'input[aria-label="Arrow {label.lower()}"]'] == value
+        assert row in step["table"]["rows"]
+        assert row in finished["table"]["rows"]
+        assert finished["capture"]["assertAppState"][f"adv.arrow_{name}"] == value
 
 
 def test_vibrio_capture_keeps_publication_comparisons_active() -> None:
@@ -410,16 +382,61 @@ def test_vibrio_capture_keeps_publication_comparisons_active() -> None:
         operation["capture"]
         for _, operation in iter_operation_contexts(sample, tutorial)
         if operation.get("media", {}).get("src", "").startswith(
-            "./media/vibrio-harveyi-group-collinear/manual-04-"
+            "./media/vibrio-harveyi-group-collinear/manual-05-"
         )
+        and "replayThrough" not in operation["capture"]
     ]
-    assert comparison_captures
+    assert len(comparison_captures) == 4
     for capture in comparison_captures:
         scripts = " ".join(
             action.get("script", "") for action in capture.get("actions", [])
         )
         assert "setLinearComparisonGlobalAction('losat')" in scripts
         assert capture["assertAppState"]["linearComparisonPlan.mode"] == "adjacent"
+
+
+def test_vibrio_previews_replay_each_generate_step() -> None:
+    """Every Generate step shows its own replayed preview; LOSAT is set up once (D-01, D-02, D-07)."""
+
+    sample = load_ready_examples("vibrio-harveyi-group-collinear")[0]
+    tutorial = _load_tutorial(sample)
+    steps = tutorial["manualSteps"]
+    generate_steps = [
+        index
+        for index, step in enumerate(steps, start=1)
+        if any(action["type"] == "generate" for action in step.get("replay", []))
+    ]
+    assert generate_steps == [4, 5, 8, 10]
+
+    losat_steps = [
+        index
+        for index, step in enumerate(steps, start=1)
+        if any("Run LOSAT" in action.get("selector", "") for action in step.get("replay", []))
+    ]
+    assert losat_steps == [5]
+
+    # File defaults are filled one File at a time; no step adds a slot during replay.
+    assert [action["selector"] for action in steps[1]["replay"]] == [
+        "input[aria-label='Default definition for file 1']",
+        "input[aria-label='Default subtitle for file 1']",
+    ]
+    assert [action["selector"] for action in steps[2]["replay"]] == [
+        "input[aria-label='Default definition for file 2']",
+        "input[aria-label='Default subtitle for file 2']",
+    ]
+
+    for index in generate_steps:
+        previews = [
+            operation["capture"]
+            for operation in steps[index - 1]["operations"]
+            if operation["capture"].get("selector") == "svg[data-capture-vibrio-preview='true']"
+        ]
+        assert len(previews) == 1, index
+        capture = previews[0]
+        assert capture["replayThrough"] == index
+        assert capture["session"] == sample["session"]
+        scripts = " ".join(action.get("script", "") for action in capture["actions"])
+        assert "(D-07)" in scripts
 
 
 @pytest.mark.parametrize("example_id", LAYOUT_RESULT_CAPTURES)
@@ -499,6 +516,27 @@ def test_basic_gallery_capture_session_contains_the_named_record(
     assert expected["resource_marker"] in decoded
 
 
+def test_vnig_upload_capture_names_the_session_file_it_shows() -> None:
+    """The tool retakes the upload crop only from capture metadata (OV-628)."""
+
+    filename = "GCF_015097735.1_ASM1509773v1_genomic.gbff"
+    sample = load_ready_examples("Vnig_TUMSAT-TG-2018")[0]
+    operations = [
+        operation
+        for _, operation in iter_operation_contexts(sample, _load_tutorial(sample))
+        if operation.get("media", {}).get("src", "").endswith("/manual-02-01-gbff-upload.webp")
+    ]
+
+    assert len(operations) == 1
+    operation = operations[0]
+    assert operation.get("dataDependent") is True
+    capture = operation.get("capture", {})
+    assert capture.get("source") == "webapp"
+    assert capture.get("session") == sample["session"]
+    assert capture.get("assertAppState") == {"mode": "circular", "files.c_gb.name": filename}
+    assert capture.get("visibleText") == [filename]
+
+
 def test_ready_gallery_media_passes_capture_contract_validation() -> None:
     result = validate_tutorial_media(
         load_ready_examples(),
@@ -570,3 +608,98 @@ def test_web_app_readiness_waits_for_palette_without_starting_worker() -> None:
     assert "diagramGenerationWorkerReady" not in script
     assert "pyodideReady" not in script
     assert timeout == 120000
+
+
+def _manual_context(step_index: int) -> TutorialContext:
+    return TutorialContext(
+        example_id="current-example",
+        tutorial_path=Path("tutorial.json"),
+        section="manualSteps",
+        step_index=step_index,
+        step_title="Generate",
+        operation_index=1,
+    )
+
+
+@pytest.mark.parametrize("replay_through", [0, 3, "2", True])
+def test_replay_capture_names_a_step_up_to_its_own(replay_through: object) -> None:
+    result = ValidationResult(errors=[], warnings=[])
+    operation = {"capture": {"source": "webapp", "replayThrough": replay_through}}
+
+    add_capture_contract_validation(result, _manual_context(2), {}, operation)
+
+    assert result.errors == [
+        "current-example / manualSteps / step 2 / Generate / operation 1: "
+        "capture.replayThrough must name a manual step from 1 to this step."
+    ]
+
+
+def test_step_replay_accepts_reader_actions_only() -> None:
+    result = ValidationResult(errors=[], warnings=[])
+    step = {"replay": [{"type": "fill"}, {"type": "generate"}, {"type": "resetSettings"}, {"type": "upload"}]}
+
+    add_step_replay_validation(result, _manual_context(1), step)
+
+    assert len(result.errors) == 2
+    assert "replay action 3" in result.errors[0]
+    assert "replay action 4" in result.errors[1]
+
+
+def test_replay_resets_then_performs_steps_through_the_named_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tutorial = tmp_path / "tutorial.json"
+    tutorial.write_text(
+        json.dumps(
+            {
+                "manualSteps": [
+                    {"replay": [{"type": "fill", "value": "one"}]},
+                    {"title": "no replay"},
+                    {"replay": [{"type": "generate"}]},
+                    {"replay": [{"type": "fill", "value": "four"}]},
+                ]
+            }
+        )
+    )
+    performed: list[dict[str, object]] = []
+    monkeypatch.setattr(capture_tool, "resolve_gallery_reference", lambda reference: tutorial)
+    monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action: performed.append(action))
+
+    capture_tool.replay_tutorial_steps(object(), {"tutorial": "./tutorials/x.json"}, 3)
+
+    assert performed == [
+        {"type": "resetSettings"},
+        {"type": "fill", "value": "one"},
+        {"type": "generate"},
+    ]
+
+
+def test_capture_lets_css_transitions_end_before_the_crop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A caret turns over 200 ms after its card opens; a crop taken sooner shows it mid-turn (OV-627)."""
+
+    events: list[str] = []
+
+    class FakePage:
+        def evaluate(self, script: str, *args: object) -> None:
+            events.append(script)
+
+        def screenshot(self, **kwargs: object) -> bytes:
+            events.append("screenshot")
+            buffer = io.BytesIO()
+            Image.new("RGB", (2, 2)).save(buffer, "PNG")
+            return buffer.getvalue()
+
+    monkeypatch.setattr(capture_tool, "prepare_capture_page", lambda *args: None)
+    monkeypatch.setattr(capture_tool, "output_path_for_operation", lambda operation: tmp_path / "crop.webp")
+    operation = {"capture": {"boundingBox": {"x": 0, "y": 0, "width": 2, "height": 2}}}
+
+    capture_tool.capture_operation(FakePage(), {}, operation, "http://127.0.0.1", 90)
+
+    waits = [
+        index
+        for index, script in enumerate(events)
+        if "CSSTransition" in script and ".finished" in script
+    ]
+    assert waits and waits[-1] < events.index("screenshot")

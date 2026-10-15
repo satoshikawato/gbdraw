@@ -7,6 +7,7 @@ import pytest
 
 from dataclasses import asdict, replace
 import copy
+from typing import get_args, get_type_hints
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -29,7 +30,7 @@ from gbdraw.api.requests import (
     RenderOutputRequest,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
+from gbdraw.features.placement import _LANE_SIDES, FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.features.source import build_source_feature_catalog
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session_request_codec import (
@@ -205,6 +206,19 @@ def test_wrong_mode_exact_and_table_rejected(mode, side):
         plan_request(
             _request(mode=mode, feature_placement_table=_table(placement=side))
         )
+
+
+@pytest.mark.parametrize("mode", [["circular"], {"circular": 1}, None, 1, "Circular"])
+def test_a_mode_that_is_not_a_mode_name_is_refused_as_a_mode(mode):
+    # A Session file can hold an array where its mode is read (validate_session, Sessions 41 to 44).
+    with pytest.raises(ValidationError, match="Placement mode must be circular or linear"):
+        FeaturePlacementTarget("main").validate_mode(mode)
+
+
+def test_the_side_annotation_lists_the_lane_sides_of_both_modes():
+    # The annotation of a public dataclass cannot read _LANE_SIDES; this pins the two together.
+    annotated = get_args(get_args(get_type_hints(FeaturePlacementTarget)["side"])[0])
+    assert sorted(annotated) == sorted(side for sides in _LANE_SIDES.values() for side in sides)
 
 
 @pytest.mark.parametrize("kind", ["duplicate", "table", "file", "table_file"])
@@ -1629,10 +1643,24 @@ def test_final_svg_undefined_uses_negative_geometry_pool(mode, undefined, resolv
     record.seq = Seq("ATGC" * 3000)
     record.features = [SeqFeature(SimpleLocation(1000, 2000, strand), type="CDS",
         qualifiers={"locus_tag": [label]}) for strand, label in ((undefined, "undefined"), (-1, "negative"), (1, "positive"))]
+    overrides = {"canvas.strandedness": True, "canvas.resolve_overlaps": resolve,
+        ("canvas.circular.track_type" if mode == "circular" else "canvas.linear.track_layout"): "middle",
+        f"labels.{mode}.scope": "both" if mode == "circular" else "all"}
+    if not resolve:
+        # Unresolved, the first two features are drawn on top of each other and so are
+        # their labels: nothing is drawn, and the row separates the features (LP-D52).
+        from gbdraw.exceptions import LabelsDoNotFitError
+        with pytest.raises(LabelsDoNotFitError) as stopped:
+            plan_request(_request(record, mode=mode, feature_placements=(_exact(record, 0),),
+                config_overrides=overrides)).build()
+        rows = {row.kind: row for row in stopped.value.report.rows}
+        assert rows["separate_features"].status == "found"
+        assert rows["separate_features"].values == {"canvas.resolve_overlaps": True}
+        assert "--resolve_overlaps   (separate overlapping features)" in str(stopped.value)
+        # Labels outside the features stay apart.
+        overrides["labels.rendering"] = "external_only"
     request = _request(record, mode=mode, feature_placements=(_exact(record, 0),),
-        config_overrides={"canvas.strandedness": True, "canvas.resolve_overlaps": resolve,
-            ("canvas.circular.track_type" if mode == "circular" else "canvas.linear.track_layout"): "middle",
-            f"labels.{mode}.scope": "both" if mode == "circular" else "all"})
+        config_overrides=overrides)
     drawing = plan_request(request).build()
     root = ET.fromstring((drawing.drawing if hasattr(drawing, "drawing") else drawing).tostring())
     starts = {}

@@ -9,6 +9,67 @@ documents current support and what a user does with an older file, including
 the [retired inputs](../REFERENCE/session-and-request-compatibility.md#retired-inputs).
 Release notes record when a format changed.
 
+## Unreleased: Session 47 keys the Legend edits by the row key
+
+Session version 47 stores each mode slice's Legend color and stroke edits
+(`editorState.legend.colorOverrides` and `strokeOverrides`) under the row key:
+the caption gbdraw drew for the row, kept in the entry's `originalCaption`
+(the entry's `caption` when it has none). Session 46 stored them under the
+name the row shows (`caption`). Keep both in the Legend rename dialog keeps the
+typed name (PD-OI-061 scenario revision 5), so two rows can show one name; the
+shown name no longer identifies a row. A rename changes only the entry's
+`caption`; its edits stay under the key. Within one Legend list the entries are
+unique by row key, not by caption.
+
+Session 47 also adds the diagram font of each mode slice,
+`modes.<mode>.config.adv.font_family` (the **Font** section, PD-OI-098): the
+CSS `font-family` list a drawing's text uses, `null` for the default
+(Liberation Sans). A Session stores only the name, never the font file
+(D-02). A Session older than 47 has no such field; when its draft holds the
+font as the preserved override `objects.text.font_family` (a Python API
+request that set it, saved again by the Web app), the Web Load moves that value into
+the field. `font-family-preserved.v44.gbdraw-session.json.gz` and
+`font-family-preserved.v46.gbdraw-session.json.gz` are the positive fixtures.
+No other field changed.
+
+The bytes of a Session 46 cannot be read as Session 47: after a rename of
+GC skew to `Z` and of GC content to `GC skew`, a color stored under `GC skew`
+belongs to the GC content row in Session 46 and would name the GC skew row in
+Session 47. Every reader of a Session older than 47 therefore gives each row
+key the value Session 46 applied to that row (the Web compile of first-parent
+`main` 9839de8e: `draftLegendRows` and `compileDirectEditorMutationPlan` in
+`app/candidate-render.js`). It reads the stores as Session 46 Load read them
+(keys trimmed, a value without a usable color or width left out) and the rows
+as Session 46 Load kept them (an entry with a caption and a usable color, the
+first of each caption in its list). An edit reaches the row whose caption it
+is stored under, a listed row before a dormant one and a deleted row as its
+Restore shows it, and moves to that row's key (`moved`). An edit under a name
+that no row shows reached Python's row of that name and stays under its key:
+`unshown` when it is the key of a renamed row, else `unmatched`. Session 46
+applied the color edits in their order, then the strokes in the order of the
+color edits' keys and then their own, so of several edits that reach one row
+the later wins and each earlier one is a `collision` (dropped); a stroke field
+(`strokeColor`, `strokeWidth`) that no later edit sets keeps the earlier value,
+whose `collision` then names the row's key as `toKey`.
+Each reader returns these outcomes as data (`{store, fromKey, toKey, outcome}`,
+`toKey` null when dropped); the Web Load computes them before it commits.
+The Web Load (`sessionLegendEditsByRowKey`
+in `services/mode-scoped-migration.js`, before any other reader), the CLI
+re-save (`build_session_json`), the Python migration of an older Session
+(`_split_session_adjunct`), and `upgrade_session_document` (a Session 46 keeps
+its drawings) read them this way; `legend_edits_by_row_key` in
+`gbdraw/session_io.py` is the Python twin of `legendEditsByRowKey`.
+`tests/fixtures/sessions/legend-row-key-vectors.json` pins both, and
+`legend-renamed-rows.v46.gbdraw-session.json.gz` is the positive Session 46
+fixture written by first-parent `main` 9839de8e (#1003), which holds Session
+46. The Legend inventory and generated colors (`originalOrder`,
+`originalColors`) were already keyed by Python's key and are unchanged, as is
+`addedCaptions` (rule row keys).
+
+The multi-drawing format planned as "Session 47" in PD-OI-090 becomes Session
+48 (Owner decision of 2026-10-13, quoted in the Product Contract revision
+that records PD-OI-061 scenario revision 5).
+
 ## Unreleased: Session 46 keeps the settings and the Result of each diagram mode
 
 In the Web app, Circular and Linear each keep their own settings, edits, and
@@ -423,9 +484,9 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 46 | 27–33, 39–42, 44, and 46 |
+| gbdraw session | 47 | 27–33, 39–42, 44, 46, and 47 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, 46, and 47 |
 
 Previously written Session 44 documents with request schema 7 or 8 and feature
 catalog schema 4 remain readable. Current saves write request schema 9;

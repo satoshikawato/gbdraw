@@ -18,6 +18,7 @@ from gbdraw.api.request_render import plan_linear_request
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
+    SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
     AlignmentAnchorIdentity,
     AlignmentChoiceKind,
     AlignmentEvidenceEdge,
@@ -486,8 +487,8 @@ def resolve_similarity_alignment_payload(
         },
         "request",
     )
-    if type(raw["schema"]) is not int or raw["schema"] != 2:
-        raise ValidationError("request.schema must be 2.")
+    if type(raw["schema"]) is not int or raw["schema"] != SIMILARITY_ALIGNMENT_PLAN_SCHEMA:
+        raise ValidationError(f"request.schema must be {SIMILARITY_ALIGNMENT_PLAN_SCHEMA}.")
     group_id = _text(raw["groupId"], "request.groupId")
     records = [
         _record_fact(value, f"request.records[{index}]")
@@ -578,7 +579,7 @@ def resolve_similarity_alignment_payload(
     )
     plan = resolution.plan
     return {
-        "schema": 2,
+        "schema": SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
         "status": "ambiguous" if resolution.ambiguities else "resolved",
         "groupId": resolution.group_id,
         "reference": _serialize_anchor(resolution.reference),

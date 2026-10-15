@@ -83,7 +83,8 @@ const EDITS = [
     await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
   }],
   // N-06 (PD-OI-042): a rule captioned like the generated `other proteins` row
-  // draws its own `other proteins [#hex]` row; that row then edits the rule.
+  // draws its own row, whose key is `other proteins [#hex]` (never drawn: the
+  // Legend numbers the two names); that row then edits the rule.
   ['rule caption naming a generated row', (page) => evaluateWithRetainedPromise(page, () => {
     const app = window.__GBDRAW_APP__;
     Object.assign(app.newSpecRule, {

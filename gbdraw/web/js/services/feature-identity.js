@@ -1,4 +1,50 @@
 // @ts-check
+/** @typedef {Record<string, unknown>} AliasSource Any object whose alias keys are read. */
+/** @typedef {{ valid: boolean, supplied: boolean, value: string }} TextAliasStatus */
+/** @typedef {{ valid: boolean, supplied: boolean, value: number | null }} IntegerAliasStatus */
+/**
+ * @typedef {{
+ *   valid: boolean,
+ *   usable: boolean,
+ *   recordIndex: IntegerAliasStatus,
+ *   sourceIndex: IntegerAliasStatus,
+ *   recordKey: TextAliasStatus,
+ *   biologicalId: TextAliasStatus,
+ *   renderedId: TextAliasStatus,
+ *   stableId: TextAliasStatus
+ * }} FeatureIdentity
+ */
+/**
+ * A selector of a record in the committed request: by index or by record ID.
+ * @typedef {{ kind?: string, index: number, value?: string }} CommittedRecordSelector
+ */
+/**
+ * A record of the committed request, as the pure checks below, the record
+ * display and the alignment read it. The committed request can be one of an
+ * older schema that a Session keeps until the next Generate, so this is not
+ * the generated `CanonicalRecord`.
+ * @typedef {{
+ *   recordKey: string,
+ *   cardinality?: string,
+ *   selector?: CommittedRecordSelector | null,
+ *   region?: { selector?: CommittedRecordSelector | null, reverseComplement?: unknown } | null,
+ *   presentation?: { reverseComplement?: unknown } | null,
+ *   display?: { isCircular: boolean | null, startCoordinate: number | null },
+ *   source: { resourceId?: string, gffResourceId?: string, fastaResourceId?: string }
+ * }} CommittedRecord
+ */
+/** @typedef {{ mode?: string, records: CommittedRecord[] }} CommittedRecordRequest */
+/**
+ * An input source of the record display (the File card and its optional pair).
+ * @typedef {{ scope: string, sourceUid: string, source: unknown, paired?: unknown }} RecordDisplaySource
+ */
+/**
+ * A feature as `isCurrentFeature` reads it. A catalog feature's `record_key` is text
+ * (services/feature-catalog.js); a feature row of a Session before 40 is stored unchecked.
+ * @typedef {{ record_key?: unknown }} RecordKeyedFeature
+ */
+
+/** @param {unknown} value */
 const normalizeText = (value) => String(value ?? '').trim();
 
 export const RECORD_INDEX_KEYS = Object.freeze([
@@ -24,6 +70,11 @@ export const ORTHOGROUP_ID_KEYS = Object.freeze([
   'id', 'orthogroupId', 'orthogroup_id'
 ]);
 
+/**
+ * @param {AliasSource | null | undefined} source
+ * @param {readonly string[]} keys
+ * @returns {TextAliasStatus}
+ */
 export const textAliasStatus = (source, keys) => {
   let supplied = false;
   let value = '';
@@ -37,6 +88,11 @@ export const textAliasStatus = (source, keys) => {
   return { valid: true, supplied, value };
 };
 
+/**
+ * @param {AliasSource | null | undefined} source
+ * @param {readonly string[]} keys
+ * @returns {IntegerAliasStatus}
+ */
 export const nonnegativeIntegerAliasStatus = (source, keys) => {
   let supplied = false;
   /** @type {number | null} */
@@ -61,15 +117,24 @@ export const nonnegativeIntegerAliasStatus = (source, keys) => {
   return { valid: true, supplied, value };
 };
 
+/** @param {AliasSource | null | undefined} source */
 export const orthogroupIdStatus = (source) => (
   textAliasStatus(source, ORTHOGROUP_ID_KEYS)
 );
 
+/**
+ * @template G
+ * @param {G[] | null | undefined} orthogroups
+ * @returns {{ group: G, id: string }[]}
+ */
 export const uniqueOrthogroupEntries = (orthogroups) => {
+  /** @type {Map<string, number>} */
   const counts = new Map();
+  /** @type {{ group: G, id: string }[]} */
   const entries = [];
   (Array.isArray(orthogroups) ? orthogroups : []).forEach((group) => {
-    const status = orthogroupIdStatus(group);
+    // A group is a record of alias fields; callers hold it under their own shape.
+    const status = orthogroupIdStatus(/** @type {AliasSource | null | undefined} */ (group));
     if (!status.valid || !status.supplied) return;
     counts.set(status.value, (counts.get(status.value) || 0) + 1);
     entries.push({ group, id: status.value });
@@ -77,6 +142,11 @@ export const uniqueOrthogroupEntries = (orthogroups) => {
   return entries.filter(({ id }) => counts.get(id) === 1);
 };
 
+/**
+ * @param {AliasSource | null | undefined} source
+ * @param {{ allowLegacySvgStable?: boolean }} [options]
+ * @returns {FeatureIdentity}
+ */
 export const featureIdentity = (source, { allowLegacySvgStable = false } = {}) => {
   const recordIndex = nonnegativeIntegerAliasStatus(source, RECORD_INDEX_KEYS);
   const sourceIndex = nonnegativeIntegerAliasStatus(source, SOURCE_FEATURE_INDEX_KEYS);
@@ -112,6 +182,10 @@ export const featureIdentity = (source, { allowLegacySvgStable = false } = {}) =
   };
 };
 
+/**
+ * @param {AliasSource | null | undefined} feature
+ * @returns {FeatureIdentity}
+ */
 export const renderedFeatureIdentity = (feature) => {
   const identity = featureIdentity(feature);
   const renderedId = textAliasStatus(feature, [
@@ -127,8 +201,14 @@ export const renderedFeatureIdentity = (feature) => {
   };
 };
 
+/**
+ * @param {FeatureIdentity | null | undefined} reference
+ * @param {FeatureIdentity | null | undefined} candidate
+ * @param {{ includeRendered?: boolean }} [options]
+ */
 export const identityMatches = (reference, candidate, { includeRendered = false } = {}) => {
   if (!reference?.usable || !candidate?.usable) return false;
+  /** @type {('recordIndex' | 'sourceIndex' | 'recordKey' | 'biologicalId' | 'stableId' | 'renderedId')[]} */
   const fields = ['recordIndex', 'sourceIndex', 'recordKey', 'biologicalId', 'stableId'];
   if (includeRendered) fields.push('renderedId');
   return fields.every((field) => (
@@ -138,11 +218,18 @@ export const identityMatches = (reference, candidate, { includeRendered = false 
   ));
 };
 
+/**
+ * @template M
+ * @param {AliasSource | null | undefined} feature
+ * @param {M[] | null | undefined} [members]
+ * @returns {M | null}
+ */
 export const resolveUniqueOrthogroupMemberForFeature = (feature, members = []) => {
   const featureIdentityValue = renderedFeatureIdentity(feature);
   if (!featureIdentityValue.usable) return null;
   const matches = (Array.isArray(members) ? members : []).filter((member) => {
-    const memberIdentityValue = featureIdentity(member);
+    // A member is a record of alias fields; callers hold it under their own shape.
+    const memberIdentityValue = featureIdentity(/** @type {AliasSource | null | undefined} */ (member));
     return (
       identityMatches(featureIdentityValue, memberIdentityValue, { includeRendered: true }) &&
       identityMatches(memberIdentityValue, featureIdentityValue, { includeRendered: true })
@@ -153,11 +240,20 @@ export const resolveUniqueOrthogroupMemberForFeature = (feature, members = []) =
 
 // The committed request record that draws a record key: the record itself, or
 // one record of a source drawn whole (`cardinality: 'all'`, `<recordKey>:<n>`).
+/**
+ * @param {CommittedRecordRequest | null | undefined} request
+ * @param {string} key
+ */
 export const committedRecordForKey = (request, key) => request?.records.find((record) => record.recordKey === key
   || (record.cardinality === 'all' && key.startsWith(`${record.recordKey}:`)
     && /^[1-9]\d*$/.test(key.slice(record.recordKey.length + 1))));
 
 // Whether an input source of the record display feeds a committed record.
+/**
+ * @param {CommittedRecordRequest | null | undefined} request
+ * @param {CommittedRecord} record
+ * @param {RecordDisplaySource} source
+ */
 export const committedRecordUsesSource = (request, record, source) => source.scope === request?.mode
   && (source.scope === 'circular' || record.recordKey === source.sourceUid
     || (record.selector?.kind === 'recordIndex'
@@ -168,8 +264,19 @@ export const committedRecordUsesSource = (request, record, source) => source.sco
 // display's source binding, refreshed for the committed request: `request`,
 // the current input `sources`, the `boundSources` captured when that request
 // was committed, and `matchesSavedSource(file, resourceId)` for its Session.
+/**
+ * @param {RecordKeyedFeature} feature
+ * @param {{
+ *   request: CommittedRecordRequest | null | undefined,
+ *   sources: RecordDisplaySource[],
+ *   boundSources: RecordDisplaySource[],
+ *   matchesSavedSource: (file: unknown, resourceId: string | undefined) => boolean
+ * }} binding
+ */
 export const isCurrentFeature = (feature, { request, sources, boundSources, matchesSavedSource }) => {
-  const record = committedRecordForKey(request, feature.record_key);
+  // A record key that is not text names no committed record (OV-618).
+  const key = feature.record_key;
+  const record = typeof key === 'string' ? committedRecordForKey(request, key) : undefined;
   if (!record) return false;
   return sources.some((source) => source.source && committedRecordUsesSource(request, record, source)
     && boundSources.some((bound) => bound.scope === source.scope && bound.sourceUid === source.sourceUid

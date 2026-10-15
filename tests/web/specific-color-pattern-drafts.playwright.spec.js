@@ -65,8 +65,10 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
     const described = await field.getAttribute('aria-describedby');
     expect(described).toBe(await status(page).getAttribute('id'));
     await expect(status(page)).toContainText('Not applied');
-    await expect(status(page)).toContainText('last accepted rule');
-    await expect(status(page)).toContainText('current Result');
+    // The rule for Save, Generate and Export sits in the help tip beside "Not applied".
+    const policyId = await status(page).locator('.help-tip-trigger').getAttribute('aria-describedby');
+    await expect(page.locator(`[id="${policyId}"]`)).toContainText('last accepted rule');
+    await expect(page.locator(`[id="${policyId}"]`)).toContainText('current Result');
     expect(await snapshot(page)).toEqual(before);
     const error = (await draft(page)).draft.error;
     expect(error).toMatchObject({ code: 'REGEX_SYNTAX', stage: 'rule-validation', context: { position: 1, positionUnit: 'python-character' } });
@@ -287,16 +289,11 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
       await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
       await snapshot(page);
     }
-    // Session: the held request is the caption normalization a caption edit
-    // asks for when it gives rule 1's caption to rule 0 in another color (a
-    // Load waits for a pending match, U3a 1e), so the Load takes over while
-    // the edit is late.
-    await evaluateWithRetainedPromise(page, async (captionEdit) => {
+    // Session: no Load takes over a held edit. A rule edit's only request is
+    // its match (`color`), and Save and Load wait for it (OV-377): Load is not
+    // available until the edit is applied.
+    await evaluateWithRetainedPromise(page, async () => {
       const a = window.__GBDRAW_APP__;
-      if (captionEdit) {
-        Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: '(?i)cytochrome', color: '#2266aa', cap: 'Shared' });
-        await a.addSpecificRule();
-      }
       const send = Worker.prototype.postMessage;
       Worker.prototype.postMessage = function (message, ...args) {
         if (message.operation === 'evaluateRules') {
@@ -307,29 +304,33 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
         }
         return send.call(this, message, ...args);
       };
-      window.__pendingPattern = captionEdit
-        ? a.setSpecificRuleField(0, 'cap', 'Shared')
-        : a.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
-    }, boundary === 'Session');
+      window.__pendingPattern = a.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)');
+    });
     await page.waitForFunction(() => window.__releasePattern);
     const before = await snapshot(page);
-    if (boundary === 'Session') expect(await page.evaluate(() => window.__heldKind)).toBe('color-captions');
-    else expect((await draft(page)).draft.pending).toBe(true);
+    expect(await page.evaluate(() => window.__heldKind)).toBe('color');
+    expect((await draft(page)).draft.pending).toBe(true);
     if (boundary === 'drawer') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     if (boundary === 'mode cycle') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
     if (boundary === 'remove') await page.evaluate(() => window.__GBDRAW_APP__.removeSpecificRule(0));
     if (boundary === 'reorder') await evaluateWithRetainedPromise(page, async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'other', color: '#abcdef', cap: '' }); await a.addSpecificRule(); await a.moveSpecificRuleDown(0); });
-    if (boundary === 'Session') await load(page, fixture('circular'));
+    if (boundary === 'Session') expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionLoadAvailable)).toBe(false);
     if (boundary === 'new edit') await page.evaluate(() => window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?P<enzyme>protein)'));
     if (boundary === 'new keystroke') await page.getByLabel('Color rule 1 pattern', { exact: true }).fill('[new');
     if (boundary === 'Worker cancellation') await page.evaluate(async () => { const { cancelDiagramGeneration } = await import('/gbdraw/web/js/services/diagram-generation.js'); cancelDiagramGeneration(); await window.__pendingPattern; });
     const current = await snapshot(page);
     if (boundary === 'mode cycle') writeFileSync(test.info().outputPath('mode-boundary.json'), JSON.stringify({ before, current }));
     await page.evaluate(async () => { window.__releasePattern(); await window.__pendingPattern; });
+    if (boundary === 'Session') {
+      // Nothing crossed the edit, so it is applied, and Load is available again.
+      expect(await page.evaluate(() => { const a = window.__GBDRAW_APP__; return [a.manualSpecificRules[0].val, a.sessionLoadAvailable]; })).toEqual(['(?P<enzyme>NADH)', true]);
+      expect(await draft(page)).toEqual({ text: '(?P<enzyme>NADH)', draft: null });
+      return;
+    }
     expect(await snapshot(page)).toEqual(current);
     if (['drawer', 'mode cycle'].includes(boundary)) { expect((await draft(page)).text).toBe('(?P<enzyme>NADH)'); expect(await snapshot(page)).toEqual(before); }
     if (boundary === 'reorder') expect(await page.evaluate(() => { const a = window.__GBDRAW_APP__; return a.specificRulePattern(a.manualSpecificRules[1]); })).toBe('(?P<enzyme>NADH)');
-    if (['remove', 'Session'].includes(boundary)) expect(await draft(page)).toBe(null);
+    if (boundary === 'remove') expect(await draft(page)).toBe(null);
     if (boundary === 'Worker cancellation') { expect((await draft(page)).draft.error).toBe(null); expect(await snapshot(page)).toEqual(before); }
     if (boundary === 'new keystroke') expect((await draft(page)).text).toBe('[new');
   });

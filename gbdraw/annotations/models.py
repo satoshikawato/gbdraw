@@ -11,9 +11,9 @@ from typing import Literal, Mapping, TypeAlias, cast
 
 from pandas import DataFrame
 
-from gbdraw.core.color import normalize_hex_color
+from gbdraw.core.color import HEX_COLOR_DIGITS, normalize_hex_color
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.colors import resolve_color_to_hex
+from gbdraw.io.colors import COLOR_NAMES, resolve_color_to_hex
 from gbdraw.io.record_select import RecordSelector
 
 
@@ -30,6 +30,18 @@ def _finite(value: object, name: str, *, positive: bool = False, nonnegative: bo
     if nonnegative and number < 0:
         raise ValidationError(f"{name} must be non-negative.")
     return number
+
+
+# What `_color` reads, as data (the canonical request description): outer
+# spaces, then a hex of 3 or 6 digits (normalize_hex_color) or one of
+# COLOR_NAMES in any case (named_color_hex); an optional color also reads a
+# blank text as unset. The name pattern spells each letter in both cases, so
+# Python's re and the Web's RegExp read it alike without a flag.
+HEX_COLOR_TEXT_PATTERN = rf"^\s*#(?:{HEX_COLOR_DIGITS})\s*$"
+COLOR_NAME_TEXT_PATTERN = r"^\s*(?:{})\s*$".format(
+    "|".join("".join(f"[{letter}{letter.upper()}]" for letter in name) for name in COLOR_NAMES)
+)
+BLANK_TEXT_PATTERN = r"^\s*$"
 
 
 def _color(value: object | None, name: str, *, optional: bool = False) -> str | None:
@@ -307,6 +319,8 @@ class AnnotationTrackParams:
     anchor_slot: str | None = None
     layer: Literal["underlay", "foreground"] = "foreground"
     cover_anchor: bool = False
+    # With to_slot, an overlay spans from its anchor slot's band to this slot's band.
+    to_slot: str | None = None
 
     def __post_init__(self) -> None:
         set_id = str(self.set_id).strip()
@@ -336,11 +350,14 @@ class AnnotationTrackParams:
             raise ValidationError("layer must be 'underlay' or 'foreground'.")
         if self.style_override is not None and not isinstance(self.style_override, RegionAnnotationStyle):
             raise ValidationError("style_override must be RegionAnnotationStyle or None.")
-        if self.anchor_slot is not None:
-            anchor = str(self.anchor_slot).strip()
-            if not anchor:
-                raise ValidationError("anchor_slot cannot be empty.")
-            object.__setattr__(self, "anchor_slot", anchor)
+        for name in ("anchor_slot", "to_slot"):
+            reference = getattr(self, name)
+            if reference is None:
+                continue
+            slot_id = str(reference).strip()
+            if not slot_id:
+                raise ValidationError(f"{name} cannot be empty.")
+            object.__setattr__(self, name, slot_id)
 
 
 def annotation_track_params_from_mapping(params: Mapping[str, object]) -> AnnotationTrackParams:
@@ -358,6 +375,7 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
         "anchor_slot",
         "layer",
         "cover_anchor",
+        "to_slot",
     }
     unknown = set(raw) - allowed
     if unknown:
@@ -399,6 +417,7 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
             str(raw.get("layer", "foreground")).strip().lower(),
         ),
         cover_anchor=cover_anchor,
+        to_slot=(None if raw.get("to_slot") is None else str(raw["to_slot"])),
     )
 
 

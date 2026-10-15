@@ -163,11 +163,11 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     record_list = index.index("data-linear-record-list")
     comparison = index.index("data-linear-comparison-card")
     timeline = index.index("data-linear-comparison-timeline")
-    basic = index.index('<div class="card basic-settings">')
+    basic = index.index('<div class="card basic-settings"')
     generate = index.index('<div class="generate-bar')
     advanced = index.index("data-linear-advanced-comparison")
     # UI-12 (Owner decision 2026-10-07): Generate is the last settings Tab stop.
-    about = index.index("About & Citation</summary>")
+    about = index.index('<settings-section-title section="about">')
     settings_end = index.index("<!-- Resize Handle -->")
     assert record_list < add_action < comparison < timeline < basic < advanced
     assert about < generate < settings_end
@@ -191,8 +191,10 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     assert "linearResolvedLosatEdges" not in index
     assert ">Adjacent gaps</" not in index
     assert ">Selected pairs and retained drafts</" not in index
-    raw_results = index.index(">Raw LOSAT results</div>")
-    assert advanced < raw_results
+    # Each pair row holds its own Raw LOSAT result; no second list follows Advanced.
+    assert ">Raw LOSAT results</div>" not in index
+    raw_result = index.index(':data-linear-raw-result="pair.edgeKey"')
+    assert timeline < raw_result < basic
 
 
 def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
@@ -305,7 +307,7 @@ def test_losatn_tutorial_controls_and_match_popup_are_accessible() -> None:
     assert ':data-testid="testId || undefined"' in index
     assert "'testId'" in components
     assert 'role="dialog"' in index
-    assert 'aria-label="Pairwise match details"' in index
+    assert ": 'Pairwise match details'\"" in index
     assert "element.setAttribute('role', 'button')" in svg_actions
     assert "element.setAttribute('tabindex', '0')" in svg_actions
     assert "`Pairwise match ${index + 1}`" in svg_actions

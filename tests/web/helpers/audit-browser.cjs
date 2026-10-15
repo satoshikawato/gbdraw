@@ -1,6 +1,6 @@
 // Shared browser steps for the Web GUI audit 2026-09-30 regression specs.
 const { expect } = require('@playwright/test');
-const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp } = require('./app-lifecycle.cjs');
 
 const BATCH_FIXTURE = 'tests/fixtures/web_batch_two_records.gb';
 const HMMT = 'tests/test_inputs/HmmtDNA.gbk';
@@ -52,6 +52,7 @@ const openWithGenBank = async (page, path, configure = null) => {
 
 const loadSessionFile = async (page, path) => {
   await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0, null, { timeout: 180_000 });
   await settle(page);

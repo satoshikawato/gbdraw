@@ -210,7 +210,7 @@ edits in its mode's slice of `modes`; both drawings share the LOSAT caches.
 `SessionDrawingSpec(request, mode=, id=, name=, state=)` values, where `state`
 holds Web-owned drawing fields such as `results`, `editorState`, or the
 drawing's slice in `modes`; `active_drawing=` names the drawing to open. It
-rejects what version 46 cannot hold: two drawings of one mode, a second drawing
+rejects what version 47 cannot hold: two drawings of one mode, a second drawing
 without its Results, other IDs or names, or a second drawing whose shared
 fields differ from the first's.
 

@@ -8,7 +8,6 @@ elements need no svgwrite validation.
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 import tempfile
@@ -23,13 +22,12 @@ from svgwrite.data.typechecker import Full11TypeChecker
 from gbdraw import cli
 from gbdraw.analysis.conservation import conservation_track_gradient_colors
 from gbdraw.analysis.depth_tracks import clone_depth_config
-from gbdraw.api.prepared import resolve_feature_inputs
+from gbdraw.api.diagram import resolve_feature_inputs
 from gbdraw.api.request_render import _prepare_diagram_inputs
 from gbdraw.config.modify import validate_config_overrides
 from gbdraw.exceptions import ValidationError
 from gbdraw.io import colors as color_io
 from gbdraw.io.colors import is_user_color, load_default_colors, resolve_color_to_hex
-from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.session import load_session_document, materialize_session, session_to_request
 
 REPO = Path(__file__).resolve().parents[1]
@@ -111,6 +109,27 @@ def test_default_colors_header_row_is_not_an_override(header: str, tmp_path: Pat
         resolve_feature_inputs(color_table=None, default_colors=colors, feature_visibility_table=None)
 
 
+def test_first_row_of_a_repeated_default_color_wins_for_comparisons(tmp_path: Path) -> None:
+    # A repeated feature type in -d: every row of it takes the first row's color, and a later
+    # row's color is never read. A later invalid color is therefore no error.
+    path = _tsv(tmp_path, "colors.tsv", "CDS\tred\ngene\tblue\nCDS\tgreen\nCDS\tnotacolor\n")
+    colors = load_default_colors(path, load_comparison=True)
+    assert colors[colors["feature_type"] == "CDS"]["color"].tolist() == ["#FF0000"] * 3
+    assert colors[colors["feature_type"] == "gene"]["color"].tolist() == ["#0000FF"]
+
+
+def test_linear_comparison_draws_the_first_row_of_a_repeated_default_color(tmp_path: Path) -> None:
+    _run_cli(
+        "linear", "--gbk", str(EXAMPLES / "MjeNMV.gb"), str(EXAMPLES / "MelaMJNV.gb"),
+        "-b", str(EXAMPLES / "MjeNMV.MelaMJNV.tblastx.out"),
+        "-d", _tsv(tmp_path, "colors.tsv", "CDS\tred\nCDS\tgreen\n"),
+        "-o", str(tmp_path / "out"), "-f", "svg",
+    )
+    svg = (tmp_path / "out.svg").read_text(encoding="utf-8")
+    assert 'fill="#FF0000"' in svg
+    assert 'fill="#008000"' not in svg
+
+
 def test_invalid_specific_table_color_stays_a_gbdraw_error(tmp_path: Path) -> None:
     table = _tsv(tmp_path, "table.tsv", "CDS\tproduct\tkinase\tnotacolor\n")
     with pytest.raises(ValidationError, match="Invalid color 'notacolor'"):
@@ -142,7 +161,7 @@ def test_accepted_colors_pass_every_entry_point(value: str) -> None:
     defaults = load_default_colors("")
     defaults.loc[defaults["feature_type"] == "CDS", "color"] = value
     # A color table without captions writes its colors as given; captions need
-    # a name or hex color (normalize_specific_color_captions, unchanged).
+    # a name or hex color (`_check_caption_colors`, gbdraw/api/diagram.py).
     table = DataFrame(
         [["CDS", "product", "kinase", value]],
         columns=["feature_type", "qualifier_key", "value", "color"],
@@ -154,23 +173,18 @@ def test_accepted_colors_pass_every_entry_point(value: str) -> None:
 
 @pytest.mark.parametrize("color", ["rgb(1,2,3)", "transparent", "hsl(120,50%,50%)", "#junk", "#abcd", "notacolor"])
 def test_captioned_color_tables_keep_their_hex_domain(color: str) -> None:
-    # Every value outside none / name / #RGB / #RRGGBB carries one diagnostic,
-    # also through the Web rule check (evaluate_rules_json).
+    # Every value outside none / name / #RGB / #RRGGBB carries one diagnostic.
     table = DataFrame(
         [["CDS", "product", "kinase", color, "Kinase"]],
         columns=["feature_type", "qualifier_key", "value", "color", "caption"],
     )
-    expected = {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": 1}
-    if is_user_color(color):  # the others stop earlier, at the feature color check
-        with pytest.raises(ValidationError, match=re.escape(f"{color!r} in the color table (row 1)")) as raised:
-            resolve_feature_inputs(
-                color_table=table, default_colors=load_default_colors(""), feature_visibility_table=None
-            )
-        assert raised.value.diagnostic == expected
-    rule = {"feat": "CDS", "qual": "product", "val": "kinase", "color": color, "cap": "Kinase"}
-    with pytest.raises(ValidationError) as web:
-        evaluate_rules_json("[]", json.dumps([rule]), "color-captions")
-    assert web.value.diagnostic == expected
+    # The values that are no user color stop earlier, at the feature color check.
+    message = f"{color!r} in the color table (row 1)" if is_user_color(color) else "(row 1)"
+    with pytest.raises(ValidationError, match=re.escape(message)) as raised:
+        resolve_feature_inputs(
+            color_table=table, default_colors=load_default_colors(""), feature_visibility_table=None
+        )
+    assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": 1}
 
 
 @pytest.mark.parametrize("color", ["#11223344", "#abcd"])

@@ -1,0 +1,430 @@
+// Sidebar input cards on loaded Gallery Sessions: record readouts before and
+// after the source records are inspected.
+const { test, expect } = require('@playwright/test');
+const { join } = require('node:path');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp, openLinearFileCards, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
+
+const loadSession = async (page, name) => {
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.locator('input[accept^=".json,"]').setInputFiles(
+    join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
+};
+
+// OV-374: after Inspect, the Display start field shows the start the record
+// is drawn from, the same value the readout used to show beside an empty field.
+test('OV-374: Display start shows the current start after Inspect', async ({ page }) => {
+  test.setTimeout(240000);
+  await openApp(page);
+  await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+  await page.locator('[data-circular-inspect]').click();
+  const start = page.getByLabel(/^Display start NC_012920\.1/);
+  await expect(start).toBeVisible({ timeout: 180000 });
+  await expect(start).toHaveValue('1');
+
+  // Reset start leaves with its change; the keyboard focus moves to the field.
+  await start.fill('100');
+  await start.press('Tab');
+  const reset = page.getByRole('button', { name: 'Reset start', exact: true });
+  await reset.focus();
+  await page.keyboard.press('Enter');
+  await expect(start).toBeFocused();
+  await expect(start).toHaveValue('1');
+
+  // Clearing the field requests no start, also when none was requested, so
+  // it shows the current start again.
+  await start.fill('');
+  await start.press('Tab');
+  await expect(start).toHaveValue('1');
+
+  // With Circular record off the start field is disabled; Reset start then
+  // moves the keyboard focus to that checkbox instead of dropping it.
+  await start.fill('100');
+  await start.press('Tab');
+  const topology = page.getByLabel(/^Circular record NC_012920\.1/);
+  await topology.uncheck();
+  await expect(start).toBeDisabled();
+  await reset.focus();
+  await page.keyboard.press('Enter');
+  await expect(reset).toHaveCount(0);
+  await expect(topology).toBeFocused();
+});
+
+// OV-373: a single-record Circular Session shows its annotation records as a
+// plain record name before Inspect, never "target record unavailable".
+test('OV-373: annotation rows name their record before Inspect', async ({ page }) => {
+  test.setTimeout(240000);
+  await openApp(page);
+  await loadSession(page, 'tobacco-chloroplast.gbdraw-session.json');
+  const panel = page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
+  await panel.locator('summary').first().click();
+  await expect(panel.locator('[data-annotation-record-caption]').first()).toHaveText('Record: NC_001879.2');
+  await expect(panel).not.toContainText('unavailable');
+});
+
+// A default color edited under "More colors" stays in that grid and keeps
+// focus while it is edited; the grouping does not follow each edit.
+test('a color edited under More colors stays there and keeps focus', async ({ page }) => {
+  test.setTimeout(240000);
+  await openApp(page);
+  await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+  await page.locator('summary[aria-label="Colors"]').click();
+  const more = page.locator('[data-default-colors-more]');
+  await more.locator('summary').click();
+  const tmrna = more.getByLabel('tmRNA feature color mode');
+  await expect(tmrna).toBeVisible();
+  await expect(tmrna).toHaveValue('color');
+  await tmrna.focus();
+  await page.keyboard.press('ArrowUp');
+  await expect(more.getByLabel('tmRNA feature color mode')).toHaveValue('none');
+  await expect(more.getByLabel('tmRNA feature color mode')).toBeFocused();
+});
+
+// A Default colors file replaces the color table, so a type it colors joins
+// the user's colors in the first list, as a color added by hand does.
+test('a color from a Default colors file leaves More colors', async ({ page }) => {
+  test.setTimeout(240000);
+  await openApp(page);
+  await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+  await page.locator('summary[aria-label="Colors"]').click();
+  const more = page.locator('[data-default-colors-more]');
+  await more.locator('summary').click();
+  await expect(more.getByLabel('tmRNA feature color mode')).toBeVisible();
+  await page.getByLabel('Default colors file', { exact: true }).setInputFiles({
+    name: 'colors.tsv', mimeType: 'text/plain', buffer: Buffer.from('tmRNA\t#ff0000\n')
+  });
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.waitForAuxiliaryFileImport(app.files.d_color);
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.currentColors.tmRNA)).toBe('#ff0000');
+  await expect(more.getByLabel('tmRNA feature color mode')).toHaveCount(0);
+  await expect(page.getByLabel('tmRNA feature color mode')).toBeVisible();
+});
+
+// OV-379: a loaded Linear Session has not read its records; the record select
+// says so instead of a load that never runs.
+test('OV-379: Linear record selects say Not inspected after Session load', async ({ page }) => {
+  test.setTimeout(240000);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await loadSession(page, 'BGC0000708-BGC0000713.gbdraw-session.json');
+  const labels = await page.locator('select[data-record-selector-uid]').evaluateAll((selects) => (
+    selects.map((select) => select.options[select.selectedIndex]?.text || '')));
+  expect(labels.length).toBeGreaterThan(0);
+  expect(new Set(labels)).toEqual(new Set(['Not inspected']));
+});
+
+// Linear File cards: which name fields a card shows follows the File's rows
+// and stored File values (web.linear.file-default-definition).
+const namedGenbank = (id, organism) => {
+  const sequence = 'atg'.repeat(100);
+  const origin = sequence.match(/.{1,60}/g).map((chunk, index) => (
+    `${String(index * 60 + 1).padStart(9)} ${chunk.match(/.{1,10}/g).join(' ')}`)).join('\n');
+  return `LOCUS       ${id.padEnd(24)} ${sequence.length} bp    DNA     linear   UNA 01-JAN-2000
+DEFINITION  ${organism} test record.
+ACCESSION   ${id}
+VERSION     ${id}
+KEYWORDS    .
+SOURCE      ${organism}
+  ORGANISM  ${organism}
+            .
+FEATURES             Location/Qualifiers
+     source          1..${sequence.length}
+                     /organism="${organism}"
+                     /strain="${id}"
+     CDS             1..90
+                     /product="test protein"
+ORIGIN
+${origin}
+//
+`;
+};
+
+const openLinearWithFile = async (page, name, content, rows) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
+    name, mimeType: 'text/plain', buffer: Buffer.from(content)
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const seqs = window.__GBDRAW_APP__.linearSeqs;
+    return seqs.every((seq) => seq.inferred_definition) ? seqs.length : 0;
+  }), { timeout: 180000 }).toBe(rows);
+  await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
+    legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none'
+  }));
+};
+
+const saveAndReloadSession = async (page) => {
+  const download = page.waitForEvent('download');
+  await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'file-card-names';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const saved = await (await download).path();
+  await page.reload();
+  await waitForAppShell(page);
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(saved);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
+  await openLinearFileCards(page);
+};
+
+const drawnDefinitionLines = (page) => page.evaluate(() => {
+  const doc = new DOMParser().parseFromString(window.__GBDRAW_APP__.results[0]?.content || '', 'image/svg+xml');
+  return [...doc.querySelectorAll('text[data-definition-line-kind]')].map((text) => text.textContent);
+});
+
+test('a one-record File shows its record names on the File card', async ({ page }) => {
+  test.setTimeout(240000);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  const card = page.locator('[data-linear-source-card]').first();
+  const fileNames = card.locator('[data-linear-source-defaults]');
+  const definition = page.getByLabel('Definition for sequence 1', { exact: true });
+  const subtitle = page.getByLabel('Subtitle / title for sequence 1', { exact: true });
+  const recordOptions = card.locator('[data-linear-record-options]');
+
+  // An empty File card has one row: its record names are on the card.
+  await expect(definition).toBeVisible();
+  await expect(fileNames).toBeHidden();
+
+  await openLinearWithFile(page, 'one.gb', namedGenbank('ONE_REC', 'Aeromonas hydrophila'), 1);
+  const inferred = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].inferred_definition);
+  await expect(recordOptions).not.toHaveAttribute('open', '');
+  await expect(card.locator(':scope > details > [data-linear-record-names]')).toHaveCount(1);
+  await expect(recordOptions.locator('[data-linear-record-names]')).toHaveCount(0);
+  await expect(definition).toBeVisible();
+  await expect(subtitle).toBeVisible();
+  await expect(definition).toHaveAttribute('placeholder', inferred);
+  await expect(fileNames).toBeHidden();
+  await expect(card.getByText('Names for all records in this file')).toBeHidden();
+
+  // The card fields are the record's own: they write the record's values,
+  // and the next Generate draws them.
+  await generateAndWaitForResult(page);
+  const drawnBefore = await drawnDefinitionLines(page);
+  await definition.fill('Card organism');
+  await subtitle.fill('Card subtitle');
+  await subtitle.press('Tab');
+  expect(await page.evaluate(() => {
+    const [seq] = window.__GBDRAW_APP__.linearSeqs;
+    return [seq.definition, seq.record_subtitle, seq.file_definition, seq.file_subtitle];
+  })).toEqual(['Card organism', 'Card subtitle', '', '']);
+  expect(await drawnDefinitionLines(page)).toEqual(drawnBefore);
+  await generateAndWaitForResult(page);
+  expect(await drawnDefinitionLines(page)).toEqual(expect.arrayContaining(['Card organism', 'Card subtitle']));
+
+  // A cleared record name shows the inferred one as its placeholder again.
+  await definition.fill('');
+  await expect(definition).toHaveAttribute('placeholder', inferred);
+  await definition.fill('Card organism');
+  await definition.press('Tab');
+
+  // Session round trip: the record keeps its values, and the card, whose
+  // records are not inspected after the load, shows the same fields.
+  await saveAndReloadSession(page);
+  await expect(definition).toBeVisible();
+  await expect(definition).toHaveValue('Card organism');
+  await expect(subtitle).toHaveValue('Card subtitle');
+  await expect(fileNames).toBeHidden();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0])[0].label))
+    .toBe('Not inspected');
+
+  // Inspect leaves the name fields where they are in the settings. The click
+  // on Inspect records may scroll the settings, so the place is read from the
+  // top of the scrolled content.
+  const placeInSettings = async () => {
+    const box = await definition.boundingBox();
+    const scrolled = await page.locator('#settings-sections').evaluate((area) => area.scrollTop);
+    return { ...box, y: box.y + scrolled };
+  };
+  const before = await placeInSettings();
+  await card.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
+  await card.getByRole('button', { name: 'Inspect records', exact: true }).click({ timeout: 15000 });
+  await expect(card.locator('[data-record-rotation]')).toHaveCount(1, { timeout: 180000 });
+  await expect(definition).toBeVisible();
+  expect(await placeInSettings()).toEqual(before);
+  await expect(fileNames).toBeHidden();
+});
+
+test('a one-record File that holds a File names value keeps the File names block alone', async ({ page }) => {
+  test.setTimeout(240000);
+  await openLinearWithFile(page, 'one.gb', namedGenbank('ONE_REC', 'Aeromonas hydrophila'), 1);
+  // A one-record card has no field for a File value; a Session can hold one.
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearSourceDefaultDefinition(app.linearSourceGroups[0], 'File organism');
+  });
+  await generateAndWaitForResult(page);
+  expect(await drawnDefinitionLines(page)).toContain('File organism');
+  await saveAndReloadSession(page);
+
+  const card = page.locator('[data-linear-source-card]').first();
+  const fileNames = card.locator('[data-linear-source-defaults]');
+  const fileDefinition = page.getByLabel('Default definition for file 1', { exact: true });
+  const cardNames = card.locator(':scope > details > [data-linear-record-names]');
+  const names = card.locator('[data-linear-record-options] [data-linear-record-names]');
+  const definition = page.getByLabel('Definition for sequence 1', { exact: true });
+  await expect(fileNames).toBeVisible();
+  await expect(fileNames).toContainText('Names for all records in this file');
+  await expect(fileDefinition).toHaveValue('File organism');
+  // One names block: the record's own fields stay in Record options.
+  await expect(cardNames).toHaveCount(0);
+  await expect(definition).toBeHidden();
+  await card.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
+  await expect(definition).toBeVisible();
+  await expect(definition).toHaveValue('');
+  await expect(definition).toHaveAttribute('placeholder', 'File organism');
+  await expect(names.getByText('Using file default')).toHaveCount(1);
+
+  // Record, then File, then inferred; Reset returns to the File value.
+  await definition.fill('Own organism');
+  await definition.press('Tab');
+  await names.getByRole('button', { name: 'Reset to default', exact: true }).click();
+  await expect(definition).toHaveValue('');
+  expect(await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.resolveLinearRecordEffectiveDefinition(app.linearSeqs[0], app.linearSourceGroups[0]);
+  })).toBe('File organism');
+
+  // Clearing the last File value keeps the block, alone, while the focus is in it.
+  await fileDefinition.fill('');
+  await expect(fileDefinition).toBeFocused();
+  await expect(fileNames).toBeVisible();
+  await expect(definition).toBeHidden();
+  // When the focus leaves, the record's own fields take its place on the card.
+  await fileDefinition.blur();
+  await expect(fileNames).toBeHidden();
+  await expect(cardNames).toHaveCount(1);
+  await expect(names).toHaveCount(0);
+  await expect(definition).toBeVisible();
+  const inferred = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].inferred_definition);
+  await expect(definition).toHaveAttribute('placeholder', inferred || 'e.g., Escherichia coli O157:H7 Sakai');
+  // Undo brings the value back, and the File block with it.
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(fileNames).toBeVisible();
+  await expect(fileDefinition).toHaveValue('File organism');
+  await expect(cardNames).toHaveCount(0);
+});
+
+// OV-486: an empty card shows the record's own name fields. A name typed there
+// stays the record's when the file has one record, and becomes the File's name
+// when the upload expands the card to several records.
+const gffText = (ids) => `##gff-version 3\n${ids.map((id) => [
+  `${id}\ttest\tregion\t1\t300\t.\t+\t.\tID=${id}`,
+  `${id}\ttest\tgene\t1\t90\t.\t+\t.\tID=gene_${id}`,
+  `${id}\ttest\tCDS\t1\t90\t.\t+\t0\tID=cds_${id};Parent=gene_${id};product=test protein`
+].join('\n')).join('\n')}\n`;
+const fastaText = (ids) => ids.map((id) => `>${id}\n${'atg'.repeat(100)}\n`).join('');
+const chooseFiles = async (card, files) => {
+  for (const [index, [name, content]] of files.entries()) {
+    await card.locator('input[type="file"]').nth(index).setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content) });
+  }
+};
+const typedFirstUploads = [
+  { kind: 'a one-record GenBank file', files: [['one.gb', namedGenbank('ONE_REC', 'Aeromonas hydrophila')]],
+    names: [['Typed first', 'Typed subtitle', '', '']] },
+  { kind: 'a two-record GenBank file',
+    files: [['two.gb', namedGenbank('TWO_A', 'Aeromonas hydrophila') + namedGenbank('TWO_B', 'Aeromonas caviae')]],
+    names: [['', '', 'Typed first', 'Typed subtitle'], ['', '', 'Typed first', 'Typed subtitle']] },
+  { kind: 'two-record GFF3 + FASTA files', gff: true,
+    files: [['two.gff3', gffText(['recA', 'recB'])], ['two.fasta', fastaText(['recA', 'recB'])]],
+    names: [['', '', 'Typed first', 'Typed subtitle'], ['', '', 'Typed first', 'Typed subtitle']] }
+];
+for (const { kind, files, gff = false, names } of typedFirstUploads) {
+  test(`a name typed on an empty File card is kept after ${kind} is chosen`, async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (gff) await page.locator('input[type="radio"][value="gff"]:visible').check();
+    const card = page.locator('[data-linear-source-card]').first();
+    await page.getByLabel('Definition for sequence 1', { exact: true }).fill('Typed first');
+    await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).fill('Typed subtitle');
+    await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).press('Tab');
+    await chooseFiles(card, files);
+    // A GenBank upload is read when every record has its inferred name; GFF3 + FASTA infer none.
+    await expect.poll(() => page.evaluate((isGff) => {
+      const seqs = window.__GBDRAW_APP__.linearSeqs;
+      return (isGff ? seqs.length > 1 : seqs.every((seq) => seq.inferred_definition)) ? seqs.length : 0;
+    }, gff), { timeout: 180000 }).toBe(names.length);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => (
+      [seq.definition, seq.record_subtitle, seq.file_definition, seq.file_subtitle])))).toEqual(names);
+    // The card shows the name where it now lives, and Generate draws it.
+    await expect(names.length > 1 ? page.getByLabel('Default definition for file 1', { exact: true })
+      : page.getByLabel('Definition for sequence 1', { exact: true })).toHaveValue('Typed first');
+    await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
+      legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none'
+    }));
+    await generateAndWaitForResult(page);
+    const drawn = await drawnDefinitionLines(page);
+    expect(drawn).toEqual(expect.arrayContaining(['Typed first', 'Typed subtitle']));
+    expect(drawn.filter((text) => text.includes('Aeromonas'))).toEqual([]);
+  });
+}
+
+// A one-record file that replaces a one-record file keeps the record's own
+// name: the card still shows it, and Generate draws it on the new record.
+const oneRecordReplacements = [
+  { kind: 'GenBank file', drawnId: 'OTHER_REC',
+    first: [['one.gb', namedGenbank('ONE_REC', 'Aeromonas hydrophila')]],
+    second: [['other.gb', namedGenbank('OTHER_REC', 'Aeromonas caviae')]] },
+  { kind: 'GFF3 + FASTA pair', gff: true, drawnId: 'recZ',
+    first: [['one.gff3', gffText(['recA'])], ['one.fasta', fastaText(['recA'])]],
+    second: [['other.gff3', gffText(['recZ'])], ['other.fasta', fastaText(['recZ'])]] }
+];
+for (const { kind, first, second, drawnId, gff = false } of oneRecordReplacements) {
+  test(`a name typed on a one-record File card stays the record's name when another one-record ${kind} replaces it`, async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (gff) await page.locator('input[type="radio"][value="gff"]:visible').check();
+    const card = page.locator('[data-linear-source-card]').first();
+    const definition = page.getByLabel('Definition for sequence 1', { exact: true });
+    await chooseFiles(card, first);
+    await definition.fill('Typed first');
+    await definition.press('Tab');
+    await chooseFiles(card, second);
+    await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
+      legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none'
+    }));
+    await generateAndWaitForResult(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => [seq.definition, seq.file_definition])))
+      .toEqual([['Typed first', '']]);
+    await expect(definition).toHaveValue('Typed first');
+    expect(await drawnDefinitionLines(page)).toEqual(expect.arrayContaining(['Typed first', drawnId]));
+  });
+}
+
+// Unchanged behaviour: this case passes before and after the one-record change.
+test('a File with two records keeps its File names block and per-record names', async ({ page }) => {
+  test.setTimeout(240000);
+  await openLinearWithFile(page, 'two.gb',
+    namedGenbank('TWO_A', 'Aeromonas hydrophila') + namedGenbank('TWO_B', 'Aeromonas hydrophila'), 2);
+  const card = page.locator('[data-linear-source-card]').first();
+  const fileNames = card.locator('[data-linear-source-defaults]');
+  const fileDefinition = page.getByLabel('Default definition for file 1', { exact: true });
+  const expectTwoRecordCard = async () => {
+    await expect(fileNames).toBeVisible();
+    await expect(card.locator(':scope > details > [data-linear-record-names]')).toHaveCount(0);
+    await expect(card.locator('[data-linear-record-options]').getByLabel(/^Definition for sequence [12]$/)).toHaveCount(2);
+    await expect(page.getByLabel('Definition for sequence 1', { exact: true })).toBeHidden();
+  };
+  await expectTwoRecordCard();
+  await expect(fileDefinition).toHaveValue('');
+
+  await fileDefinition.fill('Shared organism');
+  await fileDefinition.press('Tab');
+  await generateAndWaitForResult(page);
+  // Both records share a row and now one name, drawn once; no inferred name is left.
+  const drawn = await drawnDefinitionLines(page);
+  expect(drawn).toContain('Shared organism');
+  expect(drawn.filter((text) => text.includes('Aeromonas'))).toEqual([]);
+  await saveAndReloadSession(page);
+  await expectTwoRecordCard();
+  await expect(fileDefinition).toHaveValue('Shared organism');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => [seq.definition, seq.file_definition])))
+    .toEqual([['', 'Shared organism'], ['', 'Shared organism']]);
+});

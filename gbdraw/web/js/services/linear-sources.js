@@ -1,15 +1,41 @@
 // @ts-check
+/** @import { LinearSeq } from '../state.js' */
+/** @import { FileLike } from './session-resource-backing.js' */
 import { getSessionResourceSource } from './file-content-cache.js';
 import { depthFileSlotsFromValue } from './depth-track-state.js';
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
+import { plainTextLinearRecordLabel } from './linear-comparisons.js';
 
 // A composite backing carries `descriptors` and no single `descriptor`.
+/** @param {FileLike | null | undefined} file */
 const sourceFileIdentity = (file) => (
-  /** @type {{ descriptor?: any } | null} */ (getSessionResourceSource(file))?.descriptor || file
+  /** @type {{ descriptor?: unknown } | null} */ (getSessionResourceSource(file))?.descriptor || file
 );
 
+/**
+ * An entry of a File's `records`: a record card and its position in the grouped list.
+ * @template {Partial<LinearSeq>} [S=LinearSeq]
+ * @typedef {{ sequence: S, index: number }} LinearSourceRecord
+ */
+/**
+ * A File's record cards: the cards that read the same files.
+ * @template {Partial<LinearSeq>} [S=LinearSeq]
+ * @typedef {{ uid: S['uid'], sequence: S, index: number, files: unknown[], records: LinearSourceRecord<S>[] }} LinearSourceGroup
+ */
+/**
+ * What the File accessors read of a group.
+ * @typedef {{ records?: readonly LinearSourceRecord<Partial<LinearSeq>>[], sequence?: Partial<LinearSeq> | null }} LinearSourceView
+ */
+
+/**
+ * @template {Partial<LinearSeq>} S
+ * @param {readonly S[]} sequences
+ * @returns {LinearSourceGroup<S>[]}
+ */
 export const groupLinearSourceRecords = (sequences) => {
+  /** @type {LinearSourceGroup<S>[]} */
   const groups = [];
+  /** @type {Map<unknown, LinearSourceGroup<S>[]>} */
   const bySource = new Map();
   sequences.forEach((sequence, index) => {
     const files = [sequence.gb, sequence.gff, sequence.fasta].map(sourceFileIdentity);
@@ -27,10 +53,12 @@ export const groupLinearSourceRecords = (sequences) => {
   return groups;
 };
 
+/** @param {LinearSourceView | null | undefined} source */
 export const linearSourceHasPrimaryInput = (source) => Boolean(
   source?.records?.some(({ sequence }) => sequence?.gb || sequence?.gff || sequence?.fasta)
 );
 
+/** @param {LinearSourceView | null | undefined} source */
 export const isPristineLinearSource = (source) => {
   const records = Array.isArray(source?.records) ? source.records : [];
   if (records.length !== 1) return false;
@@ -50,14 +78,75 @@ export const isPristineLinearSource = (source) => {
   );
 };
 
+// The Linear File cards shown folded to their header line, by source uid, so
+// the state follows a card through Move up and Move down. It is view state:
+// no Session, History step, Undo, or Reset Settings holds or changes it.
+/** @typedef {Set<string>} FoldedLinearSources */
+/** @typedef {LinearSourceView & { uid: string }} FoldableLinearSource */
+
+/**
+ * What a card's disclosure reports: the user's press on the header line, or a
+ * path that opened the card to show a setting.
+ * @param {FoldedLinearSources} folded
+ * @param {string} uid
+ * @param {boolean} isFolded
+ */
+export const setLinearSourceFolded = (folded, uid, isFolded) => {
+  if (isFolded) folded.add(uid);
+  else folded.delete(uid);
+};
+
+/**
+ * The fold state a Session load that was rolled back returns to.
+ * @param {FoldedLinearSources} folded
+ * @param {readonly string[]} uids
+ */
+export const restoreFoldedLinearSources = (folded, uids) => {
+  folded.clear();
+  uids.forEach((uid) => folded.add(uid));
+};
+
+/** @typedef {'gb' | 'gff' | 'fasta'} LinearFileField */
+
+/**
+ * The file slots a File card shows for an input type, in the order of its
+ * uploaders.
+ * @param {string} inputType
+ * @returns {readonly LinearFileField[]}
+ */
+export const linearCardFileFields = (inputType) => (inputType === 'gff' ? ['gff', 'fasta'] : ['gb']);
+
+/**
+ * A card holds its input when every slot it shows has a file. The folded line
+ * and the load rule read this one answer.
+ * @param {LinearSourceView} source
+ * @param {string} inputType
+ */
+export const linearCardInputComplete = (source, inputType) => linearCardFileFields(inputType)
+  .every((field) => Boolean(source.sequence?.[field]));
+
+/**
+ * The one rule of which cards a loaded Session shows folded: those that hold
+ * their input. A card without a file, or with a slot still empty, stays open.
+ * @param {FoldedLinearSources} folded
+ * @param {readonly FoldableLinearSource[]} sources
+ * @param {string} inputType
+ */
+export const foldLoadedLinearSources = (folded, sources, inputType) => restoreFoldedLinearSources(
+  folded, sources.filter((source) => linearCardInputComplete(source, inputType)).map(({ uid }) => uid)
+);
+
 /**
  * @typedef {{ allowed: false, reason: string, sourceIndex?: number }
  *   | { allowed: true, intent: string, sourceIndex: number, insertionIndex: number,
- *       sourceUid: any, recordCount: number, removedUids: any[], retainedSequences: any[] }
+ *       sourceUid: string, recordCount: number, removedUids: string[], retainedSequences: LinearSeq[] }
  * } LinearSourceRemovalPlan
  */
 
-/** @returns {LinearSourceRemovalPlan} */
+/**
+ * @param {{ sequences: readonly LinearSeq[] | null | undefined, sourceUid: unknown, intent: string }} options
+ * @returns {LinearSourceRemovalPlan}
+ */
 export const planLinearSourceRemoval = ({ sequences, sourceUid, intent }) => {
   const ordered = Array.from(sequences || []);
   const groups = groupLinearSourceRecords(ordered);
@@ -82,6 +171,10 @@ export const planLinearSourceRemoval = ({ sequences, sourceUid, intent }) => {
   };
 };
 
+/**
+ * @param {LinearSourceView | null | undefined} source
+ * @param {unknown} trackIndex
+ */
 export const linearSourceDepthStatus = (source, trackIndex) => {
   const index = Number(trackIndex);
   const records = Array.isArray(source?.records) ? source.records : [];
@@ -103,6 +196,13 @@ export const linearSourceDepthStatus = (source, trackIndex) => {
   };
 };
 
+/**
+ * @template {Partial<LinearSeq>} S
+ * @param {readonly S[] | null | undefined} sequences
+ * @param {number} groupIndex
+ * @param {number} direction
+ * @returns {S[]}
+ */
 export const moveLinearSourceGroup = (sequences, groupIndex, direction) => {
   const ordered = Array.from(sequences || []);
   const index = groupIndex;
@@ -117,10 +217,15 @@ export const moveLinearSourceGroup = (sequences, groupIndex, direction) => {
   return groups.flatMap(({ records }) => records.map(({ sequence }) => sequence));
 };
 
+/** @param {LinearSourceView | null | undefined} source */
 export const getLinearSourceDefaultDefinition = (source) => {
   return String(source?.records?.[0]?.sequence?.file_definition ?? source?.sequence?.file_definition ?? '');
 };
 
+/**
+ * @param {LinearSourceView | null | undefined} source
+ * @param {unknown} value
+ */
 export const setLinearSourceDefaultDefinition = (source, value) => {
   const text = String(value ?? '');
   (source?.records || []).forEach(({ sequence }) => {
@@ -131,10 +236,15 @@ export const setLinearSourceDefaultDefinition = (source, value) => {
   }
 };
 
+/** @param {LinearSourceView | null | undefined} source */
 export const getLinearSourceDefaultSubtitle = (source) => {
   return String(source?.records?.[0]?.sequence?.file_subtitle ?? source?.sequence?.file_subtitle ?? '');
 };
 
+/**
+ * @param {LinearSourceView | null | undefined} source
+ * @param {unknown} value
+ */
 export const setLinearSourceDefaultSubtitle = (source, value) => {
   const text = String(value ?? '');
   (source?.records || []).forEach(({ sequence }) => {
@@ -145,8 +255,24 @@ export const setLinearSourceDefaultSubtitle = (source, value) => {
   }
 };
 
+// The one decision of which name fields a File card shows: one block. A File
+// with one row and no File-level value shows that record's own names on the
+// card, and this returns the record. Any other File shows the File-level
+// block, so no stored value is hidden, and each record's names in its Record
+// options; this returns null.
+// It reads the rows the File has, not whether its records were inspected.
+/** @param {{ records: readonly LinearSourceRecord<Partial<LinearSeq>>[] }} source @returns {LinearSourceRecord<Partial<LinearSeq>> | null} */
+export const linearFileCardRecord = (source) => {
+  const fileValue = Boolean(getLinearSourceDefaultDefinition(source) || getLinearSourceDefaultSubtitle(source));
+  return source.records.length === 1 && !fileValue ? source.records[0] : null;
+};
+
 // A record draws its own Definition, else the File default the user entered,
 // else the definition inferred from that record (D-12).
+/**
+ * @param {Partial<LinearSeq>} sequence
+ * @param {LinearSourceView | null} [source]
+ */
 export const resolveLinearRecordEffectiveDefinition = (sequence, source = null) => {
   const own = String(sequence?.definition ?? '').trim();
   if (own) return sequence.definition;
@@ -154,8 +280,38 @@ export const resolveLinearRecordEffectiveDefinition = (sequence, source = null) 
   return fileDef || String(sequence?.inferred_definition ?? '').trim();
 };
 
+// How panels and lists name each record (OV-436): its drawn Definition as
+// plain text, else the Definition another record of its File draws, else its
+// accession or file name. A File that supplies several records adds each
+// record's accession, so two chromosomes of one genome stay apart. The
+// diagram's own record headings are not changed.
+/**
+ * @param {readonly Partial<LinearSeq>[]} sequences
+ * @returns {Map<string, { definition: string, name: string, accession: string, label: string }>}
+ */
+export const linearRecordNames = (sequences) => {
+  const names = new Map();
+  const plain = (/** @type {unknown} */ value) => (String(value ?? '').trim() ? plainTextLinearRecordLabel(value) : '');
+  groupLinearSourceRecords(sequences).forEach((source) => {
+    const definitions = source.records.map((/** @type {LinearSourceRecord<Partial<LinearSeq>>} */ { sequence }) => plain(resolveLinearRecordEffectiveDefinition(sequence, source)));
+    const fileDefinition = definitions.find(Boolean) || '';
+    source.records.forEach((/** @type {LinearSourceRecord<Partial<LinearSeq>>} */ { sequence }, /** @type {number} */ position) => {
+      const recordId = String(sequence?.region_record_id ?? '').trim();
+      const definition = definitions[position] || fileDefinition;
+      const name = definition || recordId || plain(sequence?.gb?.name || sequence?.gff?.name || sequence?.fasta?.name);
+      const accession = source.records.length > 1 && recordId !== name ? recordId : '';
+      names.set(String(sequence?.uid ?? ''), { definition, name, accession, label: [name, accession].filter(Boolean).join(' · ') || 'Record' });
+    });
+  });
+  return names;
+};
+
 // The definition inferred from the record a row selects; an automatic selector
 // names a record only when its File has exactly one.
+/**
+ * @param {readonly { inferredDefinition?: unknown, sourceIndex?: unknown, selector?: unknown, recordId?: unknown }[] | null | undefined} records
+ * @param {unknown} selector
+ */
 export const inferredDefinitionForRecord = (records, selector) => {
   const list = Array.isArray(records) ? records : [];
   const record = String(selector ?? '').trim()
@@ -164,6 +320,10 @@ export const inferredDefinitionForRecord = (records, selector) => {
   return String(record?.inferredDefinition || '');
 };
 
+/**
+ * @param {Partial<LinearSeq>} sequence
+ * @param {LinearSourceView | null} [source]
+ */
 export const resolveLinearRecordEffectiveSubtitle = (sequence, source = null) => {
   const own = String(sequence?.record_subtitle ?? '').trim();
   if (own) return sequence.record_subtitle;
@@ -172,12 +332,20 @@ export const resolveLinearRecordEffectiveSubtitle = (sequence, source = null) =>
 };
 
 // The explicit LOSAT translation table of one record, or null for the default.
+/** @param {{ losat_gencode?: unknown } | null | undefined} sequence */
 export const losatRecordGencode = (sequence) => {
   const raw = sequence?.losat_gencode;
   if (raw === null || raw === undefined || raw === '') return null;
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;
 };
+
+/** @typedef {'self' | 'within-source' | 'between-sources'} LosatSourceScope */
+/**
+ * One search of the plan: the record indexes of the query and subject sides and the record-pair specs it answers.
+ * @template Spec
+ * @typedef {{ queryIndexes: number[], subjectIndexes: number[], args: readonly unknown[], scope: LosatSourceScope, specs: Spec[] }} LosatSourceJob
+ */
 
 // The single LOSAT job plan, used by Generate and by the Settings job-count
 // estimate (PD-OI-018 revision 4, N-10). Record-pair evidence and source-file
@@ -191,19 +359,33 @@ export const losatRecordGencode = (sequence) => {
 // whose indexes the specs use, then the OFF records (`losatSearchSequences`):
 // an OFF record is never a query, but stays in its source's database, so
 // turning a record ON or OFF changes no other record's E-value.
+/**
+ * @template {Partial<LinearSeq>} S
+ * @template {{ queryIndex: number, subjectIndex: number }} Spec
+ * @param {{
+ *   sequences: readonly S[], specs: readonly Spec[],
+ *   buildArgs: (queryIndex: number, subjectIndex: number) => readonly unknown[], drawnCount?: number
+ * }} options
+ * @returns {{ jobs: LosatSourceJob<Spec>[], bySpec: Map<Spec, LosatSourceJob<Spec>> }}
+ */
 export const planLosatSourceJobs = ({ sequences, specs, buildArgs, drawnCount = sequences.length }) => {
+  /** @type {Map<number, LinearSourceGroup<S>>} */
   const byRecord = new Map();
   groupLinearSourceRecords(sequences).forEach((source) => {
     source.records.forEach(({ index }) => byRecord.set(index, source));
   });
+  /** @type {Map<string, LosatSourceJob<Spec>>} */
   const jobs = new Map();
+  /** @type {Map<Spec, LosatSourceJob<Spec>>} */
   const bySpec = new Map();
   for (const spec of specs) {
     const { queryIndex, subjectIndex } = spec;
     const args = buildArgs(queryIndex, subjectIndex);
     const argsText = JSON.stringify(args);
-    const querySource = byRecord.get(queryIndex);
-    const subjectSource = byRecord.get(subjectIndex);
+    // A spec addresses a listed record: `buildLosatJobSpecs` numbers them within the listed sequences.
+    const querySource = /** @type {LinearSourceGroup<S>} */ (byRecord.get(queryIndex));
+    const subjectSource = /** @type {LinearSourceGroup<S>} */ (byRecord.get(subjectIndex));
+    /** @type {LosatSourceScope} */
     const scope = queryIndex === subjectIndex ? 'self'
       : querySource === subjectSource ? 'within-source' : 'between-sources';
     const key = JSON.stringify([querySource.uid, subjectSource.uid, args, scope,
@@ -243,16 +425,38 @@ export const losatSearchSequences = (drawn, sequences) => {
   return { sequences: [...drawn, ...sequences.filter((sequence) => !drawnSet.has(sequence))], drawnCount: drawn.length };
 };
 
+/** @typedef {{ indexes: number[], ids: Map<string, { index: number, originalId: string }>, fasta: string, sequenceKey: string, hash: string }} LosatSourceSide A side's records as one FASTA, and the identifiers it was renamed to. */
+/**
+ * @template Spec
+ * @typedef {{ query: LosatSourceSide, subject: LosatSourceSide, searchContext: string | null, args: readonly unknown[], scope: LosatSourceScope, specs: Spec[] }} LosatSourceBatch
+ */
+
+/**
+ * @template {Partial<LinearSeq>} S
+ * @template {{ queryIndex: number, subjectIndex: number }} Spec
+ * @param {{
+ *   sequences: readonly S[], specs: readonly Spec[],
+ *   getEntry: (index: number) => Promise<{ fasta: string }>,
+ *   buildArgs: (queryIndex: number, subjectIndex: number) => readonly unknown[],
+ *   hashText: (text: string) => Promise<string>, protein?: boolean, drawnCount?: number
+ * }} options
+ * @returns {Promise<{ batches: LosatSourceBatch<Spec>[], bySpec: Map<Spec, LosatSourceBatch<Spec>> }>}
+ */
 export const prepareLosatSourceBatches = async ({
   sequences, specs, getEntry, buildArgs, hashText, protein, drawnCount = sequences.length
 }) => {
   const plan = planLosatSourceJobs({ sequences, specs, buildArgs, drawnCount });
+  /** @type {Map<string, LosatSourceSide>} */
   const sides = new Map();
+  /** @param {number[]} indexes */
   const prepareSide = async (indexes) => {
     const ordered = [...indexes].sort((a, b) => String(sequences[a].uid).localeCompare(String(sequences[b].uid)));
     const key = ordered.join(',');
-    if (sides.has(key)) return sides.get(key);
+    // `sides` holds the sides prepared under a key.
+    if (sides.has(key)) return /** @type {LosatSourceSide} */ (sides.get(key));
+    /** @type {LosatSourceSide['ids']} */
     const ids = new Map();
+    /** @type {string[]} */
     const parts = [];
     for (const index of ordered) {
       const entry = await getEntry(index);
@@ -260,7 +464,7 @@ export const prepareLosatSourceBatches = async ({
       const prefix = !protein && ordered.length > 1
         ? `n_${await hashText(String(sequences[index].uid))}` : '';
       let ordinal = 0;
-      fasta = fasta.replace(/^>(\S+)([^\r\n]*)/gm, (_header, originalId, description) => {
+      fasta = fasta.replace(/^>(\S+)([^\r\n]*)/gm, (/** @type {string} */ _header, /** @type {string} */ originalId, /** @type {string} */ description) => {
         const id = prefix ? `${prefix}_${ordinal++}` : originalId;
         if (ids.has(id)) throw new Error(`Duplicate LOSAT source identifier: ${id}`);
         ids.set(id, { index, originalId });
@@ -274,7 +478,9 @@ export const prepareLosatSourceBatches = async ({
     sides.set(key, side);
     return side;
   };
+  /** @type {LosatSourceBatch<Spec>[]} */
   const batches = [];
+  /** @type {Map<Spec, LosatSourceBatch<Spec>>} */
   const bySpec = new Map();
   for (const job of plan.jobs) {
     const query = await prepareSide(job.queryIndexes);
@@ -289,7 +495,15 @@ export const prepareLosatSourceBatches = async ({
   return { batches, bySpec };
 };
 
+/**
+ * @template K
+ * @param {string} text
+ * @param {{ query: LosatSourceSide, subject: LosatSourceSide }} batch
+ * @param {readonly { queryIndex: number, subjectIndex: number, cacheKey: K }[]} jobs
+ * @returns {{ cacheKey: K, text: string }[]}
+ */
 export const splitLosatSourceResult = (text, batch, jobs) => {
+  /** @type {Map<string, string[]>} */
   const rows = new Map(jobs.map((job) => [`${job.queryIndex}:${job.subjectIndex}`, []]));
   for (const line of String(text).split(/\r?\n/)) {
     if (!line.trim() || line.trimStart().startsWith('#')) continue;
@@ -308,6 +522,7 @@ export const splitLosatSourceResult = (text, batch, jobs) => {
   }
   return jobs.map((job) => ({
     cacheKey: job.cacheKey,
-    text: rows.get(`${job.queryIndex}:${job.subjectIndex}`).map((line) => `${line}\n`).join('')
+    // `rows` holds an entry for every job.
+    text: /** @type {string[]} */ (rows.get(`${job.queryIndex}:${job.subjectIndex}`)).map((line) => `${line}\n`).join('')
   }));
 };

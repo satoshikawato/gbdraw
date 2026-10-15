@@ -90,9 +90,12 @@ for (const mode of ['circular', 'linear']) {
     const projected = projectCanonicalSessionRequest(result);
     assert.equal(projected.config.adv.feature_overlap_tolerance_bp, 2);
     assert.deepEqual(Object.values(projected.config.featurePlacementOverrides), [draftRow]);
+    // An older schema carrying the current fields is not a stored form (Load
+    // promotes schemas 5 to 8 before projecting).
     const old = structuredClone(result.renderRequest);
     old.schema = 6;
-    assert.throws(() => projectCanonicalSessionRequest({ ...result, renderRequest: old }), /schema 7/);
+    assert.throws(() => projectCanonicalSessionRequest({ ...result, renderRequest: old }),
+      (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'SESSION_FORMAT');
   });
 }
 

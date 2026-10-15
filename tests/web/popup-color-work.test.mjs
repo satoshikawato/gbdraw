@@ -22,7 +22,6 @@ const savedRule = { feat: 'CDS', qual: 'product', val: '^p3$', color: '#111111',
 
 // Python's answer for `hash` and `product` rules (gbdraw/web_support/rule_matching.py).
 const evaluateRules = async ({ features: payloads, rules, kind }) => {
-  if (kind === 'color-captions') return { rules };
   const matches = payloads.map((payload) => rules.flatMap((rule, index) => {
     const values = rule.qual === 'hash' ? [payload.selector.hash] : payload.qualifiers[rule.qual] || [];
     return values.some((value) => new RegExp(rule.val).test(value)) ? [index] : [];
@@ -96,7 +95,7 @@ const setup = ({
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
   // app-setup.js: the palette owner's ports (D-15).
   const palette = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
-  const actions = createFeatureColorActions({
+  const actions = createFeatureColorActions({ readDrawnTracks: () => [],
     state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
     getFeatureElements: () => [], getFeatureFillElements: () => [],
     closeAfterDialogChoice: dialogChoice.closeAfterChoice,
@@ -107,8 +106,9 @@ const setup = ({
     },
     ruleActions: {
       runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
-      commitSpecificRules: async (rules) => {
+      commitSpecificRules: async (build) => {
         stages.push('commitSpecificRules');
+        const rules = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
         if (!await commit()) return false;
         manualSpecificRules.splice(0, manualSpecificRules.length, ...rules);
         return true;

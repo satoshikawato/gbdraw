@@ -11,7 +11,10 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-legend-sync-'));
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'app'), join(tempRoot, 'app'), { recursive: true });
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services'), join(tempRoot, 'services'), { recursive: true });
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'utils'), join(tempRoot, 'utils'), { recursive: true });
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'contracts'), join(tempRoot, 'contracts'), { recursive: true });
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'config.js'), join(tempRoot, 'config.js'));
+// track-slot-display.js reads the generated size-class boundaries.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), join(tempRoot, 'mode-profiles.generated.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 
 const {
@@ -24,6 +27,7 @@ const {
   PAIRWISE_LEGEND_SELECTOR,
   getComparisonLegendGroup,
   getLegendChildById,
+  isLegendOrderEdited,
   parseTransformXY
 } = await import(
   pathToFileURL(join(tempRoot, 'services', 'legend-svg.js'))
@@ -106,9 +110,9 @@ assert.match(
 );
 assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);
 assert.doesNotMatch(appSetupSource, /restoreLoadedSessionLegendEntries/);
-assert.match(configSource, /const entries = normalizeSessionLegendEntries\(legend\.entries, 'entries', droppedLegendColors\)/);
+assert.match(configSource, /const entries = normalizeSessionLegendEntries\(legend\.entries, 'entries', legendLoad\)/);
 assert.match(configSource, /entries: entries\.filter\(\(entry\) => entry\.dormant !== true\)/);
-assert.match(configSource, /deletedEntries: normalizeSessionLegendEntries\(legend\.deletedEntries, 'deletedEntries', droppedLegendColors\)/);
+assert.match(configSource, /deletedEntries: normalizeSessionLegendEntries\(legend\.deletedEntries, 'deletedEntries', legendLoad\)/);
 
 const rules = [
   { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' },
@@ -550,7 +554,7 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(shows, 1);
   sortActions.sortLegendEntries('asc');
   assert.equal(shows, 1, 'an order already listed records nothing');
-  sortActions.moveLegendEntryDown(0);
+  sortActions.moveLegendEntry(0, 1);
   assert.deepEqual(listed(), ['Beta', 'Alpha', 'Own1']);
   assert.equal(shows, 2);
   sortActions.sortLegendEntriesByDefault();
@@ -795,7 +799,8 @@ const mockLegendEntry = (caption, color, x) => {
 
 {
   // U3a A2a (gaps 1 and 2): the Legend rows of a rule commit are intent. The
-  // diff and the OV-158 placement are computed on the listed rows; `apply`
+  // diff, the OV-158 replacement of a renamed row (a re-key of its records),
+  // and the D-29 placement of a split row are computed on the listed rows; `apply`
   // writes them and names the rows the displayed Result shows at once: a
   // rule's new row where the Result lacks it, before the row it replaces, and
   // the retired row of a removed or renamed rule, which Python drew.
@@ -826,6 +831,7 @@ const mockLegendEntry = (caption, color, x) => {
     originalLegendColors: ref({}),
     legendStrokeOverrides: {},
     legendColorOverrides: {},
+    addedLegendCaptions: ref(new Set()),
     manualSpecificRules: [],
     skipCaptureBaseConfig: ref(false)
   };
@@ -837,7 +843,7 @@ const mockLegendEntry = (caption, color, x) => {
   const drawnRows = shownRows();
   const renamed = await actions.prepareFileLegendEntries([{ caption: 'New', color: '#aa0000' }], {
     previousFileIntents: [{ caption: 'Old', color: '#aa0000' }],
-    placement: { caption: 'New', at: 'Old' }
+    rekeyed: new Map([['Old', 'New']])
   });
   assert.deepEqual(renamed.diff, {
     add: [{ caption: 'New', color: '#aa0000' }], update: [], remove: [{ caption: 'Old', color: '#aa0000' }], unchanged: []
@@ -845,6 +851,15 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(renamed.isCurrent(), true);
   assert.deepEqual(renamed.apply(), { add: [{ caption: 'New', color: '#aa0000', before: 'Old' }], retire: ['Old'] });
   assert.deepEqual(listed(), [['CDS', '#112233'], ['New', '#aa0000'], ['tRNA', '#334455']]);
+  // D-29: a row split off goes right after the row of its name, before the
+  // row that followed it.
+  const split = await actions.prepareFileLegendEntries([{ caption: 'New', color: '#aa0000' }, { caption: 'CDS [#00aa00]', name: 'CDS', color: '#00aa00' }], {
+    previousFileIntents: [{ caption: 'New', color: '#aa0000' }],
+    placement: { caption: 'CDS [#00aa00]', after: 'CDS' }
+  });
+  assert.deepEqual(split.apply(), { add: [{ caption: 'CDS [#00aa00]', name: 'CDS', color: '#00aa00', before: 'New' }], retire: [] });
+  assert.deepEqual(listed(), [['CDS', '#112233'], ['CDS [#00aa00]', '#00aa00'], ['New', '#aa0000'], ['tRNA', '#334455']]);
+  state.legendEntries.value = state.legendEntries.value.filter(({ caption }) => caption !== 'CDS [#00aa00]');
   // A rule color change draws no row; a listed row the rules do not own keeps
   // its color or stops the commit.
   const recolored = await actions.prepareFileLegendEntries([{ caption: 'New', color: '#00aa00' }], {
@@ -855,11 +870,302 @@ const mockLegendEntry = (caption, color, x) => {
   assert.deepEqual(listed()[1], ['New', '#00aa00']);
   await assert.rejects(
     actions.prepareFileLegendEntries([{ caption: 'tRNA', color: '#000000' }]),
-    /Legend entry "tRNA" already exists with a different color/
+    // OV-644: a typed refusal that names no row key.
+    (error) => error.code === 'LEGEND_ROW_CONFLICT' && !String(error.message).includes('tRNA')
   );
   const reused = await actions.prepareFileLegendEntries([{ caption: 'tRNA', color: '#334455' }]);
   assert.deepEqual(reused.diff.unchanged, [{ caption: 'tRNA', color: '#334455' }]);
   assert.equal(reused.apply(), null);
   assert.equal(shownRows(), drawnRows, 'a rule commit leaves the Result to the executor');
   assert.equal(commits, 0);
+}
+
+// OV-645: a rule row whose key the allocation changes (its name starts or
+// stops being written in several colors) is the same row. `apply` writes it in
+// the place of its old key, in the list and in the generated inventory, so the
+// default order stays the default order and a user order keeps the row's
+// place; the displayed Result shows it before the row it replaces.
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const RED = 'alpha [#e63946]';
+  const TEAL = 'alpha [#2a9d8f]';
+  const setup = (order) => {
+    const colors = { [RED]: '#e63946', [TEAL]: '#2a9d8f', alpha: '#e63946', beta: '#2a9d8f', CDS: '#112233', tRNA: '#334455' };
+    const state = {
+      results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
+      selectedResultIndex: ref(0),
+      svgContainer: ref({ querySelector: () => svg }),
+      adv: {},
+      legendEntries: ref(order.listed.map((caption) => ({ caption, originalCaption: caption, color: colors[caption] }))),
+      deletedLegendEntries: ref([]),
+      dormantLegendEntries: ref([]),
+      originalLegendOrder: ref([...order.inventory]),
+      originalLegendColors: ref({}),
+      legendStrokeOverrides: {},
+      legendColorOverrides: {},
+      addedLegendCaptions: ref(new Set()),
+      manualSpecificRules: [],
+      skipCaptureBaseConfig: ref(false)
+    };
+    featureLegend.children.splice(0);
+    order.listed.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, colors[caption], index * 70)));
+    const actions = createLegendEntryActions({ state: withDrawings(state), readActiveResultIdentity: () => 'result-1' });
+    return {
+      state, actions,
+      listed: () => state.legendEntries.value.map(({ caption, originalCaption }) => (assert.equal(originalCaption, caption), caption)),
+      edited: () => isLegendOrderEdited(state.legendEntries.value, state.originalLegendOrder.value)
+    };
+  };
+  const shared = [{ caption: RED, color: '#e63946', name: 'alpha' }, { caption: TEAL, color: '#2a9d8f', name: 'alpha' }];
+  const sharedRows = [{ caption: RED, color: '#e63946' }, { caption: TEAL, color: '#2a9d8f' }];
+
+  // The Legend editor renames the teal row "gamma": the red row's key becomes
+  // "alpha". Both rows stay where they were.
+  const generated = [RED, TEAL, 'CDS', 'tRNA'];
+  const stops = setup({ listed: generated, inventory: generated });
+  // OV-660: the row's stored edits follow its key.
+  stops.state.legendStrokeOverrides[RED] = { strokeColor: '#111111', strokeWidth: 3 };
+  stops.state.legendColorOverrides[RED] = '#ff0000';
+  stops.state.legendStrokeOverrides[TEAL] = { strokeColor: '#222222', strokeWidth: 1 };
+  const unshared = await stops.actions.prepareFileLegendEntries(
+    [{ caption: 'alpha', color: '#e63946' }, { caption: 'gamma', color: '#2a9d8f' }],
+    // The renamed row replaces the teal row (OV-158), as a re-key of its records.
+    { previousFileIntents: sharedRows, rekeyed: new Map([[RED, 'alpha'], [TEAL, 'gamma']]) }
+  );
+  assert.deepEqual(unshared.apply(), {
+    add: [{ caption: 'alpha', color: '#e63946', before: RED }, { caption: 'gamma', color: '#2a9d8f', before: TEAL }],
+    retire: [RED, TEAL]
+  });
+  assert.deepEqual(stops.listed(), ['alpha', 'gamma', 'CDS', 'tRNA']);
+  assert.deepEqual(stops.state.originalLegendOrder.value, ['alpha', 'gamma', 'CDS', 'tRNA'], 'each re-keyed row keeps its rank');
+  assert.deepEqual(stops.state.legendStrokeOverrides, {
+    alpha: { strokeColor: '#111111', strokeWidth: 3 }, gamma: { strokeColor: '#222222', strokeWidth: 1 }
+  }, 'OV-660: the stroke follows the re-keyed row, and the renamed row\'s (D-25)');
+  assert.deepEqual(stops.state.legendColorOverrides, { alpha: '#ff0000' });
+
+  // The rule list renames "beta" onto "alpha" (no placement): the first row
+  // keeps its place under its new key, and the order is still the default one.
+  const starts = setup({ listed: ['alpha', 'beta', 'CDS', 'tRNA'], inventory: ['alpha', 'beta', 'CDS', 'tRNA'] });
+  const inventoryBefore = starts.state.originalLegendOrder.value;
+  starts.state.legendStrokeOverrides.alpha = { strokeColor: '#111111', strokeWidth: 3 };
+  const nowShared = await starts.actions.prepareFileLegendEntries(shared, {
+    previousFileIntents: [{ caption: 'alpha', color: '#e63946' }, { caption: 'beta', color: '#2a9d8f' }],
+    rekeyed: new Map([['alpha', RED]])
+  });
+  assert.deepEqual(nowShared.apply(), {
+    add: [{ caption: RED, color: '#e63946', name: 'alpha', before: 'alpha' }, { caption: TEAL, color: '#2a9d8f', name: 'alpha' }],
+    retire: ['alpha', 'beta']
+  });
+  assert.deepEqual(starts.listed(), [RED, 'CDS', 'tRNA', TEAL]);
+  assert.deepEqual(starts.state.originalLegendOrder.value, [RED, 'beta', 'CDS', 'tRNA']);
+  assert.deepEqual(inventoryBefore, ['alpha', 'beta', 'CDS', 'tRNA'], 'the inventory History holds is not written in place');
+  assert.equal(starts.edited(), false, 'a re-key alone is no edited order');
+  assert.deepEqual(starts.state.legendStrokeOverrides, { [RED]: { strokeColor: '#111111', strokeWidth: 3 } }, 'OV-660, the other direction');
+
+  // A user order keeps the re-keyed row's place.
+  const moved = setup({ listed: ['tRNA', RED, 'CDS', TEAL], inventory: generated });
+  assert.equal(moved.edited(), true);
+  const kept = await moved.actions.prepareFileLegendEntries([{ caption: 'alpha', color: '#e63946' }], {
+    previousFileIntents: sharedRows, rekeyed: new Map([[RED, 'alpha']])
+  });
+  kept.apply();
+  assert.deepEqual(moved.listed(), ['tRNA', 'alpha', 'CDS']);
+  assert.equal(moved.edited(), true);
+
+  // A key that names no row the commit replaces moves nothing: the old row
+  // stays (another rule still draws it), or the new key is already listed.
+  const other = setup({ listed: generated, inventory: generated });
+  const stays = await other.actions.prepareFileLegendEntries([...shared, { caption: 'beta', color: '#2a9d8f' }], {
+    previousFileIntents: sharedRows, rekeyed: new Map([[RED, 'beta']])
+  });
+  assert.deepEqual(stays.apply(), { add: [{ caption: 'beta', color: '#2a9d8f' }], retire: [] });
+  assert.deepEqual(other.listed(), [...generated, 'beta']);
+  assert.deepEqual(other.state.originalLegendOrder.value, generated);
+}
+
+// OV-531: Restore reads the color override by the row's caption, which is free
+// text. A caption that names an inherited member of a plain object
+// (`constructor`) has no override; an own entry still wins.
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const state = {
+    results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([
+      { caption: 'constructor', originalCaption: 'constructor', color: '#112233', featureIds: [] },
+      { caption: 'Alpha', originalCaption: 'Alpha', color: '#445566', featureIds: [] },
+      { caption: 'Zed', originalCaption: 'Zed', color: '#778899', featureIds: [] }
+    ]),
+    dormantLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    legendStrokeOverrides: {},
+    legendColorOverrides: { Alpha: '#aabbcc' },
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state: withDrawings(state),
+    commitActiveResultEdit: () => true,
+    readShownLegendColor: (entry) => entry?.color
+  });
+  await actions.restoreDeletedLegendEntries();
+  const colors = Object.fromEntries(state.legendEntries.value.map((entry) => [entry.caption, entry.color]));
+  assert.deepEqual(colors, { constructor: '#112233', Alpha: '#aabbcc', Zed: '#778899' },
+    'a caption named like an inherited member keeps its recorded color; an own override and an unknown caption read as before');
+}
+
+// OV-532: a first stroke edit reads the existing override by the row's caption.
+// An inherited member is no override, so the stored override gets the drawn
+// stroke like that of any other row.
+{
+  const ref = (value) => ({ value });
+  const strokeOverridesAfterFirstEdit = (caption, edit) => {
+    const svg = new MockElement('svg');
+    const featureLegend = new MockElement('g', { id: 'feature_legend' });
+    const row = mockLegendEntry(caption, '#112233', 0);
+    featureLegend.appendChild(row);
+    const legend = new MockElement('g', { id: 'legend' });
+    legend.appendChild(featureLegend);
+    svg.appendChild(legend);
+    const swatch = row.querySelector('path');
+    swatch.setAttribute('stroke', '#999999');
+    swatch.setAttribute('data-gbdraw-base-stroke', 'gray');
+    swatch.setAttribute('stroke-width', '2');
+    const state = {
+      svgContainer: ref({ querySelector: () => svg }),
+      legendEntries: ref([{ caption, color: '#112233' }]),
+      legendStrokeOverrides: {},
+      featureStrokeOverrides: {},
+      extractedFeatures: ref([])
+    };
+    const actions = createLegendStrokeActions({ state: withDrawings(state) });
+    assert.equal(edit(actions), true);
+    return state.legendStrokeOverrides[caption];
+  };
+  for (const [name, edit] of [
+    ['color', (actions) => actions.updateLegendEntryStrokeColor(0, '#222222')],
+    ['width', (actions) => actions.updateLegendEntryStrokeWidth(0, 3)]
+  ]) {
+    const ordinary = strokeOverridesAfterFirstEdit('Gamma', edit);
+    assert.equal(Object.keys(ordinary).length, 4);
+    assert.deepEqual([ordinary.originalStrokeColor, ordinary.originalStrokeWidth], ['gray', 2]);
+    for (const caption of ['constructor', 'toString']) {
+      assert.deepEqual(strokeOverridesAfterFirstEdit(caption, edit), ordinary,
+        `a first stroke ${name} edit of the row named ${caption} stores the drawn stroke like any other row`);
+    }
+  }
+}
+
+// D-35 (Owner, 2026-10-14): rows of one name and one swatch draw as one row
+// (D-28). A color or stroke edit of that row edits every row it merges, by
+// their keys, so it stays one row; a draw lists the merged row's entry, so the
+// Legend tab has it at once when it shows again.
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  featureLegend.appendChild(mockLegendEntry('Alpha', '#112233', 0));
+  const merged = mockLegendEntry('Alpha', '#112233', 70);
+  merged.setAttribute('data-gbdraw-base-data-legend-key', 'Beta');
+  merged.setAttribute('display', 'none');
+  merged.setAttribute('data-legend-merged', 'Alpha');
+  featureLegend.appendChild(merged);
+  featureLegend.appendChild(mockLegendEntry('Gamma', '#445566', 140));
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  merged.children.forEach((child) => child.setAttribute('stroke', '#999999'));
+  featureLegend.children[0].querySelector('path').setAttribute('stroke', '#999999');
+  const entries = () => [
+    { caption: 'Alpha', originalCaption: 'Alpha', color: '#112233', featureIds: [] },
+    { caption: 'Alpha', originalCaption: 'Beta', color: '#112233', featureIds: [] },
+    { caption: 'Gamma', originalCaption: 'Gamma', color: '#445566', featureIds: [] }
+  ];
+  const state = {
+    results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref(entries()),
+    deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
+    originalLegendOrder: ref(['Alpha', 'Beta', 'Gamma']),
+    originalLegendColors: ref({}),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    featureStrokeOverrides: {},
+    extractedFeatures: ref([]),
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({ state: withDrawings(state), readShownLegendColor: (entry) => entry?.color });
+  const strokeActions = createLegendStrokeActions({ state: withDrawings(state) });
+  assert.equal(actions.updateLegendEntryColor(0, '#ff0000'), true);
+  assert.deepEqual(state.legendColorOverrides, { Alpha: '#ff0000', Beta: '#ff0000' }, 'the color reaches both keys');
+  assert.deepEqual(state.legendEntries.value.map((entry) => entry.color), ['#ff0000', '#ff0000', '#445566']);
+  assert.equal(actions.updateLegendEntryColor(2, '#00ff00'), true);
+  assert.deepEqual(state.legendColorOverrides, { Alpha: '#ff0000', Beta: '#ff0000', Gamma: '#00ff00' }, 'a row that merges none: its key');
+  assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), true);
+  assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 3), true);
+  assert.deepEqual(Object.keys(state.legendStrokeOverrides), ['Alpha', 'Beta'], 'the stroke reaches both keys');
+  assert.deepEqual(state.legendStrokeOverrides.Beta, state.legendStrokeOverrides.Alpha);
+  assert.deepEqual([state.legendStrokeOverrides.Alpha.strokeColor, state.legendStrokeOverrides.Alpha.strokeWidth], ['#222222', 3]);
+  assert.equal(strokeActions.setLegendEntryStrokeColorValue(0, null), true);
+  assert.deepEqual([state.legendStrokeOverrides.Alpha.strokeColor, state.legendStrokeOverrides.Beta.strokeColor], [undefined, undefined]);
+  assert.equal(strokeActions.resetLegendEntryStroke(0), true);
+  assert.deepEqual(state.legendStrokeOverrides, {}, 'Reset stroke resets both keys');
+
+  // After a draw, the merged row's entry stays listed (the Legend tab leaves
+  // it out while it is merged), never a dormant rename.
+  state.legendEntries.value = entries();
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
+  assert.deepEqual(state.legendEntries.value.map((entry) => [entry.originalCaption, entry.caption]),
+    [['Alpha', 'Alpha'], ['Beta', 'Alpha'], ['Gamma', 'Gamma']]);
+  assert.deepEqual(state.dormantLegendEntries.value, []);
+}
+
+// Review L-1 (D-37): Keep both onto a deleted row restores it only when the
+// two rows would be one row: the same name and the whole swatch, as the
+// naming pass compares them (D-28), not the fill alone.
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  featureLegend.appendChild(mockLegendEntry('Alpha', '#112233', 0));
+  const deleted = mockLegendEntry('Beta', '#112233', 70);
+  deleted.setAttribute('display', 'none');
+  const deletedSwatch = deleted.querySelector('path');
+  deletedSwatch.setAttribute('stroke', '#000000');
+  deletedSwatch.setAttribute('stroke-width', '2');
+  featureLegend.appendChild(deleted);
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const state = {
+    results: ref([]), selectedResultIndex: ref(0), svgContainer: ref({ querySelector: () => svg }), adv: {},
+    legendEntries: ref([{ caption: 'Alpha', originalCaption: 'Alpha', color: '#112233', featureIds: [] }]),
+    deletedLegendEntries: ref([{ caption: 'Beta', originalCaption: 'Beta', color: '#112233', featureIds: [] }]),
+    dormantLegendEntries: ref([]), originalLegendOrder: ref(['Alpha', 'Beta']), originalLegendColors: ref({}),
+    legendStrokeOverrides: {}, legendColorOverrides: {}, manualSpecificRules: [], skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({ state: withDrawings(state), readShownLegendColor: (entry) => entry?.color });
+  const keepBoth = () => {
+    actions.readLegendRowNames();
+    return actions.keepBothNamesOf({ name: 'Beta', renamedKey: 'Alpha', targetKey: null, color: '#112233', deletedKey: 'Beta' });
+  };
+  assert.deepEqual(keepBoth(), { keepBothName: 'Beta', targetNameAfter: null, restores: false },
+    'one fill, another line: two rows, so Keep both leaves the deleted row deleted');
+  deletedSwatch.removeAttribute('stroke');
+  deletedSwatch.removeAttribute('stroke-width');
+  assert.deepEqual(keepBoth(), { keepBothName: 'Beta', targetNameAfter: null, restores: true }, 'one swatch: one row, restored');
 }

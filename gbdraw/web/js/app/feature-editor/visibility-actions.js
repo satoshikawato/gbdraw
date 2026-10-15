@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { ShowNotice } from '../app-messages.js' */
 import {
   applyFeatureVisibilityOverrideChanges,
   buildFeatureVisibilityChanges,
@@ -24,11 +24,37 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
+/** @import { DrawingState } from '../../state.js' */
+/** @import { FeatureDrawnContext, FeatureVisibilityRuleDraft, VisibilityFeature } from '../../services/feature-visibility.js' */
+
+/**
+ * A feature the visibility actions read: an extracted or catalog feature under its
+ * snake-case or camel-case names, with the qualifiers and similarity-group fields
+ * the scopes read by name.
+ * @typedef {VisibilityFeature & Record<string, unknown>} VisibilityTarget
+ */
+
+/**
+ * One scope of a visibility edit: this feature, its similarity-group members, or
+ * an exact product or protein ID rule.
+ * @typedef {object} VisibilityScope
+ * @property {string} id
+ * @property {string} label
+ * @property {string} description
+ * @property {VisibilityTarget[]} [features] The members of a `orthogroup` scope.
+ * @property {string} [featureType] The exact-qualifier rule of a `product` or `protein_id` scope.
+ * @property {string} [qualifier]
+ * @property {string} [value]
+ */
+
+/** @typedef {Partial<VisibilityScope> & { id: string }} VisibilityScopeChoice A scope, or the bare `feature` scope. */
+
+/** @typedef {{ reflow?: boolean, rerender?: boolean, labels?: boolean }} LabelFollowOptions */
 
 /**
  * The label owner's reaction the composition root registers once that owner exists.
  * @typedef {object} VisibilityActionsPorts
- * @property {(options?: { reflow?: boolean, rerender?: boolean, labels?: boolean }) => boolean} applyFeatureVisibilityToLabels
+ * @property {(options?: LabelFollowOptions) => boolean} applyFeatureVisibilityToLabels
  *   Projects the stored visibility overrides (`labels`: the whole label intent) onto the labels and queues the label reflow.
  */
 
@@ -43,6 +69,7 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
  * @property {import('../rule-matching.js').RulePreparation | null} [rulePreparation]
  * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
  *   The committed canonical request (Python owns the option fields, R7).
+ * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
 
 // The paint domain this owner shows through the port.
@@ -58,7 +85,8 @@ export const createFeatureVisibilityActions = ({
   ports,
   selectResult,
   rulePreparation = null,
-  getCommittedRequest = () => null
+  getCommittedRequest = () => null,
+  showNotice = () => {}
 }) => {
   // The preview owner selects the Result a History command targets (R13).
   if (typeof selectResult !== 'function') {
@@ -77,8 +105,13 @@ export const createFeatureVisibilityActions = ({
 
   const ruleFields = new Set(['recordId', 'featureType', 'qualifier', 'value', 'action']);
 
+  /** @param {unknown} value */
   const normalizeText = (value) => String(value ?? '').trim();
 
+  /**
+   * @param {...unknown} values
+   * @returns {string}
+   */
   const firstText = (...values) => {
     for (const value of values) {
       if (Array.isArray(value)) {
@@ -92,15 +125,22 @@ export const createFeatureVisibilityActions = ({
     return '';
   };
 
+  /** @param {VisibilityTarget | null | undefined} feat */
   const getFeatureType = (feat) => normalizeText(feat?.type || feat?.featureType || feat?.feature_type);
 
+  /**
+   * @param {VisibilityTarget | null | undefined} feat
+   * @param {unknown} key
+   */
   const getQualifierValue = (feat, key) => {
     const normalizedKey = normalizeText(key).toLowerCase();
     if (!normalizedKey) return '';
-    const qualifiers = feat?.qualifiers && typeof feat.qualifiers === 'object' ? feat.qualifiers : {};
+    // `feat.qualifiers` is checked to be an object just above.
+    const qualifiers = /** @type {Record<string, unknown>} */ (feat?.qualifiers && typeof feat.qualifiers === 'object' ? feat.qualifiers : {});
     return firstText(feat?.[normalizedKey], qualifiers[normalizedKey]);
   };
 
+  /** @param {{ id?: unknown, orthogroupId?: unknown, orthogroup_id?: unknown } | null | undefined} source */
   const orthogroupIdFor = (source) => {
     const ids = new Set([
       source?.id,
@@ -110,14 +150,16 @@ export const createFeatureVisibilityActions = ({
     return ids.size === 1 ? ids.values().next().value : '';
   };
 
+  /** @param {unknown} orthogroupId */
   const findOrthogroup = (orthogroupId) => {
     const id = normalizeText(orthogroupId);
     if (!id) return null;
     const matches = (Array.isArray(orthogroups?.value) ? orthogroups.value : [])
-      .filter((group) => orthogroupIdFor(group) === id);
+      .filter((/** @type {{ id?: unknown, orthogroupId?: unknown, orthogroup_id?: unknown }} */ group) => orthogroupIdFor(group) === id);
     return matches.length === 1 ? matches[0] : null;
   };
 
+  /** @param {VisibilityTarget[]} features */
   const uniqueFeaturesBySvgId = (features) => {
     const seen = new Set();
     return features.filter((feat) => {
@@ -128,6 +170,7 @@ export const createFeatureVisibilityActions = ({
     });
   };
 
+  /** @param {VisibilityTarget} feat */
   const getOrthogroupMemberFeatures = (feat) => {
     const orthogroupId = orthogroupIdFor({
       orthogroupId: feat?.orthogroupId,
@@ -139,8 +182,9 @@ export const createFeatureVisibilityActions = ({
     const members = Array.isArray(group.members) ? group.members : [];
     if (!resolveUniqueOrthogroupMemberForFeature(feat, members)) return [];
 
+    /** @type {Map<unknown, VisibilityTarget[]>} */
     const featuresByMember = new Map();
-    (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((candidate) => {
+    (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((/** @type {VisibilityTarget} */ candidate) => {
       const candidateGroupId = orthogroupIdFor({
         orthogroupId: candidate?.orthogroupId,
         orthogroup_id: candidate?.orthogroup_id
@@ -152,14 +196,16 @@ export const createFeatureVisibilityActions = ({
       matches.push(candidate);
       featuresByMember.set(member, matches);
     });
-    return members.flatMap((member) => {
+    return members.flatMap((/** @type {unknown} */ member) => {
       const matches = featuresByMember.get(member) || [];
       return matches.length === 1 ? matches : [];
     });
   };
 
+  /** @param {VisibilityTarget} feat */
   const buildVisibilityScopes = (feat) => {
     const featureType = getFeatureType(feat);
+    /** @type {VisibilityScope[]} */
     const scopes = [{
       id: 'feature',
       label: 'This feature',
@@ -210,6 +256,7 @@ export const createFeatureVisibilityActions = ({
   // feature's label with it, as Generate does, and queues the label reflow
   // unless the caller declines it (F-3); `rerender` asks for the automatic
   // rerender, which draws a feature the Result does not draw (R-5).
+  /** @param {LabelFollowOptions} [options] */
   const followLabels = (options) => ports.applyFeatureVisibilityToLabels(options);
 
   // The visibility table holds rules only; per-feature edits are identity rows.
@@ -220,11 +267,13 @@ export const createFeatureVisibilityActions = ({
       : drawing.featureVisibilityManualRules.map((rule) => normalizeFeatureVisibilityRule(rule))
   );
 
+  /** @param {VisibilityTarget | null | undefined} left @param {VisibilityTarget | null | undefined} right */
   const sameFeature = (left, right) => {
     const key = featureIdentityKeyOf(left);
     return Boolean(key) && key === featureIdentityKeyOf(right);
   };
 
+  /** @param {VisibilityScopeChoice | null | undefined} scope */
   const isRuleScope = (scope) => scope?.id === 'product' || scope?.id === 'protein_id';
 
   // OV-42 (Owner decision 2026-10-06, option A): whether a Result's Legend
@@ -232,6 +281,7 @@ export const createFeatureVisibilityActions = ({
   // Legend source of the features each Result's catalog draws against the
   // source of the features the resolver draws now, under the current rules.
   // Python redraws the Legend in the automatic rerender.
+  /** @param {FeatureDrawnContext} context */
   const legendSourceChanged = (context) => !sameLegendSources(
     resultLegendSources(state, context, { asRendered: true }),
     resultLegendSources(state, context)
@@ -246,7 +296,11 @@ export const createFeatureVisibilityActions = ({
   // (`targeted`), and, unless the caller declines it (`legend`), a changed
   // Legend source of any Result (OV-42). The resolver reads Python's rule
   // matches, so an action prepares them first (`prepareDrawn`).
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {VisibilityTarget[]} features
+   * @param {{ targeted?: boolean, legend?: boolean }} [projection]
+   */
   const needsRerenderFor = (drawing, features, { targeted = false, legend = true } = {}) => {
     const context = featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions });
     const catalogFeatures = resultCatalogFeatures(state);
@@ -260,7 +314,7 @@ export const createFeatureVisibilityActions = ({
   const displayedFeatures = () => {
     const catalogFeatures = resultCatalogFeatures(state);
     return catalogFeatures
-      ? catalogFeatures.biological.map((feature) => (
+      ? catalogFeatures.biological.map((/** @type {VisibilityTarget} */ feature) => (
         catalogFeatures.renderedByIdentity.get(stableFeatureOverrideKey(feature)) || feature
       ))
       : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
@@ -270,7 +324,7 @@ export const createFeatureVisibilityActions = ({
   // whether the rerender must draw a feature or the Legend.
   /**
    * @param {DrawingState} drawing
-   * @param {Record<string, any>[]} features
+   * @param {VisibilityTarget[]} features
    * @param {{ targeted?: boolean, legend?: boolean, show?: boolean }} [projection]
    */
   const projectDrawn = (drawing, features, { show = true, ...projection } = {}) => ({
@@ -285,7 +339,10 @@ export const createFeatureVisibilityActions = ({
    */
   const prepareDrawn = (options) => rulePreparation?.prepareDrawn?.(options) ?? true;
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {VisibilityTarget[]} features
+   */
   const updateClickedFeatureVisibilityFromRules = (drawing, features) => {
     const clicked = clickedFeature.value?.feat;
     if (!clicked || !features.some((feature) => sameFeature(feature, clicked))) return;
@@ -300,6 +357,10 @@ export const createFeatureVisibilityActions = ({
     }
   }));
 
+  /**
+   * @param {unknown} resultIndex
+   * @param {unknown} generationKey
+   */
   const ensureCommandTargetResult = async (resultIndex, generationKey) => {
     if (String(resultGenerationKey?.value ?? '') !== String(generationKey ?? '')) return false;
     const targetIndex = Number(resultIndex);
@@ -313,6 +374,10 @@ export const createFeatureVisibilityActions = ({
     return Boolean(svgContainer?.value?.querySelector?.('svg'));
   };
 
+  /**
+   * @param {VisibilityTarget[]} features
+   * @param {unknown} modeRaw
+   */
   const buildSelectedFeaturesVisibilityCommand = (features, modeRaw) => {
     const drawing = state.activeDrawing();
     const targetFeatures = uniqueFeaturesBySvgId(Array.isArray(features) ? features : [])
@@ -326,6 +391,7 @@ export const createFeatureVisibilityActions = ({
     const commandResultIndex = Number(selectedResultIndex?.value || 0);
     const commandGenerationKey = String(resultGenerationKey?.value ?? '');
 
+    /** @param {'apply' | 'revert'} direction */
     const applyChangeSet = async (direction) => {
       if (!(await ensureCommandTargetResult(commandResultIndex, commandGenerationKey))) return false;
       await prepareDrawn();
@@ -356,6 +422,10 @@ export const createFeatureVisibilityActions = ({
     };
   };
 
+  /**
+   * @param {VisibilityTarget[]} targetFeatures
+   * @param {string} mode
+   */
   const showClickedFeatureVisibility = (targetFeatures, mode) => {
     const clicked = clickedFeature.value?.feat;
     if (clicked && targetFeatures.some((feature) => sameFeature(feature, clicked))) {
@@ -365,7 +435,12 @@ export const createFeatureVisibilityActions = ({
 
   // A feature or similarity-group scope: the identity rows of its features.
   // Returns whether the rerender must draw one of them.
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {VisibilityTarget} feat
+   * @param {unknown} modeRaw
+   * @param {VisibilityScopeChoice} scope
+   */
   const applyFeatureVisibilityScope = (drawing, feat, modeRaw, scope) => {
     const nextMode = normalizeVisibilityMode(modeRaw);
     const targetFeatures = scope?.id === 'orthogroup'
@@ -389,6 +464,7 @@ export const createFeatureVisibilityActions = ({
   // its matches. Resolves to `projectDrawn`'s answer, or null when it projects
   // nothing.
   let projectionRun = 0;
+  /** @type {unknown} */
   let ruleTableError = null;
   /** @param {DrawingState} drawing */
   const runProjection = async (drawing, { legend = true, show = true } = {}) => {
@@ -439,7 +515,10 @@ export const createFeatureVisibilityActions = ({
   // A rerender that runs when the rules change may have read the old ones and
   // is about to replace the Result this edit is decided against, so the edit
   // asks for one more, which the running one coalesces (OV-330).
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {(rules: FeatureVisibilityRuleDraft[]) => boolean | void} edit Changes the copy; false writes nothing.
+   */
   const editFeatureVisibilityRules = async (drawing, edit) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -466,7 +545,12 @@ export const createFeatureVisibilityActions = ({
     featureVisibilityScopeDialog.scopes = [];
   };
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {VisibilityTarget} feat
+   * @param {unknown} modeRaw
+   * @param {{ triggerReflow?: boolean, scope?: VisibilityScopeChoice }} [options]
+   */
   const setFeatureVisibilityIn = (drawing, feat, modeRaw, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -487,15 +571,19 @@ export const createFeatureVisibilityActions = ({
   };
 
   /**
-   * @param {Record<string, any>} feat
+   * @param {VisibilityTarget} feat
    * @param {string} modeRaw
-   * @param {Record<string, any>} [options]
+   * @param {{ triggerReflow?: boolean, scope?: VisibilityScopeChoice }} [options]
    */
   const setFeatureVisibility = (feat, modeRaw, options = {}) => {
     const drawing = state.activeDrawing();
     return setFeatureVisibilityIn(drawing, feat, modeRaw, options);
   };
 
+  /**
+   * @param {VisibilityTarget[]} features
+   * @param {unknown} modeRaw
+   */
   const setSelectedFeaturesVisibility = async (features, modeRaw) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -504,6 +592,7 @@ export const createFeatureVisibilityActions = ({
     return command.apply();
   };
 
+  /** @param {unknown} modeRaw */
   const updateClickedFeatureVisibility = async (modeRaw) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -525,6 +614,7 @@ export const createFeatureVisibilityActions = ({
     return false;
   };
 
+  /** @param {string} scopeId */
   const handleFeatureVisibilityScopeChoice = async (scopeId) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -535,7 +625,7 @@ export const createFeatureVisibilityActions = ({
     }
     const feat = featureVisibilityScopeDialog.feat;
     const nextMode = featureVisibilityScopeDialog.mode;
-    const scope = (featureVisibilityScopeDialog.scopes || []).find((entry) => entry.id === scopeId);
+    const scope = (featureVisibilityScopeDialog.scopes || []).find((/** @type {VisibilityScope} */ entry) => entry.id === scopeId);
     if (!feat || !scope) {
       clearFeatureVisibilityScopeDialog({ restorePrevious: true });
       return false;
@@ -557,6 +647,11 @@ export const createFeatureVisibilityActions = ({
     return previousMode !== nextMode;
   };
 
+  /**
+   * @param {number} index
+   * @param {string} field
+   * @param {unknown} value
+   */
   const setFeatureVisibilityRuleField = (index, field, value) => {
     const drawing = state.activeDrawing();
     return editFeatureVisibilityRules(drawing, (rules) => {
@@ -565,7 +660,11 @@ export const createFeatureVisibilityActions = ({
     });
   };
 
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @param {number} index
+   * @param {number} offset
+   */
   const moveFeatureVisibilityRule = (drawing, index, offset) => editFeatureVisibilityRules(drawing, (rules) => {
     const target = index + offset;
     if (!rules[index] || target < 0 || target >= rules.length) return false;
@@ -579,6 +678,7 @@ export const createFeatureVisibilityActions = ({
     });
   };
 
+  /** @param {number} index */
   const removeFeatureVisibilityRule = (index) => {
     const drawing = state.activeDrawing();
     return editFeatureVisibilityRules(drawing, (rules) => {
@@ -591,12 +691,13 @@ export const createFeatureVisibilityActions = ({
     const drawing = state.activeDrawing();
     const text = serializeFeatureVisibilityRules(visibilityRuleRows(drawing));
     if (!text.trim()) {
-      alert('No valid feature visibility rules to export.');
+      showNotice({ text: 'There are no complete Feature visibility rules to export.' });
       return;
     }
     downloadTextFile('gbdraw_feature_visibility_table.tsv', text);
   };
 
+  /** @param {FeatureVisibilityRuleDraft} rule */
   const featureVisibilityRuleDetail = (rule) => {
     const normalized = normalizeFeatureVisibilityRule(rule);
     if (normalized.source === 'editor' && normalized.featureId) {
@@ -616,11 +717,11 @@ export const createFeatureVisibilityActions = ({
     featureVisibilityRuleDetail,
     buildSelectedFeaturesVisibilityCommand,
     handleFeatureVisibilityScopeChoice,
-    moveFeatureVisibilityRuleDown: (index) => {
+    moveFeatureVisibilityRuleDown: (/** @type {number} */ index) => {
       const drawing = state.activeDrawing();
       return moveFeatureVisibilityRule(drawing, index, 1);
     },
-    moveFeatureVisibilityRuleUp: (index) => {
+    moveFeatureVisibilityRuleUp: (/** @type {number} */ index) => {
       const drawing = state.activeDrawing();
       return moveFeatureVisibilityRule(drawing, index, -1);
     },

@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const zlib = require('node:zlib');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, openLinearFileCards, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -24,6 +24,7 @@ const generateFromControl = async (page) => {
 };
 
 const expandLinearRecordControls = async (page) => {
+  await openLinearFileCards(page);
   for (const disclosure of await page.locator('[data-linear-source-records]').all()) {
     if (!await disclosure.evaluate((element) => element.open)) {
       await disclosure.locator(':scope > summary').click();
@@ -241,8 +242,11 @@ for (const mode of ['circular', 'linear']) {
     if (mode === 'linear') expect(committed.records.map((record) => record.presentation.gridRow)).toEqual([1, 1]);
     await upload.setInputFiles({ name: 'same.gbk', mimeType: 'text/plain', buffer: Buffer.from((source + source).replace('chosen protein', 'replacement protein')) });
     if (mode === 'linear') await expandLinearRecordControls(page);
-    await expect(first).toHaveValue('');
-    await expect(second).toHaveValue('');
+    // The requested starts left with the replaced source: each field shows the
+    // current start (OV-374) and no Reset start is offered.
+    await expect(first).toHaveValue('1');
+    await expect(second).toHaveValue('1');
+    await expect(page.getByRole('button', { name: 'Reset start', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: /^Undo/ }).first().click();
     if (mode === 'linear') await expandLinearRecordControls(page);
     await expect(first).toHaveValue('71');
@@ -257,7 +261,7 @@ for (const mode of ['circular', 'linear']) {
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
     if (mode === 'linear') {
       await expandLinearRecordControls(page);
-      await page.getByRole('button', { name: 'Load record rotation controls', exact: true }).first().click();
+      await page.getByRole('button', { name: 'Inspect records', exact: true }).first().click();
     } else {
       await page.locator('[data-circular-inspect]').click();
     }
@@ -295,7 +299,8 @@ for (const mode of ['circular', 'linear']) {
     await expect(start).toBeEnabled();
     await expect(start).toHaveValue('71');
     await page.getByRole('button', { name: 'Reset start', exact: true }).click();
-    await expect(start).toHaveValue('');
+    // OV-374: without a requested start the field shows the current start.
+    await expect(start).toHaveValue('1');
     if (mode === 'circular') await (await reveal(page.locator('#circular-track-preset'))).selectOption('middle');
     await (await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }))).uncheck();
     await generateFromControl(page);
@@ -353,7 +358,9 @@ test('paired GFF/FASTA replacement keeps placements; Generate applies survivors 
   const placements = () => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length);
   const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta.replace('ACGT', 'TCGT')) });
-  await expect(start).toHaveValue('');
+  // The requested start left with the replaced source (OV-374: the field shows the current start).
+  await expect(start).toHaveValue('1');
+  await expect(page.getByRole('button', { name: 'Reset start', exact: true })).toHaveCount(0);
   expect(await placements()).toBe(1);
   await page.getByRole('button', { name: /^Undo/ }).first().click();
   await expect(start).toHaveValue('71');

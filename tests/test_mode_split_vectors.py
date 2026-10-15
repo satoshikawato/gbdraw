@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 
 from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
     expand_session_feature_catalog,
     migrate_session_flat_draft,
     mode_split_palette_colors,
@@ -241,7 +242,7 @@ def test_the_27_44_chain_composes_to_one_drawing_and_carries_drawing_b(fixture: 
         return
     upgraded = upgrade_session_document(REPO_ROOT / fixture, temporary_directory=tmp_path).document.to_dict()
 
-    assert upgraded["version"] == 46
+    assert upgraded["version"] == CURRENT_SESSION_VERSION
     assert [(drawing.id, drawing.name, drawing.request is not None) for drawing in read_session_drawings(upgraded)] == [
         (mode_a, DRAWING_NAMES[mode_a], isinstance(request, dict))
     ]

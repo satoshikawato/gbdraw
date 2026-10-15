@@ -60,13 +60,19 @@ circularSlice.editorState.legend = {
     color: 'url(javascript:alert(2))'
   }]
 };
+// Load lists the entries it drops for their color before it applies the
+// file (BA-D25); the port answers [Load].
+const maliciousLegendDialogs = [];
 const importedMaliciousLegend = await importSession({
   target: {
     files: [new Blob([JSON.stringify(maliciousLegendSession)], { type: 'application/json' })],
     value: 'selected'
   }
-});
+}, { confirmLoadRepairs: async (dialog) => { maliciousLegendDialogs.push(dialog); return true; } });
 assert.equal(importedMaliciousLegend.status, 'ok');
+assert.deepEqual(maliciousLegendDialogs.map(({ items }) => items), [[
+  'Legend: entries "unsafe-current", "unsafe-deleted" (deleted) had a color the app does not accept and were dropped.'
+]]);
 assert.equal(
   state.activeDrawing().legendEntries.value.some((entry) => entry.caption === 'unsafe-current'),
   false

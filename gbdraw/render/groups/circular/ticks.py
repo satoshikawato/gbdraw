@@ -4,7 +4,7 @@
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group, Path, Text
 
-from ....canvas import CircularCanvasConfigurator
+from ....canvas import CircularCanvasGeometry
 from ....config.models import CircularRenderProfile
 from ....svg.circular_ticks import (
     get_circular_tick_intervals,
@@ -23,11 +23,10 @@ class TickGroup:
     def __init__(
         self,
         gb_record: SeqRecord,
-        canvas_config: CircularCanvasConfigurator,
+        geometry: CircularCanvasGeometry,
         *,
         profile: CircularRenderProfile,
         radius: float | None = None,
-        tick_track_channel_override: str | None = None,
         label_side: str = "legacy",
         tick_side: str = "legacy",
         tick_length_px: float | None = None,
@@ -38,8 +37,8 @@ class TickGroup:
     ) -> None:
         self.record_transform = record_transform
         self.gb_record: SeqRecord = gb_record
-        self.canvas_config: CircularCanvasConfigurator = canvas_config
-        self.radius: float = float(radius) if radius is not None else self.canvas_config.radius
+        self.geometry = geometry
+        self.radius: float = float(radius) if radius is not None else geometry.radius
         self.tick_group = Group(id=str(group_id or "tick"))
         if slot_id:
             self.tick_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
@@ -57,14 +56,10 @@ class TickGroup:
         self.track_type = str(track_preset or cfg.canvas.circular.track_type)
         self.length_threshold = int(cfg.labels.length_threshold.circular)
         self.separate_strands = profile.strandedness
-        normalized_tick_channel = str(tick_track_channel_override or "").strip().lower()
-        self.tick_track_channel_override = (
-            normalized_tick_channel if normalized_tick_channel in {"short", "long"} else None
-        )
         self.label_side = str(label_side or "legacy").strip().lower()
         self.tick_side = str(tick_side or "legacy").strip().lower()
         self.tick_length_px = tick_length_px
-        self.dpi = self.canvas_config.dpi
+        self.dpi = geometry.dpi
         self.set_tick_size()
         self.add_elements_to_group()
 
@@ -87,10 +82,9 @@ class TickGroup:
             self.tick_width,
             self.track_type,
             self.separate_strands,
-            tick_track_channel_override=self.tick_track_channel_override,
             tick_side=self.tick_side,
             tick_length_px=self.tick_length_px,
-            length_reference_radius_px=float(self.canvas_config.radius),
+            length_reference_radius_px=float(self.geometry.radius),
             record_transform=self.record_transform,
             length_threshold=self.length_threshold,
         )
@@ -108,12 +102,11 @@ class TickGroup:
             self.track_type,
             self.separate_strands,
             self.dpi,
-            tick_track_channel_override=self.tick_track_channel_override,
             label_side=self.label_side,
             tick_side=self.tick_side,
             tick_length_px=self.tick_length_px,
             tick_width=float(self.tick_width),
-            length_reference_radius_px=float(self.canvas_config.radius),
+            length_reference_radius_px=float(self.geometry.radius),
             group_identifier=str(self.tick_group.attribs.get("id", "tick")),
             record_identifier=str(self.gb_record.id),
             record_transform=self.record_transform,

@@ -12,7 +12,7 @@ import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-depth-slot-lifecycle-'));
-for (const directory of ['app', 'utils']) {
+for (const directory of ['app', 'utils', 'contracts']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', directory), join(tempRoot, directory), { recursive: true });
 }
 // circular-track-slots.js reads the conservation-series row helpers.
@@ -20,12 +20,17 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
   join(tempRoot, 'services', 'conservation-series.js')
 );
-// linear-track-slots.js reads the current option values.
-await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'current-option-values.js'),
-  join(tempRoot, 'services', 'current-option-values.js')
-);
+// linear-track-slots.js reads the current option values, which read the
+// Linear label visibilities and the comparison settings.
+for (const leaf of ['current-option-values.js', 'linear-label-visibility.js', 'losat-normalization.js']) {
+  await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf), join(tempRoot, 'services', leaf));
+}
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
+// track-slot-display.js reads the generated size-class boundaries.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'),
+  join(tempRoot, 'mode-profiles.generated.js')
+);
 // The track-slot leaves the slot editors import.
 for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js',
   'circular-track-slot-model.js', 'linear-track-slot-model.js']) {

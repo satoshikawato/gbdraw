@@ -422,7 +422,6 @@ const state = {
   selectedOrthogroupAlignmentFeature: ref(''),
   similarityAlignmentPlan: ref(null),
   linearRecordTranslations: ref([]),
-  legacySimilarityAlignment: ref(null),
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
   linearRecordRows: [],
@@ -742,6 +741,23 @@ assert.equal(
   30
 );
 state.adv.circular_definition_interval = null;
+// The diagram font is a managed setting: the draft list goes to the request as
+// typed, and the request projects back into the setting (custom-fonts PR-2).
+state.adv.font_family = "'DejaVu Serif', serif";
+const fontFamilyRequest = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.equal(
+  fontFamilyRequest.renderRequest.diagramOptions.configOverrides['objects.text.font_family'],
+  "'DejaVu Serif', serif"
+);
+assert.equal(projectCanonicalSessionRequest(fontFamilyRequest).config.adv.font_family, "'DejaVu Serif', serif");
+state.adv.font_family = null;
+assert.equal(
+  Object.hasOwn(
+    buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.diagramOptions.configOverrides,
+    'objects.text.font_family'
+  ),
+  false
+);
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
 assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
 assert.equal(canonical.renderRequest.diagramOptions.bitscore, 50);
@@ -1433,6 +1449,41 @@ assert.deepEqual(
     priority: 'original-priority.tsv'
   }
 );
+// OV-525: a request rebuilt for publication keeps a label whitelist that was
+// written as a table (Python stores `label_whitelist_table` as canonical TSV).
+{
+  const committed = structuredClone(semanticCanonical);
+  const options = committed.renderRequest.diagramOptions;
+  const tableRef = {
+    resourceId: options.labelWhitelistFile.resourceId,
+    representation: 'canonicalTsv'
+  };
+  delete options.labelWhitelistFile;
+  options.labelWhitelistTable = tableRef;
+  const table = Buffer.from('CDS\tgene\talpha\n', 'utf8');
+  committed.resources[tableRef.resourceId] = {
+    kind: 'canonical-tsv',
+    name: 'label-whitelist.tsv',
+    encoding: 'base64',
+    size: table.length,
+    data: table.toString('base64')
+  };
+  // Load backs each file with its Session resource; the writer reads the kind from it.
+  const { adoptCurrentSessionResources } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))
+  );
+  const projection = projectCanonicalSessionRequest({
+    ...committed,
+    sessionResourceTable: adoptCurrentSessionResources(committed.resources)
+  });
+  assert.deepEqual(projection.config.whitelist, [{ feat: 'CDS', qual: 'gene', key: 'alpha' }]);
+  const rebuilt = buildCanonicalRenderRequestRaw({
+    state: { ...state, canonicalPublicationFiles: projection.requestTableFiles },
+    filesData
+  });
+  assert.deepEqual(rebuilt.renderRequest.diagramOptions.labelWhitelistTable, tableRef);
+  assert.equal(rebuilt.renderRequest.diagramOptions.labelWhitelistFile, undefined);
+}
 // OV-23: a pasted tab or line break in a Label whitelist or Qualifier priority cell
 // must not add a column; the writers normalize like the Feature visibility writer.
 state.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: 'two\twords\nmore ' });
@@ -2388,16 +2439,12 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     }
   });
 
-  // A Session loaded from an older request schema keeps its request until the
-  // next Generate; the reflow promotes it instead of rejecting it.
+  // Load reads every stored request to schema 9 (except schema 1, kept as
+  // stored); the reflow reads only a committed request of the current schema.
   const older = structuredClone(committed);
-  older.renderRequest.schema = 7;
-  delete older.renderRequest.diagramOptions.featureOverrides;
-  const promoted = projectCommittedEditorIntent({ committed: older, state: draft });
-  assert.equal(older.renderRequest.schema, 7, 'the committed Session is not modified');
-  assert.equal(promoted.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
-  assert.deepEqual(promoted.renderRequest.records, reflow.renderRequest.records);
-  assert.deepEqual(promoted.renderRequest.diagramOptions, reflow.renderRequest.diagramOptions);
+  older.renderRequest.schema = 1;
+  assert.throws(() => projectCommittedEditorIntent({ committed: older, state: draft }),
+    /A current committed canonical Session is required/);
 }
 
 state.form.prefix = '';
@@ -2535,13 +2582,51 @@ assert.equal(
   'lightgray'
 );
 state.form.linear_ruler_on_axis = true;
-const rulerAxisCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
+// Ruler on Axis with Bar scale or Middle layout is ignored, so the axis keeps
+// the plain Linear color (as in the CLI and the Python API).
+const ignoredRulerAxisCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
+assert.equal(
+  ignoredRulerAxisCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.axis.linear.stroke_color'
+  ],
+  'lightgray'
+);
+const rulerAxisColorFor = (layout, style) => {
+  state.form.linear_track_layout = layout;
+  state.form.scale_style = style;
+  try {
+    return buildCanonicalRenderRequestRaw({
+      state,
+      filesData: linearFilesData,
+      comparisonPlanSnapshot: comparisonSnapshotForState(state, linearFilesData)
+    });
+  } finally {
+    state.form.linear_track_layout = 'middle';
+    state.form.scale_style = 'bar';
+  }
+};
+assert.equal(
+  rulerAxisColorFor('above', 'bar').renderRequest.diagramOptions.configOverrides[
+    'objects.axis.linear.stroke_color'
+  ],
+  'lightgray'
+);
+const rulerAxisCanonical = rulerAxisColorFor('above', 'ruler');
 assert.equal(
   rulerAxisCanonical.renderRequest.diagramOptions.configOverrides[
     'objects.axis.linear.stroke_color'
   ],
   'dimgray'
 );
+// Unset ruler colors stay out of the request: the shared config-override
+// owner (gbdraw/config/modify.py) makes them follow the axis color.
+for (const path of ['objects.scale.stroke_color', 'objects.scale.label_color']) {
+  assert.equal(
+    Object.hasOwn(rulerAxisCanonical.renderRequest.diagramOptions.configOverrides, path),
+    false,
+    path
+  );
+}
 state.form.show_scale = false;
 const hiddenRulerAxisCanonical = buildCanonicalRenderRequest({
   state,
@@ -2965,8 +3050,7 @@ const legacyProjection = projectCanonicalSessionRequest({
   resources: losatPairCanonical.resources
 });
 assert.deepEqual(legacyProjection.pipelineState.legacySimilarityAlignment, {
-  target: 'og-legacy',
-  sourceSchema: 7
+  target: 'og-legacy'
 });
 const legacyFeatureCatalog = {
   schema: 3,
@@ -3537,11 +3621,13 @@ pythonCircularConfigCanonical.renderRequest.diagramOptions.config = structuredCl
 );
 pythonCircularConfigCanonical.renderRequest.diagramOptions.config.objects.definition.circular.interval = 30;
 pythonCircularConfigCanonical.renderRequest.diagramOptions.config.canvas.show_labels = true;
+pythonCircularConfigCanonical.renderRequest.diagramOptions.config.objects.text = { font_family: "'Liberation Serif', serif" };
 const pythonCircularConfigProjection = projectCanonicalSessionRequest(pythonCircularConfigCanonical);
 assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_width, 3);
 assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_color, '#333333');
 assert.equal(pythonCircularConfigProjection.config.adv.def_font_size, 18);
 assert.equal(pythonCircularConfigProjection.config.adv.circular_definition_interval, 30);
+assert.equal(pythonCircularConfigProjection.config.adv.font_family, "'Liberation Serif', serif");
 assert.equal(pythonCircularConfigProjection.config.adv.plot_title_font_size, 30);
 assert.equal(pythonCircularConfigProjection.config.adv.label_font_size, 13);
 assert.equal(pythonCircularConfigProjection.config.adv.outer_label_x_offset, 0.9);
@@ -3911,6 +3997,31 @@ assert.deepEqual(
 );
 assert.equal(structuredV33Projection.config.adv.linear_track_slots[1].height, '44px');
 assert.equal(structuredV33Projection.config.adv.linear_track_slots[1].spacing, '6px');
+
+// OV-490: a Linear content or skew slot that names no dinucleotide takes the
+// request's, as Python reads it (`slot_dinucleotide`), not GC.
+const requestDinucleotideProjection = projectCanonicalSessionRequest({
+  ...structuredSparseDepthCanonical,
+  renderRequest: {
+    ...structuredSparseDepthCanonical.renderRequest,
+    diagramOptions: {
+      ...structuredSparseDepthCanonical.renderRequest.diagramOptions,
+      dinucleotide: 'AT',
+      tracks: {
+        ...structuredSparseDepthCanonical.renderRequest.diagramOptions.tracks,
+        linearTrackSlots: [
+          ...structuredSparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots,
+          { kind: 'linearTrackSlot', id: 'skew', renderer: 'dinucleotide_skew', enabled: true, side: 'below', height: null, spacing: null, z: 0, params: {} },
+          { kind: 'linearTrackSlot', id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, side: 'below', height: null, spacing: null, z: 0, params: { nt: 'GC' } }
+        ]
+      }
+    }
+  }
+});
+assert.deepEqual(
+  requestDinucleotideProjection.config.adv.linear_track_slots.slice(-2).map((slot) => [slot.id, slot.params.nt]),
+  [['skew', 'AT'], ['gc_skew', 'GC']]
+);
 
 const legacySparseDepthProjection = projectCanonicalSessionRequest({
   ...structuredSparseDepthCanonical,
@@ -4525,6 +4636,36 @@ assert.deepEqual(
   linearP3Slots.find((slot) => slot.id === 'review_overlay').params.style_override,
   nestedStyleOverride
 );
+
+// The slot editor has no control for to_slot (an overlay that spans from its
+// anchor slot to a second slot): Generate and a saved Session keep the value.
+for (const [spanState, spanFilesData, requestKey, configKey, gcSlot] of [
+  [circularP3State, filesData, 'circularTrackSlots', 'circular_track_slots',
+    { side: 'inside', width: null, radius: null, inner_gap_px: null, outer_gap_px: null }],
+  [linearP3State, linearFilesData, 'linearTrackSlots', 'linear_track_slots',
+    { side: 'below', height: '', spacing: '' }]
+]) {
+  const spanSlots = [
+    ...spanState.adv[configKey].map((slot) => (slot.id === 'review_overlay'
+      ? { ...slot, params: { ...slot.params, to_slot: 'gc_content' } }
+      : slot)),
+    { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, z: 0, params: {}, ...gcSlot }
+  ];
+  const spanDrawing = { ...spanState, adv: { ...spanState.adv, [configKey]: spanSlots } };
+  const spanCanonical = buildCanonicalRenderRequestRaw({
+    state: spanDrawing,
+    filesData: spanFilesData,
+    ...(configKey === 'linear_track_slots'
+      ? { comparisonPlanSnapshot: comparisonSnapshotForState(spanDrawing, spanFilesData) }
+      : {})
+  });
+  const spanParams = (slots) => slots.find((slot) => slot.id === 'review_overlay').params;
+  assert.equal(spanParams(spanCanonical.renderRequest.diagramOptions.tracks[requestKey]).to_slot, 'gc_content');
+  assert.equal(
+    spanParams(projectCanonicalSessionRequest(spanCanonical).config.adv[configKey]).to_slot,
+    'gc_content'
+  );
+}
 
 const defaultAnnotationPayload = buildCircularTrackSlotPayload({
   id: 'default_annotation',
@@ -5239,7 +5380,7 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 
 assert.equal(characterizedRequests.length, 83);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  '11e0b868a984674442a573877db42bd4e1f83202a44b6c4fe92223d2bdfb4e1c',
+  'b654f731b14f0317193a9cdb21cfba7e2431011189b41d897a7003ffc6dcdeb8',
   'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');
@@ -5564,8 +5705,8 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
 // Sessions 31–39 read that row as the current writer writes it and report it;
 // any other Session table failure names the table and the Session.
 {
-  const { legacyTableRowsNotice, legendColorDropNotice } = await import(
-    pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+  const { describeLoadRepairs } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'utils', 'load-repairs.js'))
   );
   const { normalizeUserFacingError } = await import(
     pathToFileURL(join(tempRoot, 'js', 'utils', 'error-normalization.js'))
@@ -5581,34 +5722,11 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   const repaired = project(session, true);
   assert.deepEqual(repaired.config.whitelist, [{ feat: 'CDS', qual: 'product', key: 'cytochrome c oxidase' }]);
   assert.equal(repaired.config.filterMode, 'Whitelist');
-  assert.deepEqual(repaired.legacyTableRepairs, [{ table: 'label-whitelist', row: 1, repair: 'joined' }]);
-  assert.equal(legacyTableRowsNotice(repaired.legacyTableRepairs),
-    'Some table rows of this older Session were read as the current version writes them. '
-    + 'Label whitelist: line 1 had extra cells, joined into the last column with one space.');
-  assert.equal(legacyTableRowsNotice([
-    ...[3, 4, 5, 6, 7, 9, 12].map((row) => ({ table: 'qualifier-priority', row, repair: 'dropped' })),
-    { table: 'label-whitelist', row: 2, repair: 'dropped' },
-    { table: 'default-colors', row: 4, repair: 'invalid' }
-  ]), 'Some table rows of this older Session were read as the current version writes them. '
-    + 'Qualifier priority: lines 3, 4, 5, 6, 7, and 2 more lacked a required column and were dropped. '
-    + 'Label whitelist: line 2 lacked a required column and was dropped. '
-    + 'Default colors: line 4 had a color the table does not accept and was dropped.');
-  assert.equal(legacyTableRowsNotice([]), '');
-  // D-43 (OV-300): the Load notice names each Legend entry dropped for its
-  // color once, marks rows outside the shown list, and caps the list.
-  assert.equal(legendColorDropNotice([{ list: 'entries', caption: 'X' }, { list: 'entries', caption: 'X' }]),
-    'Legend: entry "X" had a color the app does not accept and was dropped.');
-  assert.equal(legendColorDropNotice([
-    ...['A', 'B', 'C', 'D'].map((caption) => ({ list: 'entries', caption })),
-    { list: 'deletedEntries', caption: 'A' }, { list: 'dormantEntries', caption: 'E' },
-    { list: 'entries', caption: 'F' }, { list: 'entries', caption: 'G' }
-  ]), 'Legend: entries "A", "B", "C", "D", "A" (deleted), and 3 more had a color the app does not accept and were dropped.');
-  assert.equal(legendColorDropNotice([{ list: 'dormantEntries', caption: 'E' }]),
-    'Legend: entry "E" (not drawn) had a color the app does not accept and was dropped.');
-  // A caption is free text quoted as other user text is ("5' UTR" contains a ').
-  assert.equal(legendColorDropNotice([{ list: 'entries', caption: "5' UTR" }]),
-    'Legend: entry "5\' UTR" had a color the app does not accept and was dropped.');
-  assert.equal(legendColorDropNotice([]), '');
+  // The rows read so are Load repairs, listed in the Load dialog (BA-D25).
+  assert.deepEqual(repaired.legacyTableRepairs,
+    [{ code: 'table-row-joined', path: 'label-whitelist', effect: 'changed', line: 1 }]);
+  assert.deepEqual(describeLoadRepairs(repaired.legacyTableRepairs).items,
+    ['Label whitelist: line 1 had extra cells, joined into the last column with one space.']);
   const sessionTableFailure = (document, repairLegacyTableRows) => {
     try {
       project(document, repairLegacyTableRows);

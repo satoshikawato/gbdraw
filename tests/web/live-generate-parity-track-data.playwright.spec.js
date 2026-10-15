@@ -4,9 +4,9 @@
 // (OV-65), a decoration moved on one mode's Result (OV-104), and the track
 // toggles of the mode not shown. The matrix of edit kinds is in
 // live-generate-parity.playwright.spec.js.
-const { test, expect } = require('@playwright/test');
+const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { reveal } = require('./helpers/app-lifecycle.cjs');
+const { reveal, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const {
@@ -338,7 +338,8 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     const undoRestores = async (page, row) => {
       await undo(page);
       expect(await restored(page), 'data restored').toBe(true);
-      expect((await legendStyleOf(page, row)).color).toBe(COLORED);
+      // A renamed row's style is stored under its key (PR 3, D-25).
+      expect((await legendStyleOf(page, renamedFrom || row)).color).toBe(COLORED);
       if (renamedFrom) expect(await legendNames(page), 'the rename is restored').toContain(`${renamedFrom}=>${row}`);
       await expectLiveEqualsGenerate(page, { label: `${name}, Undo` });
     };
@@ -387,7 +388,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     await renameAndColorRow(drawDepthFile(), depthCaption, 'Coverage')(page);
     await addDepthFile(page, 'depth.tsv');
     expect(await legendNames(page)).toContain('depth=>Coverage');
-    expect((await legendStyleOf(page, 'Coverage')).color).toBe(COLORED);
+    expect((await legendStyleOf(page, 'depth')).color, 'the style stays under the row key').toBe(COLORED);
     await expectLiveEqualsGenerate(page, { label: 'renamed depth row, file replaced with the same label' });
     expect(await drawnLegendCaptions(page)).toContain('Coverage');
   });
@@ -416,8 +417,8 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     if (await panel.getAttribute('aria-expanded') !== 'true') await panel.click({ timeout: 15_000 });
     await page.getByText('Use custom stack', { exact: true }).locator('input').check({ timeout: 15_000 });
     await settleLive(page);
-    const field = page.getByRole('group', { name: 'Circular track slot gc_content', exact: true })
-      .getByRole('textbox', { name: 'Track legend label' });
+    const field = await reveal(page.getByRole('group', { name: 'Circular track slot gc_content', exact: true })
+      .getByRole('textbox', { name: 'Track legend label', includeHidden: true }));
     await field.fill('Custom GC', { timeout: 15_000 });
     await field.blur();
     await settleLive(page);

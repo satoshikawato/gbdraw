@@ -6,6 +6,53 @@ import {
   resolveInternalProteinId
 } from '../../services/feature-utils.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
+/** @import { FeatureLike } from '../../services/feature-utils.js' */
+
+/**
+ * A similarity group as the search reads it, or an unvalidated row: its ID under
+ * either name, the display name under any of three, and its member rows.
+ * @typedef {object} SearchOrthogroup
+ * @property {unknown} [id]
+ * @property {unknown} [orthogroupId]
+ * @property {unknown} [orthogroup_id]
+ * @property {unknown} [display_name]
+ * @property {unknown} [displayName]
+ * @property {unknown} [name]
+ * @property {unknown} [description]
+ * @property {FeatureLike[] | null} [members]
+ */
+
+/**
+ * A value the search can match, under the label that names where it came from.
+ * @typedef {object} SearchItem
+ * @property {string} label
+ * @property {string} value
+ * @property {string} alphabet `nucleotide` or `amino-acid` for a sequence, else empty.
+ */
+
+/**
+ * @typedef {object} PreparedSearchItem
+ * @property {string} label
+ * @property {string} value
+ * @property {string} normalizedValue Empty for a sequence, which a pattern matches.
+ * @property {string} alphabet
+ */
+
+/**
+ * @typedef {object} SearchMatchDetail
+ * @property {string} label
+ * @property {string} value
+ * @property {string} match
+ */
+
+/**
+ * @typedef {object} FeatureSearchMatcher
+ * @property {boolean} active
+ * @property {string} error
+ * @property {(value: unknown, alphabet: string) => string} match
+ * @property {(item: PreparedSearchItem) => string} [matchPrepared]
+ * @property {(values: unknown[]) => boolean} test
+ */
 
 const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([
   'qualifier-key',
@@ -31,12 +78,18 @@ const FEATURE_SEARCH_FIELD_DEFINITIONS = Object.freeze([
 const FIELD_IDS = new Set(FEATURE_SEARCH_FIELD_DEFINITIONS.map((field) => field.id));
 const RICH_FIELD_IDS = new Set(RICH_FEATURE_SEARCH_FIELD_IDS);
 
+/** @param {unknown} field */
 export const isRichFeatureSearchField = (field) => RICH_FIELD_IDS.has(String(field || ''));
 
+/** @param {unknown} popupMode */
 export const normalizeFeatureSearchPopupMode = (popupMode) => (
   popupMode === 'simple' ? 'simple' : 'rich'
 );
 
+/**
+ * @param {unknown} field
+ * @param {{ popupMode?: unknown }} [options]
+ */
 export const normalizeFeatureSearchField = (field, { popupMode = 'rich' } = {}) => {
   const selected = String(field || 'all').trim() || 'all';
   if (!FIELD_IDS.has(selected)) return 'all';
@@ -46,6 +99,7 @@ export const normalizeFeatureSearchField = (field, { popupMode = 'rich' } = {}) 
   return selected;
 };
 
+/** @param {{ popupMode?: unknown }} [options] */
 export const getFeatureSearchFieldOptions = ({ popupMode = 'rich' } = {}) => {
   const normalizedPopupMode = normalizeFeatureSearchPopupMode(popupMode);
   return FEATURE_SEARCH_FIELD_DEFINITIONS.filter((field) => (
@@ -53,8 +107,13 @@ export const getFeatureSearchFieldOptions = ({ popupMode = 'rich' } = {}) => {
   ));
 };
 
+/** @param {unknown} value */
 const normalizeSearchText = (value) => String(value == null ? '' : value).toLowerCase();
 
+/**
+ * @param {{ label?: unknown, value?: unknown, alphabet?: unknown } | null | undefined} item
+ * @returns {PreparedSearchItem}
+ */
 const prepareSearchItem = (item) => ({
   label: String(item?.label || ''),
   value: String(item?.value || ''),
@@ -62,6 +121,7 @@ const prepareSearchItem = (item) => ({
   alphabet: String(item?.alphabet || '')
 });
 
+/** @type {Readonly<Record<string, string>>} */
 const NUCLEOTIDE_IUPAC = Object.freeze({
   A: 'A',
   C: 'C',
@@ -82,6 +142,7 @@ const NUCLEOTIDE_IUPAC = Object.freeze({
   '-': '-'
 });
 
+/** @type {Readonly<Record<string, string>>} */
 const AMINO_ACID_IUPAC = Object.freeze({
   A: 'A',
   C: 'C',
@@ -113,14 +174,18 @@ const AMINO_ACID_IUPAC = Object.freeze({
   '-': '-'
 });
 
+/** @param {unknown} alphabet */
 const getIupacAlphabet = (alphabet) => {
   if (alphabet === 'nucleotide') return NUCLEOTIDE_IUPAC;
   if (alphabet === 'amino-acid') return AMINO_ACID_IUPAC;
   return null;
 };
 
+/** @param {unknown} value */
 const uniqueCharacters = (value) => {
+  /** @type {Set<string>} */
   const seen = new Set();
+  /** @type {string[]} */
   const chars = [];
   String(value || '').split('').forEach((char) => {
     if (!char || seen.has(char)) return;
@@ -130,19 +195,24 @@ const uniqueCharacters = (value) => {
   return chars;
 };
 
+/** @param {unknown} left @param {unknown} right */
 const charSetsIntersect = (left, right) => {
   const rightSet = new Set(uniqueCharacters(right));
   return uniqueCharacters(left).some((char) => rightSet.has(char));
 };
 
+/** @param {unknown} value */
 const escapeRegExpText = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** @param {unknown} value */
 const escapeRegExpClassChar = (value) => String(value).replace(/[\\\]\[\^-]/g, '\\$&');
 
+/** @param {unknown} query @param {unknown} alphabet */
 const buildIupacQueryPattern = (query, alphabet) => {
   const map = getIupacAlphabet(alphabet);
   const normalized = String(query || '').replace(/\s+/g, '').toUpperCase();
   if (!map || !normalized) return null;
   const targetChars = Object.keys(map);
+  /** @type {string[]} */
   const parts = [];
   normalized.split('').forEach((queryChar) => {
     const querySet = map[queryChar] || queryChar;
@@ -160,6 +230,10 @@ const buildIupacQueryPattern = (query, alphabet) => {
   return parts.join('');
 };
 
+/**
+ * @param {string[]} values
+ * @param {unknown} value
+ */
 const appendSearchValues = (values, value) => {
   if (Array.isArray(value)) {
     value.forEach((entry) => appendSearchValues(values, entry));
@@ -170,6 +244,12 @@ const appendSearchValues = (values, value) => {
   if (text) values.push(text);
 };
 
+/**
+ * @param {SearchItem[]} items
+ * @param {string} label
+ * @param {unknown} value
+ * @param {{ alphabet?: unknown }} [options]
+ */
 const appendSearchItems = (items, label, value, options = {}) => {
   if (Array.isArray(value)) {
     value.forEach((entry) => appendSearchItems(items, label, entry, options));
@@ -185,24 +265,33 @@ const appendSearchItems = (items, label, value, options = {}) => {
   });
 };
 
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @returns {Record<string, unknown>}
+ */
 const getFeatureQualifiers = (feature) => (
   feature?.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
-    ? feature.qualifiers
+    // Checked to be a non-array object just above.
+    ? /** @type {Record<string, unknown>} */ (feature.qualifiers)
     : {}
 );
 
+/** @param {FeatureLike | null | undefined} feature */
 const resolveFeatureAminoAcidSequence = (feature) => {
   const direct = String(feature?.amino_acid_sequence || feature?.aminoAcidSequence || '').trim();
   if (direct) return direct;
   const qualifiers = getFeatureQualifiers(feature);
+  /** @type {string[]} */
   const values = [];
   appendSearchValues(values, qualifiers.translation);
   return values.find((value) => value.trim()) || '';
 };
 
+/** @param {FeatureLike | null | undefined} feature @param {unknown} qualifierKey */
 const getQualifierSearchItems = (feature, qualifierKey) => {
   const target = normalizeSearchText(qualifierKey).trim();
   const qualifiers = getFeatureQualifiers(feature);
+  /** @type {SearchItem[]} */
   const items = [];
   Object.keys(qualifiers).sort().forEach((key) => {
     if (target && normalizeSearchText(key) !== target) return;
@@ -211,13 +300,16 @@ const getQualifierSearchItems = (feature, qualifierKey) => {
   return items;
 };
 
+/** @param {FeatureLike | null | undefined} feature @param {string} key */
 const firstQualifierValue = (feature, key) => {
   const qualifiers = getFeatureQualifiers(feature);
+  /** @type {string[]} */
   const values = [];
   appendSearchValues(values, qualifiers[key]);
   return values.find((value) => value.trim()) || '';
 };
 
+/** @param {FeatureLike | null | undefined} feature */
 const getFeatureLabelCandidates = (feature) => [
   feature?.display_label,
   feature?.displayLabel,
@@ -234,10 +326,14 @@ const getFeatureLabelCandidates = (feature) => [
   feature?.svg_id
 ];
 
+/** @param {FeatureLike | null | undefined} feature */
 const getLabelSearchItems = (feature) => {
+  /** @type {SearchItem[]} */
   const items = [];
+  /** @type {Set<string>} */
   const seen = new Set();
   getFeatureLabelCandidates(feature).forEach((value) => {
+    /** @type {string[]} */
     const values = [];
     appendSearchValues(values, value);
     values.forEach((entry) => {
@@ -250,6 +346,7 @@ const getLabelSearchItems = (feature) => {
   return items;
 };
 
+/** @param {{ id?: unknown, orthogroupId?: unknown, orthogroup_id?: unknown } | null | undefined} source */
 const orthogroupIdFor = (source) => {
   const ids = new Set([
     source?.id,
@@ -259,15 +356,18 @@ const orthogroupIdFor = (source) => {
   return ids.size === 1 ? ids.values().next().value : '';
 };
 
+/** @param {unknown} orthogroups Rows of similarity groups; anything but an array holds none. */
 const buildOrthogroupMap = (orthogroups) => {
+  /** @type {Map<string, SearchOrthogroup[]>} */
   const candidates = new Map();
-  (Array.isArray(orthogroups) ? orthogroups : []).forEach((group) => {
+  (Array.isArray(orthogroups) ? orthogroups : []).forEach((/** @type {SearchOrthogroup} */ group) => {
     const id = orthogroupIdFor(group);
     if (!id) return;
     const matches = candidates.get(id) || [];
     matches.push(group);
     candidates.set(id, matches);
   });
+  /** @type {Map<string, SearchOrthogroup>} */
   const groups = new Map();
   candidates.forEach((matches, id) => {
     if (matches.length === 1) groups.set(id, matches[0]);
@@ -275,15 +375,18 @@ const buildOrthogroupMap = (orthogroups) => {
   return groups;
 };
 
+/** @param {FeatureLike | null | undefined} feature */
 const getOrthogroupId = (feature) => orthogroupIdFor({
   orthogroupId: feature?.orthogroupId,
   orthogroup_id: feature?.orthogroup_id
 });
 
+/** @param {FeatureLike | null | undefined} feature @param {SearchOrthogroup | null} group */
 const getFeatureOrthogroupMember = (feature, group) => {
   return resolveUniqueOrthogroupMemberForFeature(feature, group?.members);
 };
 
+/** @param {FeatureLike | null | undefined} feature @param {Map<string, SearchOrthogroup>} orthogroupsById */
 const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   const orthogroupId = getOrthogroupId(feature);
   const candidateGroup = orthogroupsById.get(orthogroupId) || null;
@@ -291,6 +394,7 @@ const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   const member = getFeatureOrthogroupMember(feature, group);
   const proteinId = resolveDisplayProteinId(feature, member);
   const internalId = resolveInternalProteinId(feature, member);
+  /** @type {SearchItem[]} */
   const items = [];
   appendSearchItems(items, 'Similarity group ID', orthogroupId);
   appendSearchItems(items, 'Similarity group name', group?.display_name || group?.displayName || group?.name);
@@ -311,6 +415,13 @@ const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   return items;
 };
 
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {unknown} field
+ * @param {unknown} qualifierKey
+ * @param {{ popupMode?: unknown, orthogroupsById?: Map<string, SearchOrthogroup> }} [options]
+ * @returns {SearchItem[]}
+ */
 const featureSearchItems = (
   feature,
   field,
@@ -320,6 +431,7 @@ const featureSearchItems = (
     orthogroupsById = new Map()
   } = {}
 ) => {
+  /** @type {SearchItem[]} */
   const items = [];
   const selectedField = normalizeFeatureSearchField(field, { popupMode });
   const qualifiers = getFeatureQualifiers(feature);
@@ -380,6 +492,11 @@ const featureSearchItems = (
   return items;
 };
 
+/**
+ * @param {unknown} query
+ * @param {unknown} useRegex
+ * @returns {FeatureSearchMatcher}
+ */
 const compileFeatureSearchMatcher = (query, useRegex) => {
   const trimmedQuery = String(query || '').trim();
   if (!trimmedQuery) {
@@ -407,12 +524,14 @@ const compileFeatureSearchMatcher = (query, useRegex) => {
         })
       };
     } catch {
-      return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regex to return to word search.', match: () => '', test: () => false };
+      return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regular expression to return to word search.', match: () => '', test: () => false };
     }
   }
 
   const needle = normalizeSearchText(trimmedQuery);
+  /** @type {Record<string, RegExp | null>} */
   const sequenceMatchers = {};
+  /** @param {string} alphabet */
   const getSequenceRegex = (alphabet) => {
     if (!getIupacAlphabet(alphabet)) return null;
     if (!Object.prototype.hasOwnProperty.call(sequenceMatchers, alphabet)) {
@@ -450,6 +569,7 @@ const compileFeatureSearchMatcher = (query, useRegex) => {
   };
 };
 
+/** @param {FeatureLike | null | undefined} feature @param {string} field @param {unknown} popupMode @param {Map<string, SearchOrthogroup>} orthogroupsById */
 const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
   featureSearchItems(feature, field, '', { popupMode, orthogroupsById }).map(prepareSearchItem)
 );
@@ -460,16 +580,24 @@ const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
  * @typedef {object} FeatureSearchIndex
  * @property {string} popupMode
  * @property {string[]} featureOrder
- * @property {Map<string, { feature: Record<string, any>, itemsByField: Map<string, any[]>, qualifierValuesByKey: Map<string, any[]> }>} byId
+ * @property {Map<string, FeatureSearchDocument>} byId
  * @property {Map<string, string[]>} qualifierFeatureIdsByKey
- * @property {Map<string, any>} orthogroupsById
+ * @property {Map<string, SearchOrthogroup>} orthogroupsById
+ */
+
+/**
+ * One searchable feature: its prepared items by search field, and its qualifier values by key.
+ * @typedef {object} FeatureSearchDocument
+ * @property {FeatureLike} feature
+ * @property {Map<string, PreparedSearchItem[]>} itemsByField
+ * @property {Map<string, PreparedSearchItem[]>} qualifierValuesByKey
  */
 
 /**
  * @typedef {object} BuildFeatureSearchIndexOptions
- * @property {Record<string, any>[]} [features]
+ * @property {FeatureLike[]} [features]
  * @property {string} [popupMode]
- * @property {Record<string, any>[]} [orthogroups]
+ * @property {SearchOrthogroup[]} [orthogroups]
  */
 
 /**
@@ -483,8 +611,11 @@ export const buildFeatureSearchIndex = ({
 } = {}) => {
   const normalizedPopupMode = normalizeFeatureSearchPopupMode(popupMode);
   const orthogroupsById = buildOrthogroupMap(orthogroups);
+  /** @type {string[]} */
   const featureOrder = [];
+  /** @type {Map<string, FeatureSearchDocument>} */
   const byId = new Map();
+  /** @type {Map<string, string[]>} */
   const qualifierFeatureIdsByKey = new Map();
 
   (Array.isArray(features) ? features : []).forEach((feature) => {
@@ -492,20 +623,25 @@ export const buildFeatureSearchIndex = ({
     const svgId = String(feature?.search_id || feature?.svg_id || '').trim();
     if (!svgId || byId.has(svgId)) return;
     const qualifiers = getFeatureQualifiers(feature);
+    /** @type {Map<string, PreparedSearchItem[]>} */
     const qualifierValuesByKey = new Map();
+    /** @type {PreparedSearchItem[]} */
     const qualifierKeys = [];
     Object.keys(qualifiers).sort().forEach((key) => {
       const normalizedKey = normalizeSearchText(key).trim();
       if (!normalizedKey) return;
       qualifierKeys.push(prepareSearchItem({ label: 'Qualifier key', value: key }));
+      /** @type {SearchItem[]} */
       const values = [];
       appendSearchItems(values, `Qualifier ${key}`, qualifiers[key]);
       const preparedValues = values.map(prepareSearchItem);
       qualifierValuesByKey.set(normalizedKey, preparedValues);
       if (!qualifierFeatureIdsByKey.has(normalizedKey)) qualifierFeatureIdsByKey.set(normalizedKey, []);
-      qualifierFeatureIdsByKey.get(normalizedKey).push(svgId);
+      // Set just above when it was missing.
+      /** @type {string[]} */ (qualifierFeatureIdsByKey.get(normalizedKey)).push(svgId);
     });
 
+    /** @type {Map<string, PreparedSearchItem[]>} */
     const itemsByField = new Map();
     ['label', 'type', 'record-id', 'location', 'strand', 'orthogroup', 'nucleotide', 'amino-acid']
       .forEach((field) => {
@@ -529,12 +665,19 @@ export const buildFeatureSearchIndex = ({
   };
 };
 
+/**
+ * @param {FeatureSearchDocument | undefined} document
+ * @param {FeatureSearchMatcher} matcher
+ * @param {string} field
+ * @param {unknown} qualifierKey
+ */
 const preparedFeatureSearchMatches = (document, matcher, field, qualifierKey) => {
   if (!document || !matcher?.active || matcher.error) return [];
   const normalizedQualifierKey = normalizeSearchText(qualifierKey).trim();
   const items = field === 'qualifier-value' && normalizedQualifierKey
     ? document.qualifierValuesByKey.get(normalizedQualifierKey) || []
     : document.itemsByField.get(field) || [];
+  /** @type {SearchMatchDetail[]} */
   const details = [];
   items.forEach((item) => {
     const matchedText = matcher.matchPrepared
@@ -548,14 +691,14 @@ const preparedFeatureSearchMatches = (document, matcher, field, qualifierKey) =>
 
 /**
  * @typedef {object} RunFeatureSearchOptions
- * @property {Record<string, any>[]} [features]
+ * @property {FeatureLike[]} [features]
  * @property {Iterable<string> | null} [renderedFeatureIds]
  * @property {string} [query]
  * @property {string} [field]
  * @property {string} [qualifierKey]
  * @property {boolean} [useRegex]
  * @property {string} [popupMode]
- * @property {Record<string, any>[]} [orthogroups]
+ * @property {SearchOrthogroup[]} [orthogroups]
  * @property {FeatureSearchIndex | null} [searchIndex]
  * @property {string} [previousActiveId]
  */
@@ -597,7 +740,9 @@ export const runFeatureSearch = ({
   const preparedIndex = searchIndex?.byId instanceof Map
     ? searchIndex
     : buildFeatureSearchIndex({ features, popupMode: normalizedPopupMode, orthogroups });
+  /** @type {string[]} */
   const matches = [];
+  /** @type {Record<string, SearchMatchDetail[]>} */
   const matchDetails = {};
   let candidateIds = preparedIndex.featureOrder;
   const normalizedQualifierKey = normalizeSearchText(qualifierKey).trim();
@@ -630,8 +775,10 @@ export const runFeatureSearch = ({
   };
 };
 
+/** @param {unknown} value */
 const collapseWhitespace = (value) => String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
 
+/** @param {unknown} value @param {unknown} matchText */
 const searchMatchSnippet = (value, matchText) => {
   const text = collapseWhitespace(value);
   const match = collapseWhitespace(matchText);
@@ -644,6 +791,7 @@ const searchMatchSnippet = (value, matchText) => {
   return `${start > 0 ? '...' : ''}${text.slice(start, end)}${end < text.length ? '...' : ''}`;
 };
 
+/** @param {SearchMatchDetail | null | undefined} detail */
 const formatSearchMatchDetail = (detail) => {
   if (!detail) return '';
   const label = collapseWhitespace(detail.label);
@@ -656,8 +804,8 @@ const formatSearchMatchDetail = (detail) => {
 // The line under the search row. The record comes first so that a truncated
 // line still says which record the active match is on (OV-211).
 /**
- * @param {Record<string, any> | null | undefined} feature
- * @param {Record<string, any>[] | null | undefined} details
+ * @param {FeatureLike | null | undefined} feature
+ * @param {SearchMatchDetail[] | null | undefined} details
  * @returns {string}
  */
 export const formatSearchMatchLine = (feature, details) => {

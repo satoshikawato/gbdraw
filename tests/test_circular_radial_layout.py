@@ -217,7 +217,8 @@ def test_custom_core_slot_order_moves_feature_inward_when_ticks_are_axis_side() 
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(
         total_length=5_500_000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="ticks", renderer="ticks"),
             CircularTrackSlot(id="features", renderer="features"),
@@ -235,7 +236,8 @@ def test_custom_core_slot_order_keeps_default_feature_then_ticks_order() -> None
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(
         total_length=5_500_000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="features", renderer="features"),
             CircularTrackSlot(id="ticks", renderer="ticks"),
@@ -266,7 +268,8 @@ def test_pinned_inside_slots_are_reserved_before_auto_feature_slots() -> None:
     with pytest.raises(Exception, match="cannot fit inside"):
         resolve_circular_radial_layout(
             total_length=1000,
-            canvas_config=canvas_config,
+            geometry=canvas_config.geometry(),
+            cfg=canvas_config.profile.config,
             slots=[
                 CircularTrackSlot(
                     id="upper_spacer",
@@ -313,7 +316,8 @@ def test_auto_conservation_stack_compresses_ring_width_and_gap_when_tight() -> N
 
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="features", renderer="features"),
             *conservation_slots,
@@ -344,7 +348,8 @@ def test_outside_physical_gap_uses_facing_radial_sides() -> None:
 
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(
                 id="outer",
@@ -376,7 +381,8 @@ def test_inside_physical_gap_uses_facing_radial_sides() -> None:
 
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(
                 id="outer",
@@ -417,7 +423,8 @@ def test_explicit_inside_gaps_are_not_auto_compressed_when_widths_are() -> None:
 
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="features", renderer="features"),
             *conservation_slots,
@@ -444,7 +451,8 @@ def test_explicit_conservation_ring_width_is_not_auto_compressed() -> None:
     with pytest.raises(Exception, match="cannot fit inside"):
         resolve_circular_radial_layout(
             total_length=1000,
-            canvas_config=canvas_config,
+            geometry=canvas_config.geometry(),
+            cfg=canvas_config.profile.config,
             slots=[
                 CircularTrackSlot(id="features", renderer="features"),
                 *[
@@ -464,7 +472,8 @@ def test_radial_numeric_stack_places_default_inside_tracks_when_space_allows() -
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
             CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
@@ -483,7 +492,8 @@ def test_radial_numeric_stack_compresses_group_no_lower_than_readable_minimum() 
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
             CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
@@ -505,7 +515,8 @@ def test_radial_numeric_stack_raises_when_readable_minimum_cannot_fit() -> None:
     with pytest.raises(Exception, match="Circular track slot 'at_skew' cannot fit inside"):
         resolve_circular_radial_layout(
             total_length=1000,
-            canvas_config=canvas_config,
+            geometry=canvas_config.geometry(),
+            cfg=canvas_config.profile.config,
             slots=[
                 CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
                 CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
@@ -519,7 +530,8 @@ def test_outside_auto_numeric_width_is_independent_from_inside_compression() -> 
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="outer_skew", renderer="dinucleotide_skew", side="outside"),
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
@@ -539,7 +551,8 @@ def test_outside_auto_stack_order_is_outermost_first() -> None:
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="outer_content", renderer="dinucleotide_content", side="outside"),
             CircularTrackSlot(id="middle_skew", renderer="dinucleotide_skew", side="outside"),
@@ -566,7 +579,8 @@ def test_user_preset_generated_private_param_is_rejected() -> None:
     with pytest.raises(ValueError, match="private parameter '_preset_generated'"):
         resolve_circular_radial_layout(
             total_length=1000,
-            canvas_config=canvas_config,
+            geometry=canvas_config.geometry(),
+            cfg=canvas_config.profile.config,
             slots=[tagged_slot],
             definition_reserved_radius_px=35.0,
         )
@@ -592,7 +606,8 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
 
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(
                 id="depth",
@@ -619,7 +634,8 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
     hidden_axis_config = DepthConfigurator(10, 10, profile, show_axis=False)
     hidden_axis_layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(
                 id="depth",
@@ -642,7 +658,8 @@ def test_unpinned_rows_pack_on_both_sides_of_a_pinned_row_in_stack_order(side: s
     pinned_radius = 0.5 if side == "inside" else 1.5
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="above", renderer="dinucleotide_content", side=side),
             CircularTrackSlot(
@@ -672,7 +689,8 @@ def test_outside_row_after_a_pinned_feature_row_lies_between_it_and_the_axis() -
     canvas_config.radius = 300.0
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(
                 id="features",
@@ -786,7 +804,8 @@ def test_adjacent_rows_keep_the_larger_facing_gap_after_a_pin_or_group_boundary(
 
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=slots,
         feature_dict={"a": _Feature(0)},
     )
@@ -927,7 +946,8 @@ def _pinned_below_a_fixed_row(radius: float, **pinned_fields) -> CircularRadialL
     canvas_config.radius = 300.0
     return resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="above", renderer="dinucleotide_skew", side="inside", width=ScalarSpec(40.0, "px")),
             CircularTrackSlot(
@@ -972,7 +992,8 @@ def test_inside_row_pinned_beyond_the_axis_keeps_its_width() -> None:
     canvas_config.radius = 300.0
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="inside", radius=ScalarSpec(1.3, "factor")),
             CircularTrackSlot(id="features", renderer="features", params={"lane_direction": "inside"}),
@@ -993,7 +1014,8 @@ def test_row_pinned_above_an_earlier_pinned_row_does_not_bound_the_rows_before_i
     canvas_config.radius = 300.0
     layout = resolve_circular_radial_layout(
         total_length=1000,
-        canvas_config=canvas_config,
+        geometry=canvas_config.geometry(),
+        cfg=canvas_config.profile.config,
         slots=[
             CircularTrackSlot(id="features", renderer="features", params={"lane_direction": "inside"}),
             CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew", side="inside", radius=ScalarSpec(0.45, "factor")),

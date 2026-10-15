@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 
 // Stand-in for losat-threaded.wasm: _start spawns one WASI thread, then waits
 // on a futex that only that thread could notify. The thread traps at once, as a
@@ -39,21 +39,9 @@ const threadTrapJobModule = Buffer.from([
 
 test('a trapping WASI thread fails its threaded LOSAT job after bounded retries instead of stalling it', async ({ page }) => {
   test.setTimeout(60000);
-  const isolation = {
-    'Cross-Origin-Opener-Policy': 'same-origin',
-    'Cross-Origin-Embedder-Policy': 'require-corp'
-  };
-  await page.context().route('**/*', async (route) => {
-    const url = new URL(route.request().url());
-    if (url.hostname !== '127.0.0.1') return route.abort();
-    if (url.pathname === '/gbdraw/web/losat-thread-fault.html') {
-      return route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>LOSAT thread fault</title>', headers: isolation });
-    }
-    if (url.pathname === '/gbdraw/web/wasm/losat/thread-trap.wasm') {
-      return route.fulfill({ contentType: 'application/wasm', body: threadTrapJobModule, headers: isolation });
-    }
-    const response = await route.fetch();
-    return route.fulfill({ response, headers: { ...response.headers(), ...isolation } });
+  await routeCrossOriginIsolated(page.context(), {
+    '/gbdraw/web/losat-thread-fault.html': { contentType: 'text/html', body: '<!doctype html><title>LOSAT thread fault</title>' },
+    '/gbdraw/web/wasm/losat/thread-trap.wasm': { contentType: 'application/wasm', body: threadTrapJobModule }
   });
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 4 });

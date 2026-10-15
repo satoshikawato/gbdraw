@@ -157,10 +157,14 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation = page.get_by_role(
         "group", name="Circular track slot annotations", exact=True
     )
-    annotation.get_by_label("Annotation set", exact=True).select_option(
+    annotation.get_by_label(
+        "Circular track slot annotations Annotation set", exact=True
+    ).select_option(
         "mitochondrial_regions"
     )
-    annotation.get_by_label("Annotation placement", exact=True).select_option(
+    annotation.get_by_label(
+        "Circular track slot annotations Annotation placement", exact=True
+    ).select_option(
         "inside"
     )
     slot_id = annotation.get_by_label(
@@ -173,7 +177,9 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation.get_by_role(
         "textbox", name="Circular track slot mitochondrial_regions Width value", exact=True
     ).fill("24px")
-    annotation.get_by_label("Show annotation labels", exact=True).check()
+    annotation.get_by_label(
+        "Circular track slot mitochondrial_regions Show annotation labels", exact=True
+    ).check()
     annotation.locator('select:has(option[value="compress"])').select_option(
         "compress"
     )
@@ -339,10 +345,14 @@ def _load_label_overrides(page: Page, path: Path) -> None:
     drawer = page.locator(".right-drawer")
     expect(drawer).to_have_attribute("aria-hidden", "false")
     drawer.locator("button").filter(has_text="Features").click()
-    page.once("dialog", lambda dialog: dialog.accept())
+    drawer.locator("details.action-menu", has_text="Import / export").locator("summary").click()
     with page.expect_file_chooser() as chooser:
         drawer.get_by_role("button", name="Load Label TSV", exact=True).click()
     chooser.value.set_files(path)
+    # The import reports in the notice banner; dismiss it so it stays out of later captures.
+    notice = page.locator("[data-app-notice]")
+    expect(notice).to_contain_text("Loaded", timeout=ACTION_TIMEOUT_MS)
+    notice.get_by_role("button", name="Dismiss notice").click()
     page.wait_for_timeout(1_000)
     processing = page.get_by_text("Reflowing label placement...", exact=True)
     if processing.count():
@@ -382,7 +392,7 @@ def capture_gui_feature_highlight(
         colors = page.get_by_label("Colors", exact=True)
         toggle_disclosure(colors)
         expect(page.get_by_label("Palette", exact=True)).to_have_value("default")
-        page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
+        page.get_by_label("Specific rules file", exact=True).set_input_files(
             tables["colors"]
         )
         page.wait_for_function(

@@ -13,7 +13,7 @@ from gbdraw.features.placement import FeaturePlacementSlot
 
 from collections.abc import Collection
 import math
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from ...canvas import LinearCanvasConfigurator
@@ -23,18 +23,21 @@ from ...config.models import (
 )
 from ...configurators import FeatureDrawingConfigurator
 from ...auto_sizes import linear_label_font_size
-from ...features.colors import preprocess_color_tables
 from ...features.factory import (
     FeatureBuildResult,
     create_feature_layers,
 )
 from ...features.objects import FeatureObject
-from ...render.groups.linear import DefinitionGroup
-from ...labels.filtering import preprocess_label_filtering
+from ...render.groups.linear import DefinitionGroup, LinearDefinitionStyle
+from ...labels.filtering import label_filter_maps
+from ...render_stages import render_stage
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
+
+if TYPE_CHECKING:
+    from gbdraw.api.requests import RecordPresentation
 
 
 FeatureDict = dict[str, FeatureObject]
@@ -46,10 +49,10 @@ def _resolve_linear_diagram_label_font_size(
     canvas_config: LinearCanvasConfigurator,
     profile: LinearRenderProfile,
 ) -> float:
-    """Resolve one readable auto label size for all labels drawn in a linear diagram.
+    """Resolve one auto label size for all labels drawn in a linear diagram.
 
-    The records in the label display scope set the size. With no record in
-    scope, labels shown by per-feature overrides use the size of all records.
+    The longest record in the label display scope sets the size. With no record
+    in scope, labels shown by per-feature overrides use the size of all records.
     """
 
     cfg = profile.config
@@ -70,6 +73,7 @@ def _precalculate_definition_metrics(
     cfg: GbdrawConfig,
     line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    record_presentations: Sequence[RecordPresentation | None] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """
     Pre-calculate definition widths and heights for all records.
@@ -80,6 +84,7 @@ def _precalculate_definition_metrics(
     if not records:
         return 0.0, definition_widths, definition_heights
 
+    style = LinearDefinitionStyle.of(cfg)
     if line_kinds_by_record is not None and len(line_kinds_by_record) != len(records):
         raise ValueError("line_kinds_by_record must match the number of records")
     for index, record in enumerate(records):
@@ -90,10 +95,11 @@ def _precalculate_definition_metrics(
         )
         def_group = DefinitionGroup(
             record,
-            canvas_config,
-            cfg=cfg,
+            str(canvas_config.length_param),
+            style=style,
             line_kinds=line_kinds,
             record_transform=(record_transforms[index] if record_transforms is not None else None),
+            record_presentation=(record_presentations[index] if record_presentations is not None else None),
         )
         if def_group.definition_bounding_box_width > max_definition_width:
             max_definition_width = def_group.definition_bounding_box_width
@@ -113,20 +119,18 @@ def _precalculate_feature_layers(
     """Build feature objects once per record for the linear assembly pipeline."""
 
     cfg = profile.config
-    color_table, default_colors = preprocess_color_tables(
-        feature_config.color_table,
-        feature_config.default_colors,
-    )
-    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
 
     feature_layers: list[FeatureBuildResult] = []
     for i, record in enumerate(records):
         compute_label_text = profile.labels_in_scope(i)
-        result = create_feature_layers(
+        result = render_stage(
+            "feature_layers",
+            create_feature_layers,
             record,
-            color_table,
+            feature_config.specific_color_rules,
             feature_config.selected_features_set,
-            default_colors,
+            feature_config.default_color_map,
             profile.strandedness,
             profile.resolve_overlaps,
             label_filtering if compute_label_text else {},
@@ -171,12 +175,7 @@ def _precalculate_label_dimensions(
     all_labels_by_record: list[list[dict]] = []
     record_label_heights: list[float] = []
     normalize_length = cfg.canvas.linear.normalize_length
-    if precomputed_feature_dicts is None:
-        color_table, default_colors = preprocess_color_tables(
-            feature_config.color_table,
-            feature_config.default_colors,
-        )
-        label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
 
     for i, record in enumerate(records):
         if not profile.record_has_labels(i):
@@ -193,9 +192,9 @@ def _precalculate_label_dimensions(
         else:
             feature_result = create_feature_layers(
                 record,
-                color_table,
+                feature_config.specific_color_rules,
                 feature_config.selected_features_set,
-                default_colors,
+                feature_config.default_color_map,
                 profile.strandedness,
                 profile.resolve_overlaps,
                 label_filtering,
@@ -237,6 +236,7 @@ def _precalculate_label_dimensions(
                 else None
             ),
             record_transform=(record_transforms[i] if record_transforms is not None else None),
+            label_filtering=label_filtering,
         )
         all_labels_by_record.append(label_list)
 

@@ -368,4 +368,9 @@ def test_circular_track_widths_follow_the_rule(materialize) -> None:
     region = derive_region_drawing(materialize(source), [RegionSelection("mito", 1, 16000)], mode="circular")
     assert region.adaptation.reset == ()
     kept_slots = region.drawing.request.options.tracks.circular_track_slots
-    assert [replace(slot) for slot in kept_slots] == list(slots)
+    # The request encoder writes a renderer by the planner's name, so the alias
+    # gc_content reads back as dinucleotide_content (OV-653); the widths stay.
+    assert [replace(slot) for slot in kept_slots] == [
+        slots[0],
+        replace(slots[1], renderer="dinucleotide_content"),
+    ]

@@ -1,13 +1,13 @@
 // @ts-check
-const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'convertMainSessionComparisonFrame',
+const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
-  'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'resolveLegacyProteinReferences',
-  'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save']);
+  'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'registerFonts', 'resolveLegacyProteinReferences',
+  'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
   'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'parse']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
-recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
+recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size font_family plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
 inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
 config configOverrides records anchors schema recordKey groupId direction sourceStrand role blast files
 input comparison protein_blastp_max_hits orthogroup_member_max_hits bitscore evalue identity
@@ -25,6 +25,7 @@ gc_content_radius_circular gc_skew_width_circular gc_skew_radius_circular conser
 conservation_ring_gap center_reserved_radius multi_record_min_radius_ratio multi_record_column_gap_ratio
 multi_record_row_gap_ratio protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix
 placement strict compress reserve gapAfter gap_after innerRadius inner_radius outerRadius outer_radius`.split(/\s+/));
+/** @type {Readonly<Record<string, string>>} */
 const REASONS = Object.freeze({
   CROSS_ORIGIN_ISOLATION: 'This page is not cross-origin isolated.', SHARED_MEMORY: 'This browser does not provide SharedArrayBuffer.',
   WORKERS: 'This browser does not provide Web Workers.', THREADED_WASM: 'The threaded LOSAT runtime could not start.',
@@ -78,6 +79,8 @@ const REASONS = Object.freeze({
   SEARCH_FRAME: 'Use comparison coordinates within the selected and cropped record, counted on its source strand.',
   LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
   LOSAT_PLAN: 'Choose record pairs that the LOSAT search can run: two or more records, LOSAT rows only with a LOSAT program, and LOSATP Pairwise for selected pairs.',
+  // A Selected plan with a LOSATP mode that compares every adjacent pair.
+  SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs. Choose Run LOSAT for all pairs, or choose Pairwise matches.',
   LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
   RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for similarity rings.',
   RING_LOSAT_INPUT: 'Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.',
@@ -94,6 +97,7 @@ const REASONS = Object.freeze({
   // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
   FILENAME: 'Use one file name without a folder: no / \\ : * ? " < > | or control characters, no trailing dot, and not a Windows device name such as CON or NUL.',
   FILENAME_LENGTH: 'Use at most 200 bytes in UTF-8, for example 200 ASCII characters.',
+  FONT_NOT_LOADED: 'This font is no longer loaded in this page. Load it again in Font, or choose another font.',
   BOOLEAN: 'Use true or false.', INTEGER: 'Use an integer.', NONNEGATIVE: 'Use a finite value of zero or greater.',
   FINITE: 'Use a finite number.', POSITIVE_INTEGER: 'Use an integer greater than zero.',
   POSITIVE: 'Use a finite value greater than zero.', POSITIVE_OR_AUTO: 'Use Auto or a finite value greater than zero.',
@@ -119,6 +123,7 @@ const REASONS = Object.freeze({
   SELECT_RECORD_FOR_REGION: 'Choose a Record before setting a region on a multi-record file.',
   DISCOVERY_PENDING: 'Wait for the record list to finish loading, then retry.',
   SESSION_FORMAT: 'Choose a gbdraw Session file.',
+  SESSION_TOO_OLD: 'This Session was saved by gbdraw 0.11.0 or older, or by gbdraw.app before 0.12.0, and this version cannot read it. Generate the diagram again from its input files.',
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
   EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
   SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.',
@@ -128,8 +133,15 @@ const REASONS = Object.freeze({
   OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',
   FASTA_IN_GENBANK: 'This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.',
+  FONT_FILE: 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.',
+  FONT_EMBEDDING: 'Turn off Embed font in exported SVG in Font to export without the font, or choose another font.',
+  FONT_RASTER: 'The PNG cannot draw this font. Choose another font.',
   FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.'
 });
+/**
+ * Per code: the message, the actions offered, and the correction guidance when the context gives no reason.
+ * @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>}
+ */
 const DEFINITIONS = Object.freeze({
   SESSION_SIZE_LIMIT: ['The Session exceeds the browser size limit. Use a smaller Session file.', ['select-input', 'retry']],
   SESSION_BROWSER_UNSUPPORTED: ['This browser cannot complete this Session operation. Use a browser with the required gzip and Worker support.', ['retry']],
@@ -144,6 +156,9 @@ const DEFINITIONS = Object.freeze({
   // Generate fails the same way until the feature's popup choice changes.
   LABEL_NOT_DRAWN: ['Label visibility is On for a feature, but this diagram does not draw its label.', ['edit-input']],
   INPUT_INVALID: ['An input value is invalid.', ['edit-input', 'retry']],
+  // OV-644: a rule commit whose Legend row would take the key of a listed row
+  // of another color; committing again fails the same way.
+  LEGEND_ROW_CONFLICT: ['A color rule would draw a Legend item that already exists in another color. Change the rule\'s Legend name or color, or rename that Legend item.', ['edit-input']],
   INPUT_REQUIRED: ['Supply GenBank input or matching GFF3 and FASTA inputs.', ['select-input', 'retry']],
   FASTA_REQUIRED: ['Supply a matching FASTA input for each GFF3 input.', ['select-input', 'retry']],
   INPUT_UNREADABLE: ['An input could not be read. Replace or reselect it.', ['select-input', 'retry']],
@@ -166,13 +181,16 @@ const DEFINITIONS = Object.freeze({
   ANNOTATION_TARGET: ['The region annotation target is invalid.', ['edit-annotation', 'retry']],
   TRACK_INVALID: ['The track settings are invalid.', ['edit-track', 'retry']],
   TRACK_LAYOUT: ['A circular track does not fit.', ['edit-track', 'retry']],
+  // Labels of any kind overlap, or radial labels lack room; nothing new was drawn (LP-D43,
+  // SCOPE-ALL-LABELS). Generate opens the fixes Python found.
+  LABEL_LAYOUT: ['Labels do not fit.', ['edit-input', 'retry'], 'Generate again to choose a fix, or change the label settings.'],
   FEATURE_PLACEMENT: ['A Feature placement uses a lane that the current feature track does not have.', ['edit-track', 'retry']],
   FEATURE_IDENTITY: ['A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   // The same request fails the same way until the setting or the mode changes.
   MODE_SETTING: ['A preserved session setting does not apply to this diagram mode.', ['edit-input']],
   // The Session's Reset alignment evidence is bound to the records and plan of the latest Align.
   ALIGNMENT_RESET_EVIDENCE: ['The Reset alignment evidence of the latest Align does not match the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
-  REGEX_SYNTAX: ['The Python regular expression is invalid.', ['edit-pattern', 'retry']],
+  REGEX_SYNTAX: ['Not a valid regular expression.', ['edit-pattern', 'retry']],
   RESOURCE_INVALID: ['Input resource preparation failed. Reselect the input and retry.', ['select-input', 'retry']],
   HELPER_PROTOCOL: ['The helper request is invalid. Retry the operation.', ['retry', 'save-session']],
   RUNTIME_INCOMPATIBLE: ['The diagram engine is incompatible with this Web app. Reload the page and retry; contact the site administrator if it continues.', ['reload', 'retry']],
@@ -188,6 +206,7 @@ const DEFINITIONS = Object.freeze({
   CLEANUP_FAILED: ['Temporary resource cleanup failed. Save a Session and reload before retrying.', ['save-session', 'reload', 'retry']]
 });
 
+/** @type {Readonly<Record<string, string>>} */
 const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
   losatp_max_hits: 'Protein BLASTP Pairwise max hits', losatp_max_target_seqs: 'Protein BLASTP Max target seqs',
   losatp_member_max_hits: 'Protein BLASTP member hits per protein',
@@ -196,7 +215,7 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pa
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
   evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length',
-  plot_title_font_size: 'Plot Title Font Size', feature_width_circular: 'Feature Width',
+  plot_title_font_size: 'Plot Title Font Size', font_family: 'Font', feature_width_circular: 'Feature Width',
   depth_width_circular: 'Depth Width', gc_content_width_circular: 'GC Content Width',
   gc_content_radius_circular: 'GC Content Radius', gc_skew_width_circular: 'GC Skew Width',
   gc_skew_radius_circular: 'GC Skew Radius', match_height: 'Pairwise Match Height',
@@ -209,8 +228,10 @@ const EXCEPTION_TYPES = new Set(`ValidationError ParseError ConfigError ExportEr
 FloatingPointError OverflowError ArithmeticError AssertionError AttributeError IndexError KeyError LookupError
 NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError NameError ValueError Exception`.split(/\s+/));
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
+/** @type {Readonly<Record<string, string>>} */
 const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison sequence' });
 // The tables a Session stores as text resources, as the documentation names them.
+/** @type {Readonly<Record<string, string>>} */
 export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default colors', 'specific-colors': 'Specific colors',
   'label-whitelist': 'Label whitelist', 'qualifier-priority': 'Qualifier priority', 'feature-visibility': 'Feature visibility',
   'label-overrides': 'Label overrides' });
@@ -218,6 +239,53 @@ const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
 const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
+
+/**
+ * The context the normalizer keeps: only these keys survive `contextFor`.
+ * @typedef {object} UserFacingContext
+ * @property {string} [field]
+ * @property {string} [reason]
+ * @property {'python-character'} [positionUnit]
+ * @property {string} [configPath]
+ * @property {string} [exceptionType]
+ * @property {string} [featureId]
+ * @property {string} [featureType]
+ * @property {string} [featureCaption]
+ * @property {string} [sessionTable]
+ * @property {'circular' | 'linear'} [diagramMode]
+ * @property {number} [featureStart]
+ * @property {number} [featureEnd]
+ * @property {number} [featureCount]
+ * @property {number} [position]
+ * @property {number} [row]
+ * @property {number} [column]
+ * @property {number} [inputOrdinal]
+ * @property {number} [recordIndex]
+ * @property {number} [seriesIndex]
+ * @property {number} [slotIndex]
+ * @property {number} [recordCount]
+ * @property {number} [columnCount]
+ * @property {number} [codepoint]
+ * @property {number} [innerPx]
+ * @property {number} [outerPx]
+ * @property {number} [placementIndex]
+ * @property {number} [queryRecordIndex]
+ * @property {number} [subjectRecordIndex]
+ * @property {string} [labelFitCounts] Python's sentence of the label fit counts, shown as sent.
+ */
+
+/**
+ * The public diagnostic model: the wording and the facts of one failure.
+ * @typedef {object} UserFacingError
+ * @property {string} code
+ * @property {string} operation
+ * @property {string} stage
+ * @property {UserFacingContext} context
+ * @property {{ code: string, stage: string }[]} secondary
+ * @property {string} summary
+ * @property {{ label: string, text: string }[]} details
+ * @property {string[]} actions
+ */
 
 /**
  * @typedef {Record<string, any>} DiagnosticContext Bounded facts about the failure; `contextFor` keeps only the known keys.
@@ -406,6 +474,7 @@ const nativeValidation = (message) => {
 };
 // The native track validator already identifies its failures. Project its
 // first issue; never copy its message, slot ID, or arbitrary field path.
+/** @type {Readonly<Record<string, readonly string[]>>} */
 const TRACK_ISSUES = Object.freeze({
   slots_not_array: ['ARRAY'], mode_unsupported: ['TRACK_RENDERER'], depth_count_invalid: ['NONNEGATIVE_INTEGER', 'depth'],
   slot_not_object: ['OBJECT'], enabled_not_boolean: ['BOOLEAN'], linear_slots_empty: ['REQUIRED'],
@@ -443,8 +512,20 @@ const typedTrackValidation = (error) => {
   return { code: correction ? 'TRACK_INVALID' : 'VALIDATION_UNCLASSIFIED', stage: 'request-validation',
     context: correction ? { reason: correction[0], field: correction[1], slotIndex: issue.rowIndex } : {} };
 };
+/**
+ * @template Fallback
+ * @param {unknown} value
+ * @param {ReadonlySet<string>} domain
+ * @param {Fallback} fallback
+ * @returns {string | Fallback}
+ */
 const identifier = (value, domain, fallback) => typeof value === 'string' && value.length <= 80 && domain.has(value) ? value : fallback;
+/**
+ * @param {DiagnosticContext | null | undefined} value The producer's context, unvalidated.
+ * @returns {UserFacingContext}
+ */
 const contextFor = (value) => {
+  /** @type {UserFacingContext} */
   const context = {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) return context;
   if (FIELDS.has(value.field)) context.field = value.field;
@@ -455,7 +536,7 @@ const contextFor = (value) => {
   if (typeof value.featureId === 'string' && FEATURE_ID.test(value.featureId)) context.featureId = value.featureId;
   if (typeof value.featureType === 'string' && FEATURE_TYPE.test(value.featureType)) context.featureType = value.featureType;
   // One-based feature span; genomes may exceed the other numeric bounds.
-  for (const key of ['featureStart', 'featureEnd', 'featureCount']) {
+  for (const key of /** @type {Array<'featureStart' | 'featureEnd' | 'featureCount'>} */ (['featureStart', 'featureEnd', 'featureCount'])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 1 && value[key] <= 1e12) context[key] = value[key];
   }
   // The Web names the feature of a reported placement row (nameFeaturePlacementFailure).
@@ -464,7 +545,13 @@ const contextFor = (value) => {
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
-  for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex']) {
+  // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
+  if (typeof value.labelFitCounts === 'string' && value.labelFitCounts.length <= 80 && /^[\x20-\x7e]+$/.test(value.labelFitCounts)) {
+    context.labelFitCounts = value.labelFitCounts;
+  }
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
+    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
+  ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
     }
@@ -472,10 +559,13 @@ const contextFor = (value) => {
   return context;
 };
 
+/** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
+
 /**
  * The sole public diagnostic model. Raw messages, causes, logs and stacks are never copied.
  * @param {string | Record<string, any> | null | undefined} value
- * @param {{ operation?: string, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} [options]
+ * @param {UserFacingOptions} [options]
+ * @returns {UserFacingError | null} Null only for a falsy value.
  */
 export const normalizeUserFacingError = (value, {
   operation = 'unknown', stage = 'unknown', code = 'UNKNOWN', summaryLimit = 1000, detailLimit = 4000
@@ -483,13 +573,14 @@ export const normalizeUserFacingError = (value, {
   if (!value) return null;
   const object = value && typeof value === 'object' ? value : {};
   const source = /** @type {Record<string, any>} */ (object.code === 'CUSTOM_TRACK_PLAN_INVALID' ? typedTrackValidation(object) : CODES.has(object.code) ? object : nativeValidation(typeof value === 'string' ? value : object.message) || object);
-  const result = {
+  // `summary`, `details`, and `actions` are assigned below, before the model is returned.
+  const result = /** @type {UserFacingError} */ ({
     code: identifier(source.code, CODES, identifier(code, CODES, 'UNKNOWN')),
     operation: identifier(operation === 'unknown' ? source.operation : operation, OPERATIONS, 'unknown'),
     stage: identifier(source.stage === 'unknown' ? stage : source.stage, STAGES, identifier(stage, STAGES, 'unknown')),
     context: contextFor(source.context),
     secondary: /** @type {{ code: string, stage: string }[]} */ ([])
-  };
+  });
   for (const item of Array.isArray(source.secondary) ? source.secondary.slice(0, 2) : []) {
     if (item?.code !== 'CLEANUP_FAILED' || item?.stage !== 'cleanup') continue;
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
@@ -514,20 +605,28 @@ export const normalizeUserFacingError = (value, {
     seriesIndex !== undefined ? `Depth series ${seriesIndex + 1}.` : '',
     configPath !== undefined ? `Setting: ${configPath}.` : '',
     featureName ? `Feature: ${featureName}.` : '',
-    featureCount > 1 ? `Features affected: ${featureCount}.` : ''
+    // `undefined > 1` is false: with no count there is no line.
+    /** @type {number} */ (featureCount) > 1 ? `Features affected: ${featureCount}.` : ''
   ].filter(Boolean).map((text) => ` ${text}`).join('');
   const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
-  const guidance = REASONS[result.context.reason] || DEFINITIONS[result.code][2] || '';
+  const guidance = REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
   const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
-  const position = result.context.position !== undefined ? ` Python character position ${result.context.position} (zero-based).` : '';
+  // The context keeps Python's zero-based index; people count from one.
+  const position = result.context.position !== undefined ? ` At character ${result.context.position + 1}.` : '';
   const columns = result.context.columnCount !== undefined ? ` Required columns: ${result.context.columnCount}.` : '';
   const count = result.context.recordCount !== undefined ? ` Loaded records: ${result.context.recordCount}.` : '';
+  const labelFit = result.context.labelFitCounts ? ` ${result.context.labelFitCounts}` : '';
   const exception = result.context.exceptionType ? ` Python exception: ${result.context.exceptionType}.` : '';
   const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
     ? ' Load a supported Session file or recreate it with the current writer.' : '';
+  // A file chosen in Load Session that is not JSON is not a Session;
+  // every other Session reason keeps its correction.
+  const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID'
+    && result.context.field === 'schema' && result.context.reason === 'JSON_FORMAT'
+    ? 'This file is not a gbdraw Session: it is not valid JSON.' : '';
   const continuation = result.operation === 'align' && result.context.field === 'direction'
     && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
-  result.summary = `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`
+  result.summary = (notASession || `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${labelFit}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`)
     .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),
@@ -539,7 +638,6 @@ export const normalizeUserFacingError = (value, {
   return result;
 };
 
-/** @typedef {NonNullable<ReturnType<typeof normalizeUserFacingError>>} UserFacingError */
 
 // A value that a `catch` block receives is a failure even when it is falsy
 // (`throw undefined`), so it normalizes to the unknown failure instead of to
@@ -557,6 +655,7 @@ export const normalizeCaughtError = (value, options) => (
 // A failure whose own recovery changes no input (B11, R6): the runtime failed,
 // not the request, so the same request can succeed on Retry.
 const PLAIN_RETRY_ACTIONS = new Set(['retry', 'reload', 'save-session']);
+/** @param {UserFacingError} error */
 export const retryCanSucceed = (error) =>
   error.actions.includes('retry') && error.actions.every((action) => PLAIN_RETRY_ACTIONS.has(action));
 
@@ -564,6 +663,7 @@ export const retryCanSucceed = (error) =>
 // repeating the edit sends the same request. Retry is offered only when it can
 // succeed; otherwise the edit or the settings must change, and settings apply
 // on Generate.
+/** @param {UserFacingError | null | undefined} error */
 export const liveEditFailure = (error) => {
   if (!error) return null;
   const retry = retryCanSucceed(error);
@@ -574,16 +674,19 @@ export const liveEditFailure = (error) => {
 };
 
 // Presentation of finite operation and transaction facts stays with public wording.
-export const operationErrorTitle = (operation) => ({
-  generate: 'Generation Error', align: 'Alignment error', evaluateRules: 'Rule error',
+/** @param {string | null | undefined} operation */
+export const operationErrorTitle = (operation) => (/** @type {Readonly<Record<string, string>>} */ ({
+  generate: 'Generation Error', align: 'Alignment error', evaluateRules: 'Rule error', 'session-load': 'Session not loaded',
   'export-svg': 'SVG export error', 'export-png': 'PNG export error', 'export-pdf': 'PDF export error',
   listSequenceRecords: 'Input error', listGffFastaRecords: 'Input error', readComparisonSequence: 'Input error',
   readFeatureOverrideTable: 'Feature edits TSV error',
   'feature-extraction': 'Feature preparation error'
-}[operation] || 'Operation error');
-export const generationRecoveryGuidance = (recovery) => ({
+})[/** @type {string} */ (operation)] || 'Operation error');
+/** @param {string | null | undefined} recovery */
+export const generationRecoveryGuidance = (recovery) => (/** @type {Readonly<Record<string, string>>} */ ({
   'no-result': 'No successful Result is available yet. Correct the cause and retry.',
-  preserved: 'The last successful Result and committed request are unchanged.',
-  restored: 'The last successful Result and committed request were restored. Correct the cause and retry.',
+  // The one notice that the shown Result is the last successful one (PD-OI-016).
+  preserved: 'Showing the last successful Result; your changes were not applied.',
+  restored: 'Showing the last successful Result again; your changes were not applied. Correct the cause and retry.',
   'restore-failed': 'Restoration could not complete. Save a Session if available, then reload before retrying.'
-}[recovery] || '');
+})[/** @type {string} */ (recovery)] || '');

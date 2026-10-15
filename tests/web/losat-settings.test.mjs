@@ -45,7 +45,9 @@ await writeFile(
 );
 await writeFile(
   tempNormalizationPath,
-  await readFile(new URL('../services/losat-normalization.js', sourceRoot), 'utf8')
+  (await readFile(new URL('../services/losat-normalization.js', sourceRoot), 'utf8'))
+    .replace("../contracts/request-shape.generated.js", new URL("../contracts/request-shape.generated.js", sourceRoot).href)
+    .replace("../utils/contract-shape.js", new URL("../utils/contract-shape.js", sourceRoot).href)
 );
 
 const { createLosatSettings } = await import(pathToFileURL(tempModulePath));

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, Literal, Sequence, cast
+from typing import Iterable, Literal, Sequence, TypeAlias, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -18,13 +19,11 @@ from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.io.comparison_sequences import comparison_file_stem
 from gbdraw.io.comparisons import (
     COMPARISON_COLUMNS,
+    ComparisonFilter,
     filter_comparison_dataframe,
     normalize_comparison_dataframe,
     read_comparison_table,
 )
-
-if TYPE_CHECKING:
-    from gbdraw.configurators import BlastMatchConfigurator
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +51,61 @@ class ConservationSearchResult:
                 "ConservationSearchResult.text must be a string.",
                 diagnostic={"code": "INPUT_INVALID", "field": "conservation_search_results"},
             )
+
+
+@dataclass(frozen=True, eq=False)
+class ConservationTable:
+    """One conservation input read once: its parsed rows, or why it could not be read.
+
+    A figure assembled again with other settings (the label fit rows) filters
+    these rows instead of reading the file again (OV-720). ``name`` is the
+    file path or search result name that labels the source.
+    """
+
+    name: str
+    rows: DataFrame | None
+    reason: str | None = None
+
+
+ConservationInput: TypeAlias = str | ConservationSearchResult | ConservationTable
+
+
+def _input_name(source: ConservationInput) -> str:
+    return source.name if isinstance(source, (ConservationSearchResult, ConservationTable)) else str(source)
+
+
+def read_conservation_inputs(sources: Sequence[ConservationInput] | None) -> tuple[ConservationTable, ...]:
+    """Read every conservation input once, keeping its rows or the reason it was unreadable."""
+
+    return tuple(_read_conservation_input(source) for source in sources or ())
+
+
+def _read_conservation_input(source: ConservationInput) -> ConservationTable:
+    """Read one input; a staged file gives its rows that resource's identity.
+
+    The identity lets the ``conservation_tracks`` render stage that filters
+    the rows be reused across requests; rows of a search result are keyed by
+    their text.
+    """
+
+    if isinstance(source, ConservationTable):
+        return source
+    # Deferred: gbdraw.api imports this module.
+    from gbdraw.api.prepared import register_prepared_resource_value, register_prepared_value_identity
+
+    try:
+        if isinstance(source, ConservationSearchResult):
+            # Resolved LOSAT rows take the file path's reader (byte-identical rings).
+            rows = read_comparison_table(io.StringIO(source.text), label=source.name)
+            register_prepared_value_identity(
+                rows,
+                ("conservation_search_result", source.name, hashlib.sha256(source.text.encode("utf-8")).hexdigest()),
+            )
+        else:
+            rows = register_prepared_resource_value(read_comparison_table(source), source)
+    except ValidationError as exc:
+        return ConservationTable(_input_name(source), None, str(exc))
+    return ConservationTable(_input_name(source), rows)
 
 
 ConservationReferenceSide = Literal["query", "subject"]
@@ -109,6 +163,20 @@ class ConservationTrack:
 
 
 @dataclass(frozen=True)
+class ConservationLegendSource:
+    """What a legend reads from one conservation track: its label and color."""
+
+    track_label: str
+    track_color: str | None
+
+
+def conservation_legend_sources(
+    tracks: Sequence[ConservationTrack] | None,
+) -> tuple[ConservationLegendSource, ...]:
+    return tuple(ConservationLegendSource(track.track_label, track.track_color) for track in tracks or ())
+
+
+@dataclass(frozen=True)
 class ConservationLoadResult:
     sources: tuple[ConservationSource, ...]
     skipped_sources: tuple[ConservationSource, ...]
@@ -125,13 +193,11 @@ def empty_normalized_conservation_hits() -> DataFrame:
     return DataFrame(columns=NORMALIZED_CONSERVATION_COLUMNS)
 
 
-def _default_label(source_index: int, path: "str | ConservationSearchResult | None") -> str:
+def _default_label(source_index: int, path: ConservationInput | None) -> str:
     """The file name without its last extension (D-03), as for a FASTA ring and in the Web."""
 
-    if isinstance(path, ConservationSearchResult):
-        path = path.name
-    if path:
-        basename = os.path.basename(str(path))
+    if path is not None and _input_name(path):
+        basename = os.path.basename(_input_name(path))
         if basename:
             return comparison_file_stem(basename).strip() or basename
     return f"Conservation {int(source_index) + 1}"
@@ -181,7 +247,7 @@ def conservation_track_gradient_colors(
     return tint_color(normalized_track_color), normalized_track_color
 
 
-def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: BlastMatchConfigurator) -> DataFrame:
+def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: ComparisonFilter) -> DataFrame:
     df = dataframe.copy()
     # Keep the original source-row identity through filtering and paint-order sorting.
     df["source_hit_index"] = range(len(df))
@@ -190,24 +256,22 @@ def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: BlastMatchC
 
 
 def _load_conservation_file(
-    path: "str | ConservationSearchResult",
-    blast_config: BlastMatchConfigurator,
+    path: ConservationInput,
+    blast_config: ComparisonFilter,
 ) -> tuple[DataFrame | None, str | None]:
+    table = _read_conservation_input(path)
+    if table.rows is None:
+        return None, table.reason
     try:
-        if isinstance(path, ConservationSearchResult):
-            # Resolved LOSAT rows take the file path's reader (byte-identical rings).
-            table = read_comparison_table(io.StringIO(path.text), label=path.name)
-        else:
-            table = read_comparison_table(path)
-        return _filter_normalized_dataframe(table, blast_config), None
+        return _filter_normalized_dataframe(table.rows, blast_config), None
     except ValidationError as exc:
         return None, str(exc)
 
 
 def load_conservation_sources(
     *,
-    blast_config: object,
-    conservation_files: "Sequence[str | ConservationSearchResult] | None" = None,
+    blast_config: ComparisonFilter,
+    conservation_files: Sequence[ConservationInput] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     labels: Sequence[str] | None = None,
     colors: Sequence[str] | None = None,
@@ -247,8 +311,8 @@ def load_conservation_sources(
 
         if path is not None:
             frame, reason = _load_conservation_file(
-                path if isinstance(path, ConservationSearchResult) else str(path),
-                cast("BlastMatchConfigurator", blast_config),
+                path if isinstance(path, (ConservationSearchResult, ConservationTable)) else str(path),
+                blast_config,
             )
             if frame is not None:
                 valid_frames.append(frame)
@@ -261,7 +325,7 @@ def load_conservation_sources(
                 valid_frames.append(
                     _filter_normalized_dataframe(
                         normalize_comparison_dataframe(dataframes[source_index]),
-                        cast("BlastMatchConfigurator", blast_config),
+                        blast_config,
                     )
                 )
             except ValidationError as exc:
@@ -284,7 +348,7 @@ def load_conservation_sources(
                     label=label,
                     color=color,
                     dataframe=merged.reset_index(drop=True),
-                    path=str(path) if path is not None else None,
+                    path=_input_name(path) if path is not None else None,
                 )
             )
             continue
@@ -295,7 +359,7 @@ def load_conservation_sources(
             label=label,
             color=color,
             dataframe=None,
-            path=str(path) if path is not None else None,
+            path=_input_name(path) if path is not None else None,
             skipped=True,
             skip_reason=reason,
         )
@@ -517,18 +581,23 @@ def normalize_conservation_tracks_for_record(
 
 
 __all__ = [
+    "ConservationInput",
+    "ConservationLegendSource",
     "ConservationLoadResult",
     "ConservationSearchResult",
     "ConservationReferenceMode",
     "ConservationReferenceSide",
     "ConservationSource",
+    "ConservationTable",
     "ConservationTrack",
     "NORMALIZED_CONSERVATION_COLUMNS",
+    "conservation_legend_sources",
     "conservation_track_gradient_colors",
     "empty_normalized_conservation_hits",
     "load_conservation_sources",
     "normalize_conservation_color",
     "normalize_conservation_reference",
     "normalize_conservation_tracks_for_record",
+    "read_conservation_inputs",
     "resolve_conservation_reference_side",
 ]

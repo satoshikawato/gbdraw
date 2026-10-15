@@ -199,3 +199,39 @@ request-only Session 42 and 44 files, and for inferring the index (OV-269). The 
 Session 40+ Result without composition metadata, which Load gives the legacy
 composition (OV-273); as a CLI Session it holds no manual positions (no
 `ui` offsets). Commands, inputs, and hashes are in each `.provenance.json`.
+
+`legend-renamed-rows.v46.gbdraw-session.json.gz` is the Session that the Web
+app of first-parent `main` commit `9839de8e` wrote (bytes unchanged; see its
+`.provenance.json`) after renaming the Legend rows GC skew (+) to `Z` and GC
+content to `GC skew (+)`, coloring the latter red, adding a stroke to `Z`, and
+renaming GC skew (-) to `W`, coloring it blue, and deleting it. Session 46
+stored these edits under the shown captions (`GC skew (+)`, `Z`, `W`). It is
+the positive fixture of the Session 47 reading that moves them to the row keys
+(`GC content`, `GC skew (+)`, `GC skew (-)`): `tests/test_session_io.py`
+upgrades and re-saves it, and `tests/web/mode-split-vectors.test.mjs` loads
+it. `legend-row-key-vectors.json` holds the cases that the Web
+(`legendEditsByRowKey`) and Python (`legend_edits_by_row_key`) readers share.
+The Session's decompressed SHA-256 is
+`8efd7a20948b7dcc9e5cb815d2391178d2b7a48c22bf37ece64160385340237a`.
+
+`rule-captions-with-color-id.v46.gbdraw-session.json.gz` and
+`rule-captions-with-color-id.specific-colors.tsv` are the Session and the
+downloaded color-table TSV that the Web app of first-parent `main` commit
+`9839de8e` wrote for one caption in two colors (see their `.provenance.json`),
+bytes unchanged. That build saved the captions as `Complex IV [#ffe700]` and
+`Complex IV [#1f77b4]`, and the Session holds a Legend stroke stored under the
+first text. They are the positive fixtures of the reading that drops a
+caption's own color ID (PD-OI-042 scenario revision 2):
+`tests/test_specific_color_captions.py` reads both, and
+`feature-identity-overrides.playwright.spec.js` loads the Session. The
+Session's decompressed SHA-256 is
+`0e986cee60a78fab2dffa49b9ea0eebcff34039be512ec26aa5d2397a658ffab`.
+
+`font-family-preserved.v44.gbdraw-session.json.gz` and
+`font-family-preserved.v46.gbdraw-session.json.gz` are Sessions written by
+first-parent `main` commits `fe6861f06d0eaaecac0ba4ee6b1c3095019789df`
+(Session 44) and `9839de8ee` (Session 46): the Python API wrote a request whose
+config overrides name `objects.text.font_family`, and the Web app of the same
+commit loaded it and saved it again, keeping that path as a preserved override
+in its draft. `font-family-preserved.provenance.json` records the writers and
+the decompressed SHA-256 values.

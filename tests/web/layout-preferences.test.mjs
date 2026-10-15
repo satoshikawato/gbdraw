@@ -1,23 +1,4 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const repoRoot = process.cwd();
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-layout-preferences-'));
-await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempRoot, 'services'));
-await writeFile(
-  join(tempRoot, 'services', 'layout-preferences.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'layout-preferences.js'), 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempRoot, 'web-ux-profile.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'web-ux-profile.js'), 'utf8'),
-  'utf8'
-);
 
 const {
   createDefaultLayoutPreferences,
@@ -27,7 +8,7 @@ const {
   resolveActiveLayoutPreference,
   resolveCircularLayoutPreference,
   updateActiveLayoutPreference
-} = await import(pathToFileURL(join(tempRoot, 'services', 'layout-preferences.js')));
+} = await import('../../gbdraw/web/js/services/layout-preferences.js');
 
 const defaults = createDefaultLayoutPreferences();
 assert.deepEqual(resolveCircularLayoutPreference(defaults, false), {

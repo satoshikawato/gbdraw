@@ -343,14 +343,19 @@ def _run_node_adapter(node: str, cli: str) -> int:
 
 
 def _import_session(page: Any, path: Path, checks: AcceptanceChecks) -> None:
-    with page.expect_event("dialog", timeout=120_000) as dialog_info:
-        page.locator('input[accept^=".json,"]').first.set_input_files(str(path))
-    dialog = dialog_info.value
+    page.locator('input[accept^=".json,"]').first.set_input_files(str(path))
+    # The fixture loads without a repair: a Load repair dialog (BA-D25) is a
+    # failure, reported with its lines, not a wait that times out.
+    loaded = page.locator("[data-app-notice]").filter(has_text="Session loaded")
+    repairs = page.locator("[data-choice-prompt]").filter(has_text="Load this file?")
+    loaded.or_(repairs).first.wait_for(state="visible", timeout=120_000)
+    if repairs.count():
+        checks.require(False, f"Load asked about repairs: {repairs.locator('li').all_inner_texts()!r}")
+        return
     checks.require(
-        dialog.message == "Session loaded successfully!",
-        f"Unexpected import dialog: {dialog.message!r}",
+        page.locator("[data-app-notice] li").count() == 0,
+        f"Import notice carried warnings: {page.locator('[data-app-notice]').inner_text()!r}",
     )
-    dialog.accept()
     page.wait_for_function(
         """() => {
           const app = window.__GBDRAW_APP__;
@@ -494,26 +499,17 @@ def _assert_hydrated_utf8_prompt_boundary(
         """async () => {
           const {
             LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES,
-            confirmHydratedLosatExport,
+            losatExportBytesExceedLimit,
             totalHydratedLosatExportBytes
           } = await import('/gbdraw/web/js/app/run-analysis.js');
           const hydrated = { text: '界界' };
           const utf8Bytes = totalHydratedLosatExportBytes([hydrated]);
-          let prompts = 0;
-          const accepted = confirmHydratedLosatExport(
-            utf8Bytes,
-            () => {
-              prompts += 1;
-              return true;
-            },
-            5
-          );
           return {
             threshold: LOSAT_EXPORT_CONFIRM_THRESHOLD_BYTES,
             codeUnits: hydrated.text.length,
             utf8Bytes,
-            prompts,
-            accepted
+            exceedsFiveBytes: losatExportBytesExceedLimit(utf8Bytes, 5),
+            exceedsExactLimit: losatExportBytesExceedLimit(utf8Bytes, utf8Bytes)
           };
         }"""
     )
@@ -523,8 +519,8 @@ def _assert_hydrated_utf8_prompt_boundary(
             "threshold": expected["downloads"]["hydratedPromptThresholdBytes"],
             "codeUnits": 2,
             "utf8Bytes": 6,
-            "prompts": 1,
-            "accepted": True,
+            "exceedsFiveBytes": True,
+            "exceedsExactLimit": False,
         },
         f"Hydrated UTF-8 prompt boundary is incorrect: {probe}",
     )

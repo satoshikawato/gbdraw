@@ -1,5 +1,8 @@
 // @ts-check
 /** @import { ArtifactSlot } from './artifact-slot.js' */
+/** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
+/** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+/** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -11,14 +14,184 @@ import {
 } from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
+/** @import { HistoryArtifactHandle } from './history.js' */
 
 export { cloneJsonData };
 
+/**
+ * The per-feature edits a History intent, checkpoint, or generated artifact holds.
+ * @typedef {{
+ *   selectedFeatureRecordIdx?: unknown,
+ *   featureColorOverrides?: unknown,
+ *   featureVisibilityManualRules?: unknown,
+ *   featureOverrides?: unknown,
+ *   labelTextBulkOverrides?: unknown
+ * }} FeatureEditsData
+ */
+/**
+ * The Legend entries and stroke overrides the editor intent holds.
+ * @typedef {{
+ *   legend?: {
+ *     entries?: unknown,
+ *     deletedEntries?: unknown,
+ *     dormantEntries?: unknown,
+ *     colorOverrides?: unknown,
+ *     strokeOverrides?: unknown,
+ *     addedCaptions?: unknown
+ *   } | null,
+ *   featureStrokes?: { overrides?: unknown } | null
+ * }} EditorIntentData
+ */
+/** @typedef {{ selectedOrthogroupId?: unknown, selectedOrthogroupAlignmentFeature?: unknown }} OrthogroupIntentData */
+/** @typedef {{ orthogroupNameOverrides?: unknown, orthogroupDescriptionOverrides?: unknown, orthogroupDormantOverrides?: unknown }} GroupNameIntentData */
+/** @typedef {{ mode?: unknown, defaultSource?: unknown, edges?: unknown }} LinearComparisonPlanData */
+/** @typedef {{ x?: unknown, y?: unknown }} OffsetData */
+/** @typedef {HistorySnapshotServiceOptions['state']} HistorySnapshotState The app state (state.js has no typedef for it yet). */
+/** @typedef {{ name?: unknown, content?: unknown }} ResultData One generated Result, as the fallback capture and restore read it. */
+/** @typedef {{ receipt?: AlignmentResetReceipt | null, plan?: unknown, recordTranslations?: unknown }} AlignmentStateData */
+/**
+ * The app-level `ui` values of an intent, checkpoint, or generated artifact: the fallback fields,
+ * the shown mode, and the keys the owners of `ui` add.
+ * @typedef {FallbackUiData & Record<string, unknown> & { mode?: string, selectedFeatureRecordIdx?: unknown }} IntentUiData
+ */
+/**
+ * One diagram mode's drawing in an intent or checkpoint.
+ * @typedef {object} ModeIntentData
+ * @property {HistorySnapshotData} [config] The Settings capture.
+ * @property {DrawingUiData} [ui]
+ * @property {FeatureEditsData} [features]
+ * @property {EditorIntentData} [editorState]
+ * @property {GroupNameIntentData} [groupNames]
+ * @property {unknown} [fileLegendCaptions]
+ */
+/**
+ * A History intent: both drawings and the shared edits (PD-OI-086).
+ * @typedef {object} HistoryIntentData
+ * @property {Partial<Record<'circular' | 'linear', ModeIntentData>>} [modes]
+ * @property {FilesData} [files]
+ * @property {AlignmentStateData} [alignmentState]
+ * @property {IntentUiData} [ui]
+ * @property {DraftIntentData} [drafts]
+ * @property {OrthogroupIntentData} [orthogroupState]
+ */
+/**
+ * The steps of an intent that `applyHistoryIntent` is told changed.
+ * @typedef {{ changes?: { path?: unknown }[], [key: string]: unknown }} HistoryIntentContext
+ */
+/**
+ * An artifact checkpoint: the shown mode's intent and the generated Result domains.
+ * @typedef {object} ArtifactCheckpointData
+ * @property {HistorySnapshotData} [config]
+ * @property {FilesData} [files]
+ * @property {AlignmentStateData} [alignmentState]
+ * @property {DraftIntentData} [drafts]
+ * @property {unknown} [fileLegendCaptions]
+ * @property {{ mode?: unknown, drawing?: ModeIntentData } | null} [otherMode] The other mode's drawing.
+ * @property {IntentUiData} [ui]
+ * @property {HistorySnapshotData[]} [results]
+ * @property {FeatureEditsData & { extractedFeatures?: unknown, featureRecordIds?: unknown }} [features]
+ * @property {EditorIntentData} [editorState]
+ * @property {OrthogroupIntentData & GroupNameIntentData & { groups?: unknown }} [orthogroupState]
+ * @property {{ lastRunInfo?: unknown, pairwiseMatchFactors?: unknown }} [runState]
+ */
+/**
+ * The presentation values a generated artifact handle keeps with its intent.
+ * @typedef {{
+ *   resultGenerationKey?: unknown, resultPanelTab?: unknown, errorLog?: unknown, labelTextScopeDialog?: unknown,
+ *   featureEditorStatus?: unknown, featureExtractionPending?: unknown, featureExtractionError?: unknown
+ * }} PresentationData
+ */
+/**
+ * The mutable intent of a generated artifact handle.
+ * @typedef {object} GeneratedArtifactIntent
+ * @property {IntentUiData} ui
+ * @property {FeatureEditsData & { labelOverrideRows?: unknown }} features
+ * @property {EditorIntentData & { originalSvgStroke?: unknown }} editorState
+ * @property {OrthogroupIntentData & GroupNameIntentData} orthogroupState
+ * @property {unknown} alignmentState
+ * @property {PresentationData} presentation
+ */
+/**
+ * One Linear record row of an intent's files: the File descriptors and the metadata the row keeps.
+ * @typedef {{
+ *   uid?: unknown, gb?: unknown, gff?: unknown, fasta?: unknown, depth?: unknown,
+ *   losat_gencode?: unknown, definition?: unknown, record_subtitle?: unknown, file_definition?: unknown,
+ *   file_subtitle?: unknown, inferred_definition?: unknown, region_record_id?: unknown,
+ *   region_start?: unknown, region_end?: unknown, region_reverse?: unknown
+ * }} FilesDataSequence
+ */
+/**
+ * The files of an intent or checkpoint: File descriptors (`fileStore.describeValue`) by input.
+ * @typedef {{
+ *   c_gb?: unknown, c_gff?: unknown, c_fasta?: unknown, c_depth?: unknown,
+ *   c_conservation_blasts?: unknown, c_conservation_blasts_source?: unknown,
+ *   c_conservation_fastas?: unknown, c_conservation_sequence_sources?: unknown,
+ *   d_color?: unknown, t_color?: unknown, blacklist?: unknown, whitelist?: unknown, qualifier_priority?: unknown,
+ *   linearSeqs?: FilesDataSequence[],
+ *   linearComparisons?: { id?: unknown, file?: unknown }[],
+ *   linearCanonicalComparisons?: ResourceBackedComparison[]
+ * }} FilesData
+ */
+/**
+ * The `ui` values that belong to a drawing (Session 46 `modes.<m>.ui`, and its LOSAT program).
+ * @typedef {{
+ *   canvasPadding?: Record<string, unknown> | null,
+ *   layoutPreferences?: unknown,
+ *   linearTypographyLinked?: unknown,
+ *   pendingPaletteName?: unknown,
+ *   pendingPaletteColors?: unknown,
+ *   losatProgram?: unknown
+ * }} DrawingUiData
+ */
+/**
+ * The UI state the fallback restore reads when the service has no UI owner.
+ * @typedef {DrawingUiData & {
+ *   title?: unknown,
+ *   cInputType?: unknown,
+ *   lInputType?: unknown,
+ *   downloadDpi?: unknown,
+ *   generatedLegendPosition?: unknown,
+ *   generatedMode?: unknown,
+ *   generatedMultiRecordCanvas?: unknown,
+ *   generatedCircularPlotTitlePosition?: unknown,
+ *   autoLabelReflow?: unknown,
+ *   paletteInstantPreviewEnabled?: unknown,
+ *   appliedPaletteName?: unknown,
+ *   appliedPaletteColors?: unknown,
+ *   legendCurrentOffset?: OffsetData | null,
+ *   diagramOffset?: OffsetData | null,
+ *   lengthBarUserOffset?: OffsetData | null,
+ *   plotTitleUserOffset?: OffsetData | null,
+ *   selectedResultIndex?: number
+ * }} FallbackUiData
+ */
+/**
+ * The draft inputs (annotation, preset, and rule forms) a History intent holds.
+ * @typedef {{
+ *   selectedAnnotation?: unknown,
+ *   selectedSpecificPreset?: unknown,
+ *   newSpecRule?: unknown,
+ *   newPriorityRule?: unknown,
+ *   newColorFeat?: unknown,
+ *   newColorVal?: unknown,
+ *   newFeatureToAdd?: unknown
+ * }} DraftIntentData
+ */
+
+/**
+ * @param {unknown} value
+ * @returns {Record<string, unknown>}
+ */
 const clonePlainObject = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return cloneJsonData(value);
+  // A non-null, non-array object that survives the JSON clone is a plain JSON object.
+  return /** @type {Record<string, unknown>} */ (cloneJsonData(value));
 };
 
+/**
+ * @param {Record<string, unknown> | null | undefined} target
+ * @param {Record<string, unknown> | null | undefined} source
+ */
 const replacePlainObject = (target, source) => {
   if (!target || typeof target !== 'object') return;
   Object.keys(target).forEach((key) => delete target[key]);
@@ -27,11 +200,16 @@ const replacePlainObject = (target, source) => {
   });
 };
 
+/**
+ * @param {{ value?: unknown } | null | undefined} target
+ * @param {unknown} source
+ */
 const replaceRefArray = (target, source) => {
   if (!target || typeof target !== 'object' || !('value' in target)) return;
   target.value = Array.isArray(source) ? cloneJsonData(source) : [];
 };
 
+/** @param {FeatureEditsData} [features] */
 const buildFeatureIntentData = (features = {}) => ({
   featureColorOverrides: clonePlainObject(features.featureColorOverrides),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules),
@@ -39,6 +217,7 @@ const buildFeatureIntentData = (features = {}) => ({
   labelTextBulkOverrides: clonePlainObject(features.labelTextBulkOverrides)
 });
 
+/** @param {EditorIntentData} [editorState] */
 const buildEditorIntentData = (editorState = {}) => ({
   legend: {
     entries: cloneJsonData(editorState?.legend?.entries) || [],
@@ -53,6 +232,7 @@ const buildEditorIntentData = (editorState = {}) => ({
   }
 });
 
+/** @param {OrthogroupIntentData} [orthogroupState] */
 const buildOrthogroupIntentData = (orthogroupState = {}) => ({
   selectedOrthogroupId: String(orthogroupState.selectedOrthogroupId || ''),
   selectedOrthogroupAlignmentFeature: String(orthogroupState.selectedOrthogroupAlignmentFeature || '')
@@ -69,6 +249,7 @@ const buildGroupNameIntentData = (drawing) => ({
 // Neither the selected Result nor the offsets read from its mounted root is
 // an edit, so neither is intent; composition offsets are recorded per Result
 // in `compositionUserDeltas` (B17).
+/** @param {Record<string, unknown>} [ui] */
 const buildUiIntentData = (ui = {}) => {
   const intent = clonePlainObject(ui);
   delete intent.generatedLegendPosition;
@@ -87,6 +268,7 @@ const buildUiIntentData = (ui = {}) => {
 /**
  * @param {Record<string, any>} state
  * @param {HistorySnapshotDrawing} drawing
+ * @param {FeatureEditsData} [features]
  */
 const applyFeatureIntentData = (state, drawing, features = {}) => {
   if (Object.hasOwn(features, 'selectedFeatureRecordIdx')) {
@@ -99,7 +281,10 @@ const applyFeatureIntentData = (state, drawing, features = {}) => {
   replaceFeatureEditState(drawing, features);
 };
 
-/** @param {HistorySnapshotDrawing} drawing */
+/**
+ * @param {HistorySnapshotDrawing} drawing
+ * @param {EditorIntentData} [editorState]
+ */
 const applyEditorIntentData = (drawing, editorState = {}) => {
   const legend = editorState.legend || {};
   replaceRefArray(drawing.legendEntries, legend.entries);
@@ -118,7 +303,10 @@ const applyEditorIntentData = (drawing, editorState = {}) => {
   );
 };
 
-/** @param {Record<string, any>} state */
+/**
+ * @param {Record<string, any>} state
+ * @param {OrthogroupIntentData} [orthogroupState]
+ */
 const applyOrthogroupIntentData = (state, orthogroupState = {}) => {
   setRef(state.selectedOrthogroupId, String(orthogroupState.selectedOrthogroupId || ''));
   setRef(
@@ -127,13 +315,17 @@ const applyOrthogroupIntentData = (state, orthogroupState = {}) => {
   );
 };
 
-/** @param {HistorySnapshotDrawing} drawing */
+/**
+ * @param {HistorySnapshotDrawing} drawing
+ * @param {GroupNameIntentData} [names]
+ */
 const applyGroupNameIntentData = (drawing, names = {}) => {
   replacePlainObject(drawing.orthogroupNameOverrides, clonePlainObject(names.orthogroupNameOverrides));
   replacePlainObject(drawing.orthogroupDescriptionOverrides, clonePlainObject(names.orthogroupDescriptionOverrides));
   replacePlainObject(drawing.orthogroupDormantOverrides, clonePlainObject(names.orthogroupDormantOverrides));
 };
 
+/** @param {LinearComparisonPlanData | null} [plan] */
 const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
   mode: String(plan?.mode || 'none'),
   defaultSource: String(plan?.defaultSource || 'losat'),
@@ -149,6 +341,10 @@ const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
   }))
 });
 
+/**
+ * @param {{ mode: string, defaultSource: string, edges?: unknown[] } | null | undefined} target
+ * @param {LinearComparisonPlanData} [plan]
+ */
 const replaceLinearComparisonPlan = (target, plan = {}) => {
   if (!target || typeof target !== 'object') return;
   const cloned = cloneLinearComparisonPlanMetadata(plan);
@@ -161,13 +357,17 @@ const replaceLinearComparisonPlan = (target, plan = {}) => {
   })));
 };
 
+/** @param {unknown} rules */
 const cloneFeatureVisibilityRules = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
 
 // Manual visibility rules, identity-keyed per-feature edits, and bulk label
 // edits: the feature edit intent History restores as captured (R11).
-/** @param {HistorySnapshotDrawing} drawing */
+/**
+ * @param {HistorySnapshotDrawing} drawing
+ * @param {FeatureEditsData} [features]
+ */
 const replaceFeatureEditState = (drawing, features = {}) => {
   if (Array.isArray(drawing.featureVisibilityManualRules)) {
     drawing.featureVisibilityManualRules.splice(
@@ -180,6 +380,10 @@ const replaceFeatureEditState = (drawing, features = {}) => {
   replacePlainObject(drawing.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
 };
 
+/**
+ * @param {unknown} target A Vue ref, or any other value (a non-ref is left as it is).
+ * @param {unknown} value
+ */
 const setRef = (target, value) => {
   if (target && typeof target === 'object' && 'value' in target) {
     target.value = value;
@@ -187,29 +391,45 @@ const setRef = (target, value) => {
 };
 
 /**
- * @param target A Vue ref, or any other value (the fallback is returned for a non-ref).
- * @param {unknown} [fallback] The value for a target that is not a ref.
+ * @template T, F
+ * @param {{ value: T } | null | undefined} target A Vue ref (the fallback is returned for a non-ref).
+ * @param {F} fallback The value for a target that is not a ref.
+ * @returns {T | F}
  */
-const getRef = (target, fallback = null) => (
+const getRef = (target, fallback) => (
   target && typeof target === 'object' && 'value' in target
     ? target.value
     : fallback
 );
 
+/**
+ * @param {unknown} target A Vue ref, or any other value (a non-ref is left as it is).
+ * @param {unknown} value
+ */
 const setGeneratedArtifactRef = (target, value) => {
   if (target && typeof target === 'object' && 'value' in target) target.value = value;
 };
 
 /**
- * @param target A Vue ref, or any other value (the fallback is returned for a non-ref).
- * @param {unknown} [fallback] The value for a target that is not a ref.
+ * @template T, F
+ * @param {{ value: T } | null | undefined} target A Vue ref (the fallback is returned for a non-ref).
+ * @param {F} fallback The value for a target that is not a ref.
+ * @returns {T | F}
  */
-const getGeneratedArtifactRef = (target, fallback = null) => (
+const getGeneratedArtifactRef = (target, fallback) => (
   target && typeof target === 'object' && 'value' in target ? target.value : fallback
 );
 
+// The vendored Vue is a global of the page (index.html); a unit test without a page may not set it.
+/** @type {typeof globalThis & { Vue?: { toRaw?: <T>(value: T) => T } }} */
+const vueHost = globalThis;
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
 const artifactOwnedValue = (value) => (
-  typeof globalThis.Vue?.toRaw === 'function' ? globalThis.Vue.toRaw(value) : value
+  typeof vueHost.Vue?.toRaw === 'function' ? vueHost.Vue.toRaw(value) : value
 );
 
 /** @param {Record<string, any>} state */
@@ -228,7 +448,10 @@ const buildFileLegendCaptionData = (drawing) => Array.from(getRef(drawing.fileLe
   .map((caption) => String(caption || '').trim())
   .filter(Boolean);
 
-/** @param {HistorySnapshotDrawing} drawing */
+/**
+ * @param {HistorySnapshotDrawing} drawing
+ * @param {unknown} captions
+ */
 const applyFileLegendCaptionData = (drawing, captions) => {
   if (drawing.fileLegendCaptions?.value !== undefined) {
     drawing.fileLegendCaptions.value = new Set(
@@ -237,7 +460,10 @@ const applyFileLegendCaptionData = (drawing, captions) => {
   }
 };
 
-/** @param {Record<string, any>} state */
+/**
+ * @param {Record<string, any>} state
+ * @param {DraftIntentData} [drafts]
+ */
 const applyDraftIntentData = (state, drafts = {}) => {
   setRef(state.selectedAnnotation, cloneJsonData(drafts.selectedAnnotation) || null);
   setRef(state.selectedSpecificPreset, String(drafts.selectedSpecificPreset || ''));
@@ -264,12 +490,16 @@ const appUiPart = (ui = {}) => Object.fromEntries(
 );
 // Installs a drawing's `ui` values as captured. The shown drawing's values go
 // through the UI restore with the app-level values instead.
-/** @param {HistorySnapshotDrawing} drawing */
+/**
+ * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingUiData} [ui]
+ */
 const applyDrawingUiIntentData = (drawing, ui = {}) => {
   if (ui.layoutPreferences) replaceLayoutPreferences(drawing.layoutPreferences, ui.layoutPreferences);
-  if (drawing.canvasPadding && ui.canvasPadding) {
+  const { canvasPadding } = ui;
+  if (drawing.canvasPadding && canvasPadding) {
     ['top', 'right', 'bottom', 'left'].forEach((side) => {
-      drawing.canvasPadding[side] = Number(ui.canvasPadding[side]) || 0;
+      drawing.canvasPadding[side] = Number(canvasPadding[side]) || 0;
     });
   }
   if (typeof ui.linearTypographyLinked === 'boolean') setRef(drawing.linearTypographyLinked, ui.linearTypographyLinked);
@@ -295,6 +525,7 @@ const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
   }
 }));
 
+/** @param {HistorySnapshotState} state */
 const closeTransientState = (state) => {
   setRef(state.clickedFeature, null);
   setRef(state.clickedPairwiseMatch, null);
@@ -345,6 +576,7 @@ const buildFallbackUiStateData = (state, drawing) => ({
 /**
  * @param {Record<string, any>} state
  * @param {HistorySnapshotDrawing} drawing
+ * @param {FallbackUiData} [ui]
  */
 const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   if (typeof ui.title === 'string') setRef(state.sessionTitle, ui.title);
@@ -391,7 +623,8 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   }
   if (Number.isInteger(ui.selectedResultIndex)) {
     const count = Array.isArray(getRef(state.results, [])) ? getRef(state.results, []).length : 0;
-    setRef(state.selectedResultIndex, count > 0 ? Math.max(0, Math.min(ui.selectedResultIndex, count - 1)) : 0);
+    // The guard above passes only integers; `Number.isInteger` does not narrow the type.
+    setRef(state.selectedResultIndex, count > 0 ? Math.max(0, Math.min(/** @type {number} */ (ui.selectedResultIndex), count - 1)) : 0);
   }
 };
 
@@ -412,6 +645,7 @@ const buildFallbackFeatureStateData = (state, drawing) => ({
 /**
  * @param {Record<string, any>} state
  * @param {HistorySnapshotDrawing} drawing
+ * @param {FeatureEditsData & { extractedFeatures?: unknown, featureRecordIds?: unknown }} [features]
  */
 const applyFallbackFeatureStateData = (state, drawing, features = {}) => {
   setRef(state.extractedFeatures, cloneJsonData(features.extractedFeatures) || []);
@@ -440,6 +674,7 @@ const buildFallbackOrthogroupStateData = (state, drawing) => ({
 /**
  * @param {Record<string, any>} state
  * @param {HistorySnapshotDrawing} drawing
+ * @param {OrthogroupIntentData & GroupNameIntentData & { groups?: unknown }} [data]
  */
 const applyFallbackOrthogroupStateData = (state, drawing, data = {}) => {
   setRef(state.orthogroups, cloneJsonData(data.groups) || []);
@@ -450,6 +685,7 @@ const applyFallbackOrthogroupStateData = (state, drawing, data = {}) => {
   replacePlainObject(drawing.orthogroupDormantOverrides, clonePlainObject(data.orthogroupDormantOverrides));
 };
 
+/** @param {HistorySnapshotState} state */
 const buildFallbackResultsData = (state) => {
   const currentSvg = (() => {
     const svg = state.svgContainer?.value?.querySelector?.('svg');
@@ -457,12 +693,16 @@ const buildFallbackResultsData = (state) => {
     return serializeCleanSvg(svg);
   })();
   const selected = getRef(state.selectedResultIndex, 0);
-  return (getRef(state.results, []) || []).map((result, index) => ({
+  return (getRef(state.results, []) || []).map((/** @type {ResultData | null | undefined} */ result, /** @type {number} */ index) => ({
     name: result?.name || `Result ${index + 1}`,
     content: index === selected && currentSvg ? currentSvg : String(result?.content || '')
   }));
 };
 
+/**
+ * @param {HistorySnapshotState} state
+ * @param {unknown} [results]
+ */
 const applyFallbackResultsData = (state, results = []) => {
   setRef(
     state.results,
@@ -481,6 +721,7 @@ const applyFallbackResultsData = (state, results = []) => {
 /**
  * @param {Record<string, any>} state
  * @param {HistorySnapshotDrawing} drawing
+ * @param {HistorySnapshotFileStore} fileStore
  */
 const buildIntentFilesData = (state, drawing, fileStore) => ({
   c_gb: fileStore.describeValue(state.files?.c_gb),
@@ -525,6 +766,7 @@ const buildIntentFilesData = (state, drawing, fileStore) => ({
 /**
  * @param {Record<string, any>} state
  * @param {HistorySnapshotDrawing} drawing
+ * @param {HistorySnapshotFileStore} fileStore
  */
 const buildFilesData = (state, drawing, fileStore) => ({
   ...buildIntentFilesData(state, drawing, fileStore),
@@ -532,7 +774,7 @@ const buildFilesData = (state, drawing, fileStore) => ({
     Array.isArray(state.files?.linearCanonicalComparisons)
       ? state.files.linearCanonicalComparisons
       : []
-  ).map((comparison) => (
+  ).map((/** @type {ResourceBackedComparison} */ comparison) => (
     isResourceBackedCanonicalComparison(comparison)
       ? {
           ...mapResourceBackedCanonicalComparison(comparison),
@@ -542,8 +784,14 @@ const buildFilesData = (state, drawing, fileStore) => ({
   ))
 });
 
+/**
+ * @param {HistorySnapshotState} state
+ * @param {HistorySnapshotFileStore} fileStore
+ */
 const collectCurrentFileIds = (state, fileStore) => {
+  /** @type {Set<string>} */
   const fileIds = new Set();
+  /** @param {unknown} value */
   const register = (value) => {
     if (Array.isArray(value)) {
       value.forEach(register);
@@ -570,7 +818,7 @@ const collectCurrentFileIds = (state, fileStore) => {
   (Array.isArray(files.linearCanonicalComparisons)
     ? files.linearCanonicalComparisons
     : []
-  ).forEach((comparison) => register(comparison?.file));
+  ).forEach((/** @type {ResourceBackedComparison | null | undefined} */ comparison) => register(comparison?.file));
   Array.from(state.linearSeqs || []).forEach((sequence) => {
     register(sequence?.gb);
     register(sequence?.gff);
@@ -589,12 +837,14 @@ const collectCurrentFileIds = (state, fileStore) => {
 /**
  * @param {Record<string, any>} state
  * @param {HistorySnapshotDrawing} drawing
+ * @param {FilesData} filesData
  * @param {HistorySnapshotFileStore} fileStore
  * @param {HistorySnapshotServiceOptions['normalizeLinearSeqList']} [normalizeLinearSeqList]
  */
 const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeqList = null) => {
   if (!state.files) return;
   state.matchSequenceRegistry?.reset?.();
+  /** @param {unknown} value */
   const restore = (value) => fileStore.restoreValue(value);
   state.files.c_gb = restore(filesData?.c_gb);
   state.files.c_gff = restore(filesData?.c_gff);
@@ -656,7 +906,7 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
       (Array.isArray(filesData?.linearComparisons) ? filesData.linearComparisons : [])
         .map((comparison) => [String(comparison?.id || ''), restore(comparison?.file)])
     );
-    drawing.linearComparisonPlan.edges.forEach((edge) => {
+    drawing.linearComparisonPlan.edges.forEach((/** @type {LinearComparisonEdge} */ edge) => {
       edge.file = comparisonFiles.get(String(edge?.id || '')) || null;
     });
   }
@@ -760,6 +1010,7 @@ export const createHistorySnapshotService = ({
   let restoreSemanticSuppressionBaseline = false;
   let restoreTrustedStateBaseline = false;
 
+  /** @param {typeof afterApplyHistoryIntent} callback */
   const setAfterApplyHistoryIntent = (callback) => {
     afterApplyHistoryIntent = typeof callback === 'function' ? callback : null;
   };
@@ -767,8 +1018,12 @@ export const createHistorySnapshotService = ({
   // Intent captures of owners created after this service (R13): the
   // composition root registers each once its owner exists. An unregistered
   // capture adds nothing to the intent, as for a service without that owner.
-  /** @type {{ composition: (() => unknown) | null }} */
+  /** @type {Record<string, (() => unknown) | null>} */
   const captures = { composition: null };
+  /**
+   * @param {string} name The capture's name; an unknown name throws.
+   * @param {(() => unknown) | null} capture
+   */
   const registerCapture = (name, capture) => {
     if (!Object.hasOwn(captures, name)) throw new Error(`Unknown History intent capture: ${name}`);
     captures[name] = typeof capture === 'function' ? capture : null;
@@ -810,6 +1065,7 @@ export const createHistorySnapshotService = ({
     await restoreMode(mode);
   };
 
+  /** @param {HistorySnapshotRuntimeOwner | null} owner */
   const setGeneratedArtifactRuntimeOwner = (owner) => {
     generatedArtifactRuntimeOwner = (
       owner
@@ -825,6 +1081,7 @@ export const createHistorySnapshotService = ({
     })).filter(({ recordKey }) => recordKey)
   );
 
+  /** @param {unknown} orientations */
   const installLinearRecordOrientations = (orientations) => {
     const byRecord = new Map(
       (Array.isArray(orientations) ? orientations : []).map((entry) => [
@@ -838,6 +1095,7 @@ export const createHistorySnapshotService = ({
     });
   };
 
+  /** @typedef {ReturnType<typeof captureGeneratedArtifactOwnerSet>} GeneratedArtifactOwnerSet The owners' values, by reference, key by key. */
   const captureGeneratedArtifactOwnerSet = () => {
     const drawing = drawingOfMode(state, getGeneratedArtifactRef(state.generatedMode, null));
     const results = artifactOwnedValue(getGeneratedArtifactRef(state.results, []));
@@ -867,7 +1125,8 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.featureIdentityNotices, null)
       ),
       comparisonWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.comparisonWarnings, null)),
-      specificRules: (drawing.manualSpecificRules || []).map(rule => ({ ...rule })),
+      labelFitReports: artifactOwnedValue(getGeneratedArtifactRef(state.labelFitReports, null)),
+      specificRules: (drawing.manualSpecificRules || []).map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule })),
       fileLegendCaptions: new Set(drawing.fileLegendCaptions?.value || []),
       trackSlotResolvedGeometry: artifactOwnedValue(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
@@ -914,6 +1173,7 @@ export const createHistorySnapshotService = ({
   };
 
   const installGeneratedArtifactOwnerSet = (
+    /** @type {Partial<GeneratedArtifactOwnerSet> | null | undefined} */
     ownerSet,
     /** @type {{ selectedResultIndex?: number, installResults?: ((results: any[]) => unknown) | null }} */
     { selectedResultIndex = 0, installResults = null } = {}
@@ -957,8 +1217,9 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
     setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
     setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
+    setGeneratedArtifactRef(state.labelFitReports, ownerSet.labelFitReports || []);
     if (drawing.manualSpecificRules && ownerSet.specificRules) {
-      drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...ownerSet.specificRules.map(rule => ({ ...rule })));
+      drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...ownerSet.specificRules.map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule })));
     }
     if (drawing.fileLegendCaptions && ownerSet.fileLegendCaptions) drawing.fileLegendCaptions.value = new Set(ownerSet.fileLegendCaptions);
     setGeneratedArtifactRef(
@@ -1002,7 +1263,8 @@ export const createHistorySnapshotService = ({
   // E1: the displayed mode's generated artifact, by reference, key by key.
   // The state's `generatedMode` names the slot's mode.
   const captureArtifactSlot = () => createArtifactSlot({
-    mode: getGeneratedArtifactRef(state.generatedMode, null),
+    // `state.generatedMode` is always a ref, so the fallback `null` never applies.
+    mode: /** @type {'circular' | 'linear'} */ (getGeneratedArtifactRef(state.generatedMode, null)),
     values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
       key, artifactOwnedValue(getGeneratedArtifactRef(state[key], null))
     ])),
@@ -1080,6 +1342,10 @@ export const createHistorySnapshotService = ({
     currentGeneratedArtifactRetainedBytes = Math.max(0, Number(retainedBytes) || 0);
   };
 
+  /**
+   * @param {Readonly<Record<string, unknown>>} ownerSet
+   * @param {HistorySnapshotTransportIdentity | null} identity
+   */
   const currentArtifactMatchesIdentity = (ownerSet, identity) => {
     const expected = identity?.ownerReferences;
     if (!expected || expected.results !== ownerSet.results) return false;
@@ -1098,6 +1364,7 @@ export const createHistorySnapshotService = ({
       'annotationWarnings',
       'featureIdentityNotices',
       'comparisonWarnings',
+      'labelFitReports',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
       'legacyProteinDerivedEvidence',
@@ -1115,6 +1382,7 @@ export const createHistorySnapshotService = ({
     ].every((key) => expected[key] === ownerSet[key]);
   };
 
+  /** @param {GeneratedArtifactIntent} mutableIntent */
   const compactGeneratedArtifactSignature = (mutableIntent) => {
     const {
       zoom: _zoom,
@@ -1268,7 +1536,20 @@ export const createHistorySnapshotService = ({
     });
   };
 
+  /**
+   * The handle History stored and passes back: History's own type names the fields History reads; these are
+   * the fields `captureGeneratedArtifactHandle` wrote beside them, as a restore reads them.
+   * @typedef {Pick<HistoryArtifactHandle, 'retainedBytes' | 'fileIds' | 'identity'> & {
+   *   kind?: unknown,
+   *   ownerSet?: GeneratedArtifactOwnerSet | null,
+   *   mutableIntent?: Partial<GeneratedArtifactIntent>,
+   *   runtimeState?: { canonical?: { committedCanonicalSession?: AlignmentResetCanonical | null } | null } | null,
+   *   transportIdentity?: HistorySnapshotTransportIdentity | null,
+   *   baseRetainedBytes?: unknown
+   * }} StoredGeneratedArtifactHandle
+   */
   const restoreGeneratedArtifactHandle = async (
+    /** @type {StoredGeneratedArtifactHandle | null | undefined} */
     handle,
     { clearFailedGeneratePresentation = false } = {}
   ) => {
@@ -1405,6 +1686,10 @@ export const createHistorySnapshotService = ({
     }
   };
 
+  /**
+   * @param {{ identity?: { fingerprint?: string, compactSignature?: string } } | null | undefined} before
+   * @param {{ identity?: { fingerprint?: string, compactSignature?: string } } | null | undefined} after
+   */
   const compareGeneratedArtifactHandles = (before, after) => Boolean(
     before?.identity?.fingerprint
     && before.identity.fingerprint === after?.identity?.fingerprint
@@ -1418,6 +1703,7 @@ export const createHistorySnapshotService = ({
     plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
     recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
   });
+  /** @param {AlignmentStateData | null | undefined} alignmentState */
   const installAlignmentState = (alignmentState) => {
     setGeneratedArtifactRef(
       state.similarityAlignmentResetReceipt,
@@ -1462,7 +1748,10 @@ export const createHistorySnapshotService = ({
   // retains each checkpoint object as captured.
   const checkpointFeatureCatalogs = new WeakMap();
 
-  /** @param {HistorySnapshotDrawing} drawing */
+  /**
+   * @param {HistorySnapshotDrawing} drawing
+   * @param {ArtifactCheckpointData} snapshot
+   */
   const applyArtifactDomains = (drawing, snapshot) => {
     const ui = snapshot?.ui || {};
     if (typeof applyResultsData === 'function') {
@@ -1622,6 +1911,10 @@ export const createHistorySnapshotService = ({
     return { shownIntent, shownDomains, shownChanges };
   };
 
+  /**
+   * @param {HistoryIntentData | null | undefined} intent
+   * @param {HistoryIntentContext} [context]
+   */
   const applyHistoryIntent = async (intent, context = {}) => {
     if (!intent || typeof intent !== 'object') return;
     closeTransientState(state);
@@ -1657,8 +1950,8 @@ export const createHistorySnapshotService = ({
             ? linearDrawing.linearComparisonPlan.edges
             : []
           )
-            .map((edge) => [String(edge?.id || ''), edge?.file ?? null])
-            .filter(([edgeId]) => edgeId)
+            .map((/** @type {LinearComparisonEdge} */ edge) => [String(edge?.id || ''), edge?.file ?? null])
+            .filter((/** @type {[string, unknown]} */ [edgeId]) => edgeId)
         )
       : null;
     const suppressRef = state.semanticFileWatchersSuppressed;
@@ -1684,7 +1977,7 @@ export const createHistorySnapshotService = ({
         }
       });
       if (retainedComparisonFiles) {
-        (linearDrawing.linearComparisonPlan?.edges || []).forEach((edge) => {
+        (linearDrawing.linearComparisonPlan?.edges || []).forEach((/** @type {LinearComparisonEdge} */ edge) => {
           const edgeId = String(edge?.id || '');
           if (edgeId && retainedComparisonFiles.has(edgeId)) {
             edge.file = retainedComparisonFiles.get(edgeId);
@@ -1702,8 +1995,10 @@ export const createHistorySnapshotService = ({
         }
       }
       if (domains.has('ui') && Object.hasOwn(intent.ui || {}, 'selectedFeatureRecordIdx')) {
-        setRef(state.selectedFeatureRecordIdx, Number.isInteger(intent.ui.selectedFeatureRecordIdx)
-          ? intent.ui.selectedFeatureRecordIdx : 0);
+        // `hasOwn` is true only when `intent.ui` exists.
+        const ownUi = /** @type {IntentUiData} */ (intent.ui);
+        setRef(state.selectedFeatureRecordIdx, Number.isInteger(ownUi.selectedFeatureRecordIdx)
+          ? ownUi.selectedFeatureRecordIdx : 0);
       }
       drawingModes.forEach((drawingMode) => {
         if (drawingMode !== shownMode && changed(drawingMode, 'ui')) {
@@ -1765,6 +2060,7 @@ export const createHistorySnapshotService = ({
     return checkpoint;
   };
 
+  /** @param {ArtifactCheckpointData | null | undefined} snapshot */
   const applyArtifactCheckpoint = async (snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
     const suppressRef = state.semanticFileWatchersSuppressed;
@@ -1830,6 +2126,7 @@ export const createHistorySnapshotService = ({
     }
   };
 
+  /** @param {unknown} snapshot */
   const snapshotSignature = (snapshot) => JSON.stringify(snapshot);
 
   return {

@@ -11,8 +11,11 @@ const {
   generateAndWaitForResult,
   getDiagramWorkerActivity,
   openApp,
+  openLinearFileCards,
   reveal,
-  waitForAppShell
+  waitForAppShell,
+  expectSessionLoadedWithoutWarnings,
+  answerLoadRepairs,
 } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -720,14 +723,12 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
     expect(savedPath).toBeTruthy();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppShell(page, { waitForPalette: false });
-    const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
     await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
-    const dialog = await dialogPromise;
-    expect(dialog.message()).toBe('Session loaded successfully!');
-    await dialog.accept();
+    await expectSessionLoadedWithoutWarnings(page);
     await expect.poll(() => page.evaluate(() => (
       window.__GBDRAW_APP__.mode === 'linear' && window.__GBDRAW_APP__.linearSeqs.length
     ))).toBe(2);
+    await openLinearFileCards(page);
   };
   const showDepthRows = async () => {
     const disclosure = page.locator('[data-linear-source-depth]').first();
@@ -1398,14 +1399,9 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   await expect(
     page.getByRole('heading', { name: 'Last Successful Result', exact: true })
   ).toBeVisible();
-  const preservedResultNotice = page.getByRole('status').filter({
-    hasText: /Showing the last successful result\.\s*Current changes were not applied\./
-  });
-  await expect(preservedResultNotice).toHaveCount(1);
-  await expect(preservedResultNotice.getByText('Showing the last successful result.', { exact: true }))
-    .toBeVisible();
-  await expect(preservedResultNotice.getByText('Current changes were not applied.', { exact: true }))
-    .toBeVisible();
+  // The error card says the Result was kept; the separate amber strip is hidden while it shows.
+  await expect(generationError).toContainText('Showing the last successful Result; your changes were not applied.');
+  await expect(page.getByText('Showing the last successful result.', { exact: true })).toHaveCount(0);
   await expect(svgExport).toBeEnabled();
 
   const successfulRetry = await evaluateWithRetainedPromise(page, async () => {
@@ -1559,7 +1555,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
   const expectSchemaRejection = async (count, reason) => {
     await expect.poll(() => page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(count);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
-    await expect(page.getByRole('alert', { name: 'Operation error' }))
+    await expect(page.getByRole('alert', { name: 'Session not loaded' }))
       .toContainText('Load a supported Session file or recreate it with the current writer.');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
       code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason }
@@ -1700,8 +1696,9 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(repairedCanonicalSession))
   });
-  await expect.poll(() => dialogs.length).toBe(1);
-  expect(dialogs[0]).toBe('Session loaded successfully!');
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: repaired-canonical.gbdraw-session.json', { timeout: 120_000 });
+  await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
+  expect(dialogs).toEqual([]);
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     comparisonHeight: window.__GBDRAW_APP__.adv.comparison_height,
@@ -1914,11 +1911,8 @@ ORIGIN
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
 
   expect(await layoutPreferenceTree()).toEqual(expectedPreferences);
   await expectActiveProjection('circular', false, expectedPreferences.circular.single);
@@ -1957,6 +1951,34 @@ ORIGIN
   });
 });
 
+// OV-652 (BA-D07): the Web reads a legend position outside its mode's set
+// like an absent one, so the Session loads with the mode's default and the
+// request Generate sends is one Python accepts.
+test('a Session legend position outside its mode loads as the mode default and generates (OV-652)', async ({ page }) => {
+  test.setTimeout(420000);
+  const session = JSON.parse(readFileSync(
+    join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'), 'utf8'
+  ));
+  expect(session.modes.linear.ui.layoutPreferences.legend).toBe('left');
+  session.modes.linear.ui.layoutPreferences.legend = 'Upper_Left';
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').first().setInputFiles({
+    name: 'legend-position.gbdraw-session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(session))
+  });
+  // The file is lossy on purpose: Load lists the position and the one it uses (BA-D25).
+  await answerLoadRepairs(page, [
+    'Legend: the position "Upper_Left" (modes.linear.ui.layoutPreferences.legend) is not one of its mode\'s positions;'
+      + ' bottom is used.'
+  ], 'load', { timeout: 180000 });
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  await expect.soft(await reveal(page.locator('#legend-position'))).toHaveValue('bottom');
+  await generateAndWaitForResult(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.legend)).toBe('bottom');
+});
+
 test('P3 Custom Track drafts survive fresh-page session re-save and Reset history', async ({ page }) => {
   test.setTimeout(180000);
   const recordText = readFileSync(hmmtDnaPath, 'utf8');
@@ -1981,11 +2003,8 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     return JSON.parse(gunzipSync(readFileSync(filePath)).toString('utf8'));
   };
   const loadSession = async (filePath) => {
-    const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
     await page.locator('input[accept^=".json,"]').first().setInputFiles(filePath);
-    const dialog = await dialogPromise;
-    expect(dialog.message()).toBe('Session loaded successfully!');
-    await dialog.accept();
+    await expectSessionLoadedWithoutWarnings(page);
     await page.waitForFunction(() => {
       const app = window.__GBDRAW_APP__;
       return (
@@ -2526,12 +2545,13 @@ ORIGIN
     buffer: Buffer.from(JSON.stringify(session))
   });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
-  await expect(page.getByRole('alert', { name: 'Operation error' })).toBeVisible();
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toBeVisible();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation'
+    code: 'UNKNOWN', operation: 'session-load', stage: 'request-validation'
   });
-  await expect(page.getByRole('alert', { name: 'Operation error' })).not.toContainText('Injected session commit failure');
+  await expect(page.getByRole('alert', { name: 'Session not loaded' })).not.toContainText('Injected session commit failure');
   expect(dialogs).toEqual([]);
+  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     title: window.__GBDRAW_APP__.sessionTitle,
@@ -2856,11 +2876,8 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return app.mode === 'linear' &&
@@ -3010,11 +3027,8 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toBe('Session loaded successfully!');
-  await dialog.accept();
+  await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return app.mode === 'circular' &&
@@ -3251,6 +3265,59 @@ test('BGC session selected feature Hide undo redo keeps visibility and legend st
 // series, ArrowUp then ArrowDown on `depth_2` leaves two series, and Generate
 // and Save Session succeed (before: the render added "Depth 3", and both failed
 // with DEPTH_INVALID "Depth series 3").
+// BA-OD94: Load keeps the Depth state the app keeps without a Depth file. A
+// series Add Depth track added and a Depth row with geometry whose file was
+// cleared load as saved, with no dialog, and the Depth panel shows both series.
+test('a Circular Session keeps a Depth series without a file and a row whose file was cleared (BA-OD94)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  const depthTsv = Array.from({ length: 6 }, (_, index) => `NC_012920.1\t${index * 3000 + 1}\t${10 + index}`).join('\n');
+  const depthState = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      series: app.adv.depth_tracks.map(({ label }) => label),
+      panel: app.circularDepthTrackRows.length,
+      rows: app.adv.circular_track_slots.filter((slot) => slot?.renderer === 'depth')
+        .map(({ id, enabled, width, params }) => ({ id, enabled: enabled !== false, width, trackIndex: params?.track_index }))
+    };
+  });
+  await page.evaluate(async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([text], 'depth_a.tsv', { type: 'text/tab-separated-values' }));
+    await window.Vue.nextTick();
+    app.resetCircularTrackSlotsFromSimpleControls();
+    app.setCircularTrackSlotsEnabled(true);
+    // A width makes the managed row the user's; clearing the file keeps it in
+    // the saved stack (with Use custom stack on, Save asks for its file).
+    app.adv.circular_track_slots.find((slot) => slot?.renderer === 'depth').width = '12';
+    app.setCircularTrackSlotsEnabled(false);
+    app.setCircularDepthFile(0, null);
+    app.addCircularDepthTrack();
+    app.setDepthTrackLabel(1, 'Coverage B');
+    await window.Vue.nextTick();
+  }, depthTsv);
+  const before = await depthState();
+  expect(before.series).toHaveLength(2);
+  expect(before.series[1]).toBe('Coverage B');
+  expect(before.panel).toBe(2);
+  expect(before.rows).toEqual([{ id: 'depth', enabled: true, width: '12', trackIndex: 0 }]);
+  const pending = page.waitForEvent('download');
+  const saved = await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'ba-od94-depth';
+    return await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  expect(saved.status, JSON.stringify(saved)).toBe('saved');
+  const savedPath = await (await pending).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await expectSessionLoadedWithoutWarnings(page);
+  expect(await depthState()).toEqual(before);
+});
+
 test('TK-03: stepping a Depth row track index past the series adds no series', async ({ page }) => {
   test.setTimeout(300_000);
   await openApp(page);

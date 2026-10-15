@@ -8,17 +8,10 @@ const {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
+  readSessionInput,
   validateSessionAuthorityInventory
 } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
 
-// `config` and `features` are read from Sessions 27-44; Session 46 keeps the
-// draft of each mode in `modes` and the CLI's options in `cliOptions`.
-assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
-  'cliInvocation', 'cliOptions', 'config', 'createdAt', 'editorState', 'features', 'files', 'format',
-  'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'modes', 'orthogroupState',
-  'otherModeResult', 'proteinIdentityManifest', 'renderRequest', 'resources',
-  'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles'
-].sort());
 assert.equal(SESSION_TOP_LEVEL_AUTHORITY.modes, 'editor-metadata');
 assert.equal(SESSION_TOP_LEVEL_AUTHORITY.cliOptions, 'provenance');
 assert.equal(SESSION_TOP_LEVEL_AUTHORITY.renderRequest, 'canonical-render');
@@ -148,6 +141,14 @@ assert.throws(
     }
   }, 40),
   /Missing canonical resource/
+);
+// OV-636: a `resources` that holds no resource is a missing resource whatever it
+// is; `null` used to end in a TypeError. Python refuses each of them
+// (gbdraw/session_io.py:632-635).
+for (const resources of [null, undefined, [], 5, 'x']) assert.throws(
+  () => validateSessionAuthorityInventory({ ...currentWebDraft, resources }, 40),
+  /^Error: Missing canonical resource: comparison-resource$/,
+  String(JSON.stringify(resources))
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
@@ -479,4 +480,40 @@ assert.throws(() => validateSessionAuthorityInventory({
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, otherModeResult: { ...otherModeResult, renderRequest: unboundRequest }
   }, 46), /missing resource\(s\): record-9-genbank/);
+}
+
+// `readSessionInput` is the one reader of a parsed Session file. Its refusals
+// keep their order: not an object, a version that is no integer, a version
+// this app does not read, then a format that is not `gbdraw-session`.
+{
+  const refusal = (value) => {
+    try {
+      readSessionInput(value);
+    } catch (error) {
+      return `${error.code}:${error.context?.reason}`;
+    }
+    return 'accepted';
+  };
+  const format = 'INPUT_INVALID:SESSION_FORMAT';
+  const fields = 'INPUT_INVALID:FIELDS';
+  for (const value of [null, undefined, 5, 'x', true, [], [{ format: 'gbdraw-session', version: 46 }]]) {
+    assert.equal(refusal(value), format, JSON.stringify(value));
+  }
+  for (const version of [undefined, null, '46', 46.5, true, [46], {}]) {
+    assert.equal(refusal({ format: 'gbdraw-session', version }), format, `version ${JSON.stringify(version)}`);
+  }
+  for (const version of [48, 45, 43, 38, 34, 26, 0, -1]) {
+    // B51 (Q2): a Session older than 27 is refused as an old version.
+    assert.equal(refusal({ format: 'gbdraw-session', version }), version === 26 ? 'INPUT_INVALID:SESSION_TOO_OLD' : fields,
+      `version ${version}`);
+    // The version is read before the format.
+    assert.equal(refusal({ format: 'other', version }), fields, `version ${version}, other format`);
+  }
+  for (const formatValue of [undefined, null, 'other', 'GBDRAW-SESSION', ['gbdraw-session'], 46]) {
+    assert.equal(refusal({ format: formatValue, version: 46 }), format, `format ${JSON.stringify(formatValue)}`);
+  }
+  for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47]) {
+    const document = { format: 'gbdraw-session', version, anything: { unvalidated: true } };
+    assert.equal(readSessionInput(document), document, `version ${version}`);
+  }
 }

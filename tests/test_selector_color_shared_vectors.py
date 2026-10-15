@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 
-from gbdraw.api.prepared import resolve_feature_inputs
+from gbdraw.api.diagram import resolve_feature_inputs
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import is_user_color, load_default_colors, read_color_table
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering

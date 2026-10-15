@@ -9,7 +9,7 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 import math
 import sys
-from typing import Literal, Mapping, Sequence, SupportsInt, cast
+from typing import Literal, Mapping, Sequence, SupportsInt, cast, get_args
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -43,6 +43,7 @@ from gbdraw.analysis.protein_colinearity import (
     select_rbh_orthogroup_edges_from_directional_hits,
 )
 from gbdraw.comparisons.losat_jobs import losatp_job_specs
+from gbdraw.contract_shapes import Spellings, read_spelling
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
@@ -88,9 +89,32 @@ COLLINEARITY_METADATA_COLUMNS = (
     "subject_orthogroup_member_count",
 )
 COLLINEARITY_COMPARISON_COLUMNS = tuple(COMPARISON_COLUMNS) + COLLINEARITY_METADATA_COLUMNS
-COLLINEARITY_COLOR_MODES = ("average_identity", "orientation", "orientation_identity")
-COLLINEARITY_ANCHOR_MODES = ("all", "one_to_one", "rbh")
-COLLINEARITY_SEARCH_SCOPES = ("adjacent", "all")
+COLLINEARITY_COLOR_MODES: tuple[CollinearityColorMode, ...] = get_args(CollinearityColorMode)
+COLLINEARITY_ANCHOR_MODES: tuple[CollinearityAnchorMode, ...] = get_args(CollinearityAnchorMode)
+COLLINEARITY_SEARCH_SCOPES: tuple[CollinearitySearchScope, ...] = get_args(CollinearitySearchScope)
+# The other spellings each normalizer below reads (gbdraw.contract_shapes.read_spelling);
+# the request description names them for the Web's Session Load.
+COLLINEARITY_COLOR_MODE_SPELLINGS: Spellings = {
+    "aliases": {"identity": "average_identity"}, "foldHyphens": True, "blank": "orientation",
+}
+COLLINEARITY_ANCHOR_MODE_SPELLINGS: Spellings = {
+    "aliases": {
+        "all_hits": "all",
+        "raw": "all",
+        "top_n": "all",
+        "topn": "all",
+        "one2one": "one_to_one",
+        "one_to_ones": "one_to_one",
+        "mutual_best": "one_to_one",
+        "top1": "one_to_one",
+        "top_1": "one_to_one",
+        "reciprocal_best": "rbh",
+        "strict_rbh": "rbh",
+    },
+    "foldHyphens": True,
+    "blank": "rbh",
+}
+COLLINEARITY_SEARCH_SCOPE_SPELLINGS: Spellings = {"foldHyphens": True, "blank": "adjacent"}
 
 
 @dataclass(frozen=True)
@@ -186,10 +210,8 @@ class _Chain:
 
 
 def normalize_collinearity_color_mode(mode: str | None) -> CollinearityColorMode:
-    normalized = str(mode or "orientation").strip().lower().replace("-", "_")
-    if normalized == "identity":
-        normalized = "average_identity"
-    if normalized not in COLLINEARITY_COLOR_MODES:
+    normalized = read_spelling(mode, COLLINEARITY_COLOR_MODES, COLLINEARITY_COLOR_MODE_SPELLINGS)
+    if normalized is None:
         raise ValidationError(
             "collinear_color_mode must be one of: "
             + ", ".join(COLLINEARITY_COLOR_MODES),
@@ -199,22 +221,8 @@ def normalize_collinearity_color_mode(mode: str | None) -> CollinearityColorMode
 
 
 def normalize_collinearity_anchor_mode(mode: str | None) -> CollinearityAnchorMode:
-    normalized = str(mode or "rbh").strip().lower().replace("-", "_")
-    aliases = {
-        "all_hits": "all",
-        "raw": "all",
-        "top_n": "all",
-        "topn": "all",
-        "one2one": "one_to_one",
-        "one_to_ones": "one_to_one",
-        "mutual_best": "one_to_one",
-        "top1": "one_to_one",
-        "top_1": "one_to_one",
-        "reciprocal_best": "rbh",
-        "strict_rbh": "rbh",
-    }
-    normalized = aliases.get(normalized, normalized)
-    if normalized not in COLLINEARITY_ANCHOR_MODES:
+    normalized = read_spelling(mode, COLLINEARITY_ANCHOR_MODES, COLLINEARITY_ANCHOR_MODE_SPELLINGS)
+    if normalized is None:
         raise ValidationError(
             "collinear_anchor_mode must be one of: "
             + ", ".join(COLLINEARITY_ANCHOR_MODES),
@@ -224,8 +232,8 @@ def normalize_collinearity_anchor_mode(mode: str | None) -> CollinearityAnchorMo
 
 
 def normalize_collinearity_search_scope(scope: str | None) -> CollinearitySearchScope:
-    normalized = str(scope or "adjacent").strip().lower().replace("-", "_")
-    if normalized not in COLLINEARITY_SEARCH_SCOPES:
+    normalized = read_spelling(scope, COLLINEARITY_SEARCH_SCOPES, COLLINEARITY_SEARCH_SCOPE_SPELLINGS)
+    if normalized is None:
         raise ValidationError(
             "collinear_search_scope must be one of: "
             + ", ".join(COLLINEARITY_SEARCH_SCOPES),

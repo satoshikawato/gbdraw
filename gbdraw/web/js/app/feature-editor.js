@@ -1,9 +1,11 @@
 // @ts-check
 /** @import { RulePreparation } from './rule-matching.js' */
-/** @import { PreparedFileLegend, RuleActionsPorts } from './feature-editor/rule-actions.js' */
+/** @import { PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
-/** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort } from './feature-editor/svg-actions.js' */
-/** @import { ReadUserDefaultColorPort, SetDefaultColorPort } from './feature-editor/color-actions.js' */
+/** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
+/** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
+/** @import { AskChoice, ShowNotice } from './app-messages.js' */
+/** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
@@ -33,12 +35,13 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   Closes a choice dialog once the History step of its choice ends (D-12).
  * @property {() => ({ mode?: string, diagramOptions?: Record<string, any> } | null)} getCommittedRequest
  *   The committed canonical request (Python owns the option fields, R7).
+ * @property {ReadDrawnTracksPort} readDrawnTracks
  * @property {() => Record<string, any> | null} [getCommittedSession] The committed canonical Session.
- * @property {((resourceId: string, kind: string) => any) | null} [readResourceRecordCount]
+ * @property {((resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>) | null} [readResourceRecordCount]
  *   Counts the records of a committed resource.
  * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
  *   The diagram helper that reads a Feature Edits TSV (R7).
- * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
  * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
@@ -50,6 +53,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(index: number) => any} selectResult The preview owner's selection of a Result.
  * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
+ * @property {() => boolean} [previewPopupsHeld] The root's hold of the popups while a review hides them.
  * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('./candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
  * @property {() => any} projectFeatureEdits
@@ -58,6 +62,16 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
+ * @property {LegendRowIsNamedPort} [legendRowIsNamed]
+ * @property {LegendRowNamePort} [legendRowName]
+ * @property {FindLegendRowNamedPort} [findLegendRowNamed]
+ * @property {KeepBothNamesPort} [keepBothNamesOf]
+ * @property {LegendEntryNamePort} [legendEntryName]
+ * @property {WriteLegendRowColorPort} [writeLegendRowColor]
+ * @property {ShownLegendNamePort} [shownLegendName]
+ * @property {AskChoice} askChoice The root's choice dialog.
+ * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.
+ * @property {RevealSetting} revealSetting The root's way to bring a setting of the settings pane into view.
  */
 
 /** @param {FeatureEditorOptions} options */
@@ -70,6 +84,7 @@ export const createFeatureEditor = ({
   runUndoableCheckpoint,
   closeAfterDialogChoice,
   getCommittedRequest,
+  readDrawnTracks,
   getCommittedSession = () => null,
   readResourceRecordCount = null,
   readFeatureOverrideTable = null,
@@ -82,11 +97,22 @@ export const createFeatureEditor = ({
   selectResult,
   isPatternEditAvailable = () => true,
   previewTransformInteraction = null,
+  previewPopupsHeld = () => false,
   projectPaletteAndRules,
   projectFeatureEdits,
   evaluateLabelRules,
   readUserDefaultColor,
-  setDefaultColor
+  setDefaultColor,
+  legendRowIsNamed,
+  legendRowName,
+  findLegendRowNamed,
+  keepBothNamesOf,
+  legendEntryName,
+  writeLegendRowColor,
+  shownLegendName,
+  askChoice,
+  showNotice,
+  revealSetting
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
   // R13: the label owner's reactions, registered once it exists; the owners
@@ -94,18 +120,21 @@ export const createFeatureEditor = ({
   const editorPorts = /** @type {FeatureEditorPorts} */ ({});
   const ruleActions = createFeatureRuleActions({
     state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
-    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable
+    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice,
+    revealSetting
   });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
     getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
+    shownLegendName,
     // R13: the visibility owner prepares the matches the popup reads; it is
     // created after this owner, so the port registers in `editorPorts`.
     prepareDrawnFeatureMatches: (...args) => editorPorts.prepareDrawnFeatureMatches(...args),
     onFeaturePopupOpened: (...args) => editorPorts.syncLabelEditor(...args),
     featureSelection,
-    previewTransformInteraction
+    previewTransformInteraction,
+    previewPopupsHeld
   });
   const colorActions = createFeatureColorActions({
     state,
@@ -115,7 +144,14 @@ export const createFeatureEditor = ({
     getFeatureFillElements: featureSvgActions.getFeatureFillElements,
     closeAfterDialogChoice,
     readUserDefaultColor,
-    setDefaultColor
+    setDefaultColor,
+    readDrawnTracks,
+    legendRowIsNamed,
+    legendRowName,
+    findLegendRowNamed,
+    keepBothNamesOf,
+    legendEntryName,
+    writeLegendRowColor
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature
@@ -126,10 +162,11 @@ export const createFeatureEditor = ({
     ports: editorPorts,
     selectResult,
     rulePreparation,
-    getCommittedRequest
+    getCommittedRequest,
+    showNotice
   });
   const labelActions = createFeatureLabelActions({
-    state, commitActiveResultEdit, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest,
+    state, commitActiveResultEdit, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest, showNotice,
     setFeatureVisibility: visibilityActions.setFeatureVisibility,
     prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches,
     evaluateLabelRules
@@ -142,10 +179,10 @@ export const createFeatureEditor = ({
   // the root's projection (`projectFeatureEdits`) projects it.
   const featureEditTableActions = createFeatureEditTableActions({
     state, ref, computed, getCommittedSession, readResourceRecordCount, readFeatureOverrideTable,
-    projectFeatureEdits
+    projectFeatureEdits, showNotice
   });
   /** @param {Record<string, any>} feat
-   *  @param {{ clientX: number, clientY: number } | null} [eventLike] */
+   *  @param {import('../utils/popup-bounds.js').PopupOrigin | null} [eventLike] */
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     return featureSvgActions.openFeatureEditorForFeature(feat, eventLike);
   };
@@ -181,6 +218,7 @@ export const createFeatureEditor = ({
     setFeatureShape: ruleActions.setFeatureShape,
     addSpecificRule: ruleActions.addSpecificRule,
     commitSpecificRules: ruleActions.commitSpecificRules,
+    importSpecificRules: ruleActions.importSpecificRules,
     followRestoredSpecificRules: ruleActions.followRestoredRules,
     applySpecificRulePreset: ruleActions.applySpecificRulePreset,
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
@@ -216,7 +254,7 @@ export const createFeatureEditor = ({
     handleFeatureStyleScopeChoice: colorActions.handleFeatureStyleScopeChoice,
     handleLegendNameCommit: colorActions.handleLegendNameCommit,
     handleLegendRenameChoice: colorActions.handleLegendRenameChoice,
-    selectLegendNameOption: colorActions.selectLegendNameOption,
+    joinLegendGroup: colorActions.joinLegendGroup,
     renameLegendEntry: colorActions.renameLegendEntry,
     handleResetColorChoice: colorActions.handleResetColorChoice,
     resetClickedFeatureFillColor: colorActions.resetClickedFeatureFillColor,
@@ -231,16 +269,22 @@ export const createFeatureEditor = ({
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,
+    preparePreviewItemAffordances: featureSvgActions.preparePreviewItemAffordances,
+    // The legend-entry popup's feature count: the features a Legend row colors.
+    /** @param {string} caption */
+    countLegendCaptionFeatures: (caption) => ruleActions.findFeaturesWithSameLegendItem({ svg_id: null }, caption).length,
     previewAlignmentCandidate: featureSvgActions.previewAlignmentCandidate,
     clearAlignmentCandidatePreview: featureSvgActions.clearAlignmentCandidatePreview,
     showAlignmentOverlay: featureSvgActions.showAlignmentOverlay,
     clearAlignmentOverlay: featureSvgActions.clearAlignmentOverlay,
+    showFeaturePopupAtFeature: featureSvgActions.showFeaturePopupAtFeature,
     dispose: featureSvgActions.dispose,
     openFeatureEditorForFeature,
     getEditableLabelByFeatureId: labelActions.getEditableLabelByFeatureId,
     syncLabelEditor: labelActions.syncLabelEditor,
     // R13: label owner ports the root hands Generate and the watchers.
     closeLabelTextScopeDialog: labelActions.closeLabelTextScopeDialog,
+    closeHiddenLabelTextDialog: labelActions.closeHiddenLabelTextDialog,
     clearLabelBuildNotices: labelActions.clearLabelBuildNotices,
     ...featureEditTableActions,
     downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,

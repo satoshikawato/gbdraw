@@ -14,14 +14,22 @@ export const FEATURE_SELECTOR = [
   'rect[id^="f"]'
 ].join(', ');
 
+/** @typedef {Map<string, Element[]>} FeatureElementIndex Rendered elements by normalized feature identity. */
+
+/** An SVG root, or any element that holds the rendered features; the id lookup is optional. */
+/** @typedef {Element & { getElementById?: (id: string) => Element | null }} FeatureSvgRoot */
+
+/** @type {WeakMap<Element, FeatureElementIndex>} */
 const featureElementIndexCache = new WeakMap();
 
 const FEATURE_ELEMENT_SUFFIX_RE = /__(?:part|line)\d+$/;
 const CONNECTOR_ID_SUFFIX_RE = /__line\d+$/;
 
+/** @param {unknown} value */
 export const normalizeFeatureIdentity = (value) =>
   String(value || '').trim().replace(FEATURE_ELEMENT_SUFFIX_RE, '');
 
+/** @param {Element | null | undefined} element */
 export const getFeatureIdentity = (element) =>
   normalizeFeatureIdentity(
     element?.getAttribute?.(RENDERED_FEATURE_ID_ATTRIBUTE) ||
@@ -31,6 +39,7 @@ export const getFeatureIdentity = (element) =>
     ''
   );
 
+/** @param {Element | null | undefined} element */
 export const getFeaturePart = (element) => {
   const explicitPart = String(element?.getAttribute?.(FEATURE_PART_ATTRIBUTE) || '').trim();
   if (explicitPart === FEATURE_PART_BLOCK || explicitPart === FEATURE_PART_CONNECTOR) {
@@ -50,27 +59,40 @@ export const AUTO_FEATURE_UNDERLAY_STROKE = Object.freeze({ color: 'none', width
 /** @param {Element | null | undefined} element */
 export const isAutoFeatureUnderlay = (element) => element?.getAttribute?.(AUTO_FEATURE_UNDERLAY_ATTRIBUTE) === 'true';
 
+/** @param {Element | null | undefined} element */
 const isFeatureFillTarget = (element) => (
   getFeaturePart(element) === FEATURE_PART_BLOCK
   && !String(element?.getAttribute?.('id') || element?.id || '').endsWith('__outline')
 );
 
+/** @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements */
 export const filterFeatureFillTargets = (elements) =>
   Array.from(elements || []).filter(isFeatureFillTarget);
 
+/**
+ * @param {FeatureSvgRoot | null | undefined} svg
+ * @returns {FeatureElementIndex}
+ */
 export const buildFeatureElementIndex = (svg) => {
+  /** @type {FeatureElementIndex} */
   const indexed = new Map();
   if (!svg) return indexed;
   Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).forEach((element) => {
     const id = getFeatureIdentity(element);
     if (!id) return;
     if (!indexed.has(id)) indexed.set(id, []);
-    indexed.get(id).push(element);
+    // `indexed` holds `id` after the line above.
+    /** @type {Element[]} */ (indexed.get(id)).push(element);
   });
   featureElementIndexCache.set(svg, indexed);
   return indexed;
 };
 
+/**
+ * @param {FeatureSvgRoot | null | undefined} svg
+ * @param {{ rebuild?: boolean }} [options]
+ * @returns {FeatureElementIndex}
+ */
 export const getFeatureElementIndex = (svg, { rebuild = false } = {}) => {
   if (!svg) return new Map();
   const indexed = rebuild || !featureElementIndexCache.has(svg)
@@ -79,11 +101,17 @@ export const getFeatureElementIndex = (svg, { rebuild = false } = {}) => {
   return indexed;
 };
 
+/** @param {FeatureSvgRoot | null | undefined} svg */
 export const clearFeatureElementIndex = (svg) => {
   if (svg) featureElementIndexCache.delete(svg);
 };
 
-/** @param {Map<string, Element[]> | null} [featureIndex] */
+/**
+ * @param {FeatureSvgRoot | null | undefined} svg
+ * @param {unknown} featureId
+ * @param {FeatureElementIndex | null} [featureIndex]
+ * @returns {Element[]}
+ */
 export const getFeatureElements = (svg, featureId, featureIndex = null) => {
   const normalizedId = String(featureId || '').trim();
   if (!svg || !normalizedId) return [];
@@ -96,6 +124,10 @@ export const getFeatureElements = (svg, featureId, featureIndex = null) => {
   return byId ? [byId] : [];
 };
 
-/** @param {Map<string, Element[]> | null} [featureIndex] */
+/**
+ * @param {FeatureSvgRoot | null | undefined} svg
+ * @param {unknown} featureId
+ * @param {FeatureElementIndex | null} [featureIndex]
+ */
 export const getFeatureFillElements = (svg, featureId, featureIndex = null) =>
   filterFeatureFillTargets(getFeatureElements(svg, featureId, featureIndex));
