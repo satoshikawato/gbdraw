@@ -3576,9 +3576,7 @@ export const adoptCanonicalRenderArtifacts = (
   }
 };
 
-// The port's readers take a stored request (schema 1 or 2) as an object of
-// unchecked leaves, so the return type leaves out its `schema` literal.
-/** @returns {CanonicalRenderRequest | Readonly<Record<string, unknown>> | null} */
+/** @returns {CanonicalRenderRequest | null} */
 export const getCommittedCanonicalRenderRequest = () => {
   void committedCanonicalRevision.value;
   return committedCanonicalSession?.renderRequest || null;

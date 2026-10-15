@@ -6,6 +6,7 @@
 /** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
 /** @import { AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
+/** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
@@ -213,7 +214,7 @@ import {
 /** @import { LegendEntry } from '../state.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { RequestCanonicalComparison } from '../services/session-request.js' */
-/** @import { CanonicalFeatureOverride, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalFeatureOverride, CanonicalGeneratedProteinComparison, CanonicalLosslessCollinearityParameters, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
@@ -758,10 +759,8 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `files.linearCanonicalComparisons`.
  *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
- * @param options.committedSession The committed Session (`CommittedCanonicalSession` in services/session-request.js),
- *   left untyped: its request may be a stored one whose leaves no reader has checked (`StoredRenderRequest`), and the
- *   reads below use them as they are (a null record throws). The true type needs checks that change that result, so
- *   the member stays an implicit `any` until Load promotes the stored request.
+ * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
+ *   current schema (Load reads a stored one to schema 9; Generate and the rerender commit the one they built).
  * @param {LinearSeq[]} options.sequences
  * @param {ResolvedProteinReuseActive} options.active
  */
@@ -779,10 +778,12 @@ const canReuseResolvedProteinArtifacts = ({
   const persistedMarker = persisted.find((comparison) => (
     comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
   ));
-  const committedMarker = committed.find((comparison) => (
+  // The test of `kind` is the type.
+  const committedMarker = /** @type {CanonicalGeneratedProteinComparison | undefined} */ (committed.find((comparison) => (
     comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
-  ));
-  if (!persistedMarker || !committedMarker || !active) return false;
+  )));
+  // A committed marker implies a committed request; the test only states it.
+  if (!committedRequest || !persistedMarker || !committedMarker || !active) return false;
   // Selected proteins follow the Feature visibility rules (CO-02).
   if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility, active.featureOverrides)) {
     return false;
@@ -796,8 +797,9 @@ const canReuseResolvedProteinArtifacts = ({
     const end = Number(seq.region_end) || null;
     const reverse = Boolean(seq.region_reverse)
       || (start !== null && end !== null && start > end);
+    const selector = record.region?.selector || record.selector;
     return record.recordKey !== seq.uid
-      || String((record.region?.selector || record.selector)?.value || '') !== String(seq.region_record_id || '').trim()
+      || String((selector && 'value' in selector ? selector.value : '') || '') !== String(seq.region_record_id || '').trim()
       || (record.region?.start ?? null) !== (start !== null && end !== null ? Math.min(start, end) : start)
       || (record.region?.end ?? null) !== (start !== null && end !== null ? Math.max(start, end) : end)
       || reverse !== Boolean(record.region?.reverseComplement || record.presentation?.reverseComplement);
@@ -836,6 +838,7 @@ const canReuseResolvedProteinArtifacts = ({
   }
   if (active.mode === 'orthogroup') return true;
 
+  /** @type {Partial<CanonicalLosslessCollinearityParameters>} */
   const parameters = settings.collinearityParams?.parameters || {};
   return (
     sameNumber(parameters.minAnchors ?? 1, active.minAnchors)
@@ -1526,7 +1529,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
- * @property {(() => (Record<string, any> | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
+ * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
  * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
  * @property {() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
@@ -2604,7 +2607,7 @@ export const createRunAnalysis = ({
     const sourceReplaced = replacedFeatures.length > 0;
     const previousCommittedRequest = typeof getCommittedCanonicalSession === 'function'
       ? getCommittedCanonicalSession()?.renderRequest : null;
-    const previousRequestRecords = previousCommittedRequest?.mode === mode.value
+    const previousRequestRecords = previousCommittedRequest && previousCommittedRequest.mode === mode.value
       ? previousCommittedRequest.records || [] : [];
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
       ?? losatCacheInfo.value;
@@ -5077,8 +5080,7 @@ export const createRunAnalysis = ({
         if (typeof getCommittedCanonicalSession !== 'function') {
           throw new Error('The preserved comparison owner is unavailable.');
         }
-        // Load read the committed request (schema 9; a schema-1 request is
-        // refused as the inherited comparison's owner).
+        // Load read the committed request to schema 9 (`readStoredRenderRequest`).
         inheritCommittedComparisonIntent({
           candidate: canonical,
           committed: getCommittedCanonicalSession()

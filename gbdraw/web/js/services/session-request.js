@@ -3352,12 +3352,24 @@ const generationResourceIdentity = (resource) => {
 
 // Successful render/import already validates these backings. Compare immutable
 // owners or their encoded payloads, without another genome read or digest.
+/**
+ * A record source by field: a resource reference field holds the parts of its
+ * resource (null when it has none), any other field its value.
+ * @typedef {{ payload: unknown, size: unknown, encoding: unknown }} CompositionSourcePart
+ * @typedef {Array<[string, unknown] | [string, CompositionSourcePart[] | null]>} CompositionSourceIdentity
+ */
+/**
+ * @param {Readonly<Record<string, unknown>> | null | undefined} source A record's `source`.
+ * @param {Readonly<Record<string, unknown>> | undefined} resources
+ */
 const compositionSourceIdentity = (source, resources) => {
   if (!source || typeof source !== 'object') return null;
   const fields = Object.keys(source).sort();
+  /** @type {CompositionSourceIdentity} */
   const identity = fields.map((key) => {
     if (!isCanonicalResourceReferenceField(key)) return [key, source[key]];
-    const descriptor = resources?.[source[key]];
+    // A reference field of a request its reader read holds a resource id.
+    const descriptor = resources?.[/** @type {string} */ (source[key])];
     if (!descriptor) return [key, null];
     const parts = generationResourceIdentity(descriptor)?.bindings;
     if (!Array.isArray(parts) || !parts.length) return [key, null];
@@ -3370,6 +3382,10 @@ const compositionSourceIdentity = (source, resources) => {
   return identity;
 };
 
+/**
+ * @param {CommittedCanonicalSession | null | undefined} canonical A committed Session, or a candidate's.
+ * @param {unknown} keys The record keys of one Result, unchecked; checked here.
+ */
 export const projectCompositionRecordIdentity = (canonical, keys) => {
   const request = canonical?.renderRequest;
   if (!request || !Array.isArray(keys) || !keys.length || new Set(keys).size !== keys.length) return null;
@@ -3383,18 +3399,19 @@ export const projectCompositionRecordIdentity = (canonical, keys) => {
         // With no region/selector, successful EXACTLY_ONE selects the sole
         // source record; FIRST selects #1, and unexpanded ALL also proves one.
         const selector = record.selector ?? (!record.region && ['exactly_one', 'first', 'all'].includes(record.cardinality)
-          ? { kind: 'recordIndex', index: 0 } : null);
+          ? { kind: /** @type {const} */ ('recordIndex'), index: 0 } : null);
         return [{ record, selector }];
       }
       const suffix = key.startsWith(`${record.recordKey}:`) ? key.slice(record.recordKey.length + 1) : '';
       if (record.cardinality !== 'all' || !/^[1-9]\d*$/.test(suffix)) return [];
-      return [{ record, selector: { kind: 'recordIndex', index: Number(suffix) - 1 } }];
+      return [{ record, selector: { kind: /** @type {const} */ ('recordIndex'), index: Number(suffix) - 1 } }];
     });
     if (matches.length !== 1) return null;
     const { record, selector } = matches[0];
     const source = compositionSourceIdentity(record.source, canonical.resources);
     if (!source || source.some(([field, value]) => isCanonicalResourceReferenceField(field)
-      && (!value || value.some(part => !part.payload || !Number.isSafeInteger(part.size))))) return null;
+      // A reference field holds its parts (`compositionSourceIdentity`).
+      && (!value || /** @type {CompositionSourcePart[]} */ (value).some(part => !part.payload || !Number.isSafeInteger(part.size))))) return null;
     records.push({ key, source, selector: publicationClone(selector),
       region: publicationClone(record.region ?? null) });
   }
