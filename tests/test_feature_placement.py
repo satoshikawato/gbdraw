@@ -1728,3 +1728,25 @@ def test_final_svg_intron_child_reserves_main_against_whole_parent(mode, resolve
         assert min(parent) == pytest.approx(min(child))
         assert max(parent) == pytest.approx(max(child))
     assert record.seq == before.seq and record.features == before.features
+
+
+def test_feature_without_a_location_is_skipped_with_a_warning(caplog):
+    """Biopython drops the location of an origin-spanning feature of a record whose
+    LOCUS line is not circular (SnapGene exports); the feature is left out, not a crash."""
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import SeqFeature, SimpleLocation
+    from Bio.SeqRecord import SeqRecord
+    from gbdraw.features.factory import create_feature_layers
+
+    record = SeqRecord(Seq("ACGT" * 250), id="plasmid")
+    record.features = [
+        SeqFeature(SimpleLocation(10, 400, 1), type="CDS", qualifiers={"label": ["AmpR"]}),
+        SeqFeature(None, type="enhancer", qualifiers={"label": ["CMV enhancer"]}),
+    ]
+    with caplog.at_level("WARNING"):
+        layers = create_feature_layers(
+            record, {}, ["CDS", "enhancer"], {"default": "#999999", "CDS": "#999999"},
+            False, False, {}, compute_label_text=False,
+        )
+    assert len(layers.foreground_features) == 1
+    assert "CMV enhancer" in caplog.text and "no location" in caplog.text

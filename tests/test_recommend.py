@@ -221,7 +221,9 @@ def test_circular_records_share_one_canvas_and_rows_are_stacked_otherwise() -> N
     assert "--multi_record_canvas" in grid.cli_args()
     contigs = [_record(topology="linear", definition=f"contig_{i}", length=50_000, record_id=f"C{i}", features=_genes(10)) for i in range(3)]
     rows = propose(contigs)
-    assert (rows.mode, rows.grouping, rows.label_scope) == ("linear", "single", "first")
+    assert (rows.mode, rows.grouping, rows.label_scope) == ("linear", "single", "all")
+    clusters = [_record(topology="linear", definition=f"contig_{i}", length=100_000, record_id=f"C{i}", features=_genes(60)) for i in range(3)]
+    assert propose(clusters).label_scope == "first"
 
 
 @pytest.mark.parametrize(
@@ -243,6 +245,66 @@ def test_annotation_tool_selects_its_color_table(
     assert proposal.color_rules_name == rules_name
     assert proposal.color_rules and proposal.color_rules[0][:2] == first_rule
     assert "color_table" in proposal.tables()
+
+
+def test_synthetic_construct_is_a_plasmid_map() -> None:
+    parts = [
+        _feature("CDS", 100, 1_000, label="AmpR", product="beta-lactamase"),
+        _feature("promoter", 1_100, 1_200, label="araBAD promoter"),
+        _feature("rep_origin", 2_000, 2_600, label="ori"),
+        _feature("terminator", 1_050, 1_090, label="rrnB T1"),
+        _feature("primer_bind", 3_000, 3_020, label="M13 fwd"),
+    ]
+    record = _record(topology="linear", organism="synthetic DNA construct", taxonomy=(), definition="pTest cloning vector", length=4_000, features=parts)
+    proposal = propose([record])
+    assert proposal.facts[0].kind == "vector"
+    assert (proposal.mode, proposal.topology_override) == ("circular", "circular")
+    assert proposal.feature_types == ("CDS", "promoter", "terminator", "rep_origin")
+    assert proposal.feature_shapes == (("promoter", "arrow"),)
+    assert proposal.label_scope == "outer"
+    assert dict(proposal.qualifier_priority)["promoter"].startswith("label,")
+    assert proposal.species == "TEST000001.1"
+    assert not proposal.show_gc and not proposal.show_skew
+    args = proposal.cli_args()
+    assert "--feature_shape" in args and args[args.index("--feature_shape") + 1] == "promoter=arrow"
+    assert "--species" in args
+    # Unnamed records of a linear drawing are titled through --record_label instead.
+    rows = propose([_record(topology="linear", organism=".", taxonomy=(), definition="NC_000001.", record_id=f"R{i}", features=[
+        _feature("CDS", 100, 1_000, product="tail protein", phrog="phrog_1", function="tail")
+    ]) for i in range(2)])
+    assert rows.mode == "linear" and rows.cli_args().count("--record_label") == 2
+
+
+def test_annotator_outputs_without_a_lineage_are_classified_by_the_tool() -> None:
+    pharokka = _record(topology="linear", organism=".", taxonomy=(), definition="NC_000001.", features=[
+        _feature("CDS", 100 + 1_000 * i, 1_000 + 1_000 * i, product="tail protein", phrog="phrog_1", function="tail") for i in range(5)
+    ])
+    assert inspect_record(pharokka).kind == "phage"
+    assert propose([pharokka]).species == "TEST000001.1"
+    bakta = _record(organism=".", taxonomy=(), definition="chromosome, complete genome", length=7_600, features=[
+        _feature("CDS", 100, 1_000, product="hypothetical protein", note="COG:S"),
+    ], comment="Annotated with Bakta")
+    assert inspect_record(bakta).kind == "plasmid"
+    assert inspect_record(_record(organism=".", taxonomy=(), definition="contig_1", length=600_000, topology="linear", comment="Annotated with Bakta", features=[_feature("CDS", 100, 1_000, product="p", note="COG:S")])).kind == "bacterial_chromosome"
+
+
+def test_repeated_gene_names_and_cog_free_bakta_fall_back() -> None:
+    # HBV-like: three CDS share the gene name S, so the products label them.
+    hbv = _record(length=3_200, organism="Hepatitis B virus", taxonomy=("Viruses",), definition="Hepatitis B virus, complete genome", features=[
+        _feature("CDS", 100, 1_300, gene="S", product="large S protein"),
+        _feature("CDS", 400, 1_300, gene="S", product="middle S protein"),
+        _feature("CDS", 600, 1_300, gene="S", product="small S protein"),
+        _feature("CDS", 1_400, 1_900, gene="X", product="X protein"),
+    ])
+    proposal = propose([hbv])
+    assert dict(proposal.qualifier_priority)["CDS"].startswith("product")
+    assert proposal.resolve_overlaps
+    # A Bakta file whose CDS carry no COG note gets the base scheme, not the COG table.
+    bakta = _record(organism=".", taxonomy=(), definition="chromosome, complete genome", length=7_600, comment="Annotated with Bakta", features=[
+        _feature("CDS", 100 + 1_000 * i, 1_000 + 1_000 * i, product=f"phage protein {i}") for i in range(4)
+    ])
+    assert inspect_record(bakta).annotation_tool == "bakta"
+    assert propose([bakta]).color_rules_name is None
 
 
 def test_gene_only_annotation_draws_the_gene_features() -> None:

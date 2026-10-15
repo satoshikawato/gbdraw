@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
@@ -31,9 +32,12 @@ from .shapes import (
 )
 from gbdraw.exceptions import ValidationError
 from .tracks import arrange_feature_tracks
+
 if TYPE_CHECKING:
     from .overrides import ResolvedFeatureOverride
     from .placement import FeaturePlacementSlot, ResolvedRecordFeatureInputs
+
+logger = logging.getLogger(__name__)
 
 
 def create_repeat_object(
@@ -214,6 +218,16 @@ def _build_feature_layers(
     )
 
     for feature in gb_record.features:
+        if getattr(feature, "location", None) is None:
+            # Biopython drops the location of a feature that spans the origin of
+            # a record whose LOCUS line does not say circular (SnapGene exports).
+            logger.warning(
+                "WARNING: %s feature %r of record %s has no location and is not drawn",
+                feature.type,
+                (feature.qualifiers.get("label") or feature.qualifiers.get("gene") or [""])[0],
+                gb_record.id,
+            )
+            continue
         override = override_of(feature)
         if not should_render_feature(
             feature,

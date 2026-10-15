@@ -42,6 +42,7 @@ GenomeKind = Literal[
     "bacterial_chromosome",
     "contig",
     "eukaryotic_region",
+    "vector",
     "unknown",
 ]
 Grouping = Literal["single", "grid"]
@@ -71,6 +72,26 @@ _PLASMID = re.compile(r"\bplasmid\b", re.IGNORECASE)
 _PHAGE = re.compile(r"\bphage\b", re.IGNORECASE)
 _GENE_CLUSTER = re.compile(r"gene cluster|biosynthetic|\bBGC\d{7}\b", re.IGNORECASE)
 _COMPLETE = re.compile(r"complete (genome|sequence|plastome|chromosome)", re.IGNORECASE)
+_SYNTHETIC = re.compile(r"synthetic|\bvector\b|\bconstruct\b", re.IGNORECASE)
+_BACTERIAL_ANNOTATORS = frozenset({"bakta", "prokka", "dfast", "pgap"})
+VECTOR_FEATURE_TYPES = (
+    "CDS",
+    "promoter",
+    "terminator",
+    "rep_origin",
+    "oriT",
+    "LTR",
+    "regulatory",
+    "enhancer",
+    "polyA_signal",
+    "protein_bind",
+    "misc_feature",
+    "ncRNA",
+    "misc_RNA",
+)
+"""The feature keys a plasmid map draws when a record is a synthetic construct."""
+VECTOR_LABEL_PRIORITY = "label,gene,product,standard_name,note"
+"""SnapGene, Benchling and Addgene files name their features in ``/label``."""
 _TOOL_SIGNATURES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("bakta", re.compile(r"\bbakta\b", re.IGNORECASE)),
     ("pharokka", re.compile(r"\bpharokka\b", re.IGNORECASE)),
@@ -99,10 +120,17 @@ BASE_DEFAULT_COLORS: tuple[tuple[str, str], ...] = (
     ("misc_feature", "#dedede"),
     ("gene", "#73b1e6"),
     ("D-loop", "#e2d6c2"),
-    ("rep_origin", "#625245"),
-    ("oriT", "#625245"),
+    ("rep_origin", "#8f8070"),
+    ("oriT", "#8f8070"),
     ("mobile_element", "#d78e8d"),
     ("mat_peptide", "#c5b3ea"),
+    ("promoter", "#85cc87"),
+    ("terminator", "#e4918f"),
+    ("LTR", "#b89dd9"),
+    ("regulatory", "#bdd594"),
+    ("enhancer", "#bdd594"),
+    ("polyA_signal", "#e4918f"),
+    ("protein_bind", "#d8c9a0"),
     ("gc_content", "#c8bca9"),
     ("skew_high", "#89cdc3"),
     ("skew_low", "#b89dd9"),
@@ -158,6 +186,7 @@ class RecordFacts:
     """What one record says about itself, before any drawing decision."""
 
     record_id: str
+    record_name: str
     length: int
     topology: str
     molecule_type: str
@@ -171,6 +200,8 @@ class RecordFacts:
     feature_counts: Mapping[str, int]
     cds_qualifier_coverage: Mapping[str, float]
     hypothetical_fraction: float
+    cog_fraction: float
+    distinct_gene_fraction: float
     plus_strand_fraction: float
     gc_percent: float
     complete: bool
@@ -207,6 +238,7 @@ class Proposal:
     qualifier_priority: tuple[tuple[str, str], ...] = ()
     label_whitelist: tuple[tuple[str, str, str], ...] = ()
     label_blacklist: tuple[str, ...] = ()
+    feature_shapes: tuple[tuple[str, str], ...] = ()
     separate_strands: bool = False
     resolve_overlaps: bool = False
     show_gc: bool = False
@@ -215,6 +247,7 @@ class Proposal:
     legend: str = "left"
     topology_override: str | None = None
     species: str | None = None
+    record_labels: tuple[str, ...] = ()
     decisions: list[Decision] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -262,6 +295,8 @@ class Proposal:
             args += ["-t", paths["color_table"]]
         if tuple(self.feature_types) != DEFAULT_FEATURE_TYPES:
             args += ["-k", ",".join(self.feature_types)]
+        for kind, shape in self.feature_shapes:
+            args += ["--feature_shape", f"{kind}={shape}"]
         if self.mode == "circular":
             if self.label_scope != "none":
                 args += ["--labels", "out" if self.label_scope == "outer" else self.label_scope]
@@ -287,8 +322,11 @@ class Proposal:
             args += ["--label_blacklist", ",".join(self.label_blacklist)]
         if self.topology_override:
             args += ["--record_topology", self.topology_override]
-        if self.species:
+        if self.species and self.mode == "circular":
             args += ["--species", self.species]
+        elif self.record_labels and self.mode == "linear":
+            for label in self.record_labels:
+                args += ["--record_label", label]
         args += ["-l", self.legend]
         return args
 
@@ -334,6 +372,7 @@ class Proposal:
             "qualifierPriority": [list(row) for row in self.qualifier_priority],
             "labelWhitelist": [list(row) for row in self.label_whitelist],
             "labelBlacklist": list(self.label_blacklist),
+            "featureShapes": [list(row) for row in self.feature_shapes],
             "separateStrands": self.separate_strands,
             "resolveOverlaps": self.resolve_overlaps,
             "showGc": self.show_gc,
@@ -342,6 +381,7 @@ class Proposal:
             "legend": self.legend,
             "topologyOverride": self.topology_override,
             "species": self.species,
+            "recordLabels": list(self.record_labels),
             "decisions": [
                 {"setting": d.setting, "value": d.value, "reason": d.reason} for d in self.decisions
             ],
@@ -422,6 +462,7 @@ def _classify(
     length: int,
     complete: bool,
     annotation_tool: str,
+    has_vector_parts: bool = False,
 ) -> GenomeKind:
     lineage = {name.lower() for name in taxonomy}
     organelle_text = (organelle or "").lower()
@@ -429,19 +470,27 @@ def _classify(
         return "mitochondrion"
     if any(word in organelle_text for word in ("plastid", "chloroplast")) or _PLASTID.search(definition):
         return "plastid"
+    if not lineage and (_SYNTHETIC.search(organism) or (not organism.strip(".") and has_vector_parts)):
+        return "vector"
     if plasmid or _PLASMID.search(definition):
         return "plasmid"
+    if annotation_tool == "pharokka":
+        return "phage"
     if "viruses" in lineage or "viroids" in lineage or "virus" in organism.lower():
-        if "rna" in molecule_type.lower() or "riboviria" in lineage:
+        if "riboviria" in lineage:
             return "virus_rna"
         if _PHAGE.search(f"{definition} {organism}") or lineage & {"caudoviricetes", "duplodnaviria", "uroviricota"}:
             return "phage"
+        if "rna" in molecule_type.lower():
+            return "virus_rna"
         return "virus_dna"
     if annotation_tool == "antismash" or _GENE_CLUSTER.search(definition):
         return "gene_cluster"
-    if lineage & {"bacteria", "archaea"}:
-        if complete or topology == "circular" or length >= COMPLETE_GENOME_MIN_LENGTH:
+    if lineage & {"bacteria", "archaea"} or (not lineage and annotation_tool in _BACTERIAL_ANNOTATORS):
+        if length >= COMPLETE_GENOME_MIN_LENGTH or (lineage and (complete or topology == "circular")):
             return "bacterial_chromosome"
+        if topology == "circular":
+            return "plasmid"
         return "contig"
     if "eukaryota" in lineage:
         return "eukaryotic_region"
@@ -467,6 +516,13 @@ def inspect_record(record: SeqRecord) -> RecordFacts:
         if cds
         else 0.0
     )
+    cog = (
+        sum(1 for feature in cds if any(note.startswith("COG:") for note in _qualifier_text(feature, "note"))) / len(cds)
+        if cds
+        else 0.0
+    )
+    gene_names = [name for feature in cds for name in _qualifier_text(feature, "gene")[:1]]
+    distinct = len(set(gene_names)) / len(gene_names) if gene_names else 1.0
     stranded = [
         feature
         for feature in features
@@ -485,6 +541,7 @@ def inspect_record(record: SeqRecord) -> RecordFacts:
     tool = _detect_annotation_tool(record, cds)
     return RecordFacts(
         record_id=str(record.id),
+        record_name=str(getattr(record, "name", "") or ""),
         length=len(record),
         topology=topology,
         molecule_type=molecule_type,
@@ -498,6 +555,8 @@ def inspect_record(record: SeqRecord) -> RecordFacts:
         feature_counts=dict(counts),
         cds_qualifier_coverage=coverage,
         hypothetical_fraction=hypothetical,
+        cog_fraction=cog,
+        distinct_gene_fraction=distinct,
         plus_strand_fraction=plus / len(stranded) if stranded else 0.5,
         gc_percent=_gc_percent(record),
         complete=complete,
@@ -512,8 +571,18 @@ def inspect_record(record: SeqRecord) -> RecordFacts:
             length=len(record),
             complete=complete,
             annotation_tool=tool,
+            has_vector_parts=bool(counts["promoter"] or counts["rep_origin"] or counts["primer_bind"]),
         ),
     )
+
+
+def _fallback_title(facts: RecordFacts) -> str:
+    """The record ID, the LOCUS name, or the definition's first clause, whichever names the record."""
+    for candidate in (facts.record_id, facts.record_name):
+        if re.search(r"[A-Za-z0-9]", candidate) and candidate.lower() not in {"exported", "unknown"}:
+            return candidate
+    clause = re.split(r"[.;,]\s", facts.definition.strip(), maxsplit=1)[0].strip()
+    return clause[:60] if clause else facts.record_id
 
 
 def _overlap_fraction(records: Sequence[SeqRecord], types: set[str]) -> float:
@@ -574,7 +643,7 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
     facts = tuple(inspect_record(record) for record in records)
     head = facts[0]
     kinds = {f.kind for f in facts}
-    circular_kinds = {"mitochondrion", "plastid", "plasmid", "bacterial_chromosome"}
+    circular_kinds = {"mitochondrion", "plastid", "plasmid", "bacterial_chromosome", "vector"}
     count = len(facts)
     proposal = Proposal(facts=facts)
 
@@ -582,9 +651,10 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
     if count == 1:
         if head.topology == "circular":
             proposal.decide("mode", "circular", "the LOCUS line says circular")
-        elif head.kind in circular_kinds and head.complete:
+        elif head.kind in circular_kinds and (head.complete or head.kind == "vector"):
             proposal.decide(
                 "mode", "circular", f"the LOCUS line says linear, but a complete {head.kind} genome is circular"
+                if head.kind != "vector" else "a plasmid map is drawn as a circle"
             )
             proposal.decide("topology_override", "circular", "treat the record as circular (--record_topology)")
         else:
@@ -604,6 +674,13 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
     for f in facts:
         counts.update(f.feature_counts)
     types = list(DEFAULT_FEATURE_TYPES)
+    if kinds == {"vector"}:
+        types = [kind for kind in VECTOR_FEATURE_TYPES if counts[kind]]
+        proposal.decisions.append(
+            Decision("feature_types", ",".join(types), "a plasmid map draws its parts: promoters, terminators, origins, LTRs")
+        )
+        if counts["promoter"]:
+            proposal.feature_shapes = (("promoter", "arrow"),)
     if counts["CDS"] == 0 and counts["gene"] > 0:
         types.append("gene")
         proposal.notes.append("no CDS features; the gene features are drawn instead")
@@ -613,7 +690,7 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
         ("mobile_element", "mobile elements are annotated"),
         ("oriT", "oriT is annotated"),
     ):
-        if counts[kind]:
+        if counts[kind] and kind not in types:
             types.append(kind)
             proposal.decisions.append(Decision("feature_types", f"+{kind}", reason))
     mature = counts["mat_peptide"]
@@ -641,7 +718,9 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
         )
 
     # Labels.
-    labelable = sum(f.labelable for f in facts)
+    labelable = (
+        sum(counts[kind] for kind in proposal.feature_types) if kinds == {"vector"} else sum(f.labelable for f in facts)
+    )
     gene_coverage = head.cds_qualifier_coverage.get("gene", 0.0)
     if proposal.mode == "circular":
         if proposal.grouping == "single" and labelable <= LABEL_ALL_MAX:
@@ -652,14 +731,20 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
             proposal.label_whitelist = (("CDS", "gene", ".+"), ("rRNA", "product", ".+"), ("tRNA", "product", ".+"))
         else:
             proposal.decide("label_scope", "none", f"{labelable} labels would not be readable")
-    elif count == 1 and labelable <= LABEL_ALL_MAX:
-        proposal.decide("label_scope", "all", f"one record with {labelable} labels")
+    elif labelable <= LABEL_ALL_MAX:
+        proposal.decide("label_scope", "all", f"{labelable} labels over {count} record(s)" if count > 1 else f"one record with {labelable} labels")
     elif count > 1 and labelable <= LABEL_ALL_MAX * count:
         proposal.decide("label_scope", "first", f"{count} records: only the first row is labelled")
     else:
         proposal.decide("label_scope", "none", f"{labelable // count} labels per record would not be readable")
-    if proposal.label_scope != "none":
-        if gene_coverage >= GENE_NAME_COVERAGE_MIN:
+    if proposal.label_scope != "none" and kinds == {"vector"}:
+        proposal.decide("qualifier_priority", VECTOR_LABEL_PRIORITY, "plasmid editors name features in /label")
+        proposal.qualifier_priority = tuple((kind, VECTOR_LABEL_PRIORITY) for kind in proposal.feature_types)
+    elif proposal.label_scope != "none":
+        if gene_coverage >= GENE_NAME_COVERAGE_MIN and head.distinct_gene_fraction < 0.9:
+            priority = "product,gene,locus_tag"
+            reason = f"gene names repeat ({head.distinct_gene_fraction:.0%} distinct), so products label the CDS"
+        elif gene_coverage >= GENE_NAME_COVERAGE_MIN:
             priority = "gene,product"
             reason = f"gene names on {gene_coverage:.0%} of CDS are shorter than products"
         else:
@@ -684,9 +769,9 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
     tool = head.annotation_tool
     preset = _preset_rules(tool) if tool in {"bakta", "pharokka"} else ()
     scheme = "base"
-    if tool == "bakta" and preset:
+    if tool == "bakta" and preset and head.cog_fraction > 0:
         proposal.color_rules_name, proposal.color_rules = "bakta_cog", preset
-        proposal.decide("colors", "bakta COG", "Bakta COG categories (note COG:X) color the CDS")
+        proposal.decide("colors", "bakta COG", f"Bakta COG categories (note COG:X) on {head.cog_fraction:.0%} of CDS color them")
     elif tool == "pharokka" and preset:
         proposal.color_rules_name, proposal.color_rules = "pharokka", preset
         proposal.decide("colors", "pharokka", "Pharokka functions (function, phrog) color the CDS")
@@ -716,7 +801,10 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
         proposal.decide("separate_strands", False, "a gene cluster is more compact in one lane")
     else:
         proposal.decide("separate_strands", True, f"genes on both strands ({plus:.0%} on the plus strand)")
-    if proposal.mode == "circular":
+    if kinds == {"vector"}:
+        proposal.decide("show_gc", False, "a plasmid map shows parts, not composition")
+        proposal.decide("show_skew", False, "a plasmid map shows parts, not composition")
+    elif proposal.mode == "circular":
         proposal.decide("show_gc", True, "a circular diagram shows the GC content ring")
         if head.kind in {"bacterial_chromosome", "plasmid"}:
             proposal.decide("show_skew", True, "the GC skew sign change marks the replication origin and terminus")
@@ -734,8 +822,11 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
         proposal.decide("legend", "left" if captions <= 12 else "right", "the legend beside the circle")
     else:
         proposal.decide("legend", "bottom", "the legend under the rows")
-    if not head.organism or head.organism.lower() in {"synthetic construct", "unknown", "unidentified"}:
-        proposal.decide("species", head.record_id, "no organism name, so the record ID titles the drawing")
+    if not re.search(r"[A-Za-z]", head.organism) or head.organism.lower() in {
+        "synthetic construct", "synthetic dna construct", "unknown", "unidentified",
+    }:
+        proposal.decide("species", _fallback_title(head), "no organism name, so the record ID titles the drawing")
+        proposal.record_labels = tuple(_fallback_title(f) for f in facts)
     if head.feature_counts.get("CDS", 0) == 0 and "gene" not in proposal.feature_types:
         proposal.notes.append("no CDS or gene features: the drawing shows the quantitative tracks only")
     if any(f.length > 20_000_000 for f in facts):

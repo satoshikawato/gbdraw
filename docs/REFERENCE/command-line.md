@@ -109,7 +109,8 @@ drawn feature types (`D-loop`, `rep_origin`, `mat_peptide` of a polyprotein,
 `gene` when a file has no CDS), the label scope and the qualifier that labels
 the CDS (up to 150 labelable genes are all labelled, with `--label_blacklist`
 leaving out hypothetical products; up to 400 only the named genes and RNA
-genes; more none), separate strands, `--resolve_overlaps` when
+genes; more none; products rather than gene names when the names repeat),
+separate strands, `--resolve_overlaps` when
 features nest, the colors (a `-d` scheme of soft fills and muted rings, plus a
 `-t` color table generated from the annotation: COG categories of Bakta,
 Pharokka functions, antiSMASH `gene_kind`, plastid and mitochondrial gene
@@ -117,8 +118,13 @@ families), the GC content and skew tracks, the track preset, and the legend
 position. The tables the command needs are written
 next to the output as `<prefix>.auto.<table>.tsv`, so the printed command can
 be edited and rerun; the output and format options are those of the mode
-commands. The same proposal is available in Python as
-`gbdraw.recommend.propose(records)`.
+commands. A synthetic construct (a SnapGene, Benchling or Addgene file) is
+drawn as a plasmid map: its promoters, terminators, origins and LTRs, labelled
+from `/label`, without the composition rings; a Pharokka file is a phage, and a
+Bakta, Prokka, DFAST or PGAP file without a lineage is a bacterial record. A
+record without an organism name is titled by its ID, its LOCUS name or its
+definition (`--species`, or `--record_label` in Linear mode). The same proposal
+is available in Python as `gbdraw.recommend.propose(records)`.
 
 ## Record selection and layout
 
