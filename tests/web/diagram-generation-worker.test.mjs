@@ -8,6 +8,7 @@ const {
   buildPreparedResourceIdentityMap,
   buildGeneratedArtifactTransportIdentity,
   collectGenerationResultTransferList,
+  resolveGeneratedFeatureCatalog,
   resolveGenerationCleanupOutcome,
   serializeError
 } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
@@ -42,45 +43,88 @@ assert.throws(
 );
 
 const svgBytes = new TextEncoder().encode('<svg />');
-const metadataBytes = new TextEncoder().encode('{"featureCatalog":{}}');
+const metadataBytes = new TextEncoder().encode('{"legendRows":[]}');
+const catalogText = '{"schema":4,"items":[]}';
+const catalogBytes = new TextEncoder().encode(catalogText);
+// Step 3a: the feature catalog is its own transferred buffer beside the metadata.
 assert.deepEqual(
   collectGenerationResultTransferList({
     results: [{ content: svgBytes }, { content: '<svg />' }],
-    metadata: metadataBytes
+    metadata: metadataBytes,
+    featureCatalog: catalogBytes
   }),
-  [svgBytes.buffer, metadataBytes.buffer]
+  [svgBytes.buffer, metadataBytes.buffer, catalogBytes.buffer]
 );
-const firstIdentity = await buildGeneratedArtifactTransportIdentity({
+const catalogDigest = {
+  bytes: catalogBytes.byteLength,
+  sha256: Array.from(
+    new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', catalogBytes)),
+    (value) => value.toString(16).padStart(2, '0')
+  ).join('')
+};
+const identityOf = (overrides = {}, digest = catalogDigest) => buildGeneratedArtifactTransportIdentity({
   results: [{ name: 'out.svg', content: svgBytes }],
-  metadata: metadataBytes
+  metadata: metadataBytes,
+  ...overrides
+}, digest);
+const firstIdentity = await identityOf();
+const sameIdentity = await identityOf();
+const changedIdentity = await identityOf({ results: [{ name: 'changed.svg', content: svgBytes }] });
+const changedContentIdentity = await identityOf({
+  results: [{ name: 'out.svg', content: new TextEncoder().encode('<svg>b</svg>') }]
 });
-const sameIdentity = await buildGeneratedArtifactTransportIdentity({
-  results: [{ name: 'out.svg', content: svgBytes }],
-  metadata: metadataBytes
-});
-const changedIdentity = await buildGeneratedArtifactTransportIdentity({
-  results: [{ name: 'changed.svg', content: svgBytes }],
-  metadata: metadataBytes
-});
-const changedContentIdentity = await buildGeneratedArtifactTransportIdentity({
-  results: [{ name: 'out.svg', content: new TextEncoder().encode('<svg>b</svg>') }],
-  metadata: metadataBytes
-});
-const changedMetadataIdentity = await buildGeneratedArtifactTransportIdentity({
-  results: [{ name: 'out.svg', content: svgBytes }],
-  metadata: new TextEncoder().encode('{"featureCatalog":{"schema":4}}')
-});
+const changedMetadataIdentity = await identityOf({ metadata: new TextEncoder().encode('{"legendRows":[1]}') });
+const changedCatalogIdentity = await identityOf({}, { ...catalogDigest, sha256: '0'.repeat(64) });
+const noCatalogIdentity = await identityOf({}, null);
 assert.match(firstIdentity.fingerprint, /^[0-9a-f]{64}$/);
 assert.equal(firstIdentity.fingerprint, sameIdentity.fingerprint);
 assert.notEqual(firstIdentity.fingerprint, changedIdentity.fingerprint);
 assert.notEqual(firstIdentity.fingerprint, changedContentIdentity.fingerprint);
 assert.notEqual(firstIdentity.fingerprint, changedMetadataIdentity.fingerprint);
+assert.notEqual(firstIdentity.fingerprint, changedCatalogIdentity.fingerprint);
+assert.notEqual(firstIdentity.fingerprint, noCatalogIdentity.fingerprint);
+assert.equal(firstIdentity.schema, 1);
+assert.equal(firstIdentity.metadataBytes, metadataBytes.byteLength + catalogBytes.byteLength);
 assert.equal(
   firstIdentity.retainedBytes,
   svgBytes.byteLength
-    + metadataBytes.byteLength * 2
+    + (metadataBytes.byteLength + catalogBytes.byteLength) * 2
     + new TextEncoder().encode('out.svg').byteLength
 );
+
+// A sent catalog is hashed; "unchanged" takes the held digest, so both name
+// one artifact; without a catalog and a held digest there is no revision.
+const sent = await resolveGeneratedFeatureCatalog({
+  results: [{ name: 'out.svg', content: svgBytes }],
+  metadata: metadataBytes,
+  featureCatalog: catalogBytes,
+  featureCatalogRevision: 'e:1'
+}, null);
+assert.deepEqual(sent.featureCatalogRevision, { revision: 'e:1', ...catalogDigest });
+assert.equal(sent.artifactIdentity.fingerprint, firstIdentity.fingerprint);
+const unchanged = await resolveGeneratedFeatureCatalog({
+  results: [{ name: 'out.svg', content: svgBytes }],
+  metadata: metadataBytes,
+  featureCatalog: undefined,
+  featureCatalogRevision: 'e:1'
+}, { revision: 'e:1', ...catalogDigest });
+assert.deepEqual(unchanged.featureCatalogRevision, { revision: 'e:1', ...catalogDigest });
+assert.equal(unchanged.artifactIdentity.fingerprint, firstIdentity.fingerprint);
+const unnamed = await resolveGeneratedFeatureCatalog({
+  results: [{ name: 'out.svg', content: svgBytes }],
+  metadata: metadataBytes,
+  featureCatalog: catalogBytes,
+  featureCatalogRevision: undefined
+}, null);
+assert.equal(unnamed.featureCatalogRevision, null);
+assert.equal(unnamed.artifactIdentity.fingerprint, firstIdentity.fingerprint);
+const neither = await resolveGeneratedFeatureCatalog({
+  results: [{ name: 'out.svg', content: svgBytes }],
+  metadata: metadataBytes,
+  featureCatalogRevision: 'e:1'
+}, null);
+assert.equal(neither.featureCatalogRevision, null);
+assert.equal(neither.artifactIdentity.fingerprint, noCatalogIdentity.fingerprint);
 
 const sentinel = 'PRIVATE_SENTINEL';
 const pythonPayload = { error: { code: 'COMPARISON_IDENTITY', operation: 'generate',

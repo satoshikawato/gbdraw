@@ -25,3 +25,40 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
 export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
   Object.values(DIAGRAM_HELPER_OPERATIONS)
 );
+
+/**
+ * One feature catalog build in one Worker lifetime: the cache epoch and the
+ * build numbers of its items (gbdraw/web/CLAUDE.md, Runtime data flow). Opaque;
+ * compared for equality only.
+ * @typedef {string} FeatureCatalogRevisionId
+ */
+
+/**
+ * A catalog revision with the digest of the catalog bytes the Worker last sent
+ * for it, so an "unchanged" reply gets the same artifact fingerprint without
+ * hashing again.
+ * @typedef {object} FeatureCatalogRevision
+ * @property {FeatureCatalogRevisionId} revision
+ * @property {string} sha256 64 lowercase hex digits.
+ * @property {number} bytes
+ */
+
+/**
+ * Read a catalog revision from a message. `null` and `undefined` give `null`.
+ * @param {unknown} value
+ * @param {() => unknown} invalid Builds the caller's classified error for a malformed value.
+ * @returns {Readonly<FeatureCatalogRevision> | null}
+ */
+export const readFeatureCatalogRevision = (value, invalid) => {
+  if (value === null || value === undefined) return null;
+  const record = /** @type {{ revision?: unknown, sha256?: unknown, bytes?: unknown }} */ (
+    typeof value === 'object' && !Array.isArray(value) ? value : {}
+  );
+  const { revision, sha256, bytes } = record;
+  if (
+    typeof revision !== 'string' || !revision
+    || typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256)
+    || typeof bytes !== 'number' || !Number.isSafeInteger(bytes) || bytes < 0
+  ) throw invalid();
+  return Object.freeze({ revision, sha256, bytes });
+};

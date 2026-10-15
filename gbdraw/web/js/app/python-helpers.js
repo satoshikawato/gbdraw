@@ -109,10 +109,16 @@ def run_canonical_request_wrapper(
     workspace,
     diagnostics_enabled=False,
     resource_identities_json=None,
+    held_feature_catalog_revision=None,
 ):
     try:
         with web_error_stage("request-validation"):
             payload = json.loads(str(request_json))
+            held_revision = (
+                None
+                if _is_blank_or_js_nullish(held_feature_catalog_revision)
+                else str(held_feature_catalog_revision)
+            )
             resource_paths = json.loads(str(resource_paths_json))
             resource_identities = None
             if resource_identities_json is not None and type(resource_identities_json).__name__ not in {"JsNull", "JsUndefined"}:
@@ -132,6 +138,7 @@ def run_canonical_request_wrapper(
             ),
             _resource_identities=resource_identities,
             _label_fit_searches=_WEB_LABEL_FIT_SEARCHES,
+            _held_feature_catalog_revision=held_revision,
         )
         if diagnostics is not None:
             for name in (
@@ -166,6 +173,7 @@ def run_canonical_request_wrapper(
                 "preparedInputCacheEvictionCount",
                 "preparedInputCacheRetainedBytes",
                 "preparedInputCacheMutationViolationCount",
+                "featureCatalogSerializationCount",
             ):
                 diagnostics["metrics"].setdefault(name, 0)
             result["_diagnostics"] = diagnostics
@@ -180,6 +188,17 @@ def run_canonical_request_wrapper(
                 ensure_ascii=False,
                 separators=(",", ":"),
             ).encode("utf-8")
+        # The feature catalog travels as its own bytes; None when the page
+        # keeps the catalog it holds for the same revision.
+        catalog = result.get("featureCatalog")
+        if catalog is not None:
+            result["featureCatalog"] = json.dumps(
+                catalog,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            if diagnostics is not None:
+                diagnostics["metrics"]["featureCatalogSerializationCount"] = 1
         return result
     except Exception as e:
         failure = {"error": serialize_web_error(e, operation="generate", stage="render")}

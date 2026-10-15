@@ -80,6 +80,7 @@ export const collectGenerationResultTransferList = (payload) => {
     addBuffer(result?.content);
   });
   addBuffer(payload?.metadata);
+  addBuffer(payload?.featureCatalog);
   return Array.from(buffers);
 };
 
@@ -98,11 +99,13 @@ const hexDigest = async (bytes) => {
 
 /**
  * Build a private identity from the buffers that are already being transferred.
- * SVG and metadata payloads are never re-encoded or concatenated here. Each large
- * buffer is hashed independently and only the compact digest manifest is encoded
- * for the final ordered digest.
+ * SVG, metadata and feature catalog payloads are never re-encoded or concatenated
+ * here. Each large buffer is hashed independently and only the compact digest
+ * manifest is encoded for the final ordered digest. `featureCatalogDigest` is the
+ * digest of the catalog bytes sent, or of the held catalog's bytes when Python
+ * reported it unchanged, so equal artifacts get equal fingerprints either way.
  */
-export const buildGeneratedArtifactTransportIdentity = async (payload) => {
+export const buildGeneratedArtifactTransportIdentity = async (payload, featureCatalogDigest = null) => {
   const results = Array.isArray(payload?.results) ? payload.results : [];
   const encoder = new TextEncoder();
   const resultManifest = [];
@@ -132,13 +135,17 @@ export const buildGeneratedArtifactTransportIdentity = async (payload) => {
     throw new Error('Generated metadata was not encoded for Worker transport.');
   }
   const manifest = {
-    schema: 1,
+    schema: 2,
     results: resultManifest,
     metadata: {
       bytes: metadataBytes.byteLength,
       sha256: await hexDigest(metadataBytes)
-    }
+    },
+    featureCatalog: featureCatalogDigest
+      ? { bytes: featureCatalogDigest.bytes, sha256: featureCatalogDigest.sha256 }
+      : null
   };
+  const catalogBytes = featureCatalogDigest?.bytes ?? 0;
   const fingerprint = await hexDigest(encoder.encode(JSON.stringify(manifest)));
   return Object.freeze({
     schema: 1,
@@ -146,13 +153,37 @@ export const buildGeneratedArtifactTransportIdentity = async (payload) => {
     fingerprint,
     resultBytes,
     resultNameBytes,
-    metadataBytes: metadataBytes.byteLength,
+    metadataBytes: metadataBytes.byteLength + catalogBytes,
     // Parsed metadata retains strings and object structure in addition to the
     // transferred UTF-8 representation. Two bytes per source byte is a bounded,
     // deliberately conservative owner estimate; Result UTF-16 strings are added
-    // separately by the main-thread handle.
-    retainedBytes: resultBytes + resultNameBytes + metadataBytes.byteLength * 2
+    // separately by the main-thread handle. The feature catalog counts as
+    // metadata whether it was sent or kept (D-38 OQ-2).
+    retainedBytes: resultBytes + resultNameBytes + (metadataBytes.byteLength + catalogBytes) * 2
   });
+};
+
+/**
+ * Name the feature catalog of a Generate reply and fix its artifact identity.
+ * A sent catalog is hashed; an "unchanged" reply reuses the digest of the held
+ * catalog (`held`, read from the run message), so nothing is hashed again. The
+ * page checks that "unchanged" names the revision it holds.
+ * @param {{ featureCatalog?: unknown, featureCatalogRevision?: unknown, artifactIdentity?: unknown }} outcome
+ * @param {{ revision: string, sha256: string, bytes: number } | null} held
+ */
+export const resolveGeneratedFeatureCatalog = async (outcome, held) => {
+  const catalogBytes = bytesForDigest(outcome.featureCatalog);
+  const digest = catalogBytes
+    ? { bytes: catalogBytes.byteLength, sha256: await hexDigest(catalogBytes) }
+    : held
+      ? { bytes: held.bytes, sha256: held.sha256 }
+      : null;
+  const pythonRevision = typeof outcome.featureCatalogRevision === 'string' && outcome.featureCatalogRevision
+    ? outcome.featureCatalogRevision
+    : null;
+  outcome.featureCatalogRevision = pythonRevision && digest ? { revision: pythonRevision, ...digest } : null;
+  outcome.artifactIdentity = await buildGeneratedArtifactTransportIdentity(outcome, digest);
+  return outcome;
 };
 
 export const serializeError = (error, options = {}) => normalizeUserFacingError(error || {}, options);
@@ -1022,6 +1053,7 @@ const runGeneration = async ({
     }
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-transport-ready', {
       transport: 'transferable-binary',
+      featureCatalog: result?.featureCatalog == null ? 'unchanged' : 'sent',
       bytes: collectGenerationResultTransferList(result).reduce(
         (total, buffer) => total + buffer.byteLength,
         0
@@ -1090,7 +1122,7 @@ const runGeneration = async ({
   if (outcome?.error) outcome.error = serializeError(outcome.error, { operation: 'generate' });
   if (!outcome?.error) {
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-start');
-    outcome.artifactIdentity = await buildGeneratedArtifactTransportIdentity(outcome);
+    await resolveGeneratedFeatureCatalog(outcome, null);
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-end', {
       fingerprint: outcome.artifactIdentity.fingerprint,
       retainedBytes: outcome.artifactIdentity.retainedBytes

@@ -842,7 +842,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
             document.to_dict()["renderRequest"], resource_paths=materialized.resource_paths,
             output_directory=tmp_path / "web",
         )
-    assert web["metadata"]["featureCatalog"]["items"] == [catalog_item]
+    assert web["featureCatalog"]["items"] == [catalog_item]
     semantic = {group["id"]: group for group in catalog_item["orthogroups"]}
     assert set(semantic) == {"og_1", "og_2"}
     assert semantic["og_1"]["scope"] == "cross_record"
@@ -895,11 +895,11 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
 
     session_path = tmp_path / "mixed.gbdraw-session.json"
     saved = save_session_document(session_path, drawings=[SessionDrawingSpec(request, state={
-        "results": web["results"], "editorState": {"featureCatalog": web["metadata"]["featureCatalog"]},
+        "results": web["results"], "editorState": {"featureCatalog": web["featureCatalog"]},
     })])
     reloaded = load_session_document(session_path)
     assert reloaded.version == saved.version == CURRENT_SESSION_VERSION
-    assert reloaded.to_dict()["editorState"]["featureCatalog"] == web["metadata"]["featureCatalog"]
+    assert reloaded.to_dict()["editorState"]["featureCatalog"] == web["featureCatalog"]
     with materialize_session(reloaded, output_directory=tmp_path / "reload") as materialized:
         restored = session_to_request(materialized)
         assert restored.options.collinearity_blocks == groups
@@ -907,7 +907,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
             reloaded.to_dict()["renderRequest"], resource_paths=materialized.resource_paths,
             output_directory=tmp_path / "reload-web",
         )
-    assert rerendered["metadata"]["featureCatalog"] == web["metadata"]["featureCatalog"]
+    assert rerendered["featureCatalog"] == web["featureCatalog"]
     assert [path.get("d") for path in comparison_paths(rerendered["results"][0]["content"])] == [paths[0].get("d")]
     return session_path
 

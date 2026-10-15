@@ -121,12 +121,13 @@ def _document(
 
 def _render(
     tmp_path: Path,
-    cache: PreparedBiologicalInputCache,
+    cache: PreparedBiologicalInputCache | None,
     document: dict[str, object],
     *,
     request_id: int,
     token_generation: int = 1,
     token_numbers: dict[str, int] | None = None,
+    held_revision: str | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
     resources = document["resources"]
     assert isinstance(resources, dict)
@@ -165,9 +166,10 @@ def _render(
         workspace=workspace,
         _diagnostics=diagnostics,
         _prepared_input_cache=cache,
-        _resource_identities=identities,
+        _resource_identities=identities if cache is not None else None,
+        _held_feature_catalog_revision=held_revision,
     )
-    return result, diagnostics
+    return dict(result), diagnostics
 
 
 def _metrics(diagnostics: dict[str, object]) -> dict[str, int]:
@@ -274,6 +276,7 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
 
     assert warm["results"] == cold["results"]
     assert warm["metadata"] == cold["metadata"]
+    assert warm["featureCatalog"] == cold["featureCatalog"]
     assert render_only["results"] != cold["results"]
     # Every top-level Circular group is a content (the plot title too), so the
     # catalog item is reused and no Generate after the first reads the SVG.
@@ -287,7 +290,7 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
     assert {
         name for name in _metrics(render_only_diagnostics) if name.startswith("renderStageBuild:")
     } == {"renderStageBuild:circular_plot_title_content", "renderStageBuild:composition_plan"}
-    assert render_only["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
+    assert render_only["featureCatalog"] == cold["featureCatalog"]
 
 
 def _linear_document(source: Path, *, title: str) -> dict[str, object]:
@@ -329,8 +332,9 @@ def test_a_linear_title_change_reuses_the_catalog_item(tmp_path: Path) -> None:
 
     assert warm["results"] == cold["results"]
     assert warm["metadata"] == cold["metadata"]
+    assert warm["featureCatalog"] == cold["featureCatalog"]
     assert retitled["results"] != cold["results"]
-    assert retitled["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
+    assert retitled["featureCatalog"] == cold["featureCatalog"]
 
 
 def _multi_record_document(source: Path, *, title: str) -> dict[str, object]:
@@ -372,7 +376,20 @@ def test_a_multi_record_circular_title_change_reuses_the_merged_records(tmp_path
         "renderStageBuild:composition_plan",
     }
     assert retitled["results"] != cold["results"]
-    assert retitled["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
+    assert retitled["featureCatalog"] == cold["featureCatalog"]
+
+
+def test_a_render_without_a_cache_always_returns_the_catalog_without_a_revision(tmp_path: Path) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("uncached-catalog"),))
+    document = _document(source, title="Uncached")
+    uncached, _ = _render(tmp_path, None, document, request_id=1, held_revision="e:1")
+    cached, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=2)
+
+    assert uncached["featureCatalogRevision"] is None
+    assert uncached["featureCatalog"] == cached["featureCatalog"]
+    assert isinstance(cached["featureCatalogRevision"], str)
+    assert "featureCatalog" not in uncached["metadata"]
 
 
 def test_public_render_request_remains_uncached_by_default(
@@ -491,7 +508,7 @@ def test_annotation_change_invalidates_interactive_context_only(
     assert changed_metrics["parsedSourceCacheHitCount"] == 1
     assert changed_metrics["resolvedRecordCacheHitCount"] == 1
     assert changed_metrics["renderStageBuild:interactive_context"] == 1
-    assert changed["metadata"] != first["metadata"]
+    assert changed["featureCatalog"] != first["featureCatalog"]
 
 
 def test_visibility_resource_invalidates_context_but_not_genbank_records(
@@ -595,7 +612,7 @@ def test_orthogroup_resource_invalidates_interactive_context_only(
     assert metrics["resolvedRecordCacheHitCount"] == 1
     assert metrics["resolvedRecordBuildCount"] == 0
     assert metrics["renderStageBuild:interactive_context"] == 1
-    assert changed["metadata"] != first["metadata"]
+    assert changed["featureCatalog"] != first["featureCatalog"]
     changed_payload = json.dumps(changed, sort_keys=True)
     assert "OG-B" in changed_payload
     assert "OG-A" not in changed_payload

@@ -179,9 +179,22 @@ const {
     artifactIdentity: null
   });
   const metadata = { trackSlotGeometry: { schema: 1, mode: 'linear', records: [] }, annotationWarnings: [{ code: 'feature_selector_unmatched', setId: 's', annotationId: 'a', recordId: 'r', recordIndex: 0, missingCount: 1, message: 'Skipped annotation: 1 feature selector(s) unmatched.', resultIndex: 0, resultName: 'out.svg' }] };
+  // The feature catalog travels beside the metadata (step 3a).
+  const featureCatalog = { schema: 4, items: [] };
   assert.deepEqual(
-    normalizeGenerationResponse({ results: legacyResults, metadata }),
-    { results: legacyResults, metadata, artifactIdentity: null }
+    normalizeGenerationResponse({ results: legacyResults, metadata, featureCatalog }),
+    { results: legacyResults, metadata: { ...metadata, featureCatalog }, artifactIdentity: null }
+  );
+  // A catalog inside the metadata is the removed shape.
+  assert.throws(
+    () => normalizeGenerationResponse({ results: legacyResults, metadata: { ...metadata, featureCatalog }, featureCatalog }),
+    (error) => error.code === 'RESULT_INVALID' && error.stage === 'result-admission'
+  );
+  assert.throws(
+    () => normalizeGenerationResponse({
+      results: legacyResults, metadata, featureCatalog, featureCatalogRevision: { revision: 'e:1', sha256: 'x', bytes: 1 }
+    }),
+    (error) => error.code === 'RESULT_INVALID' && error.stage === 'result-admission'
   );
   const errorPayload = { error: { type: 'OutputError', message: 'No output files generated.' } };
   assert.deepEqual(normalizeGenerationResponse(errorPayload), {
@@ -193,11 +206,12 @@ const {
   assert.deepEqual(
     normalizeGenerationResponse({
       results: [{ name: 'binary.svg', content: binarySvg }],
-      metadata: new TextEncoder().encode(JSON.stringify(metadata))
+      metadata: new TextEncoder().encode(JSON.stringify(metadata)),
+      featureCatalog: new TextEncoder().encode(JSON.stringify(featureCatalog))
     }),
     {
       results: [{ name: 'binary.svg', content: '<svg>µ</svg>' }],
-      metadata,
+      metadata: { ...metadata, featureCatalog },
       artifactIdentity: null
     }
   );

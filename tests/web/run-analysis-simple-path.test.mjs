@@ -103,6 +103,15 @@ const assertDownloadedFilesMatchCommands = (runInfo, entries) => {
   assert.deepEqual(referenced, expected);
 };
 
+// The Worker sends the feature catalog beside the metadata (step 3a); the
+// fixtures below keep it in `metadata` for the generationExecutor seam.
+const asWorkerReply = (payload) => {
+  if (!payload || typeof payload !== 'object' || payload.error || !payload.metadata
+    || !Object.hasOwn(payload.metadata, 'featureCatalog')) return payload;
+  const { featureCatalog, ...metadata } = payload.metadata;
+  return { ...payload, metadata, featureCatalog };
+};
+
 class AuditSimplePathWorker {
   constructor() {
     this.listeners = new Map();
@@ -141,7 +150,7 @@ class AuditSimplePathWorker {
         type: 'run',
         requestId: message.requestId,
         ok: true,
-        results: structuredClone(payload)
+        results: asWorkerReply(structuredClone(payload))
       })));
       return;
     }

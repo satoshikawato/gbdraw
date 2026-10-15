@@ -192,7 +192,7 @@ def test_a_circular_batch_drawing_still_numbers_its_diagrams(tmp_path: Path) -> 
             ),
             SessionDrawingSpec(
                 linear,
-                state={"results": web["results"], "editorState": {"featureCatalog": web["metadata"]["featureCatalog"]}},
+                state={"results": web["results"], "editorState": {"featureCatalog": web["featureCatalog"]}},
             ),
         ]
     )

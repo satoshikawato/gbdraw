@@ -187,7 +187,7 @@ def test_renderer_emits_unique_catalog_refs_for_exact_feature_collisions(
         resources=document["resources"],
         workspace=tmp_path / "render",
     )
-    item = response["metadata"]["featureCatalog"]["items"][0]
+    item = response["featureCatalog"]["items"][0]
     rendered = item["features"]
 
     assert len(rendered) == 2

@@ -249,7 +249,7 @@ def bgc_og18(tmp_path_factory):
     rendered = render_embedded_canonical_web_request(
         session["renderRequest"], resources=session["resources"], workspace=str(tmp / "render")
     )
-    item = rendered["metadata"]["featureCatalog"]["items"][0]
+    item = rendered["featureCatalog"]["items"][0]
     group = next(entry for entry in item["orthogroups"] if entry["id"] == "og_18")
     features = {(f["recordKey"], f["biologicalFeatureId"]): f for f in item["biologicalFeatures"]}
     lengths = dict(zip(item["recordKeys"], (len(s["sequence"]) for s in item["sequenceSources"])))

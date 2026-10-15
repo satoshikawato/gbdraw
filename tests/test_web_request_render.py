@@ -512,7 +512,7 @@ def test_web_request_returns_one_base_svg_and_compact_catalog(
     assert [result["name"] for result in response["results"]] == [
         f"{output_prefix}.svg"
     ]
-    catalog = response["metadata"]["featureCatalog"]
+    catalog = response["featureCatalog"]
     assert catalog["schema"] == FEATURE_CATALOG_SCHEMA
     assert len(catalog["items"]) == 1
     item = catalog["items"][0]
@@ -585,7 +585,7 @@ def test_web_circular_batch_has_one_catalog_item_per_logical_result(tmp_path) ->
         "batch-catalog-1.svg",
         "batch-catalog-2.svg",
     ]
-    items = response["metadata"]["featureCatalog"]["items"]
+    items = response["featureCatalog"]["items"]
     assert [
         (item["resultIndex"], item["resultName"], item["recordKeys"])
         for item in items

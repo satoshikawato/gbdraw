@@ -380,6 +380,11 @@ const generationPhaseAttribution = (outcome, probe) => {
       'result-metadata-binary-decode-start',
       'result-metadata-binary-decode-end'
     )
+    + durationOrZero(
+      events,
+      'result-feature-catalog-binary-decode-start',
+      'result-feature-catalog-binary-decode-end'
+    )
   );
   const inputResolutionMs = durationOrZero(
     events,

@@ -5,7 +5,8 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
-  DIAGRAM_HELPER_OPERATIONS
+  DIAGRAM_HELPER_OPERATIONS,
+  readFeatureCatalogRevision
 } from './diagram-worker-protocol.js';
 import {
   recordSessionLifecycleEvent,
@@ -22,6 +23,8 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 /** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
+/** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { FeatureCatalogRevision } from './diagram-worker-protocol.js' */
 
 /**
  * The fingerprint of the artifact a Generate returned.
@@ -51,6 +54,8 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
  * @property {unknown} [error]
  * @property {unknown} [results]
  * @property {unknown} [metadata]
+ * @property {unknown} [featureCatalog] The feature catalog's UTF-8 JSON bytes; absent when Python reports it unchanged.
+ * @property {unknown} [featureCatalogRevision] The catalog revision with its digest, or null.
  * @property {unknown} [labelFit] The JSON text of a label fit report, next to an error.
  * @property {Partial<GeneratedArtifactIdentity> | null} [artifactIdentity]
  */
@@ -151,27 +156,64 @@ const decodeGenerationResults = (results) => (
 );
 
 /**
- * @param {unknown} metadata The Worker's metadata: an object, or its UTF-8 JSON bytes.
+ * The two JSON payloads of a Generate reply and the names their decoding reports.
+ * @typedef {{ event: string, countMetric: string, bytesMetric: string }} GenerationJsonPart
+ */
+/** @type {Readonly<Record<'metadata' | 'featureCatalog', GenerationJsonPart>>} */
+const GENERATION_JSON_PARTS = Object.freeze({
+  metadata: Object.freeze({
+    event: 'result-metadata-binary-decode',
+    countMetric: 'resultMetadataBinaryDecodeCount',
+    bytesMetric: 'resultMetadataBinaryDecodedBytes'
+  }),
+  featureCatalog: Object.freeze({
+    event: 'result-feature-catalog-binary-decode',
+    countMetric: 'resultFeatureCatalogBinaryDecodeCount',
+    bytesMetric: 'resultFeatureCatalogBinaryDecodedBytes'
+  })
+});
+
+/**
+ * @param {unknown} value The Worker's value: an object, or its UTF-8 JSON bytes.
+ * @param {GenerationJsonPart} part
  * @returns {unknown}
  */
-const decodeGenerationMetadata = (metadata) => {
-  const bytes = metadata instanceof ArrayBuffer
-    ? new Uint8Array(metadata)
-    : ArrayBuffer.isView(metadata)
-      ? new Uint8Array(metadata.buffer, metadata.byteOffset, metadata.byteLength)
+const decodeGenerationJson = (value, { event, countMetric, bytesMetric }) => {
+  const bytes = value instanceof ArrayBuffer
+    ? new Uint8Array(value)
+    : ArrayBuffer.isView(value)
+      ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
       : null;
-  if (!bytes) return metadata;
-  recordSessionLifecycleEvent('result-metadata-binary-decode-start', {
+  if (!bytes) return value;
+  recordSessionLifecycleEvent(`${event}-start`, {
     bytes: bytes.byteLength
   });
   const decoded = JSON.parse(new TextDecoder().decode(bytes));
-  recordStructuralMetric('resultMetadataBinaryDecodeCount');
-  recordStructuralMetric('resultMetadataBinaryDecodedBytes', bytes.byteLength);
-  recordSessionLifecycleEvent('result-metadata-binary-decode-end', {
+  recordStructuralMetric(countMetric);
+  recordStructuralMetric(bytesMetric, bytes.byteLength);
+  recordSessionLifecycleEvent(`${event}-end`, {
     bytes: bytes.byteLength
   });
   return decoded;
 };
+
+/**
+ * The revision each feature catalog this page received arrived with, and its
+ * items' Result names then (before a rerender renames them, OV-136). Keyed by
+ * the object the page owns: no copy, and the record dies with the object.
+ * @type {WeakMap<object, { revision: Readonly<FeatureCatalogRevision>, resultNames: readonly string[] }>}
+ */
+const featureCatalogRevisions = new WeakMap();
+
+/**
+ * @param {FeatureCatalog} catalog
+ * @returns {string[]}
+ */
+const itemResultNames = (catalog) => catalog.items.map((item) => String(item?.resultName ?? ''));
+
+const invalidGenerationResult = () => deserializeWorkerError({
+  code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission'
+});
 
 /**
  * @param {Partial<GeneratedArtifactIdentity> | null | undefined} identity
@@ -233,15 +275,30 @@ export const normalizeGenerationResponse = (payload) => {
   const results = Array.isArray(payload.results)
     ? decodeGenerationResults(payload.results)
     : [];
-  const decodedMetadata = decodeGenerationMetadata(payload.metadata);
+  const decodedMetadata = decodeGenerationJson(payload.metadata, GENERATION_JSON_PARTS.metadata);
+  // A copy: the catalog joins it below, and a decoded object is the caller's.
+  /** @type {Record<string, unknown>} */
   const metadata = (
     decodedMetadata &&
     typeof decodedMetadata === 'object' &&
     !Array.isArray(decodedMetadata)
   )
-    // A non-array object, by the condition.
-    ? /** @type {Record<string, unknown>} */ (decodedMetadata)
+    ? { ...decodedMetadata }
     : {};
+  // The catalog travels beside the metadata, never inside it (step 3a).
+  if (Object.hasOwn(metadata, 'featureCatalog')) throw invalidGenerationResult();
+  const replyRevision = readFeatureCatalogRevision(payload.featureCatalogRevision, invalidGenerationResult);
+  if (payload.featureCatalog != null) {
+    const catalog = decodeGenerationJson(payload.featureCatalog, GENERATION_JSON_PARTS.featureCatalog);
+    if (replyRevision && catalog && typeof catalog === 'object' && Array.isArray(/** @type {{ items?: unknown }} */ (catalog).items)) {
+      const received = /** @type {FeatureCatalog} */ (catalog);
+      featureCatalogRevisions.set(received, {
+        revision: replyRevision,
+        resultNames: Object.freeze(itemResultNames(received))
+      });
+    }
+    metadata.featureCatalog = catalog;
+  }
   return markCurrentWorkerGenerationResponse({
     results,
     metadata,

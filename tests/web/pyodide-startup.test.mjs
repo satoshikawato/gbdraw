@@ -79,7 +79,8 @@ class FakeWorker {
         ok: true,
         results: {
           results: [{ name: 'shared.svg', content: '<svg></svg>' }],
-          metadata: {}
+          metadata: {},
+          featureCatalog: { schema: 4, items: [] }
         }
       }));
     }

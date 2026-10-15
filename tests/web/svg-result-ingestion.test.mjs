@@ -226,7 +226,8 @@ const currentFixture = (content = '<svg><path id="f0001"/></svg>') => {
   const featureCatalog = catalog();
   const response = normalizeGenerationResponse({
     results: [{ name: 'diagram.svg', content }],
-    metadata: { featureCatalog }
+    metadata: {},
+    featureCatalog
   });
   const admission = admitFeatureCatalog(featureCatalog, response.results, {
     adopt: true,
@@ -963,8 +964,8 @@ const legendRowsFixture = ({ contents, legendRows, withFacts = true, rename = fa
   const names = contents.map((_, index) => (index === 0 ? 'diagram.svg' : 'diagram-2.svg'));
   const response = normalizeGenerationResponse({
     results: contents.map((content, index) => ({ name: names[index], content })),
+    featureCatalog,
     metadata: {
-      featureCatalog,
       ...(withFacts ? {
         legendRows: legendRows.map(({ drawn = [], suppressed = [] }, index) => ({
           resultIndex: index, resultName: names[index], drawn, suppressed
@@ -1789,7 +1790,7 @@ test('a Legend row stroke reaches in each Result of a batch the features of Pyth
 test('the Load normalizer records no fill Python is not known to have drawn', () => {
   const featureCatalog = catalog();
   featureCatalog.items[0].features[0].fillColor = '';
-  const response = normalizeGenerationResponse({ results: [{ name: 'diagram.svg', content: '<svg/>' }], metadata: { featureCatalog } });
+  const response = normalizeGenerationResponse({ results: [{ name: 'diagram.svg', content: '<svg/>' }], metadata: {}, featureCatalog });
   const admission = admitFeatureCatalog(featureCatalog, response.results, { mode: 'linear' });
   const svg = buildSvgRoot();
   svg.querySelector('[data-gbdraw-feature-id]').setAttribute('fill', '#112233');
