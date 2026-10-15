@@ -35,6 +35,7 @@ print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
     json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
 `], { input: JSON.stringify(payload), encoding: 'utf8', cwd: fileURLToPath(REPO) })) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
+const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 
 const fixture = (name) => {
@@ -146,6 +147,43 @@ for (const [base, path, value, rows, check] of CASES) {
     if (base !== 'v30') await saved();
   });
 }
+
+// K14 (D1c 4.3): record display drafts of no list are read before the dialog
+// by the reader the apply uses, so Load applies what the dialog lists and
+// nothing acts after the commit point. The dialog's wording is the owner's.
+test('K14: record display drafts of no list are listed before the dialog and applied as listed', async () => {
+  const configFile = () => {
+    const config = structuredClone(BASES.g47L().modes.linear.config);
+    state.mode.value = 'linear';
+    return config;
+  };
+  const cases = [
+    ['g47L', () => BASES.g47L(), 'modes.linear.config.recordDisplayDrafts', 'linear'],
+    ['v44', () => BASES.v44(), 'config.recordDisplayDrafts', 'circular'],
+    ['configuration file', configFile, 'recordDisplayDrafts', 'linear']
+  ];
+  await load(BASES.g47L());
+  for (const [name, base, path, mode] of cases) {
+    for (const value of [{}, 'x', 5, true]) {
+      const drawing = state.drawings[mode];
+      drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, {
+        sourceUid: 'held', selector: '#1', recordId: 'held', topologyOverride: null, startCoordinate: null,
+        reverseComplementOverride: null, anchorIntent: null
+      });
+      const dialogs = [];
+      const loaded = await importSession(input(set(base(), path, value)), {
+        transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(dialog.items); return true; }
+      });
+      const label = `${name} ${JSON.stringify(value)}`;
+      assert.ok(['ok', 'legacy'].includes(loaded.status), `${label}: ${JSON.stringify(loaded.error)}`);
+      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), [`setting-replaced ${path}`], label);
+      assert.deepEqual(dialogs, [describeLoadRepairs(loaded.repairs)?.items], label);
+      assert.ok(dialogs[0].some((line) => line.includes(`(${path})`)), `${label}: ${dialogs[0]}`);
+      assert.deepEqual([...drawing.recordDisplayDrafts], [], label);
+    }
+  }
+  await saved();
+});
 
 test('E1b: an unknown field of a stored comparison edge is dropped with a row (E-OD12)', async () => {
   const session = BASES.g47L();

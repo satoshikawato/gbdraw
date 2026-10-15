@@ -32,6 +32,7 @@ import {
   migrateLinearTrackSlotsToCurrentSchema
 } from '../gbdraw/web/js/services/linear-track-slot-model.js';
 import { CIRCULAR_TRACK_SLOT_SCHEMA_VERSION } from '../gbdraw/web/js/services/session-active-config-contract.js';
+import { isPlainObject } from '../gbdraw/web/js/utils/contract-shape.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG_SOURCE = fs.readFileSync(path.join(ROOT, 'gbdraw/web/js/services/config.js'), 'utf8');
@@ -53,7 +54,6 @@ const load = (name, dependencies) => new Function(
   ...Object.keys(dependencies), `${definition(name)}\nreturn ${name};`
 )(...Object.values(dependencies));
 
-const isPlainObject = load('isPlainObject', {});
 const migrateImportedLinearTrackSlots = load('migrateImportedLinearTrackSlots', {
   LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,

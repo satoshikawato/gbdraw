@@ -2748,17 +2748,20 @@ export const applyLabelFitValues = (drawing, values, mode) => {
 // track stacks are installed as given, so unset slot sides, lane directions,
 // and axis indexes stay unset (R11). Load applies a file's settings with the
 // readers it listed their losses with before its dialog (`configFieldRepairs`).
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {Record<string, unknown>} data
+ * @param {{ resolveTrackPlacements?: boolean, applyAlignment?: boolean }} [options]
+ */
 const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true } = {}) => {
   const mode = drawing === state.drawings.linear ? 'linear' : 'circular';
-  if (data.losat) {
-    // The execution settings of a Session 44 or older draft or of a request
-    // projection are app-level (`state.losatExecution`); the drawing keeps the
-    // search settings.
-    const executionFields = LOSAT_EXECUTION_FIELDS.filter((field) => Object.hasOwn(data.losat, field));
-    if (executionFields.length) {
-      applyLosatExecutionData(Object.fromEntries(executionFields.map((field) => [field, data.losat[field]])));
-    }
+  // The execution settings of a Session 44 or older draft or of a request
+  // projection are app-level (`state.losatExecution`); the drawing keeps the
+  // search settings. A group of no object holds none.
+  const losat = readPlainObject(data.losat).value;
+  const executionFields = LOSAT_EXECUTION_FIELDS.filter((field) => Object.hasOwn(losat, field));
+  if (executionFields.length) {
+    applyLosatExecutionData(Object.fromEntries(executionFields.map((field) => [field, losat[field]])));
   }
   // The stored settings' merge and readers (Load lists what they cannot restore first).
   installStoredSettings(drawing, data, drawing === state.drawings.linear ? 'linear' : 'circular');
@@ -2768,28 +2771,26 @@ const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, a
   drawing.recordsOff.splice(0, drawing.recordsOff.length, ...recordsOffReader(mode)(data.recordsOff).value);
   replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(featurePlacementsReader(mode)(data.featurePlacementOverrides).value));
   drawing.annotationSets.splice(0, drawing.annotationSets.length, ...readAnnotationSets(data.annotationSets).value);
-  const linearLayout = data.linearRecordLayout && typeof data.linearRecordLayout === 'object'
-    ? data.linearRecordLayout
-    : null;
+  const linearLayout = readPlainObject(data.linearRecordLayout).value;
   // Omission takes the fresh default in every Session version.
-  drawing.linearRecordLayoutEnabled.value = readLinearRecordLayoutEnabled(linearLayout?.enabled).value;
-  drawing.linearRecordGap.value = readLinearRecordGap(linearLayout?.recordGap).value;
-  drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...readLinearRecordRows(linearLayout?.rows).value);
+  drawing.linearRecordLayoutEnabled.value = readLinearRecordLayoutEnabled(linearLayout.enabled).value;
+  drawing.linearRecordGap.value = readLinearRecordGap(linearLayout.recordGap).value;
+  drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...readLinearRecordRows(linearLayout.rows).value);
   // The record translations and alignment plan are the Linear mode's
   // artifact; only the Linear drawing's settings carry them. A History
   // config step carries neither and leaves them alone (OV-383).
   const ownsAlignment = applyAlignment && drawing === state.drawings.linear;
   if (state.linearRecordTranslations && ownsAlignment) {
-    state.linearRecordTranslations.value = cloneJsonData(readList(linearLayout?.recordTranslations).value);
+    state.linearRecordTranslations.value = cloneJsonData(readList(linearLayout.recordTranslations).value);
   }
   if (state.similarityAlignmentPlan && ownsAlignment) {
-    state.similarityAlignmentPlan.value = cloneJsonData(readSimilarityAlignment(linearLayout?.similarityAlignment).value);
+    state.similarityAlignmentPlan.value = cloneJsonData(readSimilarityAlignment(linearLayout.similarityAlignment).value);
   }
   replaceLinearComparisonPlan(
     drawing.linearComparisonPlan,
     data.linearComparisonPlan || createDefaultLinearComparisonPlan()
   );
-  drawing.importedComparisonIntent.action = readImportedComparisonAction(data.importedComparisonResolution?.action).value;
+  drawing.importedComparisonIntent.action = readImportedComparisonAction(readPlainObject(data.importedComparisonResolution).value.action).value;
   drawing.form.plot_title = String(drawing.form.plot_title || '');
   // `form.legend` and `adv.plot_title_position` are accessors over
   // `layoutPreferences` (state.js) whose setters normalize a merged value.
@@ -2837,7 +2838,7 @@ const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, a
   if (!storedRules.kept) {
     drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...storedRules.value);
     drawing.fileLegendCaptions.value = new Set(
-      drawing.manualSpecificRules
+      storedRules.value
         .filter((rule) => rule.fromFile && rule.cap)
         .map((rule) => rule.cap)
     );
@@ -2857,7 +2858,7 @@ const applyStoredConfigData = (drawing, data, { resolveTrackPlacements = true, a
     drawing.losatProgram.value = readLosatProgram(data.losatProgram).value;
   }
   drawing.circularConservation.labels = String(drawing.circularConservation.labels || '');
-  const webEdits = data.webEdits && typeof data.webEdits === 'object' ? data.webEdits : {};
+  const webEdits = readPlainObject(data.webEdits).value;
   if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupNameOverrides')) {
     replaceStringMap(drawing.orthogroupNameOverrides, webEdits.orthogroupNameOverrides);
   }
