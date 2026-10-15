@@ -373,3 +373,15 @@ test('hash color rules migrate to the vectors both readers share', () => {
     assert.deepEqual(saved, input, name);
   }
 });
+
+// The same vectors pin the Python reader (tests/test_session_compat.py).
+const featureEditVectors = JSON.parse(readFileSync(new URL('../fixtures/feature-edit-migration-vectors.json', import.meta.url), 'utf8'));
+
+test('rendered-ID feature edits migrate to the vectors both readers share', () => {
+  for (const { name, input, expected } of featureEditVectors.cases) {
+    const saved = structuredClone(input);
+    const { features, droppedCount, narrowedVisibilityCount } = migrateSessionFeatureEdits(saved);
+    assert.deepEqual({ features, droppedCount, narrowedVisibilityCount }, expected, name);
+    assert.deepEqual(saved, input, name);
+  }
+});

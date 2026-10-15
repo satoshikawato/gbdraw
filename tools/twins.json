@@ -116,7 +116,7 @@
         "gbdraw/web/js/services/session-request.js:projectCanonicalSessionRequest"
       ],
       "vector": "tests/fixtures/feature-edit-migration-vectors.json",
-      "reason": "Partly shared: the Web test runs only the source-read cases of the vector; the edit cases run in Python only.",
+      "reason": "Partly shared: the Web reads the source-read cases through projectCanonicalSessionRequest; the edit cases run through migrateSessionFeatureEdits (function row).",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (placement drafts, rendered-ID edits, annotation targets; OV-102, OV-114, OV-133)"
     },
@@ -573,8 +573,8 @@
       "jsOwner": [
         "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionFeatureEdits"
       ],
-      "vector": null,
-      "reason": "Both Load paths migrate. The Python test runs the edit cases of tests/fixtures/feature-edit-migration-vectors.json through this function; the Web test runs only the vector's source-read cases (through projectCanonicalSessionRequest) and has its own inline edit cases (OV-714), so the row names no shared vector.",
+      "vector": "tests/fixtures/feature-edit-migration-vectors.json",
+      "reason": "Both Load paths migrate; the 15 edit cases of the shared vector pin them.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (rendered-ID edits; OV-114)"
     },
