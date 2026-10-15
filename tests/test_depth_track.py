@@ -721,6 +721,7 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
         track_width_override=None,
         norm_factor_override=None,
         record_transform=None,
+        **_unused,
     ):
         assert track_width_override is not None
         assert norm_factor_override is not None
@@ -738,6 +739,7 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
         track_width_override=None,
         norm_factor_override=None,
         record_transform=None,
+        **_unused,
     ):
         assert track_width_override is not None
         assert norm_factor_override is not None
@@ -755,6 +757,7 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
         track_width_override=None,
         norm_factor_override=None,
         record_transform=None,
+        **_unused,
     ):
         assert track_width_override is not None
         assert norm_factor_override is not None
@@ -833,6 +836,7 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
         norm_factor_override=None,
         group_id=None,
         record_transform=None,
+        **_unused,
     ):
         captured["gc_width"] = float(track_width_override)
         captured["gc_norm"] = float(norm_factor_override)
@@ -849,6 +853,7 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
         norm_factor_override=None,
         group_id=None,
         record_transform=None,
+        **_unused,
     ):
         captured["skew_width"] = float(track_width_override)
         captured["skew_norm"] = float(norm_factor_override)

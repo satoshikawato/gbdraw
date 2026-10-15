@@ -35,7 +35,10 @@ P = ParamSpec("P")
 class GroupKind(str, Enum):
     """The closed set of group kinds a content can have."""
 
+    # Linear: the record group that draws the axis and the ruler (it carries the record span).
     AXIS = "axis"
+    # Circular: the axis circle alone.
+    AXIS_CIRCLE = "axis_circle"
     FEATURES = "features"
     LABEL_LEADERS = "label_leaders"
     LABEL_TEXT = "label_text"
@@ -190,12 +193,14 @@ class ContentGroup(Group):
         )
 
 
-class _BuildsGroup(Protocol):
+class BuildsGroup(Protocol):
+    """A group class instance: it built its group in ``__init__``."""
+
     def get_group(self) -> Group: ...
 
 
 def build_group_content(
-    group_class: Callable[P, _BuildsGroup],
+    group_class: Callable[P, BuildsGroup],
     /,
     *args: P.args,
     **kwargs: P.kwargs,
@@ -275,6 +280,7 @@ def group_manifest(drawing: Drawing) -> tuple[RenderedGroup, ...]:
 
 
 __all__ = [
+    "BuildsGroup",
     "CANVAS_SCOPE",
     "ContentGroup",
     "DefinitionMeasurement",

@@ -5,8 +5,6 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from gbdraw.svg.elements import Group
 
-from ....auto_sizes import determine_length_parameter
-from ....config.models import GbdrawConfig
 from ...drawers.circular.gc_content import GcContentDrawer
 from ....configurators import GcContentConfigurator
 
@@ -25,10 +23,8 @@ class GcContentGroup:
         radius: float,
         track_width: float,
         gc_config: GcContentConfigurator,
-        track_id: str,
         *,
-        cfg: GbdrawConfig,
-        norm_factor_override: float | None = None,
+        norm_factor_override: float,
         group_id: str | None = None,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
@@ -41,14 +37,7 @@ class GcContentGroup:
         self.record_len: int = len(self.gb_record.seq)
         self.gc_df: DataFrame = gc_df
         self.track_width: float = track_width
-        self.length_threshold = cfg.labels.length_threshold.circular
-        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
-        self.track_type = cfg.canvas.circular.track_type
-        self.norm_factor = (
-            float(norm_factor_override)
-            if norm_factor_override is not None
-            else cfg.canvas.circular.track_dict[self.length_param][self.track_type][str(track_id)]
-        )
+        self.norm_factor = float(norm_factor_override)
         self.dinucleotide: str = self.gc_config.dinucleotide
         self.add_elements_to_group()
 

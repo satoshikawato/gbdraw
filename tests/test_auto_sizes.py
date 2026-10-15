@@ -238,7 +238,7 @@ def test_circular_auto_values_equal_render_time_resolution(cfg: GbdrawConfig, le
         "tuckin",
         CircularPresetContext(
             cfg=cfg,
-            canvas_config=canvas,
+            geometry=canvas.geometry(),
             total_length=length,
             strandedness=False,
             show_features=True,
@@ -246,6 +246,7 @@ def test_circular_auto_values_equal_render_time_resolution(cfg: GbdrawConfig, le
             show_depth=True,
             show_gc=True,
             show_skew=True,
+            track_ids=tuple(canvas.track_ids.items()),
         ),
     )
     widths = {slot.id: slot.width.value for slot in slots if slot.width is not None}
@@ -318,7 +319,7 @@ def test_mixed_circular_canvas_reports_the_harmonized_long_styles(cfg: GbdrawCon
             "tuckin",
             CircularPresetContext(
                 cfg=harmonized,
-                canvas_config=canvas,
+                geometry=canvas.geometry(),
                 total_length=length,
                 strandedness=False,
                 show_features=True,
@@ -326,6 +327,7 @@ def test_mixed_circular_canvas_reports_the_harmonized_long_styles(cfg: GbdrawCon
                 show_depth=True,
                 show_gc=True,
                 show_skew=True,
+                track_ids=tuple(canvas.track_ids.items()),
             ),
         )
         for slot in slots:

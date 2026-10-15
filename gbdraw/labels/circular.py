@@ -16,7 +16,7 @@ from .filtering import label_filter_maps
 from .circular_candidates import build_circular_label_candidates
 from .circular_leaders import chosen_contact_end, leader_polyline
 from .circular_radial import place_radial_labels
-from .circular_types import CircularLabel
+from .circular_types import CircularLabel, CircularLabelCandidateCache
 from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
 from ..config.models import (
     CircularRenderProfile,
@@ -4928,7 +4928,7 @@ def prepare_label_list(
     track_preset: str | None = None,
     feature_lane_direction: str | None = None,
     label_font_size: float | None = None,
-    _candidate_cache: dict[str, object] | None = None,
+    _candidate_cache: CircularLabelCandidateCache | None = None,
     record_transform: RecordDisplayTransform | None = None,
     probe: bool = False,
     definition_text: Sequence[Aabb] = (),

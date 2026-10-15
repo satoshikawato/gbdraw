@@ -51,6 +51,11 @@ class CircularLabelCandidate:
     source_middle_bp: float | None = None
 
 
+# The measured candidates of one label font size ("candidates"), shared by the
+# placements of one record.
+CircularLabelCandidateCache: TypeAlias = dict[str, tuple[CircularLabelCandidate, ...]]
+
+
 class _CircularLabelRequired(TypedDict):
     """Keys every Circular label has from ``prepare_label_list`` on."""
 
@@ -163,6 +168,7 @@ class CircularLabelLayoutResult:
 __all__ = [
     "CircularLabel",
     "CircularLabelCandidate",
+    "CircularLabelCandidateCache",
     "CircularLabelLayoutResult",
     "CircularLabelPlacement",
     "normalize_circular_label_placement",

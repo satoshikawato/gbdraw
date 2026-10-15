@@ -680,6 +680,9 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
     from gbdraw import cli
 
     monkeypatch.setattr(circular_repair_module, "MAX_DEFECTS", 0)
+    # The warning search stops after 5 s of wall clock (LP-D48), so a slow runner prints
+    # "Not searched within 5 s" instead of the rows. A clock that stands still searches every row.
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
     output = tmp_path / "lambda"
     monkeypatch.setattr(
         sys, "argv", ["gbdraw", "circular", *LAMBDA_ARGS, "-o", str(output), "-f", "svg"]

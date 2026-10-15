@@ -35,6 +35,7 @@ from gbdraw.layout.composition import (
     CompositionPlan,
 )
 from gbdraw.layout.spatial import Aabb
+from gbdraw.render.group_content import GroupContent, GroupKey, GroupKind, place_content
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 from gbdraw.tracks import CircularTrackSlot
 
@@ -366,10 +367,12 @@ def _build_mock_circular_subcanvas(width: float, height: float, inset: float) ->
         viewBox=f"0 0 {width} {height}",
         debug=False,
     )
-    axis_group = canvas.g(id="Axis")
-    axis_group.translate(width * 0.5, height * 0.5)
+    # A record drawing holds placed contents only, as real record assembly does.
+    axis = canvas.g(id="Axis")
     radius = max(1.0, (width * 0.5) - float(inset))
-    axis_group.add(canvas.circle(center=(0, 0), r=radius, fill="none", stroke="gray"))
+    axis.add(canvas.circle(center=(0, 0), r=radius, fill="none", stroke="gray"))
+    axis_group = place_content(canvas, GroupContent.of(axis), GroupKey("record", GroupKind.AXIS_CIRCLE))
+    axis_group.translate(width * 0.5, height * 0.5)
     canvas.add(axis_group)
     return _with_mock_circular_result(
         canvas,
@@ -1746,7 +1749,7 @@ def test_multi_record_positions_group_rows_and_preserve_within_row_order(
         )
         marker = canvas.g(id=f"marker_{gb_record.id}")
         marker.add(canvas.circle(center=(10, 10), r=1))
-        canvas.add(marker)
+        canvas.add(place_content(canvas, GroupContent.of(marker), GroupKey("record", GroupKind.AXIS_CIRCLE)))
         return _with_mock_circular_result(canvas)
 
     monkeypatch.setattr(
@@ -1904,7 +1907,7 @@ def test_multi_record_positions_accept_record_id_selectors(
         )
         marker = canvas.g(id=f"marker_{gb_record.id}")
         marker.add(canvas.circle(center=(10, 10), r=1))
-        canvas.add(marker)
+        canvas.add(place_content(canvas, GroupContent.of(marker), GroupKey("record", GroupKind.AXIS_CIRCLE)))
         return _with_mock_circular_result(canvas)
 
     monkeypatch.setattr(
@@ -4348,3 +4351,56 @@ def test_multi_record_grid_layout_never_serializes_subcanvases(
         legend="none",
     )
     assert isinstance(canvas, Drawing)
+
+
+def test_the_record_merge_renames_ids_of_earlier_records_without_changing_the_contents() -> None:
+    """A record's merge takes the previous record's result: its ids are unique
+    against every earlier record (M9), and the stored contents are copied, not
+    changed."""
+
+    from gbdraw.api.diagram import merge_circular_record
+    from gbdraw.render.group_content import GroupContent
+    from gbdraw.svg.elements import Group, Path
+
+    def content() -> GroupContent:
+        group = Group(id="Axis")
+        group.add(Path(d="M0,0", id="shared", fill="url(#hatch)"))
+        pattern = Drawing().pattern(id="hatch")
+        return GroupContent.of(group, (pattern,))
+
+    first_content, second_content = content(), content()
+    placed_attributes = (("id", "Axis"), ("data-gbdraw-composition-role", "primary"))
+    first = merge_circular_record(
+        ((first_content, placed_attributes),),
+        ((0, 0),),
+        record_index=0,
+        record_id="A",
+        bind_record_identity=False,
+        previous=None,
+    )
+    second = merge_circular_record(
+        ((second_content, placed_attributes),),
+        ((0, 0),),
+        record_index=1,
+        record_id="A",
+        bind_record_identity=False,
+        previous=first,
+    )
+
+    assert first.content.attributes == {
+        "id": "record_0",
+        "data-gbdraw-record-id": "A",
+        "data-gbdraw-record-index": "0",
+    }
+    (second_axis,) = second.content.children
+    assert second_axis.attribs == {"id": "Axis_1"}
+    (second_path,) = second_axis.elements
+    assert second_path.attribs["id"] == "shared__record_2"
+    assert second_path.attribs["fill"] == "url(#hatch__record_2)"
+    assert second.content.definition_ids == ("hatch__record_2",)
+    assert {"record_0", "record_1", "Axis_0", "Axis_1", "shared", "hatch"} <= second.used_ids
+    # The stored contents keep their ids and roles.
+    for stored in (first_content, second_content):
+        (path,) = stored.children
+        assert path.attribs["id"] == "shared"
+        assert stored.definitions[0].attribs["id"] == "hatch"

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 
-from svgwrite import Drawing
 from svgwrite.pattern import Pattern
 from gbdraw.svg.elements import Line
 
@@ -57,17 +56,4 @@ def hatch_pattern(hatch: HatchStyle) -> Pattern:
     return pattern
 
 
-def ensure_hatch_pattern(drawing: Drawing, hatch: HatchStyle) -> str:
-    """Return a deduplicated ``url(#...)`` paint for one hatch style."""
-
-    pattern_id = hatch_pattern_id(hatch)
-    existing = {
-        str(getattr(item, "attribs", {}).get("id", ""))
-        for item in getattr(drawing.defs, "elements", ())
-    }
-    if pattern_id not in existing:
-        drawing.defs.add(hatch_pattern(hatch))
-    return hatch_pattern_paint(hatch)
-
-
-__all__ = ["ensure_hatch_pattern", "hatch_pattern", "hatch_pattern_id", "hatch_pattern_paint"]
+__all__ = ["hatch_pattern", "hatch_pattern_id", "hatch_pattern_paint"]

@@ -60,7 +60,8 @@ def _compute_case(radius_px: float, layout: str, side: str, width_px: float | No
     slots = [features, ticks] if side == "inside" else [ticks, features]
     radial_layout = resolve_circular_radial_layout(
         total_length=TOTAL_LENGTH,
-        canvas_config=canvas,
+        geometry=canvas.geometry(),
+        cfg=canvas.profile.config,
         slots=slots,
         feature_dict={"a": _Feature()},
     )

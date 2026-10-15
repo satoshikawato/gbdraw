@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional, Sequence, cas
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite import Drawing
+from svgwrite.base import BaseElement
 
 from gbdraw.analysis.collinearity import (
     CollinearityAnchorMode,
@@ -42,6 +43,7 @@ from gbdraw.analysis.collinearity_units import CollinearityUnitMode
 from gbdraw.analysis.conservation import (
     conservation_legend_sources,
     ConservationLoadResult,
+    ConservationReferenceMode,
     ConservationTrack,
     load_conservation_sources,
     normalize_conservation_reference,
@@ -184,7 +186,7 @@ from gbdraw.layout.composition import (
     TitlePlacement,
     plan_composition,
 )
-from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
+from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
@@ -210,8 +212,17 @@ from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
 )
-from gbdraw.render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupKind, place_content
+from gbdraw.render.group_content import (
+    CANVAS_SCOPE,
+    ContentGroup,
+    GroupContent,
+    GroupKey,
+    GroupKind,
+    build_group_content,
+    place_content,
+)
 from gbdraw.render.groups.circular import DefinitionGroup
+from gbdraw.render.groups.circular.definition import definition_record_facts
 from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
@@ -546,60 +557,50 @@ def _has_conservation_inputs(
     return bool(conservation_blast_files or conservation_dataframes)
 
 
-def _build_conservation_blast_config(
-    records: Sequence[SeqRecord],
-    *,
-    evalue: float,
-    bitscore: float,
-    identity: float,
-    alignment_length: int,
-    default_colors: DataFrame,
-    profile: CircularRenderProfile,
-) -> BlastMatchConfigurator:
-    return BlastMatchConfigurator(
-        evalue=float(evalue),
-        bitscore=float(bitscore),
-        identity=float(identity),
-        alignment_length=int(alignment_length),
-        sequence_length_dict=create_dict_for_sequence_lengths(records),
-        profile=profile,
-        default_colors_df=default_colors,
-    )
-
-
 def _load_conservation_result(
-    records: Sequence[SeqRecord],
     *,
     conservation_blast_files: Sequence[ConservationInput] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
     conservation_labels: Sequence[str] | None,
     conservation_colors: Sequence[str] | None,
-    evalue: float,
-    bitscore: float,
-    identity: float,
-    alignment_length: int,
-    default_colors: DataFrame,
-    profile: CircularRenderProfile,
+    thresholds: ComparisonThresholds,
 ) -> ConservationLoadResult | None:
+    """The filtered conservation sources, from the ``conservation_sources`` stage.
+
+    Files are read outside the stage, so a staged file is keyed by its
+    resource identity, never by its path.
+    """
+
     if not _has_conservation_inputs(conservation_blast_files, conservation_dataframes):
         return None
-    if alignment_length < 0:
-        raise ValidationError("alignment_length must be >= 0")
-    blast_config = _build_conservation_blast_config(
-        records,
-        evalue=evalue,
-        bitscore=bitscore,
-        identity=identity,
-        alignment_length=alignment_length,
-        default_colors=default_colors,
-        profile=profile,
-    )
-    return load_conservation_sources(
-        blast_config=blast_config,
-        conservation_files=conservation_blast_files,
+    return render_stage(
+        "conservation_sources",
+        load_conservation_sources,
+        blast_config=thresholds,
+        conservation_files=read_conservation_inputs(conservation_blast_files),
         conservation_dataframes=conservation_dataframes,
         labels=conservation_labels,
         colors=conservation_colors,
+    )
+
+
+def _conservation_tracks_for_record(
+    load_result: ConservationLoadResult | None,
+    records: Sequence[SeqRecord],
+    record: SeqRecord,
+    conservation_reference: ConservationReferenceMode,
+) -> tuple[ConservationTrack, ...]:
+    """The rings of one displayed record, from the ``conservation_tracks`` stage."""
+
+    if load_result is None:
+        return ()
+    return render_stage(
+        "conservation_tracks",
+        normalize_conservation_tracks_for_record,
+        load_result,
+        displayed_records=tuple(records),
+        record=record,
+        conservation_reference=conservation_reference,
     )
 
 
@@ -1158,6 +1159,104 @@ def _uniquify_copied_subtrees_ids(
                     attribs[name] = rewritten
 
 
+# One placed top-level group of a record drawing: its content and its attributes in document order.
+PlacedRecordContent = tuple[GroupContent, tuple[tuple[str, object], ...]]
+
+
+@dataclass(frozen=True)
+class MergedCircularRecord:
+    """Result of the ``record_merge`` stage: one record's ``record_<i>`` group content.
+
+    ``used_ids`` holds the ids of this record and of every earlier one; the next
+    record's merge takes this result, so its ids depend on all earlier records.
+    """
+
+    content: GroupContent
+    used_ids: frozenset[str]
+
+
+def placed_record_contents(
+    drawing: Drawing,
+) -> tuple[tuple[PlacedRecordContent, ...], tuple[tuple[int, int], ...]]:
+    """The placed contents of a single-record Circular drawing and where each of its definitions comes from.
+
+    A definition's position is (index of the placed content, index in its definitions).
+    """
+
+    placed: list[PlacedRecordContent] = []
+    definitions: list[object] = []
+    for element in drawing.elements:
+        if _is_defs_element(element):
+            definitions.extend(getattr(element, "elements", ()) or ())
+            continue
+        if not isinstance(element, ContentGroup):
+            raise RuntimeError(f"a Circular record drawing holds a group that is not a content: {element!r}")
+        placed.append((element.content, tuple(element.attribs.items())))
+    owners = {
+        id(definition): (content_index, definition_index)
+        for content_index, (content, _attributes) in enumerate(placed)
+        for definition_index, definition in enumerate(content.definitions)
+    }
+    try:
+        positions = tuple(owners[id(definition)] for definition in definitions)
+    except KeyError as error:
+        raise RuntimeError("a Circular record drawing holds a definition that no content holds") from error
+    return tuple(placed), positions
+
+
+def merge_circular_record(
+    placed: tuple[PlacedRecordContent, ...],
+    definition_positions: tuple[tuple[int, int], ...],
+    *,
+    record_index: int,
+    record_id: str,
+    bind_record_identity: bool,
+    previous: MergedCircularRecord | None,
+) -> MergedCircularRecord:
+    """The ``record_merge`` stage: copy one record's groups into its ``record_<i>`` group.
+
+    The copies drop the single-record composition roles, suffix the fixed
+    top-level ids, and rename ids that an earlier record (``previous``) or this
+    one already uses, with the references to them. The stored contents are not
+    changed: their children are deep copies (perf-0140 D-07 keeps the copy).
+    """
+
+    used_ids = set(previous.used_ids) if previous is not None else set()
+    used_ids.add(f"record_{record_index}")
+    copied_definitions: list[BaseElement] = [
+        copy.deepcopy(placed[content_index][0].definitions[definition_index])
+        for content_index, definition_index in definition_positions
+    ]
+    copied_elements: list[Group] = []
+    for content, attributes in placed:
+        group = Group(debug=False)
+        if content.parameter is not None:
+            group._parameter = content.parameter
+        group.attribs = dict(attributes)
+        group.elements = list(content.children)
+        copied = copy.deepcopy(group)
+        _strip_nested_composition_roles(copied)
+        _suffix_fixed_top_level_group_id(copied, record_index)
+        copied_elements.append(copied)
+    for definition in copied_definitions:
+        _strip_nested_composition_roles(definition)
+    _uniquify_copied_subtrees_ids(
+        (*copied_definitions, *copied_elements),
+        record_index=record_index,
+        used_ids=used_ids,
+        bind_record_identity=bind_record_identity,
+    )
+    record_group = Group(id=f"record_{record_index}")
+    record_group.attribs["data-gbdraw-record-id"] = record_id
+    record_group.attribs["data-gbdraw-record-index"] = str(record_index)
+    for copied in copied_elements:
+        record_group.add(copied)
+    return MergedCircularRecord(
+        content=GroupContent.of(record_group, tuple(copied_definitions)),
+        used_ids=frozenset(used_ids),
+    )
+
+
 def _is_defs_element(element: object) -> bool:
     """Return True if the element is an SVG <defs> container."""
     class_name = element.__class__.__name__.lower()
@@ -1238,7 +1337,7 @@ def _apply_circular_plot_title_font_size_override(
     )
 
 
-def _build_circular_plot_title_group(
+def _circular_plot_title_content(
     *,
     gb_record: SeqRecord,
     output_prefix: str,
@@ -1248,25 +1347,29 @@ def _build_circular_plot_title_group(
     strain: str | None,
     plot_title: str | None,
     record_presentation: RecordPresentation | None,
-) -> tuple[Group, Aabb]:
+) -> GroupContent:
+    """The plot title content, keyed by the record's facts (not the record) and the title geometry."""
+
     plot_title_canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix,
         profile=profile,
         legend="none",
         gb_record=gb_record,
     )
-    definition = DefinitionGroup(
-        gb_record=gb_record,
-        canvas_config=plot_title_canvas_config,
+    return render_stage(
+        "circular_plot_title_content",
+        build_group_content,
+        DefinitionGroup,
+        definition_record_facts(gb_record, gc_percent=False),
+        plot_title_canvas_config.geometry(),
+        cfg=cfg,
         species=species,
         strain=strain,
         plot_title=plot_title,
         definition_profile="shared_common",
         definition_group_id="plot_title",
-        cfg=cfg,
         record_presentation=record_presentation,
     )
-    return definition.get_group(), definition.local_bounds
 
 
 def _validate_multi_record_min_radius_ratio(value: float) -> float:
@@ -2523,27 +2626,14 @@ def assemble_circular_diagram_from_record(
         conservation_tracks = tuple(_precomputed_conservation_tracks)
     else:
         conservation_load_result = _load_conservation_result(
-            [gb_record],
             conservation_blast_files=conservation_blast_files,
             conservation_dataframes=conservation_dataframes,
             conservation_labels=conservation_labels,
             conservation_colors=conservation_colors,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-            default_colors=default_colors,
-            profile=profile,
+            thresholds=thresholds,
         )
-        conservation_tracks = (
-            normalize_conservation_tracks_for_record(
-                conservation_load_result,
-                displayed_records=[gb_record],
-                record=gb_record,
-                conservation_reference=conservation_mode,
-            )
-            if conservation_load_result is not None
-            else ()
+        conservation_tracks = _conservation_tracks_for_record(
+            conservation_load_result, [gb_record], gb_record, conservation_mode
         )
     if conservation_tracks:
         if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
@@ -2694,11 +2784,10 @@ def assemble_circular_diagram_from_record(
         canvas_config=canvas_config,
     )
 
-    title_target: Group | None = None
-    title_bounds: Aabb | None = None
+    title_content: GroupContent | None = None
     title_placement = TitlePlacement.NONE
     if show_plot_title:
-        title_target, title_bounds = _build_circular_plot_title_group(
+        title_content = _circular_plot_title_content(
             gb_record=gb_record,
             output_prefix=output_prefix,
             cfg=cfg,
@@ -2743,8 +2832,7 @@ def assemble_circular_diagram_from_record(
         definition_profile=effective_definition_profile,
         definition_group_id=_definition_group_id,
         center_reserved_radius=center_reserved_radius,
-        title_target=title_target,
-        title_bounds=title_bounds,
+        title_content=title_content,
         title_placement=title_placement,
     )
     _attach_circular_label_layouts(result.drawing, [result.label_layout])
@@ -2989,27 +3077,14 @@ def assemble_circular_diagram_from_records(
     )
     conservation_mode = normalize_conservation_reference(conservation_reference)
     conservation_load_result = _load_conservation_result(
-        records,
         conservation_blast_files=conservation_blast_files,
         conservation_dataframes=conservation_dataframes,
         conservation_labels=conservation_labels,
         conservation_colors=conservation_colors,
-        evalue=evalue,
-        bitscore=bitscore,
-        identity=identity,
-        alignment_length=alignment_length,
-        default_colors=default_colors,
-        profile=profile,
+        thresholds=thresholds,
     )
-    first_record_conservation_tracks = (
-        normalize_conservation_tracks_for_record(
-            conservation_load_result,
-            displayed_records=records,
-            record=records[0],
-            conservation_reference=conservation_mode,
-        )
-        if conservation_load_result is not None
-        else ()
+    first_record_conservation_tracks = _conservation_tracks_for_record(
+        conservation_load_result, records, records[0], conservation_mode
     )
     if first_record_conservation_tracks:
         if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
@@ -3106,15 +3181,8 @@ def assemble_circular_diagram_from_records(
             if record_id_counts[raw_record_id] > 1
             else None
         )
-        record_conservation_tracks = (
-            normalize_conservation_tracks_for_record(
-                conservation_load_result,
-                displayed_records=records,
-                record=record,
-                conservation_reference=conservation_mode,
-            )
-            if conservation_load_result is not None
-            else ()
+        record_conservation_tracks = _conservation_tracks_for_record(
+            conservation_load_result, records, record, conservation_mode
         )
         sub_canvas = assemble_circular_diagram_from_record(
             record,
@@ -3202,11 +3270,10 @@ def assemble_circular_diagram_from_records(
     legend_target: Group | None = None
     legend_content: GroupContent | None = None
     legend_bounds: Aabb | None = None
-    plot_title_group: Group | None = None
-    plot_title_bounds: Aabb | None = None
+    plot_title_content: GroupContent | None = None
 
     if show_plot_title:
-        plot_title_group, plot_title_bounds = _build_circular_plot_title_group(
+        plot_title_content = _circular_plot_title_content(
             gb_record=records[0],
             output_prefix=output_prefix,
             cfg=cfg,
@@ -3323,56 +3390,36 @@ def assemble_circular_diagram_from_records(
         debug=False,
     )
     attach_legend_row_facts(merged_canvas, legend_row_facts)
-    used_ids: set[str] = set()
     record_targets: list[Group] = []
     grid_overlay_obstacles: list[Aabb] = []
+    bind_record_identity = len(records) > 1 and (
+        len({record.id for record in records}) != len(records)
+        or bool(
+            _record_transforms
+            and any(transform.start_coordinate is not None for transform in _record_transforms)
+        )
+    )
+    merged_record: MergedCircularRecord | None = None
 
     for record_index, result in enumerate(record_results):
-        record_group = Group(id=f"record_{record_index}")
-        record_group.attribs["data-gbdraw-record-id"] = str(records[record_index].id)
-        record_group.attribs["data-gbdraw-record-index"] = str(record_index)
+        placed, definition_positions = placed_record_contents(result.drawing)
+        merged_record = render_stage(
+            "record_merge",
+            merge_circular_record,
+            placed,
+            definition_positions,
+            record_index=record_index,
+            record_id=str(records[record_index].id),
+            bind_record_identity=bind_record_identity,
+            previous=merged_record,
+        )
+        record_group = place_content(
+            merged_canvas,
+            merged_record.content,
+            GroupKey(record_key_at(records[record_index], record_index), GroupKind.RECORD),
+        )
         record_dx, record_dy = grid_layout.translations[record_index]
         record_group.translate(record_dx, record_dy)
-        used_ids.add(f"record_{record_index}")
-
-        copied_definitions: list[object] = []
-        copied_elements: list[object] = []
-        for element in result.drawing.elements:
-            copied = copy.deepcopy(element)
-            if _is_defs_element(element):
-                copied_definitions.extend(
-                    list(getattr(copied, "elements", ()) or ())
-                )
-                continue
-            _strip_nested_composition_roles(copied)
-            _suffix_fixed_top_level_group_id(copied, record_index)
-            copied_elements.append(copied)
-
-        for definition in copied_definitions:
-            _strip_nested_composition_roles(definition)
-
-        _uniquify_copied_subtrees_ids(
-            (*copied_definitions, *copied_elements),
-            record_index=record_index,
-            used_ids=used_ids,
-            bind_record_identity=(
-                len(records) > 1
-                and (
-                    len({record.id for record in records}) != len(records)
-                    or bool(
-                        _record_transforms
-                        and any(
-                            transform.start_coordinate is not None
-                            for transform in _record_transforms
-                        )
-                    )
-                )
-            ),
-        )
-        for definition in copied_definitions:
-            merged_canvas.defs.add(definition)
-        for copied in copied_elements:
-            record_group.add(copied)
         merged_canvas.add(record_group)
         record_targets.append(record_group)
         grid_overlay_obstacles.extend(
@@ -3380,7 +3427,13 @@ def assemble_circular_diagram_from_records(
             for obstacle in result.overlay_obstacles
         )
 
-    if plot_title_group is not None:
+    plot_title_group: Group | None = None
+    plot_title_bounds: Aabb | None = None
+    if plot_title_content is not None:
+        plot_title_group = place_content(
+            merged_canvas, plot_title_content, GroupKey(CANVAS_SCOPE, GroupKind.PLOT_TITLE)
+        )
+        plot_title_bounds = plot_title_content.local_bounds
         merged_canvas.add(plot_title_group)
     if legend_content is not None:
         legend_target = place_content(

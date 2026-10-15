@@ -56,14 +56,17 @@ RenderStageName = Literal[
     "legend_measurement",
     "legend_content",
     "plot_title_content",
+    "circular_plot_title_content",
     "composition_plan",
     "gc_content_content",
     "gc_skew_content",
     "depth_content",
     "length_bar_content",
     "definition_content",
+    "circular_definition_content",
     "annotation_content",
     "record_content",
+    "circular_record_content",
     "comparison_content",
     "interactive_context",
     "catalog_normalization",
@@ -75,11 +78,37 @@ RenderStageName = Literal[
     "derived_losat_entries",
     "feature_layers",
     "feature_dom_index",
+    "circular_labels",
+    "circular_radial_labels",
+    "axis_content",
+    "ticks_content",
+    "conservation_sources",
+    "conservation_tracks",
+    "conservation_content",
+    "label_leaders_content",
+    "label_text_content",
+    "record_merge",
 ]
 
 # The sections of GbdrawConfig each stage reads (design 2.2). A section is a
 # top node ("canvas", "labels", "objects": its direct values) or one of the
 # dataclasses below it ("labels.filtering", "objects.features", ...).
+_CIRCULAR_LABEL_SECTIONS = frozenset(
+    {
+        "canvas",
+        "canvas.circular",
+        "labels",
+        "labels.font_size",
+        "labels.length_threshold",
+        "labels.spacing",
+        "labels.unified_adjustment",
+        "objects.features",
+        "objects.text",
+    }
+)
+# The Circular tick group sizes itself from the length threshold and the
+# preset track table.
+_CIRCULAR_TRACK_SECTIONS = frozenset({"canvas.circular", "labels.length_threshold"})
 RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "color_rules": frozenset(),
     "default_colors": frozenset(),
@@ -92,19 +121,31 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "legend_measurement": frozenset(),
     "legend_content": frozenset(),
     "plot_title_content": frozenset(),
+    # The Circular title is a shared-common definition (its font and interval).
+    "circular_plot_title_content": frozenset({"objects.definition", "objects.text"}),
     "composition_plan": frozenset(),
+    # The Circular track groups take their norm factor from the radial plan.
     "gc_content_content": frozenset(),
     "gc_skew_content": frozenset(),
     "depth_content": frozenset(),
     "length_bar_content": frozenset(),
     "definition_content": frozenset(),
+    # The Circular centre or edge definition reads its font and interval.
+    "circular_definition_content": frozenset({"objects.definition", "objects.text"}),
     "annotation_content": frozenset(),
+    # Linear: the record group draws the axis, the ruler, features and labels.
     "record_content": frozenset(
+        {"labels.stroke_color", "labels.stroke_width", "objects.axis", "objects.scale", "objects.text"}
+    ),
+    # Circular: the record group sizes features and embedded labels (the label
+    # drawer reads the preset track factors).
+    "circular_record_content": frozenset(
         {
+            "canvas.circular",
+            "labels.font_size",
+            "labels.length_threshold",
             "labels.stroke_color",
             "labels.stroke_width",
-            "objects.axis",
-            "objects.scale",
             "objects.text",
         }
     ),
@@ -119,6 +160,19 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "derived_losat_entries": frozenset(),
     "feature_layers": frozenset(),
     "feature_dom_index": frozenset(),
+    # One function (CA ``circular_labels``) under two names: radial labels also
+    # replan the radial layout as they grow the radius, which reads the axis
+    # and tick sections; horizontal labels never do.
+    "circular_labels": _CIRCULAR_LABEL_SECTIONS,
+    "circular_radial_labels": _CIRCULAR_LABEL_SECTIONS | {"objects.axis", "objects.scale", "objects.ticks"},
+    "axis_content": frozenset({"objects.axis"}),
+    "ticks_content": _CIRCULAR_TRACK_SECTIONS | {"objects.scale", "objects.text", "objects.ticks"},
+    "conservation_sources": frozenset(),
+    "conservation_tracks": frozenset(),
+    "conservation_content": frozenset({"objects.conservation"}),
+    "label_leaders_content": frozenset({"labels.stroke_color", "labels.stroke_width"}),
+    "label_text_content": frozenset({"labels.font_size", "labels.length_threshold", "objects.text"}),
+    "record_merge": frozenset(),
 }
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")
@@ -740,6 +794,8 @@ def render_stage(
     except _Unkeyable as reason:
         logger.debug("render stage %s is not cached: %s", name, reason)
         _metric("Uncacheable", name)
+        # It may take a record without an identity (O-2).
+        prepared.mark_record_touched(transaction)
         result = function(*args, **kwargs)
         _register_result(result, prepared.NO_IDENTITY, _argument_locators(args, kwargs))
         return result
@@ -755,6 +811,8 @@ def render_stage(
         _register_hit(stored, key, args, kwargs)
         return cast(R, stored.result)
 
+    if prepared.key_names_record(key):
+        prepared.mark_record_touched(transaction)
     frame = _StageFrame(name)
     views = {path: _settings_view(config, declared, frame) for path, config in configs}
     call_args = tuple(_with_views(arg, (index,), views) for index, arg in enumerate(args))

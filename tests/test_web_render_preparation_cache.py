@@ -31,7 +31,9 @@ from gbdraw.api.prepared import (
     PreparedResourceIdentity,
     get_or_build_decoded_resource,
     get_or_build_parsed_source,
+    register_prepared_value_identity,
 )
+from gbdraw.render_stages import render_stage
 from gbdraw.annotations import (
     AnnotationOptions,
     AnnotationSet,
@@ -248,6 +250,8 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
     assert cold_metrics["renderStageBuild:interactive_context"] == 1
     assert cold_metrics["interactiveFeatureTraversalCount"] == 1
     assert cold_metrics["preparedInputCacheRetainedBytes"] > 0
+    assert cold_metrics["preparedInputCacheMutationViolationCount"] == 0
+    assert cold_metrics["preparedInputCacheFullCheckCount"] > 0
 
     for diagnostics in (warm_diagnostics, render_only_diagnostics):
         metrics = _metrics(diagnostics)
@@ -256,25 +260,34 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
         assert metrics["resolvedRecordCacheHitCount"] == 1
         assert metrics["resolvedRecordBuildCount"] == 0
         # Every counter of these stages, so a build would show as a second key.
-        for stage in ("interactive_context", "catalog_normalization"):
+        # The catalog item is a hit, so the normalization it reads is not asked for.
+        for stage in ("interactive_context", "catalog_item"):
             assert {
                 name: count for name, count in metrics.items() if name.endswith(f":{stage}")
             } == {f"renderStageHit:{stage}": 1}
         assert metrics["interactiveFeatureTraversalCount"] == 0
         assert metrics["preparedInputCacheRetainedBytes"] > 0
         assert metrics["preparedInputCacheMutationViolationCount"] == 0
+        # O-2: neither request builds a stage that takes a record, so the
+        # violation count above comes from the structure check only.
+        assert metrics["preparedInputCacheFullCheckCount"] == 0
 
     assert warm["results"] == cold["results"]
     assert warm["metadata"] == cold["metadata"]
     assert render_only["results"] != cold["results"]
-    # Circular groups have no contents until PR 4, so the catalog reads the
-    # SVG on every Generate and has no catalog item stage.
+    # Every top-level Circular group is a content (the plot title too), so the
+    # catalog item is reused and no Generate after the first reads the SVG.
+    assert _metrics(cold_diagnostics)["featureCatalogSvgParseCount"] == 1
     for diagnostics in (warm_diagnostics, render_only_diagnostics):
         metrics = _metrics(diagnostics)
-        assert metrics["featureCatalogSvgParseCount"] == 1
-        assert not [name for name in metrics if name.endswith(":catalog_item")]
-    assert float(render_only_diagnostics["timingsMs"]["drawing"]) > 0
-    assert float(render_only_diagnostics["timingsMs"]["svgWrite"]) > 0
+        assert metrics.get("featureCatalogSvgParseCount", 0) == 0
+        assert metrics.get("featureCatalogFullDomTraversalCount", 0) == 0
+    assert not [name for name in _metrics(warm_diagnostics) if name.startswith("renderStageBuild:")]
+    # A title change builds its own content and the composition plan, nothing else.
+    assert {
+        name for name in _metrics(render_only_diagnostics) if name.startswith("renderStageBuild:")
+    } == {"renderStageBuild:circular_plot_title_content", "renderStageBuild:composition_plan"}
+    assert render_only["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
 
 
 def _linear_document(source: Path, *, title: str) -> dict[str, object]:
@@ -316,6 +329,48 @@ def test_a_linear_title_change_reuses_the_catalog_item(tmp_path: Path) -> None:
 
     assert warm["results"] == cold["results"]
     assert warm["metadata"] == cold["metadata"]
+    assert retitled["results"] != cold["results"]
+    assert retitled["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
+
+
+def _multi_record_document(source: Path, *, title: str) -> dict[str, object]:
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=GenBankInputSource(source), record_key="records-1", cardinality=RecordCardinality.ALL
+            ),
+        ),
+        options=CircularDiagramOptions(
+            plot_title=title,
+            output=CircularOutputOptions(plot_title_position="top"),
+        ),
+        output=RenderOutputRequest(output_prefix="prepared-multi-record", formats=("svg",)),
+    )
+    return build_session_document(request).to_dict()
+
+
+def test_a_multi_record_circular_title_change_reuses_the_merged_records(tmp_path: Path) -> None:
+    """The merged records and the catalog item read no title: a title change builds neither."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("multi-a"), _record("multi-b")))
+    cache = PreparedBiologicalInputCache()
+    cold, cold_diagnostics = _render(tmp_path, cache, _multi_record_document(source, title="Cold title"), request_id=1)
+    retitled, retitled_diagnostics = _render(
+        tmp_path, cache, _multi_record_document(source, title="Render-only title change"), request_id=2
+    )
+
+    cold_metrics = _metrics(cold_diagnostics)
+    assert cold_metrics["renderStageBuild:record_merge"] == 2
+    assert cold_metrics["renderStageBuild:catalog_item"] == 1
+    retitled_metrics = _metrics(retitled_diagnostics)
+    assert retitled_metrics["renderStageHit:record_merge"] == 2
+    assert retitled_metrics["renderStageHit:catalog_item"] == 1
+    assert retitled_metrics.get("featureCatalogSvgParseCount", 0) == 0
+    assert {name for name in retitled_metrics if name.startswith("renderStageBuild:")} == {
+        "renderStageBuild:circular_plot_title_content",
+        "renderStageBuild:composition_plan",
+    }
     assert retitled["results"] != cold["results"]
     assert retitled["metadata"]["featureCatalog"] == cold["metadata"]["featureCatalog"]
 
@@ -936,6 +991,17 @@ def _parsed_source_cache(
     return cache, path, identity
 
 
+def _feature_count(record: SeqRecord, _salt: str) -> int:
+    return len(record.features)
+
+
+def _read_in_a_record_stage(record: SeqRecord, salt: str) -> None:
+    """Build a render stage that takes ``record`` (a new ``salt`` builds again): the commit checks owners in full."""
+
+    register_prepared_value_identity(record, (prepared_module.RECORD_IDENTITY_TAG, "test", salt))
+    render_stage("gc_skew_data", _feature_count, record, salt)
+
+
 def _replace_first_feature(records: tuple[SeqRecord, ...]) -> None:
     """Change a cached record without changing its feature count (D-05)."""
 
@@ -971,7 +1037,7 @@ def test_feature_replaced_at_the_same_length_fails_at_commit_of_the_same_request
     tmp_path: Path,
 ) -> None:
     # D-05 (R2-8): the structural check at entry passes, the render runs, and
-    # the full check at commit fails the same request.
+    # the full check at commit (a record stage built) fails the same request.
     records = (_record("replaced"),)
     cache, path, identity = _parsed_source_cache(tmp_path, {"source": records})
     _replace_first_feature(records)
@@ -985,9 +1051,11 @@ def test_feature_replaced_at_the_same_length_fails_at_commit_of_the_same_request
                 frozenset({identity}),
                 lambda: pytest.fail("the entry check is structural"),
             ) is records
+            _read_in_a_record_stage(records[0], "same-request")
             reached_render = True
     assert reached_render is True
     assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 1
+    assert _metrics(diagnostics)["preparedInputCacheFullCheckCount"] == 1
 
     rebuilt = (_record("rebuilt"),)
     with cache.transaction(resource_paths={path: identity}, diagnostics=None):
@@ -996,6 +1064,77 @@ def test_feature_replaced_at_the_same_length_fails_at_commit_of_the_same_request
             frozenset({identity}),
             lambda: rebuilt,
         ) is rebuilt
+
+
+def test_a_request_without_a_record_stage_skips_the_walk_and_the_next_record_stage_finds_the_write(
+    tmp_path: Path,
+) -> None:
+    # O-2 (D-07): a request that builds no record entry and no stage that
+    # takes a record checks structure only; the change is found at the commit
+    # of the next request that runs a record stage.
+    records = (_record("skipped"),)
+    cache, path, identity = _parsed_source_cache(tmp_path, {"source": records})
+    _replace_first_feature(records)
+
+    skipped: dict[str, object] = {"metrics": {}}
+    with cache.transaction(resource_paths={path: identity}, diagnostics=skipped):
+        assert get_or_build_parsed_source(
+            ("source", identity),
+            frozenset({identity}),
+            lambda: pytest.fail("the entry check is structural"),
+        ) is records
+    assert _metrics(skipped)["preparedInputCacheFullCheckCount"] == 0
+    assert _metrics(skipped)["preparedInputCacheMutationViolationCount"] == 0
+
+    diagnostics: dict[str, object] = {"metrics": {}}
+    with pytest.raises(ValidationError, match="ownership was mutated .*feature 0"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            get_or_build_parsed_source(
+                ("source", identity),
+                frozenset({identity}),
+                lambda: pytest.fail("the entry check is structural"),
+            )
+            _read_in_a_record_stage(records[0], "next-request")
+    assert _metrics(diagnostics)["preparedInputCacheFullCheckCount"] == 1
+    assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 1
+
+
+def test_a_request_that_builds_a_record_entry_checks_it_in_full_without_a_record_stage(
+    tmp_path: Path,
+) -> None:
+    """O-2 (D-07): a new entry that holds records is walked at its commit, with no stage run."""
+
+    cache, path, identity = _parsed_source_cache(tmp_path, {})
+    diagnostics: dict[str, object] = {"metrics": {}}
+    with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+        get_or_build_parsed_source(
+            ("source", identity),
+            frozenset({identity}),
+            lambda: (_record("built"),),
+        )
+    assert _metrics(diagnostics)["preparedInputCacheFullCheckCount"] == 1
+    assert _metrics(diagnostics).get("renderStageBuildCount", 0) == 0
+
+
+def test_an_uncacheable_stage_checks_owners_in_full(tmp_path: Path) -> None:
+    """A stage without a key may take a record without an identity: the commit walks."""
+
+    records = (_record("uncacheable"),)
+    cache, path, identity = _parsed_source_cache(tmp_path, {"source": records})
+    _replace_first_feature(records)
+
+    diagnostics: dict[str, object] = {"metrics": {}}
+    with pytest.raises(ValidationError, match="ownership was mutated .*feature 0"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            get_or_build_parsed_source(
+                ("source", identity),
+                frozenset({identity}),
+                lambda: pytest.fail("the entry check is structural"),
+            )
+            # No identity is registered for this record: the stage is uncacheable.
+            render_stage("gc_skew_data", _feature_count, records[0], "no-identity")
+    assert _metrics(diagnostics)["renderStageUncacheableCount"] == 1
+    assert _metrics(diagnostics)["preparedInputCacheFullCheckCount"] == 1
 
 
 def test_request_after_a_mutation_error_checks_every_owner_in_full_at_entry(
@@ -1018,6 +1157,7 @@ def test_request_after_a_mutation_error_checks_every_owner_in_full_at_entry(
                     frozenset({identity}),
                     lambda: pytest.fail("the entry check is structural"),
                 )
+            _read_in_a_record_stage(first[0], "mutation-error")
 
     # The commit stopped at the first changed owner; the other is still cached
     # and is now found before the render.
@@ -1090,11 +1230,12 @@ def test_request_after_a_failed_render_checks_owners_in_full_at_entry(
                 frozenset({identity}),
                 lambda: pytest.fail("the entry check is structural"),
             )
+            _read_in_a_record_stage(rebuilt[0], "after-success")
             reached_render = True
     assert reached_render is True
 
 
-def test_warm_request_walks_each_cached_feature_once(
+def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_builds(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1112,17 +1253,33 @@ def test_warm_request_walks_each_cached_feature_once(
         return original(feature)
 
     monkeypatch.setattr(prepared_module, "_feature_stamp", counting)
+    # O-2: a warm repeat builds no record entry and no stage that takes a record.
     _result, diagnostics = _render(tmp_path, cache, document, request_id=2)
-
     metrics = _metrics(diagnostics)
     assert metrics["parsedSourceCacheHitCount"] == 1
     assert metrics["resolvedRecordCacheHitCount"] == 1
     assert metrics["preparedInputCacheMutationViolationCount"] == 0
-    # One full walk per cached entry that holds records: the one at commit.
-    cached_features = sum(
-        len(record.features)
+    assert metrics["preparedInputCacheFullCheckCount"] == 0
+    assert walked == []
+
+    # A feature selection change builds the feature layers, which take the
+    # record: one full walk per cached entry that holds records, at commit.
+    _result, diagnostics = _render(
+        tmp_path, cache, _document(source, title="Walk count", selected_features=("CDS",)), request_id=3
+    )
+    metrics = _metrics(diagnostics)
+    assert metrics["renderStageBuild:feature_layers"] == 1
+    assert metrics["preparedInputCacheMutationViolationCount"] == 0
+    record_entries = [
+        entry
         for entries in cache._layers.values()
         for entry in entries.values()
+        if prepared_module._records_from_value(entry.value) is not None
+    ]
+    assert metrics["preparedInputCacheFullCheckCount"] == len(record_entries) > 0
+    cached_features = sum(
+        len(record.features)
+        for entry in record_entries
         for record in prepared_module._records_from_value(entry.value) or ()
     )
     assert cached_features > 0

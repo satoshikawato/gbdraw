@@ -21,11 +21,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
+from typing import Any, cast
+
 import pytest
 
+from gbdraw.api.request_render import DiagramRequest
+from tests.utils import render_stage_equivalence
 from tests.utils.render_stage_equivalence import (
     UNIVERSE_MARKS,
     CASES,
+    CapturedRequest,
     EquivalenceHarness,
     Placeholders,
     StepResult,
@@ -36,7 +41,9 @@ from tests.utils.render_stage_equivalence import (
     matrix_steps,
     matrix_variants,
     random_walk,
+    render_captured,
     run_chain,
+    state_arguments,
     synthetic_record,
     write_depth_table,
     write_genbank,
@@ -48,10 +55,24 @@ pytestmark = pytest.mark.circular
 
 _BASE = ("--labels", "out", "--gc", "--skew", "-l", "right")
 
-# Chains: one variant per option on C1, named options on C2; the first variant of each.
-# C2-named takes 37 s (a C2 render is 13 s), so it runs with the universe.
+# Chains: named options on C1 and C2; the first variant of each. C1-fast keeps the
+# cheapest option of each stage a C1 P1/P2 option can rebuild (in universe order,
+# which the chain relies on); every other C1 option runs in the C1 full chunks under
+# ``--render-stage-universe``. C2-named takes about 20 s (a C2 render is about 6 s),
+# so it runs with the universe.
+_C1_FAST_OPTIONS = (
+    "window", "arrow_head_length_ratio", "arrow_shaft_width_ratio", "axis_stroke_color",
+    "line_stroke_width", "definition_font_size", "plot_title", "plot_title_font_size",
+    "plot_title_position", "gc_content_mode", "gc_content_min_percent", "gc_content_tick_font_size", "show_gc_content_axis",
+    "show_gc_content_ticks",
+    "depth_track (add)", "legend", "legend_box_size", "legend_font_size", "separate_strands",
+    "resolve_overlaps", "feature_overlap_tolerance_bp", "label_rendering", "label_whitelist", "label_blacklist",
+    "qualifier_priority", "label_table",
+    "feature_visibility_table", "feature_override_table", "annotation_table", "scale_interval",
+    "hide_scale", "species (no plot title)", "keep_full_definition_with_plot_title",
+)
 _CHAINS = {
-    "C1-fast": ("C1", None),
+    "C1-fast": ("C1", _C1_FAST_OPTIONS),
     "C2-named": ("C2", ("label_table",)),
 }
 # The full universe of each case, in chunks within the time budget (``cost_chunks``).
@@ -84,6 +105,28 @@ def chain(
     return run_chain(harness, matrix_steps(case, placeholders, variants))
 
 
+def test_the_case_base_draws(chain: list[StepResult]) -> None:
+    """A base that ends in an error checks only that warm and cold fail alike (OV-706)."""
+
+    assert chain[0].cold.error is None, f"{chain[0].label}: {chain[0].cold.error}"
+
+
+def test_the_harness_renders_without_the_label_fit_warning_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The search is bounded by wall-clock time, so its renders would depend on machine load (OV-705)."""
+
+    seen: dict[str, object] = {}
+
+    def stop(request: object, **kwargs: object) -> None:
+        seen.update(kwargs)
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(render_stage_equivalence, "render_request", stop)
+    captured = CapturedRequest("circular", cast(DiagramRequest, None), None, ())
+    outcome = render_captured(captured, None)
+    assert outcome.error == ("RuntimeError", "stop")
+    assert seen.get("label_fit_warn_search_seconds") == 0.0
+
+
 def test_matrix_warm_equals_cold(chain: list[StepResult]) -> None:
     failures = equivalence_failures(chain)
     assert not failures, "\n".join(failures)
@@ -94,6 +137,38 @@ def test_declarations_have_no_undeclared_read_or_uncacheable_stage(
 ) -> None:
     failures = declaration_failures(chain)
     assert not failures, "\n".join(failures)
+
+
+@pytest.mark.parametrize(
+    ("case_id", "option_ids"),
+    [
+        ("C1", ("annotation_table",)),
+        ("C1", ("plot_title_position", "annotation_table")),
+        ("C3", ("plot_title_position",)),
+        # About 21 s (two C2 renders at load 10): it runs with the universe (D-16).
+        pytest.param("C2", (), marks=UNIVERSE_MARKS),
+    ],
+)
+def test_the_circular_catalog_item_of_the_contents_equals_the_catalog_of_the_svg(
+    case_id: str,
+    option_ids: tuple[str, ...],
+    placeholders: Placeholders,
+    tmp_path: Path,
+) -> None:
+    """When every top-level group is a content (the plot title too), a cache
+    transaction reads the Circular catalog from the contents; without one it
+    reads the SVG. Both give the same reply (annotations on C1 with and
+    without its title; depth, conservation and an overlay legend on C3; the
+    merged records of the Multi-Record Canvas on C2)."""
+
+    case = CASES[case_id]
+    variants = {option: variant for option, variant in matrix_variants(case, option_ids=option_ids)}
+    arguments = state_arguments(case, variants, placeholders)
+    harness = EquivalenceHarness("circular", tmp_path / "out")
+    cold = harness.cold(arguments)
+    assert cold.error is None
+    assert cold.stages.builds["catalog_item"] == 1
+    assert_same_outcome(harness.uncached(arguments), cold, f"{case_id} {option_ids} (uncached vs cold)")
 
 
 # Slow walks: short walks over many seeds, each well within the 300 s timeout.
@@ -129,6 +204,63 @@ def test_random_walk_warm_equals_cold(
     assert len(results) > steps // 2, "too many refused steps"
     failures = equivalence_failures(results)
     assert not failures, "\n".join(failures)
+
+
+# --- Record stages (PR 4) ----------------------------------------------------------------------
+
+
+_RADIAL_GROWTH = ("--label_placement", "radial", "--labels", "both", "--resolve_overlaps")
+
+
+def test_radial_growth_replans_copies_of_the_feature_layers(
+    placeholders: Placeholders, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The radial growth loop replans feature placements on copies: a stage result is never changed."""
+
+    import gbdraw.diagrams.circular.assemble as assemble
+
+    layouts: list[int] = []
+    layout_features = assemble._radial_layout_feature_dict
+    built: list[tuple[Any, dict[str, tuple[int, object]]]] = []
+    create = assemble.create_feature_layers
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        layouts.append(1)
+        return layout_features(*args, **kwargs)
+
+    def kept(*args: Any, **kwargs: Any) -> Any:
+        result = create(*args, **kwargs)
+        built.append((result, _placements(result)))
+        return result
+
+    monkeypatch.setattr(assemble, "_radial_layout_feature_dict", counted)
+    monkeypatch.setattr(assemble, "create_feature_layers", kept)
+    case = CASES["C1"]
+    outcome = EquivalenceHarness("circular", tmp_path / "radial").uncached(
+        [*placeholders.expand(case, case.base), *_RADIAL_GROWTH]
+    )
+    assert outcome.error is None, outcome.error
+    assert len(layouts) == 2, "the case must grow the radius and replan once"
+    [(layers, before)] = built
+    assert _placements(layers) == before
+
+
+def _placements(layers: Any) -> dict[str, tuple[int, object]]:
+    return {key: (id(feature.placement), feature.feature_track_id) for key, feature in layers.foreground_features.items()}
+
+
+def test_labels_after_a_radial_growth_reuse_the_feature_layers(placeholders: Placeholders, tmp_path: Path) -> None:
+    case = CASES["C1"]
+    harness = EquivalenceHarness("circular", tmp_path / "radial")
+    first = harness.warm([*placeholders.expand(case, case.base), *_RADIAL_GROWTH])
+    assert first.error is None, first.error
+    assert first.stages.builds.get("feature_layers") == 1
+    # Horizontal labels take the same feature layers and do not replan.
+    horizontal = [*placeholders.expand(case, case.base), *_RADIAL_GROWTH[2:]]
+    second = harness.warm(horizontal)
+    assert second.stages.hits.get("feature_layers") == 1
+    assert not second.stages.builds.get("feature_layers")
+    assert_same_outcome(second, harness.cold(horizontal), "horizontal after radial")
 
 
 # --- Identity (M1, M5) -------------------------------------------------------------------------

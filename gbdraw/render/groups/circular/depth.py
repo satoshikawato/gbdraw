@@ -5,9 +5,7 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from gbdraw.svg.elements import Group
 
-from ....config.models import GbdrawConfig
 from ....configurators import DepthConfigurator
-from ....auto_sizes import determine_length_parameter
 from ...drawers.circular.depth import DepthDrawer
 
 
@@ -23,10 +21,8 @@ class DepthGroup:
         radius: float,
         track_width: float,
         depth_config: DepthConfigurator,
-        track_id: str | int,
         *,
-        cfg: GbdrawConfig,
-        norm_factor_override: float | None = None,
+        norm_factor_override: float,
         group_id: str | None = None,
         axis_group_id: str | None = None,
         record_transform: RecordDisplayTransform | None = None,
@@ -40,14 +36,7 @@ class DepthGroup:
         self.depth_df = depth_df
         self.track_width = float(track_width)
         self.axis_group_id = str(axis_group_id or f"{group_id or 'depth'}_axis")
-        self.length_threshold = cfg.labels.length_threshold.circular
-        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
-        self.track_type = cfg.canvas.circular.track_type
-        self.norm_factor = (
-            float(norm_factor_override)
-            if norm_factor_override is not None
-            else cfg.canvas.circular.track_dict[self.length_param][self.track_type][str(track_id)]
-        )
+        self.norm_factor = float(norm_factor_override)
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:

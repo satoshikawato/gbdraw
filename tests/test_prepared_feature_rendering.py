@@ -38,10 +38,8 @@ def _record(record_id: str = "record_1") -> SeqRecord:
     "target",
     [
         circular_record_module.SeqRecordGroup,
-        circular_labels_module.LabelsGroup,
         linear_record_module.SeqRecordGroup,
         add_record_group_on_canvas,
-        add_labels_group_on_canvas,
         add_record_group,
     ],
 )
@@ -50,6 +48,14 @@ def test_feature_render_boundaries_require_prepared_layers(target) -> None:
 
     assert parameters["feature_layers"].default is inspect.Parameter.empty
     assert "precomputed_feature_dict" not in parameters
+
+
+@pytest.mark.parametrize("target", [circular_labels_module.LabelsGroup, add_labels_group_on_canvas])
+def test_label_groups_draw_placed_labels_without_feature_layers(target) -> None:
+    parameters = inspect.signature(target).parameters
+
+    assert "feature_layers" not in parameters
+    assert "precalculated_labels" in parameters
 
 
 @pytest.mark.parametrize(
@@ -70,7 +76,6 @@ def test_circular_groups_receive_the_same_prepared_feature_layers(
 ) -> None:
     built_layers = []
     record_group_layers = []
-    label_group_layers = []
     real_create_feature_layers = circular_assemble_module.create_feature_layers
 
     def capture_create_feature_layers(*args, **kwargs):
@@ -82,10 +87,6 @@ def test_circular_groups_receive_the_same_prepared_feature_layers(
         record_group_layers.append(kwargs["feature_layers"])
         return canvas
 
-    def capture_label_group(canvas, *args, **kwargs):
-        label_group_layers.append(kwargs["feature_layers"])
-        return canvas
-
     monkeypatch.setattr(
         circular_assemble_module,
         "create_feature_layers",
@@ -95,11 +96,6 @@ def test_circular_groups_receive_the_same_prepared_feature_layers(
         circular_assemble_module,
         "add_record_group_on_canvas",
         capture_record_group,
-    )
-    monkeypatch.setattr(
-        circular_assemble_module,
-        "add_labels_group_on_canvas",
-        capture_label_group,
     )
 
     assemble_circular_diagram_from_record(
@@ -116,7 +112,6 @@ def test_circular_groups_receive_the_same_prepared_feature_layers(
     assert len(built_layers) == 1
     assert len(built_layers[0].underlay_features) == 1
     assert record_group_layers == [built_layers[0]]
-    assert label_group_layers == [built_layers[0], built_layers[0]]
 
 
 @pytest.mark.linear
