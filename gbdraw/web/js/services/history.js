@@ -1125,6 +1125,29 @@ export const createHistoryManager = ({
     return true;
   };
 
+  // OV-872: what a rerender writes as its figure is shown (the Legend rows
+  // Python drew) is drawn state, not an edit: an open intent step takes it
+  // into the state it began from, so no step records it, as when no step is
+  // open. Its own changes stay in it. The intent is read on both sides of the
+  // write in the same task, so the binder's timing does not change; a
+  // snapshot service that builds the intent asynchronously keeps the write in
+  // the step.
+  /** @param {() => void} write */
+  const adoptDrawnWrite = (write) => {
+    const open = restoring.value || capturing.value ? null : openTransaction();
+    if (!open) { write(); return; }
+    const before = buildIntent();
+    write();
+    if (isPromiseLike(before)) return;
+    const after = buildIntent();
+    diagnostics.intentBuilds += 2;
+    if (isPromiseLike(after)) return;
+    const changes = buildIntentPatch(before, after);
+    if (changes.length === 0) return;
+    open.before = applyIntentPatch(open.before, changes, 'redo');
+    open.beforeSignature = computeSignature(open.before, 'intent');
+  };
+
   /**
    * @param {HistoryArtifactHandle} handle
    * @param {'before' | 'after'} phase
@@ -1692,6 +1715,7 @@ export const createHistoryManager = ({
     hasChangesSinceSavePoint,
     historyAvailability,
     keepRedrawnResult,
+    adoptDrawnWrite,
     historyLimitMessage,
     traversalPending: () => traversals.value > 0,
     initializeIntentBaseline,

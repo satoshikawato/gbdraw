@@ -3139,27 +3139,33 @@ export const createAppSetup = () => {
       // a loaded Session show bytes already laid out.
       const drawn = !context.bindingOptions.isIncrementalEdit
         || Boolean(context.bindingOptions.replaceGeneratedLegend);
-      // It shows the Legend editor's edits laid out as Python lays the edited
-      // rows out, before its entries are read (zero shift; OV-122, OV-124,
-      // OV-126, OV-127): a Result whose records show a Legend structure edit.
-      if (
-        drawn && context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
-        && legendStructureEdited(context.root)
-      ) {
-        legendActions.onLegendGeometryChanged({ commit: false });
-        mountedLegendLayouts.add(context.root);
-      }
-      if (context.bindingOptions.skipLegendExtraction) return;
-      recordStructuralMetric('legendDomFullScanCount', 1, {
-        phase: context.phase,
-        rootGeneration: context.rootGeneration
-      });
-      // A draw that replays an edited Legend order replays it on the displayed
-      // mode's Results only.
-      legendActions.extractLegendEntries({
-        replaceGeneratedInventory: !selecting && drawn,
-        liveResultIdentities: results.value.map(previewRuntime.getResultIdentity)
-      });
+      const adopt = () => {
+        // It shows the Legend editor's edits laid out as Python lays the edited
+        // rows out, before its entries are read (zero shift; OV-122, OV-124,
+        // OV-126, OV-127): a Result whose records show a Legend structure edit.
+        if (
+          drawn && context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
+          && legendStructureEdited(context.root)
+        ) {
+          legendActions.onLegendGeometryChanged({ commit: false });
+          mountedLegendLayouts.add(context.root);
+        }
+        if (context.bindingOptions.skipLegendExtraction) return;
+        recordStructuralMetric('legendDomFullScanCount', 1, {
+          phase: context.phase,
+          rootGeneration: context.rootGeneration
+        });
+        // A draw that replays an edited Legend order replays it on the displayed
+        // mode's Results only.
+        legendActions.extractLegendEntries({
+          replaceGeneratedInventory: !selecting && drawn,
+          liveResultIdentities: results.value.map(previewRuntime.getResultIdentity)
+        });
+      };
+      // OV-872: the Legend an automatic rerender draws is no edit of a step
+      // open meanwhile (an action waiting for this rerender).
+      if (context.phase === 'label-reflow') history.adoptDrawnWrite(adopt);
+      else adopt();
     },
     bindComposition(context) {
       if (context.bindingOptions.trustedRestore) return;

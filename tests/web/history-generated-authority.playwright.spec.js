@@ -822,6 +822,8 @@ test('Undo and Redo while a color edit is still being drawn draw the restored ru
 // second of two quick color edits, each adding a Legend row, waits for the
 // first edit's rerender and asks for its own; History keeps that one, so Redo
 // shows the row Python draws for the second edit ("other proteins").
+// OV-872: the Legend rows the first edit's rerender draws while the second
+// edit waits are no step of their own: each edit is one step.
 test('A color edit made while another edit is drawn keeps its own rerender (OV-731)', async ({ browser }) => {
   test.setTimeout(300000);
   const page = await load(browser);
@@ -829,6 +831,7 @@ test('A color edit made while another edit is drawn keeps its own rerender (OV-7
     await generate(page);
     await settleLive(page);
     const generated = await shownLegend(page);
+    const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
     expect(await page.evaluate(async () => {
       const app = window.__GBDRAW_APP__;
       const first = await app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'tRNA'), '#654321');
@@ -840,6 +843,7 @@ test('A color edit made while another edit is drawn keeps its own rerender (OV-7
     const edited = await shownLegend(page);
     expect(edited.keys).toEqual(expect.arrayContaining(['other proteins', 'other tRNAs']));
     expect(edited).toMatchObject({ rules: generated.rules + 2, error: null });
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()), 'one step per color edit').toBe(steps + 2);
     const runs = await workerRuns(page);
     await traverse(page, ['undo']);
     await settleLive(page);
@@ -853,6 +857,9 @@ test('A color edit made while another edit is drawn keeps its own rerender (OV-7
     // The first edit's rerender was shown before the second edit committed,
     // so both sides of the second edit's step are drawn.
     expect(await workerRuns(page), 'Undo and Redo post no Worker run').toBe(runs);
+    await traverse(page, ['undo', 'undo']);
+    await settleLive(page);
+    expect(await shownLegend(page), 'two Undos undo both edits').toEqual(generated);
   } finally { await page.context().close(); }
 });
 
