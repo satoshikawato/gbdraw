@@ -782,17 +782,24 @@ test('Undo and Redo while a color edit is still being drawn draw the restored ru
     await settleLive(page);
     const generated = await shownLegend(page);
     const before = await workerRuns(page);
-    // The edit and its Undo in one task: the edit's rerender is still drawing.
-    expect(await page.evaluate(async () => {
+    // The edit and its Undo in one task: the Undo comes once the edit's
+    // rerender has posted its Worker run and is still drawing.
+    expect(await page.evaluate(async before => {
       const app = window.__GBDRAW_APP__;
+      const runs = () => (window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__?.instances || [])
+        .reduce((total, instance) => total + (instance.runs?.length || 0), 0);
       const applied = await app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'CDS'), '#123456');
+      while (runs() === before && app.labelReflowProcessing) await new Promise(resolve => setTimeout(resolve, 5));
+      const posted = runs() - before;
       const drawing = app.labelReflowProcessing;
       await window.__GBDRAW_HISTORY__.undo();
-      return { applied, drawing };
-    })).toEqual({ applied: true, drawing: true });
+      return { applied, posted, drawing };
+    }, before)).toEqual({ applied: true, posted: 1, drawing: true });
     await settleLive(page);
     expect(await shownLegend(page), 'Undo while drawing').toEqual(generated);
-    expect(await workerRuns(page), 'Undo while drawing draws again').toBeGreaterThan(before);
+    // The edit's run, and the run the Undo asks for: the rerender drawing the
+    // edit is not admitted and draws the restored rules (OV-351).
+    expect(await workerRuns(page), 'Undo while drawing draws again').toBe(before + 2);
     // Redo asks for the rerender again; Undo and Redo come while it draws.
     const redoing = await workerRuns(page);
     await traverse(page, ['redo', 'undo', 'redo']);
@@ -808,6 +815,91 @@ test('Undo and Redo while a color edit is still being drawn draw the restored ru
       expect(await shownLegend(page), `${step} after the rerender`).toEqual(expected);
       expect(await workerRuns(page), `${step} after the rerender posts no Worker run`).toBe(runs);
     }
+  } finally { await page.context().close(); }
+});
+
+// D-36: a rerender keeps a figure only when it drew the current paint. The
+// second of two quick color edits, each adding a Legend row, waits for the
+// first edit's rerender and asks for its own; History keeps that one, so Redo
+// shows the row Python draws for the second edit ("other proteins").
+test('A color edit made while another edit is drawn keeps its own rerender (OV-731)', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await load(browser);
+  try {
+    await generate(page);
+    await settleLive(page);
+    const generated = await shownLegend(page);
+    expect(await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      const first = await app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'tRNA'), '#654321');
+      const drawing = app.labelReflowProcessing;
+      const second = await app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'CDS'), '#123456');
+      return { first, drawing, second };
+    })).toEqual({ first: true, drawing: true, second: true });
+    await settleLive(page);
+    const edited = await shownLegend(page);
+    expect(edited.keys).toEqual(expect.arrayContaining(['other proteins', 'other tRNAs']));
+    expect(edited).toMatchObject({ rules: generated.rules + 2, error: null });
+    const runs = await workerRuns(page);
+    await traverse(page, ['undo']);
+    await settleLive(page);
+    const undone = await shownLegend(page);
+    expect(undone.keys, 'Undo of the second edit').toContain('other tRNAs');
+    expect(undone.keys, 'Undo of the second edit').not.toContain('other proteins');
+    expect(undone.rules).toBe(generated.rules + 1);
+    await traverse(page, ['redo']);
+    await settleLive(page);
+    expect(await shownLegend(page), 'Redo of the second edit').toEqual(edited);
+    // The first edit's rerender was shown before the second edit committed,
+    // so both sides of the second edit's step are drawn.
+    expect(await workerRuns(page), 'Undo and Redo post no Worker run').toBe(runs);
+  } finally { await page.context().close(); }
+});
+
+// D-36: a redraw that ends without a figure (a Generate during it, then
+// canceled) is still owed, so the next color step does not record the figure
+// it starts from as drawn: its Undo asks for the redraw, and the Legend shows
+// the restored rules' row ("other proteins").
+test('Undo after a lost redraw draws the restored rules (OV-731)', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await load(browser);
+  try {
+    await generate(page);
+    await settleLive(page);
+    expect(await colorFirstCds(page)).toBe(true);
+    await settleLive(page);
+    const colored = await shownLegend(page);
+    expect(colored.keys).toContain('other proteins');
+    await traverse(page, ['undo']);
+    await settleLive(page);
+    // The color again; a Generate starts while its rerender draws and is canceled.
+    expect(await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      const hooks = window.__GBDRAW_TEST_HOOKS__;
+      const prior = hooks.onSessionLifecycleEvent;
+      hooks.onSessionLifecycleEvent = event => {
+        prior?.(event);
+        if (event.name === 'generate.processing-published') app.cancelGeneration();
+      };
+      try {
+        const applied = await app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'CDS'), '#123456');
+        const drawing = app.labelReflowProcessing;
+        const outcome = await app.runAnalysis();
+        return { applied, drawing, outcome: outcome?.status };
+      } finally { hooks.onSessionLifecycleEvent = prior; }
+    })).toEqual({ applied: true, drawing: true, outcome: 'canceled' });
+    await settleLive(page);
+    expect((await shownLegend(page)).keys, 'the redraw was lost').not.toContain('other proteins');
+    expect(await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      return app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'tRNA'), '#654321');
+    })).toBe(true);
+    await settleLive(page);
+    const runs = await workerRuns(page);
+    await traverse(page, ['undo']);
+    await settleLive(page);
+    expect(await shownLegend(page), 'Undo shows the restored rules').toEqual(colored);
+    expect(await workerRuns(page), 'Undo asks for the redraw').toBe(runs + 1);
   } finally { await page.context().close(); }
 });
 
