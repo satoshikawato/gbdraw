@@ -7,7 +7,9 @@ from gbdraw.layout.spatial import (
     AabbIndex,
     Interval,
     IntervalIndex,
+    bounding_aabb,
     candidate_aabb_pairs,
+    finite_aabb,
     split_circular_interval,
 )
 
@@ -29,6 +31,14 @@ def _bboxes_overlap(left: Aabb, right: Aabb, padding: float = 0.0) -> bool:
 def test_interval_and_aabb_normalize_reversed_bounds() -> None:
     assert Interval(10, 2) == Interval(2, 10)
     assert Aabb(10, 20, 1, 3) == Aabb(1, 3, 10, 20)
+
+
+def test_finite_aabb_reorders_bounds_and_reads_non_finite_as_unknown() -> None:
+    assert finite_aabb(3.0, 4.0, 1.0, 2.0) == Aabb(1.0, 2.0, 3.0, 4.0)
+    assert finite_aabb(0.0, 0.0, float("nan"), 1.0) is None
+    assert finite_aabb(0.0, float("-inf"), 1.0, 1.0) is None
+    assert bounding_aabb([(1.0, 2.0), (3.0, 0.5)], 1.0) == finite_aabb(0.0, -0.5, 4.0, 3.0)
+    assert bounding_aabb([(1.0, float("inf"))]) is None
 
 
 @pytest.mark.parametrize("bad_bucket_size", [0, -1, float("inf")])

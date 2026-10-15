@@ -209,11 +209,12 @@ def crossing_pairs(polylines: Sequence[Polyline]) -> list[tuple[int, int]]:
 def polylines_cross(first: Polyline, second: Polyline) -> bool:
     """Whether two polylines cross (touching does not count)."""
 
-    return any(
-        segments_intersect(left, right, touching=False)
-        for left in zip(first, first[1:])
-        for right in zip(second, second[1:])
-    )
+    # Loops, not a generator: the label repair tests about 1 M leader pairs per record.
+    for left in zip(first, first[1:]):
+        for right in zip(second, second[1:]):
+            if segments_intersect(left, right, touching=False):
+                return True
+    return False
 
 
 def polyline_crossing_count(polylines: Sequence[Polyline]) -> int:
