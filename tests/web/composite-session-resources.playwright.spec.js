@@ -5,7 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerChoicePrompt, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerChoicePrompt, answerLoadRepairs, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 // Three single-record GenBank files: Circular binds them as one composite File.
 const seed = 'tests/fixtures/sessions/composite-circular-three-files.v44-schema8.gbdraw-session.json.gz';
@@ -295,7 +295,9 @@ test('Session CLI sidecar preserves the composite draft for fresh Web Load and G
   }
 });
 
-test('Session import rejects malformed composite bindings without replacing existing work @pr-smoke', async ({ browser }, testInfo) => {
+// BA-D25 (receipt 〔確認〕): a malformed binding is not a refusal class; Load lists
+// what it drops before it changes anything, and Cancel keeps the current work.
+test('Session import lists malformed composite bindings and Cancel keeps existing work @pr-smoke', async ({ browser }, testInfo) => {
   test.setTimeout(6 * loadTimeout);
   const contexts = [];
   try {
@@ -307,6 +309,8 @@ test('Session import rejects malformed composite bindings without replacing exis
     const resourceId = seedSession.renderRequest.records[0].source.resourceId;
     const leaf = { resourceId, name: 'part.gb', type: 'text/plain', lastModified: 0 };
 
+    const inventoryDropped = ['Session file: the field webFiles.bindings could not be read and was left out.'];
+    const entryDropped = slot => [`Input files: 1 entry of webFiles.bindings.${slot} could not be read and was dropped.`];
     const mutations = {
       schema: s => { s.webFiles.bindings.schema = 99; },
       kind: s => { s.webFiles.bindings.c_gb.kind = 'unknown'; },
@@ -321,7 +325,16 @@ test('Session import rejects malformed composite bindings without replacing exis
       slot: s => { s.webFiles.bindings.c_fasta = s.webFiles.bindings.c_gb; },
       payload: s => { s.resources[resourceId].encoding = 'unsupported'; }
     };
-    const rejected = [];
+    const rows = {
+      schema: inventoryDropped, missing: inventoryDropped, slot: entryDropped('c_fasta'),
+      payload: [
+        'Saved diagram: the settings of the saved diagram (renderRequest) could not be read. The file loads as settings only;'
+          + ' the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.',
+        `Input files: 1 entry of resources.${resourceId} could not be read and was dropped.`,
+        ...entryDropped('c_gb')
+      ]
+    };
+    const canceled = [];
     for (const [label, mutate] of Object.entries(mutations)) {
       const invalid = structuredClone(seedSession);
       invalid.webFiles ||= {};
@@ -329,22 +342,18 @@ test('Session import rejects malformed composite bindings without replacing exis
         components: [structuredClone(leaf), structuredClone(leaf)],
         name: 'logical.gb', type: 'text/plain', lastModified: 0 } };
       mutate(invalid);
-      await page.evaluate(()=>{window.__PREVIOUS_SESSION_IMPORT_ERROR__=window.__GBDRAW_APP__.errorLog;});
       await page.locator('input[accept^=".json,"]').setInputFiles({
         name: `${label}.gbdraw-session.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalid))
       });
-      await page.waitForFunction(()=>window.__GBDRAW_APP__.errorLog!==window.__PREVIOUS_SESSION_IMPORT_ERROR__,{},{timeout:loadTimeout});
+      // The rows name places in the file, never the stored file names.
+      await answerLoadRepairs(page, rows[label] || entryDropped('c_gb'), 'cancel', { timeout: loadTimeout });
       await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: loadTimeout }).toBe(false);
-      const error=await page.evaluate(()=>window.__GBDRAW_APP__.errorLog);
-      expect(error).toMatchObject({code:'INPUT_INVALID',stage:'request-validation'});
-      await expect(page.getByRole('alert',{name:'Session not loaded'})).toBeVisible();
-      expect(JSON.stringify(error)).not.toMatch(/logical\.gb|part\.gb|missing/);
-      expect(await snapshot(page)).toEqual({ ...before, error });
+      expect(await snapshot(page)).toEqual(before);
       expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(beforeHistory);
-      rejected.push({ label, error });
+      canceled.push(label);
     }
     expect(external).toEqual([]);
-    await fs.writeFile(testInfo.outputPath('transactional-rejections.json'), JSON.stringify(rejected, null, 2));
+    await fs.writeFile(testInfo.outputPath('transactional-cancels.json'), JSON.stringify(canceled, null, 2));
   } finally {
     for (const context of contexts) await context.close();
   }
