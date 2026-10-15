@@ -13,6 +13,8 @@ import {
   GbdrawLoader,
   LinearRecordNames,
   MarkupPreview,
+  PreviewZoomPercent,
+  previewTransform,
   RecordName,
   SettingsSectionIndex,
   SettingsSectionTitle,
@@ -26,12 +28,13 @@ import { formatFeatureLocation } from './services/feature-utils.js';
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, RecordName, SettingsSectionIndex, SettingsSectionTitle },
+  components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, PreviewZoomPercent, RecordName, SettingsSectionIndex, SettingsSectionTitle },
   methods: { formatFeatureLocation },
   setup: createAppSetup
 });
 app.directive('dialog-focus', dialogFocus);
 app.directive('settings-section', settingsSection);
+app.directive('preview-transform', previewTransform);
 
 const mountedApp = app.mount('#app');
 window.__GBDRAW_APP__ = mountedApp;

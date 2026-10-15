@@ -198,6 +198,40 @@ export const HelpTip = {
   }
 };
 
+// OV-912: the preview zoom and pan change on every wheel tick and pan. Only
+// the zoom label and the preview surface read them, so a change renders the
+// label and writes the surface transform instead of rendering the whole app.
+// The values stay in `state` for History, the Session, and the pan and zoom
+// owner (app/ui.js), which also writes the transform during a gesture.
+export const PreviewZoomPercent = {
+  setup: () => ({ zoom: state.zoom }),
+  template: '{{ Math.round(zoom * 100) }}%'
+};
+
+/** @type {WeakMap<HTMLElement, () => void>} */
+const previewTransformStops = new WeakMap();
+// `v-preview-transform` on the preview surface: its transform follows the pan
+// and zoom from its creation (before it is inserted) until it unmounts.
+export const previewTransform = {
+  /** @param {HTMLElement} element */
+  beforeMount: (element) => {
+    previewTransformStops.set(element, watch(
+      () => /** @type {const} */ ([state.canvasPan.x, state.canvasPan.y, state.zoom.value, state.isPanning.value]),
+      (/** @type {readonly [number, number, number, boolean]} */ [x, y, zoom, panning]) => {
+        element.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+        element.style.transformOrigin = 'top center';
+        element.style.transition = panning ? 'none' : 'transform 0.2s';
+      },
+      { immediate: true }
+    ));
+  },
+  /** @param {HTMLElement} element */
+  unmounted: (element) => {
+    previewTransformStops.get(element)?.();
+    previewTransformStops.delete(element);
+  }
+};
+
 // The heading of a settings section: its icon and title from the catalog
 // (services/settings-sections.js), which the section index shows too.
 export const SettingsSectionTitle = {

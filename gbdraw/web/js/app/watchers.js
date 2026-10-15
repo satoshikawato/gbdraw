@@ -502,8 +502,9 @@ export const setupWatchers = ({
     () => isFeatureDrawerMounted.value,
     (visible) => {
       if (!visible) return;
+      // OV-923: an unchanged Result keeps its label binding.
       nextTick(() => {
-        syncLabelEditor();
+        syncLabelEditor({ reuseCurrentBinding: true });
       });
     }
   );

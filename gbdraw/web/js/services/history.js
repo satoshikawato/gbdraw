@@ -472,21 +472,34 @@ export const createHistoryManager = ({
     return fileIds;
   };
 
-  const captureIntent = async () => {
-    capturing.value = true;
+  /**
+   * @param {HistoryIntent} intent
+   * @returns {IntentRecord}
+   */
+  const finishIntentCapture = (intent) => {
+    const signature = computeSignature(intent, 'intent');
+    emitHistoryDiagnostic({ type: 'capture', scope: 'intent' });
+    return {
+      intent,
+      signature,
+      fileIds: collectIntentFileIds(intent)
+    };
+  };
+
+  // OV-922: a synchronous capture writes no reactive state; nothing else
+  // runs while it does. `capturing` marks a capture only across its await,
+  // so a tracked control renders the app for its step, not for each capture.
+  /** @returns {IntentRecord | Promise<IntentRecord>} */
+  const captureIntent = () => {
     diagnostics.intentBuilds += 1;
-    try {
-      const intent = await buildIntent();
-      const signature = computeSignature(intent, 'intent');
-      emitHistoryDiagnostic({ type: 'capture', scope: 'intent' });
-      return {
-        intent,
-        signature,
-        fileIds: collectIntentFileIds(intent)
-      };
-    } finally {
-      capturing.value = false;
-    }
+    const intent = buildIntent();
+    if (!isPromiseLike(intent)) return finishIntentCapture(intent);
+    capturing.value = true;
+    return Promise.resolve(intent)
+      .then(finishIntentCapture)
+      .finally(() => {
+        capturing.value = false;
+      });
   };
 
   /**

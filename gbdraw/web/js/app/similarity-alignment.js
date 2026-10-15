@@ -1259,6 +1259,8 @@ const anchorsAgree = (left, right) => {
  * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
  * @property {(groupId: string) => Record<string, any> | null} getOrthogroupById
  * @property {(group: Record<string, any> | string | null) => Record<string, any>[]} getEnrichedOrthogroupMembers
+ * @property {{ readonly value: SelectedGroupDetail | null }} selectedOrthogroupDetail
+ *   the orthogroup owner's detail of the drawer's selected group (OV-920)
  * @property {() => Record<string, any> | null} getCommittedRequest
  * @property {(() => AnnotationRecordCatalog) | null} [getRecordCatalog]
  * @property {() => Record<string, any> | null} getCommittedSession
@@ -1271,6 +1273,15 @@ const anchorsAgree = (left, right) => {
  * @property {((anchor: Record<string, any>) => any) | null} [previewCandidate]
  * @property {(() => void) | null} [clearCandidatePreview]
  * @property {((error: Record<string, any>) => void) | null} [onError]
+ */
+
+/**
+ * The orthogroup owner's detail of the drawer's selected group (OV-920): the
+ * group, the id its controls pass, and its enriched members.
+ * @typedef {object} SelectedGroupDetail
+ * @property {NonNullable<ReturnType<SimilarityAlignmentActionsOptions['getOrthogroupById']>>} group
+ * @property {unknown} id
+ * @property {ReturnType<SimilarityAlignmentActionsOptions['getEnrichedOrthogroupMembers']>} members
  */
 
 /**
@@ -1300,6 +1311,7 @@ export const createSimilarityAlignmentActions = ({
   state,
   getOrthogroupById,
   getEnrichedOrthogroupMembers,
+  selectedOrthogroupDetail,
   getCommittedRequest,
   getRecordCatalog = null,
   getCommittedSession,
@@ -1318,6 +1330,7 @@ export const createSimilarityAlignmentActions = ({
     !state
     || typeof getOrthogroupById !== 'function'
     || typeof getEnrichedOrthogroupMembers !== 'function'
+    || !selectedOrthogroupDetail
     || typeof getCommittedRequest !== 'function'
     || typeof getCommittedSession !== 'function'
     || typeof projectCommittedAlignment !== 'function'
@@ -1755,14 +1768,12 @@ export const createSimilarityAlignmentActions = ({
     };
   });
 
-  /** @param {unknown} groupId */
-  const drawerReferenceOptions = (groupId) => {
-    const id = String(groupId || '').trim();
-    const group = getOrthogroupById(id);
-    if (!group) return [];
+  // The exact reference options of a group's enriched members.
+  /** @param {SelectedGroupDetail['members']} members */
+  const referenceOptionsOf = (members) => {
     const { records, factsOf } = committedNames.value;
     // `filter(Boolean)` drops the members whose anchor does not resolve (the `null` results).
-    const candidates = /** @type {{ anchor: ReturnType<typeof anchorFromSource>, canonicalKey: string, key: string, label: string, location: string }[]} */ (getEnrichedOrthogroupMembers(group).map((member) => {
+    const candidates = /** @type {{ anchor: ReturnType<typeof anchorFromSource>, canonicalKey: string, key: string, label: string, location: string }[]} */ (members.map((member) => {
       try {
         const anchor = anchorFromSource(member, 'Drawer reference');
         const record = shortRecordName(records.get(anchor.recordKey)) || 'Unavailable record';
@@ -1792,6 +1803,31 @@ export const createSimilarityAlignmentActions = ({
     ));
   };
 
+  // OV-920: the options of the drawer's selected group, from the members the
+  // orthogroup owner enriched for its detail; every render reads them.
+  /** @type {{ readonly value: { groupId: string, options: ReturnType<typeof referenceOptionsOf> } }} */
+  const selectedGroupOptions = computed(() => {
+    const detail = selectedOrthogroupDetail.value;
+    const groupId = String(detail?.id || '').trim();
+    const group = getOrthogroupById(groupId);
+    if (!detail || !group) return { groupId, options: [] };
+    // The drawer's controls name the group by `id`, as `drawerReferenceOptions` reads it.
+    return {
+      groupId,
+      options: referenceOptionsOf(group === detail.group ? detail.members : getEnrichedOrthogroupMembers(group))
+    };
+  });
+
+  /** @param {unknown} groupId @returns {ReturnType<typeof referenceOptionsOf>} */
+  const drawerReferenceOptions = (groupId) => {
+    const id = String(groupId || '').trim();
+    const selected = selectedGroupOptions.value;
+    if (selected.groupId && selected.groupId === id) return selected.options;
+    const group = getOrthogroupById(id);
+    if (!group) return [];
+    return referenceOptionsOf(getEnrichedOrthogroupMembers(group));
+  };
+
   // OV-381: a new plan (Apply, Session load, Undo) selects its own group in the
   // drawer, whichever group was selected or saved before, so the drawer can
   // offer the plan's reference below.
@@ -1809,24 +1845,33 @@ export const createSimilarityAlignmentActions = ({
     return plan?.reference && !repair.value ? anchorKey(plan.reference) : '';
   });
 
-  /** @param {unknown} groupId */
-  const selectedDrawerReference = (groupId) => (
-    drawerReferenceOptions(groupId)
-      .find(({ key }) => key === drawerReferenceKey.value)?.anchor || null
+  /** @param {ReturnType<typeof referenceOptionsOf>} options */
+  const pickedReference = (options) => (
+    options.find(({ key }) => key === drawerReferenceKey.value)?.anchor || null
   );
-
   /** @param {unknown} groupId */
-  const drawerDisabledReason = (groupId) => {
+  const selectedDrawerReference = (groupId) => pickedReference(drawerReferenceOptions(groupId));
+
+  /** @param {ReturnType<typeof referenceOptionsOf>} options */
+  const disabledReasonOf = (options) => {
     if (['resolving', 'applying'].includes(status.value)) {
       return 'Wait for the current alignment operation to finish.';
     }
-    const options = drawerReferenceOptions(groupId);
     if (!options.length) return 'No exact reference features are available for this group.';
-    if (!selectedDrawerReference(groupId)) {
+    if (!pickedReference(options)) {
       return 'Select an exact reference record and feature before aligning.';
     }
     return '';
   };
+  /** @param {unknown} groupId */
+  const drawerDisabledReason = (groupId) => disabledReasonOf(drawerReferenceOptions(groupId));
+
+  // What the drawer shows for its selected group: one value per change of the
+  // group, its members, the picked reference, or the operation status.
+  const drawer = computed(() => {
+    const { groupId, options } = selectedGroupOptions.value;
+    return { groupId, options, disabledReason: disabledReasonOf(options) };
+  });
 
   const activePlanInspector = computed(() => {
     try {
@@ -2277,6 +2322,7 @@ export const createSimilarityAlignmentActions = ({
       source: 'drawer'
     }),
     drawerReferenceOptions,
+    drawer,
     /**
      * @param {unknown} groupId
      * @param {string} key
