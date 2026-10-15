@@ -623,6 +623,74 @@ test('one full payload request traverses each input once and builds one FASTA pa
   });
 });
 
+test('OV-930: hover summaries of similarity bands read the groups once per groups array', () => {
+  let traversals = 0;
+  const group = (id, scope, name) => ({ id, scope, name, member_count: 2, members: [] });
+  const orthogroups = countedArray([
+    group('og-main', 'global', 'Main enzymes'),
+    group('og-main', 'record_local', 'Local enzymes'),
+    group('og-dup', 'global', 'First copy'),
+    group('og-dup', 'global', 'Second copy'),
+    group('og-other', 'global', 'Other enzymes')
+  ], () => {
+    traversals += 1;
+  });
+  const titleOf = (orthogroupId, groupScope) => instrumentedPopupModule.buildPairwiseMatchHoverSummary(
+    elementFrom({
+      ...commonAttributes,
+      'data-match-kind': 'orthogroup',
+      'data-orthogroup-id': orthogroupId,
+      ...(groupScope ? { 'data-group-scope': groupScope } : {})
+    }),
+    { orthogroups }
+  ).title;
+  for (let index = 0; index < 20; index += 1) {
+    assert.match(titleOf('og-main', 'global'), /Main enzymes/);
+  }
+  assert.match(titleOf('og-main', 'record_local'), /Local enzymes/);
+  assert.match(titleOf('og-other', 'global'), /Other enzymes/);
+  // A group is named only when exactly one group has that ID (and scope).
+  assert.doesNotMatch(titleOf('og-dup', 'global'), /copy/);
+  assert.doesNotMatch(titleOf('og-main', ''), /enzymes/);
+  assert.equal(traversals, 1);
+});
+
+test('OV-911: popups on the same Result read its Features and source Features once', () => {
+  const state = makeSyntheticState();
+  const traversalCounts = { rendered: 0, source: 0 };
+  class CountedFeatureMap extends Map {
+    values() {
+      traversalCounts.rendered += 1;
+      return super.values();
+    }
+  }
+  const options = {
+    featureLookup: new CountedFeatureMap(state.featureLookup),
+    sourceFeatures: countedArray(state.sourceFeatures, () => {
+      traversalCounts.source += 1;
+    }),
+    orthogroups: [state.globalGroup, state.localGroup]
+  };
+  const element = elementFrom({
+    ...commonAttributes,
+    'data-match-kind': 'pairwise',
+    'data-orthogroup-id': 'og-main',
+    'data-group-scope': 'global'
+  });
+  const first = instrumentedPopupModule.buildMatchPopupPayload(element, options);
+  for (let index = 0; index < 5; index += 1) {
+    assert.deepStrictEqual(instrumentedPopupModule.buildMatchPopupPayload(element, options), first);
+  }
+  assert.deepStrictEqual(traversalCounts, { rendered: 1, source: 1 });
+  // A new Result (a new Feature map) is read again.
+  const next = instrumentedPopupModule.buildMatchPopupPayload(element, {
+    ...options,
+    featureLookup: new CountedFeatureMap(state.featureLookup)
+  });
+  assert.deepStrictEqual(next, first);
+  assert.deepStrictEqual(traversalCounts, { rendered: 2, source: 2 });
+});
+
 test('source contracts keep heavy work out of hover and migrated inner loops', async () => {
   const svgActionsSource = await readFile(new URL(
     'gbdraw/web/js/app/feature-editor/svg-actions.js',

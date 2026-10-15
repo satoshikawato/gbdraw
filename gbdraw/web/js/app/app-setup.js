@@ -129,7 +129,7 @@ import {
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { appliedFeatureColors, COMPARISON_COLOR_KEYS, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
-import { PAIRWISE_MATCH_SELECTOR, groupCountText } from './pairwise-match-popup.js';
+import { groupCountText } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
@@ -5306,35 +5306,11 @@ export const createAppSetup = () => {
     openFeatureEditorForFeature(row.feature, event);
   };
 
+  // The bands of the open match popup carry `gbdraw-match-selected`; the SVG
+  // owner marks them from its band indexes (OV-937).
   watch(clickedPairwiseMatch, (/** @type {{ id?: unknown, matchKind?: unknown, orthogroupId?: unknown } | null} */ match) => {
     selectedPairwiseBlockOrthogroupId.value = '';
-    const svg = svgContainer.value?.querySelector?.('svg');
-    if (!svg) return;
-    const matchId = String(match?.id || '').trim();
-    const orthogroupId = String(
-      match?.matchKind === 'orthogroup' ? match?.orthogroupId : ''
-    ).trim();
-    svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((/** @type {Element} */ element) => {
-      const elementMatchId = String(
-        element.getAttribute('data-gbdraw-match-id') ||
-        element.getAttribute('data-gbdraw-pairwise-match-id') ||
-        ''
-      ).trim();
-      const elementOrthogroupIds = String(element.getAttribute('data-orthogroup-id') || '')
-        .split(';')
-        .map((value) => value.trim())
-        .filter(Boolean);
-      const elementMatchKind = String(element.getAttribute('data-match-kind') || '').trim().toLowerCase();
-      const isOrthogroupMatch = elementMatchKind === 'orthogroup' || (
-        !elementMatchKind &&
-        !element.hasAttribute('data-collinearity-block-id') &&
-        elementOrthogroupIds.length > 0
-      );
-      const selected = orthogroupId
-        ? isOrthogroupMatch && elementOrthogroupIds.includes(orthogroupId)
-        : Boolean(matchId) && elementMatchId === matchId;
-      element.classList.toggle('gbdraw-match-selected', selected);
-    });
+    featureActions.markSelectedPairwiseMatch(match);
   });
 
   /** @param {MouseEvent} event */

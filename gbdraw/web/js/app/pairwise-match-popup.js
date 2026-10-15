@@ -17,7 +17,8 @@ import {
   featureIdentity,
   identityMatches,
   renderedFeatureIdentity,
-  textAliasStatus
+  textAliasStatus,
+  orthogroupIdStatus
 } from '../services/feature-identity.js';
 
 /** @import { AliasSource, FeatureIdentity } from '../services/feature-identity.js' */
@@ -352,10 +353,6 @@ const firstArrayValue = (value) => {
   return normalizeText(value);
 };
 
-const ORTHOGROUP_ID_KEYS = Object.freeze(['id', 'orthogroupId', 'orthogroup_id']);
-/** @param {AliasSource | null | undefined} source */
-const orthogroupIdStatus = (source) => textAliasStatus(source, ORTHOGROUP_ID_KEYS);
-
 /** @param {PopupGroup | null | undefined} group */
 const groupScopeStatus = (group) => {
   const presentationValues = [
@@ -394,29 +391,73 @@ const groupScopeValue = (group) => {
 };
 
 /**
+ * @template V
+ * @param {Map<string, V[]>} buckets
+ * @param {string} key
+ * @param {V} value
+ */
+const addBucketValue = (buckets, key, value) => {
+  if (!key) return;
+  if (!buckets.has(key)) buckets.set(key, []);
+  /** @type {V[]} */ (buckets.get(key)).push(value); // Set above when absent.
+};
+
+/**
+ * The similarity groups by ID, built once per groups array (OV-930). A group
+ * answers a lookup only when its ID and scope are valid; `identified` keeps,
+ * in order, every group whose ID is valid and supplied, whatever its scope.
+ * @typedef {object} OrthogroupIndex
+ * @property {Map<string, PopupGroup[]>} byId
+ * @property {Map<string, PopupGroup[]>} byScopedId Keyed by ID and normalized scope.
+ * @property {PopupGroup[]} identified
+ */
+
+/** @type {WeakMap<PopupGroup[], OrthogroupIndex>} */
+const orthogroupIndexes = new WeakMap();
+
+/**
+ * The index of a groups array. The groups are replaced as a whole array, never
+ * edited in place, so the array's identity keys its index.
  * @param {PopupGroup[] | null | undefined} orthogroups
+ * @returns {OrthogroupIndex}
+ */
+const orthogroupIndexFor = (orthogroups) => {
+  const groups = Array.isArray(orthogroups) ? orthogroups : null;
+  const cached = groups ? orthogroupIndexes.get(groups) : null;
+  if (cached) return cached;
+  /** @type {OrthogroupIndex} */
+  const index = { byId: new Map(), byScopedId: new Map(), identified: [] };
+  for (const group of groups || []) {
+    const idStatus = orthogroupIdStatus(group);
+    if (!idStatus.valid || !idStatus.value) continue;
+    index.identified.push(group);
+    const scopeStatus = groupScopeStatus(group);
+    if (!scopeStatus.valid) continue;
+    addBucketValue(index.byId, idStatus.value, group);
+    addBucketValue(index.byScopedId, `${idStatus.value}\u001f${scopeStatus.value}`, group);
+  }
+  if (groups) orthogroupIndexes.set(groups, index);
+  return index;
+};
+
+/**
+ * The one group with this ID (and this scope, when one is asked for), or null
+ * when none or several are.
+ * @param {OrthogroupIndex} index
  * @param {unknown} orthogroupId
  * @param {unknown} [groupScope]
+ * @returns {PopupGroup | null}
  */
-const getOrthogroupById = (orthogroups, orthogroupId, groupScope = '') => {
+const orthogroupInIndex = (index, orthogroupId, groupScope = '') => {
   const id = normalizeText(orthogroupId);
   if (!id) return null;
   const requestedScope = normalizeText(groupScope)
     ? normalizeGroupMetadataScope(groupScope)
     : '';
-  /** @type {PopupGroup[]} */
-  const matches = [];
-  for (const entry of Array.isArray(orthogroups) ? orthogroups : []) {
-    const status = orthogroupIdStatus(entry);
-    const scopeStatus = groupScopeStatus(entry);
-    if (
-      status.valid
-      && scopeStatus.valid
-      && status.value === id
-      && (!requestedScope || scopeStatus.value === requestedScope)
-    ) matches.push(entry);
-  }
-  return matches.length === 1 ? matches[0] : null;
+  const candidates = requestedScope
+    ? index.byScopedId.get(`${id}\u001f${requestedScope}`) || []
+    : index.byId.get(id) || [];
+  return candidates.length === 1 ? candidates[0] : null;
 };
 
 /** @param {AliasSource | null | undefined} member */
@@ -635,18 +676,6 @@ const featureToOrthogroupMember = (feature, resolvedIdentity = null) => {
   };
 };
 
-/**
- * @template V
- * @param {Map<string, V[]>} buckets
- * @param {string} key
- * @param {V} value
- */
-const addBucketValue = (buckets, key, value) => {
-  if (!key) return;
-  if (!buckets.has(key)) buckets.set(key, []);
-  /** @type {V[]} */ (buckets.get(key)).push(value); // Set above when absent.
-};
-
 /** @param {FeatureIdentity | null | undefined} identity */
 const identityIndexKeys = (identity) => {
   if (!identity?.usable) return [];
@@ -703,20 +732,27 @@ const identityIndexKeys = (identity) => {
  */
 
 /**
- * @param {{
- *   featureLookup?: FeatureLookup,
- *   sourceFeatures?: PopupFeature[],
- *   orthogroups?: PopupGroup[],
- *   descriptor?: PairwiseMatchDescriptor | null
- * }} [options]
- * @returns {PairwisePayloadContext}
+ * The lookups of a payload that depend only on the rendered and the source
+ * features, and the member index of each group they meet. Built once per
+ * (`featureLookup`, `sourceFeatures`) pair and reused by every later popup on
+ * the same Result (OV-911).
+ * @typedef {object} PayloadFeatureIndex
+ * @property {(source: PopupFeature | PopupMember | null | undefined, mode: 'rendered' | 'standard' | 'legacy') => FeatureIdentity} cachedIdentity
+ * @property {WeakMap<object, RenderedRecord>} renderedByObject
+ * @property {Map<string, RenderedRecord[]>} renderedById
+ * @property {Map<string, PopupFeature[]>} featuresByOrthogroupId
+ * @property {WeakMap<object, ReturnType<typeof featureOrthogroupIdStatus>>} featureOrthogroupStatuses
+ * @property {WeakMap<object, SourceRecord>} sourceByObject
+ * @property {Map<string, SourceRecord[]>} sourceByIdentity
+ * @property {(group: PopupGroup | null | undefined) => { records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }} memberIndexForGroup
  */
-const createPairwisePayloadContext = ({
-  featureLookup = new Map(),
-  sourceFeatures = [],
-  orthogroups = [],
-  descriptor = null
-} = {}) => {
+
+/**
+ * @param {FeatureLookup} featureLookup
+ * @param {PopupFeature[]} sourceFeatures
+ * @returns {PayloadFeatureIndex}
+ */
+const buildPayloadFeatureIndex = (featureLookup, sourceFeatures) => {
   /** @type {WeakMap<object, Map<string, FeatureIdentity>>} */
   const identityCache = new WeakMap();
   /**
@@ -806,6 +842,93 @@ const createPairwisePayloadContext = ({
     });
   }
 
+  /** @type {WeakMap<object, { records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }>} */
+  const groupMemberIndexes = new WeakMap();
+  /**
+   * @param {PopupGroup | null | undefined} group
+   * @returns {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }}
+   */
+  const memberIndexForGroup = (group) => {
+    if (!group || typeof group !== 'object') return { records: [], byIdentity: new Map() };
+    const cached = groupMemberIndexes.get(group);
+    if (cached) return cached;
+    /** @type {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }} */
+    const index = { records: [], byIdentity: new Map() };
+    for (const member of Array.isArray(group.members) ? group.members : []) {
+      const record = { member, identity: cachedIdentity(member, 'standard') };
+      index.records.push(record);
+      identityIndexKeys(record.identity).forEach((key) => {
+        addBucketValue(index.byIdentity, key, record);
+      });
+    }
+    groupMemberIndexes.set(group, index);
+    return index;
+  };
+  return {
+    cachedIdentity,
+    renderedByObject,
+    renderedById,
+    featuresByOrthogroupId,
+    featureOrthogroupStatuses,
+    sourceByObject,
+    sourceByIdentity,
+    memberIndexForGroup
+  };
+};
+
+/** @type {WeakMap<object, WeakMap<PopupFeature[], PayloadFeatureIndex>>} */
+const payloadFeatureIndexes = new WeakMap();
+
+/**
+ * The feature index of a lookup and a source list. The catalogs are replaced as
+ * a whole, never edited in place, so their identities key the index.
+ * @param {FeatureLookup} featureLookup
+ * @param {PopupFeature[]} sourceFeatures
+ * @returns {PayloadFeatureIndex}
+ */
+const payloadFeatureIndexFor = (featureLookup, sourceFeatures) => {
+  if (!featureLookup || typeof featureLookup !== 'object' || !Array.isArray(sourceFeatures)) {
+    return buildPayloadFeatureIndex(featureLookup, sourceFeatures);
+  }
+  let bySource = payloadFeatureIndexes.get(featureLookup);
+  if (!bySource) {
+    bySource = new WeakMap();
+    payloadFeatureIndexes.set(featureLookup, bySource);
+  }
+  let index = bySource.get(sourceFeatures);
+  if (!index) {
+    index = buildPayloadFeatureIndex(featureLookup, sourceFeatures);
+    bySource.set(sourceFeatures, index);
+  }
+  return index;
+};
+
+/**
+ * @param {{
+ *   featureLookup?: FeatureLookup,
+ *   sourceFeatures?: PopupFeature[],
+ *   orthogroups?: PopupGroup[],
+ *   descriptor?: PairwiseMatchDescriptor | null
+ * }} [options]
+ * @returns {PairwisePayloadContext}
+ */
+const createPairwisePayloadContext = ({
+  featureLookup = new Map(),
+  sourceFeatures = [],
+  orthogroups = [],
+  descriptor = null
+} = {}) => {
+  const {
+    cachedIdentity,
+    renderedByObject,
+    renderedById,
+    featuresByOrthogroupId,
+    featureOrthogroupStatuses,
+    sourceByObject,
+    sourceByIdentity,
+    memberIndexForGroup
+  } = payloadFeatureIndexFor(featureLookup, sourceFeatures);
+
   /** @type {Set<string>} */
   const rejectedRenderedIds = new Set();
   /** @param {unknown} renderedSvgId */
@@ -852,28 +975,6 @@ const createPairwisePayloadContext = ({
       : feature;
   };
 
-  /** @type {WeakMap<object, { records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }>} */
-  const groupMemberIndexes = new WeakMap();
-  /**
-   * @param {PopupGroup | null | undefined} group
-   * @returns {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }}
-   */
-  const memberIndexForGroup = (group) => {
-    if (!group || typeof group !== 'object') return { records: [], byIdentity: new Map() };
-    const cached = groupMemberIndexes.get(group);
-    if (cached) return cached;
-    /** @type {{ records: MemberRecord[], byIdentity: Map<string, MemberRecord[]> }} */
-    const index = { records: [], byIdentity: new Map() };
-    for (const member of Array.isArray(group.members) ? group.members : []) {
-      const record = { member, identity: cachedIdentity(member, 'standard') };
-      index.records.push(record);
-      identityIndexKeys(record.identity).forEach((key) => {
-        addBucketValue(index.byIdentity, key, record);
-      });
-    }
-    groupMemberIndexes.set(group, index);
-    return index;
-  };
   /**
    * @param {PopupGroup | null | undefined} group
    * @param {unknown} featureSvgId
@@ -908,51 +1009,22 @@ const createPairwisePayloadContext = ({
       .some((featureSvgId) => Boolean(groupMemberForFeatureId(group, featureSvgId)))
   );
 
-  /** @type {Map<string, PopupGroup[]>} */
-  const groupsById = new Map();
-  /** @type {Map<string, PopupGroup[]>} */
-  const groupsByScopedId = new Map();
-  /** @type {PopupGroup[]} */
-  const implicitGroupMatches = [];
-  for (const group of Array.isArray(orthogroups) ? orthogroups : []) {
-    const idStatus = orthogroupIdStatus(group);
-    const scopeStatus = groupScopeStatus(group);
-    if (!idStatus.valid || !idStatus.value) continue;
-    if (scopeStatus.valid) {
-      addBucketValue(groupsById, idStatus.value, group);
-      addBucketValue(
-        groupsByScopedId,
-        `${idStatus.value}\u001f${scopeStatus.value}`,
-        group
-      );
-    }
-    if (
-      descriptor
-      && !normalizeText(descriptor.orthogroupId)
-      && descriptor.matchKind !== 'collinear'
-      && (
-        groupHasFeatureIds(group, descriptor.queryFeatureSvgId)
-        || groupHasFeatureIds(group, descriptor.subjectFeatureSvgId)
-      )
-    ) implicitGroupMatches.push(group);
-  }
+  const groupIndex = orthogroupIndexFor(orthogroups);
+  const implicitGroupMatches = descriptor
+    && !normalizeText(descriptor.orthogroupId)
+    && descriptor.matchKind !== 'collinear'
+    ? groupIndex.identified.filter((group) => (
+      groupHasFeatureIds(group, descriptor.queryFeatureSvgId)
+      || groupHasFeatureIds(group, descriptor.subjectFeatureSvgId)
+    ))
+    : [];
 
   /**
    * @param {unknown} orthogroupId
    * @param {unknown} [groupScope]
    * @returns {PopupGroup | null}
    */
-  const orthogroupById = (orthogroupId, groupScope = '') => {
-    const id = normalizeText(orthogroupId);
-    if (!id) return null;
-    const requestedScope = normalizeText(groupScope)
-      ? normalizeGroupMetadataScope(groupScope)
-      : '';
-    const candidates = requestedScope
-      ? groupsByScopedId.get(`${id}\u001f${requestedScope}`) || []
-      : groupsById.get(id) || [];
-    return candidates.length === 1 ? candidates[0] : null;
-  };
+  const orthogroupById = (orthogroupId, groupScope = '') => orthogroupInIndex(groupIndex, orthogroupId, groupScope);
   const orthogroupForMatch = () => {
     const direct = orthogroupById(descriptor?.orthogroupId, descriptor?.groupScope);
     if (direct) return direct;
@@ -2286,8 +2358,8 @@ export const buildPairwiseMatchHoverSummary = (
     ? (typeof orthogroups === 'function' ? orthogroups() : orthogroups)
     : [];
   const group = descriptor.matchKind === 'orthogroup'
-    ? getOrthogroupById(
-      groupValues,
+    ? orthogroupInIndex(
+      orthogroupIndexFor(groupValues),
       descriptor.orthogroupId,
       descriptor.groupScope
     )

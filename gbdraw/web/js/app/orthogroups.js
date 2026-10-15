@@ -23,6 +23,7 @@ import {
   STABLE_FEATURE_ID_KEYS,
   featureIdentity,
   identityMatches,
+  indexFeatureIdentities,
   nonnegativeIntegerAliasStatus,
   orthogroupIdStatus,
   renderedFeatureIdentity,
@@ -64,45 +65,6 @@ const COPY_FEEDBACK_LABELS = Object.freeze({
 const normalizeText = (value) => String(value ?? '').trim();
 /** @param {unknown} value */
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
-
-// Narrow the search by supplied fields; identityMatches still owns all matching semantics.
-/**
- * @template T
- * @param {readonly T[]} entries
- * @param {(entry: T) => FeatureIdentity} identityOf
- * @returns {(reference: FeatureIdentity) => T[]}
- */
-const indexFeatureIdentities = (entries, identityOf) => {
-  /** @type {readonly ('recordIndex' | 'sourceIndex' | 'recordKey' | 'biologicalId' | 'stableId' | 'renderedId')[]} */
-  const fields = ['recordIndex', 'sourceIndex', 'recordKey', 'biologicalId', 'stableId', 'renderedId'];
-  const indexes = new Map(fields.map((field) => [field, new Map()]));
-  for (const entry of entries) {
-    const identity = identityOf(entry);
-    if (!identity.usable) continue;
-    for (const field of fields) {
-      const status = identity[field];
-      if (!status.supplied) continue;
-      // `fields` lists every key of `indexes`, so the lookup always finds a map.
-      const index = /** @type {Map<any, any[]>} */ (indexes.get(field));
-      if (!index.has(status.value)) index.set(status.value, []);
-      // The line above stores a list under this value when none exists.
-      /** @type {any[]} */ (index.get(status.value)).push(entry);
-    }
-  }
-  return (reference) => {
-    if (!reference.usable) return [];
-    let candidates = entries;
-    for (const field of fields) {
-      const status = reference[field];
-      if (!status.supplied) continue;
-      // `fields` lists every key of `indexes`, so the lookup always finds a map.
-      const matches = /** @type {Map<any, any[]>} */ (indexes.get(field)).get(status.value) || [];
-      if (matches.length < candidates.length) candidates = matches;
-    }
-    return candidates.filter((entry) => identityMatches(reference, identityOf(entry), { includeRendered: true }));
-  };
-};
-
 
 /** @param {OrthogroupMember | null | undefined} member */
 const memberStableFeatureId = (member) => {

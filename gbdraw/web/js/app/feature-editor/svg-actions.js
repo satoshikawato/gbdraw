@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { DrawingState, PopupPosition } from '../../state.js' */
 /** @import { PopupOrigin } from '../../utils/popup-bounds.js' */
-/** @import { AliasSource } from '../../services/feature-identity.js' */
+/** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
@@ -28,7 +28,7 @@ import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
   featureIdentity,
-  identityMatches,
+  indexFeatureIdentities,
   renderedFeatureIdentity
 } from '../../services/feature-identity.js';
 import {
@@ -124,14 +124,40 @@ export {
  */
 
 /**
- * The state of the feature and match hover summary. The tooltip element is
- * created on the first hover; `lastEvent` holds the last pointer position seen.
+ * One row of the hover summary: its label and value text nodes.
+ * @typedef {{ row: HTMLElement, label: Text, valueElement: HTMLElement, value: Text }} HoverSummaryRowView
+ */
+
+/**
+ * The hover summary's DOM, built once (OV-933): a show rewrites its text nodes,
+ * the swatch colour and which rows are shown, so it adds or removes no node and
+ * changes a class only when a row's clamping changes. The vendored Tailwind
+ * runtime rescans every class on a node or class change.
+ * @typedef {object} HoverSummaryView
+ * @property {HTMLElement} element
+ * @property {HTMLElement} swatch
+ * @property {Text} heading
+ * @property {Text} subtitle
+ * @property {HoverSummaryRowView[]} rows
+ */
+
+/**
+ * What one hover summary shows: a feature's or a match's.
+ * @typedef {object} HoverSummaryContent
+ * @property {string} color
+ * @property {string} heading
+ * @property {string} subtitle
+ * @property {Array<{ label: string, value: unknown, clamp: boolean }>} rows
+ */
+
+/**
+ * The state of the feature and match hover summary. The tooltip is built on the
+ * first show; `lastEvent` holds the last pointer position seen.
  * @typedef {object} HoverSummaryState
- * @property {HTMLElement | null} element
+ * @property {HoverSummaryView | null} view
  * @property {number | null} timer
  * @property {number | null} frame
  * @property {boolean} visible
- * @property {string} activeSvgId
  * @property {{ clientX?: number, clientY?: number } | null} lastEvent
  */
 
@@ -174,6 +200,8 @@ export {
  * @property {Map<string, Element[]> | null} comparisonElementsByOrthogroupId
  * @property {Map<string, Element[]> | null} comparisonElementsByCollinearityBlockId
  * @property {Map<string, Element[]> | null} comparisonElementsByMatchId
+ * @property {((reference: FeatureIdentity) => RenderedIdentityEntry[]) | null} renderedFeatureIdentities
+ * @property {Set<Element>} selectedMatchElements The match elements marked as the open match popup's.
  * @property {boolean} pairwiseAffordancesPrepared
  * @property {string | null} activeHoverSvgId
  * @property {string} activeHoverKey
@@ -194,7 +222,15 @@ export {
  * @property {((options?: { restore?: boolean }) => void) | null} clearAlignmentCandidatePreview
  * @property {((eventLike: any, kind?: string) => void) | null} beginPreviewTransformInteraction
  * @property {((options?: { reconcile?: boolean }) => void) | null} endPreviewTransformInteraction
+ * @property {((match: SelectedPairwiseMatch | null) => void) | null} markSelectedMatch
  * @property {(() => void) | null} cleanup
+ */
+
+/** @typedef {{ svgId: string, identity: FeatureIdentity }} RenderedIdentityEntry */
+
+/**
+ * The open match popup's payload, as far as it names the bands it shows.
+ * @typedef {{ id?: unknown, matchKind?: unknown, orthogroupId?: unknown }} SelectedPairwiseMatch
  */
 
 /** @param {FeatureSvgActionsOptions} options */
@@ -233,13 +269,15 @@ export const createFeatureSvgActions = ({
   );
   /** @type {HoverSummaryState} */
   const hoverSummaryState = {
-    element: null,
+    view: null,
     timer: null,
     frame: null,
     visible: false,
-    activeSvgId: '',
     lastEvent: null
   };
+  // The fine-pointer query, asked once; its `matches` follows the device (OV-938).
+  /** @type {MediaQueryList | null | undefined} */
+  let finePointerQuery;
 
   /** @param {unknown} value */
   const getOrthogroupIds = (value) =>
@@ -324,26 +362,20 @@ export const createFeatureSvgActions = ({
     ''
   );
 
-  /** @param {string} tagName @param {string} [className] @param {string} [text] */
-  const createHoverSummaryElement = (tagName, className = '', text = '') => {
+  /** @param {string} tagName @param {string} [className] */
+  const createHoverSummaryElement = (tagName, className = '') => {
     const element = document.createElement(tagName);
     if (className) element.className = className;
-    if (text !== '') element.textContent = text;
     return element;
   };
 
-  /** @param {Element} container @param {string} label @param {unknown} value @param {{ clamp?: boolean }} [options] */
-  const addHoverSummaryRow = (container, label, value, { clamp = false } = {}) => {
-    const normalizedValue = String(value === null || value === undefined ? '' : value).trim();
-    if (!normalizedValue) return;
-    const row = createHoverSummaryElement('div', 'feature-hover-summary-row');
-    row.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-label', label));
-    row.appendChild(createHoverSummaryElement(
-      'div',
-      `feature-hover-summary-value${clamp ? ' is-clamped' : ''}`,
-      normalizedValue
-    ));
-    container.appendChild(row);
+  /** @param {HTMLElement} parent @param {string} className */
+  const appendHoverSummaryText = (parent, className) => {
+    const element = createHoverSummaryElement('div', className);
+    const text = document.createTextNode('');
+    element.appendChild(text);
+    parent.appendChild(element);
+    return { element, text };
   };
 
   /** @param {FeatureLike} feat @param {string} primaryLabel */
@@ -639,24 +671,45 @@ export const createFeatureSvgActions = ({
     if (clickedFeature.value) return false;
     if (clickedPairwiseMatch?.value) return false;
     if (isPreviewTransformInteractionActive()) return false;
-    if (window.matchMedia && !window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    if (finePointerQuery === undefined) {
+      finePointerQuery = window.matchMedia ? window.matchMedia('(hover: hover) and (pointer: fine)') : null;
+    }
+    if (finePointerQuery && !finePointerQuery.matches) {
       return false;
     }
     return true;
   };
 
-  const ensureHoverSummaryElement = () => {
-    if (hoverSummaryState.element?.isConnected) return hoverSummaryState.element;
+  /** @returns {HoverSummaryView} */
+  const ensureHoverSummaryView = () => {
+    if (hoverSummaryState.view?.element.isConnected) return hoverSummaryState.view;
     const element = createHoverSummaryElement('div', 'feature-hover-summary');
     element.hidden = true;
     element.setAttribute('role', 'tooltip');
+    const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
+    const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
+    const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
+    const heading = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-heading').text;
+    const subtitle = appendHoverSummaryText(titleTextWrap, 'feature-hover-summary-subtitle').text;
+    title.appendChild(swatch);
+    title.appendChild(titleTextWrap);
+    element.appendChild(title);
     document.body.appendChild(element);
-    hoverSummaryState.element = element;
-    return element;
+    hoverSummaryState.view = { element, swatch, heading, subtitle, rows: [] };
+    return hoverSummaryState.view;
+  };
+
+  /** @param {HTMLElement} container @returns {HoverSummaryRowView} */
+  const appendHoverSummaryRow = (container) => {
+    const row = createHoverSummaryElement('div', 'feature-hover-summary-row');
+    const label = appendHoverSummaryText(row, 'feature-hover-summary-label').text;
+    const { element: valueElement, text: value } = appendHoverSummaryText(row, 'feature-hover-summary-value');
+    container.appendChild(row);
+    return { row, label, valueElement, value };
   };
 
   const positionHoverSummary = (eventLike = hoverSummaryState.lastEvent) => {
-    const element = hoverSummaryState.element;
+    const element = hoverSummaryState.view?.element;
     if (!element || element.hidden || !eventLike) return;
     const margin = 12;
     const offset = 14;
@@ -689,110 +742,82 @@ export const createFeatureSvgActions = ({
     });
   };
 
-  /** @param {FeatureLike | null | undefined} feat @param {Element | null | undefined} featureElement @param {HoverPoint | null | undefined} eventLike */
-  const renderHoverSummary = (feat, featureElement, eventLike) => {
-    if (!feat || !hoverSummaryIsAllowed()) {
-      hideHoverSummary();
-      return;
-    }
-    const element = ensureHoverSummaryElement();
+  /**
+   * @param {FeatureLike} feat
+   * @param {Element | null | undefined} featureElement
+   * @returns {HoverSummaryContent}
+   */
+  const featureHoverContent = (feat, featureElement) => {
     const primaryLabel = getHoverSummaryPrimaryLabel(feat);
     const featureType = String(feat?.type || 'Feature').trim() || 'Feature';
-    const titleText = primaryLabel ? `${featureType}: ${primaryLabel}` : featureType;
-    const locationText = formatFeatureLocation(feat);
-    const color = resolveColorToHex(
-      featureElement?.getAttribute?.('fill') || getFeatureColor(feat) || '#94a3b8'
-    ) || '#94a3b8';
-
-    element.replaceChildren();
-    const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
-    const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
-    swatch.style.backgroundColor = color;
-    const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', titleText));
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', locationText));
-    title.appendChild(swatch);
-    title.appendChild(titleTextWrap);
-    element.appendChild(title);
-
-    buildHoverSummaryRows(feat, primaryLabel).forEach(([label, value, clamp]) => {
-      addHoverSummaryRow(element, label, value, { clamp: Boolean(clamp) });
-    });
-
-    element.hidden = false;
-    hoverSummaryState.visible = true;
-    hoverSummaryState.activeSvgId = renderedFeatureSvgId(feat);
-    scheduleHoverSummaryPosition(eventLike);
-    positionHoverSummary(eventLike);
-  };
-
-  /** @param {FeatureLike | null | undefined} feat @param {Element | null | undefined} featureElement @param {HoverPoint | null | undefined} eventLike */
-  const scheduleHoverSummary = (feat, featureElement, eventLike) => {
-    if (hoverSummaryState.timer) {
-      window.clearTimeout(hoverSummaryState.timer);
-      hoverSummaryState.timer = null;
-    }
-    if (!feat || !hoverSummaryIsAllowed()) {
-      hideHoverSummary();
-      return;
-    }
-    scheduleHoverSummaryPosition(eventLike);
-    const show = () => {
-      hoverSummaryState.timer = null;
-      renderHoverSummary(feat, featureElement, eventLike);
+    return {
+      color: resolveColorToHex(
+        featureElement?.getAttribute?.('fill') || getFeatureColor(feat) || '#94a3b8'
+      ) || '#94a3b8',
+      heading: primaryLabel ? `${featureType}: ${primaryLabel}` : featureType,
+      subtitle: formatFeatureLocation(feat),
+      rows: buildHoverSummaryRows(feat, primaryLabel)
+        .map(([label, value, clamp]) => ({ label, value, clamp: Boolean(clamp) }))
     };
-    if (hoverSummaryState.visible) {
-      show();
-      return;
-    }
-    hoverSummaryState.timer = window.setTimeout(show, 180);
   };
 
-  /** @param {MatchHoverSummary | null} summary @param {HoverPoint | null | undefined} eventLike */
-  const renderMatchHoverSummary = (summary, eventLike) => {
-    if (!summary || !hoverSummaryIsAllowed()) {
+  /**
+   * @param {MatchHoverSummary | null} summary
+   * @returns {HoverSummaryContent | null}
+   */
+  const matchHoverContent = (summary) => summary && {
+    color: resolveColorToHex(summary.fill || '#94a3b8') || '#94a3b8',
+    heading: summary.title,
+    subtitle: summary.subtitle || summary.id || '',
+    rows: summary.rows.map((row) => ({ ...row, clamp: row.label === 'Query' || row.label === 'Subject' }))
+  };
+
+  // The rows without a value are not shown; the view keeps its other rows
+  // empty and hidden.
+  /** @param {HoverSummaryContent | null} content @param {HoverPoint | null | undefined} eventLike */
+  const renderHoverSummary = (content, eventLike) => {
+    if (!content || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
       return;
     }
-    const element = ensureHoverSummaryElement();
-    const color = resolveColorToHex(summary.fill || '#94a3b8') || '#94a3b8';
-
-    element.replaceChildren();
-    const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
-    const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
-    swatch.style.backgroundColor = color;
-    const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', summary.title));
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', summary.subtitle || summary.id || ''));
-    title.appendChild(swatch);
-    title.appendChild(titleTextWrap);
-    element.appendChild(title);
-
-    summary.rows.forEach((row) => {
-      addHoverSummaryRow(element, row.label, row.value, { clamp: row.label === 'Query' || row.label === 'Subject' });
+    const view = ensureHoverSummaryView();
+    view.swatch.style.backgroundColor = content.color;
+    view.heading.data = content.heading;
+    view.subtitle.data = content.subtitle;
+    const rows = content.rows
+      .map((row) => ({ ...row, value: String(row.value === null || row.value === undefined ? '' : row.value).trim() }))
+      .filter((row) => row.value);
+    while (view.rows.length < rows.length) view.rows.push(appendHoverSummaryRow(view.element));
+    view.rows.forEach((rowView, index) => {
+      const row = rows[index];
+      rowView.row.style.display = row ? '' : 'none';
+      rowView.label.data = row?.label || '';
+      rowView.value.data = row?.value || '';
+      if (row) rowView.valueElement.classList.toggle('is-clamped', row.clamp);
     });
-
-    element.hidden = false;
+    view.element.hidden = false;
     hoverSummaryState.visible = true;
-    hoverSummaryState.activeSvgId = String(summary.id || '').trim();
+    // Placed in the next frame, before it paints (OV-938): measuring here would
+    // force a style pass right after the highlight writes.
     scheduleHoverSummaryPosition(eventLike);
-    positionHoverSummary(eventLike);
   };
 
-  /** @param {MatchHoverSummary | null} summary @param {HoverPoint | null | undefined} eventLike */
-  const scheduleMatchHoverSummary = (summary, eventLike) => {
+  // The summary is built when it shows, 180 ms after the pointer rests or at
+  // once while one is shown, not on every pointer entry (OV-915).
+  /** @param {(() => HoverSummaryContent | null) | null} buildContent @param {HoverPoint | null | undefined} eventLike */
+  const scheduleHoverSummary = (buildContent, eventLike) => {
     if (hoverSummaryState.timer) {
       window.clearTimeout(hoverSummaryState.timer);
       hoverSummaryState.timer = null;
     }
-    if (!summary || !hoverSummaryIsAllowed()) {
+    if (!buildContent || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
       return;
     }
     scheduleHoverSummaryPosition(eventLike);
     const show = () => {
       hoverSummaryState.timer = null;
-      renderMatchHoverSummary(summary, eventLike);
+      renderHoverSummary(buildContent(), eventLike);
     };
     if (hoverSummaryState.visible) {
       show();
@@ -810,11 +835,10 @@ export const createFeatureSvgActions = ({
       window.cancelAnimationFrame(hoverSummaryState.frame);
       hoverSummaryState.frame = null;
     }
-    if (hoverSummaryState.element) {
-      hoverSummaryState.element.hidden = true;
+    if (hoverSummaryState.view) {
+      hoverSummaryState.view.element.hidden = true;
     }
     hoverSummaryState.visible = false;
-    hoverSummaryState.activeSvgId = '';
     hoverSummaryState.lastEvent = null;
   }
 
@@ -937,6 +961,8 @@ export const createFeatureSvgActions = ({
       comparisonElementsByOrthogroupId: null,
       comparisonElementsByCollinearityBlockId: null,
       comparisonElementsByMatchId: null,
+      renderedFeatureIdentities: null,
+      selectedMatchElements: new Set(),
       pairwiseAffordancesPrepared: false,
       activeHoverSvgId: null,
       activeHoverKey: '',
@@ -957,6 +983,7 @@ export const createFeatureSvgActions = ({
       clearAlignmentCandidatePreview: null,
       beginPreviewTransformInteraction: null,
       endPreviewTransformInteraction: null,
+      markSelectedMatch: null,
       cleanup: null
     };
 
@@ -1091,6 +1118,16 @@ export const createFeatureSvgActions = ({
       /** @param {Element | null | undefined} element @param {string} name */
       const matchAttr = (element, name) => String(element?.getAttribute?.(name) || '').trim();
 
+      // A similarity-group ribbon, as opposed to a pairwise match or a collinear
+      // block that names groups.
+      /** @param {Element} element */
+      const isOrthogroupRibbon = (element) => {
+        const kind = matchAttr(element, 'data-match-kind').toLowerCase();
+        return kind === 'orthogroup' || (
+          !kind && !element.hasAttribute('data-collinearity-block-id') && Boolean(matchAttr(element, 'data-orthogroup-id'))
+        );
+      };
+
       /** @param {Element | null | undefined} matchElement */
       const getMatchHoverKey = (matchElement) => {
         const blockId = matchAttr(matchElement, 'data-collinearity-block-id');
@@ -1164,17 +1201,34 @@ export const createFeatureSvgActions = ({
         }
       };
 
+      // The rendered features by identity, indexed once per mounted root: the
+      // Review alignment asks for one feature per candidate (OV-935).
+      const ensureRenderedFeatureIdentities = () => {
+        if (!handlerState.renderedFeatureIdentities) {
+          /** @type {RenderedIdentityEntry[]} */
+          const entries = Array.from(ensureFeatureLookup(), ([svgId, feature]) => ({
+            svgId, identity: renderedFeatureIdentity(feature)
+          }));
+          handlerState.renderedFeatureIdentities = indexFeatureIdentities(
+            entries, (entry) => entry.identity, { includeRendered: false }
+          );
+        }
+        return handlerState.renderedFeatureIdentities;
+      };
+
+      // The rendered feature an anchor names, when exactly one is.
+      /** @param {AliasSource} anchor */
+      const uniqueRenderedSvgId = (anchor) => {
+        const requested = featureIdentity(anchor);
+        if (!requested.usable) return '';
+        const matches = ensureRenderedFeatureIdentities()(requested);
+        return matches.length === 1 ? matches[0].svgId : '';
+      };
+
       /** @param {AliasSource} anchor */
       const previewAlignmentCandidate = (anchor) => {
-        const requested = featureIdentity(anchor);
-        if (!requested.usable) return false;
-        const matches = Array.from(ensureFeatureLookup().entries())
-          .filter(([, feature]) => {
-            const candidate = renderedFeatureIdentity(feature);
-            return candidate.usable
-              && identityMatches(requested, candidate);
-          });
-        if (matches.length !== 1) return false;
+        const svgId = uniqueRenderedSvgId(anchor);
+        if (!svgId) return false;
         const restore = handlerState.alignmentCandidateRestore || {
           featureSvgId: handlerState.activeHoverSvgId,
           matchElement: handlerState.activeMatchHoverElement
@@ -1187,7 +1241,6 @@ export const createFeatureSvgActions = ({
         clearActiveMatchHover();
         hideHoverSummary();
         handlerState.alignmentCandidateRestore = restore;
-        const [svgId] = matches[0];
         setFeatureHover(svgId);
         handlerState.alignmentCandidateSvgId = svgId;
         handlerState.alignmentOverlay?.setHover(handlerState.alignmentCandidatesBySvgId.get(svgId) ?? null);
@@ -1205,13 +1258,8 @@ export const createFeatureSvgActions = ({
       // the alignment centres that whole span.
       /** @param {AliasSource} anchor */
       const uniqueRenderedFeature = (anchor) => {
-        const requested = featureIdentity(anchor);
-        if (!requested.usable) return null;
-        const matches = Array.from(ensureFeatureLookup().entries()).filter(([, feature]) => (
-          identityMatches(requested, renderedFeatureIdentity(feature))
-        ));
-        if (matches.length !== 1) return null;
-        const [svgId] = matches[0];
+        const svgId = uniqueRenderedSvgId(anchor);
+        if (!svgId) return null;
         const blocks = getFeatureFillElements(svg, svgId, ensureFeaturePaths());
         return blocks.length && blocks.every(isDrawnBlock) ? { svgId, blocks } : null;
       };
@@ -1430,6 +1478,8 @@ export const createFeatureSvgActions = ({
         const update = () => {
           overlay.frame = 0;
           if (!element.isConnected || delegatedFeatureHandlers !== handlerState) return;
+          // Hidden while the preview pans or zooms; the end of the gesture places it again (OV-936).
+          if (isPreviewTransformInteractionActive()) return;
           const frame = viewport.getBoundingClientRect();
           const paper = svgContainer.value.getBoundingClientRect();
           const referenceBox = boxIn(referenceFeature?.blocks, frame);
@@ -1492,6 +1542,32 @@ export const createFeatureSvgActions = ({
       handlerState.showAlignmentOverlay = showAlignmentOverlay;
       handlerState.clearAlignmentOverlay = clearAlignmentOverlay;
 
+      // The bands of the open match popup: a similarity group's ribbons, or one
+      // match's fragments. Only the bands that change are written (OV-937).
+      /** @param {SelectedPairwiseMatch | null} match */
+      handlerState.markSelectedMatch = (match) => {
+        const matchId = String(match?.id || '').trim();
+        const orthogroupId = String(match?.matchKind === 'orthogroup' ? match?.orthogroupId : '').trim();
+        /** @type {Element[]} */
+        let selected = [];
+        if (orthogroupId || matchId) {
+          ensureComparisonIndexes();
+          // ensureComparisonIndexes above has set all three comparison maps.
+          selected = orthogroupId
+            ? (/** @type {Map<string, Element[]>} */ (handlerState.comparisonElementsByOrthogroupId).get(orthogroupId) || [])
+              .filter((element) => element.matches(PAIRWISE_MATCH_SELECTOR) && isOrthogroupRibbon(element))
+            : /** @type {Map<string, Element[]>} */ (handlerState.comparisonElementsByMatchId).get(matchId) || [];
+        }
+        const next = new Set(selected);
+        handlerState.selectedMatchElements.forEach((element) => {
+          if (!next.has(element)) element.classList.toggle('gbdraw-match-selected', false);
+        });
+        next.forEach((element) => {
+          if (!handlerState.selectedMatchElements.has(element)) element.classList.toggle('gbdraw-match-selected', true);
+        });
+        handlerState.selectedMatchElements = next;
+      };
+
       const clearPendingMatch = () => {
         if (!handlerState.pendingMatchElement) return;
         matchFragments(handlerState.pendingMatchElement).forEach((element) => element.classList.remove('gbdraw-match-pending'));
@@ -1532,7 +1608,8 @@ export const createFeatureSvgActions = ({
         handlerState.activeHoverSvgId = svgId;
         handlerState.activeHoverKey = hoverKey;
         handlerState.alignmentOverlay?.setHover(handlerState.alignmentCandidatesBySvgId.get(svgId) ?? null);
-        scheduleHoverSummary(ensureFeatureLookup().get(svgId), featureEl, eventLike);
+        const feat = ensureFeatureLookup().get(svgId);
+        scheduleHoverSummary(feat ? () => featureHoverContent(feat, featureEl) : null, eventLike);
         return true;
       };
 
@@ -1549,7 +1626,7 @@ export const createFeatureSvgActions = ({
         }
         handlerState.activeMatchHoverElement = matchEl;
         handlerState.activeMatchHoverKey = matchKey;
-        scheduleMatchHoverSummary(buildMatchHoverSummary(matchEl), eventLike);
+        scheduleHoverSummary(() => matchHoverContent(buildMatchHoverSummary(matchEl)), eventLike);
         return true;
       };
 
@@ -1880,8 +1957,8 @@ export const createFeatureSvgActions = ({
       unsubscribePreviewTransformInteraction();
     }
     cleanupDelegatedFeatureHandlers();
-    if (hoverSummaryState.element?.isConnected) hoverSummaryState.element.remove();
-    hoverSummaryState.element = null;
+    if (hoverSummaryState.view?.element.isConnected) hoverSummaryState.view.element.remove();
+    hoverSummaryState.view = null;
   };
 
   /** @param {AliasSource} anchor */
@@ -1899,6 +1976,12 @@ export const createFeatureSvgActions = ({
 
   const clearAlignmentOverlay = () => {
     delegatedFeatureHandlers?.clearAlignmentOverlay?.();
+  };
+
+  // Marks the bands of the open match popup on the mounted Result.
+  /** @param {SelectedPairwiseMatch | null} match */
+  const markSelectedPairwiseMatch = (match) => {
+    delegatedFeatureHandlers?.markSelectedMatch?.(match);
   };
 
   /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
@@ -1947,6 +2030,7 @@ export const createFeatureSvgActions = ({
     clearAlignmentCandidatePreview,
     showAlignmentOverlay,
     clearAlignmentOverlay,
+    markSelectedPairwiseMatch,
     showFeaturePopupAtFeature,
     preparePairwiseInteractionAffordances,
     preparePreviewItemAffordances,

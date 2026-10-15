@@ -5,7 +5,7 @@ import {
   resolveDisplayProteinId,
   resolveInternalProteinId
 } from '../../services/feature-utils.js';
-import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
+import { uniqueOrthogroupMemberResolver } from '../../services/feature-identity.js';
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 
 /**
@@ -381,9 +381,29 @@ const getOrthogroupId = (feature) => orthogroupIdFor({
   orthogroup_id: feature?.orthogroup_id
 });
 
-/** @param {FeatureLike | null | undefined} feature @param {SearchOrthogroup | null} group */
-const getFeatureOrthogroupMember = (feature, group) => {
-  return resolveUniqueOrthogroupMemberForFeature(feature, group?.members);
+// Each group's members are indexed once per group map, that is once per search
+// index build, not once per feature and field (OV-914).
+/** @type {WeakMap<Map<string, SearchOrthogroup>, Map<SearchOrthogroup, (feature: FeatureLike | null | undefined) => FeatureLike | null>>} */
+const memberResolversByGroupMap = new WeakMap();
+
+/**
+ * @param {FeatureLike | null | undefined} feature
+ * @param {SearchOrthogroup | null} group
+ * @param {Map<string, SearchOrthogroup>} orthogroupsById
+ */
+const getFeatureOrthogroupMember = (feature, group, orthogroupsById) => {
+  if (!group) return null;
+  let resolvers = memberResolversByGroupMap.get(orthogroupsById);
+  if (!resolvers) {
+    resolvers = new Map();
+    memberResolversByGroupMap.set(orthogroupsById, resolvers);
+  }
+  let resolve = resolvers.get(group);
+  if (!resolve) {
+    resolve = uniqueOrthogroupMemberResolver(group.members);
+    resolvers.set(group, resolve);
+  }
+  return resolve(feature);
 };
 
 /** @param {FeatureLike | null | undefined} feature @param {Map<string, SearchOrthogroup>} orthogroupsById */
@@ -391,7 +411,7 @@ const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   const orthogroupId = getOrthogroupId(feature);
   const candidateGroup = orthogroupsById.get(orthogroupId) || null;
   const group = orthogroupIdFor(candidateGroup) === orthogroupId ? candidateGroup : null;
-  const member = getFeatureOrthogroupMember(feature, group);
+  const member = getFeatureOrthogroupMember(feature, group, orthogroupsById);
   const proteinId = resolveDisplayProteinId(feature, member);
   const internalId = resolveInternalProteinId(feature, member);
   /** @type {SearchItem[]} */
