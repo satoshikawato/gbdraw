@@ -383,9 +383,11 @@ The checker reads the registry from the trusted base.
   `count-map` (a number per key), `set` (exempt names), `writer-map` (exempt
   writers per module, each with a category), `set-map` (names per path),
   `json-entries` (the objects of a JSON array, by `id`), `json-ids` (the `id`
-  set of a JSON array: a new id is an expansion, a removed id a contraction,
-  and an edit of another field neither), and `py-count`, `py-count-map`, and
-  `py-set` for a module-level literal of a Python test.
+  set of a JSON array and the length of each entry's lists: a new id or a
+  further list item is an expansion, a removed id or list item a contraction,
+  and a renamed list item or an edit of another field neither), and
+  `py-count`, `py-count-map`, and `py-set` for a module-level literal of a
+  Python test.
 - A count is a ceiling. Its test asserts observed ≤ recorded, per key for a
   map, and a key without an entry counts as 0. Lowering or removing an entry
   is a contraction and is optional; the test names what may be lowered.
