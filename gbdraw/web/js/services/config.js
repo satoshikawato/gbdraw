@@ -14,6 +14,7 @@ import {
 } from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
+import { orderedOptionalConservationFiles, withoutConservationSeries } from './conservation-series.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import { isNoStrokeColor, normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
 import {
@@ -293,6 +294,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { RawConservationSeriesEntry } from './conservation-series.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
@@ -3883,6 +3885,51 @@ export const canonicalRenderArtifactOwner = Object.freeze({
 });
 
 /**
+ * OV-893 (E-OD30): a Circular comparison series whose BLAST table Load could
+ * not read (an empty place of `c_conservation_blasts`) is left out with its
+ * files, as Remove leaves a series out (`withoutConservationSeries`), and
+ * listed; the series after it keep their own files. Writes the file lists of
+ * `files`; returns the draft with the series left.
+ * @param {Record<string, unknown>} config The Circular draft Load installs.
+ * @param {Record<string, unknown>} files The candidate's file slots (`applyFiles`).
+ * @param {string} at Where the draft's series are in the file.
+ * @param {LoadRepair[]} repairs
+ * @returns {Record<string, unknown>}
+ */
+const withoutUnreadConservationSeries = (config, files, at, repairs) => {
+  /** @param {unknown} list @returns {(FileLike | null)[]} */
+  const placed = (list) => (Array.isArray(list) ? list : []);
+  if (!placed(files.c_conservation_blasts).some((file) => !file)) return config;
+  const conservation = isPlainObject(config.circularConservation) ? config.circularConservation : {};
+  const series = /** @type {RawConservationSeriesEntry[]} */ (Array.isArray(conservation.series) ? conservation.series : []);
+  /** @param {unknown} list */
+  const inSeriesOrder = (list) => orderedOptionalConservationFiles(placed(list), { series });
+  let kept = {
+    blasts: inSeriesOrder(files.c_conservation_blasts),
+    fastas: inSeriesOrder(files.c_conservation_fastas),
+    sequenceSources: inSeriesOrder(files.c_conservation_sequence_sources),
+    series,
+    labels: ''
+  };
+  for (let index = kept.blasts.length - 1; index >= 0; index -= 1) {
+    if (kept.blasts[index]) continue;
+    if (index < kept.series.length) {
+      const label = kept.series[index].label;
+      repairs.push(loadRepair({
+        code: 'comparison-series-dropped', path: `${at}[${index}]`, effect: 'dropped',
+        ...(typeof label === 'string' ? { label } : {})
+      }));
+    }
+    kept = withoutConservationSeries(kept, index);
+  }
+  files.c_conservation_blasts = kept.blasts;
+  files.c_conservation_fastas = kept.fastas;
+  files.c_conservation_sequence_sources = kept.sequenceSources;
+  // A draft without series names its rings by `labels` (by place), which keeps its text.
+  return { ...config, circularConservation: { ...conservation, series: kept.series, ...(series.length ? { labels: kept.labels } : {}) } };
+};
+
+/**
  * A single file slot's stored value: the first entry `deserializeFile` reads.
  * The other entries of a list, and an entry it cannot read, are dropped and
  * listed at `path` (OV-655, TB23, E-OD07); an entry that holds nothing is no row.
@@ -3958,8 +4005,9 @@ const applyFiles = (filesData, {
   targetState.files.c_fasta = fileSlot('c_fasta');
   // A Depth slot holds a list.
   targetState.files.c_depth = deserializeFile(filesData.c_depth);
+  // A table's place stays until Load leaves out its series (`withoutUnreadConservationSeries`).
   targetState.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
-    ? filesData.c_conservation_blasts.map((entry) => deserializeFile(entry)).filter(Boolean)
+    ? filesData.c_conservation_blasts.map((entry) => deserializeFile(entry))
     : [];
   targetState.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
     ? 'losat-cache'
@@ -5860,6 +5908,10 @@ const importSessionDocument = async (e, options = {}) => {
       // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
       if (Array.isArray(modeConfigs[mode].rules)) modeConfigs[mode].rules = savedSpecificRules(modeConfigs[mode].rules);
       if (mode === 'linear') modeConfigs.linear = withBoundLinearRecordsOff(modeConfigs.linear, candidateFiles.linearSeqs);
+      if (mode === 'circular') {
+        modeConfigs.circular = withoutUnreadConservationSeries(modeConfigs.circular, candidateFiles.files,
+          `${modeScopedSession ? 'modes.circular.config' : 'config'}.circularConservation.series`, repairs);
+      }
       // The form's legend position is the drawing's layout slot (state.js), which reads it in its mode.
       if (isPlainObject(modeConfigs[mode].form)) {
         repairs.push(...readLegendPositionOfMode(modeConfigs[mode].form.legend, mode,

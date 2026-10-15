@@ -37,6 +37,7 @@ print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
 const fixture = (name) => {
   const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));
@@ -311,6 +312,35 @@ test('R1-B1: a dropped comparison sequence binding keeps its place, so no later 
   const names = (files) => files.map((file) => file?.name ?? null);
   assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
   assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+});
+
+// OV-893 (E-OD30): a comparison series reads its BLAST table by place too, and
+// its readers take no empty place: a dropped table binding drops its series
+// with its files, as Remove does, and the series after it keep their own.
+test('OV-893: a dropped comparison table binding drops its series with its files; later series keep theirs', async () => {
+  const session = fixture('synthetic_conservation.gbdraw-session.json.gz');
+  session.webFiles.bindings.c_conservation_blasts[1].resourceId = 'zz';
+  const dialogs = [];
+  const result = await importSession(input(session), {
+    transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(...dialog.items); return true; }
+  });
+  assert.deepEqual(result.repairs.map(({ code, path }) => `${code} ${path}`), [
+    'file-entry-dropped webFiles.bindings.c_conservation_blasts[1]',
+    'comparison-series-dropped config.circularConservation.series[1]'
+  ]);
+  assert.ok(dialogs.some((line) => line.includes('"comparison-c"')), JSON.stringify(dialogs));
+  const names = (files) => files.map((file) => file?.name ?? null);
+  assert.deepEqual(names(state.files.c_conservation_blasts),
+    ['comparison-b.circular_conservation.losatn.tsv', 'comparison-d.circular_conservation.losatn.tsv']);
+  assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
+  assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
+  const conservation = state.drawings.circular.circularConservation;
+  assert.deepEqual(conservation.series.map(({ label, sourceIndex }) => [label, sourceIndex]), [['comparison-b', 0], ['comparison-d', 1]]);
+  assert.deepEqual(orderedConservationSources(state.files.c_conservation_blasts, conservation)
+    .map(({ label, file, sourceIndex }) => [label, file.name, state.files.c_conservation_sequence_sources[sourceIndex]?.name]), [
+    ['comparison-b', 'comparison-b.circular_conservation.losatn.tsv', 'comparison-b.fasta'],
+    ['comparison-d', 'comparison-d.circular_conservation.losatn.tsv', 'comparison-d.fasta']
+  ]);
 });
 
 // R2-B1: a null request of a full Session reads as an absent one (E-OD29):

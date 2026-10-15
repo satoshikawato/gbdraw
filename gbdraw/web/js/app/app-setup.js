@@ -247,7 +247,8 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles,
   parseConservationLabelText,
-  reconcileConservationSeries
+  reconcileConservationSeries,
+  withoutConservationSeries
 } from '../services/conservation-series.js';
 import {
   getDepthTrackFallbackLabel,
@@ -2961,23 +2962,21 @@ export const createAppSetup = () => {
         files.c_conservation_sequence_sources,
         drawing.circularConservation
       );
-      orderedBlasts.splice(idx, 1);
-      orderedFastas.splice(idx, 1);
-      orderedSequenceSources.splice(idx, 1);
-      drawing.circularConservation.series.splice(idx, 1);
-      drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ seriesEntry, /** @type {number} */ seriesIndex) => {
-        seriesEntry.sourceIndex = seriesIndex;
-      });
-      drawing.circularConservation.labels = drawing.circularConservation.series
-        .map((/** @type {RawConservationSeriesEntry} */ seriesEntry) => seriesEntry.label)
-        .join(',');
-      files.c_conservation_blasts = orderedBlasts;
-      files.c_conservation_fastas = orderedFastas;
-      files.c_conservation_sequence_sources = orderedSequenceSources;
-      files.c_conservation_blasts_source = orderedBlasts.length > 0
+      const kept = withoutConservationSeries({
+        blasts: orderedBlasts,
+        fastas: orderedFastas,
+        sequenceSources: orderedSequenceSources,
+        series: drawing.circularConservation.series
+      }, idx);
+      drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
+      drawing.circularConservation.labels = kept.labels;
+      files.c_conservation_blasts = kept.blasts;
+      files.c_conservation_fastas = kept.fastas;
+      files.c_conservation_sequence_sources = kept.sequenceSources;
+      files.c_conservation_blasts_source = kept.blasts.length > 0
         ? 'losat-cache'
         : null;
-      drawing.circularConservation.enabled = orderedBlasts.length > 0;
+      drawing.circularConservation.enabled = kept.blasts.length > 0;
       losatCacheInfo.value = [];
       if (drawing.adv.circular_track_slots_enabled === true) {
         circularTrackSlotEditor.syncCircularConservationSlots();

@@ -249,14 +249,16 @@ export const webFileBindingPath = (at) => at.map((key, index) => (
 /**
  * The binding lists whose index is a place, not an order: a Depth track
  * (`c_depth`, a Linear row's `depth`) and a Circular comparison series's
- * sequence (`c_conservation_fastas`, `c_conservation_sequence_sources`, read
- * by the series' `sourceIndex`). Their readers take a null place as a slot
- * with no file, so Load leaves a dropped binding's place null and no later
- * file changes place. A binding of any other list is removed from it.
+ * BLAST table and sequence (`c_conservation_blasts`, `c_conservation_fastas`,
+ * `c_conservation_sequence_sources`, read by the series' `sourceIndex`).
+ * Load leaves a dropped binding's place null, so no later file changes place:
+ * the readers of a sequence or Depth list take it as a slot with no file, and
+ * Load leaves out the series of an empty table place with its files (OV-893).
+ * A binding of any other list is removed from it.
  * @type {ReadonlySet<string>}
  */
 export const POSITIONAL_BINDING_LISTS = Object.freeze(new Set([
-  'c_depth', 'depth', 'c_conservation_fastas', 'c_conservation_sequence_sources'
+  'c_depth', 'depth', 'c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources'
 ]));
 /**
  * The one check of a Web input inventory: Load drops what it names

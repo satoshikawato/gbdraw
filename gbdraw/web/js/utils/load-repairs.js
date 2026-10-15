@@ -19,6 +19,7 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  *   | 'setting-replaced'
  *   | 'setting-entries-dropped'
  *   | 'file-entry-dropped'
+ *   | 'comparison-series-dropped'
  *   | 'pending-palette-dropped'
  *   | 'depth-row-disabled'
  *   | 'orthogroup-edit-dropped'
@@ -198,6 +199,9 @@ const WORDING = {
     `Settings: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
   'file-entry-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
     `Input files: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
+  'comparison-series-dropped': (repairs) => repairs.map(({ path, label }) => (
+    `Comparison series: the series ${label === undefined ? '' : `"${label}" `}(${path}) has no BLAST table that could be read;`
+    + ' it is left out with its sequence files.')),
   'pending-palette-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Palette: the palette "${label ?? ''}" (${path}) waits to be applied, but Instant Preview is on, which applies a palette at once;`
     + ' it was dropped.')),
