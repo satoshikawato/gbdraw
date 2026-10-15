@@ -107,8 +107,9 @@ mitochondrion, or plastome is circular even when its LOCUS line says linear;
 several circular records share one canvas; other sets are Linear rows), the
 drawn feature types (`D-loop`, `rep_origin`, `mat_peptide` of a polyprotein,
 `gene` when a file has no CDS), the label scope and the qualifier that labels
-the CDS (up to 150 labelable genes are all labelled, up to 400 only the named
-genes and RNA genes, more none), separate strands, `--resolve_overlaps` when
+the CDS (up to 150 labelable genes are all labelled, with `--label_blacklist`
+leaving out hypothetical products; up to 400 only the named genes and RNA
+genes; more none), separate strands, `--resolve_overlaps` when
 features nest, the palette and a color table generated from the annotation
 (COG categories of Bakta, Pharokka functions, antiSMASH `gene_kind`, plastid
 and mitochondrial gene families), the GC content and skew tracks, the track

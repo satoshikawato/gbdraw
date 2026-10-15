@@ -160,6 +160,24 @@ def test_many_labels_are_hidden_and_named_genes_are_whitelisted() -> None:
     assert proposal.track_type == "tuckin"
 
 
+def test_hypothetical_products_are_left_out_of_the_labels() -> None:
+    named = _genes(10)
+    hypothetical = [
+        _feature("CDS", 20_000 + 1_000 * i, 20_900 + 1_000 * i, product="hypothetical protein") for i in range(3)
+    ]
+    proposal = propose([_record(length=40_000, features=[*named, *hypothetical])])
+    assert proposal.label_scope == "outer"
+    assert proposal.label_blacklist == ("hypothetical", "uncharacterized", "unknown")
+    args = proposal.cli_args()
+    assert args[args.index("--label_blacklist") + 1] == "hypothetical,uncharacterized,unknown"
+    assert "--label_whitelist" not in args
+    # Only named genes are labelled above LABEL_ALL_MAX, so the whitelist replaces the blacklist.
+    crowded = propose([_record(length=1_000_000, features=[*_genes(LABEL_ALL_MAX + 1), *hypothetical])])
+    assert crowded.label_whitelist and not crowded.label_blacklist
+    # Without hypothetical products there is nothing to leave out.
+    assert not propose([_record(features=named)]).label_blacklist
+
+
 def test_polyprotein_genome_draws_mature_peptides_on_separate_lanes() -> None:
     polyprotein = _feature("CDS", 100, 20_000, gene="ORF1ab", product="polyprotein")
     peptides = [_feature("mat_peptide", 100 + 1_000 * i, 100 + 1_000 * (i + 1), product=f"nsp{i + 1}") for i in range(10)]
@@ -179,7 +197,7 @@ def test_polyprotein_genome_draws_mature_peptides_on_separate_lanes() -> None:
     assert ("mat_peptide", "product,gene") in proposal.qualifier_priority
 
 
-def test_feature_joined_across_the_origin_does_not_count_as_nested() -> None:
+def test_origin_spanning_joins_and_underlays_do_not_count_as_nested() -> None:
     wrapped = _feature("D-loop", 0, 0, parts=[(19_000, 20_000), (0, 500)])
     record = _record(
         source={"organelle": "mitochondrion"},
@@ -188,6 +206,9 @@ def test_feature_joined_across_the_origin_does_not_count_as_nested() -> None:
         features=[*_genes(13, offset=1_000), wrapped],
     )
     assert not propose([record]).resolve_overlaps
+    # A repeat_region is drawn as an underlay: the genes on it are not nested.
+    inverted_repeat = _feature("repeat_region", 0, 15_000, note="inverted repeat A")
+    assert not propose([_record(features=[*_genes(13), inverted_repeat])]).resolve_overlaps
 
 
 def test_circular_records_share_one_canvas_and_rows_are_stacked_otherwise() -> None:

@@ -28,6 +28,7 @@ from typing import Literal
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import infer_record_source_metadata
+from gbdraw.features.shapes import DEFAULT_FEATURE_RENDERINGS
 from gbdraw.mode_profiles import DEFAULT_FEATURE_TYPES, DiagramMode
 
 GenomeKind = Literal[
@@ -56,6 +57,10 @@ GENE_NAME_COVERAGE_MIN = 0.6
 """Fraction of CDS with a ``gene`` qualifier above which gene names make the labels."""
 OVERLAP_FRACTION_MIN = 0.2
 """Fraction of drawn features nested in another one above which lanes are split."""
+HYPOTHETICAL_FRACTION_MIN = 0.05
+"""Fraction of hypothetical CDS from which their labels are left out."""
+HYPOTHETICAL_LABEL_BLACKLIST = ("hypothetical", "uncharacterized", "unknown")
+"""The label keywords left out then (the packaged default, which ``--label_blacklist`` replaces)."""
 COMPLETE_GENOME_MIN_LENGTH = 500_000
 """A prokaryotic record at least this long is treated as a chromosome."""
 _RNA_TYPES = ("rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA")
@@ -159,6 +164,7 @@ class Proposal:
     label_scope: str = "none"
     qualifier_priority: tuple[tuple[str, str], ...] = ()
     label_whitelist: tuple[tuple[str, str, str], ...] = ()
+    label_blacklist: tuple[str, ...] = ()
     separate_strands: bool = False
     resolve_overlaps: bool = False
     show_gc: bool = False
@@ -231,6 +237,8 @@ class Proposal:
             args += ["--qualifier_priority", paths["qualifier_priority"]]
         if "label_whitelist" in paths:
             args += ["--label_whitelist", paths["label_whitelist"]]
+        elif self.label_blacklist:
+            args += ["--label_blacklist", ",".join(self.label_blacklist)]
         if self.topology_override:
             args += ["--record_topology", self.topology_override]
         if self.species:
@@ -278,6 +286,7 @@ class Proposal:
             "labelScope": self.label_scope,
             "qualifierPriority": [list(row) for row in self.qualifier_priority],
             "labelWhitelist": [list(row) for row in self.label_whitelist],
+            "labelBlacklist": list(self.label_blacklist),
             "separateStrands": self.separate_strands,
             "resolveOverlaps": self.resolve_overlaps,
             "showGc": self.show_gc,
@@ -575,7 +584,10 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
     if 0 < counts["regulatory"] <= 30:
         proposal.notes.append(f"{counts['regulatory']} regulatory feature(s) can be drawn by adding regulatory to -k")
     proposal.feature_types = tuple(types)
-    overlap = _overlap_fraction(records, set(types))
+    # Underlays (repeat_region by default) are backdrops that genes lie on by design.
+    overlap = _overlap_fraction(
+        records, {kind for kind in types if DEFAULT_FEATURE_RENDERINGS.get(kind) != "underlay"}
+    )
     if overlap >= OVERLAP_FRACTION_MIN:
         proposal.decide(
             "resolve_overlaps", True, f"{overlap:.0%} of the drawn features lie inside another one (--resolve_overlaps)"
@@ -611,9 +623,14 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
             rows.append(("mat_peptide", "product,gene"))
         proposal.decide("qualifier_priority", priority, reason)
         proposal.qualifier_priority = tuple(rows)
-        if head.hypothetical_fraction > 0.3:
-            proposal.notes.append(
-                f"{head.hypothetical_fraction:.0%} of CDS are hypothetical; --label_blacklist hypothetical thins the labels"
+        if not proposal.label_whitelist and head.hypothetical_fraction >= HYPOTHETICAL_FRACTION_MIN:
+            proposal.label_blacklist = HYPOTHETICAL_LABEL_BLACKLIST
+            proposal.decisions.append(
+                Decision(
+                    "label_blacklist",
+                    ",".join(HYPOTHETICAL_LABEL_BLACKLIST),
+                    f"{head.hypothetical_fraction:.0%} of CDS are hypothetical; their labels say nothing",
+                )
             )
 
     # Colors.
@@ -680,6 +697,8 @@ __all__ = [
     "Decision",
     "GenomeKind",
     "Grouping",
+    "HYPOTHETICAL_FRACTION_MIN",
+    "HYPOTHETICAL_LABEL_BLACKLIST",
     "LABEL_ALL_MAX",
     "LABEL_NAMED_MAX",
     "MITOCHONDRION_RULES",
