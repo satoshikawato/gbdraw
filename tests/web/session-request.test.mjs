@@ -5593,7 +5593,8 @@ if (roundTripSessionIndex >= 0) {
     assert.equal(backing.sessionResourceSource(projected.files.c_gb[0]).descriptors, undefined);
   }
   const bad = { ...webFiles, bindings: { schema: 2, c_gb: { ...composite, components: [] } } };
-  assert.throws(() => projectCanonicalSessionRequest({ ...frozen, webFiles: bad }), /at least two/);
+  assert.throws(() => projectCanonicalSessionRequest({ ...frozen, webFiles: bad }),
+    (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS'); // R6 (R1-M3)
   const noDraft = projectCanonicalSessionRequest({ ...frozen, webFiles: { bindings: { schema: 2, c_gb: null } } });
   assert.equal(noDraft.files.c_gb, null);
 }

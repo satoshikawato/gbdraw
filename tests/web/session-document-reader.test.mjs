@@ -128,7 +128,8 @@ test('the input files are read before the dialog: a resource or binding that can
   const read2 = readSessionDocument(listed);
   assert.deepEqual(read2.repairs.map(({ code, path }) => `${code}@${path}`),
     ['session-field-dropped@webFiles.bindings.extra', 'file-entry-dropped@webFiles.bindings.c_conservation_blasts[0]']);
-  assert.deepEqual(read2.value.webFiles.bindings.c_conservation_blasts, []);
+  // A comparison table keeps its place (Load leaves out its series, OV-893).
+  assert.deepEqual(read2.value.webFiles.bindings.c_conservation_blasts, [null]);
   assert.equal(Object.hasOwn(read2.value.webFiles.bindings, 'extra'), false);
   // Save refuses each of these as before (E-OD02).
   for (const document of [unreadable, listed]) {
