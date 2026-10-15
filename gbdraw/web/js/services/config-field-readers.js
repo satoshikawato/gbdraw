@@ -536,7 +536,8 @@ const CONSERVATION_ROWS = Object.freeze([
 /** Omitted: the fresh default in every Session version. @type {FieldReader<boolean>} */
 export const readLinearRecordLayoutEnabled = (value) => (typeof value === 'boolean' ? { value, lost: false }
   : { value: WEB_UX_PROFILE.linear.arrangeInRowsByDefault, lost: !isUnsetValue(value) });
-export const readLinearRecordGap = numberOr(isNonNegative, 24);
+/** A blank gap reads as 0, as Generate and Save project it (OV-828 decides its meaning). @type {FieldReader<number>} */
+export const readLinearRecordGap = (value) => numberOr(isNonNegative, 24)(value === null || value === '' ? 0 : value);
 export const readImportedComparisonAction = exactChoice(Object.values(IMPORTED_COMPARISON_ACTIONS), null);
 const readLosatProgramText = exactChoice(['blastn', 'tblastx', 'blastp'], 'blastn');
 /** The label filter, read without case. */

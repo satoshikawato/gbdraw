@@ -231,7 +231,7 @@ configuration file drops a key it does not know.
 - A Depth series without a Depth file loads as saved, and so does a Depth row
   the app keeps when you remove a Depth file (a row with its own size or
   position). Save Session before the first Generate of a mode leaves such an
-  enabled row out of the saved diagram's settings, as it draws nothing; the
+  enabled row out of the saved render request, as it draws nothing; the
   Session's settings keep the row, and Generate still stops on its row issue.
 - The **Replace the current work?** question, asked when there is unsaved
   work, still comes first, before you choose the file. The question about a

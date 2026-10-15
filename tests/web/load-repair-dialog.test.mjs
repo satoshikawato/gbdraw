@@ -1064,8 +1064,9 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
     drawing.losat.blastp.collinearMaxUnitGap, drawing.linearRecordGap.value];
   // '' (a cleared input) reads as the field's default; null is copied as
   // stored and read by the field's reader, whose unset value is its default
-  // (the GC tick interval's is null, auto), never 0.
-  const READS = { '': [20, 0.10, 0.05, 1, 0, 24], null: [null, 0.10, 0.05, 1, 0, 24] };
+  // (the GC tick interval's is null, auto), never 0. The Linear record gap
+  // keeps reading a blank as 0, as Generate and Save project it (OV-828).
+  const READS = { '': [20, 0.10, 0.05, 1, 0, 0], null: [null, 0.10, 0.05, 1, 0, 0] };
   for (const blank of ['', null]) {
     edited();
     const file = {
@@ -1306,8 +1307,9 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH
 
 // A History restore applies captured settings with the same readers and
 // lists nothing (only Load asks): what it installs is unchanged (R11), but a
-// blank (null) reads as the reader's default, never 0 (OV-827).
-test('a History restore reads stored settings as before and asks nothing', async () => {
+// blank (null) reads as the reader's default, never 0 (OV-827), except the
+// Linear record gap, which keeps 0 (OV-828).
+test('a History restore reads a blank as the reader\'s default, other values as before, and asks nothing', async () => {
   const { applyConfigData } = await import('../../gbdraw/web/js/services/config.js');
   const drawing = state.drawings.circular;
   applyConfigData(drawing, {
@@ -1346,7 +1348,7 @@ test('a History restore reads stored settings as before and asks nothing', async
   assert.deepEqual([circularConservation.source, circularConservation.series.map(({ color, losat_gencode, sourceIndex }) => [color, losat_gencode, sourceIndex])],
     ['upload', [['#4e79a7', 1, 0]]]);
   assert.deepEqual([drawing.linearRecordLayoutEnabled.value, drawing.linearRecordGap.value, [...drawing.linearRecordRows]],
-    [true, 24, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
+    [true, 0, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
   assert.equal(drawing.importedComparisonIntent.action, null);
   assert.equal(drawing.losatProgram.value, 'blastn');
 });

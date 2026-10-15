@@ -177,7 +177,7 @@ import {
   validateWebFileBindings
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
-import { createDefaultLosatExecution, draftFeatureOverlapTolerance } from './session-active-config-contract.js';
+import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
@@ -1641,7 +1641,7 @@ const buildConfigOverrides = (
     [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
-    [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: draftFeatureOverlapTolerance(adv),
+    [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: leaf(CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp, adv.feature_overlap_tolerance_bp),
     [CONFIG_OVERRIDE_PATHS.gcContentMode]: adv.gc_content_mode || 'deviation',
     [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMinPercent, adv.gc_content_min_percent),
     [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMaxPercent, adv.gc_content_max_percent),

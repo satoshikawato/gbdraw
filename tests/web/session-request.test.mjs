@@ -390,6 +390,7 @@ const state = {
     features: ['CDS'], feature_shapes: { CDS: 'arrow' }, nt: 'GC', evalue: '1e-5',
     arrow_head_length_ratio: null, arrow_shaft_width_ratio: 1.0,
     min_bitscore: 50, identity: 70, alignment_length: 0, plot_title_position: 'none',
+    feature_overlap_tolerance_bp: 0, // the factory value; a blank leaves the override out (R7)
     gc_content_mode: 'deviation', gc_content_min_percent: 0, gc_content_max_percent: 100,
     gc_content_show_axis: true, gc_content_show_ticks: true,
     depth_color: '#4A90E2', depth_show_axis: true, depth_show_ticks: true,

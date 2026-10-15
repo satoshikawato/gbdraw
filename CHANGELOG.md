@@ -348,11 +348,12 @@ write-up of a release.
 - Fixed (web app): a cleared **Feature overlap tolerance (bp)** made Save
   Session fail and Generate send an invalid value; it now draws and saves as
   its default, 0. A blank number in a configuration file now reads as the
-  field's default instead of keeping the current drawing's value, and a blank
-  column gap, row gap, LOSAT merge-gap conflict count or Linear record gap no
-  longer reads as 0. Save Session before the first Generate no longer fails on
-  an enabled Depth row whose Depth file was removed: the saved diagram leaves
-  the row out, and the Session's settings keep it. A Session 44 whose font was
+  field's default instead of keeping the current drawing's value (a blank
+  Linear record gap still reads as 0), and a blank **Column Gap Ratio**,
+  **Row Gap Ratio** or LOSAT **Merge conflicts** no longer reads as 0. Save
+  Session before the first Generate no longer fails on an enabled Depth row
+  whose Depth file was removed: the saved render request leaves the row out,
+  and the Session's settings keep it. A Session 44 whose font was
   a preserved override and whose `adv` is not an object now lists the dropped
   `adv` in the **Load this file?** dialog.
 - Fixed: the records of one multi-record File were named differently in
