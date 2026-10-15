@@ -92,7 +92,6 @@ const EXPLICIT_ANY_BASELINE = {
   'services/linear-comparisons.js': 2,
   'services/losat-cache.js': 8,
   'services/losat.js': 2,
-  'services/main-session-comparison-frame.js': 2,
   'services/match-sequences.js': 11,
   'services/mode-scoped-migration.js': 26,
   'services/result-normalization.js': 1,

@@ -2189,7 +2189,9 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
   // its drop has a code the dialog does not list (Q1).
   /** @type {{ slice: string, unread: LegendEditsUnread }[]} */
   const unreadLegendEdits = [];
-  const legendRead = sessionLegendEditsByRowKey(await convertMainSessionComparisonFrames(sessionData), sourceSessionVersion, unreadLegendEdits);
+  // A Session before 31 holds no request (OV-862), so no stored table of it is converted.
+  const framed = isCanonicalBand(sessionData) ? await convertMainSessionComparisonFrames(sessionData) : sessionData;
+  const legendRead = sessionLegendEditsByRowKey(framed, sourceSessionVersion, unreadLegendEdits);
   unreadLegendEdits.forEach(({ slice, unread }) => repairs.push(
     ...legendEditRepairs(unread, `${slice === 'draft' ? '' : `modes.${slice}.`}editorState.legend`)
   ));
