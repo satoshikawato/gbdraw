@@ -55,6 +55,7 @@ import {
   parseLinearTrackSlotSpecs
 } from './linear-track-slot-model.js';
 import {
+  activeDepthTrackIndices,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
@@ -84,6 +85,7 @@ import {
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from './track-slot-validation.js';
+/** @import { CustomTrackPlan, CustomTrackPlanInput } from './track-slot-validation.js' */
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
@@ -175,7 +177,7 @@ import {
   validateWebFileBindings
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
-import { createDefaultLosatExecution } from './session-active-config-contract.js';
+import { createDefaultLosatExecution, draftFeatureOverlapTolerance } from './session-active-config-contract.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
@@ -1639,7 +1641,7 @@ const buildConfigOverrides = (
     [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
-    [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: adv.feature_overlap_tolerance_bp ?? 0,
+    [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: draftFeatureOverlapTolerance(adv),
     [CONFIG_OVERRIDE_PATHS.gcContentMode]: adv.gc_content_mode || 'deviation',
     [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMinPercent, adv.gc_content_min_percent),
     [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMaxPercent, adv.gc_content_max_percent),
@@ -2166,15 +2168,43 @@ const conservationSeriesForValidation = ({
 };
 
 /**
+ * The custom stack's plan; throws on a row issue. With `omitUnsourcedDepth`
+ * (the request a Save builds for a mode not generated yet, BA-OD114), an
+ * enabled Depth row whose series has no source in any record (the
+ * validator's `depth_source_missing`) is left out, as it draws nothing; the
+ * draft keeps the row. Generate stops on that row issue before it builds a
+ * request (PD-OI-083).
+ * @param {CustomTrackPlanInput} input
+ * @param {{ omitUnsourcedDepth: boolean, depthRows: DepthFileSlots[] }} depth
+ * @returns {CustomTrackPlan}
+ */
+const assertedCustomTrackPlan = (input, { omitUnsourcedDepth, depthRows }) => {
+  if (!omitUnsourcedDepth) return assertValidCustomTrackPlan(validateCustomTrackPlan(input));
+  const sourced = { ...input, depthSourcedTrackIndexes: activeDepthTrackIndices(depthRows) };
+  const plan = validateCustomTrackPlan(sourced);
+  const unsourced = new Set([...plan.rowIssues]
+    .filter(([, issues]) => issues.some(({ code }) => code === 'depth_source_missing'))
+    .map(([index]) => index));
+  if (unsourced.size === 0) return assertValidCustomTrackPlan(plan);
+  const slots = Array.isArray(input.slots) ? input.slots : [];
+  return assertValidCustomTrackPlan(validateCustomTrackPlan({
+    ...sourced,
+    slots: slots.map((slot, index) => (unsourced.has(index) ? { ...slot, enabled: false } : slot))
+  }));
+};
+
+/**
  * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
- *   recordCount: number, resolvedCircularConservation: ResolvedConservationEntry[] | undefined }} input
+ *   recordCount: number, resolvedCircularConservation: ResolvedConservationEntry[] | undefined,
+ *   omitUnsourcedDepth: boolean }} input
  */
 const buildTrackPlan = ({
   state,
   drawing,
   filesData,
   recordCount,
-  resolvedCircularConservation
+  resolvedCircularConservation,
+  omitUnsourcedDepth
 }) => {
   const circular = state.mode.value === 'circular';
   const depthTrackCount = logicalDepthTrackCountForRequest({
@@ -2182,10 +2212,11 @@ const buildTrackPlan = ({
     filesData,
     recordCount
   });
+  const depth = { omitUnsourcedDepth, depthRows: depthSourceRowsForRequest({ state, filesData, recordCount }) };
   const annotationSetIds = annotationSetIdsForState(drawing);
 
   if (circular && drawing.adv.circular_track_slots_enabled) {
-    const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+    const validation = assertedCustomTrackPlan({
       mode: 'circular',
       slots: drawing.adv.circular_track_slots,
       axisIndex: drawing.adv.circular_track_slots_axis_index,
@@ -2197,7 +2228,7 @@ const buildTrackPlan = ({
         filesData,
         resolvedCircularConservation
       })
-    }));
+    }, depth);
     const depthRequested = validation.enabledSlots.some(
       (slot) => slot.renderer === 'depth'
     );
@@ -2216,7 +2247,7 @@ const buildTrackPlan = ({
   }
 
   if (!circular && drawing.adv.linear_track_slots_enabled) {
-    const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+    const validation = assertedCustomTrackPlan({
       mode: 'linear',
       slots: drawing.adv.linear_track_slots,
       axisIndex: drawing.adv.linear_track_slots_axis_index,
@@ -2224,7 +2255,7 @@ const buildTrackPlan = ({
       depthTrackCount,
       annotationSetIds,
       conservationSeries: []
-    }));
+    }, depth);
     const depthRequested = validation.enabledSlots.some(
       (slot) => slot.renderer === 'depth'
     );
@@ -2983,6 +3014,8 @@ const projectCanonicalRenderInput = ({
   resolvedCircularConservation = [],
   // The record-catalog keys of OFF records: annotations bound to them wait in the draft.
   omittedAnnotationRecordKeys = [],
+  // A Save of a mode not generated yet leaves out a Depth row without a source (BA-OD114).
+  omitUnsourcedDepth = false,
   resources = createResourceBuilder()
 }) => {
   recordStructuralMetric('canonicalRequestProjectionCount');
@@ -3080,7 +3113,8 @@ const projectCanonicalRenderInput = ({
       ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => filesData.linearSeqs[index]) }
       : selectedCircularFilesData,
     recordCount: records.length,
-    resolvedCircularConservation
+    resolvedCircularConservation,
+    omitUnsourcedDepth
   });
   const circularGroupingIntent = ['single', 'batch'].includes(
     drawing.adv.circular_grouping_intent

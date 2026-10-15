@@ -17,6 +17,19 @@ import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
 import { DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION, ORTHOGROUP_INFERENCE_VERSION, SESSION_VERSION } from '../contracts/schema.generated.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
+// The Feature overlap tolerance of a new drawing, in bp.
+export const DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP = 0;
+/**
+ * The Feature overlap tolerance a draft draws and saves with: a blank (the
+ * cleared number input stores '') or an unset value is the default, as R7
+ * reads a blank (OV-826, BA-OD112). Any other value is the draft's own, which
+ * `validateCurrentWriterActiveConfig` and Python check.
+ * @param {{ feature_overlap_tolerance_bp?: unknown }} adv
+ * @returns {unknown}
+ */
+export const draftFeatureOverlapTolerance = ({ feature_overlap_tolerance_bp: value }) => (
+  value === undefined || value === null || value === '' ? DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP : value
+);
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 /**
  * @template T
@@ -75,7 +88,7 @@ export const createDefaultAdv = (mode = 'circular') => ({
   circular_definition_interval: null, label_font_size: null, circular_label_spacing: null, linear_label_spacing: null, label_rendering: 'auto',
   circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
   line_stroke_width: null, line_stroke_color: null, axis_stroke_width: null, axis_stroke_color: managedAdvStateForMode(mode).axis_stroke_color,
-  legend_box_size: null, legend_font_size: null, resolve_overlaps: false, feature_overlap_tolerance_bp: 0, feature_height: null, track_axis_gap: null, linear_show_replicon: false,
+  legend_box_size: null, legend_font_size: null, resolve_overlaps: false, feature_overlap_tolerance_bp: DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, feature_height: null, track_axis_gap: null, linear_show_replicon: false,
   linear_accession_visibility: 'auto', linear_length_visibility: 'auto', linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
   depth_height: null, depth_color: '#4A90E2', depth_tracks: [], depth_window_size: null, depth_step_size: null, depth_share_axis: false,
   depth_min: null, depth_max: null, depth_normalize: false, depth_show_axis: true, depth_show_ticks: true, depth_large_tick_interval: null,

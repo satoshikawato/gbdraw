@@ -20,6 +20,7 @@ import { committedRecordForKey, committedRecordUsesSource } from '../services/fe
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 import { ownEntry } from '../utils/own-entry.js';
+import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
@@ -361,7 +362,7 @@ export const createRecordDisplayControls = ({
       try { return requestFeaturePlacements(drawing.featurePlacementOverrides, request.mode, request.records || []).length; }
       catch { return -1; }
     };
-    if (request.mode !== state.mode.value || tolerance !== drawing.adv.feature_overlap_tolerance_bp
+    if (request.mode !== state.mode.value || tolerance !== draftFeatureOverlapTolerance(drawing.adv)
       || placements.length !== draftPlacementCount()
       || placements.some((/** @type {{ recordKey: string, biologicalFeatureId: string, placement: Record<string, unknown> }} */ row) => {
         const target = drawing.featurePlacementOverrides[

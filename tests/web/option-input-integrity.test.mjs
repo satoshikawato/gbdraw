@@ -221,3 +221,14 @@ test('Generate keeps the numeric draft: no Generate-path draft assignments are a
     assert.doesNotMatch(source, new RegExp(`(adv|circularConservation)\\.${field}\\s*=[^=]`), field);
   }
 });
+
+// OV-826 (BA-OD112): a cleared Feature overlap tolerance (the number input
+// stores '') is a blank, so the request draws with the default, as for null.
+test('a blank Feature overlap tolerance projects its default', () => {
+  for (const mode of ['circular', 'linear']) {
+    for (const blank of ['', null]) {
+      const overrides = project(mode, { feature_overlap_tolerance_bp: blank }).diagramOptions.configOverrides;
+      assert.equal(overrides['canvas.feature_overlap_tolerance_bp'], 0, `${mode} ${JSON.stringify(blank)}`);
+    }
+  }
+});

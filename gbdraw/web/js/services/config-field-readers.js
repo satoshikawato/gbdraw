@@ -19,8 +19,8 @@ import {
 } from './losat-normalization.js';
 import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
 import {
-  createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, createDefaultLosatpHitLimits,
-  readLinearTypographyLinked
+  DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat,
+  createDefaultLosatpHitLimits, readLinearTypographyLinked
 } from './session-active-config-contract.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { FEATURE_RENDERING_VALUES, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
@@ -162,8 +162,8 @@ export const readConservationSeries = (value) => {
     const gencode = readGencode(entry.losat_gencode);
     if (color.lost) leaves.push({ at: `[${index}].color`, stored: entry.color, used: color.value });
     if (gencode.lost) leaves.push({ at: `[${index}].losat_gencode`, stored: entry.losat_gencode, used: gencode.value });
-    // A series without its file index takes its place in the list.
-    const sourceIndex = numberOr(Number.isInteger, series.length, { coerceUnset: true })(entry.sourceIndex);
+    // A series without its file index (unset or blank) takes its place in the list.
+    const sourceIndex = numberOr(Number.isInteger, series.length)(entry.sourceIndex);
     if (sourceIndex.lost) leaves.push({ at: `[${index}].sourceIndex`, stored: entry.sourceIndex, used: sourceIndex.value });
     series.push({
       sourceKey: String(entry.sourceKey || ''),
@@ -411,10 +411,10 @@ const ADV_ROWS = Object.freeze([
   row('linear_label_spacing', positiveNumberOrNull),
   row('track_axis_gap', readNonNegativeNumberOrNull),
   row('multi_record_min_radius_ratio', numberOr(isRadiusRatio, 0.55)),
-  row('multi_record_column_gap_ratio', numberOr(isNonNegative, 0.10, { coerceUnset: true })),
-  row('multi_record_row_gap_ratio', numberOr(isNonNegative, 0.05, { coerceUnset: true })),
+  row('multi_record_column_gap_ratio', numberOr(isNonNegative, 0.10)),
+  row('multi_record_row_gap_ratio', numberOr(isNonNegative, 0.05)),
   row('multi_record_positions', readMultiRecordPositions),
-  row('feature_overlap_tolerance_bp', numberOr((numeric) => Number.isSafeInteger(numeric) && numeric >= 0, 0)),
+  row('feature_overlap_tolerance_bp', numberOr((numeric) => Number.isSafeInteger(numeric) && numeric >= 0, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP)),
   row('plot_title_font_size', positiveNumberOrNull),
   row('keep_full_definition_with_plot_title', onlyTrue),
   row('depth_color', (value) => ({ value: resolveColorToHex(String(value || '#4A90E2')), lost: false })),
@@ -478,9 +478,9 @@ const LOSAT_SEARCH_ROWS = Object.freeze([
   row('orthogroupMembershipMode', readOrthogroupMembershipMode),
   row('orthogroupMemberMaxHits', numberOr(isPositiveInteger, null)),
   row('collinearMinAnchors', numberOr(isPositiveInteger, 1)),
-  row('collinearMaxUnitGap', numberOr(isNonNegativeInteger, 0, { coerceUnset: true })),
-  row('collinearMaxDiagonalDrift', numberOr(isNonNegativeInteger, 0, { coerceUnset: true })),
-  row('collinearMaxConflictsInMergeGap', numberOr(isNonNegativeInteger, 1, { coerceUnset: true })),
+  row('collinearMaxUnitGap', numberOr(isNonNegativeInteger, 0)),
+  row('collinearMaxDiagonalDrift', numberOr(isNonNegativeInteger, 0)),
+  row('collinearMaxConflictsInMergeGap', numberOr(isNonNegativeInteger, 1)),
   row('collinearMaxParalogLinksPerOrthogroup', numberOr(isPositiveInteger, 2)),
   row('collinearColorMode', readCollinearColorMode),
   row('collinearUnitMode', readCollinearUnitMode),
@@ -536,7 +536,7 @@ const CONSERVATION_ROWS = Object.freeze([
 /** Omitted: the fresh default in every Session version. @type {FieldReader<boolean>} */
 export const readLinearRecordLayoutEnabled = (value) => (typeof value === 'boolean' ? { value, lost: false }
   : { value: WEB_UX_PROFILE.linear.arrangeInRowsByDefault, lost: !isUnsetValue(value) });
-export const readLinearRecordGap = numberOr(isNonNegative, 24, { coerceUnset: true });
+export const readLinearRecordGap = numberOr(isNonNegative, 24);
 export const readImportedComparisonAction = exactChoice(Object.values(IMPORTED_COMPARISON_ACTIONS), null);
 const readLosatProgramText = exactChoice(['blastn', 'tblastx', 'blastp'], 'blastn');
 /** The label filter, read without case. */
@@ -751,16 +751,17 @@ const UNSAFE_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
  * Merges a stored settings object into `target`: a key `target` lacks is
  * ignored, except in a map of `FREE_KEY_MAPS`, where it is copied; an object merges into an object; a list replaces a list; a value
  * of `target`'s kind, or `null` on either side, is copied. An empty text of
- * another kind (a cleared number input) keeps `target`'s value without a loss,
- * as a blank reads (R7). Any other value of another kind (a list for an object
- * included) is not used; it is returned as a loss at `at`, and `target` keeps
- * its value.
+ * another kind over a number (a cleared number input) is the field's value in
+ * `defaults`, without a loss: a blank is the default (R7, OV-827). Any other
+ * value of another kind (a list for an object included) is not used; it is
+ * returned as a loss at `at`, and `target` keeps its value.
  * @param {Record<string, unknown>} target
  * @param {unknown} source
- * @param {string} [at]
+ * @param {string} at
+ * @param {Record<string, unknown> | null} defaults The fresh settings of the same place (`defaultSettingsContainers`).
  * @returns {SettingLoss[]}
  */
-export const mergeStoredSettings = (target, source, at = '') => {
+const mergeStoredSettings = (target, source, at, defaults) => {
   if (!source || typeof source !== 'object') return [];
   const stored = /** @type {Record<string, unknown>} */ (source);
   return Object.keys(stored).flatMap((key) => {
@@ -773,7 +774,10 @@ export const mergeStoredSettings = (target, source, at = '') => {
     const targetValue = target[key];
     const sourceValue = stored[key];
     const keyAt = at ? `${at}.${key}` : key;
-    if (isPlainObject(targetValue) && isPlainObject(sourceValue)) return mergeStoredSettings(targetValue, sourceValue, keyAt);
+    const fresh = defaults && Object.hasOwn(defaults, key) ? defaults[key] : undefined;
+    if (isPlainObject(targetValue) && isPlainObject(sourceValue)) {
+      return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null);
+    }
     if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
       targetValue.splice(0, targetValue.length, ...sourceValue);
       return [];
@@ -782,9 +786,11 @@ export const mergeStoredSettings = (target, source, at = '') => {
       target[key] = sourceValue;
       return [];
     }
-    // A blank over a number is a cleared number input: the target keeps its
-    // value, as an unset value does; any other value of another kind is listed.
-    return sourceValue === '' && typeof targetValue === 'number' ? [] : [{ at: keyAt, stored: sourceValue, used: targetValue, kept: true }];
+    if (sourceValue === '' && typeof targetValue === 'number') {
+      if (fresh !== undefined) target[key] = copied(fresh);
+      return [];
+    }
+    return [{ at: keyAt, stored: sourceValue, used: targetValue, kept: true }];
   });
 };
 
@@ -826,17 +832,22 @@ const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.str
  * both lose the same values.
  * @param {SettingsContainers} targets
  * @param {Record<string, unknown>} config
+ * @param {'circular' | 'linear'} mode The drawing's mode, whose defaults a blank reads as.
  * @returns {SettingLoss[]}
  */
-export const installStoredSettings = (targets, config) => {
-  /** A stored container that is no object is not used (the drawing's stays). @param {Record<string, unknown>} target @param {string} at */
-  const merged = (target, at) => (isPlainObject(config[at]) || isUnsetValue(config[at])
-    ? mergeStoredSettings(target, config[at], at) : [{ at, stored: config[at], used: target, kept: true }]);
+export const installStoredSettings = (targets, config, mode) => {
+  const defaults = defaultSettingsContainers(mode);
+  /**
+   * A stored container that is no object is not used (the drawing's stays).
+   * @param {'form' | 'adv' | 'losat' | 'circularConservation'} at
+   */
+  const merged = (at) => (isPlainObject(config[at]) || isUnsetValue(config[at])
+    ? mergeStoredSettings(targets[at], config[at], at, defaults[at]) : [{ at, stored: config[at], used: targets[at], kept: true }]);
   const losses = [
-    ...merged(targets.form, 'form'),
-    ...merged(targets.adv, 'adv'),
-    ...merged(targets.losat, 'losat'),
-    ...merged(targets.circularConservation, 'circularConservation')
+    ...merged('form'),
+    ...merged('adv'),
+    ...merged('losat'),
+    ...merged('circularConservation')
   ].filter(({ at }) => !RAW_FIELDS.includes(at) && !at.startsWith('losat.blastp.hitLimitsByMode.'));
   CONTAINER_TABLES.forEach(({ at, rows }) => {
     const container = at === 'losat.blastp' ? targets.losat.blastp
@@ -967,13 +978,13 @@ const lossRepairs = (losses, path, stored, { mode = null, root = '', targets = '
  * @param {SettingsContainers} targets Written.
  * @param {Record<string, unknown>} config
  * @param {string} path Where the configuration is in the file.
- * @param {{ stored?: unknown, mode?: 'circular' | 'linear' | null, current?: boolean }} [options]
+ * @param {{ stored?: unknown, mode: 'circular' | 'linear', current?: boolean }} options
  *   `current`: `targets` are the drawing's current settings (a configuration
  *   file), so a value not used keeps the drawing's.
  * @returns {LoadRepair[]}
  */
-export const configFieldRepairs = (targets, config, path, { stored = config, mode = null, current = false } = {}) => lossRepairs([
-  ...installStoredSettings(targets, config),
+export const configFieldRepairs = (targets, config, path, { stored = config, mode, current = false }) => lossRepairs([
+  ...installStoredSettings(targets, config, mode),
   ...readValueTables(VALUE_TABLES, config)
 ], path, stored, { mode, root: 'config', targets: current ? 'current' : 'default' });
 
