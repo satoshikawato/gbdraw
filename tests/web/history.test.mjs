@@ -3041,3 +3041,58 @@ for (const previousSuppressed of [false, true]) {
   }
   console.log('history action remainder tests passed');
 }
+
+// D-24 (OV-731): a checkpoint step's caller says whether the figure of each
+// side is the one its state draws, and Undo and Redo pass that on. The side a
+// rerender must still draw takes the figure that rerender shows, keyed by the
+// step, only while that step is the last one and nothing is open.
+{
+  let rules = 0;
+  let figure = 'drawn-0';
+  const restores = [];
+  const history = createHistoryManager({
+    buildIntent: () => ({ rules }),
+    applyIntent: (intent) => { rules = intent.rules; },
+    buildCheckpoint: () => ({ rules, figure }),
+    applyCheckpoint: (checkpoint, restored) => {
+      rules = checkpoint.rules;
+      figure = checkpoint.figure;
+      restores.push(restored);
+    }
+  });
+  await history.captureBaseline('initial');
+  const step = Symbol('Change feature color');
+  await history.runUndoableCheckpoint('Change feature color', () => {
+    rules = 1;
+    figure = 'shown-1';
+  }, { step, drawn: { before: true, after: false } });
+  // A rerender other than the step's keeps nothing.
+  figure = 'drawn-1';
+  assert.equal(await history.keepRedrawnResult(Symbol('other')), false);
+  assert.equal(await history.keepRedrawnResult(step), true);
+  assert.equal(await history.keepRedrawnResult(step), false, 'the kept side is drawn');
+  await history.undo();
+  await history.redo();
+  assert.deepEqual({ rules, figure }, { rules: 1, figure: 'drawn-1' });
+  assert.deepEqual(restores, [{ drawn: true, step: null }, { drawn: true, step }]);
+
+  // A later step, or an Undo of the step, keeps the figure out of it.
+  const later = Symbol('Change feature color again');
+  await history.runUndoableCheckpoint('Change feature color again', () => {
+    rules = 2;
+    figure = 'shown-2';
+  }, { step: later, drawn: { before: true, after: false } });
+  await history.runUndoable('Edit setting', () => { rules = 3; });
+  figure = 'drawn-3';
+  assert.equal(await history.keepRedrawnResult(later), false, 'not the last step');
+  await history.undo();
+  await history.undo();
+  assert.equal(await history.keepRedrawnResult(later), false, 'undone');
+  await history.redo();
+  assert.deepEqual(restores.at(-1), { drawn: false, step: later });
+  // A step without a caller's answer restores as before.
+  await history.runUndoableCheckpoint('Reset', () => { rules = 4; });
+  await history.undo();
+  assert.deepEqual(restores.at(-1), { drawn: false, step: null });
+  console.log('history redrawn result tests passed');
+}
