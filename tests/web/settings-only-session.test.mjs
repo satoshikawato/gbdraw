@@ -71,11 +71,13 @@ test('OV-566: a settings-only Session refuses a Linear row that is not an object
   assert.equal(adoptCurrentSessionDocument(document, 42).canonical, null);
 });
 
+// R6 (R1-M3): the binding check refuses with the typed Session-fields error.
+const sessionFields = (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS';
 const invalid = [
   ['missing request', d => { delete d.renderRequest; }, /canonical render request/],
   ['biological binding', d => { d.resources = full.resources; d.webFiles = full.webFiles; }, /biological sources/],
-  ['dangling binding', d => { d.webFiles.bindings.whitelist = { resourceId: 'absent', name: 'list.tsv', type: '', lastModified: 0 }; }, /Missing canonical resource/],
-  ['binding schema', d => { d.webFiles.bindings.schema = 99; }, /binding schema/],
+  ['dangling binding', d => { d.webFiles.bindings.whitelist = { resourceId: 'absent', name: 'list.tsv', type: '', lastModified: 0 }; }, sessionFields],
+  ['binding schema', d => { d.webFiles.bindings.schema = 99; }, sessionFields],
   // Load read the committed Result set before (`readSessionAuthorityParts`); the settings-only check refuses it.
   ['saved Result', d => { d.results = [{ name: 'old.svg', content: '<svg/>' }]; }, /committed render artifacts/],
   ['committed provenance', d => { d.cliInvocation = {}; }, /committed render artifacts/],

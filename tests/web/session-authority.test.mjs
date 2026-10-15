@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
+// R6 (R1-M3): the Save checks of a Result set, a resource and a Web binding refuse with the typed Session-fields error.
+const sessionFields = (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS';
 const {
   SESSION_TOP_LEVEL_AUTHORITY,
   isArtifactBand,
@@ -121,7 +123,7 @@ assert.throws(
       }
     }
   }, 40),
-  /Unsupported Web file binding schema/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
@@ -148,14 +150,14 @@ assert.throws(
       }
     }
   }, 40),
-  /Missing canonical resource/
+  sessionFields
 );
 // OV-636: a `resources` that holds no resource is a missing resource whatever it
 // is; `null` used to end in a TypeError. Python refuses each of them
 // (gbdraw/session_io.py:632-635).
 for (const resources of [null, undefined, [], 5, 'x']) assert.throws(
   () => validateSessionAuthorityInventory({ ...currentWebDraft, resources }, 40),
-  /^Error: Missing canonical resource: comparison-resource$/,
+  sessionFields,
   String(JSON.stringify(resources))
 );
 assert.throws(
@@ -229,7 +231,7 @@ assert.throws(
     results: 'not-an-array',
     editorState: { featureCatalog: null }
   }, 40),
-  /requires a results array/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
@@ -237,7 +239,7 @@ assert.throws(
     results: [],
     editorState: {}
   }, 40),
-  /requires editorState.featureCatalog/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
@@ -264,7 +266,7 @@ assert.throws(
       featureCatalog: { schema: 3, items: [] }
     }
   }, 40),
-  /named plain SVG/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({ ...currentSession, files: {} }, 40),
@@ -306,14 +308,14 @@ assert.throws(
     ...currentSession,
     editorState: { featureCatalog: { schema: 1 } }
   }, 40),
-  /requires a schema-3 editorState.featureCatalog/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
     ...currentSession,
     editorState: { featureCatalog: null }
   }, 40),
-  /requires a feature catalog for saved results/
+  sessionFields
 );
 assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
   cInputType: 'gff',
@@ -473,21 +475,21 @@ assert.throws(() => validateSessionAuthorityInventory({
   }, 44), /cannot contain otherModeResult/);
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, otherModeResult: { ...otherModeResult, renderRequest: circularSession.renderRequest }
-  }, 46), /committed request of the other mode/);
+  }, 46), sessionFields);
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, renderRequest: null, results: [], editorState: { ...both.editorState, featureCatalog: null }
-  }, 46), /committed request of the other mode/);
+  }, 46), sessionFields);
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, otherModeResult: { ...otherModeResult, results: [], editorState: { ...otherModeResult.editorState, featureCatalog: null } }
-  }, 46), /requires a Result/);
+  }, 46), sessionFields);
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, otherModeResult: { ...otherModeResult, config: {} }
-  }, 46), /only a committed Result set/);
+  }, 46), sessionFields);
   const unboundRequest = structuredClone(linearSession.renderRequest);
   unboundRequest.records[0].source.resourceId = 'record-9-genbank';
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, otherModeResult: { ...otherModeResult, renderRequest: unboundRequest }
-  }, 46), /missing resource\(s\): record-9-genbank/);
+  }, 46), sessionFields);
 }
 
 // `readSessionInput` is the one reader of a parsed Session file. Its refusals

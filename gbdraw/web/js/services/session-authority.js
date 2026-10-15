@@ -1109,7 +1109,7 @@ const refuseFirstFault = ([fault]) => {
   if (!fault) return;
   // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
   if (fault.kind === 'receipt') throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
-  throw new Error(fault.message);
+  throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 };
 
 /**

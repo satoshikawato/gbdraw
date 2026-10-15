@@ -11,6 +11,7 @@ import {
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 
@@ -136,8 +137,8 @@ const resourceDescriptorFaults = (resourceId, descriptor) => {
  * @returns {LeafBacking}
  */
 const validateDescriptor = (resourceId, descriptor) => {
-  const [fault] = resourceDescriptorFaults(resourceId, descriptor);
-  if (fault) throw new Error(fault.message);
+  // R6: the typed Session-fields error; Load lists the fault's place before (`readSessionResources`).
+  if (resourceDescriptorFaults(resourceId, descriptor).length) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   // `resourceDescriptorFaults` found none: an object with a supported payload and size.
   const checked = /** @type {SessionResourceDescriptor} */ (descriptor);
   return {
@@ -353,8 +354,8 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
  * @returns {WebFileBindings | undefined} the `webFiles.bindings` object, checked
  */
 export const validateWebFileBindings = (webFiles, resources = {}) => {
-  const [fault] = webFileBindingFaults(webFiles, resources);
-  if (fault) throw new Error(fault.message);
+  // R6: the typed Session-fields error; Load lists each fault's place before (`readSessionInputs`).
+  if (webFileBindingFaults(webFiles, resources).length) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   // No fault: the checks prove the schema and each file slot.
   return /** @type {WebFileBindings | undefined} */ (webFiles?.bindings);
 };

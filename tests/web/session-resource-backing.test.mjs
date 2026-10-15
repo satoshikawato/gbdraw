@@ -21,7 +21,8 @@ const {
   matchesSessionResourceDescriptor,
   releaseSessionResourceContent,
   readSessionResourceBytes,
-  readSessionResourceText
+  readSessionResourceText,
+  validateWebFileBindings
 } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const {
   readFileBytes,
@@ -485,4 +486,13 @@ test('a combined view matches no saved entry without an encoding and data', () =
   }
   assert.deepEqual([resources.alpha, resources.beta, other, combined].map((entry) => matchesSessionResourceDescriptor(leaf, entry)),
     [true, false, false, false]);
+});
+
+// R1-M3 (R6): the checks of a resource descriptor and of a Web input inventory
+// refuse with the typed Session-fields error, not a plain Error with their text.
+test('a resource descriptor or Web binding the check refuses is the typed Session-fields error (R1-M3)', () => {
+  const sessionFields = (error) => error?.code === 'INPUT_INVALID' && error.context?.field === 'schema'
+    && error.context?.reason === 'FIELDS';
+  assert.throws(() => adoptCurrentSessionResources({ alpha: 5 }), sessionFields);
+  assert.throws(() => validateWebFileBindings({ bindings: { schema: 2, c_gb: { resourceId: 'missing' } } }, {}), sessionFields);
 });
