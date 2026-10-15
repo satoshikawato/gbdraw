@@ -3,7 +3,7 @@ const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerLoadRepairs, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 
 const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
@@ -1633,8 +1633,11 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   }
   const corrupt=JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
   corrupt.editorState.alignmentResetReceipt.binding='0'.repeat(64);
-  const rejected=await evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
-  expect(rejected.status).toBe('error');expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
+  // A receipt that no longer binds the request is dropped with a row before
+  // anything changes (receipt 〔確認〕, BA-D25); Cancel keeps the restored receipt.
+  const pendingCorrupt=evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
+  await answerLoadRepairs(freshPage,['Session file: the field editorState.alignmentResetReceipt could not be read and was left out.'],'cancel');
+  expect((await pendingCorrupt).status).toBe('canceled');expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   // Re-render the restored Session and compare the complete SVG tree.
   const regenerated = await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_APP__.runAnalysis());
   expect(regenerated.status).toBe('ok');

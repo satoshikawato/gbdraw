@@ -5,7 +5,7 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -415,20 +415,30 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).diagramOptions.configOverrides[
       'canvas.linear.keep_definition_left_aligned'
     ])).toBe(locked);
-    for (const malformed of [null, 'false', 0, {}]) {
+    // A stored value that is not a boolean is not a refusal class (receipt
+    // 〔拒否〕): Load lists it with the value it uses (BA-D25), and Cancel keeps
+    // the current work. A null holds nothing: it loads with no row (E-OD06),
+    // so it goes last.
+    for (const malformed of ['false', 0, {}, null]) {
       const invalid = structuredClone(saved);
       invalid.modes.linear.config.form.keep_definition_left_aligned = malformed;
       const stable = await measureDefinitionColumns(page);
       const runs = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length);
-      const outcome = await evaluateWithRetainedPromise(page, async raw => {
+      const pending = evaluateWithRetainedPromise(page, async raw => {
         const result = await window.__GBDRAW_APP__.importSession({
           target: { files: [new File([raw], 'malformed.gbdraw-session.json')], value: 'selected' }
         });
         return { status: result.status, error: result.error };
       }, JSON.stringify(invalid));
-      expect(outcome.status).toBe('error');
-      expect(outcome.error).toMatchObject({ code: 'INPUT_INVALID', stage: 'request-validation',
-        context: { field: 'keep_definition_left_aligned', reason: 'BOOLEAN' }, summary: expect.stringContaining('Use true or false.') });
+      if (malformed === null) {
+        // A null reads like an omission, the historical OFF (importSessionDocument).
+        expect((await pending).status).toBe('ok');
+        await expect(lock).toBeChecked({ checked: false });
+        continue;
+      }
+      await answerLoadRepairs(page, [`Settings: the value "${typeof malformed === 'string' ? malformed : JSON.stringify(malformed)}"`
+        + ' (modes.linear.config.form.keep_definition_left_aligned) cannot be used; true is used.'], 'cancel');
+      expect((await pending).status).toBe('canceled');
       await expect(lock).toBeChecked({ checked: locked });
       expect(await measureDefinitionColumns(page)).toEqual(stable);
       expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(runs);

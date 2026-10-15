@@ -324,7 +324,9 @@ test('a Session load error does not follow a switch to the other diagram mode', 
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
 });
 
-test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name the obsolete field', async ({
+// A retired slot field is a name an older writer wrote: Load reads the slots
+// without it and with no dialog (receipt 〔出さないもの〕; E-OD03).
+test('a 0.13.0 Gallery Session loads, and with its Custom Track Slots turned on it loads without the obsolete field', async ({
   page
 }) => {
   test.setTimeout(300_000);
@@ -355,14 +357,14 @@ test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name 
     adv.circular_track_slots_enabled = true;
   }));
   expect(dialogs).toEqual([]);
-  await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
-  await expect(page.getByRole('alert', { name: 'Session not loaded' })).toContainText(
-    'The track settings are invalid. Track row 1. Field: spacing. Custom Track Slots no longer read this field.'
-  );
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'TRACK_INVALID', context: { field: 'spacing', reason: 'OBSOLETE_TRACK_FIELD', slotIndex: 0 }
-  });
-  expect(await importSnapshot(page)).toEqual(loaded);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
+  await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const adv = state.drawings.circular.adv;
+    return { enabled: adv.circular_track_slots_enabled, spacing: adv.circular_track_slots.some((slot) => Object.hasOwn(slot, 'spacing')) };
+  })).toEqual({ enabled: true, spacing: false });
 });
 
 // UJ-09 (Owner 2026-10-05): Load Session replaces the work and clears History,
