@@ -4704,7 +4704,7 @@
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="group-heading" aria-label="PRESET SCHEMES">PRESET SCHEMES <help-tip id="help-colors-preset-schemes" text="Replaces the specific rules with the preset's rules. The palette is unchanged. Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12."></help-tip></h4>
+                                    <h4 class="group-heading" aria-label="PRESET SCHEMES">PRESET SCHEMES <help-tip id="help-colors-preset-schemes" text="Replaces the specific rules with the preset's rules. The palette is unchanged. Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12. A softened preset keeps each category's hue but uses lighter, less saturated fills that black labels read on."></help-tip></h4>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <select v-model="selectedSpecificPreset" aria-label="Preset scheme" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow bg-white" :disabled="!semanticMutationAvailable">
@@ -4717,7 +4717,7 @@
                                         <span v-else>Apply</span>
                                     </button>
                                 </div>
-                                <p data-preset-scheme-effects class="ui-hint mt-1.5">Replaces the specific rules; the palette is unchanged.<template v-if="selectedSpecificPreset === 'bakta'"> Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.</template></p>
+                                <p data-preset-scheme-effects class="ui-hint mt-1.5">Replaces the specific rules; the palette is unchanged. {{ specificRulePresets.find(p => p.id === selectedSpecificPreset)?.effects?.note }}</p>
                             </div>
 
                             <div>

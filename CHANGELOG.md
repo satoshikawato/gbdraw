@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Web app: the **Preset schemes** list offers a softened variant of the
+  Pharokka and Bakta (COG) color tables beside the originals. Each category
+  keeps its hue, and the fills move into a lighter band that black labels read
+  on; the 26 COG categories fall into four hue families. The tables are
+  `gbdraw/web/presets/pharokka_soft_color_table.txt` and
+  `bakta_soft_color_table.txt`, usable with `-t` on the command line too.
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.

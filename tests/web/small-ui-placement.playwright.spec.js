@@ -17,12 +17,17 @@ test('FL-11 the preset panel says what Bakta changes and that the palette is unc
     await expect(effects).toHaveCount(1);
     await effects.evaluate(element => { for (let node = element.closest('details'); node; node = node.parentElement?.closest('details')) node.open = true; });
     await expect(effects).toContainText('the palette is unchanged');
-    // The Bakta side effects show when Bakta is the chosen preset.
+    // The Bakta side effects show when a Bakta preset is the chosen one.
     await expect(effects).not.toContainText('Bakta');
-    await page.getByLabel('Preset scheme', { exact: true }).selectOption('bakta');
-    await expect(effects).toContainText('Bakta also sets the CDS default color to #cccccc');
-    await expect(effects).toContainText('Legend box size and font size to 12');
-    await expect(effects).not.toContainText('update the palette');
+    const preset = page.getByLabel('Preset scheme', { exact: true });
+    for (const id of ['bakta', 'bakta_soft']) {
+      await preset.selectOption(id);
+      await expect(effects).toContainText('Bakta also sets the CDS default color to #cccccc');
+      await expect(effects).toContainText('Legend box size and font size to 12');
+      await expect(effects).not.toContainText('update the palette');
+    }
+    await preset.selectOption('pharokka_soft');
+    await expect(effects).not.toContainText('Bakta');
   } finally {
     await page.context().close();
   }

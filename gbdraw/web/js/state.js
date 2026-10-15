@@ -336,6 +336,25 @@ const paletteInstantPreviewEnabled = ref(defaultPaletteDraftState.paletteInstant
 const appliedPaletteName = ref(defaultPaletteDraftState.appliedPaletteName);
 const appliedPaletteColors = ref(defaultPaletteDraftState.appliedPaletteColors);
 const newSpecRule = reactive(createDefaultSpecificRule());
+/**
+ * A preset of specific color rules shipped under `presets/`. `effects` are the
+ * settings the preset writes after its rules; the control says them.
+ * @typedef {{
+ *   id: string, label: string, path: string,
+ *   effects?: { colors: Record<string, string>, adv: Record<string, number>, note: string }
+ * }} SpecificRulePreset
+ */
+// Bakta leaves a CDS without a COG note to the default color, so the preset
+// makes it gray, and its 26 captions need the small Legend.
+const BAKTA_PRESET_EFFECTS = Object.freeze({
+  colors: { CDS: '#cccccc' },
+  adv: { legend_box_size: 12, legend_font_size: 12 },
+  note: 'Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.'
+});
+// The softened tables keep each category's hue (the maps stay recognizable)
+// and move the fills into one lighter band, so black labels read on every
+// category; the COG categories fall into four hue families.
+/** @type {SpecificRulePreset[]} */
 const specificRulePresets = [
   {
     id: 'pharokka',
@@ -343,9 +362,21 @@ const specificRulePresets = [
     path: 'presets/pharokka_color_table.txt'
   },
   {
+    id: 'pharokka_soft',
+    label: 'Pharokka, softened colors (function/phrog/vfdb)',
+    path: 'presets/pharokka_soft_color_table.txt'
+  },
+  {
     id: 'bakta',
     label: 'Bakta (COG via note)',
-    path: 'presets/bakta_color_table.txt'
+    path: 'presets/bakta_color_table.txt',
+    effects: BAKTA_PRESET_EFFECTS
+  },
+  {
+    id: 'bakta_soft',
+    label: 'Bakta, softened colors (COG via note)',
+    path: 'presets/bakta_soft_color_table.txt',
+    effects: BAKTA_PRESET_EFFECTS
   }
 ];
 const selectedSpecificPreset = ref(defaultEditorDraftState.selectedSpecificPreset);

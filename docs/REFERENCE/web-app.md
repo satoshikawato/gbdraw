@@ -1404,6 +1404,23 @@ features, the shown tracks, the palette, or the color table change.
   one rule per feature.
 - Each choice in these dialogs is one History step, and **Cancel** records none.
 
+### Preset schemes
+
+**Preset schemes** in the Colors card replaces the specific color rules with a
+shipped color table; the palette is unchanged. **Pharokka (function/phrog/vfdb)**
+colors CDS by the `function` and `phrog` qualifiers Pharokka writes, and
+**Bakta (COG via note)** by the `COG:X` note Bakta writes. Each has a
+**softened colors** variant: every category keeps its hue, so the maps stay
+recognizable, and the fills move into a lighter, less saturated band that black
+labels read on; the 26 COG categories fall into four hue families (information
+storage and processing, cellular processes and signaling, metabolism, poorly
+characterized and the mobilome). Both Bakta presets also set the CDS default
+color to `#cccccc`, for a CDS without a COG note, and the Legend box size and
+font size to 12; the hint under the control says so when one is chosen.
+**Apply** is one History step. The tables are
+`gbdraw/web/presets/<preset>_color_table.txt` in the repository and work as a
+`-t` color table on the command line.
+
 ## Accessibility
 
 Primary controls have stable accessible names: **Circular**, **Linear**,

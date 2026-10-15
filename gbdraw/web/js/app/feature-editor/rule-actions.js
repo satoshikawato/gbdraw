@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry } from '../../state.js' */
+/** @import { DrawingState, LegendEntry, SpecificRulePreset } from '../../state.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /** @import { SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, ShowNotice } from '../app-messages.js' */
@@ -788,7 +788,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (specificRulePresetLoading.value) return;
     const presetId = selectedSpecificPreset.value;
     if (!presetId) return;
-    const preset = specificRulePresets.find((/** @type {{ id: string, path: string }} */ entry) => entry.id === presetId);
+    const preset = specificRulePresets.find((/** @type {SpecificRulePreset} */ entry) => entry.id === presetId);
     if (!preset) {
       showNotice({ text: 'That rule preset is not available.', tone: 'warning' });
       return;
@@ -810,10 +810,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         return await runSpecificRuleWrite(drawing, () => rules, 'Apply specific color preset', {
           isCurrent: () => selectedSpecificPreset.value === presetId,
           afterCommit: () => {
-            if (presetId === 'bakta') {
-              drawing.currentColors.value = { ...drawing.currentColors.value, CDS: '#cccccc' };
-              drawing.adv.legend_box_size = 12;
-              drawing.adv.legend_font_size = 12;
+            if (preset.effects) {
+              drawing.currentColors.value = { ...drawing.currentColors.value, ...preset.effects.colors };
+              Object.assign(drawing.adv, preset.effects.adv);
             }
           }
         });
