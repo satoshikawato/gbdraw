@@ -701,11 +701,12 @@ export const createHistoryManager = ({
   // ownerless action, the same owner, or an action that owns the open commit
   // joins it; another owner first settles it.
   /**
-   * @param {string} [label]
-   * @param {HistoryStepBase} [options]
+   * @param {string} label
+   * @param {HistoryStepBase} options
+   * @param {boolean} ownedByAction `runUndoable` opens the step and commits it.
    * @returns {Promise<HistoryTransaction | null>}
    */
-  const begin = async (label = 'Edit', options = {}) => {
+  const openStep = async (label, options, ownedByAction) => {
     if (mutationAvailability()) return null;
     if (restoring.value || capturing.value) return null;
     const open = openTransaction();
@@ -720,7 +721,11 @@ export const createHistoryManager = ({
       if (reopened) return reopened;
     }
 
-    const before = await captureIntent();
+    // OV-946: a synchronous capture opens the step in this turn, so a
+    // control that begins meanwhile finds it and joins it; an asynchronous
+    // one holds `capturing` until it ends.
+    const capture = captureIntent();
+    const before = isPromiseLike(capture) ? await capture : capture;
     if (mutationAvailability()) return null;
     emitHistoryDiagnostic({ type: 'begin', scope: 'intent', label });
     /** @type {HistoryTransaction} */
@@ -731,12 +736,19 @@ export const createHistoryManager = ({
       beforeFileIds: before.fileIds,
       closed: false,
       source: options.source || '',
-      owner: options.owner
+      owner: options.owner,
+      deferAdapterCommit: ownedByAction
     };
     activeTransaction = tx;
     touchTransaction();
     return tx;
   };
+
+  /**
+   * @param {string} [label]
+   * @param {HistoryStepBase} [options]
+   */
+  const begin = (label = 'Edit', options = {}) => openStep(label, options, false);
 
   /** @param {HistoryTransaction | null | undefined} transaction */
   const cancel = (transaction) => {
@@ -918,7 +930,7 @@ export const createHistoryManager = ({
     if (restoring.value || capturing.value || activeCheckpoint) return fn();
 
     const open = openTransaction();
-    const tx = open || await begin(label, options);
+    const tx = open || await openStep(label, options, true);
     if (tx) { tx.deferAdapterCommit = true; touchTransaction(); }
     // OV-460: an edit made while another action is still running on the open
     // step applies at once and is a step under its own name: it names the

@@ -93,6 +93,33 @@ test('an asynchronous intent capture still reports the edit as applying (OV-922)
   assert.equal(app.history.getUndoCount(), 1);
 });
 
+// OV-946: a synchronous capture opens the step in the turn that asks for it.
+// A control that takes focus while an action opens its step (a dialog that
+// closes returns focus to the control that opened it) joins that step; it
+// does not open a second step from the state before the action, which an
+// Undo would then record as a new edit.
+test('a control focused while an action opens its step joins that step (OV-946)', async () => {
+  const app = createApp((read) => () => read());
+  await app.history.initializeIntentBaseline();
+  /** @type {Promise<unknown> | null} */
+  let focused = null;
+  // The render that closes the dialog runs before the action awaits anything.
+  queueMicrotask(() => { focused = app.history.begin('Change setting', { source: 'input-adapter', owner: 'select' }); });
+  await app.history.runUndoable('Change setting and reset Feature placements', () => { app.checked.value = true; });
+  await focused;
+  await settle();
+  assert.equal(app.history.getUndoCount(), 1);
+  assert.equal(app.history.mutationPending(), false, 'no step stays open');
+
+  assert.equal(await app.history.undo(), true);
+  assert.equal(app.checked.value, false);
+  assert.equal(app.history.getUndoCount(), 0, 'Undo records no step');
+  assert.equal(app.history.redoLabel(), 'Change setting and reset Feature placements');
+  assert.equal(await app.history.redo(), true);
+  assert.equal(app.checked.value, true);
+  assert.equal(app.history.getUndoCount(), 1);
+});
+
 // OV-922: buttons that change only the view record no History step. They are
 // History navigation (`data-history-ignore`), as the Editor toggle is, so a
 // click captures no intent.
