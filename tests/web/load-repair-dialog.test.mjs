@@ -632,8 +632,8 @@ test('an older Session whose match sequences cannot be read again lists it (OV-7
 
 // OV-890: a Depth binding sits one list deeper (`c_depth[record][slot]`); one
 // that names a resource the Session does not hold is dropped with the row the
-// other bindings get, its slot left empty. With no resources left at all,
-// R4 refuses the file when nothing else is restored.
+// other bindings get, its slot left empty. With no resources at all the file
+// still loads with that row: its settings and Results are restored (R2-m5).
 test('a Depth binding that names no resource is dropped with its row (OV-890)', async () => {
   const depthId = 'depth-tracks-1-source-record-1';
   const session = fixture('two-mode-project.v44.gbdraw-session.json.gz');
@@ -652,8 +652,8 @@ test('a Depth binding that names no resource is dropped with its row (OV-890)', 
     const repairs = readSessionDocument(bare).repairs;
     assert.ok(repairs.some(({ path }) => path === 'webFiles.bindings.c_depth[0][0]'), JSON.stringify(repairs));
     const result = await importSession(input(bare), { confirmLoadRepairs: async () => true });
-    if (result.status === 'ok') assert.ok(result.repairs.some(({ path }) => path === 'webFiles.bindings.c_depth[0][0]'));
-    else assert.deepEqual([result.error?.code, result.error?.context?.reason], ['INPUT_INVALID', 'FIELDS'], JSON.stringify(result.error));
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    assert.ok(result.repairs.some(({ path }) => path === 'webFiles.bindings.c_depth[0][0]'), JSON.stringify(result.repairs));
   }
 });
 
@@ -1599,8 +1599,10 @@ const NEEDS_DIAGRAM_WORKER = new Set([
   'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'q-frame-main-web-losatn.v42.gbdraw-session.json.gz',
   'q-frame-main-web-upload.v42.gbdraw-session.json.gz'
 ]);
-// G2b: what Save writes after each of those Loads reads again with no repair.
-test('every Gallery Session and Session fixture loads without a repair (G3), and its Save reads again without one (G2b)', async () => {
+// G2b (E-OD02): the document Save writes after each of those Loads reads
+// again with no repair of the document reader (`readSessionDocument`); the
+// settings readers' rows are G3's, checked on the stored file above.
+test('every Gallery Session and Session fixture loads without a repair (G3), and the document its Save writes reads again without a document repair (G2b)', async () => {
   const sessions = (dir, keep) => readdirSync(new URL(dir, import.meta.url)).filter(keep).map((name) => [name, new URL(`${dir}${name}`, import.meta.url)]);
   const corpus = [
     ...sessions('../fixtures/sessions/', (name) => /\.json(\.gz)?$/.test(name) && !/provenance|expected|evidence|vectors/.test(name)),

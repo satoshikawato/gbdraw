@@ -69,6 +69,8 @@ test('inactive rotation retains raw intent but cannot emit an invalid effective 
   assert.equal(requestedRecordDisplay(row, draft(row, 1)).startCoordinate, 1);
   assert.equal(requestedRecordDisplay(row, draft(row, null)).startCoordinate, null);
   assert.throws(() => requestedRecordDisplay(row, draft(row, 101)), /between 1 and 100/);
+  // A duplicate draft is one fault of the reader Load repairs with (E-OD02); Save refuses it with the typed
+  // Session-fields error, which replaced an unclassified plain Error (R6; R2-m8).
   assert.throws(() => validateRecordDisplayDrafts([saved, saved]), /INPUT_INVALID\/FIELDS/);
 });
 

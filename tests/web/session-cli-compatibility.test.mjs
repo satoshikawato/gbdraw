@@ -42,6 +42,7 @@ const {
   CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 // The composition root's transform of an older Session's Results (R13 port).
@@ -156,7 +157,11 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         // A draft in its retired home outside `modes` is dropped with no row
         // (A7f, E-OD03: the slice fills its place); Save still refuses it.
         const before = getCommittedCanonicalRenderRequest();
-        const retired = await load(JSON.stringify({ ...session, config: { adv: { label_font_size: 99 } } }));
+        const retiredSession = { ...session, config: { adv: { label_font_size: 99 } } };
+        assert.throws(() => validateSessionAuthorityInventory(retiredSession, session.version),
+          (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS');
+        assert.doesNotThrow(() => validateSessionAuthorityInventory(session, session.version));
+        const retired = await load(JSON.stringify(retiredSession));
         assert.equal(retired.status, 'ok', retired.error?.stack);
         assert.deepEqual(retired.repairs, []);
         assert.deepEqual(getCommittedCanonicalRenderRequest(), before);
