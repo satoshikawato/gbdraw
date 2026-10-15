@@ -24,7 +24,7 @@
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
-import { createResultPaintRecord, editorPaintState } from './result-paint-record.js';
+import { createResultPaintRecord, drewPaint, editorPaintState, sameColors } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -3087,6 +3087,9 @@ export const createAppSetup = () => {
     ...(artifactSlots.circular?.values.results || []),
     ...(artifactSlots.linear?.values.results || [])
   ].map(previewRuntime.getResultIdentity);
+  // Each Result's bytes reflect the editor state it was committed or last
+  // shown with (`createResultPaintRecord`); the binder below reads it (R13).
+  const resultPaintRecord = createResultPaintRecord();
   previewRuntime.configureMountedResultBinder({
     async adoptLegend(context) {
       const drawing = state.activeDrawing();
@@ -3215,13 +3218,20 @@ export const createAppSetup = () => {
       }
     },
     afterReady(context) {
-      // D-36: a rerender that drew the current paint pays every redraw asked
-      // for; D-24 (OV-731): History keeps it as the figure of the last step.
-      const drewCurrent = rerenderDrewCurrentPaint(context);
+      // D-36: a label rerender pays the redraw its drawing owes when, as its
+      // Result is ready, no later rerender runs and its figure shows the
+      // drawing's current paint, also after an edit made since its paint was
+      // committed (`drewPaint`; read before that edit is shown on it, OV-346).
+      // Its drawing is the shown one: a mode switch waits for a rerender
+      // (`diagramModeSwitchBusy`). D-24 (OV-731): History keeps the figure
+      // as the last step's.
+      const drawing = state.activeDrawing();
+      const drewCurrent = context.phase === 'label-reflow' && !labelReflowProcessing.value
+        && drewPaint(context.bindingOptions.drawnPaint, currentEditorProjectionState(drawing));
       previewFeatureSearch.handleMountedResultReady();
       showEditsMadeWhileDrawn(context);
       if (!drewCurrent) return;
-      featureActions.redrawShown();
+      featureActions.redrawShown(drawing);
       history.keepRedrawnResult().catch((error) => {
         console.error('History could not keep the redrawn figure.', normalizeUserFacingError(error));
       });
@@ -3817,17 +3827,12 @@ export const createAppSetup = () => {
     }
   });
 
-  // Each Result's bytes reflect the editor state it was committed or last
-  // shown with (`createResultPaintRecord`).
-  const resultPaintRecord = createResultPaintRecord();
   // A displayed Result whose label intent changed since it was last shown
   // receives the label projection in the binder's label step, also when no
   // label intent remains (an undone or replaced Label TSV import).
   let labelProjectionResultIdentity = '';
   /** @param {DrawingState} drawing @returns {EditorPaintState} */
   const currentEditorProjectionState = (drawing) => editorPaintState(state, drawing);
-  /** @param {readonly unknown[]} left @param {readonly unknown[]} right */
-  const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
   /** @param {DrawingState} drawing @param {MountedResultContext} context */
   const rememberCommittedEditorState = (drawing, context) => {
     const identities = liveResultIdentities();
@@ -4106,12 +4111,6 @@ export const createAppSetup = () => {
     }
   };
 
-  // D-36: a label rerender drew the current paint when its displayed Result
-  // lacks no edit made while it ran (OV-346) and no later rerender runs; read
-  // before those edits are shown on it.
-  /** @param {{ phase: string, resultIdentity: string }} context */
-  const rerenderDrewCurrentPaint = (context) => context.phase === 'label-reflow'
-    && !labelReflowProcessing.value && !resultPaintRecord.lacking(context.resultIdentity);
   // A label rerender's displayed Result, once bound, shows the fills and
   // visibility of the edits made while it ran (OV-346).
   /** @param {{ resultIdentity: string, bindingOptions: Readonly<import('./preview-runtime.js').PreviewBindingOptions> }} context */

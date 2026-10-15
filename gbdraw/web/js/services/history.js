@@ -221,12 +221,14 @@ const checkpointSvgBytes = (checkpoint) => (
  *   restoreIntentCheckpoint?: IntentCheckpointHooks['restore'] | null,
  *   compareIntentCheckpoints?(before: unknown, after: unknown): boolean,
  *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown,
- *   drawn?: { before: boolean, after: boolean }
+ *   drawn?: { before: () => boolean, change: boolean }
  * }} HistoryStepBase
  *   What a step reads from its caller; a hook that is not a function is not called. The intent
  *   checkpoint is the caller's own value, so the three hooks take and return it opaque (they are
  *   declared as methods); a caller names its type on its own parameter. A checkpoint step also
- *   reads `drawn`, whether the figure of each side is the one its state draws (`CheckpointRecord`).
+ *   reads `drawn`, whether the figure of each side is the one its state draws (`CheckpointRecord`):
+ *   `before()` as the before side is captured, and `change`, whether the step's own change shows
+ *   as its state draws it, so that the after side is drawn when the before side is.
  */
 /**
  * @template [R=unknown]
@@ -940,10 +942,11 @@ export const createHistoryManager = ({
     if (restoring.value || capturing.value) return null;
     /**
      * @param {CheckpointRecord} before
+     * @param {boolean | undefined} drawn
      * @returns {HistoryTransaction}
      */
-    const createTransaction = (before) => {
-      if (options.drawn) before.drawn = options.drawn.before;
+    const createTransaction = (before, drawn) => {
+      if (drawn !== undefined) before.drawn = drawn;
       if (currentCheckpoint !== null) setCurrentCheckpoint(before);
       emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-checkpoint', label });
       return {
@@ -955,15 +958,17 @@ export const createHistoryManager = ({
     };
     const captureBefore = () => {
       notifyCheckpointCapture(options, 'before-start');
+      // Read as the capture starts; the snapshot service takes the figure at once.
+      const drawn = options.drawn?.before();
       const before = captureCheckpoint();
       return isPromiseLike(before)
         ? Promise.resolve(before).then((record) => {
-            const transaction = createTransaction(record);
+            const transaction = createTransaction(record, drawn);
             notifyCheckpointCapture(options, 'before-end');
             return transaction;
           })
         : (() => {
-            const transaction = createTransaction(before);
+            const transaction = createTransaction(before, drawn);
             notifyCheckpointCapture(options, 'before-end');
             return transaction;
           })();
@@ -981,7 +986,7 @@ export const createHistoryManager = ({
     if (!transaction || transaction.closed) return false;
     notifyCheckpointCapture(options, 'after-start');
     const after = await captureCheckpoint();
-    if (options.drawn) after.drawn = options.drawn.after;
+    if (options.drawn) after.drawn = transaction.before.drawn === true && options.drawn.change;
     const intent = await captureIntent();
     transaction.closed = true;
     setCurrentCheckpoint(after);

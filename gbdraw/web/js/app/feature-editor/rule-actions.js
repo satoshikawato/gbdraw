@@ -44,8 +44,8 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  * @typedef {object} RuleActionsPorts
  * @property {() => boolean} requestAutomaticRerender
  *   Asks for the automatic rerender of an edit Python must draw again (OV-43).
- * @property {() => boolean} isRedrawOwed
- *   Whether a rerender asked for is not yet shown drawn from the current paint (D-36).
+ * @property {(drawing: DrawingState) => boolean} isRedrawOwed
+ *   Whether a rerender asked for in `drawing` is not yet shown drawn from its current paint (D-36).
  */
 
 /**
@@ -458,11 +458,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     // D-24 (OV-731): a checkpoint step records whether the figure of each
     // side is the one its state draws, so Undo and Redo of a drawn side ask
     // for no Python run. The figure the commit starts from is drawn unless a
-    // rerender asked for is still owed (D-36). The commit's own figure is
-    // drawn when it also shows every row; otherwise History keeps the figure
-    // of the rerender the commit asks for once that is shown, while the step
-    // is the last one (`keepRedrawnResult`).
-    const drawnBefore = !ports.isRedrawOwed();
+    // rerender asked for is still owed when History captures it (D-36). The
+    // commit's own figure is drawn when it also shows every row; otherwise
+    // History keeps the figure of the rerender the commit asks for once that
+    // is shown, while the step is the last one (`keepRedrawnResult`).
     await transact(label, () => {
       if (!current() || !legend.isCurrent()) return false;
       drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
@@ -488,7 +487,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       // is an operation of the one compile (OV-146).
       projectPaletteAndRules({ prepareRules: false, legendRows });
       return legend.diff;
-    }, { joinsOpenStep, drawn: { before: drawnBefore, after: drawnBefore && !redrawsLegend } });
+    }, { joinsOpenStep, drawn: { before: () => !ports.isRedrawOwed(drawing), change: !redrawsLegend } });
     if (applied) appliedWrites += 1;
     if (applied && redrawsLegend) ports.requestAutomaticRerender();
     return applied;

@@ -1030,19 +1030,23 @@ export const createFeatureLabelActions = ({
   // rerender, Auto Reflow on or off: a specific-color rule edit or a History
   // step that changes a Legend source (Owner decision 2026-10-06, OV-43). A
   // request while one is pending joins it. D-36: an accepted request leaves a
-  // redraw owed until the composition root shows a rerender drawn from the
+  // redraw owed by the shown drawing (each mode has its own, PD-OI-086) until
+  // the composition root shows a rerender of that drawing drawn from its
   // current paint (`redrawShown`, OV-346); while one is owed, the shown
   // figure can lack rows Python draws, so a History step does not record it
   // as drawn (D-24 (OV-731)).
-  let redrawOwed = false;
+  /** @type {WeakSet<DrawingState>} */
+  const redrawOwed = new WeakSet();
   const requestAutomaticRerender = () => {
     if (generatedMode.value !== mode.value || !svgContainer.value?.querySelector?.('svg')) return false;
-    redrawOwed = true;
+    redrawOwed.add(state.activeDrawing());
     queueLabelReflow(true);
     return true;
   };
-  const isRedrawOwed = () => redrawOwed;
-  const redrawShown = () => { redrawOwed = false; };
+  /** @param {DrawingState} drawing */
+  const isRedrawOwed = (drawing) => redrawOwed.has(drawing);
+  /** @param {DrawingState} drawing */
+  const redrawShown = (drawing) => { redrawOwed.delete(drawing); };
 
   /** @param {string | null | undefined} labelKey @param {unknown} nextTextRaw */
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
