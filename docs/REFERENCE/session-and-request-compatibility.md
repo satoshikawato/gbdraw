@@ -218,7 +218,9 @@ configuration file drops a key it does not know.
 - **Load** loads the file. **Cancel** changes nothing. The file itself is
   never changed.
 - No dialog opens for a reading that keeps the meaning (an older format,
-  capitals, outer spaces, an alias, a number stored as its text), or for a
+  capitals, outer spaces, an alias, a number stored as its text, or a blank
+  number, such as a cleared number field, which reads as the field's default
+  in a Session and in a configuration file), or for a
   value that had no effect on the figure: a dropped cache entry that the next
   comparison computes again, a Session 46 Legend edit that a later edit of the
   same row overwrote, a pending palette that Instant Preview drops, a name or
@@ -228,7 +230,9 @@ configuration file drops a key it does not know.
   every Gallery Session, opens none.
 - A Depth series without a Depth file loads as saved, and so does a Depth row
   the app keeps when you remove a Depth file (a row with its own size or
-  position).
+  position). Save Session before the first Generate of a mode leaves such an
+  enabled row out of the saved render request, as it draws nothing; the
+  Session's settings keep the row, and Generate still stops on its row issue.
 - The **Replace the current work?** question, asked when there is unsaved
   work, still comes first, before you choose the file. The question about a
   Session font that is not available (see [Fonts](#fonts)) comes after

@@ -43,7 +43,7 @@ import {
 } from './depth-file-codec.js';
 import {
   configFieldRepairs, defaultSettingsContainers, installStoredSettings, losatExecutionRepairs, readAnnotationSets, readCanvasPadding,
-  readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, readLinearRecordGap, readLinearRecordLayoutEnabled,
+  readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, draftLinearRecordGap, readLinearRecordGap, readLinearRecordLayoutEnabled,
   readLinearRecordRows, readFeaturePanelTab, readList, readLosatProgram, readPaletteColors, readPlainObject,
   readColorRules, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
   sessionUiFieldRepairs, sliceFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS
@@ -220,7 +220,8 @@ import {
   holdsCliWriterConfig,
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots,
-  validateImportedLinearTrackSlots
+  validateImportedLinearTrackSlots,
+  draftFeatureOverlapTolerance
 } from './session-active-config-contract.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
@@ -869,6 +870,7 @@ export const buildConfigData = (drawing) => ({
   form: drawing.form,
   adv: {
     ...drawing.adv,
+    feature_overlap_tolerance_bp: draftFeatureOverlapTolerance(drawing.adv),
     feature_shapes: {
       repeat_region: defaultFeatureRendering('repeat_region'),
       ...normalizeFeatureRenderingMap(drawing.adv.feature_shapes || {})
@@ -891,7 +893,7 @@ export const buildConfigData = (drawing) => ({
   featurePlacementOverrides: cloneJsonData(drawing.featurePlacementOverrides),
   linearRecordLayout: {
     enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
-    recordGap: Number(drawing.linearRecordGap.value) || 0,
+    recordGap: Number(draftLinearRecordGap(drawing.linearRecordGap.value)) || 0,
     // The rows as Load reads them (one reader; a row state holds is valid).
     rows: readLinearRecordRows(drawing.linearRecordRows).value
   },
@@ -1416,17 +1418,27 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
  * A Session's stored drafts (the flat `config` of a Session 27-44 and each
  * Session 46 slice's `config`) with the preserved overrides that are now
  * settings moved into them (`adoptPromotedPreservedOverrides`), read once
- * before anything validates or splits the drafts.
+ * before anything validates or splits the drafts. A draft whose `adv` is no
+ * object takes the font into a new `adv`; the value it drops is listed as
+ * the reader of `adv` lists it (OV-823, BA-OD110).
  * @template {object} T
  * @param {T} data
+ * @param {LoadRepair[]} repairs
  * @returns {T}
  */
-const adoptPromotedPreservedSettings = (data) => {
+const adoptPromotedPreservedSettings = (data, repairs) => {
   const document = /** @type {{ config?: unknown, modes?: unknown }} */ (data);
+  /** @param {unknown} config @param {string} path */
+  const adopt = (config, path) => {
+    const adoptedConfig = adoptPromotedPreservedOverrides(config);
+    // The cast: the adoption changes only a plain object.
+    if (adoptedConfig !== config) repairs.push(...valueRepairs(readPlainObject, /** @type {{ adv?: unknown }} */ (config).adv, `${path}.adv`));
+    return adoptedConfig;
+  };
   /** @type {{ config?: unknown, modes?: unknown }} */
   let adopted = document;
   if (isPlainObject(document.config)) {
-    const config = adoptPromotedPreservedOverrides(document.config);
+    const config = adopt(document.config, 'config');
     if (config !== document.config) adopted = { ...adopted, config };
   }
   if (isPlainObject(document.modes)) {
@@ -1436,7 +1448,7 @@ const adoptPromotedPreservedSettings = (data) => {
     for (const mode of SLICE_MODES) {
       const slice = /** @type {{ config?: unknown }} */ (modes[mode]);
       if (!isPlainObject(slice) || !isPlainObject(slice.config)) continue;
-      const config = adoptPromotedPreservedOverrides(slice.config);
+      const config = adopt(slice.config, `modes.${mode}.config`);
       if (config === slice.config) continue;
       modes[mode] = { ...slice, config };
       changed = true;
@@ -1926,7 +1938,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
   const data = adoptPromotedPreservedSettings(currentSession
     ? promotedData
-    : migrateSessionDataToCurrent(promotedData, sourceSessionVersion));
+    : migrateSessionDataToCurrent(promotedData, sourceSessionVersion), repairs);
   // A Gallery migration rebuilt its request, which is classified as rebuilt.
   const comparisonClassification = promotedData === normalizedData && requestRead.comparisonClassification
     ? requestRead.comparisonClassification
@@ -2472,7 +2484,7 @@ export const applyConfigData = (drawing, data, { resolveTrackPlacements = true, 
     }
   }
   // The stored settings' merge and readers (Load lists what they cannot restore first).
-  installStoredSettings(drawing, data);
+  installStoredSettings(drawing, data, drawing === state.drawings.linear ? 'linear' : 'circular');
   replacePlainObject(drawing.unmanagedConfigOverrides, cloneJsonData(readPlainObject(data.unmanagedConfigOverrides).value));
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(data.recordDisplayDrafts || []));
   // Omitted: every record is drawn.
@@ -4840,7 +4852,8 @@ const exportSessionDocument = async (
       filesData: activeFiles,
       recordDisplayRows: recordDisplayRows?.value || [],
       comparisonPlanSnapshot,
-      omittedAnnotationRecordKeys
+      omittedAnnotationRecordKeys,
+      omitUnsourcedDepth: true
     });
   }
   committed = requireCurrentSavedRequest(committed, artifact.mode);

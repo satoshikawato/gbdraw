@@ -983,16 +983,22 @@ test('a value the app writes into a setting of another kind loads with no row, i
     const [container, key] = place(state.drawings[mode], at);
     return container[key] === null ? '' : container[key];
   });
-  // Every value loads as stored, but a cleared number field keeps the value
-  // the drawing has (here its default), so a written blank that reads as the
-  // value before counts as blank.
+  // Every value loads as stored, but a cleared number field reads as the
+  // field's default (a blank is the default, R7; OV-827), so a written blank
+  // that reads as the default counts as blank.
   const expected = () => WRITTEN_VALUES.map(([, value]) => value);
+  const { defaultSettingsContainers } = await import('../../gbdraw/web/js/services/config-field-readers.js');
+  /** @param {'circular' | 'linear'} mode */
+  const defaultsOf = (mode) => WRITTEN_VALUES.map(([at]) => {
+    const [container, key] = place(defaultSettingsContainers(mode), at);
+    return container[key] === null ? '' : container[key];
+  });
   /** @param {unknown[]} values @param {unknown[]} defaults */
   const blanked = (values, defaults) => values.map((value, index) => (
     WRITTEN_VALUES[index][1] === '' && value === defaults[index] ? '' : value));
   const base = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   assert.deepEqual(await load(base), ['ok', []]);
-  const before = Object.fromEntries(['circular', 'linear'].map((mode) => [mode, valuesOf(mode)]));
+  const before = { circular: defaultsOf('circular'), linear: defaultsOf('linear') };
   const session = structuredClone(base);
   for (const mode of ['circular', 'linear']) {
     for (const [at, value] of WRITTEN_VALUES) {
@@ -1033,6 +1039,115 @@ test('a value the app writes into a setting of another kind loads with no row, i
   const [status, rows] = await load({ adv: { min_bitscore: 'abc', evalue: 'abc' } });
   assert.deepEqual([status, rows.length, rows[0]?.startsWith('Settings: the value "abc" (adv.min_bitscore) cannot be used;')], ['legacy', 1, true], rows.join('\n'));
   assert.deepEqual([drawing.adv.min_bitscore, drawing.adv.evalue], [kept, 'abc']);
+  // A number filter reads text as `resolveComparisonThresholds` does
+  // (`DECIMAL_NUMBER_PATTERN`): a hexadecimal text, which Number() reads as 16,
+  // is no number of the filter, so it is listed and not used (BA-OD113 N1).
+  const [hexStatus, hexRows] = await load({ adv: { min_bitscore: '0x10' } });
+  assert.deepEqual([hexStatus, hexRows.length, hexRows[0]?.startsWith('Settings: the value "0x10" (adv.min_bitscore) cannot be used;')],
+    ['legacy', 1, true], hexRows.join('\n'));
+  assert.equal(drawing.adv.min_bitscore, kept);
+});
+
+// OV-827 (BA-OD113): a blank over a number reads as the field's default
+// (R7), with no row, in a configuration file installed over the shown drawing
+// and in a Session; a blank is never 0 for a reader whose default is not 0.
+test('a blank over a number reads as the field\'s default with no row, in a configuration file and a Session (OV-827)', async () => {
+  await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+  const drawing = state.drawings[state.mode.value];
+  const edited = () => {
+    Object.assign(drawing.adv, { gc_content_tick_interval: 50, multi_record_column_gap_ratio: 0.3, multi_record_row_gap_ratio: 0.2 });
+    Object.assign(drawing.losat.blastp, { collinearMaxConflictsInMergeGap: 4, collinearMaxUnitGap: 3 });
+    drawing.linearRecordGap.value = 40;
+  };
+  const read = () => [drawing.adv.gc_content_tick_interval, drawing.adv.multi_record_column_gap_ratio,
+    drawing.adv.multi_record_row_gap_ratio, drawing.losat.blastp.collinearMaxConflictsInMergeGap,
+    drawing.losat.blastp.collinearMaxUnitGap, drawing.linearRecordGap.value];
+  // '' (a cleared input) reads as the field's default; null is copied as
+  // stored and read by the field's reader, whose unset value is its default
+  // (the GC tick interval's is null, auto), and 0 only where the default is 0.
+  // A blank Linear record gap is its default, 24 px (OV-828, BA-D30).
+  const READS = { '': [20, 0.10, 0.05, 1, 0, 24], null: [null, 0.10, 0.05, 1, 0, 24] };
+  for (const blank of ['', null]) {
+    edited();
+    const file = {
+      adv: { gc_content_tick_interval: blank, multi_record_column_gap_ratio: blank, multi_record_row_gap_ratio: blank },
+      losat: { blastp: { collinearMaxConflictsInMergeGap: blank, collinearMaxUnitGap: blank } },
+      linearRecordLayout: { recordGap: blank }
+    };
+    const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+    assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
+    assert.deepEqual(read(), READS[String(blank)], `blank ${JSON.stringify(blank)}`);
+  }
+  // A Session's drawing is reset first: the same owner reads the same defaults.
+  const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  for (const mode of ['circular', 'linear']) {
+    Object.assign(session.modes[mode].config.adv, { gc_content_tick_interval: '', multi_record_column_gap_ratio: '' });
+    session.modes[mode].config.losat.blastp.collinearMaxConflictsInMergeGap = '';
+  }
+  session.modes.linear.config.linearRecordLayout = { ...session.modes.linear.config.linearRecordLayout, recordGap: '' };
+  const { items } = await loadAnswering(session);
+  assert.deepEqual(items, []);
+  for (const mode of ['circular', 'linear']) {
+    const { adv, losat } = state.drawings[mode];
+    assert.deepEqual([adv.gc_content_tick_interval, adv.multi_record_column_gap_ratio, losat.blastp.collinearMaxConflictsInMergeGap], [20, 0.10, 1], mode);
+  }
+  assert.equal(state.drawings.linear.linearRecordGap.value, 24);
+});
+
+// OV-823 (BA-OD110): a Session 44 whose GUI-unmanaged font override is now
+// the Font setting, with an `adv` that is no object, adopts the font and lists
+// the `adv` value it drops, in the words a dropped `adv` has elsewhere; Load
+// refuses no file it loaded before.
+test('a Session 44 font override adopted into an adv that is no object lists the dropped adv (OV-823)', async () => {
+  const session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  session.config.adv = 5;
+  session.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'Pres Font'" };
+  const dialogs = [];
+  const loaded = await importSession(input(session), {
+    confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; },
+    confirmSessionFonts: async () => true
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(dialogs, [['Settings: the value "5" (config.adv) cannot be used; its default is used.']]);
+  assert.deepEqual(['circular', 'linear'].map((mode) => state.drawings[mode].adv.font_family), ["'Pres Font'", "'Pres Font'"]);
+  // An object `adv` takes the font with no row.
+  const kept = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  kept.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'Pres Font'" };
+  const plain = await importSession(input(kept), {
+    confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')), confirmSessionFonts: async () => true
+  });
+  assert.equal(plain.status, 'ok', JSON.stringify(plain.error));
+});
+
+// OV-826 (BA-OD112): a cleared Feature overlap tolerance (the number input
+// stores '') is its default (R7): Save writes the default, the Session reads
+// back with it and no dialog, and the request draws with it.
+test('a cleared Feature overlap tolerance saves and reads as its default (OV-826)', async () => {
+  for (const [mode, name] of [['linear', 'lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'],
+    ['circular', 'legend-renamed-rows.v46.gbdraw-session.json.gz']]) {
+    await loadAnswering(fixture(name));
+    assert.equal(state.mode.value, mode);
+    state.drawings[mode].adv.feature_overlap_tolerance_bp = '';
+    const saved = await savedSession(`tolerance-${mode}`);
+    assert.equal(saved.modes[mode].config.adv.feature_overlap_tolerance_bp, 0, mode);
+    const { items } = await loadAnswering(saved);
+    assert.deepEqual(items, []);
+    assert.equal(state.drawings[mode].adv.feature_overlap_tolerance_bp, 0, mode);
+  }
+});
+
+// OV-828 (BA-D30): a cleared (or null) Linear record gap is its default,
+// 24 px: Save writes 24 and the Session reads back with it and no dialog.
+test('a cleared Linear record gap saves and reads as its default, 24 px (OV-828)', async () => {
+  for (const blank of ['', null]) {
+    await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+    state.drawings.linear.linearRecordGap.value = blank;
+    const saved = await savedSession(`record-gap-${JSON.stringify(blank)}`);
+    assert.equal(saved.modes.linear.config.linearRecordLayout.recordGap, 24, JSON.stringify(blank));
+    const { items } = await loadAnswering(saved);
+    assert.deepEqual(items, []);
+    assert.equal(state.drawings.linear.linearRecordGap.value, 24, JSON.stringify(blank));
+  }
 });
 
 // The shape of a feature type the user added is a key the default
@@ -1164,9 +1279,53 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(DEPTH_ROUND_TRI
   });
 }
 
+// OV-761 (BA-OD114): a Save of a mode not generated yet builds its request
+// from the draft. An enabled Depth row whose series has no source (its file
+// was cleared; the validator's `depth_source_missing`) draws nothing, so the
+// request leaves it out; the Session's settings keep the row and Load restores
+// it. Generate still stops on the row issue (PD-OI-083; pinned by "a Linear
+// File clear leaves a manual Depth row whose row issue stops Generate" in
+// gui-audit-20260930-options.playwright.spec.js).
+const UNSOURCED_DEPTH = {
+  linear: ['lambda_basic_linear.v44-schema8.gbdraw-session.json.gz', 'linear_track_slots',
+    { id: 'my_depth', renderer: 'depth', enabled: true, side: 'below', height: '12px', spacing: '', z: 0, params: { track_index: 0 } }],
+  circular: ['legend-renamed-rows.v46.gbdraw-session.json.gz', 'circular_track_slots',
+    { id: 'my_depth', renderer: 'depth', enabled: true, side: 'inside', width: '12', z: 0, params: { track_index: 0 } }]
+};
+for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH)) {
+  for (const cleared of [null, [null]]) {
+    test(`a ${mode} Save before Generate leaves an enabled Depth row without a source out of the request and keeps it in the settings (OV-761, depth ${JSON.stringify(cleared)})`, async () => {
+      const { canonicalRenderArtifactOwner } = await import('../../gbdraw/web/js/services/config.js');
+      await loadAnswering(fixture(name));
+      assert.equal(state.mode.value, mode);
+      const { adv } = state.drawings[mode];
+      adv[`${stackKey}_enabled`] = true;
+      adv[stackKey].push(structuredClone(manualRow));
+      if (mode === 'linear') state.linearSeqs.forEach((seq) => { seq.depth = structuredClone(cleared); });
+      else state.files.c_depth = structuredClone(cleared);
+      // No Generate since: no committed request and no Result.
+      canonicalRenderArtifactOwner.restore(null);
+      state.results.value = [];
+      const saved = await savedSession(`unsourced-depth-${mode}`);
+      const tracks = saved.renderRequest.diagramOptions.tracks;
+      const requested = (mode === 'linear' ? tracks.linearTrackSlots : tracks.circularTrackSlots) ?? [];
+      assert.deepEqual(requested.filter(({ renderer }) => renderer === 'depth'), []);
+      assert.ok(requested.length > 0);
+      const stored = saved.modes[mode].config.adv;
+      assert.equal(stored[`${stackKey}_enabled`], true);
+      assert.deepEqual(stored[stackKey].filter(({ id }) => id === 'my_depth').map(({ enabled }) => enabled), [true]);
+      const { items } = await loadAnswering(saved);
+      assert.deepEqual(items, []);
+      assert.deepEqual(state.drawings[mode].adv[stackKey].filter(({ id }) => id === 'my_depth').map(({ enabled }) => enabled), [true]);
+    });
+  }
+}
+
 // A History restore applies captured settings with the same readers and
-// lists nothing (only Load asks): what it installs is unchanged (R11).
-test('a History restore reads stored settings as before and asks nothing', async () => {
+// lists nothing (only Load asks): what it installs is unchanged (R11), but a
+// blank (null) reads as the reader's default (OV-827), the Linear record
+// gap's too (OV-828, BA-D30).
+test('a History restore reads a blank as the reader\'s default, other values as before, and asks nothing', async () => {
   const { applyConfigData } = await import('../../gbdraw/web/js/services/config.js');
   const drawing = state.drawings.circular;
   applyConfigData(drawing, {
@@ -1194,18 +1353,18 @@ test('a History restore reads stored settings as before and asks nothing', async
   const { adv, losat, circularConservation } = drawing;
   assert.deepEqual([adv.label_rendering, adv.multi_record_column_gap_ratio, adv.multi_record_row_gap_ratio, adv.depth_max,
     adv.gc_content_max_percent, adv.track_axis_gap, adv.depth_normalize, adv.gc_content_show_axis, adv.pairwise_match_style],
-  ['auto', 0, 0.05, null, 60, null, false, true, 'curve']);
+  ['auto', 0.10, 0.05, null, 60, null, false, true, 'curve']);
   assert.deepEqual(adv.multi_record_positions, [{ selector: '#1', row: 1 }, { selector: '#2', row: 2 }]);
   assert.deepEqual(adv.depth_tracks.map(({ label, height }) => [label, height]), [['D', null]]);
   assert.deepEqual([losat.blastp.mode, losat.blastp.collinearMaxConflictsInMergeGap, losat.blastp.orthogroupMemberMaxHits,
-    Object.hasOwn(losat.blastp, 'orthogroupMaxHits'), Object.hasOwn(losat.blastp, 'orthogroupHitPolicy')], ['orthogroup', 0, null, false, false]);
+    Object.hasOwn(losat.blastp, 'orthogroupMaxHits'), Object.hasOwn(losat.blastp, 'orthogroupHitPolicy')], ['orthogroup', 1, null, false, false]);
   assert.deepEqual([losat.blastp.collinearColorMode, losat.blastp.collinearAnchorMode, losat.blastp.collinearSearchScope],
     ['average_identity', 'all', 'adjacent']);
   assert.deepEqual([state.losatExecution.executionMode, state.losatExecution.totalThreadBudget], ['auto', 'safe']);
   assert.deepEqual([circularConservation.source, circularConservation.series.map(({ color, losat_gencode, sourceIndex }) => [color, losat_gencode, sourceIndex])],
     ['upload', [['#4e79a7', 1, 0]]]);
   assert.deepEqual([drawing.linearRecordLayoutEnabled.value, drawing.linearRecordGap.value, [...drawing.linearRecordRows]],
-    [true, 0, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
+    [true, 24, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
   assert.equal(drawing.importedComparisonIntent.action, null);
   assert.equal(drawing.losatProgram.value, 'blastn');
 });

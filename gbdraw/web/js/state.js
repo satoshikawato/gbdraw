@@ -2,6 +2,7 @@
 /** @import { WebFontEntry } from './services/font-store.js' */
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectSpecificColorQualifierSuggestions } from './services/feature-selector.js';
+import { DEFAULT_LINEAR_RECORD_GAP_PX } from './services/config-field-readers.js';
 import {
   featureDrawnContext,
   listFeatureRows,
@@ -1030,7 +1031,7 @@ const createDrawingState = (drawingMode) => {
     circularConservation: reactive(createDefaultCircularConservation()),
     linearComparisonPlan,
     linearRecordLayoutEnabled,
-    linearRecordGap: ref(24),
+    linearRecordGap: ref(DEFAULT_LINEAR_RECORD_GAP_PX),
     linearRecordRows,
     recordDisplayDrafts: reactive([]),
     recordsOff,

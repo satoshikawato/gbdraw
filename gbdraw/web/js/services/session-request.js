@@ -55,6 +55,7 @@ import {
   parseLinearTrackSlotSpecs
 } from './linear-track-slot-model.js';
 import {
+  activeDepthTrackIndices,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
@@ -84,6 +85,7 @@ import {
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from './track-slot-validation.js';
+/** @import { CustomTrackPlan, CustomTrackPlanInput } from './track-slot-validation.js' */
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
@@ -91,6 +93,7 @@ import { loadRepair } from '../utils/load-repairs.js';
 import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { isCurrentRequestSchema } from '../utils/request-schema.js';
@@ -1639,7 +1642,7 @@ const buildConfigOverrides = (
     [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
-    [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: adv.feature_overlap_tolerance_bp ?? 0,
+    [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: leaf(CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp, adv.feature_overlap_tolerance_bp),
     [CONFIG_OVERRIDE_PATHS.gcContentMode]: adv.gc_content_mode || 'deviation',
     [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMinPercent, adv.gc_content_min_percent),
     [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMaxPercent, adv.gc_content_max_percent),
@@ -2166,15 +2169,43 @@ const conservationSeriesForValidation = ({
 };
 
 /**
+ * The custom stack's plan; throws on a row issue. With `omitUnsourcedDepth`
+ * (the request a Save builds for a mode not generated yet, BA-OD114), an
+ * enabled Depth row whose series has no source in any record (the
+ * validator's `depth_source_missing`) is left out, as it draws nothing; the
+ * draft keeps the row. Generate stops on that row issue before it builds a
+ * request (PD-OI-083).
+ * @param {CustomTrackPlanInput} input
+ * @param {{ omitUnsourcedDepth: boolean, depthRows: DepthFileSlots[] }} depth
+ * @returns {CustomTrackPlan}
+ */
+const assertedCustomTrackPlan = (input, { omitUnsourcedDepth, depthRows }) => {
+  if (!omitUnsourcedDepth) return assertValidCustomTrackPlan(validateCustomTrackPlan(input));
+  const sourced = { ...input, depthSourcedTrackIndexes: activeDepthTrackIndices(depthRows) };
+  const plan = validateCustomTrackPlan(sourced);
+  const unsourced = new Set([...plan.rowIssues]
+    .filter(([, issues]) => issues.some(({ code }) => code === 'depth_source_missing'))
+    .map(([index]) => index));
+  if (unsourced.size === 0) return assertValidCustomTrackPlan(plan);
+  const slots = Array.isArray(input.slots) ? input.slots : [];
+  return assertValidCustomTrackPlan(validateCustomTrackPlan({
+    ...sourced,
+    slots: slots.map((slot, index) => (unsourced.has(index) ? { ...slot, enabled: false } : slot))
+  }));
+};
+
+/**
  * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
- *   recordCount: number, resolvedCircularConservation: ResolvedConservationEntry[] | undefined }} input
+ *   recordCount: number, resolvedCircularConservation: ResolvedConservationEntry[] | undefined,
+ *   omitUnsourcedDepth: boolean }} input
  */
 const buildTrackPlan = ({
   state,
   drawing,
   filesData,
   recordCount,
-  resolvedCircularConservation
+  resolvedCircularConservation,
+  omitUnsourcedDepth
 }) => {
   const circular = state.mode.value === 'circular';
   const depthTrackCount = logicalDepthTrackCountForRequest({
@@ -2182,10 +2213,11 @@ const buildTrackPlan = ({
     filesData,
     recordCount
   });
+  const depth = { omitUnsourcedDepth, depthRows: depthSourceRowsForRequest({ state, filesData, recordCount }) };
   const annotationSetIds = annotationSetIdsForState(drawing);
 
   if (circular && drawing.adv.circular_track_slots_enabled) {
-    const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+    const validation = assertedCustomTrackPlan({
       mode: 'circular',
       slots: drawing.adv.circular_track_slots,
       axisIndex: drawing.adv.circular_track_slots_axis_index,
@@ -2197,7 +2229,7 @@ const buildTrackPlan = ({
         filesData,
         resolvedCircularConservation
       })
-    }));
+    }, depth);
     const depthRequested = validation.enabledSlots.some(
       (slot) => slot.renderer === 'depth'
     );
@@ -2216,7 +2248,7 @@ const buildTrackPlan = ({
   }
 
   if (!circular && drawing.adv.linear_track_slots_enabled) {
-    const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+    const validation = assertedCustomTrackPlan({
       mode: 'linear',
       slots: drawing.adv.linear_track_slots,
       axisIndex: drawing.adv.linear_track_slots_axis_index,
@@ -2224,7 +2256,7 @@ const buildTrackPlan = ({
       depthTrackCount,
       annotationSetIds,
       conservationSeries: []
-    }));
+    }, depth);
     const depthRequested = validation.enabledSlots.some(
       (slot) => slot.renderer === 'depth'
     );
@@ -2812,7 +2844,7 @@ const buildLayout = (state, drawing, records = [], circularSourceIndexes = null)
         !records.some((record) => record.presentation.gridRow != null) &&
         plan === null && translations.length === 0) return {};
     return {
-      recordGapPx: Math.max(0, Number(drawing.linearRecordGap?.value) || 0),
+      recordGapPx: Math.max(0, Number(draftLinearRecordGap(drawing.linearRecordGap?.value)) || 0),
       multiRecordPositions: null,
       recordTranslations: translations,
       similarityAlignment: plan
@@ -2942,7 +2974,7 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []),
     losatProgram: config.losatProgram || 'blastn',
     linearRecordLayoutEnabled: Boolean(layout.enabled),
-    linearRecordGap: layout.recordGap ?? 24
+    linearRecordGap: layout.recordGap ?? DEFAULT_LINEAR_RECORD_GAP_PX
   };
   /** @param {Record<string, any>} values */
   const refsOf = (values) => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, publicationRef(value)]));
@@ -2983,6 +3015,8 @@ const projectCanonicalRenderInput = ({
   resolvedCircularConservation = [],
   // The record-catalog keys of OFF records: annotations bound to them wait in the draft.
   omittedAnnotationRecordKeys = [],
+  // A Save of a mode not generated yet leaves out a Depth row without a source (BA-OD114).
+  omitUnsourcedDepth = false,
   resources = createResourceBuilder()
 }) => {
   recordStructuralMetric('canonicalRequestProjectionCount');
@@ -3080,7 +3114,8 @@ const projectCanonicalRenderInput = ({
       ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => filesData.linearSeqs[index]) }
       : selectedCircularFilesData,
     recordCount: records.length,
-    resolvedCircularConservation
+    resolvedCircularConservation,
+    omitUnsourcedDepth
   });
   const circularGroupingIntent = ['single', 'batch'].includes(
     drawing.adv.circular_grouping_intent
@@ -5599,7 +5634,7 @@ export const projectCanonicalSessionRequest = ({
           ? presentationOwnsLinearRows ||
             (renderRequest.layout?.multiRecordPositions || []).length > 0
           : Object.keys(renderRequest.layout || {}).length > 0,
-        recordGap: renderRequest.layout?.recordGapPx ?? 24,
+        recordGap: renderRequest.layout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX,
         rows: linearLayoutRows,
         recordTranslations,
         similarityAlignment
@@ -5927,9 +5962,9 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
     if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
     const hadLayout = Object.keys(promoted.layout || {}).length > 0;
     if (hadLayout || similarityAlignment !== null) {
-      const recordGapPx = Number(promoted.layout?.recordGapPx ?? 24);
+      const recordGapPx = Number(promoted.layout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX);
       promoted.layout = {
-        recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : 24,
+        recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : DEFAULT_LINEAR_RECORD_GAP_PX,
         multiRecordPositions: null,
         recordTranslations: records.map((record) => ({
           recordKey: String(record.recordKey || ''),
@@ -6669,7 +6704,7 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
   }
   // The test above gave every record key a boolean.
   request.records.forEach(record => writeCanonicalRecordReverseComplement(record, /** @type {boolean} */ (byKey.get(record.recordKey))));
-  request.layout = { recordGapPx: 24, multiRecordPositions: null, ...request.layout,
+  request.layout = { recordGapPx: DEFAULT_LINEAR_RECORD_GAP_PX, multiRecordPositions: null, ...request.layout,
     similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
     recordTranslations: cloneCanonicalJsonValue(translations) };
   projectCanonicalSessionRequest({ ...canonical, deferResourceContent: true });
