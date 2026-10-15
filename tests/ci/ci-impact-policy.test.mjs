@@ -91,6 +91,8 @@ test('subsystem paths classify without making unknown production paths selective
     ['docs/internal/PRODUCT_IMPACT_RATCHET.md', 'policy-documentation'],
     ['pyproject.toml', 'packaging'],
     ['package-lock.json', 'packaging'],
+    // The Node version of every CI job: a runtime change, so it keeps the full route.
+    ['.node-version', 'full'],
     ['tools/helper.mjs', 'full'],
     ['gbdraw/future/new_engine.py', 'full'],
     ['gbdraw/web/new-runtime.bin', 'full'],

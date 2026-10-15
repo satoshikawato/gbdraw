@@ -835,7 +835,7 @@ test('Gallery alone owns PR parity without expanding dev or release execution', 
   for (const name of ['Set up Node.js for Gallery parity', 'Install Gallery parity dependencies', 'Prepare Gallery browser wheel', 'Verify Gallery first-Generate parity']) {
     assert.match(gallery, new RegExp(`name: ${name}\\n        if: env\\.GBDRAW_GALLERY_PR_PARITY == 'true'`));
   }
-  assert.match(gallery, /node-version: "20"/);
+  assert.match(gallery, /node-version-file: \.node-version/);
   assert.match(gallery, /npm ci/);
   assert.match(gallery, /npx playwright install --with-deps chromium/);
   assert.equal((gallery.match(/run: python tools\/prepare_browser_wheel\.py/g) || []).length, 1);
@@ -961,7 +961,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
       id
     );
   }
-  assert.match(job('ci-impact'), /node-version: "20"\n {10}cache: npm\n[\s\S]*run: npm ci/);
+  assert.match(job('ci-impact'), /node-version-file: \.node-version\n {10}cache: npm\n[\s\S]*run: npm ci/);
 });
 
 test('aggregate gates and the Gallery planner tolerate a slow checkout', () => {
