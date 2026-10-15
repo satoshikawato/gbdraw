@@ -157,10 +157,9 @@
         "gbdraw/web/js/services/legacy-render-request.js:liftLegacyRenderRequest"
       ],
       "vector": "tests/fixtures/legacy-render-request-vectors.json",
-      "reason": "Python decodes request schemas 1 and 2 directly; the Web rewrites their JSON into the schema-5 form before its one stored-request reader, so a Load needs no Worker. The vector holds every distinct schema 1/2 request of first-parent main history; both runtimes must read each one to the same request.",
+      "reason": "Python decodes request schemas 1 and 2 directly; the Web rewrites their JSON into the schema-5 form before its one stored-request reader, so a Load needs no Worker. The vector pins `requests`, every distinct schema 1/2 request of first-parent main history, which both runtimes read to the same request; `cases`, the forms the corpus does not hold (the lift's arms and divergences), each read equally, refused by both, refused by Python and by the Web's Load check after the lift reads it (`circular-keeps-linear-values`), or a Web-only reading accepted under OV-793, OV-795, OV-798 or OV-810; the lift's two rewrites of a stored full config (`labels.linear.placement`, `canvas.linear.track_layout`); and its handling of an invalid stored comparison height (B17): the default written for a full config, with a row or without one (`b17-full-config-circular`), and an invalid override dropped (`b17-overrides`, `b17-overrides-canonical`, `b17-overrides-circular`).",
       "retireWhen": "the Web stops reading request schemas 1 and 2, or reads them through the Python decoder",
-      "source": "boundary-audit-20261010 lane D (PR-D), D-OD07",
-      "pending": true
+      "source": "boundary-audit-20261010 lane D (PR-D), D-OD07"
     },
     {
       "id": "vector:tests/fixtures/legacy-table-row-vectors.json",
