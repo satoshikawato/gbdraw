@@ -1025,7 +1025,16 @@ const replacePlainObject = (target, source) => {
   });
 };
 
-/** @type {((request: Record<string, any>) => any) | null} */
+/**
+ * A check of saved configuration values by the Worker's Python (`validate_web_config_overrides_json`).
+ * `source` says which values: an editor draft's overrides, or a stored request's `config` and
+ * `configOverrides`. The port resolves to the Worker's reply, whose values are checked here.
+ * @typedef {{ mode: DiagramMode, config: unknown, configOverrides: unknown, managedPaths: readonly string[],
+ *   source: 'draft' | 'storedRequest' }} ConfigCheckRequest
+ * @typedef {{ result?: { error?: unknown, overrides?: unknown } } | null | undefined} ConfigCheckReply
+ * @typedef {(request: ConfigCheckRequest) => ConfigCheckReply | Promise<ConfigCheckReply>} ConfigCheckPort
+ */
+/** @type {ConfigCheckPort | null} */
 let unmanagedConfigOverrideValidator = null;
 
 /** @param {typeof unmanagedConfigOverrideValidator} validator */
@@ -1036,16 +1045,17 @@ export const setUnmanagedConfigOverrideValidator = (validator) => {
 };
 
 /**
- * @param {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, source?: 'draft' | 'storedRequest' }} options
+ * @param {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, source: ConfigCheckRequest['source'] }} options
  *   `mode`: a slice's mode, or the mode of a Session's projection (the projection refuses another value; a
  *   settings-only Session's is checked with its draft). `config` and `configOverrides` are saved values,
  *   unvalidated: the validator service checks them.
+ * @returns {Promise<Record<string, unknown>>} The overrides the check preserved.
  */
 const validateUnmanagedConfigOverrides = async ({
   mode,
   config = null,
   configOverrides = {},
-  source = 'storedRequest'
+  source
 }) => {
   const managedPaths = managedConfigOverridePathsForMode(mode);
   const overrides = isPlainObject(configOverrides)
@@ -1082,10 +1092,12 @@ const validateUnmanagedConfigOverrides = async ({
   if (typeof result?.result?.error === 'string' && result.result.error.trim()) {
     throw new Error(result.result.error.trim());
   }
-  if (!isPlainObject(result?.result?.overrides)) {
+  const preserved = result?.result?.overrides;
+  if (!isPlainObject(preserved)) {
     throw new Error('Configuration validation returned an invalid preserved-settings result.');
   }
-  return cloneJsonData(result.result.overrides);
+  // The cast: `isPlainObject(preserved)` above (this module's predicate is no type guard).
+  return cloneJsonData(/** @type {Record<string, unknown>} */ (preserved));
 };
 
 /** @param {DrawingState} drawing */
@@ -2130,7 +2142,8 @@ const preflightSessionImport = async (sessionData, repairs) => {
           mode: canonicalProjection.mode,
           config: projectionRenderRequest?.diagramOptions?.config ?? null,
           configOverrides:
-            projectionRenderRequest?.diagramOptions?.configOverrides ?? {}
+            projectionRenderRequest?.diagramOptions?.configOverrides ?? {},
+          source: /** @type {const} */ ('storedRequest')
         }
     : null;
   if (restoredConfig) {

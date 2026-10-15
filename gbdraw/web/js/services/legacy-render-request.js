@@ -17,7 +17,6 @@ import { parseOptionalPixel } from './track-slot-validation.js';
 /** @typedef {Record<string, unknown>} JsonObject */
 
 const LIFTED_SCHEMA = 5;
-const LEGACY_SCHEMAS = new Set([1, 2]);
 
 /**
  * @param {unknown} value
@@ -404,12 +403,13 @@ const refuseLaterSchemaFields = (request, options) => {
  * OV-798, D-OD10); a lossless lift has none. A value the reader refuses (not
  * an object, an unknown mode) is left to the reader; a field of a later
  * schema is refused here (D-OD13 F3).
- * @param {unknown} value a stored `renderRequest` (parsed JSON)
+ * @template T
+ * @param {T} value a stored `renderRequest` (parsed JSON)
  * @param {string} [path] its path in the file, which the rows name
- * @returns {Repaired<unknown>}
+ * @returns {Repaired<T | JsonObject>} `value` itself, or the lifted copy
  */
 export const liftLegacyRenderRequest = (value, path = 'renderRequest') => {
-  if (!isObject(value) || !LEGACY_SCHEMAS.has(/** @type {number} */ (value.schema))
+  if (!isObject(value) || (value.schema !== 1 && value.schema !== 2)
     || (value.mode !== 'circular' && value.mode !== 'linear') || !isObject(value.diagramOptions)) {
     return { value, repairs: [] };
   }
@@ -417,7 +417,9 @@ export const liftLegacyRenderRequest = (value, path = 'renderRequest') => {
   /** @type {LoadRepair[]} */
   const repairs = [];
   const mode = value.mode;
-  const request = /** @type {JsonObject} */ (JSON.parse(JSON.stringify(value)));
+  /** @type {JsonObject} */
+  const request = JSON.parse(JSON.stringify(value));
+  // The cast: `isObject(value.diagramOptions)` above; `request` is its copy.
   const options = /** @type {JsonObject} */ (request.diagramOptions);
   const optionsAt = `${path}.diagramOptions`;
   if (isObject(options.output)) delete options.output.outputPrefix;

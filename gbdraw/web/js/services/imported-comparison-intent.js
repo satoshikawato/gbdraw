@@ -300,6 +300,8 @@ export const classifyImportedComparisonIntent = ({
   renderRequest: stored,
   resources = {}
 } = {}) => {
+  // The cast: a lifted request is a schema-5 request, whose parts the checks
+  // below read as they read a stored one.
   const renderRequest = /** @type {SavedRenderRequest | undefined} */ (liftLegacyRenderRequest(stored).value);
   const mode = String(renderRequest?.mode || '');
   const comparisons = Array.isArray(renderRequest?.comparisons)

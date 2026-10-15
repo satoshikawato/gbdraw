@@ -757,7 +757,7 @@ export const promoteReadGallerySession = (session) => {
  * A historical Gallery Session as a current-request Session: its request is
  * read by the one reader (`readStoredRenderRequest`, which lifts schemas 1
  * and 2), then the Session is promoted.
- * @param {Record<string, any>} session An unvalidated historical Gallery Session.
+ * @param {unknown} session An unvalidated historical Gallery Session.
  * @param {{ repairs: LoadRepair[] }} options `repairs` receives what the read of its request could not carry.
  * @returns {Record<string, any>} A current-request Session with its flat draft (`config`), which publication and Load split into mode slices.
  */

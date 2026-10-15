@@ -3740,6 +3740,7 @@ export const normalizeWebGridColumnOrdering = (records = []) => {
   };
 };
 
+/** @param {{ collinearInferOrthogroups?: unknown }} settings @param {string} mode */
 const resolvePipelineCollinearInference = (settings, mode) =>
   settings.collinearInferOrthogroups ?? ['collinear', 'none'].includes(mode);
 
@@ -3816,7 +3817,7 @@ const LEGACY_DEPTH_OPTION_FIELDS = Object.freeze([
 const hasOptionValue = (value) => value !== null && value !== undefined;
 
 /**
- * @param {{ resourceId?: unknown, representation?: unknown } | null | undefined} ref Unchecked; checked here.
+ * @param {unknown} ref
  * @param {StoredResources} resources
  * @param {string} fieldName
  * @param {ResourceFileResolver | null} [resolveResourceFile]
@@ -3827,10 +3828,10 @@ const canonicalDepthResourceFile = (
   fieldName,
   resolveResourceFile = null
 ) => {
-  if (!ref || typeof ref !== 'object' || Array.isArray(ref)) {
+  if (!isPlainObject(ref)) {
     throw new Error(`${fieldName} must be a canonical resource reference.`);
   }
-  if (!(/** @type {readonly unknown[]} */ (['file', 'canonicalTsv'])).includes(ref.representation)) {
+  if (ref.representation !== 'file' && ref.representation !== 'canonicalTsv') {
     throw new Error(`${fieldName} has unsupported representation '${ref.representation}'.`);
   }
   if (typeof ref.resourceId !== 'string' || !ref.resourceId.trim()) {
@@ -4124,9 +4125,9 @@ const legacyLabelScope = ({ mode, showLabels, allowInnerLabels }) => {
   return scope;
 };
 
-/** @param {ModeProfileName} mode */
+/** @param {unknown} config @param {ModeProfileName} mode */
 const projectFullConfigOverrides = (config, mode) => {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+  if (!isPlainObject(config)) return {};
   /** @type {Set<string>} */
   const paths = new Set(Object.values(CONFIG_OVERRIDE_PATHS));
   const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
@@ -4294,9 +4295,10 @@ const projectCircularConservationConfig = (options, files) => {
   };
 };
 
+/** @param {unknown} slot */
 const projectCurrentCanonicalCircularSlot = (slot) => {
   if (
-    !slot || typeof slot !== 'object' || Array.isArray(slot) ||
+    !isPlainObject(slot) ||
     ['spacing', 'inner_gap_px', 'outer_gap_px', 'strict'].some((field) => (
       Object.prototype.hasOwnProperty.call(slot, field)
     ))
@@ -4361,12 +4363,12 @@ const combineCircularGenbankResources = (
   );
 };
 
-/** @param {readonly unknown[]} records */
+/** @param {Readonly<Record<string, unknown>>} renderRequest @param {readonly unknown[]} records */
 const canonicalGrouping = (renderRequest, records) => {
   const allowed = renderRequest.mode === 'circular'
     ? ['single', 'grid', 'batch']
     : ['single'];
-  if (!allowed.includes(renderRequest.grouping)) {
+  if (typeof renderRequest.grouping !== 'string' || !allowed.includes(renderRequest.grouping)) {
     throw new Error(`Unsupported canonical ${renderRequest.mode} grouping.`);
   }
   if (
@@ -4507,6 +4509,7 @@ export const projectCanonicalSessionRequest = ({
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
   /** @type {ReturnType<typeof canonicalSimilarityAlignment> | null} */
   let similarityAlignment = null;
+  /** @type {ReturnType<typeof canonicalRecordTranslations>} */
   let recordTranslations = [];
   if (renderRequest.mode === 'linear') {
     const layout = renderRequest.layout || {};
@@ -4685,7 +4688,7 @@ export const projectCanonicalSessionRequest = ({
   if (renderRequest.mode === 'circular') {
     files.circularRecords = records.map((record) => {
       const source = record.source || {};
-      const resourceFile = (id) => resolveResourceFile
+      const resourceFile = (/** @type {string} */ id) => resolveResourceFile
         ? resolveResourceFile(id)
         : resourceAsLegacyFile(resources, id);
       return {
@@ -6043,7 +6046,7 @@ export const readStoredRenderRequest = (value, context) => {
   const lifted = liftLegacyRenderRequest(value, path);
   /** @type {LoadRepair[]} */
   const repairs = [...lifted.repairs];
-  const stored = /** @type {Record<string, unknown>} */ (lifted.value);
+  const stored = lifted.value;
   // The promotion walks the records and comparisons; lists of another kind
   // leave nothing to read, as the repair would find at the root; nor does a
   // schema 1 or 2 request the lift cannot read (no options object or mode).
@@ -6052,7 +6055,8 @@ export const readStoredRenderRequest = (value, context) => {
     return { kind: 'request-dropped', path, reason: 'wrong-kind' };
   }
   const promoted = stored.schema === CANONICAL_REQUEST_SCHEMA ? stored : promoteCanonicalRenderRequestToCurrent(stored, {
-    // Read as the legacy alignment reader reads them; it checks what it uses.
+    // The casts: the legacy alignment reader checks the catalog and the
+    // orthogroup state where it reads them (materializeLegacySimilarityAlignment).
     featureCatalog: /** @type {RequestPromotion['featureCatalog']} */ (context.featureCatalog),
     legacyOrthogroupState: /** @type {RequestPromotion['legacyOrthogroupState']} */ (context.legacyOrthogroupState),
     unreadAlignment: () => repairs.push(loadRepair({
@@ -6082,6 +6086,7 @@ export const readStoredRenderRequest = (value, context) => {
     /** @type {Record<string, unknown>} */ (repaired.value), repaired.rows, path
   );
   // The leaf returns the stored object itself when nothing changed (RK-3).
+  // The cast: repairByDescription checked it against the request description.
   return {
     value: /** @type {CanonicalRenderRequest} */ (/** @type {unknown} */ (rebound.request)),
     repairs: [
