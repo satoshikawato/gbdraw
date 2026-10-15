@@ -250,13 +250,15 @@ const checkpointSvgBytes = (checkpoint) => (
  *   source: string,
  *   owner?: any,
  *   deferAdapterCommit?: boolean,
+ *   serial?: number,
  *   beforeSignature?: string,
  *   beforeFileIds?: Set<any>,
  *   beforeIntentCheckpoint?: any
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
  *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
- *   calls that ran on it, each with the step name it started with.
+ *   calls that ran on it, each with the step name it started with. `serial`: an intent step's
+ *   number, in the order the steps began (`intentStepSerial`).
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {{
@@ -384,6 +386,9 @@ export const createHistoryManager = ({
   // action's later write is recorded from the last recorded intent only
   // within the generation of its step.
   let intentGeneration = 0;
+  // D-40: the number of the last intent step begun; a redraw requested at
+  // serial n is drawn for the steps up to n (`adoptDrawnWrite`).
+  let intentStepSerial = 0;
   let totalEntryBytes = 0;
   // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
   // is entry k+1's `before`), so its bytes count once while any live entry
@@ -737,7 +742,8 @@ export const createHistoryManager = ({
       closed: false,
       source: options.source || '',
       owner: options.owner,
-      deferAdapterCommit: ownedByAction
+      deferAdapterCommit: ownedByAction,
+      serial: ++intentStepSerial
     };
     activeTransaction = tx;
     touchTransaction();
@@ -1125,17 +1131,28 @@ export const createHistoryManager = ({
     return true;
   };
 
-  // OV-872: what a rerender writes as its figure is shown (the Legend rows
-  // Python drew) is drawn state, not an edit: an open intent step takes it
+  // OV-872: what a rerender writes as its figure is shown (the Results it
+  // replaces, OV-873, and the Legend rows Python drew) is drawn state, not an
+  // edit: an intent step that began after the rerender was requested takes it
   // into the state it began from, so no step records it, as when no step is
-  // open. Its own changes stay in it. The intent is read on both sides of the
-  // write in the same task, so the binder's timing does not change; a
-  // snapshot service that builds the intent asynchronously keeps the write in
-  // the step.
-  /** @param {() => void} write */
-  const adoptDrawnWrite = (write) => {
+  // open. Its own changes stay in it. The step that requested the rerender
+  // (begun at `requestedAt` or earlier) keeps the write as its own, so its
+  // Undo restores the rows from before its edit (D-24 (OV-731), D-40). The
+  // intent is read on both sides of the write in the same task, so the
+  // binder's timing does not change; a snapshot service that builds the
+  // intent asynchronously keeps the write in the step.
+  // Arrays are leaves (`buildIntentPatch`): a drawn array replaces the whole
+  // array in the step's `before`, so a write the step made to the same array
+  // before the rerender binds drops out of the step (no action does so now).
+  // While an intent capture runs (`capturing`, as a step begins) the write
+  // is not adopted and the step that begins may record it.
+  /**
+   * @param {() => void} write
+   * @param {{ requestedAt: number }} request `intentStepSerial()` when the rerender was requested.
+   */
+  const adoptDrawnWrite = (write, { requestedAt }) => {
     const open = restoring.value || capturing.value ? null : openTransaction();
-    if (!open) { write(); return; }
+    if (!open || (open.serial ?? 0) <= requestedAt) { write(); return; }
     const before = buildIntent();
     write();
     if (isPromiseLike(before)) return;
@@ -1716,6 +1733,7 @@ export const createHistoryManager = ({
     historyAvailability,
     keepRedrawnResult,
     adoptDrawnWrite,
+    intentStepSerial: () => intentStepSerial,
     historyLimitMessage,
     traversalPending: () => traversals.value > 0,
     initializeIntentBaseline,

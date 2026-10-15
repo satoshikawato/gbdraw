@@ -863,6 +863,50 @@ test('A color edit made while another edit is drawn keeps its own rerender (OV-7
   } finally { await page.context().close(); }
 });
 
+// OV-873: a rerender's Results replace the shown ones under new identities,
+// and the Legend move History records is keyed by Result identity. The move
+// the rerender draws again is no step of its own either.
+test('A color edit made while another edit is drawn after a Legend move is one step (OV-873)', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await load(browser);
+  try {
+    await generate(page);
+    await settleLive(page);
+    await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      app.layoutRepositionMode = true;
+      await window.Vue.nextTick();
+      const svg = app.svgContainer.querySelector('svg');
+      const legend = svg.querySelector('[data-gbdraw-composition-role="legend"]');
+      const bounds = legend.getBoundingClientRect();
+      const x = bounds.left + Math.min(bounds.width / 2, 8);
+      const y = bounds.top + Math.min(bounds.height / 2, 8);
+      const mouse = (type, dx, dy, buttons) => new MouseEvent(type, {
+        bubbles: true, cancelable: true, clientX: x + dx, clientY: y + dy, buttons, view: window
+      });
+      const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+      legend.dispatchEvent(mouse('mousedown', 0, 0, 1));
+      await frame();
+      svg.dispatchEvent(mouse('mousemove', 12, -9, 1));
+      await frame();
+      svg.dispatchEvent(mouse('mouseup', 12, -9, 0));
+    });
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Move legend');
+    await page.evaluate(() => { window.__GBDRAW_APP__.layoutRepositionMode = false; });
+    await settleLive(page);
+    const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    expect(await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      const first = await app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'tRNA'), '#654321');
+      const drawing = app.labelReflowProcessing;
+      const second = await app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'CDS'), '#123456');
+      return { first, drawing, second };
+    })).toEqual({ first: true, drawing: true, second: true });
+    await settleLive(page);
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()), 'one step per color edit').toBe(steps + 2);
+  } finally { await page.context().close(); }
+});
+
 // D-36: a redraw that ends without a figure (a Generate during it, then
 // canceled) is still owed, so the next color step does not record the figure
 // it starts from as drawn: its Undo asks for the redraw, and the Legend shows

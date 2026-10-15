@@ -3162,10 +3162,11 @@ export const createAppSetup = () => {
           liveResultIdentities: results.value.map(previewRuntime.getResultIdentity)
         });
       };
-      // OV-872: the Legend an automatic rerender draws is no edit of a step
-      // open meanwhile (an action waiting for this rerender).
-      if (context.phase === 'label-reflow') history.adoptDrawnWrite(adopt);
-      else adopt();
+      // OV-872: the Legend a label rerender draws is no edit of a step begun
+      // after it was requested (an action waiting for it, D-40).
+      const { historyRequestedAt } = context.bindingOptions;
+      if (historyRequestedAt === undefined) adopt();
+      else history.adoptDrawnWrite(adopt, { requestedAt: historyRequestedAt });
     },
     bindComposition(context) {
       if (context.bindingOptions.trustedRestore) return;
@@ -3278,6 +3279,8 @@ export const createAppSetup = () => {
     recordDisplayRows: recordDisplayControls.allRows,
     assertActiveModeInputs,
     readDraftSignature: () => history.getCurrentIntentSignature(),
+    readHistoryStepSerial: () => history.intentStepSerial(),
+    adoptDrawnWrite: (write, request) => history.adoptDrawnWrite(write, request),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     askChoice,
