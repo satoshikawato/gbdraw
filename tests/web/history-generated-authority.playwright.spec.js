@@ -784,7 +784,7 @@ test('Undo and Redo while a color edit is still being drawn draw the restored ru
     const before = await workerRuns(page);
     // The edit and its Undo in one task: the Undo comes once the edit's
     // rerender has posted its Worker run and is still drawing.
-    expect(await page.evaluate(async before => {
+    expect(await evaluateWithRetainedPromise(page, async before => {
       const app = window.__GBDRAW_APP__;
       const runs = () => (window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__?.instances || [])
         .reduce((total, instance) => total + (instance.runs?.length || 0), 0);
@@ -873,7 +873,7 @@ test('Undo after a lost redraw draws the restored rules (OV-731)', async ({ brow
     await traverse(page, ['undo']);
     await settleLive(page);
     // The color again; a Generate starts while its rerender draws and is canceled.
-    expect(await page.evaluate(async () => {
+    expect(await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
       const hooks = window.__GBDRAW_TEST_HOOKS__;
       const prior = hooks.onSessionLifecycleEvent;
