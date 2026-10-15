@@ -36,6 +36,24 @@ for (const [domain, key, first, second] of [
   assert.equal(state.activeDrawing()[domain][key], first, `${domain}.${key}: Redo explicit value`);
 }
 
+// R11, TK-12: a Width the row shows as invalid is a draft the app wrote, so
+// Undo and Redo install it as captured; only Load reads a file's stack.
+{
+  const drawing = state.drawings.circular;
+  const slot = () => drawing.adv.circular_track_slots.find(({ id }) => id === 'gc_content');
+  const original = structuredClone(slot().width ?? null);
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Width draft', () => { slot().width = { value: 'bad', unit: 'px' }; });
+  await history.runUndoable('Width unit', () => { slot().width = { value: 'bad', unit: 'factor' }; });
+  await history.undo();
+  assert.deepEqual(slot().width, { value: 'bad', unit: 'px' }, 'Undo keeps the invalid draft and its unit');
+  await history.redo();
+  assert.deepEqual(slot().width, { value: 'bad', unit: 'factor' }, 'Redo keeps the invalid draft');
+  await history.undo();
+  await history.undo();
+  assert.deepEqual(slot().width ?? null, original);
+}
+
 // Record selection: a toggle is one intent step, and Undo and Redo restore
 // the OFF records of the drawing it was made in.
 {

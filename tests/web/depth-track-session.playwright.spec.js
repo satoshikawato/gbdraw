@@ -1622,7 +1622,7 @@ ORIGIN
     format: 'gbdraw-session',
     version: 33,
     renderRequest: readableRequest,
-    resources: recordResources,
+    resources: {},
     config: {
       adv: {
         linear_track_slots_schema_version: '1',
@@ -1635,9 +1635,11 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidSlotSchemaSession))
   });
-  // The slot list of an unknown schema is read in the current schema with a
-  // row (OV-758); the Session still holds no record, which Load refuses.
-  await expectSchemaRejection(2, 'RECORDS_REQUIRED');
+  // The slot list of an unknown schema is read in the current schema (OV-758),
+  // so it no longer refuses; the request names a record file the Session does
+  // not hold, and a Session 31 to 41 keeps nothing without its request: the
+  // Session-fields error, before the slot reading changes anything.
+  await expectSchemaRejection(2, 'FIELDS');
   expect(await snapshot()).toEqual(before);
 
   const unknownAuthoritySession = {

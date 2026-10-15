@@ -3,7 +3,9 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
-const { openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const {
+  openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs
+} = require('./helpers/app-lifecycle.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 const sessionInput = 'input[type="file"][accept^=".json,"]';
@@ -26,26 +28,24 @@ const prepare = async page => {
   });
   await openApp(page);
 };
-const load = async (page, file = fixture, accepted = true) => {
+// `canceledRows`: the Load lists these rows, and its Cancel keeps the work (E-OD25).
+const load = async (page, file = fixture, canceledRows = null) => {
+  const accepted = canceledRows === null;
   const readyBefore = await page.evaluate(() => window.__C619_EVENTS__.filter(event => event.name === 'interactiveReady').length);
   const input = page.locator(sessionInput);
   await input.setInputFiles(file);
   if (accepted) {
     await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   } else {
-    // Rejected Load reports the Session not loaded alert and clears the input at
-    // the import owner's finally boundary before the preserved state is compared.
+    await answerLoadRepairs(page, canceledRows, 'cancel');
+    // The import owner clears the input at its finally boundary before the
+    // preserved state is compared.
     await expect.poll(() => input.inputValue()).toBe('');
-    await expect(page.getByRole('alert', { name: 'Session not loaded' })).toBeVisible();
-    const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
-    expect(error.stage).toBe('request-validation');
-    expect(JSON.stringify(error)).not.toMatch(/1e|gc_content|invalid\.gbdraw-session/);
   }
   await page.waitForFunction(({ readyBefore, accepted }) => (
     !window.__GBDRAW_APP__.sessionImportPending
     && (!accepted || window.__C619_EVENTS__.filter(event => event.name === 'interactiveReady').length > readyBefore)
   ), { readyBefore, accepted });
-  if (!accepted) await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);
 };
 const openPanel = async page => {
   const button = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
@@ -379,7 +379,12 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     await expectCounts(fresh, 0);
     const rejected = structuredClone(saved);
     rejected.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
-    await load(fresh, { name: 'invalid.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rejected)) }, false);
+    // A Width Load cannot use is listed before Load changes anything (OV-758);
+    // after Cancel the notice of the earlier Load stays and the state is unchanged.
+    await load(fresh, { name: 'invalid.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rejected)) }, [
+      'Settings: the value "{"value":"1e","unit":"px"}" (modes.circular.config.adv.circular_track_slots[2].width) cannot be used;'
+        + ' it is left unset.'
+    ]);
     expect(await snapshot(fresh)).toEqual(restored);
     await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('1.');
   } finally {

@@ -494,7 +494,7 @@ test('R2-m2: a dropped Session part is named with the verb its name takes', () =
   const text = JSON.stringify(describeLoadRepairs(['resources', 'editorState', 'modes', 'otherModeResult']
     .map((path) => ({ code: 'session-part-dropped', path, effect: 'dropped' }))));
   for (const plural of ['the stored input files (resources)', 'the saved diagram (editorState)', 'both drawings (modes)']) {
-    assert.match(text, new RegExp(`${plural.replace(/[()]/g, '\\$&')} could not be read and are left out`), plural);
+    assert.ok(text.includes(`${plural} could not be read and are left out`), plural);
   }
   assert.match(text, /other mode \(otherModeResult\) could not be read and is left out/);
 });

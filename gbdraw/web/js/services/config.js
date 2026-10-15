@@ -2756,9 +2756,10 @@ export const applyLabelFitValues = (drawing, values, mode) => {
 /**
  * @param {DrawingState} drawing
  * @param {Record<string, unknown>} data
- * @param {{ resolveTrackPlacements?: boolean, applyAlignment?: boolean }} [options]
+ * @param {{ resolveTrackPlacements?: boolean, applyAlignment?: boolean, captured?: boolean }} [options] `captured`:
+ *   settings the app wrote (`applyCapturedConfigData`).
  */
-const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true } = {}) => {
+const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true, captured = false } = {}) => {
   const mode = drawing === state.drawings.linear ? 'linear' : 'circular';
   // The execution settings of a Session 44 or older draft or of a request
   // projection are app-level (`state.losatExecution`); the drawing keeps the
@@ -2769,7 +2770,7 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
     applyLosatExecutionData(Object.fromEntries(executionFields.map((field) => [field, losat[field]])));
   }
   // The stored settings' merge and readers (Load lists what they cannot restore first).
-  const { arrowRatios } = installStoredSettings(drawing, data, drawing === state.drawings.linear ? 'linear' : 'circular');
+  const { arrowRatios } = installStoredSettings(drawing, data, mode, { captured });
   if (arrowRatios) Object.assign(drawing.adv, arrowRatios);
   replacePlainObject(drawing.unmanagedConfigOverrides, cloneJsonData(readPlainObject(data.unmanagedConfigOverrides).value));
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(readRecordDisplayDrafts(data.recordDisplayDrafts).value));
@@ -2885,7 +2886,7 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
  */
 export const applyCapturedConfigData = (drawing, data, options = {}) => {
   requireCurrentConfigFields(data);
-  applyConfigData(drawing, data, options);
+  applyConfigData(drawing, data, { ...options, captured: true });
 };
 
 /** @param {DrawingState} drawing */

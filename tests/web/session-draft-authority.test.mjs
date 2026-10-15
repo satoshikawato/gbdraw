@@ -565,12 +565,21 @@ decisionRequiredSession.renderRequest.comparisons = [{
 }];
 decisionRequiredSession.losatCache = { entries: [] };
 decisionRequiredSession.losatDerivedCache = { entries: [] };
-const decisionRequiredImport = await importPayload(decisionRequiredSession);
+const decisionRequiredDialogs = [];
+const decisionRequiredImport = await importPayload(decisionRequiredSession, {
+  confirmLoadRepairs: async ({ items }) => { decisionRequiredDialogs.push(items); return true; }
+});
 assert.equal(
   decisionRequiredImport.status,
   'ok',
-  decisionRequiredImport.error?.message
+  JSON.stringify(decisionRequiredImport.error)
 );
+// Load lists the comparison that names a resource the Session lacks (OV-951)
+// and asks once; the drawing still records that a decision is required.
+assert.deepEqual(decisionRequiredImport.repairs.map(({ code, path, effect }) => [code, path, effect]), [
+  ['request-reference-dropped', 'renderRequest.comparisons[0]', 'dropped']
+]);
+assert.equal(decisionRequiredDialogs.length, 1);
 assert.equal(decisionRequiredImport.comparisonDisposition, 'DECISION_REQUIRED');
 assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   disposition: 'DECISION_REQUIRED',

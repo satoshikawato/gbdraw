@@ -63,12 +63,14 @@ import { isLabelOverrideRow } from './label-override-table.js';
 /**
  * One stored field and its reader. A reader may read fields its table read
  * before it (`container`). `inPlace`: the list is replaced in its array.
- * `retired`: the field is no longer read and is deleted.
+ * `retired`: the field is no longer read and is deleted. `fileOnly`: only a
+ * file's value is read; captured settings keep the value the app wrote (R11).
  * @typedef {object} FieldRow
  * @property {string} field
  * @property {(value: unknown, container: Record<string, unknown>) => FieldReading<unknown>} read
  * @property {boolean} [inPlace]
  * @property {boolean} [retired]
+ * @property {boolean} [fileOnly]
  */
 /** @typedef {{ at: string, rows: readonly FieldRow[] }} FieldTable */
 /**
@@ -560,15 +562,17 @@ const ADV_ROWS = Object.freeze([
   row('linear_definition_line_styles', readDefinitionLineStyles),
   // The track stacks (OV-758): each axis index is read before its stack, as a
   // stack read as the default unsets it; the stacks are read in the current
-  // slot schema.
+  // slot schema. A captured stack keeps the drafts its rows show as invalid
+  // (TK-12), so only a file's stack is read.
   .../** @type {const} */ ([['circular', CIRCULAR_TRACK_SLOT_SCHEMA_VERSION], ['linear', LINEAR_TRACK_SLOT_SCHEMA_VERSION]]).flatMap(([mode, schema]) => [
     {
       field: `${mode}_track_slots_axis_index`,
       /** @type {FieldRow['read']} */
       read: (value, adv) => (readImportedTrackSlots(mode, adv[`${mode}_track_slots`]).reset
-        ? { value: null, lost: !isUnsetValue(value) } : { value, lost: false })
+        ? { value: null, lost: !isUnsetValue(value) } : { value, lost: false }),
+      fileOnly: true
     },
-    { field: `${mode}_track_slots`, read: (/** @type {unknown} */ value) => readImportedTrackSlots(mode, value), inPlace: true },
+    { field: `${mode}_track_slots`, read: (/** @type {unknown} */ value) => readImportedTrackSlots(mode, value), inPlace: true, fileOnly: true },
     // A version up to the current one is migrated without a loss.
     {
       field: `${mode}_track_slots_schema_version`,
@@ -1142,10 +1146,12 @@ const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.str
  * @param {SettingsContainers} targets
  * @param {Record<string, unknown>} stored
  * @param {'circular' | 'linear'} mode The drawing's mode, whose defaults a blank reads as.
+ * @param {{ captured?: boolean }} [options] `captured`: settings the app wrote (History Undo and Redo, the Load
+ *   rollback), which the `fileOnly` rows leave as written (R11).
  * @returns {{ losses: SettingLoss[], arrowRatios: StoredArrowRatios | null }} `arrowRatios` is null when the stored
  *   `adv` is not used (the target keeps its ratios).
  */
-export const installStoredSettings = (targets, stored, mode) => {
+export const installStoredSettings = (targets, stored, mode, { captured = false } = {}) => {
   // A retired field name reads as its current name at every version (A17g).
   const config = migratePersistedWebStateFieldNames(stored);
   const defaults = defaultSettingsContainers(mode);
@@ -1164,7 +1170,7 @@ export const installStoredSettings = (targets, stored, mode) => {
   CONTAINER_TABLES.forEach(({ at, rows }) => {
     const container = at === 'losat.blastp' ? targets.losat.blastp
       : /** @type {Record<string, unknown>} */ (targets[/** @type {'form' | 'adv' | 'circularConservation'} */ (at)]);
-    losses.push(...readRows(container, rows, at, containerAt(config, at)));
+    losses.push(...readRows(container, captured ? rows.filter(({ fileOnly }) => !fileOnly) : rows, at, containerAt(config, at)));
   });
   // A stored group the merge did not use (its row says the target keeps its
   // value) gives no value below either.
