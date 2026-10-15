@@ -519,6 +519,42 @@ for (const mode of ['linear', 'circular']) {
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     await expect(toggle).toHaveText(/^\s*Search\s*·\s*\d+\s*$/);
 
+    // D-08: a search without matches dims every feature too, so the toggle of
+    // the hidden bar names its count of 0.
+    const dimmed = () => page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+      .classList.contains('gbdraw-preview-feature-search-results-active'));
+    await toggle.click();
+    await search.fill('no-such-feature');
+    await search.press('Enter');
+    await expect(page.locator('.preview-feature-search .gfs-count')).toHaveText('No matches');
+    await expect.poll(dimmed).toBe(true);
+    await hide.click();
+    await expect(toggle).toHaveText(/^\s*Search\s*·\s*0\s*$/);
+    expect(await dimmed()).toBe(true);
+
+    // D-09: at the narrow widths too the canvas takes the hidden bar's row and
+    // no gap stays above it; on a phone the count stays beside the icon.
+    await toggle.click();
+    await search.fill('a|e');
+    await search.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(1);
+    const narrowRows = () => page.locator('.preview-editor-layout').evaluate((layout) => ({
+      gap: layout.querySelector(':scope > .preview-workspace').getBoundingClientRect().top - layout.getBoundingClientRect().top,
+      canvas: layout.querySelector('.preview-viewport').getBoundingClientRect().height
+    }));
+    for (const width of [720, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      if (!(await bar.isVisible())) await toggle.click();
+      const narrowShown = await narrowRows();
+      await hide.click();
+      await expect(bar).toBeHidden();
+      const narrowHidden = await narrowRows();
+      expect(narrowHidden.gap, `${width} px`).toBeCloseTo(0, 0);
+      expect(narrowHidden.canvas, `${width} px`).toBeGreaterThan(narrowShown.canvas);
+    }
+    await expect(toggle.locator('.preview-search-count')).toBeVisible();
+    await expect(toggle.locator('.preview-search-count')).toHaveText(/^·\s*\d+$/);
+
     await page.locator('input[accept^=".json,"]').setInputFiles(session);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
     await expect(bar).toBeVisible();
