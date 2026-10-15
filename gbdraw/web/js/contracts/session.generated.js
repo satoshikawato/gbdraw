@@ -549,6 +549,10 @@
  * @property {unknown} [legacyArtifacts]
  * @property {unknown} [config]
  * @property {Record<string, unknown>} [features]
+ * @property {never} [modes]
+ * @property {never} [cliOptions]
+ * @property {never} [otherModeResult]
+ * @property {never} [files]
  */
 /**
  * @typedef {object} CheckedSessionModeSliceConfigAdv
@@ -777,6 +781,9 @@
  * @property {Record<string, unknown>} [cliOptions]
  * @property {unknown} [legacyArtifacts]
  * @property {CheckedSessionOtherModeResult} [otherModeResult]
+ * @property {never} [config]
+ * @property {never} [features]
+ * @property {never} [files]
  */
 /** @typedef {SessionChecked27 | SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} SessionChecked */
 export {};
