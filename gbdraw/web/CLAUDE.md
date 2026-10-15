@@ -57,10 +57,21 @@ group contents with their serialized text, and feature-catalog parts, including
 the catalog item of a Result. Key each of these by the complete inputs of the
 stage that built it: resource and record identities, the settings it declares,
 and every other argument. Every Generate still decodes and validates the
-request, runs the whole render path, writes a complete SVG document, and returns
-a complete feature catalog; it rebuilds every part whose inputs changed. Publish
-cache fills only after the full render succeeds, and release them with the
-Worker; never reuse a final reply.
+request, runs the whole render path, and writes a complete SVG document; it
+rebuilds every part whose inputs changed. Publish cache fills only after the
+full render succeeds, and release them with the Worker; never reuse a final
+reply.
+
+Every Generate leaves the page holding a complete feature catalog equal to the
+one a Generate with an empty cache returns. The reply carries that catalog
+unless the request names the catalog revision the page holds for the drawing
+and this Generate reused that same catalog build. A revision names one catalog
+build in one Worker lifetime: a build id with the Worker's epoch, never a
+content hash. For a matching revision the reply says the catalog is unchanged;
+the Worker does not serialize, hash, or send it, and the page keeps the catalog
+object it admitted for that revision without admitting it again. A changed
+catalog is always sent and admitted. Session save, export, and History read
+the kept object as they read a returned one.
 
 App-shell readiness means Vue is mounted and required local UI assets and
 palette definitions are available. It is independent of diagram-Worker
