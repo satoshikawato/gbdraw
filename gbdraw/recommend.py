@@ -477,11 +477,10 @@ def _classify(
     if annotation_tool == "pharokka":
         return "phage"
     if "viruses" in lineage or "viroids" in lineage or "virus" in organism.lower():
-        if "riboviria" in lineage:
-            return "virus_rna"
         if _PHAGE.search(f"{definition} {organism}") or lineage & {"caudoviricetes", "duplodnaviria", "uroviricota"}:
             return "phage"
-        if "rna" in molecule_type.lower():
+        # Orthornavirae are the RNA viruses; Riboviria also holds the retro-transcribing DNA viruses.
+        if "orthornavirae" in lineage or "rna" in molecule_type.lower():
             return "virus_rna"
         return "virus_dna"
     if annotation_tool == "antismash" or _GENE_CLUSTER.search(definition):

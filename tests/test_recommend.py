@@ -107,7 +107,7 @@ def _genes(
             id="virus-dna",
         ),
         pytest.param(
-            _record(topology="linear", organism="SARS-CoV-2", taxonomy=("Viruses", "Riboviria"), molecule_type="ss-RNA", definition="SARS-CoV-2, complete genome"),
+            _record(topology="linear", organism="SARS-CoV-2", taxonomy=("Viruses", "Riboviria", "Orthornavirae"), molecule_type="ss-RNA", definition="SARS-CoV-2, complete genome"),
             "virus_rna",
             id="virus-rna",
         ),
@@ -290,13 +290,14 @@ def test_annotator_outputs_without_a_lineage_are_classified_by_the_tool() -> Non
 
 def test_repeated_gene_names_and_cog_free_bakta_fall_back() -> None:
     # HBV-like: three CDS share the gene name S, so the products label them.
-    hbv = _record(length=3_200, organism="Hepatitis B virus", taxonomy=("Viruses",), definition="Hepatitis B virus, complete genome", features=[
+    hbv = _record(length=3_200, organism="Hepatitis B virus", taxonomy=("Viruses", "Riboviria", "Pararnavirae"), definition="Hepatitis B virus, complete genome", features=[
         _feature("CDS", 100, 1_300, gene="S", product="large S protein"),
         _feature("CDS", 400, 1_300, gene="S", product="middle S protein"),
         _feature("CDS", 600, 1_300, gene="S", product="small S protein"),
         _feature("CDS", 1_400, 1_900, gene="X", product="X protein"),
     ])
     proposal = propose([hbv])
+    assert proposal.facts[0].kind == "virus_dna"  # a retro-transcribing DNA virus is in Riboviria but not Orthornavirae
     assert dict(proposal.qualifier_priority)["CDS"].startswith("product")
     assert proposal.resolve_overlaps
     # A Bakta file whose CDS carry no COG note gets the base scheme, not the COG table.
