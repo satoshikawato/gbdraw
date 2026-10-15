@@ -1,7 +1,7 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
-import { shapeViolations } from '../utils/contract-shape.js';
+import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import {
   state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList
@@ -366,8 +366,6 @@ const recognizedCauseOr = (error, fallback) => {
   return model && !['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code)
     ? diagnosticError(model.code, model.context, { stage: model.stage }) : fallback;
 };
-/** @param {unknown} value */
-const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 /**
  * @template {UnvalidatedFields<string>} T
@@ -520,15 +518,11 @@ const multiRecordPositionsFromCliInvocation = (cliInvocation) => {
  * @param {{ args?: unknown } | null | undefined} cliInvocation
  */
 const hydrateMissingMultiRecordPositionsFromCliInvocation = (config, cliInvocation) => {
-  // The cast: `isPlainObject(config.form)` in the same expression.
-  if (!isPlainObject(config) || !isPlainObject(config.form)
-    || /** @type {{ multi_record_canvas?: unknown }} */ (config.form).multi_record_canvas !== true) {
+  if (!isPlainObject(config) || !isPlainObject(config.form) || config.form.multi_record_canvas !== true) {
     return;
   }
 
-  // The cast: `isPlainObject(config.adv)` in the same expression.
-  /** @type {Record<string, unknown>} */
-  const adv = isPlainObject(config.adv) ? /** @type {Record<string, unknown>} */ (config.adv) : {};
+  const adv = isPlainObject(config.adv) ? config.adv : {};
   if (Array.isArray(adv.multi_record_positions)) return;
 
   const positions = multiRecordPositionsFromCliInvocation(cliInvocation);
@@ -568,14 +562,11 @@ const buildSessionFilename = (title) => {
 // Load reads a stored configuration's older Linear visibility (every caller is a Load path).
 /** @template T @param {T} configData @returns {T} */
 const withCurrentLinearLabelVisibility = (configData) => {
-  if (!isPlainObject(configData)) return configData;
-  // The cast: `isPlainObject(configData)` above.
-  const config = /** @type {Record<string, unknown>} */ (configData);
-  if (!isPlainObject(config.adv)) return configData;
-  // The same draft with its `adv` read again (the casts: `isPlainObject` above).
+  if (!isPlainObject(configData) || !isPlainObject(configData.adv)) return configData;
+  // The cast: the same draft with its `adv` read again.
   return /** @type {T} */ ({
-    ...config,
-    adv: migrateLegacyLinearLabelVisibility(/** @type {Record<string, unknown>} */ (config.adv), { load: true })
+    ...configData,
+    adv: migrateLegacyLinearLabelVisibility(configData.adv, { load: true })
   });
 };
 
@@ -744,6 +735,10 @@ const cloneJsonArray = (value) => {
   return cloneJsonValue(value, []);
 };
 
+/**
+ * @param {unknown} value
+ * @returns {Record<string, unknown>} A copy of a plain object, or an empty one.
+ */
 const cloneJsonObject = (value) => {
   if (!isPlainObject(value)) return {};
   return cloneJsonValue(value, {});
@@ -997,12 +992,10 @@ export const normalizeEditorStateData = (editorState = {}, {
   featureCatalog = undefined, repairs = null, path = 'editorState', sessionVersion = SESSION_VERSION
 } = {}) => {
   const defaults = defaultEditorStateData();
-  // The casts: `isPlainObject` in the same expression.
-  const source = /** @type {Record<string, unknown>} */ (isPlainObject(editorState) ? editorState : {});
-  const legend = /** @type {Record<string, unknown>} */ (isPlainObject(source.legend) ? source.legend : {});
-  const featureStrokes = /** @type {Record<string, unknown>} */ (isPlainObject(source.featureStrokes) ? source.featureStrokes : {});
-  const originalSvgStroke = /** @type {Record<string, unknown>} */ (
-    isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {});
+  const source = isPlainObject(editorState) ? editorState : {};
+  const legend = isPlainObject(source.legend) ? source.legend : {};
+  const featureStrokes = isPlainObject(source.featureStrokes) ? source.featureStrokes : {};
+  const originalSvgStroke = isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {};
   // A Session 46 slice lists the renamed rows its Result does not draw
   // (OV-120) after the shown rows, marked `dormant`.
   const legendLoad = { repairs, path: `${path}.legend`, sessionVersion };
@@ -1142,8 +1135,7 @@ const checkUnmanagedConfigOverrides = async ({
   const overrides = isPlainObject(configOverrides)
     ? cloneJsonData(configOverrides)
     : configOverrides;
-  // The cast: `isPlainObject(overrides)` in the same expression.
-  const overridePaths = isPlainObject(overrides) ? Object.keys(/** @type {Record<string, unknown>} */ (overrides)) : [];
+  const overridePaths = isPlainObject(overrides) ? Object.keys(overrides) : [];
   if (
     config === null
     && overridePaths.length === 0
@@ -1315,11 +1307,8 @@ const CONFIG_SLICE_ROWS = MODE_SCOPED_SETTINGS.rows.filter((/** @type {{ domain:
  */
 const overlayModeSliceConfig = (projectedConfig, sliceConfig) => {
   /** @type {Record<string, any>} */
-  // isPlainObject is not a type predicate: the checked value is set.
-  const config = isPlainObject(projectedConfig)
-    ? cloneJsonData(/** @type {NonNullable<typeof projectedConfig>} */ (projectedConfig))
-    : {};
-  const slice = isPlainObject(sliceConfig) ? /** @type {Record<string, any>} */ (sliceConfig) : {};
+  const config = isPlainObject(projectedConfig) ? cloneJsonData(projectedConfig) : {};
+  const slice = isPlainObject(sliceConfig) ? sliceConfig : {};
   CONFIG_SLICE_ROWS.forEach((/** @type {{ domain: string, path: string }} */ row) => {
     const container = row.domain === 'config' ? slice : slice[row.domain.slice('config.'.length)];
     if (!isPlainObject(container) || !Object.hasOwn(container, row.path)) return;
@@ -1389,13 +1378,11 @@ const normalizeSessionData = (data, repairs) => {
 /** @template T @param {T} configData @param {boolean} legacy @returns {T} */
 const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
   if (!legacy || !isPlainObject(configData)) return configData;
-  // The casts: `isPlainObject` in the same expression or above.
-  const config = /** @type {Record<string, unknown>} */ (configData);
-  const adv = isPlainObject(config.adv) ? /** @type {Record<string, unknown>} */ (config.adv) : null;
+  const adv = isPlainObject(configData.adv) ? configData.adv : null;
   if (!adv) return configData;
   const features = Array.isArray(adv.features) ? adv.features : null;
   if (features && !features.includes('repeat_region')) return configData;
-  const featureShapes = isPlainObject(adv.feature_shapes) ? /** @type {Record<string, unknown>} */ (adv.feature_shapes) : {};
+  const featureShapes = isPlainObject(adv.feature_shapes) ? adv.feature_shapes : {};
   if (Object.prototype.hasOwnProperty.call(featureShapes, 'repeat_region')) return configData;
   return {
     ...configData,
@@ -1415,10 +1402,7 @@ const sessionArtifactEntries = (data, field) => {
   const container = data[field];
   if (container === undefined || container === null) return [];
   if (!isPlainObject(container)) return null;
-  const entries = Object.prototype.hasOwnProperty.call(container, 'entries')
-    // The cast: `isPlainObject(container)` above.
-    ? /** @type {{ entries?: unknown }} */ (container).entries
-    : [];
+  const entries = Object.prototype.hasOwnProperty.call(container, 'entries') ? container.entries : [];
   return Array.isArray(entries) ? entries : null;
 };
 
@@ -1588,10 +1572,9 @@ export const buildSessionLegacyArtifacts = ({
 // dropped; the reader table lists any other obsolete slot field (OV-758).
 /** @template T @param {T} configData A stored draft. @returns {T} */
 const withoutLegacyNullCircularSlotSpacing = (configData) => {
-  const stored = /** @type {UnvalidatedFields<'adv'>} */ (configData)?.adv;
-  if (!isPlainObject(stored)) return configData;
-  // The casts: `isPlainObject(stored)` above, so `configData` is an object too.
-  const adv = /** @type {Record<string, unknown>} */ (stored);
+  const adv = /** @type {UnvalidatedFields<'adv'>} */ (configData)?.adv;
+  if (!isPlainObject(adv)) return configData;
+  // The cast below: `configData` holds `adv`, so it is an object too.
   if (adv.circular_track_slots_enabled
     || adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
     || !Array.isArray(adv.circular_track_slots)) return configData;
@@ -1600,11 +1583,8 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
     adv: {
       ...adv,
       circular_track_slots: adv.circular_track_slots.map((/** @type {unknown} */ slot) => {
-        if (!isPlainObject(slot)) return slot;
-        // The cast: `isPlainObject(slot)` above.
-        const row = /** @type {Record<string, unknown>} */ (slot);
-        if (row.spacing !== null) return slot;
-        const { spacing: _spacing, ...current } = row;
+        if (!isPlainObject(slot) || slot.spacing !== null) return slot;
+        const { spacing: _spacing, ...current } = slot;
         return current;
       })
     }
@@ -1640,8 +1620,7 @@ const adoptPromotedPreservedSettings = (data, repairs) => {
     if (config !== document.config) adopted = { ...adopted, config };
   }
   if (isPlainObject(document.modes)) {
-    // The cast: `isPlainObject(document.modes)` above.
-    const modes = { .../** @type {Record<string, unknown>} */ (document.modes) };
+    const modes = { ...document.modes };
     let changed = false;
     for (const mode of SLICE_MODES) {
       const slice = /** @type {{ config?: unknown }} */ (modes[mode]);
@@ -1694,14 +1673,14 @@ const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
 const withCurrentDraftFieldNames = (data) => {
   /** @param {Record<string, unknown>} container A Session, or a slice: its `config` with the current names. */
   const named = (container) => (isPlainObject(container.config)
-    ? { ...container, config: migratePersistedWebStateFieldNames(/** @type {Record<string, unknown>} */ (container.config)) } : container);
-  const modes = isPlainObject(data.modes) ? /** @type {Record<string, unknown>} */ (data.modes) : null;
+    ? { ...container, config: migratePersistedWebStateFieldNames(container.config) } : container);
+  const modes = isPlainObject(data.modes) ? data.modes : null;
   // The cast: the same Session with its drafts' field names changed.
   return /** @type {T} */ ({
     ...named(data),
     ...(modes ? {
       modes: Object.fromEntries(Object.entries(modes).map(([mode, slice]) => [mode,
-        isPlainObject(slice) ? named(/** @type {Record<string, unknown>} */ (slice)) : slice]))
+        isPlainObject(slice) ? named(slice) : slice]))
     } : {})
   });
 };
@@ -1730,8 +1709,7 @@ const LEGACY_CONFIG_KEYS = new Set([
 const isLegacyConfigPayload = (data) =>
   isPlainObject(data) &&
   !Object.prototype.hasOwnProperty.call(data, 'format') &&
-  // The cast: a plain object (the first test).
-  Object.keys(/** @type {Record<string, unknown>} */ (data)).some((key) => LEGACY_CONFIG_KEYS.has(key));
+  Object.keys(data).some((key) => LEGACY_CONFIG_KEYS.has(key));
 
 // A legacy configuration file, read into the configuration Load applies
 // before anything changes (OV-710). Malformed record display settings are
@@ -1746,14 +1724,13 @@ const isLegacyConfigPayload = (data) =>
 const readLegacyConfigPayload = (data, drawing, mode) => {
   /** @type {LoadRepair[]} */
   const repairs = [];
-  const circularSlotSchema = isPlainObject(data.adv)
-    ? /** @type {Record<string, unknown>} */ (data.adv).circular_track_slots_schema_version : undefined;
+  const circularSlotSchema = isPlainObject(data.adv) ? data.adv.circular_track_slots_schema_version : undefined;
   const migratedOptions = circularSlotSchema === CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
     ? data
     : migratePersistedWebOptionValues(data);
   // A shape map that is no object is not used (the reader lists it, and the
   // drawing keeps its shapes), so the repeat-region shape is not added to it.
-  const storedShapes = isPlainObject(data.adv) ? /** @type {Record<string, unknown>} */ (data.adv).feature_shapes : undefined;
+  const storedShapes = isPlainObject(data.adv) ? data.adv.feature_shapes : undefined;
   /** @type {Record<string, unknown>} */
   const migrated = migrateLegacyFeatureRenderingConfig(
     migrateImportedLinearTrackSlots(
@@ -1815,11 +1792,10 @@ const shouldSuppressCircularMultiRecordDefaults = (drawing, incomingForm) => {
  * @returns {Record<string, unknown>}
  */
 const overlayCanonicalObject = (stored, canonical) => {
-  // The casts: `isPlainObject` in the same expression (`stored`) and on the line above (`canonical`).
   /** @type {Record<string, unknown>} */
-  const merged = isPlainObject(stored) ? cloneJsonData(/** @type {Record<string, unknown>} */ (stored)) : {};
+  const merged = isPlainObject(stored) ? cloneJsonData(stored) : {};
   if (!isPlainObject(canonical)) return merged;
-  Object.entries(/** @type {Record<string, unknown>} */ (canonical)).forEach(([key, value]) => {
+  Object.entries(canonical).forEach(([key, value]) => {
     if (['__proto__', 'constructor', 'prototype'].includes(key)) return;
     merged[key] = isPlainObject(value)
       ? overlayCanonicalObject(merged[key], value)
@@ -1828,6 +1804,12 @@ const overlayCanonicalObject = (stored, canonical) => {
   return merged;
 };
 
+/**
+ * @param {Record<string, unknown>} projectedConfig
+ * @param {unknown} storedConfig Unvalidated.
+ * @param {{ hasCanonicalProteinPipeline?: boolean }} [options]
+ * @returns {Record<string, unknown>}
+ */
 const restoreStoredNonCanonicalConfig = (
   projectedConfig,
   storedConfig,
@@ -1868,7 +1850,8 @@ const restoreStoredNonCanonicalConfig = (
     }
   });
   const storedAdv = storedConfig.adv;
-  if (isPlainObject(storedAdv) && isPlainObject(restored.adv)) {
+  const restoredAdv = restored.adv;
+  if (isPlainObject(storedAdv) && isPlainObject(restoredAdv)) {
     [
       'rich_feature_popup',
       'feature_width_circular',
@@ -1879,7 +1862,7 @@ const restoreStoredNonCanonicalConfig = (
       'gc_skew_radius_circular'
     ].forEach((key) => {
       if (Object.prototype.hasOwnProperty.call(storedAdv, key)) {
-        restored.adv[key] = cloneJsonData(storedAdv[key]);
+        restoredAdv[key] = cloneJsonData(storedAdv[key]);
       }
     });
   }
@@ -1887,22 +1870,22 @@ const restoreStoredNonCanonicalConfig = (
   if (!isPlainObject(storedConservation)) {
     return restored;
   }
-  if (!isPlainObject(restored?.circularConservation)) {
+  const conservation = restored?.circularConservation;
+  if (!isPlainObject(conservation)) {
     restored.circularConservation = cloneJsonData(storedConservation);
     return restored;
   }
 
   ['enabled', 'source', 'losat_program', 'subject_gencode'].forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(storedConservation, key)) {
-      restored.circularConservation[key] = cloneJsonData(storedConservation[key]);
+      conservation[key] = cloneJsonData(storedConservation[key]);
     }
   });
-  if (
-    Array.isArray(restored.circularConservation.series) &&
-    Array.isArray(storedConservation.series)
-  ) {
-    restored.circularConservation.series = restored.circularConservation.series.map((entry, index) => {
-      const storedEntry = storedConservation.series[index];
+  const series = conservation.series;
+  const storedSeries = storedConservation.series;
+  if (Array.isArray(series) && Array.isArray(storedSeries)) {
+    conservation.series = series.map((/** @type {unknown} */ entry, /** @type {number} */ index) => {
+      const storedEntry = storedSeries[index];
       if (!isPlainObject(entry) || !isPlainObject(storedEntry)) return entry;
       if (!Object.prototype.hasOwnProperty.call(storedEntry, 'losat_gencode')) return entry;
       return { ...entry, losat_gencode: cloneJsonData(storedEntry.losat_gencode) };
@@ -1915,6 +1898,11 @@ const restoreStoredNonCanonicalConfig = (
 // canonical projection owns the committed artifact and only fills fields the
 // current writer deliberately omitted. Load reads the values with the reader
 // table before its dialog (`configFieldRepairs`).
+/**
+ * @param {{ mode: unknown, projectedConfig: unknown, storedConfig: unknown }} input
+ *   Unvalidated; `requireActiveConfigContainers` reads the mode and the stored configuration.
+ * @returns {Record<string, unknown>}
+ */
 export const restoreCurrentWriterActiveConfig = ({
   mode,
   projectedConfig,
@@ -1923,21 +1911,22 @@ export const restoreCurrentWriterActiveConfig = ({
   if (!isPlainObject(projectedConfig)) {
     throw new Error('Current session is missing its canonical configuration projection.');
   }
-  requireActiveConfigContainers({ mode, storedConfig });
+  const activeConfig = requireActiveConfigContainers({ mode, storedConfig });
   const restored = cloneJsonData(projectedConfig);
   /** @type {string[]} */
   const restoredDomains = [];
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS.forEach((domain) => {
-    if (!Object.prototype.hasOwnProperty.call(storedConfig, domain)) return;
-    restored[domain] = cloneJsonData(storedConfig[domain]);
+    if (!Object.prototype.hasOwnProperty.call(activeConfig, domain)) return;
+    restored[domain] = cloneJsonData(activeConfig[domain]);
     restoredDomains.push(domain);
   });
-  if (Object.prototype.hasOwnProperty.call(storedConfig, 'colors')) {
+  if (Object.prototype.hasOwnProperty.call(activeConfig, 'colors')) {
     delete restored.colorsAreOverrides;
   }
   if (isPlainObject(restored.adv)) delete restored.adv.losatProgram;
 
-  const projectedRulerLabelFontSize = projectedConfig?.adv?.ruler_label_font_size;
+  const projectedRulerLabelFontSize = /** @type {UnvalidatedFields<'ruler_label_font_size'>} */ (projectedConfig.adv)
+    ?.ruler_label_font_size;
   if (
     projectedRulerLabelFontSize !== undefined
     && isPlainObject(restored.adv)
@@ -1949,7 +1938,8 @@ export const restoreCurrentWriterActiveConfig = ({
   // Current sessions written before the anchor control became editable omitted
   // this value. Preserve their committed projection only when active config has
   // no value of its own; new sessions store the explicit editor value above.
-  const projectedAnchorMode = projectedConfig?.losat?.blastp?.collinearAnchorMode;
+  const projectedAnchorMode = /** @type {UnvalidatedFields<'blastp', UnvalidatedFields<'collinearAnchorMode'>>} */ (
+    projectedConfig.losat)?.blastp?.collinearAnchorMode;
   if (
     projectedAnchorMode !== undefined &&
     isPlainObject(restored.losat) &&
@@ -1968,18 +1958,22 @@ export const restoreCurrentWriterActiveConfig = ({
   return restored;
 };
 
+/**
+ * @param {SessionInput} data
+ * @param {{ adopt?: boolean }} [options]
+ */
 const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {}) => {
   const results = normalizeLogicalResults(
-    (Array.isArray(data.results) ? data.results : []).map((result, index) => ({
-      name: result?.name || `Result ${index + 1}`,
-      content: result?.content || ''
-    }))
+    (Array.isArray(data.results) ? data.results : []).map((/** @type {unknown} */ stored, /** @type {number} */ index) => {
+      const result = /** @type {UnvalidatedFields<'name' | 'content'>} */ (stored);
+      return { name: result?.name || `Result ${index + 1}`, content: result?.content || '' };
+    })
   );
-  const catalog = data.editorState?.featureCatalog ?? null;
+  const catalog = /** @type {UnvalidatedFields<'featureCatalog'>} */ (data.editorState)?.featureCatalog ?? null;
   if (catalog === null) return null;
   return validateFeatureCatalogForImport(catalog, results, {
     adopt,
-    mode: data.renderRequest?.mode || ''
+    mode: /** @type {UnvalidatedFields<'mode'>} */ (data.renderRequest)?.mode || ''
   });
 };
 
@@ -2013,7 +2007,7 @@ const readSessionFeatureCatalogs = async (data, repairs) => {
   let next = data;
   if (top.dropped) {
     repairs.push(loadRepair({ code: 'feature-recovery-failed', path: 'editorState.featureCatalog', effect: 'dropped' }));
-    const editorState = /** @type {Record<string, unknown>} */ (isPlainObject(data.editorState) ? data.editorState : {});
+    const editorState = isPlainObject(data.editorState) ? data.editorState : {};
     next = /** @type {T} */ ({ ...data, editorState: { ...editorState, featureCatalog: null } });
   }
   // E1: the other mode's set is validated with its own mode.
@@ -2040,7 +2034,7 @@ const readSessionFeatureCatalogs = async (data, repairs) => {
 const readSessionResetReceipts = async (data, repairs) => {
   /** @param {SessionInput} set @param {string} at @returns {Promise<SessionInput>} */
   const read = async (set, at) => {
-    const editorState = isPlainObject(set.editorState) ? /** @type {Record<string, unknown>} */ (set.editorState) : {};
+    const editorState = isPlainObject(set.editorState) ? set.editorState : {};
     const receipt = editorState.alignmentResetReceipt;
     if (receipt === null || receipt === undefined) return set;
     // Load read the requests and resources before (`readSessionRequests`, `readSessionInputs`).
@@ -2176,8 +2170,7 @@ const readRebuiltGalleryRequest = (data, repairs) => {
  */
 const readSettingsOnlyMode = (data, repairs) => {
   if (!isSettingsOnlySessionDocument(/** @type {SessionEnvelope} */ (/** @type {unknown} */ (data)))) return data;
-  // isPlainObject is not a type predicate.
-  const ui = isPlainObject(data.ui) ? /** @type {Record<string, unknown>} */ (data.ui) : {};
+  const ui = isPlainObject(data.ui) ? data.ui : {};
   if (ui !== data.ui && !holdsNothing(data.ui)) repairs.push(loadRepair({ code: 'session-field-dropped', path: 'ui', effect: 'dropped' }));
   const mode = readSessionUiMode(ui.mode);
   if (mode.lost) repairs.push(...sessionUiFieldRepairs({ mode: ui.mode }, 'ui'));
@@ -2300,24 +2293,18 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
     : data.config;
   if (sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION && isPlainObject(currentStoredConfig)
     && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'recordDisplayDrafts')) {
-    // The cast: `isPlainObject(currentStoredConfig)` above.
-    const storedConfig = /** @type {Record<string, unknown>} */ (currentStoredConfig);
     currentStoredConfig = {
-      ...storedConfig,
-      recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
-        storedConfig.recordDisplayDrafts
-      )
+      ...currentStoredConfig,
+      recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(currentStoredConfig.recordDisplayDrafts)
     };
   }
   // A Session 41-44 placement row reached both modes; the migration names
   // its mode (Main rows both), and the Session 46 split moves it there (R2).
   if (sourceSessionVersion < MODE_SCOPED_SESSION_VERSION && isPlainObject(currentStoredConfig)
     && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'featurePlacementOverrides')) {
-    // The cast: `isPlainObject(currentStoredConfig)` above.
-    const storedConfig = /** @type {Record<string, unknown>} */ (currentStoredConfig);
     currentStoredConfig = {
-      ...storedConfig,
-      featurePlacementOverrides: migrateSessionFeaturePlacements(storedConfig.featurePlacementOverrides)
+      ...currentStoredConfig,
+      featurePlacementOverrides: migrateSessionFeaturePlacements(currentStoredConfig.featurePlacementOverrides)
     };
   }
   // Session 46 keeps each mode's draft in its slice (PD-OI-086): the committed
@@ -2387,10 +2374,7 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
     restoredConfig = withCurrentLinearLabelVisibility(restoredConfig);
   }
   if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION && restoredConfig) {
-    // The cast: `isPlainObject(normalizedData.config)` in the same expression.
-    const sourceStoredConfig = /** @type {Record<string, unknown>} */ (isPlainObject(normalizedData.config)
-      ? normalizedData.config
-      : {});
+    const sourceStoredConfig = isPlainObject(normalizedData.config) ? normalizedData.config : {};
     const storedUi = /** @type {UnvalidatedFields<'blastSource'>} */ (normalizedData.ui);
     const forceWebDraft = isPlainObject(sourceStoredConfig.linearRecordLayout)
       || !isPlainObject(sourceStoredConfig.cliOptions);
@@ -2435,9 +2419,7 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
       // As for Sessions 40-44: the stored draft owns the active controls and the
       // projection fills only what it omits.
       const restoredDomains = CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS
-        // The cast: `isPlainObject(runtimeStoredConfig)` in the same expression.
-        .filter((domain) => isPlainObject(runtimeStoredConfig)
-          && Object.hasOwn(/** @type {Record<string, unknown>} */ (runtimeStoredConfig), domain));
+        .filter((domain) => isPlainObject(runtimeStoredConfig) && Object.hasOwn(runtimeStoredConfig, domain));
       recordStructuralMetric('currentWriterActiveConfigRestoreCount', 1, { domains: restoredDomains });
       recordStructuralMetric('activeConfigCanonicalOverwriteCount', 0, { domains: restoredDomains });
     }
@@ -2461,8 +2443,7 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
     ? hasCurrentStoredUnmanagedOverrides
       ? {
           mode: canonicalProjection.mode,
-          // The cast: `hasCurrentStoredUnmanagedOverrides` tested `isPlainObject(runtimeStoredConfig)`.
-          configOverrides: /** @type {Record<string, unknown>} */ (runtimeStoredConfig).unmanagedConfigOverrides,
+          configOverrides: runtimeStoredConfig.unmanagedConfigOverrides,
           source: /** @type {const} */ ('draft')
         }
       : {
@@ -3364,16 +3345,16 @@ const pruneLosatDerivedCache = (map) => {
 };
 
 /**
- * @param {unknown} value Saved evidence, unvalidated. The casts below: `isPlainObject(value)`, first in the same
- *   expression, proves the object; each entry is tested by the filter.
+ * @param {unknown} value Saved evidence, unvalidated. The cast below: `Array.isArray` proves an array; each entry
+ *   is tested by the filter.
  * @param {unknown[]} [fallbackEntries]
  */
 const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
   schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   entries: [
     ...(
-      isPlainObject(value) && /** @type {Record<string, unknown>} */ (value).schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA && Array.isArray(/** @type {Record<string, unknown>} */ (value).entries)
-        ? /** @type {unknown[]} */ (/** @type {Record<string, unknown>} */ (value).entries)
+      isPlainObject(value) && value.schema === LEGACY_LOSAT_DERIVED_CACHE_SCHEMA && Array.isArray(value.entries)
+        ? /** @type {unknown[]} */ (value.entries)
         : []
     ),
     ...fallbackEntries
@@ -5760,19 +5741,17 @@ const importSessionDocument = async (e, options = {}) => {
     const hasFlatDraft = !modeScopedSession && isPlainObject(data.config);
     /** @type {Record<'circular' | 'linear', Record<string, any>>} */
     let modeSlices = { circular: {}, linear: {} };
-    // The cast: `isPlainObject(data.ui)` in the same expression.
     /** @type {Record<string, any>} */
-    let appUi = modeScopedSession && isPlainObject(data.ui) ? /** @type {Record<string, unknown>} */ (data.ui) : {};
+    let appUi = modeScopedSession && isPlainObject(data.ui) ? data.ui : {};
     let sessionCliOptions = modeScopedSession ? data.cliOptions : undefined;
     // The stored draft a Session 27-44's drawings both read.
     /** @type {unknown} */
     let flatDraft = null;
     if (modeScopedSession) {
       const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (data.modes);
-      // The casts: `isPlainObject` in the same expression.
       modeSlices = {
-        circular: isPlainObject(modes?.circular) ? /** @type {Record<string, unknown>} */ (modes?.circular) : {},
-        linear: isPlainObject(modes?.linear) ? /** @type {Record<string, unknown>} */ (modes?.linear) : {}
+        circular: isPlainObject(modes?.circular) ? modes.circular : {},
+        linear: isPlainObject(modes?.linear) ? modes.linear : {}
       };
     } else {
       const flatConfig = hasFlatDraft
@@ -6112,9 +6091,7 @@ const importSessionDocument = async (e, options = {}) => {
     // projection may name a thread count), the rich popup, CLI provenance.
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
-    // The cast: `isPlainObject(sessionCliOptions)` in the same expression.
-    preservedCliOptions = isPlainObject(sessionCliOptions)
-      ? cloneJsonData(/** @type {Record<string, unknown>} */ (sessionCliOptions)) : null;
+    preservedCliOptions = isPlainObject(sessionCliOptions) ? cloneJsonData(sessionCliOptions) : null;
     state.mode.value = displayMode;
     const shownDrawing = state.drawings[displayMode];
     const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;

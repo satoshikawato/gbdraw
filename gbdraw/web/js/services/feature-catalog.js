@@ -64,7 +64,7 @@ export { FEATURE_CATALOG_SCHEMA };
  * The options of one admission traversal.
  * @typedef {object} FeatureCatalogAdmissionOptions
  * @property {boolean} [adopt] Mark the validated catalog as adopted and keep it by reference.
- * @property {string} [mode] The request mode, `circular` or `linear`.
+ * @property {unknown} [mode] The request mode, `circular` or `linear`, read as text.
  */
 
 /**
@@ -917,7 +917,7 @@ function* catalogAdmissionSteps(
 
 // Both callers exhaust the same admission traversal; scheduling changes no validation.
 /**
- * @param {Record<string, any>} catalog An unvalidated catalog.
+ * @param {unknown} catalog An unvalidated catalog.
  * @param {FeatureCatalogResult[]} results
  * @param {FeatureCatalogAdmissionOptions} [options]
  * @returns {FeatureCatalogAdmission}
@@ -930,7 +930,7 @@ export const admitFeatureCatalog = (catalog, results, options = {}) => {
 };
 
 /**
- * @param {Record<string, any>} catalog An unvalidated catalog.
+ * @param {unknown} catalog An unvalidated catalog.
  * @param {FeatureCatalogResult[]} results
  * @param {FeatureCatalogAdmissionOptions} [options]
  * @returns {Promise<FeatureCatalog>}
@@ -949,7 +949,7 @@ export const validateFeatureCatalogForImport = async (catalog, results, options 
 };
 
 /**
- * @param {Record<string, any>} catalog An unvalidated catalog.
+ * @param {unknown} catalog An unvalidated catalog.
  * @param {FeatureCatalogResult[]} results
  * @param {FeatureCatalogAdmissionOptions} [options]
  * @returns {FeatureCatalog}

@@ -122,16 +122,16 @@ export const featureColorEditColor = (edit) => (
 // rule's rewritten caption into the edits of the features the rule colored,
 // so an edit's caption is read as its rule's is, by the edit's own color.
 /**
- * @template {Record<string, unknown>} Edits
- * @param {Edits | null | undefined} edits
- * @returns {Edits}
+ * @param {unknown} edits Unvalidated, read as `Object.entries` reads it.
+ * @returns {Record<string, unknown>}
  */
-export const savedFeatureColorEdits = (edits) => /** @type {Edits} */ (Object.fromEntries(Object.entries(edits || {}).map(([key, edit]) => {
+export const savedFeatureColorEdits = (edits) => Object.fromEntries(Object.entries(edits || {}).map(
+  /** @param {[string, unknown]} entry @returns {[string, unknown]} */ ([key, edit]) => {
   if (!edit || typeof edit !== 'object' || typeof (/** @type {{ caption?: unknown }} */ (edit)).caption !== 'string') return [key, edit];
   const { caption, color } = /** @type {{ caption: string, color?: unknown }} */ (edit);
   const read = savedRuleCaption(caption, color);
   return [key, read === caption ? edit : { ...edit, caption: read }];
-})));
+}));
 /**
  * @param {string} caption
  * @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule

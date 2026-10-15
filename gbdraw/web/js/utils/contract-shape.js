@@ -84,7 +84,7 @@ const kindViolation = (value, kind, path) => {
 /**
  * A JSON object: not null and not an array.
  * @param {unknown} value
- * @returns {value is Readonly<Record<string, unknown>>}
+ * @returns {value is Record<string, unknown>}
  */
 export const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 
