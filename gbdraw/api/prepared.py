@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
+import itertools
+import secrets
 
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -61,6 +63,9 @@ class _PreparedCacheEntry:
     # Render stages only: the keys of the stages its build called, kept when
     # this entry is reused (design 2.3, M10).
     inner_keys: frozenset[Hashable] = frozenset()
+    # Render stages only: the build number in its cache (step 3a). A hit
+    # keeps it; a rebuild gets a new one, never reused within a cache.
+    build_id: int = 0
 
 
 # The fifth layer holds render-stage results (gbdraw.render_stages). Its stamp
@@ -540,6 +545,11 @@ class PreparedBiologicalInputCache:
         # A transaction that did not commit may have changed what it read, so
         # the next one checks owners in full at entry, not only at commit.
         self._previous_transaction_failed = False
+        # A render-stage build is named by this cache's random epoch and its
+        # build number (gbdraw/web/CLAUDE.md, Runtime data flow). Without a
+        # random source there is no epoch and no build is named (D-38 OQ-5).
+        self._build_ids = itertools.count(1)
+        self._epoch = _new_cache_epoch()
 
     def _evict(
         self,
@@ -744,8 +754,29 @@ class PreparedBiologicalInputCache:
             structure_stamp=_RENDER_STAGE_STAMP,
             retained_bytes=0,
             inner_keys=inner_keys,
+            build_id=next(self._build_ids),
         )
         transaction.used[_RENDER_STAGE_LAYER].add(key)
+
+    def render_stage_build(
+        self,
+        key: Hashable,
+        transaction: _PreparedCacheTransaction,
+    ) -> tuple[str, int] | None:
+        """Name the build stored under ``key``: this cache's epoch and its build number.
+
+        Read without verifying or moving the entry: the stage that returned it
+        already did.
+        """
+
+        if self._epoch is None:
+            return None
+        entry = transaction.pending[_RENDER_STAGE_LAYER].get(key)
+        if entry is None:
+            entry = self._layers[_RENDER_STAGE_LAYER].get(key)
+        if entry is None:
+            return None
+        return (self._epoch, entry.build_id)
 
     def _commit(self, transaction: _PreparedCacheTransaction) -> None:
         # O-2: without a record built or read by a stage, the structure check
@@ -779,6 +810,15 @@ class PreparedBiologicalInputCache:
                 )
             self._layers[layer] = replacement
         self._set_retained_metric(transaction)
+
+
+def _new_cache_epoch() -> str | None:
+    """A random epoch per cache, or ``None`` without a random source (never a time or id seed)."""
+
+    try:
+        return secrets.token_hex(8)
+    except (NotImplementedError, OSError):
+        return None
 
 
 def _key_resource_identities(key: Hashable) -> frozenset[PreparedResourceIdentity]:
@@ -835,6 +875,15 @@ def lookup_render_stage(
     """Return the render-stage entry stored under ``key``, if any."""
 
     return transaction.cache.lookup_render_stage(key, transaction)
+
+
+def render_stage_build(
+    transaction: _PreparedCacheTransaction,
+    key: Hashable,
+) -> tuple[str, int] | None:
+    """Return the cache epoch and build number of the render stage stored under ``key``."""
+
+    return transaction.cache.render_stage_build(key, transaction)
 
 
 def store_render_stage(
