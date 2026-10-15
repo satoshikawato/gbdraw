@@ -1,8 +1,10 @@
 import copy
 import math
 import random
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TypeVar
 
 import pandas as pd
 import pytest
@@ -317,6 +319,19 @@ def test_circular_label_peer_pruning_keeps_every_count(seed: int, monkeypatch: p
     assert place() == pruned
 
 
+def test_segments_through_rect_interior_counts_every_crossing_segment() -> None:
+    box = (0.0, 0.0, 10.0, 10.0)
+    crossing = [((-5.0, 5.0), (15.0, 5.0)), ((5.0, -5.0), (5.0, 15.0))]  # two leader segments, both through
+    on_edges = [((-5.0, 0.0), (15.0, 0.0)), ((10.0, -5.0), (10.0, 15.0))]  # along the bottom and right edges
+
+    assert circular_labels_module._segments_through_rect_interior(crossing, box) == 2
+    assert circular_labels_module._segments_through_rect_interior(crossing + on_edges, box) == 2
+    assert circular_labels_module._segments_through_rect_interior(on_edges, box) == 0
+    assert circular_labels_module._segments_through_rect_interior(crossing, (5.0, 5.0, 5.0, 5.0)) == 0
+    assert circular_labels_module._segment_intersects_rect_interior(*crossing[0], box)
+    assert not circular_labels_module._segment_intersects_rect_interior(*on_edges[0], box)
+
+
 def test_circular_leader_crossing_count_keeps_pairs_with_non_finite_points() -> None:
     """A non-finite leader coordinate must not drop a crossing pair from the broad phase."""
     # A NaN sort key used to leave this order unsorted, so the x sweep stopped at the far
@@ -510,29 +525,48 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
     return external_labels, total_length
 
 
+_Loaded = TypeVar("_Loaded")
+
+
+def _with_pair_overlap_calls(load: Callable[[], _Loaded]) -> tuple[_Loaded, int]:
+    """Run ``load`` and count the label pair overlap tests it makes.
+
+    Counts ``y_overlap`` and ``_labels_overlap``: the pair test inlines its interval
+    tests (OV-870), so ``y_overlap`` alone no longer sees the resolver's pair tests.
+    """
+    calls = 0
+    originals = {name: getattr(circular_labels_module, name) for name in ("y_overlap", "_labels_overlap")}
+
+    def counting(original):
+        def wrapper(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return original(*args, **kwargs)
+
+        return wrapper
+
+    for name, original in originals.items():
+        setattr(circular_labels_module, name, counting(original))
+    try:
+        loaded = load()
+    finally:
+        for name, original in originals.items():
+            setattr(circular_labels_module, name, original)
+    return loaded, calls
+
+
 @pytest.fixture(scope="module")
 def mjenmv_inner_tuckin_labels() -> tuple[list[dict], int, GbdrawConfig, int]:
-    y_overlap_calls = 0
-    original_y_overlap = circular_labels_module.y_overlap
-
-    def counting_y_overlap(*args, **kwargs):
-        nonlocal y_overlap_calls
-        y_overlap_calls += 1
-        return original_y_overlap(*args, **kwargs)
-
-    circular_labels_module.y_overlap = counting_y_overlap
-    try:
-        external_labels, total_length, cfg = _load_mjenmv_external_labels_with_config(
+    (external_labels, total_length, cfg), pair_overlap_calls = _with_pair_overlap_calls(
+        lambda: _load_mjenmv_external_labels_with_config(
             strandedness=True,
             resolve_overlaps=False,
             track_type="tuckin",
             allow_inner_labels=True,
             label_blacklist="",
         )
-    finally:
-        circular_labels_module.y_overlap = original_y_overlap
-
-    return external_labels, total_length, cfg, y_overlap_calls
+    )
+    return external_labels, total_length, cfg, pair_overlap_calls
 
 
 @pytest.mark.parametrize(
@@ -2110,21 +2144,9 @@ def test_rearrange_dense_labels_over_70_reuses_single_legacy_candidate() -> None
 
 
 def test_nc001879_outer_only_dense_keeps_y_overlap_calls_under_regression_cap() -> None:
-    y_overlap_calls = 0
-    original_y_overlap = circular_labels_module.y_overlap
-
-    def counting_y_overlap(*args, **kwargs):
-        nonlocal y_overlap_calls
-        y_overlap_calls += 1
-        return original_y_overlap(*args, **kwargs)
-
-    circular_labels_module.y_overlap = counting_y_overlap
-    try:
-        outer_labels, total_length, _ = _load_nc001879_outer_labels_with_priority_and_color_table(
-            allow_inner_labels=False,
-        )
-    finally:
-        circular_labels_module.y_overlap = original_y_overlap
+    (outer_labels, total_length, _), y_overlap_calls = _with_pair_overlap_calls(
+        lambda: _load_nc001879_outer_labels_with_priority_and_color_table(allow_inner_labels=False)
+    )
 
     assert len(outer_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
     assert _count_overlaps(outer_labels, total_length) == 0
@@ -2132,21 +2154,9 @@ def test_nc001879_outer_only_dense_keeps_y_overlap_calls_under_regression_cap() 
 
 
 def test_nc001879_inner_dense_keeps_y_overlap_calls_under_regression_cap() -> None:
-    y_overlap_calls = 0
-    original_y_overlap = circular_labels_module.y_overlap
-
-    def counting_y_overlap(*args, **kwargs):
-        nonlocal y_overlap_calls
-        y_overlap_calls += 1
-        return original_y_overlap(*args, **kwargs)
-
-    circular_labels_module.y_overlap = counting_y_overlap
-    try:
-        external_labels, total_length, _ = _load_nc001879_external_labels_with_priority_and_color_table(
-            allow_inner_labels=True,
-        )
-    finally:
-        circular_labels_module.y_overlap = original_y_overlap
+    (external_labels, total_length, _), y_overlap_calls = _with_pair_overlap_calls(
+        lambda: _load_nc001879_external_labels_with_priority_and_color_table(allow_inner_labels=True)
+    )
 
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert len(inner_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
@@ -2532,19 +2542,9 @@ def test_hmmtdna_resolve_overlaps_middle_keeps_trna_lys_text_outside_feature_tra
 
 
 def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
-    y_overlap_calls = 0
-    original_y_overlap = circular_labels_module.y_overlap
-
-    def counting_y_overlap(*args, **kwargs):
-        nonlocal y_overlap_calls
-        y_overlap_calls += 1
-        return original_y_overlap(*args, **kwargs)
-
-    circular_labels_module.y_overlap = counting_y_overlap
-    try:
-        external_labels, total_length = _load_hmmtdna_external_labels(label_font_size=22.0)
-    finally:
-        circular_labels_module.y_overlap = original_y_overlap
+    (external_labels, total_length), y_overlap_calls = _with_pair_overlap_calls(
+        lambda: _load_hmmtdna_external_labels(label_font_size=22.0)
+    )
 
     assert len(external_labels) > 0
     assert _count_overlaps(external_labels, total_length) == 0

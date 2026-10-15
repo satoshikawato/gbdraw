@@ -349,7 +349,9 @@ def _label_y_offsets(
 
     The box is ``min_y = (start_y + low) + low_margin`` and ``max_y = (start_y + high) + high_margin``,
     in that order of additions; ``-0.0`` adds nothing. A label's offsets do not depend on its
-    position, so the placement loops look them up once per label and step the position (OV-870).
+    position, so the placement loops look them up once per label and step the position (OV-870):
+    the step loops of `_legacy_place_labels_on_arc_fc` and `_legacy_improved_label_placement_fc`
+    apply them inline; change them with this rule.
     """
     label_angle = (360.0 * (label_middle / total_len)) % 360.0
     margin_half = 0.5 * minimum_margin
@@ -389,6 +391,11 @@ def _label_x_offsets(
 
     Each is (low, low_margin, high, high_margin) as in `_label_y_offsets`: the text runs away
     from the circle's vertical axis (outer labels) or toward it (inner labels).
+
+    Inlined copies of how the offsets are applied (the ``start_x > 0`` side choice, the
+    two additions, the `_bounds_overlap` test) live in the step loops of
+    `_legacy_place_labels_on_arc_fc` and `_legacy_improved_label_placement_fc`; change
+    them with this rule. `_labels_overlap` inlines only the interval test.
     """
     margin_half = 0.5 * minimum_margin
     away = (-0.0, -margin_half, label_width, margin_half)  # text from start_x to start_x + width
