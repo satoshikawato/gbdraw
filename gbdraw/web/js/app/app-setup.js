@@ -1939,7 +1939,9 @@ export const createAppSetup = () => {
       display_name: orthogroupActions.resolveOrthogroupName(group),
       description: orthogroupActions.resolveOrthogroupDescription(group)
     })),
-    openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
+    openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature,
+    focusSearchQuery: () => /** @type {HTMLElement | null} */ (document.querySelector('.preview-feature-search .gfs-query'))?.focus(),
+    focusSearchToggle: () => /** @type {HTMLElement | null} */ (document.querySelector('[data-preview-search-toggle]'))?.focus()
   });
 
   watch(selectedResultIndex, () => {
@@ -7159,6 +7161,10 @@ export const createAppSetup = () => {
     goToPreviousPreviewFeatureSearchMatch: previewFeatureSearch.goToPrevious,
     clearPreviewFeatureSearch: previewFeatureSearch.clearSearch,
     openPreviewFeatureSearchActiveMatch: previewFeatureSearch.openActiveMatch,
+    previewFeatureSearchVisible: state.previewFeatureSearchVisible,
+    previewFeatureSearchHiddenMatchCount: previewFeatureSearch.previewFeatureSearchHiddenMatchCount,
+    hidePreviewFeatureSearchBar: previewFeatureSearch.hideSearchBar,
+    togglePreviewFeatureSearchBar: previewFeatureSearch.toggleSearchBar,
     selectedFeatureIds,
     selectedFeatureAnchorId,
     featureSelectionStatus,

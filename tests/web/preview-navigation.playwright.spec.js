@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { writeFile } = require('node:fs/promises');
 const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { seeds, generate, switchMode } = require('./helpers/mode-transition.cjs');
 
 const geometry = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
@@ -434,3 +435,93 @@ test('the Preview feature search is kept per diagram mode', async ({ page }) => 
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
   await expect.poll(searchState).toEqual({ input: '', query: '' });
 });
+
+// The search bar hides and shows again (D-01..D-05): hiding is view state only,
+// so the search, its matches, and its highlights stay; the canvas row takes the
+// freed height; neither button records a History step; the choice outlives a
+// mode round trip and Generate, and a loaded Session shows the bar again.
+for (const mode of ['linear', 'circular']) {
+  test(`the ${mode} Preview search bar hides and shows again without losing the search`, async ({ page }) => {
+    test.setTimeout(240000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    page.on('dialog', (dialog) => dialog.accept());
+    await openApp(page);
+    const session = join(process.cwd(), seeds[mode]);
+    await page.locator('input[accept^=".json,"]').setInputFiles(session);
+    await page.waitForFunction(() => window.__GBDRAW_APP__.results.length && window.__GBDRAW_APP__.extractedFeatures.length);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
+    const bar = page.locator('.preview-feature-search');
+    const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+    const toggle = page.locator('.preview-controls').getByRole('button', { name: 'Toggle feature search', exact: true });
+    const hide = bar.getByRole('button', { name: 'Hide feature search', exact: true });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toggle).toHaveText(/^\s*Search\s*$/);
+    await page.getByRole('checkbox', { name: 'Regular expression', exact: true }).check();
+    await search.fill('a|e');
+    await search.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(1);
+    await page.getByRole('button', { name: 'Next match' }).click();
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchActiveIndex)).toBe(1);
+    const searchState = () => page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      return {
+        input: app.previewFeatureSearchInput,
+        query: app.previewFeatureSearchQuery,
+        useRegex: app.previewFeatureSearchUseRegex,
+        matches: app.previewFeatureSearchMatches.length,
+        active: app.previewFeatureSearchActiveIndex,
+        status: document.querySelector('.preview-feature-search .gfs-count').textContent,
+        highlighted: app.svgContainer.querySelectorAll('.gbdraw-preview-feature-search-active-match').length
+      };
+    });
+    const rows = () => page.locator('.preview-editor-layout').evaluate((layout) => {
+      const height = (selector) => layout.querySelector(`:scope > ${selector}`).getBoundingClientRect().height;
+      return { search: height('.preview-feature-search'), workspace: height('.preview-workspace') };
+    });
+    const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    const searched = await searchState();
+    expect(searched.highlighted).toBeGreaterThan(0);
+    const shown = await rows();
+    const steps = await undoCount();
+    // The hide button ends the query row; it does not wrap onto a row of its own.
+    expect((await hide.boundingBox()).y).toBeCloseTo((await search.boundingBox()).y, 0);
+
+    await hide.click();
+    await expect(bar).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(toggle).toBeFocused();
+    const hidden = await rows();
+    expect(hidden.search).toBe(0);
+    expect(hidden.workspace).toBeGreaterThanOrEqual(shown.workspace + shown.search - 1);
+    expect(await searchState()).toEqual(searched);
+    // D-06: the dimmed diagram is explained by the match count on the toggle;
+    // its accessible name does not change (R12).
+    await expect(toggle).toHaveText(new RegExp(`^\\s*Search\\s*·\\s*${searched.matches}\\s*$`));
+    await expect(toggle).toHaveAccessibleName('Toggle feature search');
+
+    await toggle.click();
+    await expect(bar).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(search).toBeFocused();
+    await expect(toggle).toHaveText(/^\s*Search\s*$/);
+    expect(await rows()).toEqual(shown);
+    expect(await searchState()).toEqual(searched);
+    expect(await undoCount()).toBe(steps);
+
+    await toggle.click();
+    await expect(bar).toBeHidden();
+    expect(await undoCount()).toBe(steps);
+    await switchMode(page, mode === 'linear' ? 'circular' : 'linear');
+    await switchMode(page, mode);
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await generate(page);
+    await expect(bar).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(toggle).toHaveText(/^\s*Search\s*·\s*\d+\s*$/);
+
+    await page.locator('input[accept^=".json,"]').setInputFiles(session);
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
+    await expect(bar).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  });
+}
