@@ -3,6 +3,7 @@ import { resolveColorToHex } from '../utils/color-utils.js';
 import { parseSpecificRules } from './file-imports.js';
 import { legendColorIdentity as fillIdentity } from './legend-row-names.js';
 import { ruleMatcher } from './rule-matchers.js';
+import { isPlainObject } from '../utils/contract-shape.js';
 /** @import { PythonLegendKey, PythonLegendRow, SwatchColor } from './legend-svg.js' */
 
 /**
@@ -122,10 +123,11 @@ export const featureColorEditColor = (edit) => (
 // rule's rewritten caption into the edits of the features the rule colored,
 // so an edit's caption is read as its rule's is, by the edit's own color.
 /**
- * @param {unknown} edits Unvalidated, read as `Object.entries` reads it.
+ * @param {unknown} edits Unvalidated: a map of no object is no edit, as its
+ *   reader (`readFeatureColorEdits`) lists it (OV-866).
  * @returns {Record<string, unknown>}
  */
-export const savedFeatureColorEdits = (edits) => Object.fromEntries(Object.entries(edits || {}).map(
+export const savedFeatureColorEdits = (edits) => Object.fromEntries(Object.entries(isPlainObject(edits) ? edits : {}).map(
   /** @param {[string, unknown]} entry @returns {[string, unknown]} */ ([key, edit]) => {
   if (!edit || typeof edit !== 'object' || typeof (/** @type {{ caption?: unknown }} */ (edit)).caption !== 'string') return [key, edit];
   const { caption, color } = /** @type {{ caption: string, color?: unknown }} */ (edit);

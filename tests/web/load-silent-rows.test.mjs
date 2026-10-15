@@ -104,6 +104,10 @@ const CASES = [
   ['g47L', 'modes.linear.features.featureColorOverrides', { a: 5, b: 'notacolor', c: { color: '#ff0000', caption: 'x' } },
     ['setting-entries-dropped modes.linear.features.featureColorOverrides'],
     () => assert.deepEqual(state.drawings.linear.featureColorOverrides, { c: { color: '#ff0000', caption: 'x' } })],
+  // OV-866: an edit map of another kind (a list) is dropped as its row says, not read by index.
+  ['g47L', 'modes.linear.features.featureColorOverrides', ['#ff0000'],
+    ['setting-replaced modes.linear.features.featureColorOverrides'],
+    () => assert.deepEqual(state.drawings.linear.featureColorOverrides, {})],
   ['g47L', 'modes.linear.features.labelOverrideRows', [5, 'x', { recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: 'x', labelText: 'y' }],
     ['setting-entries-dropped modes.linear.features.labelOverrideRows'],
     () => assert.equal(state.drawings.linear.canonicalLabelOverrideRows.value.length, 1)],
