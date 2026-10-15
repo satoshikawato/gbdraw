@@ -1531,6 +1531,12 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     gate,
     /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*path: \.ci-trusted-base[\s\S]*persist-credentials: false/
   );
+  // Node comes from the base branch tip: github.sha is the PR merge commit and base.sha can predate .node-version.
+  assert.equal([...gate.matchAll(/uses: actions\/checkout@/g)].length, 2);
+  assert.match(
+    gate,
+    /ref: refs\/heads\/\$\{\{ github\.base_ref \}\}\n {10}path: \.ci-node-version\n {10}sparse-checkout: \.node-version\n {10}sparse-checkout-cone-mode: false\n {10}persist-credentials: false\n[\s\S]*node-version-file: \.ci-node-version\/\.node-version\n[\s\S]*Validate required PR evidence/
+  );
   assert.match(gate, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
   assert.match(gate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
   assert.match(gate, /CI_IMPACT_EXPECTED_PROFILE: pr/);
