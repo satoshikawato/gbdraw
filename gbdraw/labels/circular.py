@@ -326,101 +326,74 @@ def circular_label_fits(
 
 def _label_y_bounds(label: CircularLabel, total_len: int, minimum_margin: float) -> tuple[float, float]:
     """Return (min_y, max_y) for label bbox using the same baseline model as rendering."""
-    return _label_y_bounds_cached(
-        float(label["start_y"]),
+    low, low_margin, high, high_margin = _label_y_offsets(
         float(label["middle"]),
         int(total_len),
         float(label["height_px"]),
         float(minimum_margin),
         label.get("is_inner", False) is False,
     )
+    start_y = float(label["start_y"])
+    return (start_y + low) + low_margin, (start_y + high) + high_margin
 
 
-@lru_cache(maxsize=262144)
-def _label_y_bounds_cached(
-    label_start_y: float,
+@lru_cache(maxsize=65536)
+def _label_y_offsets(
     label_middle: float,
     total_len: int,
     label_height: float,
     minimum_margin: float,
     is_outer: bool,
-) -> tuple[float, float]:
-    """Cached scalar implementation of `_label_y_bounds`."""
+) -> tuple[float, float, float, float]:
+    """The baseline model of a label's box: (low, low_margin, high, high_margin).
+
+    The box is ``min_y = (start_y + low) + low_margin`` and ``max_y = (start_y + high) + high_margin``,
+    in that order of additions; ``-0.0`` adds nothing. A label's offsets do not depend on its
+    position, so the placement loops look them up once per label and step the position (OV-870).
+    """
     label_angle = (360.0 * (label_middle / total_len)) % 360.0
     margin_half = 0.5 * minimum_margin
+    half = 0.5 * label_height
+    full = 1.0 * label_height
+    hanging = (-0.0, -0.0, full, margin_half)  # max_y = start_y + height + margin
+    middle = (-half, -margin_half, half, margin_half)
 
     if is_outer:
-        if 0 <= label_angle < 10:  # baseline = text-after-edge
-            max_y = label_start_y
-            min_y = label_start_y - 1.0 * label_height - margin_half
-        elif 10 <= label_angle < 170:  # baseline = middle
-            max_y = label_start_y + 0.5 * label_height + margin_half
-            min_y = label_start_y - 0.5 * label_height - margin_half
-        elif 170 <= label_angle < 190:  # baseline = hanging
-            max_y = label_start_y + 1.0 * label_height + margin_half
-            min_y = label_start_y - margin_half
-        elif 190 <= label_angle < 350:  # baseline = middle
-            max_y = label_start_y + 0.5 * label_height + margin_half
-            min_y = label_start_y - 0.5 * label_height - margin_half
-        else:  # baseline = text-after-edge
-            max_y = label_start_y
-            min_y = label_start_y - 1.0 * label_height - margin_half
-    else:
-        if 0 <= label_angle < 10:  # baseline = hanging
-            max_y = label_start_y + 1.0 * label_height + margin_half
-            min_y = label_start_y
-        elif 10 <= label_angle < 170:  # baseline = middle
-            max_y = label_start_y + 0.5 * label_height + margin_half
-            min_y = label_start_y - 0.5 * label_height - margin_half
-        elif 170 <= label_angle < 190:  # baseline = middle
-            max_y = label_start_y + 0.5 * label_height + margin_half
-            min_y = label_start_y - 0.5 * label_height - margin_half
-        elif 190 <= label_angle < 350:  # baseline = middle
-            max_y = label_start_y + 0.5 * label_height + margin_half
-            min_y = label_start_y - 0.5 * label_height - margin_half
-        else:  # baseline = hanging
-            max_y = label_start_y + 1.0 * label_height + margin_half
-            min_y = label_start_y
-    return min_y, max_y
+        if 0 <= label_angle < 10 or not label_angle < 350:  # baseline = text-after-edge
+            return (-full, -margin_half, -0.0, -0.0)
+        if 170 <= label_angle < 190:  # baseline = hanging
+            return (-0.0, -margin_half, full, margin_half)
+        return middle  # baseline = middle
+    if 0 <= label_angle < 10 or not label_angle < 350:  # baseline = hanging
+        return hanging
+    return middle  # baseline = middle
 
 
 def _label_x_bounds(label: CircularLabel, minimum_margin: float) -> tuple[float, float]:
     """Return (min_x, max_x) for label bbox using current text-anchor semantics."""
-    return _label_x_bounds_cached(
-        float(label["start_x"]),
-        float(label["width_px"]),
-        float(minimum_margin),
-        label.get("is_inner", False) is False,
+    start_x = float(label["start_x"])
+    right, left = _label_x_offsets(
+        float(label["width_px"]), float(minimum_margin), label.get("is_inner", False) is False
     )
+    low, low_margin, high, high_margin = right if start_x > 0 else left
+    return (start_x + low) + low_margin, (start_x + high) + high_margin
 
 
-@lru_cache(maxsize=262144)
-def _label_x_bounds_cached(
-    label_start_x: float,
+@lru_cache(maxsize=65536)
+def _label_x_offsets(
     label_width: float,
     minimum_margin: float,
     is_outer: bool,
-) -> tuple[float, float]:
-    """Cached scalar implementation of `_label_x_bounds`."""
+) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float]]:
+    """The text-anchor model of a label's box: offsets for ``start_x > 0`` and for the other labels.
+
+    Each is (low, low_margin, high, high_margin) as in `_label_y_offsets`: the text runs away
+    from the circle's vertical axis (outer labels) or toward it (inner labels).
+    """
     margin_half = 0.5 * minimum_margin
-
-    if is_outer:
-        if label_start_x > 0:
-            max_x = label_start_x + label_width + margin_half
-            min_x = label_start_x - margin_half
-        else:
-            max_x = label_start_x + margin_half
-            min_x = label_start_x - label_width - margin_half
-    else:
-        if label_start_x > 0:
-            max_x = label_start_x + margin_half
-            min_x = label_start_x - label_width - margin_half
-        else:
-            max_x = label_start_x + label_width + margin_half
-            min_x = label_start_x - margin_half
-    return min_x, max_x
-
-
+    away = (-0.0, -margin_half, label_width, margin_half)  # text from start_x to start_x + width
+    toward = (-label_width, -margin_half, -0.0, margin_half)
+    return (away, toward) if is_outer else (toward, away)
 
 
 def _leader_start_meta(label: CircularLabel, total_length: int | None) -> tuple[str, float, float, float, float] | None:
@@ -839,19 +812,17 @@ def _segments_properly_intersect(
     ):
         return False
 
-    def _orient(px: float, py: float, qx: float, qy: float, rx: float, ry: float) -> float:
-        return ((qx - px) * (ry - py)) - ((qy - py) * (rx - px))
-
     def _on_segment(px: float, py: float, qx: float, qy: float, rx: float, ry: float) -> bool:
         return (
             (min(px, rx) - eps) <= qx <= (max(px, rx) + eps)
             and (min(py, ry) - eps) <= qy <= (max(py, ry) + eps)
         )
 
-    o1 = _orient(ax1, ay1, ax2, ay2, bx1, by1)
-    o2 = _orient(ax1, ay1, ax2, ay2, bx2, by2)
-    o3 = _orient(bx1, by1, bx2, by2, ax1, ay1)
-    o4 = _orient(bx1, by1, bx2, by2, ax2, ay2)
+    # Orientations of each end against the other segment, inlined (OV-870).
+    o1 = ((ax2 - ax1) * (by1 - ay1)) - ((ay2 - ay1) * (bx1 - ax1))
+    o2 = ((ax2 - ax1) * (by2 - ay1)) - ((ay2 - ay1) * (bx2 - ax1))
+    o3 = ((bx2 - bx1) * (ay1 - by1)) - ((by2 - by1) * (ax1 - bx1))
+    o4 = ((bx2 - bx1) * (ay2 - by1)) - ((by2 - by1) * (ax2 - bx1))
 
     if ((o1 > eps and o2 < -eps) or (o1 < -eps and o2 > eps)) and (
         (o3 > eps and o4 < -eps) or (o3 < -eps and o4 > eps)
@@ -928,50 +899,70 @@ def _segment_intersects_rect_interior(
 
     Boundary-only touches are treated as non-overlaps.
     """
-    x1, y1 = float(p1[0]), float(p1[1])
-    x2, y2 = float(p2[0]), float(p2[1])
+    return _segments_through_rect_interior(((p1, p2),), rect) > 0
+
+
+def _segments_through_rect_interior(
+    segments: Iterable[tuple[tuple[float, float], tuple[float, float]]],
+    rect: tuple[float, float, float, float],
+) -> int:
+    """How many of `segments` intersect the rectangle interior; boundary-only touches do not count.
+
+    One call per segment list: the collision counts test about 0.6 M segments per search (OV-870).
+    """
     min_x, min_y, max_x, max_y = map(float, rect)
     if max_x <= min_x or max_y <= min_y:
-        return False
-    # A segment on one side of the rectangle has no interior point.
-    if (
-        (x1 <= min_x and x2 <= min_x)
-        or (x1 >= max_x and x2 >= max_x)
-        or (y1 <= min_y and y2 <= min_y)
-        or (y1 >= max_y and y2 >= max_y)
-    ):
-        return False
-
-    dx = x2 - x1
-    dy = y2 - y1
-    p_vals = (-dx, dx, -dy, dy)
-    q_vals = (x1 - min_x, max_x - x1, y1 - min_y, max_y - y1)
-
-    t_enter = 0.0
-    t_exit = 1.0
+        return 0
     eps = 1e-9
-    for p_val, q_val in zip(p_vals, q_vals):
-        if abs(p_val) <= eps:
-            if q_val < 0.0:
-                return False
+    count = 0
+    for p1, p2 in segments:
+        x1, y1 = float(p1[0]), float(p1[1])
+        x2, y2 = float(p2[0]), float(p2[1])
+        # A segment on one side of the rectangle has no interior point.
+        if (
+            (x1 <= min_x and x2 <= min_x)
+            or (x1 >= max_x and x2 >= max_x)
+            or (y1 <= min_y and y2 <= min_y)
+            or (y1 >= max_y and y2 >= max_y)
+        ):
             continue
-        t_hit = q_val / p_val
-        if p_val < 0.0:
-            t_enter = max(t_enter, t_hit)
-        else:
-            t_exit = min(t_exit, t_hit)
-        if t_enter > t_exit:
-            return False
 
-    clipped_start = max(0.0, t_enter)
-    clipped_end = min(1.0, t_exit)
-    if clipped_end <= (clipped_start + eps):
-        return False
+        dx = x2 - x1
+        dy = y2 - y1
+        p_vals = (-dx, dx, -dy, dy)
+        q_vals = (x1 - min_x, max_x - x1, y1 - min_y, max_y - y1)
 
-    t_mid = 0.5 * (clipped_start + clipped_end)
-    x_mid = x1 + (dx * t_mid)
-    y_mid = y1 + (dy * t_mid)
-    return (min_x + eps) < x_mid < (max_x - eps) and (min_y + eps) < y_mid < (max_y - eps)
+        t_enter = 0.0
+        t_exit = 1.0
+        missed = False
+        for p_val, q_val in zip(p_vals, q_vals):
+            if abs(p_val) <= eps:
+                if q_val < 0.0:
+                    missed = True
+                    break
+                continue
+            t_hit = q_val / p_val
+            if p_val < 0.0:
+                t_enter = max(t_enter, t_hit)
+            else:
+                t_exit = min(t_exit, t_hit)
+            if t_enter > t_exit:
+                missed = True
+                break
+        if missed:
+            continue
+
+        clipped_start = max(0.0, t_enter)
+        clipped_end = min(1.0, t_exit)
+        if clipped_end <= (clipped_start + eps):
+            continue
+
+        t_mid = 0.5 * (clipped_start + clipped_end)
+        x_mid = x1 + (dx * t_mid)
+        y_mid = y1 + (dy * t_mid)
+        if (min_x + eps) < x_mid < (max_x - eps) and (min_y + eps) < y_mid < (max_y - eps):
+            count += 1
+    return count
 
 
 def _count_label_leader_line_collisions(
@@ -994,14 +985,8 @@ def _count_label_leader_line_collisions(
         for rect, label_segments in zip(rects, segments)
     ]
     for idx, jdx in touching_aabb_pairs(boxes):
-        rect_i = rects[idx]
-        rect_j = rects[jdx]
-        for segment in segments[idx]:
-            if _segment_intersects_rect_interior(segment[0], segment[1], rect_j):
-                collision_count += 1
-        for segment in segments[jdx]:
-            if _segment_intersects_rect_interior(segment[0], segment[1], rect_i):
-                collision_count += 1
+        collision_count += _segments_through_rect_interior(segments[idx], rects[jdx])
+        collision_count += _segments_through_rect_interior(segments[jdx], rects[idx])
     return collision_count
 
 
@@ -1045,13 +1030,8 @@ def _count_local_leader_line_collisions(
     for peer_idx in range(len(segments)) if peers is None else peers:
         if peer_idx == idx:
             continue
-        peer_rect = rects[peer_idx]
-        for segment in target_segments:
-            if _segment_intersects_rect_interior(segment[0], segment[1], peer_rect):
-                collision_count += 1
-        for peer_segment in segments[peer_idx]:
-            if _segment_intersects_rect_interior(peer_segment[0], peer_segment[1], target_rect):
-                collision_count += 1
+        collision_count += _segments_through_rect_interior(target_segments, rects[peer_idx])
+        collision_count += _segments_through_rect_interior(segments[peer_idx], target_rect)
         if cap is not None and collision_count > cap:
             break
     return collision_count
@@ -1111,9 +1091,14 @@ def _labels_overlap(label_a: CircularLabel, label_b: CircularLabel, total_length
     else:
         y_margin = 0.1
         x_margin = 1.0
-    return x_overlap(label_a, label_b, minimum_margin=x_margin) and y_overlap(
-        label_a, label_b, total_length, y_margin
-    )
+    # `x_overlap` and then `y_overlap`, with the interval test inlined (OV-870).
+    min_a, max_a = _label_x_bounds(label_a, x_margin)
+    min_b, max_b = _label_x_bounds(label_b, x_margin)
+    if not (max_a >= min_b if min_a < min_b else max_b >= min_a):
+        return False
+    min_a, max_a = _label_y_bounds(label_a, total_length, y_margin)
+    min_b, max_b = _label_y_bounds(label_b, total_length, y_margin)
+    return max_a >= min_b if min_a < min_b else max_b >= min_a
 
 
 def _count_local_label_overlaps(
@@ -2757,11 +2742,6 @@ def _legacy_place_labels_on_arc_fc(
     vertical gap kept between neighbouring labels.
     """
 
-    def move_label(label: CircularLabel, angle: float) -> tuple[float, float]:
-        new_x = center_x + x_radius * math.cos(math.radians(angle))
-        new_y = center_y + y_radius * math.sin(math.radians(angle))
-        return new_x, new_y
-
     if not labels:
         return []
 
@@ -2789,19 +2769,31 @@ def _legacy_place_labels_on_arc_fc(
         if new_angle > 269:
             new_angle = 269.0
 
-        label["start_x"], label["start_y"] = calculate_coordinates(
-            center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
+        x, y = calculate_coordinates(center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length)
+        # The previous label stays put while this one steps away from it. The step loop makes
+        # no call per step (about 0.4 M steps per search, OV-870): the label's box offsets are
+        # looked up once, and the coordinates and the interval test (`calculate_coordinates`,
+        # `_bounds_overlap`) are inlined.
+        prev_min_y, prev_max_y = _label_y_bounds(rearranged_labels[-1], total_length, spacing_px)
+        prev_min_x, prev_max_x = _label_x_bounds(rearranged_labels[-1], 2)
+        is_outer = label.get("is_inner", False) is False
+        low_y, low_y_margin, high_y, high_y_margin = _label_y_offsets(
+            float(label["middle"]), int(total_length), float(label["height_px"]), float(spacing_px), is_outer
         )
-        # The previous label stays put while this one steps away from it.
-        prev_y_bounds = _label_y_bounds(rearranged_labels[-1], total_length, spacing_px)
-        prev_x_bounds = _label_x_bounds(rearranged_labels[-1], 2)
-        while _bounds_overlap(_label_y_bounds(label, total_length, spacing_px), prev_y_bounds) and _bounds_overlap(
-            _label_x_bounds(label, 2), prev_x_bounds
-        ):
+        right, left = _label_x_offsets(float(label["width_px"]), 2.0, is_outer)
+        while True:
+            min_y, max_y = (y + low_y) + low_y_margin, (y + high_y) + high_y_margin
+            if not (max_y >= prev_min_y if min_y < prev_min_y else prev_max_y >= min_y):
+                break
+            low_x, low_x_margin, high_x, high_x_margin = right if x > 0 else left
+            min_x, max_x = (x + low_x) + low_x_margin, (x + high_x) + high_x_margin
+            if not (max_x >= prev_min_x if min_x < prev_min_x else prev_max_x >= min_x):
+                break
             new_angle += 0.01
-            label["start_x"], label["start_y"] = calculate_coordinates(
-                center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
-            )
+            radians = math.radians(new_angle)
+            y = center_y + y_radius * math.sin(radians)
+            x = center_x + x_radius * math.cos(radians)
+        label["start_x"], label["start_y"] = x, y
 
         rearranged_labels.append(label)
         current_angle = new_angle
@@ -2829,11 +2821,6 @@ def _legacy_improved_label_placement_fc(
     This solver is intentionally conservative and is used as a fallback to
     improve dense-label robustness.
     """
-
-    def move_label(label: CircularLabel, angle: float) -> tuple[float, float]:
-        new_x = center_x + x_radius * math.cos(math.radians(angle))
-        new_y = center_y + y_radius * math.sin(math.radians(angle))
-        return new_x, new_y
 
     def feature_angle_scorer(label: CircularLabel) -> Callable[[float, float], float]:
         """Return the angle in degrees at the origin between the label's feature middle and a point."""
@@ -2902,11 +2889,15 @@ def _legacy_improved_label_placement_fc(
                 direction = -1
             else:
                 test_angle_plus = current_angle + 1.0
-                test_x_plus, test_y_plus = move_label(label, test_angle_plus)
+                test_x_plus, test_y_plus = calculate_coordinates(
+                    center_x, center_y, x_radius, y_radius, test_angle_plus, label["middle"], total_length
+                )
                 score_plus = feature_angle(test_x_plus, test_y_plus)
 
                 test_angle_minus = current_angle - 1.0
-                test_x_minus, test_y_minus = move_label(label, test_angle_minus)
+                test_x_minus, test_y_minus = calculate_coordinates(
+                    center_x, center_y, x_radius, y_radius, test_angle_minus, label["middle"], total_length
+                )
                 score_minus = feature_angle(test_x_minus, test_y_minus)
                 direction = 1 if abs(score_plus) < abs(score_minus) else -1
 
@@ -2924,23 +2915,40 @@ def _legacy_improved_label_placement_fc(
             else:
                 fixed_labels = [prev_label, next_label]
             fixed_bounds = [
-                (_label_y_bounds(other, total_length, y_margin), _label_x_bounds(other, 1)) for other in fixed_labels
+                (*_label_y_bounds(other, total_length, y_margin), *_label_x_bounds(other, 1)) for other in fixed_labels
             ]
-            label_copy = label.copy()
+            # The step loop makes no call per step (about 0.5 M steps per search, OV-870): the
+            # label's box offsets are looked up once, and the coordinates, the feature angle and
+            # the interval test (`calculate_coordinates`, `feature_angle`, `_bounds_overlap`) are inlined.
+            is_outer = label.get("is_inner", False) is False
+            low_y, low_y_margin, high_y, high_y_margin = _label_y_offsets(
+                float(label["middle"]), int(total_length), float(label["height_px"]), float(y_margin), is_outer
+            )
+            right, left = _label_x_offsets(float(label["width_px"]), 1.0, is_outer)
+            feature_x, feature_y = float(label["feature_middle_x"]), float(label["feature_middle_y"])
+            feature_norm = math.sqrt(feature_x**2 + feature_y**2)
             while True:
                 new_angle = current_angle + direction * 0.05
-                new_x, new_y = move_label(label, new_angle)
-                new_score = feature_angle(new_x, new_y)
+                radians = math.radians(new_angle)
+                new_y = center_y + y_radius * math.sin(radians)
+                new_x = center_x + x_radius * math.cos(radians)
+                norm = math.sqrt(new_x**2 + new_y**2)
+                if feature_norm == 0 or norm == 0:
+                    new_score = 0.0
+                else:
+                    cos_angle = (feature_x * new_x + feature_y * new_y) / (feature_norm * norm)
+                    new_score = math.degrees(math.acos(max(-1.0, min(1.0, cos_angle))))
                 if not abs(new_score) <= abs(current_score):
                     break
 
-                label_copy["start_x"], label_copy["start_y"] = new_x, new_y
-                new_y_bounds = _label_y_bounds(label_copy, total_length, y_margin)
+                min_y, max_y = (new_y + low_y) + low_y_margin, (new_y + high_y) + high_y_margin
                 creates_new_overlap = False
-                for other_y_bounds, other_x_bounds in fixed_bounds:
-                    if _bounds_overlap(new_y_bounds, other_y_bounds) and _bounds_overlap(
-                        _label_x_bounds(label_copy, 1), other_x_bounds
-                    ):
+                for other_min_y, other_max_y, other_min_x, other_max_x in fixed_bounds:
+                    if not (max_y >= other_min_y if min_y < other_min_y else other_max_y >= min_y):
+                        continue
+                    low_x, low_x_margin, high_x, high_x_margin = right if new_x > 0 else left
+                    min_x, max_x = (new_x + low_x) + low_x_margin, (new_x + high_x) + high_x_margin
+                    if max_x >= other_min_x if min_x < other_min_x else other_max_x >= min_x:
                         creates_new_overlap = True
                         break
                 if creates_new_overlap:
