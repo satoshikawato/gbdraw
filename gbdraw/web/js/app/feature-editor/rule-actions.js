@@ -44,6 +44,8 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  * @typedef {object} RuleActionsPorts
  * @property {() => boolean} requestAutomaticRerender
  *   Asks for the automatic rerender of an edit Python must draw again (OV-43).
+ * @property {(drawing: DrawingState) => boolean} isRedrawOwed
+ *   Whether a rerender asked for in `drawing` is not yet shown drawn from its current paint (D-36).
  */
 
 /**
@@ -246,6 +248,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // rerender, as the edit did. A removed whole-type rule asks for it only
   // when the restored Legend lacks the type's default row (OV-169): Undo of
   // an Apply to all returns the row it recolored, so it needs no Python run.
+  // The composition root does not call this for a figure History recorded as
+  // drawn (D-24 (OV-731)).
   /** @param {Partial<SpecificColorRule>[]} previousRules */
   const followRestoredRules = (previousRules) => {
     const drawing = state.activeDrawing();
@@ -451,6 +455,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     // draws (R13); a checkpoint when the legend gains or loses a row.
     const transact = legend.diff.add.length || legend.diff.remove.length
       ? runUndoableCheckpoint : runUndoable;
+    // D-24 (OV-731): a checkpoint step records whether the figure of each
+    // side is the one its state draws, so Undo and Redo of a drawn side ask
+    // for no Python run. The figure the commit starts from is drawn unless a
+    // rerender asked for is still owed when History captures it (D-36). The
+    // commit's own figure is drawn when it also shows every row; otherwise
+    // History keeps the figure of the rerender the commit asks for once that
+    // is shown, while the step is the last one (`keepRedrawnResult`).
     await transact(label, () => {
       if (!current() || !legend.isCurrent()) return false;
       drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
@@ -476,7 +487,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       // is an operation of the one compile (OV-146).
       projectPaletteAndRules({ prepareRules: false, legendRows });
       return legend.diff;
-    }, { joinsOpenStep });
+    }, { joinsOpenStep, drawn: { before: () => !ports.isRedrawOwed(drawing), change: !redrawsLegend } });
     if (applied) appliedWrites += 1;
     if (applied && redrawsLegend) ports.requestAutomaticRerender();
     return applied;

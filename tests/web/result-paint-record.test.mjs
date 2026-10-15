@@ -124,3 +124,26 @@ test('a commit drawn from an earlier editor state leaves the edits made meanwhil
   unchanged.commit(['a', 'b'], 'a', started, { drawn: started });
   assert.equal(unchanged.lacking('a'), null, 'no edit while it ran');
 });
+
+// D-36, review C S2: whether a label rerender drew the current paint is
+// decided when its Result is ready, not when its paint is committed. A rule
+// write that lands between the two (in the binder's later steps) leaves the
+// record's `lacking` empty, yet the figure lacks the row the write adds. The
+// fills (colors, visibility) and the strokes count, so a Legend row restored
+// meanwhile does too; labels and the Legend order are projected on any figure.
+test('a rerender drew the current paint only while its fills and strokes still match', () => {
+  const started = paint('started');
+  const record = createResultPaintRecord();
+  record.commit(['a'], 'a', started, { drawn: started });
+  assert.equal(record.lacking('a'), null, 'nothing was edited before the paint commit');
+  const drewPaint = record.drewPaint;
+  assert.equal(drewPaint(started, started), true);
+  assert.equal(drewPaint(started, { ...started, colors: [started.colors[0], 'rules written after the paint commit'] }), false,
+    'a rule write after the paint commit');
+  assert.equal(drewPaint(started, { ...started, colors: [{ CDS: 'another palette' }, started.colors[1]] }), false, 'a palette');
+  assert.equal(drewPaint(started, { ...started, visibility: 'hidden meanwhile' }), false, 'a visibility edit');
+  assert.equal(drewPaint(started, { ...started, strokes: 'a Legend row restored meanwhile' }), false, 'a stroke edit');
+  assert.equal(drewPaint(started, { ...started, labels: 'labels edited', legendOrder: 'order edited' }), true,
+    'labels and the Legend order are projected');
+  assert.equal(drewPaint(undefined, started), false, 'a binding that names no drawn paint');
+});

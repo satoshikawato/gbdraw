@@ -174,6 +174,7 @@ export const createFeatureEditor = ({
   editorPorts.prepareDrawnFeatureMatches = visibilityActions.prepareDrawnFeatureMatches;
   editorPorts.applyFeatureVisibilityToLabels = labelActions.applyFeatureVisibilityToLabels;
   editorPorts.requestAutomaticRerender = labelActions.requestAutomaticRerender;
+  editorPorts.isRedrawOwed = labelActions.isRedrawOwed;
   editorPorts.syncLabelEditor = labelActions.syncLabelEditor;
   // A loaded table shows on the displayed Result as a History apply does (R3):
   // the root's projection (`projectFeatureEdits`) projects it.
@@ -191,6 +192,8 @@ export const createFeatureEditor = ({
     // O-2: the root asks Python for a Legend row a restore returns that the
     // displayed Result's bytes lack.
     requestAutomaticRerender: labelActions.requestAutomaticRerender,
+    // D-36: the root says when a shown rerender drew the current paint.
+    redrawShown: labelActions.redrawShown,
     specificRulePattern: ruleActions.specificRulePattern,
     specificRulePatternDraft: ruleActions.specificRulePatternDraft,
     specificRulePatternFieldId: ruleActions.specificRulePatternFieldId,

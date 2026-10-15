@@ -353,39 +353,50 @@ export const migrateLegacyCircularTrackSlot = (slot) => {
   return source;
 };
 
-/** @param {unknown} spec */
-export const migrateLegacyCircularTrackSlotSpec = (spec) => {
+/**
+ * A legacy Circular slot spec under current tokens, and the legacy spacing
+ * token it consumed: the last token of the first of `spacingKeys` the spec
+ * holds, as stored, with its value and whether it applied to a gap the spec
+ * leaves unset. `gapOf` gives the gap value a spacing fills, or null when it
+ * fills none.
+ * @param {unknown} spec
+ * @param {readonly string[]} [spacingKeys] the keys read as the spacing, in lower case, the first one first
+ * @param {(value: string) => string | null} [gapOf]
+ * @returns {{ spec: string, spacing: { stored: string, value: string, filled: boolean } | null }}
+ */
+export const readLegacyCircularTrackSlotSpec = (spec, spacingKeys = ['spacing'], gapOf = (value) => value) => {
   const text = String(spec || '').trim();
   const atIndex = text.indexOf('@');
-  if (atIndex < 0) return text;
+  if (atIndex < 0) return { spec: text, spacing: null };
 
   const head = text.slice(0, atIndex).trim();
-  const retained = [];
-  /** @type {string | null} */
-  let legacySpacing = null;
-  let hasInnerGap = false;
-  let hasOuterGap = false;
-  text.slice(atIndex + 1).split(',').forEach((token) => {
+  const tokens = text.slice(atIndex + 1).split(',').flatMap((token) => {
     const equalsIndex = token.indexOf('=');
-    if (equalsIndex < 0) return;
+    if (equalsIndex < 0) return [];
     const key = token.slice(0, equalsIndex).trim();
-    const normalizedKey = key.toLowerCase();
-    const rawValue = token.slice(equalsIndex + 1).trim();
-    if (normalizedKey === 'spacing') {
-      legacySpacing = rawValue;
-      return;
-    }
-    if (OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedKey)) return;
-    if (normalizedKey === 'inner_gap_px') hasInnerGap = true;
-    if (normalizedKey === 'outer_gap_px') hasOuterGap = true;
-    retained.push(`${key}=${rawValue}`);
+    return [{ stored: token.trim(), key, normalizedKey: key.toLowerCase(), value: token.slice(equalsIndex + 1).trim() }];
   });
-  if (legacySpacing !== null && legacySpacing !== '') {
-    if (!hasInnerGap) retained.push(`inner_gap_px=${legacySpacing}`);
-    if (!hasOuterGap) retained.push(`outer_gap_px=${legacySpacing}`);
-  }
-  return retained.length > 0 ? `${head}@${retained.join(',')}` : head;
+  const spacingKey = spacingKeys.find((name) => tokens.some(({ normalizedKey }) => normalizedKey === name));
+  const consumed = tokens.filter(({ normalizedKey }) => normalizedKey === spacingKey).at(-1);
+  const retained = tokens.filter(({ normalizedKey }) => (
+    normalizedKey !== spacingKey && !OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedKey)
+  ));
+  const filled = consumed && consumed.value !== ''
+    ? ['inner_gap_px', 'outer_gap_px'].filter((name) => !retained.some(({ normalizedKey }) => normalizedKey === name))
+    : [];
+  const gap = consumed && filled.length > 0 ? gapOf(consumed.value) : null;
+  const options = [
+    ...retained.map(({ key, value }) => `${key}=${value}`),
+    ...(gap === null ? [] : filled.map((name) => `${name}=${gap}`))
+  ];
+  return {
+    spec: options.length > 0 ? `${head}@${options.join(',')}` : head,
+    spacing: consumed ? { stored: consumed.stored, value: consumed.value, filled: filled.length > 0 } : null
+  };
 };
+
+/** @param {unknown} spec */
+export const migrateLegacyCircularTrackSlotSpec = (spec) => readLegacyCircularTrackSlotSpec(spec).spec;
 
 /** @param {unknown} value */
 export const normalizeSlotSide = (value) => normalizeOptionalPlacement(value);

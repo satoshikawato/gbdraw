@@ -1,7 +1,6 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
-import { isCurrentRequestSchema } from '../utils/request-schema.js';
 import { shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import {
@@ -149,7 +148,7 @@ import {
 } from './canonical-comparisons.js';
 import {
   migrateLegacyLinearComparisonDraft,
-  promoteGallerySessionToCurrent
+  promoteReadGallerySession
 } from './gallery-session-migration.js';
 import {
   compressSessionData,
@@ -1026,7 +1025,16 @@ const replacePlainObject = (target, source) => {
   });
 };
 
-/** @type {((request: Record<string, any>) => any) | null} */
+/**
+ * A check of saved configuration values by the Worker's Python (`validate_web_config_overrides_json`).
+ * `source` says which values: an editor draft's overrides, or a stored request's `config` and
+ * `configOverrides`. The port resolves to the Worker's reply, whose values are checked here.
+ * @typedef {{ mode: DiagramMode, config: unknown, configOverrides: unknown, managedPaths: readonly string[],
+ *   source: 'draft' | 'storedRequest' }} ConfigCheckRequest
+ * @typedef {{ result?: { error?: unknown, overrides?: unknown } } | null | undefined} ConfigCheckReply
+ * @typedef {(request: ConfigCheckRequest) => ConfigCheckReply | Promise<ConfigCheckReply>} ConfigCheckPort
+ */
+/** @type {ConfigCheckPort | null} */
 let unmanagedConfigOverrideValidator = null;
 
 /** @param {typeof unmanagedConfigOverrideValidator} validator */
@@ -1037,16 +1045,17 @@ export const setUnmanagedConfigOverrideValidator = (validator) => {
 };
 
 /**
- * @param {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, requireUnmanagedOnly?: boolean }} options
+ * @param {{ mode: DiagramMode, config?: unknown, configOverrides?: unknown, source: ConfigCheckRequest['source'] }} options
  *   `mode`: a slice's mode, or the mode of a Session's projection (the projection refuses another value; a
  *   settings-only Session's is checked with its draft). `config` and `configOverrides` are saved values,
  *   unvalidated: the validator service checks them.
+ * @returns {Promise<Record<string, unknown>>} The overrides the check preserved.
  */
 const validateUnmanagedConfigOverrides = async ({
   mode,
   config = null,
   configOverrides = {},
-  requireUnmanagedOnly = false
+  source
 }) => {
   const managedPaths = managedConfigOverridePathsForMode(mode);
   const overrides = isPlainObject(configOverrides)
@@ -1062,7 +1071,7 @@ const validateUnmanagedConfigOverrides = async ({
   }
   if (
     config === null
-    && !requireUnmanagedOnly
+    && source !== 'draft'
     && overridePaths.every((path) => managedPaths.includes(path))
   ) {
     return {};
@@ -1075,7 +1084,7 @@ const validateUnmanagedConfigOverrides = async ({
     config,
     configOverrides: overrides,
     managedPaths,
-    requireUnmanagedOnly
+    source
   });
   if (result?.result?.error && typeof result.result.error === 'object') {
     throw Object.assign(new Error('Configuration validation failed.'), result.result.error);
@@ -1083,10 +1092,12 @@ const validateUnmanagedConfigOverrides = async ({
   if (typeof result?.result?.error === 'string' && result.result.error.trim()) {
     throw new Error(result.result.error.trim());
   }
-  if (!isPlainObject(result?.result?.overrides)) {
+  const preserved = result?.result?.overrides;
+  if (!isPlainObject(preserved)) {
     throw new Error('Configuration validation returned an invalid preserved-settings result.');
   }
-  return cloneJsonData(result.result.overrides);
+  // The cast: `isPlainObject(preserved)` above (this module's predicate is no type guard).
+  return cloneJsonData(/** @type {Record<string, unknown>} */ (preserved));
 };
 
 /** @param {DrawingState} drawing */
@@ -1927,11 +1938,13 @@ const preflightSessionImport = async (sessionData, repairs) => {
     migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   }
 
+  // A Gallery Session that stored a schema-2 request (31-33) is rebuilt by
+  // its promotion from the request its reader read.
   const promotedData = !currentSession && (
     sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
-    Number(normalizedData.renderRequest?.schema) === 2
+    Number(requestRead.storedSchemas.renderRequest) === 2
   )
-    ? readRebuiltGalleryRequest(promoteGallerySessionToCurrent(normalizedData), repairs)
+    ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
     : normalizedData;
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
   await validateSessionLosatArtifactsForImport(promotedData, sourceSessionVersion);
@@ -2011,7 +2024,6 @@ const preflightSessionImport = async (sessionData, repairs) => {
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
           : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-        repairInvalidComparisonHeight: sourceSessionVersion >= 31 && sourceSessionVersion <= 33,
         repairLegacyTableRows: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
         sessionResourceTable: currentResourceTable,
         // A Session without a Web draft (CLI, Python) holds its tables only
@@ -2124,13 +2136,14 @@ const preflightSessionImport = async (sessionData, repairs) => {
       ? {
           mode: canonicalProjection.mode,
           configOverrides: runtimeStoredConfig.unmanagedConfigOverrides,
-          requireUnmanagedOnly: true
+          source: /** @type {const} */ ('draft')
         }
       : {
           mode: canonicalProjection.mode,
           config: projectionRenderRequest?.diagramOptions?.config ?? null,
           configOverrides:
-            projectionRenderRequest?.diagramOptions?.configOverrides ?? {}
+            projectionRenderRequest?.diagramOptions?.configOverrides ?? {},
+          source: /** @type {const} */ ('storedRequest')
         }
     : null;
   if (restoredConfig) {
@@ -3563,9 +3576,7 @@ export const adoptCanonicalRenderArtifacts = (
   }
 };
 
-// The port's readers take a stored request (schema 1 or 2) as an object of
-// unchecked leaves, so the return type leaves out its `schema` literal.
-/** @returns {CanonicalRenderRequest | Readonly<Record<string, unknown>> | null} */
+/** @returns {CanonicalRenderRequest | null} */
 export const getCommittedCanonicalRenderRequest = () => {
   void committedCanonicalRevision.value;
   return committedCanonicalSession?.renderRequest || null;
@@ -4639,21 +4650,6 @@ const admitSavedFeatureCatalog = (featureCatalog, logicalResults, mode) => {
     throw requiresGenerate();
   }
 };
-/**
- * Save writes the committed request as Load read it or Generate built it. A
- * schema-1 request, which Load keeps as stored until its reader lifts it, is
- * saved after a Generate in its mode.
- * @template {{ renderRequest: unknown } | null} T
- * @param {T} committed
- * @param {'circular' | 'linear'} mode
- * @returns {T}
- */
-const requireCurrentSavedRequest = (committed, mode) => {
-  if (committed && !isCurrentRequestSchema(committed.renderRequest)) {
-    throw sessionSaveRequiresGenerate(mode === state.mode.value ? {} : { diagramMode: mode });
-  }
-  return committed;
-};
 /** @param {SessionArtifactView} view */
 const artifactRunMetadata = (view) => ({
   ...(view.trackSlotResolvedGeometry
@@ -4689,12 +4685,9 @@ const prepareOtherModeArtifact = (view) => {
   const editorState = buildArtifactEditorState(view);
   editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, results, view.mode);
   if (!view.committedCanonicalSession) throw sessionSaveRequiresGenerate({ diagramMode: view.mode });
-  const committed = requireCurrentSavedRequest(
-    isAdoptedCanonicalSession(view.committedCanonicalSession)
-      ? view.committedCanonicalSession
-      : cloneCanonicalSession(view.committedCanonicalSession),
-    view.mode
-  );
+  const committed = isAdoptedCanonicalSession(view.committedCanonicalSession)
+    ? view.committedCanonicalSession
+    : cloneCanonicalSession(view.committedCanonicalSession);
   return { view, results, editorState, committed };
 };
 /**
@@ -4798,7 +4791,7 @@ const exportSessionDocument = async (
     config.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
       mode,
       configOverrides: config.unmanagedConfigOverrides,
-      requireUnmanagedOnly: true
+      source: 'draft'
     });
   }
   let committed = isAdoptedCanonicalSession(artifact.committedCanonicalSession)
@@ -4856,7 +4849,6 @@ const exportSessionDocument = async (
       omitUnsourcedDepth: true
     });
   }
-  committed = requireCurrentSavedRequest(committed, artifact.mode);
   const canonical = await assembleSessionResources(state, committed, state.drawings.linear, other?.committed ?? null);
   await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   if (other) {
@@ -5547,7 +5539,7 @@ const importSessionDocument = async (e, options = {}) => {
       const savedOverrides = modeSlices[mode].config?.unmanagedConfigOverrides;
       if (isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
         modeConfigs[mode].unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
-          mode, configOverrides: savedOverrides, requireUnmanagedOnly: true
+          mode, configOverrides: savedOverrides, source: 'draft'
         });
       }
     }
@@ -5936,7 +5928,9 @@ const importSessionDocument = async (e, options = {}) => {
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
     if (!currentSchemaSession) {
-      const committed = cloneCanonicalSession(data);
+      // Only a request Load read and projected is committed: a Session before
+      // 31 has none (`readSessionRequests`, OV-862), whatever its file holds (OV-819).
+      const committed = canonicalSession ? cloneCanonicalSession(data) : null;
       if (!committed && logicalImportedResults.length > 0) {
         const { adv } = shownDrawing;
         loadedTrackSettings = Object.freeze({

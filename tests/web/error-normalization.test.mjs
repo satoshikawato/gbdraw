@@ -510,7 +510,7 @@ test('a preserved setting of the other diagram mode names the setting and the wa
   assert.deepEqual(generate.actions, ['edit-input']);
   // Save Session validates the preserved settings through the helper channel.
   const save = roundtrip(invoke({ helper: 'validate_web_config_overrides_json', args: ['linear', 'null',
-    JSON.stringify({ 'objects.ticks.tick_width': 4, 'canvas.circular.radius': 1.2 }), '[]', true] }).error);
+    JSON.stringify({ 'objects.ticks.tick_width': 4, 'canvas.circular.radius': 1.2 }), '[]', 'draft'] }).error);
   assert.deepEqual([save.code, save.operation, save.stage], ['MODE_SETTING', 'validateConfigOverrides', 'helper']);
   assert.deepEqual(save.context, { reason: 'CIRCULAR_SETTING', configPath: 'canvas.circular.radius' });
   assert.equal(save.summary, `A preserved session setting does not apply to this diagram mode. Setting: canvas.circular.radius.${ways('Circular')}`);

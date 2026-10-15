@@ -5,7 +5,7 @@ import test from 'node:test';
 import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
@@ -826,4 +826,21 @@ test('a label whose text names an Object.prototype member keeps its text', () =>
   harness.actions.reconcileLabelOverrides();
   assert.equal(text.textContent, 'constructor');
   assert.deepEqual(harness.mutations, { commit: 0 });
+});
+
+// D-36, review C S3: a requested redraw is owed by the drawing it was asked
+// for (each mode has its own, PD-OI-086), so a rerender shown in one mode does
+// not pay the other mode's.
+test('a requested redraw stays owed until a rerender of its own drawing is shown', () => {
+  const harness = buildHarness();
+  const circular = {};
+  const linear = {};
+  withModeDrawings(harness.state, { circular, linear });
+  assert.equal(harness.actions.requestAutomaticRerender(), true);
+  assert.equal(harness.actions.isRedrawOwed(linear), true, 'asked in the shown mode');
+  assert.equal(harness.actions.isRedrawOwed(circular), false, 'the other mode owes nothing');
+  harness.actions.redrawShown(circular);
+  assert.equal(harness.actions.isRedrawOwed(linear), true, 'the other drawing\'s rerender');
+  harness.actions.redrawShown(linear);
+  assert.equal(harness.actions.isRedrawOwed(linear), false);
 });

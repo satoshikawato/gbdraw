@@ -63,6 +63,7 @@ from gbdraw.analysis.protein_colinearity import (
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
@@ -82,7 +83,9 @@ from gbdraw.linear_comparison import (
 )
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
+    _LEGACY_SPACING_PARAM,
     _InternalCircularTrackSlot,
+    _migrate_legacy_circular_track_slot_spec,
     _internal_circular_track_slot,
     _normalize_renderer as _circular_renderer_name,
     parse_circular_track_slot,
@@ -220,11 +223,11 @@ class _LegacyStandardCollinearityPayload:
 
     def to_lossless(self) -> LosslessCollinearityParameters:
         return LosslessCollinearityParameters(
-            min_anchors=self.min_anchors,
-            max_unit_gap=self.max_gene_gap,
-            max_diagonal_drift=self.max_diagonal_drift,
-            max_conflicts=self.max_conflicts_in_merge_gap,
-            merge_orientation="either",
+            **{
+                lossless: getattr(self, standard)
+                for standard, lossless in _LEGACY_STANDARD_COLLINEARITY_FIELDS.items()
+            },
+            merge_orientation=_LEGACY_STANDARD_MERGE_ORIENTATION,
         )
 
 
@@ -269,6 +272,10 @@ _LEGACY_SPARSE_FEATURE_TYPES = (
     "misc_RNA",
     "repeat_region",
 )
+# The feature shapes a schema 1-2 request left unset.
+_LEGACY_SPARSE_FEATURE_SHAPES = {"repeat_region": "rectangle"}
+# Schemas 1-2 values of the Circular multi-record size mode.
+_LEGACY_SIZE_MODE_RENAMES = {"sqrt": "auto"}
 _LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
     "circular": {
         "canvas.show_gc": True,
@@ -283,6 +290,23 @@ _LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
 _LEGACY_CONFIG_OVERRIDE_KEYS = {
     "depth_tick_interval": "depth_large_tick_interval",
 }
+# Schemas 1-2 diagramOptions names of the feature visibility table.
+_LEGACY_FEATURE_VISIBILITY_RENAMES = (
+    ("featureTable", "featureVisibilityTable"),
+    ("featureTableFile", "featureVisibilityTableFile"),
+)
+# A ``kind=standard`` collinearity payload (schemas 1-2) read as lossless
+# parameters: standard field -> lossless field, and the merge orientation.
+_LEGACY_STANDARD_COLLINEARITY_FIELDS = {
+    "min_anchors": "min_anchors",
+    "max_gene_gap": "max_unit_gap",
+    "max_diagonal_drift": "max_diagonal_drift",
+    "max_conflicts_in_merge_gap": "max_conflicts",
+}
+_LEGACY_STANDARD_MERGE_ORIENTATION: Literal["either"] = "either"
+# The paralog link setting a ``kind=standard`` payload's own value replaces
+# in collinear mode, when the setting holds this default.
+_LEGACY_PARALOG_LINKS_DEFAULT = 2
 _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES = {
     "label_placement": {
         "on_feature": "above_feature",
@@ -1628,8 +1652,8 @@ def _decode_circular_layout(
             "renderRequest.layout.multiRecordPositions must be a string array or null."
         )
     size_mode = layout["multiRecordSizeMode"]
-    if schema in {1, 2} and size_mode == "sqrt":
-        size_mode = "auto"
+    if schema in {1, 2} and isinstance(size_mode, str):
+        size_mode = _LEGACY_SIZE_MODE_RENAMES.get(size_mode, size_mode)
     result = CircularMultiRecordOptions(
         multi_record_size_mode=size_mode,
         multi_record_min_radius_ratio=layout["multiRecordMinRadiusRatio"],
@@ -1910,7 +1934,8 @@ def _decode_diagram_options(
         )
     if schema in {1, 2}:
         feature_shapes = dict(decoded.get("feature_shapes") or {})
-        feature_shapes.setdefault("repeat_region", "rectangle")
+        for feature_type, shape in _LEGACY_SPARSE_FEATURE_SHAPES.items():
+            feature_shapes.setdefault(feature_type, shape)
         decoded["feature_shapes"] = feature_shapes
     if schema in {1, 2}:
         _restore_legacy_sparse_defaults(decoded, mode=mode)
@@ -1953,10 +1978,7 @@ def _migrate_legacy_feature_visibility_fields(
     """Move removed feature-table aliases at the legacy schema boundary."""
 
     migrated = dict(payload)
-    for old_name, current_name in (
-        ("featureTable", "featureVisibilityTable"),
-        ("featureTableFile", "featureVisibilityTableFile"),
-    ):
+    for old_name, current_name in _LEGACY_FEATURE_VISIBILITY_RENAMES:
         if old_name not in migrated:
             continue
         old_value = migrated.pop(old_name)
@@ -2006,16 +2028,20 @@ def _decode_config_overrides(
                 f"{path} contains retired value {retired!r}; schema {schema} "
                 "requires canonical config overrides."
             )
-    return _migrate_flat_config_overrides(overrides, mode=mode, path=path)
+    return migrate_flat_config_overrides(overrides, mode=mode, path=path)
 
 
-def _migrate_flat_config_overrides(
+def migrate_flat_config_overrides(
     overrides: Mapping[str, Any],
     *,
     mode: Literal["circular", "linear"],
     path: str,
 ) -> dict[str, Any]:
-    """Project persisted flat aliases onto schema-derived dotted leaves."""
+    """Project persisted flat aliases onto schema-derived dotted leaves.
+
+    The decoder reads the overrides of every stored request with it, and so
+    does the Web Load check of a stored request (OV-799).
+    """
 
     legacy_label_paths = {
         "canvas.show_labels",
@@ -2767,7 +2793,7 @@ def _decode_option_value(
     if schema < DISPLAY_PLACEMENT_SCHEMA:
         value = _without_unwritten_feature_tolerance(name, value, CanonicalRequestDecodingError)
     if name == "config":
-        return _migrate_legacy_full_config(
+        return migrate_legacy_full_config(
             _object(value, path="renderRequest.diagramOptions.config"),
             mode=mode,
             path="renderRequest.diagramOptions.config",
@@ -2836,13 +2862,17 @@ def _decode_option_value(
     return value
 
 
-def _migrate_legacy_full_config(
+def migrate_legacy_full_config(
     value: Mapping[str, Any],
     *,
     mode: Literal["circular", "linear"],
     path: str,
 ) -> dict[str, Any]:
-    """Move persisted config aliases onto the current typed schema."""
+    """Move persisted config aliases onto the current typed schema.
+
+    The decoder reads every stored full ``config`` with it, and so does the Web
+    Load check of a stored request (OV-790).
+    """
 
     migrated = deepcopy(dict(value))
     canvas = migrated.get("canvas")
@@ -3559,7 +3589,7 @@ def _decode_track_slots(
         }
         if mode == "circular" and schema in {1, 2}:
             params = dict(kwargs.get("params") or {})
-            private_spacing = params.pop("__gbdraw_legacy_spacing", None)
+            private_spacing = params.pop(_LEGACY_SPACING_PARAM, None)
             if private_spacing is not None:
                 if legacy_spacing is not None:
                     raise CanonicalRequestDecodingError(
@@ -3590,31 +3620,6 @@ def _decode_track_slots(
             )
         result.append(decoded_slot)
     return tuple(result)
-
-
-def _migrate_legacy_circular_track_slot_spec(spec: str) -> str:
-    """Translate retired Circular slot fields at the persisted-data boundary."""
-
-    head, separator, options = str(spec).partition("@")
-    if not separator:
-        return str(spec)
-    migrated: list[str] = []
-    for raw_part in options.split(","):
-        part = raw_part.strip()
-        if not part or "=" not in part:
-            migrated.append(part)
-            continue
-        raw_key, raw_value = part.split("=", 1)
-        key = raw_key.strip().lower()
-        if key in {"strict", "compress", "reserve"}:
-            continue
-        if key == "spacing":
-            migrated.append(
-                f"__gbdraw_legacy_spacing={raw_value.strip()}"
-            )
-        else:
-            migrated.append(part)
-    return head if not migrated else f"{head}@{','.join(migrated)}"
 
 
 def _decode_scalar_if_needed(value: object, *, path: str) -> object:
@@ -4178,7 +4183,8 @@ def _decode_pipeline(
     if (
         mode == "collinear"
         and legacy_max_paralog_links is not None
-        and result["collinear_max_paralog_links_per_orthogroup"] == 2
+        and result["collinear_max_paralog_links_per_orthogroup"]
+        == _LEGACY_PARALOG_LINKS_DEFAULT
     ):
         result["collinear_max_paralog_links_per_orthogroup"] = (
             legacy_max_paralog_links
@@ -4941,6 +4947,68 @@ def _undescribed_parts(payload: object) -> list[str]:
     return violations(payload, ref(description["root"]), description["types"], "renderRequest")
 
 
+def describe_legacy_request_tables() -> dict[str, Any]:
+    """The tables of the request schemas 1-2 reading, with wire names.
+
+    The Web lift of a stored schema 1 or 2 request into schema 5
+    (``gbdraw/web/js/services/legacy-render-request.js``) reads them from the
+    generated ``LEGACY_REQUEST_TABLES``; this module's tables stay their owner.
+    """
+
+    paralog_key = next(
+        key
+        for key, _owner, name in _PROTEIN_SETTINGS_WIRE
+        if name == "collinear_max_paralog_links_per_orthogroup"
+    )
+    sparse_paths = {path for overrides in _LEGACY_SPARSE_CONFIG_OVERRIDES.values() for path in overrides}
+    return {
+        "comparisonDefaults": {
+            _option_wire_key(name): value
+            for name, value in _LEGACY_SPARSE_COMPARISON_DEFAULTS.items()
+        },
+        "featureTypes": list(_LEGACY_SPARSE_FEATURE_TYPES),
+        "featureShapes": dict(_LEGACY_SPARSE_FEATURE_SHAPES),
+        "multiRecordSizeModeRenames": dict(_LEGACY_SIZE_MODE_RENAMES),
+        # The slot parameter the decoder reads a slot spacing from (A8, N3).
+        "privateSpacingParam": _LEGACY_SPACING_PARAM,
+        "configOverrides": {
+            mode: dict(overrides)
+            for mode, overrides in _LEGACY_SPARSE_CONFIG_OVERRIDES.items()
+        },
+        "configOverrideRenames": dict(_LEGACY_CONFIG_OVERRIDE_KEYS),
+        "linearConfigOverrideValues": {
+            name: dict(values)
+            for name, values in _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES.items()
+        },
+        # The canonical paths of the flat names the lift reads: the Linear
+        # values above, a comparison height (B17, Web only), and the flat
+        # names of the sparse config defaults (a default yields to them).
+        "configOverridePaths": {
+            name: list(paths)
+            for name, paths in _LEGACY_FLAT_CONFIG_OVERRIDE_PATHS.items()
+            if name in (*_LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES, "comparison_height")
+            or sparse_paths.intersection(paths)
+        },
+        # What replaces an invalid comparison height of a stored full config
+        # (B17): the packaged default.
+        "comparisonHeightDefault": load_config_toml("gbdraw.data", "config.toml")["canvas"]["linear"][
+            "comparison_height"
+        ],
+        "diagramOptionRenames": dict(_LEGACY_FEATURE_VISIBILITY_RENAMES),
+        "collinearityStandardParameters": [
+            _camel(item.name) for item in fields(_LegacyStandardCollinearityPayload)
+        ],
+        "collinearityStandardFields": {
+            _camel(standard): _camel(lossless)
+            for standard, lossless in _LEGACY_STANDARD_COLLINEARITY_FIELDS.items()
+        },
+        "collinearityMergeOrientation": _LEGACY_STANDARD_MERGE_ORIENTATION,
+        "collinearityStandardParalogLinks": _camel("max_paralog_links_per_orthogroup"),
+        "paralogLinksSetting": paralog_key,
+        "paralogLinksDefault": _LEGACY_PARALOG_LINKS_DEFAULT,
+    }
+
+
 def describe_canonical_request() -> dict[str, Any]:
     """Describe the JSON of a current-schema request as neutral data.
 
@@ -5377,7 +5445,10 @@ __all__ = [
     "decode_canonical_typed_resource",
     "decode_canonical_request",
     "describe_canonical_request",
+    "describe_legacy_request_tables",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "migrate_flat_config_overrides",
+    "migrate_legacy_full_config",
     "with_automatic_scale_interval",
 ]

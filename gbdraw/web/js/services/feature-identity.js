@@ -20,9 +20,10 @@
  */
 /**
  * A record of the committed request, as the pure checks below, the record
- * display and the alignment read it. The committed request can be one of an
- * older schema that a Session keeps until the next Generate, so this is not
- * the generated `CanonicalRecord`.
+ * display and the alignment read it. The committed request is of the current
+ * schema, but the alignment owner's port (`getCommittedSession`) is not yet
+ * typed, so this names only the fields they read rather than the generated
+ * `CanonicalRecord`.
  * @typedef {{
  *   recordKey: string,
  *   cardinality?: string,

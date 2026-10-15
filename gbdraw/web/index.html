@@ -902,6 +902,10 @@
         .preview-feature-search .gfs-button--open {
             flex: 0 0 44px;
         }
+        .preview-feature-search .gfs-button--hide {
+            flex: 0 0 26px;
+            min-width: 26px;
+        }
         .preview-feature-search .gfs-button--search {
             flex: 0 0 62px;
             border-color: #1d4ed8;
@@ -1741,6 +1745,10 @@
             }
             .preview-controls > button span {
                 display: none;
+            }
+            /* The hidden search's match count stays beside the icon. */
+            .preview-controls > button .preview-search-count {
+                display: inline;
             }
             .preview-controls [aria-label="Reset zoom"] {
                 width: 3rem;
@@ -5875,7 +5883,7 @@
 
                 <div class="preview-editor-layout">
                     <div v-if="svgContent"
-                         v-show="resultPanelTab === 'preview'"
+                         v-show="resultPanelTab === 'preview' && previewFeatureSearchVisible"
                          :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError }]"
                          @click.stop
                          @mousedown.stop
@@ -5945,6 +5953,12 @@
                                     class="gfs-button gfs-button--clear"
                                     title="Clear search"
                                     aria-label="Clear search">Clear</button>
+                            <button type="button"
+                                    @click.stop="hidePreviewFeatureSearchBar"
+                                    data-history-ignore
+                                    class="gfs-button gfs-button--hide"
+                                    title="Hide feature search"
+                                    aria-label="Hide feature search"><i class="ph ph-x" aria-hidden="true"></i></button>
                         </div>
                         <div class="gfs-status-line" :class="{ 'is-empty': !previewFeatureSearchStatusText && !previewFeatureSearchActiveDetail }">
                             <span class="gfs-count" role="status" aria-label="Feature search status">{{ previewFeatureSearchStatusText }}</span>
@@ -8246,6 +8260,19 @@
                                 aria-label="Toggle canvas padding controls">
                             <i class="ph ph-frame-corners" aria-hidden="true"></i>
                             <span>Canvas padding</span>
+                        </button>
+                        <!-- Feature search bar toggle; the count names the matches of a hidden search. -->
+                        <button v-if="svgContent" type="button" @click="togglePreviewFeatureSearchBar"
+                                data-history-ignore
+                                data-preview-search-toggle
+                                class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
+                                :class="{ 'bg-blue-50 text-blue-600 border-blue-300': previewFeatureSearchVisible }"
+                                title="Show or hide the feature search bar"
+                                :aria-pressed="previewFeatureSearchVisible"
+                                aria-label="Toggle feature search">
+                            <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+                            <span>Search</span>
+                            <span v-if="previewFeatureSearchHiddenMatchCount" class="preview-search-count">· {{ previewFeatureSearchHiddenMatchCount }}</span>
                         </button>
                         <!-- Zoom controls -->
                         <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">

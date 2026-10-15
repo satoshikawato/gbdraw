@@ -36,6 +36,8 @@ import { ownEntry } from '../../utils/own-entry.js';
  *   feature editor port: opens the popup for a feature at a screen point
  * @property {() => Record<string, any>[]} [resolveOrthogroups] orthogroups named for the search (default: `state.orthogroups`)
  * @property {(() => boolean) | null} [isActiveResultReady] preview runtime port
+ * @property {() => void} focusSearchQuery focuses the search bar's query input
+ * @property {() => void} focusSearchToggle focuses the toolbar button that shows and hides the search bar
  */
 
 /**
@@ -48,7 +50,9 @@ export const createPreviewFeatureSearch = ({
   computed,
   openFeatureEditorForFeature,
   resolveOrthogroups = () => state.orthogroups.value,
-  isActiveResultReady = null
+  isActiveResultReady = null,
+  focusSearchQuery,
+  focusSearchToggle
 }) => {
   const {
     svgContainer,
@@ -69,6 +73,7 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchActiveIndex,
     previewFeatureSearchError,
     previewFeatureSearchRenderedCount,
+    previewFeatureSearchVisible,
     clickedFeature
   } = state;
 
@@ -417,10 +422,28 @@ export const createPreviewFeatureSearch = ({
     installSearch(searchByMode.get(arriving) || EMPTY_SEARCH);
     searchByMode.delete(arriving);
   };
-  // A loaded Session replaces the Results of both modes that a search named.
+  // Hiding the search bar changes its visibility only: the search, its
+  // matches, and its highlights stay, and the toolbar button names the match
+  // count meanwhile. Showing it from the toolbar focuses the query; hiding it
+  // returns focus to the toolbar button.
+  const hideSearchBar = () => {
+    previewFeatureSearchVisible.value = false;
+    nextTick(focusSearchToggle);
+  };
+  const toggleSearchBar = () => {
+    previewFeatureSearchVisible.value = !previewFeatureSearchVisible.value;
+    if (previewFeatureSearchVisible.value) nextTick(focusSearchQuery);
+  };
+  const previewFeatureSearchHiddenMatchCount = computed(() => (
+    previewFeatureSearchVisible.value ? 0 : previewFeatureSearchMatches.value.length
+  ));
+
+  // A loaded Session replaces the Results of both modes that a search named,
+  // and shows the search bar again.
   const resetModeSearches = () => {
     searchByMode.clear();
     clearSearch();
+    previewFeatureSearchVisible.value = true;
   };
 
   watch(
@@ -477,6 +500,9 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchCanSearch,
     previewFeatureSearchStatusText,
     previewFeatureSearchActiveDetail,
+    previewFeatureSearchHiddenMatchCount,
+    hideSearchBar,
+    toggleSearchBar,
     setQuery,
     setField,
     applySearch,

@@ -453,6 +453,8 @@ const previewFeatureSearchMatchDetails = ref({});
 const previewFeatureSearchActiveIndex = ref(-1);
 const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
+// Whether the Preview search bar is shown; transient view state (search-bar hide D-04).
+const previewFeatureSearchVisible = ref(true);
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const autoLabelReflowEnabled = ref(false);
@@ -1218,6 +1220,7 @@ export const state = {
   previewFeatureSearchActiveIndex,
   previewFeatureSearchError,
   previewFeatureSearchRenderedCount,
+  previewFeatureSearchVisible,
   featureListScrollTop,
   featureListViewportHeight,
   featureListExpandedId,

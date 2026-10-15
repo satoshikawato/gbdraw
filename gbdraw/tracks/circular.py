@@ -79,6 +79,9 @@ _OBSOLETE_GEOMETRY_KEYS = {
 }
 
 _OBSOLETE_SPACING_KEYS = {"gap", "gap_after"}
+# The slot parameter that carries a schema 1-2 slot spacing from the request
+# decoder to the slot parser (legacy transport only).
+_LEGACY_SPACING_PARAM = "__gbdraw_legacy_spacing"
 _OBSOLETE_CAMEL_KEYS = {
     "gapafter",
     "innerradius",
@@ -271,6 +274,31 @@ def _normalize_feature_lane(raw: object) -> str:
     return lane
 
 
+def _migrate_legacy_circular_track_slot_spec(spec: str) -> str:
+    """Move retired Circular slot fields of a stored slot text into the private
+    persisted-data transport (Session requests and recorded CLI invocations).
+    """
+
+    head, separator, options = str(spec).partition("@")
+    if not separator:
+        return str(spec)
+    migrated: list[str] = []
+    for raw_part in options.split(","):
+        part = raw_part.strip()
+        if not part or "=" not in part:
+            migrated.append(part)
+            continue
+        raw_key, raw_value = part.split("=", 1)
+        key = raw_key.strip().lower()
+        if key in {"strict", "compress", "reserve"}:
+            continue
+        if key == "spacing":
+            migrated.append(f"{_LEGACY_SPACING_PARAM}={raw_value.strip()}")
+        else:
+            migrated.append(part)
+    return head if not migrated else f"{head}@{','.join(migrated)}"
+
+
 def parse_circular_track_slot(
     raw: str,
     *,
@@ -322,7 +350,7 @@ def parse_circular_track_slot(
                             "'spacing' is no longer supported; use inner_gap_px and outer_gap_px"
                         )
                     legacy_spacing = ScalarSpec.parse(value)
-                elif key == "__gbdraw_legacy_spacing":
+                elif key == _LEGACY_SPACING_PARAM:
                     if not _allow_legacy_transport:
                         raise ValueError(
                             "private legacy spacing transport is not accepted by fresh track slots"
@@ -415,7 +443,7 @@ def parse_circular_track_slots(
             params = {str(key): value for key, value in dict(item.params or {}).items()}
             legacy_spacing: ScalarSpec | None = None
             if _allow_legacy_transport:
-                legacy_spacing_raw = params.pop("__gbdraw_legacy_spacing", None)
+                legacy_spacing_raw = params.pop(_LEGACY_SPACING_PARAM, None)
                 if legacy_spacing_raw is not None:
                     legacy_spacing = (
                         legacy_spacing_raw

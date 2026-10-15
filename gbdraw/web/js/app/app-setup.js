@@ -1602,45 +1602,36 @@ export const createAppSetup = () => {
     }
   };
   // A restore, or Reset Settings, that rewrites the rules: the rule owner
-  // follows the rules `write` replaced.
+  // follows the rules `write` replaced. A checkpoint figure History recorded
+  // as drawn shows its rules as Python draws them, so its restore asks for no
+  // rerender (D-24 (OV-731)).
   /**
    * @template T
    * @param {DrawingState} drawing
    * @param {() => Promise<T>} write
+   * @param {{ drawn: boolean }} [restored]
    * @returns {Promise<T>}
    */
-  const followRuleEdits = async (drawing, write) => {
+  const followRuleEdits = async (drawing, write, { drawn } = { drawn: false }) => {
     const previousRules = drawing.manualSpecificRules.map((/** @type {SpecificColorRule} */ rule) => ({ ...rule }));
     specificRuleRestorePorts.retainRulesForRestore(previousRules);
     try {
       const written = await write();
-      specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
+      if (!drawn) specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
       return written;
     } finally {
       specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
-  /**
-   * @template {unknown[]} A
-   * @template R
-   * @param {DrawingState} drawing
-   * @param {(...args: A) => R} restore
-   * @param {A} args
-   */
-  const restoreRuleEdits = (drawing, restore, ...args) => followRuleEdits(
-    drawing, () => restoreWithSpecificRuleDrafts(restore, ...args)
-  );
   const history = createHistoryManager(/** @type {HistoryManagerOptions} */ ({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: (...args) => {
-      const drawing = state.activeDrawing();
-      return restoreRuleEdits(drawing, historySnapshots.applyHistoryIntent, ...args);
-    },
+    applyIntent: (...args) => followRuleEdits(
+      state.activeDrawing(), () => restoreWithSpecificRuleDrafts(historySnapshots.applyHistoryIntent, ...args)
+    ),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: (...args) => {
-      const drawing = state.activeDrawing();
-      return restoreRuleEdits(drawing, historySnapshots.applyArtifactCheckpoint, ...args);
-    },
+    applyCheckpoint: (checkpoint, restored) => followRuleEdits(
+      state.activeDrawing(), () => restoreWithSpecificRuleDrafts(historySnapshots.applyArtifactCheckpoint, checkpoint), restored
+    ),
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
@@ -1939,7 +1930,9 @@ export const createAppSetup = () => {
       display_name: orthogroupActions.resolveOrthogroupName(group),
       description: orthogroupActions.resolveOrthogroupDescription(group)
     })),
-    openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
+    openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature,
+    focusSearchQuery: () => /** @type {HTMLElement | null} */ (document.querySelector('.preview-feature-search .gfs-query'))?.focus(),
+    focusSearchToggle: () => /** @type {HTMLElement | null} */ (document.querySelector('[data-preview-search-toggle]'))?.focus()
   });
 
   watch(selectedResultIndex, () => {
@@ -3096,6 +3089,9 @@ export const createAppSetup = () => {
     ...(artifactSlots.circular?.values.results || []),
     ...(artifactSlots.linear?.values.results || [])
   ].map(previewRuntime.getResultIdentity);
+  // Each Result's bytes reflect the editor state it was committed or last
+  // shown with (`createResultPaintRecord`); the binder below reads it (R13).
+  const resultPaintRecord = createResultPaintRecord();
   previewRuntime.configureMountedResultBinder({
     async adoptLegend(context) {
       const drawing = state.activeDrawing();
@@ -3224,8 +3220,23 @@ export const createAppSetup = () => {
       }
     },
     afterReady(context) {
+      // D-36: a label rerender pays the redraw its drawing owes when, as its
+      // Result is ready, no later rerender runs and its figure shows the
+      // drawing's current paint, also after an edit made since its paint was
+      // committed (read before that edit is shown on it, OV-346).
+      // Its drawing is the shown one: a mode switch waits for a rerender
+      // (`diagramModeSwitchBusy`). D-24 (OV-731): History keeps the figure
+      // as the last step's.
+      const drawing = state.activeDrawing();
+      const drewCurrent = context.phase === 'label-reflow' && !labelReflowProcessing.value
+        && resultPaintRecord.drewPaint(context.bindingOptions.drawnPaint, currentEditorProjectionState(drawing));
       previewFeatureSearch.handleMountedResultReady();
       showEditsMadeWhileDrawn(context);
+      if (!drewCurrent) return;
+      featureActions.redrawShown(drawing);
+      history.keepRedrawnResult().catch((error) => {
+        console.error('History could not keep the redrawn figure.', normalizeUserFacingError(error));
+      });
     }
   });
   const {
@@ -3818,9 +3829,6 @@ export const createAppSetup = () => {
     }
   });
 
-  // Each Result's bytes reflect the editor state it was committed or last
-  // shown with (`createResultPaintRecord`).
-  const resultPaintRecord = createResultPaintRecord();
   // A displayed Result whose label intent changed since it was last shown
   // receives the label projection in the binder's label step, also when no
   // label intent remains (an undone or replaced Label TSV import).
@@ -7135,6 +7143,10 @@ export const createAppSetup = () => {
     goToPreviousPreviewFeatureSearchMatch: previewFeatureSearch.goToPrevious,
     clearPreviewFeatureSearch: previewFeatureSearch.clearSearch,
     openPreviewFeatureSearchActiveMatch: previewFeatureSearch.openActiveMatch,
+    previewFeatureSearchVisible: state.previewFeatureSearchVisible,
+    previewFeatureSearchHiddenMatchCount: previewFeatureSearch.previewFeatureSearchHiddenMatchCount,
+    hidePreviewFeatureSearchBar: previewFeatureSearch.hideSearchBar,
+    togglePreviewFeatureSearchBar: previewFeatureSearch.toggleSearchBar,
     selectedFeatureIds,
     selectedFeatureAnchorId,
     featureSelectionStatus,

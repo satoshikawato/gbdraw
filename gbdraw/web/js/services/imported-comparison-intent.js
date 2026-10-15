@@ -1,5 +1,6 @@
 // @ts-check
-import { isCurrentRequestSchema } from '../utils/request-schema.js';
+import { liftLegacyRenderRequest } from './legacy-render-request.js';
+
 /**
  * Whether and how a Session's saved comparison can be edited, as the Imported comparison state holds it.
  * @typedef {{ disposition: string, action: string | null, message: string, hasCommittedComparison: boolean }} ImportedComparisonIntent
@@ -289,13 +290,19 @@ const generatedPipelineIsProjectable = ({ records, comparisons, pipeline }) => {
 };
 
 /**
+ * A stored request is classified as its reader reads it: a schema 1 or 2
+ * request through the lift (PR-D, OV-796), so its comparisons classify as the
+ * schema-2 re-save of the same Session does.
  * @param {{ renderRequest?: SavedRenderRequest, resources?: SavedResources }} [input]
  * @returns {ImportedComparisonIntent}
  */
 export const classifyImportedComparisonIntent = ({
-  renderRequest,
+  renderRequest: stored,
   resources = {}
 } = {}) => {
+  // The cast: a lifted request is a schema-5 request, whose parts the checks
+  // below read as they read a stored one.
+  const renderRequest = /** @type {SavedRenderRequest | undefined} */ (liftLegacyRenderRequest(stored).value);
   const mode = String(renderRequest?.mode || '');
   const comparisons = Array.isArray(renderRequest?.comparisons)
     ? renderRequest.comparisons
@@ -543,9 +550,7 @@ const collectComparisonResourceIds = (value, target = new Set()) => {
  * @returns {C}
  */
 export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
-  // A committed request Load kept as stored (schema 1) is no comparison owner.
-  if (!isObject(candidate?.renderRequest) || !isObject(committed?.renderRequest)
-    || !isCurrentRequestSchema(committed.renderRequest)) {
+  if (!isObject(candidate?.renderRequest) || !isObject(committed?.renderRequest)) {
     throw new Error('The preserved comparison is unavailable. Reload the Session and try again.');
   }
   const comparisons = committed.renderRequest.comparisons;

@@ -141,7 +141,7 @@ test('the Legend item of K features, whose K hash rules name a row of another co
       ref, computed: (get) => ({ get value() { return get(); } }), watch() {}, state, rulePreparation: preparation,
       runUndoable: async (_, commit) => commit(), runUndoableCheckpoint: async (_, commit) => commit(),
       prepareFileLegendEntries: async () => false, projectPaletteAndRules: () => true,
-      ports: { requestAutomaticRerender: () => true }, getCommittedRequest: () => null, isPatternEditAvailable: () => true
+      ports: { requestAutomaticRerender: () => true, isRedrawOwed: () => false }, getCommittedRequest: () => null, isPatternEditAvailable: () => true
     });
     /** @type {Record<string, any>[]} */
     let siblings = [];

@@ -16,6 +16,7 @@ from ..tracks import (
     normalize_circular_track_slots_with_axis,
     parse_circular_track_slots,
 )
+from ..tracks.circular import _LEGACY_SPACING_PARAM
 from ..tracks.parsing import split_kv_list
 
 
@@ -912,7 +913,7 @@ def _parse_circular_track_table_params(
         normalized_key = key.strip().lower()
         if normalized_key.startswith("_") and not (
             _allow_legacy_transport
-            and normalized_key == "__gbdraw_legacy_spacing"
+            and normalized_key == _LEGACY_SPACING_PARAM
         ):
             raise ValidationError(
                 _cell_error(

@@ -347,7 +347,8 @@ each matched item's offset into the new automatic layout for the same diagram;
 it does not pin an absolute page position. If the source, selected region,
 record set, or layout no longer matches a moved item, Generate keeps the saved
 Result and asks for that item's position reset, **Reset Layout**, or matching
-settings. Preview search placement and Layout edit hints are not saved. Keep
+settings. Preview search placement, whether the search bar is hidden, and Layout edit
+hints are not saved. Keep
 the Session when browser positioning must be reproduced; a raw Python render
 request alone does not contain those manual positions. Session version 40
 files that unreleased builds of early August 2026 saved recorded moved items
@@ -723,8 +724,10 @@ this page documents current support.
 
 New commands and Python calls reject the names and values below. A Session or
 a canonical request schema 1–2 saved by an earlier release may still use them:
-gbdraw rewrites them before it draws. A retired CLI flag exits with status 2
-and names its replacement. A retired Python field raises `TypeError`; there is
+the CLI and the Python API rewrite them before they draw. The Web app reads
+those a Session 31–33 request stores the same way, except a Circular slot
+`spacing` (see below the table). A retired CLI flag exits with status 2 and
+names its replacement. A retired Python field raises `TypeError`; there is
 no alias. Field names stored inside a Session file do not change.
 
 | Retired input | Current input |
@@ -765,9 +768,12 @@ Long options of more than one word use underscores, with two aliases that still
 work: `--annotation-table` for `--annotation_table`, and
 `--gc_content_tick_interval` for `--gc_content_large_tick_interval`.
 
-A Circular slot whose spacing an earlier release stored as a factor still draws.
-Set explicit pixel gaps (`inner_gap_px`, `outer_gap_px`) before you save it in
-the current format; a factor cannot be saved without loss.
+In the CLI and the Python API, a Circular slot whose spacing an earlier release
+stored as a factor still draws. Set explicit pixel gaps (`inner_gap_px`,
+`outer_gap_px`) before you save it in the current format; a factor cannot be
+saved without loss. The Web app drops a factor spacing of a Session 31–33 at
+Load and reads a spacing without a unit as pixels; it lists both in
+**Load this file?**.
 
 ## Record rotation and feature placement
 

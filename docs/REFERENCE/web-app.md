@@ -1321,7 +1321,11 @@ turned on.
 Feature search stays in its own row above the canvas, and the zoom and layout
 controls stay in a row below it. Open or close **Editor** without moving the
 search bar over the diagram; the search bar can no longer be dragged to a free
-position. On a short screen, scroll the Result or page to reach both rows.
+position. **×** at the end of the search row hides the bar and gives its height
+to the canvas, and **Search** in the bottom row shows it again with the same
+query, matches, and highlights; while the bar is hidden, that button shows the
+match count. Hiding the bar is not a History step and is not saved; loading a
+Session shows it again. On a short screen, scroll the Result or page to reach both rows.
 **Fit to preview** (**Fit**) in the zoom controls shows the whole diagram
 centred in the canvas, at the largest whole percent that fits. With **Editor**
 open beside the canvas, it fits the part of the canvas the Editor leaves free.

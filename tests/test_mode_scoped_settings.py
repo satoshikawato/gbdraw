@@ -418,6 +418,14 @@ def test_session_46_validates_unmanaged_overrides_against_their_slice_mode(
     assert excinfo.value.diagnostic["code"] == "MODE_SETTING"
 
 
+def test_session_46_reads_no_flat_override_name_in_a_slice(session_46: dict[str, Any]) -> None:
+    # The decoder's flat-name migration reads stored requests only (OV-799,
+    # D-OD11): a slice's unmanaged overrides keep the draft check.
+    session_46["modes"]["circular"]["config"]["unmanagedConfigOverrides"] = {"gc_stroke_color": "red"}
+    with pytest.raises(ValidationError, match="Unknown config override path: 'gc_stroke_color'"):
+        validate_session(session_46)
+
+
 def test_session_46_settings_only_needs_the_shown_modes_configuration() -> None:
     source = _read("settings-only.v42.json.gz")
     session = split_draft_into_modes(source, committed_mode=source["ui"]["mode"]) | {"version": 46}

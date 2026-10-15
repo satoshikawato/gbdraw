@@ -343,6 +343,15 @@ write-up of a release.
   comparison that holds one is dropped with a row, and a Session whose
   comparison settings hold one is still refused. A file that holds `top1` or
   `legacy` now loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
+- Fixed (web app): since late August 2026, gbdraw.app had refused every Session
+  31–32 whose request has schema 1, and some Sessions 32–33 whose request has
+  schema 2, among them most older Gallery Sessions with schema 2 (OV-790). They
+  load again. Load reads the request in the current format, with no
+  **Load this file?** dialog when nothing is lost. Their saved comparisons,
+  protein comparison settings and similarity alignment stay editable (OV-796),
+  and a live edit works before the first **Generate Diagram**. **Save Session**
+  writes request schema 9; right after Load of a Session with a saved Result
+  it first asks for one Generate, as for other Sessions saved before Session 40.
 - Fixed (web app): the shape set for a feature type added to the feature list
   was dropped when its Session was loaded again; Load now keeps it.
 - Fixed (web app): a cleared **Feature overlap tolerance (bp)** made Save
@@ -629,6 +638,13 @@ write-up of a release.
   earlier action's step, and so does any edit made while a **Specific Table
   (-t)** upload, **Reset Settings**, or a color rule change that adds or
   removes a Legend row is being applied (OV-460, OV-461).
+- Changed (web app): Undo and Redo of a color change that adds or removes a
+  Legend row no longer draw the diagram again in Python once the automatic
+  redraw of that change has been shown while the change was the last step:
+  its History step keeps the redrawn diagram. An Undo or Redo made while that
+  redraw is still running, or after a redraw that never finished, still draws
+  again, so the diagram and its Legend always show the restored colors
+  (OV-731).
 - Web: when **Load Label TSV** is applied while the Label Not Shown dialog is
   open, the dialog is cancelled and the edited label text is not written.
   Before, the dialog disappeared without an answer, and Undo, Redo, Save and
