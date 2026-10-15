@@ -1481,9 +1481,9 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH
 // blank (null) reads as the reader's default (OV-827), the Linear record
 // gap's too (OV-828, BA-D30).
 test('a History restore reads a blank as the reader\'s default, other values as before, and asks nothing', async () => {
-  const { applyConfigData } = await import('../../gbdraw/web/js/services/config.js');
+  const { applyCapturedConfigData } = await import('../../gbdraw/web/js/services/config.js');
   const drawing = state.drawings.circular;
-  applyConfigData(drawing, {
+  applyCapturedConfigData(drawing, {
     adv: {
       label_rendering: 'sideways', multi_record_column_gap_ratio: null, multi_record_row_gap_ratio: 'x',
       depth_min: 5, depth_max: 2, gc_content_min_percent: 60, gc_content_max_percent: 40, track_axis_gap: 'auto',

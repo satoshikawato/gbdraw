@@ -695,7 +695,7 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
     }
     await app.resetSettings();
     for (const [mode, { config: settings }] of Object.entries(drawings)) {
-      config.applyConfigData(state.drawings[mode], settings, { resolveTrackPlacements: false });
+      config.applyCapturedConfigData(state.drawings[mode], settings, { resolveTrackPlacements: false });
     }
     await window.Vue.nextTick();
     for (const [mode, { ui }] of Object.entries(drawings)) {
