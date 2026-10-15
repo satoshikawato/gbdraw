@@ -274,7 +274,11 @@ npx playwright test tests/web/webapp-performance.playwright.spec.js
 
 ## 9. Phase 4: 開発用runtimeと未使用export payloadを初期経路から外す（P1）
 
-Status: next (current scope: 4C / P1-1a lazy export payload loading only)
+Status: next (current scope: 4C / P1-1a lazy export payload loading only).
+4B: Owner 2026-10-16 (D-02 of band-hover-perf-20261015). The page links the generated `gbdraw/web/css/tailwind.css`
+(`tools/generate_web_tailwind_css.mjs`, guard `tests/web/tailwind-stylesheet.test.mjs`). 4A and removing
+`vendor/tailwindcss/tailwindcss-play.js` from the package change `gbdraw/web/vendor/`, which the Web change gate
+blocks without an exception route; they wait for a governance decision.
 
 ### 4A. Vue production build
 

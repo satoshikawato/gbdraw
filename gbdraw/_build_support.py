@@ -30,6 +30,7 @@ _PYTHON_RUNTIME_PACKAGE_DATA = [
 
 _WEB_APP_PACKAGE_DATA = [
     "web/index.html",
+    "web/css/tailwind.css",
     "web/open-source-notices.html",
     "web/gallery/palettes/palettes.json",
     "web/assets/*.ico",
@@ -85,6 +86,7 @@ BROWSER_WHEEL_MAX_BYTES = 20 * 1024 * 1024
 _BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/bin/",
     "gbdraw/web/assets/",
+    "gbdraw/web/css/",
     "gbdraw/web/gallery/",
     "gbdraw/web/js/",
     "gbdraw/web/presets/",
