@@ -106,6 +106,17 @@ const committedRequest = (page) => page.evaluate(async () => {
   };
 });
 
+// The rows the browser commits for tRNA-Phe of the first record; the Python test
+// test_cw04_each_generate_leaves_the_catalog_a_fresh_cache_gives models exactly these.
+const overrideRow = (fields) => ({
+  recordKey: expect.stringMatching(/^linear-seq-/),
+  biologicalFeatureId: 'fb8ff22d9',
+  featureVisibility: null,
+  labelVisibility: null,
+  labelText: null,
+  ...fields
+});
+
 test('status, selection, and input build no tables; each Generate builds its label table once', async ({ page }) => {
   test.setTimeout(300_000);
   await install(page);
@@ -135,7 +146,7 @@ test('status, selection, and input build no tables; each Generate builds its lab
   expect(perFeature.counts.labelOverrideTableBuildCount || 0).toBe(0);
   expect(await committedRequest(page)).toMatchObject({
     labelOverrideFile: false,
-    featureOverrides: [expect.objectContaining({ labelVisibility: 'on' })]
+    featureOverrides: [overrideRow({ labelVisibility: 'on' })]
   });
   // CW-02: one label projection per Generate, shared by the staged copy and the request.
   let bulkRows = null;
@@ -143,8 +154,9 @@ test('status, selection, and input build no tables; each Generate builds its lab
   expect(bulkRows).toBe(1);
   const override = await observe(page, () => clickGenerate(page));
   expect(count(override, 'labelOverrideTableBuildCount')).toBe(1);
-  expect((await committedRequest(page)).featureOverrides
-    .some((row) => row.labelText === 'CW_BULK_LABEL')).toBe(true);
+  // The Label TSV import replaces the visibility row with one label-text row.
+  expect((await committedRequest(page)).featureOverrides)
+    .toEqual([overrideRow({ labelText: 'CW_BULK_LABEL' })]);
   // CW-04: every Generate renders and leaves an admitted catalog; the catalog
   // is sent and admitted again only when a catalog item was built again. The
   // label edit rebuilds the item, and its automatic label reflow sends and

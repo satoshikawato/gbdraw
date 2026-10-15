@@ -189,6 +189,7 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   const retry = await record(page, testInfo, 'retry-mobile');
   expectRenderStages(retry);
   // Cancel ended the Worker: the retry's new Worker sends and admits the catalog.
+  expect(retry.workers.constructions).toBe(2);
   expect(retry.events.map(event => event.name)).toContain('catalog.admission-started');
   expect(await committedIs(page, 'appliedBeforeCancel')).toBe(false);
   await screenshot(page, testInfo, 'ready-mobile');
