@@ -1547,6 +1547,8 @@ export const createAppSetup = () => {
   setPreviewRuntime(previewRuntime);
 
   const historyFileStore = createHistoryFileStore();
+  // Before the History snapshot service, which clears its copy feedback (D-37).
+  const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest });
   const historySnapshots = createHistorySnapshotService({
     state,
     fileStore: historyFileStore,
@@ -1565,7 +1567,8 @@ export const createAppSetup = () => {
     serializeResults,
     applyResultsData,
     buildRunStateData,
-    applyRunStateData
+    applyRunStateData,
+    clearSimilarityGroupCopyFeedback: orthogroupActions.clearCopyFeedback
   });
   // R13: a History restore keeps the open specific-color pattern drafts, and
   // Undo and Redo of a rule edit follow the restored rules as the edit did
@@ -1918,7 +1921,6 @@ export const createAppSetup = () => {
       focusToggle: () => /** @type {HTMLElement | null} */ (document.querySelector('.drawer-toggle'))?.focus()
     },
     getOpenDisabledReason: () => similarityAlignmentPorts.editorDisabledReason() });
-  const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest });
   const previewFeatureSearch = createPreviewFeatureSearch({
     state,
     watch,

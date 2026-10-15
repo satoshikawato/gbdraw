@@ -1000,6 +1000,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     hasOrthogroupSequence,
     hasOrthogroupMemberSequence,
     orthogroupCopyFeedbackLabel,
+    clearCopyFeedback,
     copyOrthogroupSequences,
     downloadOrthogroupSequences,
     copyOrthogroupMemberSequence,

@@ -972,6 +972,9 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  *   The generated Results' restore, with the checkpoint's UI state.
  * @property {(() => HistorySnapshotData) | null} [buildRunStateData] The last-run capture.
  * @property {((runState: HistorySnapshotData) => unknown) | null} [applyRunStateData] The last-run restore.
+ * @property {(() => void) | null} [clearSimilarityGroupCopyFeedback]
+ *   Clears the Similarity groups "Copied!" feedback when a Generate's artifact replaces the shown
+ *   Results (D-37): a reused feature catalog keeps the groups array, so its watcher would not fire.
  */
 
 /** @param {HistorySnapshotServiceOptions} options */
@@ -993,7 +996,8 @@ export const createHistorySnapshotService = ({
   serializeResults = null,
   applyResultsData = null,
   buildRunStateData = null,
-  applyRunStateData = null
+  applyRunStateData = null,
+  clearSimilarityGroupCopyFeedback = null
 }) => {
   if (!state || !fileStore) {
     throw new Error('createHistorySnapshotService requires state and fileStore.');
@@ -1183,6 +1187,8 @@ export const createHistorySnapshotService = ({
     }
     const drawing = drawingOfMode(state, ownerSet.generatedMode);
     const results = Array.isArray(ownerSet.results) ? ownerSet.results : [];
+    const replacesShownResults = artifactOwnedValue(results)
+      !== artifactOwnedValue(getGeneratedArtifactRef(state.results, []));
     if (typeof installResults === 'function') installResults(results);
     else setGeneratedArtifactRef(state.results, results);
     setGeneratedArtifactRef(
@@ -1258,6 +1264,7 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.appliedPaletteColors, ownerSet.appliedPaletteColors || {});
     setGeneratedArtifactRef(drawing.pendingPaletteName, ownerSet.pendingPaletteName || '');
     setGeneratedArtifactRef(drawing.pendingPaletteColors, ownerSet.pendingPaletteColors || {});
+    if (replacesShownResults) clearSimilarityGroupCopyFeedback?.();
   };
 
   // E1: the displayed mode's generated artifact, by reference, key by key.

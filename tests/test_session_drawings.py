@@ -79,7 +79,7 @@ def _linear_result_state(request: LinearDiagramRequest, tmp_path: Path) -> dict:
         )
     return {
         "results": web["results"],
-        "editorState": {"featureCatalog": web["metadata"]["featureCatalog"]},
+        "editorState": {"featureCatalog": web["featureCatalog"]},
     }
 
 

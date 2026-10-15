@@ -33,7 +33,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from enum import Enum
-from typing import Any, Callable, Hashable, Iterable, Literal, Mapping, ParamSpec, TypeVar, cast
+from typing import Any, Callable, Hashable, Iterable, Literal, Mapping, ParamSpec, Sequence, TypeVar, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -854,4 +854,33 @@ def render_stage(
     return result
 
 
-__all__ = ["RENDER_STAGE_SETTINGS", "RenderStageName", "render_stage"]
+def render_stage_revision(name: RenderStageName, results: Sequence[object]) -> str | None:
+    """Name the builds of ``results``, the stage ``name`` results of this transaction, in order.
+
+    The revision is the cache epoch and the build number of each result
+    (gbdraw/web/CLAUDE.md, Runtime data flow): equal revisions name the same
+    builds in one cache. ``None`` when a result was not stored under a
+    ``name`` key (uncacheable, an undeclared read, or not built by the stage),
+    outside a transaction, or when the cache has no epoch.
+    """
+
+    from gbdraw.api import prepared
+
+    transaction = prepared.active_render_stage_transaction()
+    if transaction is None or not results:
+        return None
+    epoch: str | None = None
+    build_ids: list[str] = []
+    for result in results:
+        key = prepared.prepared_value_identity(result)
+        if not (isinstance(key, tuple) and key[:2] == ("render-stage", name)):
+            return None
+        build = prepared.render_stage_build(transaction, key)
+        if build is None:
+            return None
+        epoch = build[0]
+        build_ids.append(str(build[1]))
+    return f"{epoch}:{'.'.join(build_ids)}"
+
+
+__all__ = ["RENDER_STAGE_SETTINGS", "RenderStageName", "render_stage", "render_stage_revision"]

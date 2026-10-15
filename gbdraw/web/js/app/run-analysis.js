@@ -31,7 +31,8 @@ import {
   DiagramGenerationCanceledError,
   isDiagramGenerationCanceled,
   runDiagramGeneration,
-  runDiagramHelperOperation
+  runDiagramHelperOperation,
+  selectHeldFeatureCatalog
 } from '../services/diagram-generation.js';
 import {
   projectCompositionRecordIdentity,
@@ -196,6 +197,7 @@ import {
 /** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { FeatureCatalog } from '../services/feature-catalog.js' */
 /** @import { LosatJob, LosatJobResult, LosatRunOptions } from '../services/losat.js' */
 /** @import { OrderedConservationSource } from '../services/conservation-series.js' */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
@@ -1391,7 +1393,7 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  * @property {string} [kind]
  * @property {((progress: any) => void) | null} [onProgress]
  * @property {() => boolean} [shouldAdmit]
- * @property {((payload: Record<string, any>, options?: { onProgress?: ((progress: any) => void) | null }) => Promise<any>) | null} [generationExecutor] Test seam.
+ * @property {((payload: Record<string, any>, options?: { onProgress?: ((progress: any) => void) | null, held?: ReturnType<typeof selectHeldFeatureCatalog> }) => Promise<any>) | null} [generationExecutor] Test seam.
  * @property {typeof admitFeatureCatalog} [catalogAdmission]
  * @property {typeof prepareCandidateRenderCommit} [prepareCommit]
  * @property {Record<string, any>} [prepareCommitInput]
@@ -1399,6 +1401,8 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  * @property {any[]} [timingEntries]
  * @property {readonly string[] | null} [resultNames] The names of the Results a rerender draws again,
  *   which they keep (OV-136); Generate's Results take the names the engine gives them.
+ * @property {FeatureCatalog | null} [heldFeatureCatalog] The catalog the page holds for the drawing it
+ *   renders; when this render reuses its build, the reply says so and the page keeps it.
  */
 
 /** @param {CanonicalRenderCandidateExecutionOptions} options */
@@ -1414,22 +1418,24 @@ export const executeCanonicalRenderCandidate = async ({
   prepareCommitInput = {},
   decorationContinuity = null,
   timingEntries = [],
-  resultNames = null
+  resultNames = null,
+  heldFeatureCatalog = null
 }) => {
   if (!canonical?.renderRequest || !canonical?.resources) {
     throw new Error('Canonical candidate execution requires a request and resources.');
   }
   recordStructuralMetric('canonicalCandidateExecutionCount', 1, { kind });
   const startedAt = getNow();
+  const held = selectHeldFeatureCatalog(heldFeatureCatalog, resultNames);
   const generationResponse = generationExecutor
     ? await generationExecutor({
         request: canonical.renderRequest,
         resources: canonical.resources
-      }, { onProgress })
+      }, { onProgress, held })
     : await runDiagramGeneration({
         request: canonical.renderRequest,
         resources: canonical.resources
-      }, { onProgress: onProgress });
+      }, { onProgress: onProgress, held });
   const results = generationResponse.results;
   if (!shouldAdmit()) {
     return { status: /** @type {const} */ ('superseded'), generationResponse, elapsedMs: getNow() - startedAt };
@@ -1672,6 +1678,15 @@ export const createRunAnalysis = ({
   ) {
     throw new Error('createRunAnalysis requires PreviewRuntime readiness and selection handlers.');
   }
+  /**
+   * Generate, a committed rerender and a label reflow render the shown
+   * drawing: they name its feature catalog, so a reused build keeps it.
+   * @param {CanonicalRenderCandidateExecutionOptions} options
+   */
+  const executeShownDrawingCandidate = (options) => executeCanonicalRenderCandidate({
+    ...options,
+    heldFeatureCatalog: captureGeneratedArtifactOwnerSet().featureCatalog ?? null
+  });
   /**
    * @param {LosatJob[]} jobs
    * @param {LosatRunOptions} [options]
@@ -5170,7 +5185,7 @@ export const createRunAnalysis = ({
       /** @type {TimingEntry[]} */
       const postGbdrawTimingEntries = [];
       failureStage = 'render';
-      const canonicalExecution = await executeCanonicalRenderCandidate({
+      const canonicalExecution = await executeShownDrawingCandidate({
         canonical,
         decorationContinuity,
         mode: mode.value,
@@ -5761,7 +5776,7 @@ export const createRunAnalysis = ({
     try {
       /** @type {TimingEntry[]} */
       const timingEntries = [];
-      const execution = await executeCanonicalRenderCandidate({
+      const execution = await executeShownDrawingCandidate({
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
@@ -6146,7 +6161,7 @@ export const createRunAnalysis = ({
       });
       /** @type {TimingEntry[]} */
       const timingEntries = [];
-      const execution = await executeCanonicalRenderCandidate({
+      const execution = await executeShownDrawingCandidate({
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,

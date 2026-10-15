@@ -822,3 +822,92 @@ def test_a_font_registered_between_renders_rebuilds_every_stage(tmp_path: Path) 
     assert CALLS == ["measured_face"] * 3
     assert len({before, after, replaced}) == 3
     assert after is not None and after.startswith("user-")
+
+
+def catalog_part(value: int, name: str) -> dict[str, object]:
+    CALLS.append(f"catalog_part:{value}")
+    return {"value": value, "name": name}
+
+
+def test_a_stage_revision_names_the_builds_of_one_cache_in_order() -> None:
+    """Step 3a: a hit keeps its build number; a rebuild, even of an evicted equal entry, gets a new one."""
+
+    cache = PreparedBiologicalInputCache()
+    with _transaction(cache):
+        first = [render_stage("catalog_item", catalog_part, index, "r") for index in (1, 2)]
+        cold = stages_module.render_stage_revision("catalog_item", first)
+        assert stages_module.render_stage_revision("catalog_item", list(reversed(first))) != cold
+    assert cold is not None
+    epoch, builds = cold.split(":")
+    assert len(epoch) == 16 and int(epoch, 16) >= 0
+    assert builds == "1.2"
+    with _transaction(cache):
+        warm = stages_module.render_stage_revision(
+            "catalog_item", [render_stage("catalog_item", catalog_part, index, "r") for index in (1, 2)]
+        )
+    assert warm == cold
+    with _transaction(cache):
+        changed = stages_module.render_stage_revision(
+            "catalog_item", [render_stage("catalog_item", catalog_part, index, "r") for index in (1, 3)]
+        )
+    assert changed == f"{epoch}:1.3"
+    # The build of 2 was not used by the last commit, so it was dropped: the
+    # same inputs build again under a new number.
+    with _transaction(cache):
+        again = stages_module.render_stage_revision(
+            "catalog_item", [render_stage("catalog_item", catalog_part, index, "r") for index in (1, 2)]
+        )
+    assert again == f"{epoch}:1.4"
+    assert CALLS == ["catalog_part:1", "catalog_part:2", "catalog_part:3", "catalog_part:2"]
+
+
+def test_two_caches_name_the_same_inputs_differently() -> None:
+    revisions = []
+    for _cache in range(2):
+        cache = PreparedBiologicalInputCache()
+        with _transaction(cache):
+            revisions.append(
+                stages_module.render_stage_revision(
+                    "catalog_item", [render_stage("catalog_item", catalog_part, 1, "r")]
+                )
+            )
+    assert None not in revisions
+    assert revisions[0] != revisions[1]
+
+
+def test_a_stage_revision_is_none_unless_every_result_is_a_stored_build_of_that_stage() -> None:
+    class Local:
+        pass
+
+    assert stages_module.render_stage_revision("catalog_item", [{"value": 1}]) is None
+    cache = PreparedBiologicalInputCache()
+    with _transaction(cache):
+        stored = render_stage("catalog_item", catalog_part, 1, "r")
+        unstored = render_stage("catalog_item", catalog_part, 2, Local())
+        other_stage = render_stage("gc_skew_data", double, 4)
+        assert stages_module.render_stage_revision("catalog_item", []) is None
+        assert stages_module.render_stage_revision("catalog_item", [stored, unstored]) is None
+        assert stages_module.render_stage_revision("catalog_item", [other_stage]) is None
+        assert stages_module.render_stage_revision("catalog_item", [{"value": 1, "name": "r"}]) is None
+        assert stages_module.render_stage_revision("catalog_item", [stored]) is not None
+    assert stages_module.render_stage_revision("catalog_item", [stored]) is None
+
+
+@pytest.mark.parametrize("error", [NotImplementedError, OSError])
+def test_a_cache_without_a_random_source_names_no_build(
+    monkeypatch: pytest.MonkeyPatch, error: type[Exception]
+) -> None:
+    """No epoch from a time or an id (D-38 OQ-5): the catalog is then always sent."""
+
+    import gbdraw.api.prepared as prepared_module
+
+    def no_random_source(_size: int) -> str:
+        raise error("no random source")
+
+    monkeypatch.setattr(prepared_module.secrets, "token_hex", no_random_source)
+    cache = PreparedBiologicalInputCache()
+    with _transaction(cache):
+        result = render_stage("catalog_item", catalog_part, 1, "r")
+        assert stages_module.render_stage_revision("catalog_item", [result]) is None
+    with _transaction(cache):
+        assert render_stage("catalog_item", catalog_part, 1, "r") is result

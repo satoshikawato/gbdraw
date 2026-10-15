@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import shutil
 from time import perf_counter
-from typing import Any, Iterator, Mapping, MutableMapping, cast
+from typing import Any, Iterator, Mapping, MutableMapping, TypedDict, cast
 
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
@@ -29,6 +29,7 @@ from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
+from gbdraw.render_stages import render_stage_revision
 from gbdraw.session import with_request_output
 from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.session_io import materialize_embedded_file, safe_embedded_filename
@@ -41,6 +42,21 @@ from gbdraw.web_support.label_fit import LabelFitMode, LabelFitRowSearches, labe
 # OD-F14: Generate on the Web draws crossing label leaders with their counts
 # only; the dialog computes the rows when the user asks for them.
 WEB_LABEL_FIT_WARN_SEARCH_SECONDS = 0.0
+
+
+class WebRenderReply(TypedDict):
+    """One Web render: the SVG Results, the run metadata, and the feature catalog beside them.
+
+    ``featureCatalog`` is ``None`` only when ``featureCatalogRevision`` equals
+    the revision the page holds: the page keeps the catalog it admitted for it
+    (gbdraw/web/CLAUDE.md, Runtime data flow). A render without a prepared
+    input cache has no revision and always returns the catalog.
+    """
+
+    results: list[dict[str, str]]
+    metadata: dict[str, Any]
+    featureCatalog: dict[str, object] | None
+    featureCatalogRevision: str | None
 
 
 def _label_fit_mode_of(request: DiagramRequest) -> LabelFitMode:
@@ -108,7 +124,7 @@ def render_canonical_web_request(
     output_directory: str | Path,
     _diagnostics: MutableMapping[str, Any] | None = None,
     _label_fit_searches: LabelFitRowSearches | None = None,
-) -> dict[str, Any]:
+) -> WebRenderReply:
     """Decode and render one browser request without a CLI translation layer."""
 
     return _render_canonical_web_request_with_prepared_inputs(
@@ -119,6 +135,7 @@ def render_canonical_web_request(
         _prepared_input_cache=None,
         _resource_identities=None,
         _label_fit_searches=_label_fit_searches,
+        _held_feature_catalog_revision=None,
     )
 
 
@@ -131,8 +148,9 @@ def _render_canonical_web_request_with_prepared_inputs(
     _prepared_input_cache: PreparedBiologicalInputCache | None,
     _resource_identities: Mapping[str, PreparedResourceIdentity] | None,
     _label_fit_searches: LabelFitRowSearches | None,
-) -> dict[str, Any]:
-    def render() -> dict[str, Any]:
+    _held_feature_catalog_revision: str | None,
+) -> WebRenderReply:
+    def render() -> WebRenderReply:
         # The request's color table is the app's rule list, not a saved file.
         with _capture_request_render_diagnostics(_diagnostics), rule_captions_as_written():
             return _render_canonical_web_request(
@@ -141,6 +159,7 @@ def _render_canonical_web_request_with_prepared_inputs(
                 output_directory=output_directory,
                 diagnostics=_diagnostics,
                 label_fit_searches=_label_fit_searches,
+                held_feature_catalog_revision=_held_feature_catalog_revision,
             )
 
     if _prepared_input_cache is None:
@@ -171,7 +190,8 @@ def _render_canonical_web_request(
     output_directory: str | Path,
     diagnostics: MutableMapping[str, Any] | None,
     label_fit_searches: LabelFitRowSearches | None,
-) -> dict[str, Any]:
+    held_feature_catalog_revision: str | None,
+) -> WebRenderReply:
 
     if not isinstance(payload, Mapping):
         raise ValidationError("The Web render request must be an object.")
@@ -259,7 +279,14 @@ def _render_canonical_web_request(
             records=geometry_records,
         )
     with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
-        metadata["featureCatalog"] = build_feature_catalog(feature_catalog_items)
+        # The page keeps the catalog it holds when this render reused the same
+        # item builds in this cache (gbdraw/web/CLAUDE.md, Runtime data flow).
+        catalog_revision = render_stage_revision("catalog_item", feature_catalog_items)
+        feature_catalog = (
+            None
+            if catalog_revision is not None and catalog_revision == held_feature_catalog_revision
+            else build_feature_catalog(feature_catalog_items)
+        )
     # Per Result: the Legend rows drawn and the feature rows the draft removed (OV-63).
     metadata["legendRows"] = legend_rows
     metadata["annotationWarnings"] = [
@@ -326,6 +353,8 @@ def _render_canonical_web_request(
     return {
         "results": results,
         "metadata": metadata,
+        "featureCatalog": feature_catalog,
+        "featureCatalogRevision": catalog_revision,
     }
 
 
@@ -334,7 +363,7 @@ def render_embedded_canonical_web_request(
     *,
     resources: Mapping[str, Mapping[str, Any]],
     workspace: str | Path,
-) -> dict[str, Any]:
+) -> WebRenderReply:
     """Materialize browser-owned resources, then render their typed request."""
 
     if not isinstance(resources, Mapping):
@@ -418,7 +447,7 @@ def render_staged_canonical_web_request(
     resource_paths: Mapping[str, str | Path],
     workspace: str | Path,
     _diagnostics: MutableMapping[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> WebRenderReply:
     """Render a browser request from paths staged by the diagram Worker."""
 
     return _render_staged_canonical_web_request_with_prepared_inputs(
@@ -441,7 +470,8 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
     _prepared_input_cache: PreparedBiologicalInputCache | None = None,
     _resource_identities: Mapping[str, Mapping[str, Any]] | None = None,
     _label_fit_searches: LabelFitRowSearches | None = None,
-) -> dict[str, Any]:
+    _held_feature_catalog_revision: str | None = None,
+) -> WebRenderReply:
     if not isinstance(resource_paths, Mapping):
         raise ValidationError("The staged Web render resource map must be an object.")
     workspace_path = Path(workspace)
@@ -504,6 +534,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             _prepared_input_cache=_prepared_input_cache,
             _resource_identities=validated_identities,
             _label_fit_searches=_label_fit_searches,
+            _held_feature_catalog_revision=_held_feature_catalog_revision,
         )
     except BaseException as exc:
         render_error = exc

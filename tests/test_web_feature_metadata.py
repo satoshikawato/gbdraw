@@ -116,23 +116,42 @@ def test_canonical_request_wrapper_returns_svg_content_as_utf8_bytes(
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],
 ) -> None:
+    """The metadata and the feature catalog travel as separate UTF-8 JSON bytes (step 3a)."""
+
     wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
     original_renderer = python_helpers_namespace["render_staged_canonical_web_request"]
-    python_helpers_namespace["render_staged_canonical_web_request"] = (
-        lambda *_args, **_kwargs: {
+    held: list[object] = []
+
+    def renderer(*_args: object, **kwargs: object) -> dict[str, object]:
+        held.append(kwargs["_held_feature_catalog_revision"])
+        unchanged = kwargs["_held_feature_catalog_revision"] == "e:1"
+        return {
             "results": [{"name": "diagram.svg", "content": "<svg>µ</svg>"}],
-            "metadata": {"featureCatalog": {"schema": 1}},
+            "metadata": {},
+            "featureCatalog": None if unchanged else {"schema": 1, "items": ["µ"]},
+            "featureCatalogRevision": "e:1",
         }
-    )
+
+    python_helpers_namespace["render_staged_canonical_web_request"] = renderer
     try:
-        payload = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
+        sent = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
+        sent_null = wrapper("{}", "{}", str(tmp_path / "render"), True, None, "null")  # type: ignore[operator]
+        unchanged = wrapper("{}", "{}", str(tmp_path / "render"), True, None, "e:1")  # type: ignore[operator]
     finally:
         python_helpers_namespace["render_staged_canonical_web_request"] = original_renderer
 
-    assert payload == {
+    assert held == [None, None, "e:1"]
+    assert sent == {
         "results": [{"name": "diagram.svg", "content": "<svg>µ</svg>".encode()}],
-        "metadata": b'{"featureCatalog":{"schema":1}}',
+        "metadata": b"{}",
+        "featureCatalog": '{"schema":1,"items":["µ"]}'.encode(),
+        "featureCatalogRevision": "e:1",
     }
+    assert sent_null["featureCatalog"] == sent["featureCatalog"]
+    assert sent_null["_diagnostics"]["metrics"]["featureCatalogSerializationCount"] == 1
+    assert unchanged["featureCatalog"] is None
+    assert unchanged["featureCatalogRevision"] == "e:1"
+    assert unchanged["_diagnostics"]["metrics"]["featureCatalogSerializationCount"] == 0
 
 
 def test_importable_feature_metadata_matches_pyodide_wrapper(

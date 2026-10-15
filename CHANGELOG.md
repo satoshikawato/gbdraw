@@ -2093,6 +2093,11 @@ Retired names and their replacements are listed under
   the record features, labels and group contents, the Multi-Record merge and the feature
   catalog item. A title change on a large Multi-Record Session drops from about 1.4 s to
   about 0.1 s warm (native Python). SVG, PNG, and PDF bytes are unchanged (#1070).
+- Performance (web app): a Generate whose feature catalog was not built again keeps the
+  catalog the page already holds: the catalog is not sent, decoded, or admitted again.
+  Python returns it beside the metadata, not inside it, and the Worker render protocol is
+  now 3, so a cached older wheel is reported as a version mismatch. The figure, the
+  catalog, and Saved Sessions are unchanged.
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 

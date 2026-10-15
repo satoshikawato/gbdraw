@@ -103,6 +103,26 @@ const assertDownloadedFilesMatchCommands = (runInfo, entries) => {
   assert.deepEqual(referenced, expected);
 };
 
+// The Worker sends the feature catalog beside the metadata with its revision
+// (step 3a); the fixtures below keep the catalog in `metadata` for the
+// generationExecutor seam. A fixture without a catalog stands for one the page
+// cannot admit, as a missing catalog was before. A payload that names its own
+// `featureCatalogRevision` is sent as written (the "unchanged" cases).
+let fakeCatalogBuilds = 0;
+const fakeCatalogRevision = (revision) => ({ revision, sha256: '0'.repeat(64), bytes: 1 });
+const asWorkerReply = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.error
+    || Object.hasOwn(payload, 'featureCatalogRevision')) return payload;
+  const { featureCatalog = {}, ...metadata } = payload.metadata || {};
+  fakeCatalogBuilds += 1;
+  return {
+    ...payload,
+    metadata,
+    featureCatalog,
+    featureCatalogRevision: fakeCatalogRevision(`fake:${fakeCatalogBuilds}`)
+  };
+};
+
 class AuditSimplePathWorker {
   constructor() {
     this.listeners = new Map();
@@ -141,7 +161,7 @@ class AuditSimplePathWorker {
         type: 'run',
         requestId: message.requestId,
         ok: true,
-        results: structuredClone(payload)
+        results: asWorkerReply(structuredClone(payload))
       })));
       return;
     }
@@ -798,6 +818,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.ok(Object.keys(replay.resources).length > 0);
 
   const firstRunPayload = workerMessages.find(({ type }) => type === 'run').payload;
+  // N7 (step 3a): the first Generate holds no catalog; later renders of the
+  // shown drawing name the catalog revision it holds.
+  assert.equal(firstRunPayload.heldFeatureCatalogRevision, null);
+  const committedCatalogRevision = `fake:${fakeCatalogBuilds}`;
   assert.equal(Object.hasOwn(firstRunPayload, 'resources'), false);
   assert.ok(firstRunPayload.resourceManifest.length > 0);
   assert.ok(firstRunPayload.stagedResources.every(({ bytes }) => bytes instanceof ArrayBuffer));
@@ -847,6 +871,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(targetIntent.startCoordinate, 3);
   assert.deepEqual(state.results.value, [targetResult]);
   const targetRunPayload = workerMessages.filter(({ type }) => type === 'run').at(-1).payload;
+  assert.equal(targetRunPayload.heldFeatureCatalogRevision?.revision, committedCatalogRevision);
+  const targetCatalogRevision = `fake:${fakeCatalogBuilds}`;
   assert.equal(targetRunPayload.request.output.prefix, committedOutputPrefix);
   assert.notEqual(targetRunPayload.request.output.prefix, state.activeDrawing().form.prefix);
   assert.equal(structuralMetrics.canonicalCandidateExecutionCount, 2);
@@ -899,6 +925,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const metricsBeforePreActivationFailure = { ...structuralMetrics };
   labelNoticeClears.length = 0;
   const failedRun = await runner.runAnalysis();
+  assert.equal(
+    workerMessages.filter(({ type }) => type === 'run').at(-1).payload.heldFeatureCatalogRevision?.revision,
+    targetCatalogRevision
+  );
   assert.equal(failedRun.status, 'error');
   assert.deepEqual(labelNoticeClears, ['build']);
   assert.equal(failedRun.error, state.errorLog.value);
@@ -2504,5 +2534,109 @@ test('decoration candidate transform runs once after catalog validation for ever
     });
     assert.equal(transforms, 1, kind);
     assert.deepEqual(candidate.commit.svg, { recordDelta: [9, 7], decoration: [40, 20] });
+  }
+});
+
+test('a render that reuses the held catalog build keeps the catalog object the page admitted (step 3a)', async () => {
+  const metrics = {};
+  const events = [];
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric({ name, value }) { metrics[name] = (metrics[name] || 0) + Number(value || 0); },
+    onSessionLifecycleEvent({ name }) { events.push(name); }
+  };
+  const canonical = { renderRequest: { schema: CANONICAL_REQUEST_SCHEMA }, resources: {} };
+  const run = (options = {}) => executeCanonicalRenderCandidate({
+    canonical,
+    mode: 'circular',
+    prepareCommit: ({ generationResponse }) => ({ generationResponse }),
+    ...options
+  });
+  const runMessages = () => workerMessages.filter(({ type }) => type === 'run');
+  const lastHeld = () => runMessages().at(-1).payload.heldFeatureCatalogRevision;
+  const unchanged = (logicalResult, revision) => ({
+    results: [logicalResult], metadata: {}, featureCatalogRevision: revision
+  });
+  const delta = (before, name) => (metrics[name] || 0) - (before[name] || 0);
+  const name = 'reuse.svg';
+  try {
+    // N1: a sent catalog C with revision R; the next render names R, and an
+    // "unchanged" reply puts C itself back.
+    workerResponses.push(response(result(name, 'one'), validCatalog(name)));
+    const first = await run();
+    assert.equal(first.status, 'ok');
+    assert.equal(lastHeld(), null);
+    const catalog = first.catalog;
+    assert.equal(first.generationResponse.metadata.featureCatalog, catalog);
+    const heldRevision = fakeCatalogRevision(`fake:${fakeCatalogBuilds}`);
+    workerResponses.push(unchanged(result(name, 'two'), heldRevision));
+    const before = { ...metrics };
+    events.length = 0;
+    const reused = await run({ heldFeatureCatalog: catalog });
+    assert.equal(reused.status, 'ok');
+    assert.deepEqual(lastHeld(), heldRevision);
+    assert.equal(reused.catalog, catalog);
+    assert.equal(reused.generationResponse.metadata.featureCatalog, reused.catalogAdmission.catalog);
+    assert.equal(delta(before, 'featureCatalogAdmissionCount'), 0);
+    assert.equal(delta(before, 'featureCatalogReuseCount'), 1);
+    assert.ok(events.includes('catalog.reused'));
+    assert.equal(events.some((event) => event.startsWith('catalog.admission-')), false);
+
+    // N2: an object the page did not receive from the Worker, or none, names nothing.
+    for (const held of [structuredClone(catalog), validCatalog(name), null]) {
+      workerResponses.push(response(result(name, 'copy'), validCatalog(name)));
+      assert.equal((await run({ heldFeatureCatalog: held })).status, 'ok');
+      assert.equal(lastHeld(), null);
+    }
+
+    // N3 (OV-136): items renamed after receipt; a rerender that keeps those
+    // names names the revision, a Generate (engine names) or other names do not.
+    workerResponses.push(response(result(name, 'renamed'), validCatalog(name)));
+    const renamedSource = await run();
+    const renamed = renamedSource.catalog;
+    const renamedRevision = fakeCatalogRevision(`fake:${fakeCatalogBuilds}`);
+    renamed.items[0].resultName = 'Saved name';
+    workerResponses.push(unchanged(result(name, 'kept'), renamedRevision));
+    const kept = await run({ heldFeatureCatalog: renamed, kind: 'reflow', resultNames: ['Saved name'] });
+    assert.equal(kept.status, 'ok');
+    assert.deepEqual(lastHeld(), renamedRevision);
+    assert.equal(kept.catalog, renamed);
+    for (const resultNames of [null, ['Other name']]) {
+      workerResponses.push(response(result(name, 'resent'), validCatalog(name)));
+      await run({ heldFeatureCatalog: renamed, resultNames }).catch(() => null);
+      assert.equal(lastHeld(), null);
+    }
+
+    // N4: "unchanged" for another revision, with nothing held, or with no revision
+    // fails the reply and ends the Worker.
+    for (const [held, reply] of [
+      [catalog, unchanged(result(name, 'other'), fakeCatalogRevision('fake:other'))],
+      [null, unchanged(result(name, 'none-held'), heldRevision)],
+      [catalog, { results: [result(name, 'neither')], metadata: {}, featureCatalogRevision: null }]
+    ]) {
+      const constructed = metrics.workerConstructionCount || 0;
+      workerResponses.push(reply);
+      await assert.rejects(run({ heldFeatureCatalog: held }), (error) => error.code === 'RESULT_INVALID');
+      workerResponses.push(response(result(name, 'after-failure'), validCatalog(name)));
+      assert.equal((await run()).status, 'ok');
+      assert.equal((metrics.workerConstructionCount || 0), constructed + 1);
+    }
+
+    // N5: a sent catalog while one is held is admitted as a new object; C keeps its record.
+    workerResponses.push(response(result(name, 'changed'), validCatalog(name)));
+    const changed = await run({ heldFeatureCatalog: catalog });
+    assert.deepEqual(lastHeld(), heldRevision);
+    assert.notEqual(changed.catalog, catalog);
+    workerResponses.push(unchanged(result(name, 'undo'), heldRevision));
+    assert.equal((await run({ heldFeatureCatalog: catalog })).catalog, catalog);
+
+    // N6: an engine error leaves the held catalog and its record.
+    workerResponses.push({ error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } });
+    assert.equal((await run({ heldFeatureCatalog: catalog })).status, 'engine-error');
+    workerResponses.push(unchanged(result(name, 'after-engine-error'), heldRevision));
+    await run({ heldFeatureCatalog: catalog });
+    assert.deepEqual(lastHeld(), heldRevision);
+  } finally {
+    globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
   }
 });
