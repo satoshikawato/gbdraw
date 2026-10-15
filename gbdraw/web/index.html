@@ -1281,11 +1281,21 @@
         .preview-editor-layout > .preview-workspace {
             grid-row: 2;
         }
+        /* A bar hidden from its x or the toolbar leaves no box. Where the page,
+           not the pane, sets the height, the canvas gains about the bar's height
+           (two control rows and margins on a narrow Preview) instead. */
+        .preview-editor-layout > .preview-feature-search.is-hidden {
+            display: none;
+        }
+        .preview-feature-search.is-hidden ~ .preview-workspace {
+            --preview-search-space: 6rem;
+        }
         .preview-editor-layout > .preview-controls {
             grid-row: 3;
             margin-right: var(--preview-editor-reserve);
         }
         .preview-workspace {
+            --preview-search-space: 0px;
             display: flex;
             min-width: 0;
             min-height: 200px;
@@ -1459,6 +1469,10 @@
                 height: auto !important;
                 min-height: 0 !important;
                 overflow: visible !important;
+            }
+
+            .preview-viewport {
+                min-height: calc(200px + var(--preview-search-space));
             }
 
             .preview-toolbar {
@@ -1685,19 +1699,23 @@
                 width: auto;
                 margin-right: 0.5rem;
             }
+            /* The hidden bar's empty row keeps no gap above the canvas. */
+            .preview-feature-search.is-hidden ~ .preview-workspace {
+                margin-top: -0.5rem;
+            }
             .preview-workspace {
                 position: relative;
                 display: grid;
                 grid-template-columns: minmax(0, 1fr);
-                grid-template-rows: minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto auto;
+                grid-template-rows: minmax(calc(200px + var(--preview-search-space)), calc(var(--compact-preview-space) * 0.5 + var(--preview-search-space))) auto auto;
             }
             .preview-workspace:has(.alignment-review-panel) {
-                grid-template-rows: minmax(200px, calc(var(--compact-preview-space) * 0.5)) clamp(15rem, 29dvh, 18rem) auto;
+                grid-template-rows: minmax(calc(200px + var(--preview-search-space)), calc(var(--compact-preview-space) * 0.5 + var(--preview-search-space))) clamp(15rem, 29dvh, 18rem) auto;
             }
             /* The open Editor takes the room the canvas does not need: the canvas
                keeps 13rem and the dock still ends above the Generate bar. */
             .preview-workspace:has(> .right-drawer[aria-hidden="false"]) {
-                grid-template-rows: 13rem auto auto;
+                grid-template-rows: calc(13rem + var(--preview-search-space)) auto auto;
             }
             .preview-viewport {
                 position: relative;
@@ -5883,8 +5901,8 @@
 
                 <div class="preview-editor-layout">
                     <div v-if="svgContent"
-                         v-show="resultPanelTab === 'preview' && previewFeatureSearchVisible"
-                         :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError }]"
+                         v-show="resultPanelTab === 'preview'"
+                         :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError, 'is-hidden': !previewFeatureSearchVisible }]"
                          @click.stop
                          @mousedown.stop
                          @mousemove.stop
@@ -8261,7 +8279,7 @@
                             <i class="ph ph-frame-corners" aria-hidden="true"></i>
                             <span>Canvas padding</span>
                         </button>
-                        <!-- Feature search bar toggle; the count names the matches of a hidden search. -->
+                        <!-- Feature search bar toggle; the count names the matches of a hidden active search, 0 included. -->
                         <button v-if="svgContent" type="button" @click="togglePreviewFeatureSearchBar"
                                 data-history-ignore
                                 data-preview-search-toggle
@@ -8272,7 +8290,7 @@
                                 aria-label="Toggle feature search">
                             <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
                             <span>Search</span>
-                            <span v-if="previewFeatureSearchHiddenMatchCount" class="preview-search-count">· {{ previewFeatureSearchHiddenMatchCount }}</span>
+                            <span v-if="previewFeatureSearchHiddenMatchCount !== null" class="preview-search-count">· {{ previewFeatureSearchHiddenMatchCount }}</span>
                         </button>
                         <!-- Zoom controls -->
                         <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">

@@ -423,9 +423,11 @@ export const createPreviewFeatureSearch = ({
     searchByMode.delete(arriving);
   };
   // Hiding the search bar changes its visibility only: the search, its
-  // matches, and its highlights stay, and the toolbar button names the match
-  // count meanwhile. Showing it from the toolbar focuses the query; hiding it
-  // returns focus to the toolbar button.
+  // matches, and its highlights stay. While an active search dims the diagram
+  // (`queryIsActive`, the same test that sets the SVG root class), the toolbar
+  // button names its match count, 0 included; otherwise the count is null.
+  // Showing the bar from the toolbar focuses the query; hiding it returns
+  // focus to the toolbar button.
   const hideSearchBar = () => {
     previewFeatureSearchVisible.value = false;
     nextTick(focusSearchToggle);
@@ -435,7 +437,7 @@ export const createPreviewFeatureSearch = ({
     if (previewFeatureSearchVisible.value) nextTick(focusSearchQuery);
   };
   const previewFeatureSearchHiddenMatchCount = computed(() => (
-    previewFeatureSearchVisible.value ? 0 : previewFeatureSearchMatches.value.length
+    previewFeatureSearchVisible.value || !queryIsActive() ? null : previewFeatureSearchMatches.value.length
   ));
 
   // A loaded Session replaces the Results of both modes that a search named,

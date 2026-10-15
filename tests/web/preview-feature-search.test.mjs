@@ -201,7 +201,7 @@ const searchSnapshot = () => ({
 const beforeHide = searchSnapshot();
 assert.equal(beforeHide.matches.length, 2);
 assert.equal(state.previewFeatureSearchVisible.value, true);
-assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 0);
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
 search.hideSearchBar();
 assert.equal(state.previewFeatureSearchVisible.value, false);
 // D-06: the hidden bar's match count is named on the toolbar button.
@@ -212,13 +212,29 @@ search.toggleSearchBar();
 assert.equal(state.previewFeatureSearchVisible.value, true);
 assert.deepEqual(focused, ['toggle', 'query']);
 assert.deepEqual(searchSnapshot(), beforeHide);
-assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 0);
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
 search.toggleSearchBar();
 assert.equal(state.previewFeatureSearchVisible.value, false);
 assert.deepEqual(focused, ['toggle', 'query']);
+// Clearing while hidden ends the search, so the toggle names no count.
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 2);
+search.clearSearch();
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
+// D-08: a search without matches still dims the diagram, so a hidden bar
+// names its count of 0; the bar shown or no search names none.
+search.toggleSearchBar();
+state.previewFeatureSearchUseRegex.value = false;
+state.previewFeatureSearchInput.value = 'no such feature';
+search.applySearch();
+assert.deepEqual(state.previewFeatureSearchMatches.value, []);
+assert.equal(search.previewFeatureSearchStatusText.value, 'No matches');
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
+search.hideSearchBar();
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 0);
 search.switchModeSearch('circular', 'linear');
 assert.equal(state.previewFeatureSearchVisible.value, false);
-search.clearSearch();
+assert.equal(search.previewFeatureSearchHiddenMatchCount.value, null);
+search.switchModeSearch('linear', 'circular');
 assert.equal(search.previewFeatureSearchHiddenMatchCount.value, 0);
 search.resetModeSearches();
 assert.equal(state.previewFeatureSearchVisible.value, true);
