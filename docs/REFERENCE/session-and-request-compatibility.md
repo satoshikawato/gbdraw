@@ -183,9 +183,8 @@ with a default, not use, or read with another meaning:
   A label, file name, ID or other free text is named by its place only. A
   configuration file loads over the current drawing, so a settings group
   (`form`, `adv`, `losat` or `circularConservation`) that is not an object, a
-  value of another kind inside one (except the values kept as stored, below),
-  and `rules` or `whitelist` that is not a list (such as `"form": 5`) are not
-  used: the drawing keeps its value, and
+  value of another kind inside one, and `rules` or `whitelist` that is not a
+  list (such as `"form": 5`) are not used: the drawing keeps its value, and
   the row names that value or says that the drawing keeps its current value;
 - Legend positions outside the diagram mode in the saved layout preferences
   or a saved Result, with the position used;
@@ -195,12 +194,17 @@ with a default, not use, or read with another meaning:
 - joined or dropped table rows;
 - Depth rows of the drawing's track stack that name a Depth series the drawing
   does not have; they are turned off and no longer name it. A track stack
-  that cannot be read, or a slot value that cannot be used, is read as the
-  default stack or default value;
+  that cannot be read is read as the default stack. A slot value that cannot
+  be used is left unset or read as its default, and an axis index outside the
+  stack is read as the nearest place in it;
 - Legend and stroke edits, original Legend colors and the Legend order of a
   saved Result that cannot be read;
 - input file entries (a binding or a stored file) that name a file the Session
-  does not hold or cannot read;
+  does not hold or cannot read. A comparison sequence file or a Depth file
+  keeps its place empty, so no later file changes series or track. A Circular
+  comparison series whose BLAST table cannot be read is left out with its
+  sequence files, with a row that names the series; the other series keep
+  their own files;
 - parts of the Session file that Load cannot read, each named by its place:
   the saved Results, the feature list and edits of the saved diagram, the
   stored input files, the saved diagram of the other mode, or the settings of
@@ -220,10 +224,10 @@ mode's settings in its own place, and each place is a row
 The dialog shows at most 12 lines, the last one with the number of the rest,
 and says that Save Session afterwards writes the current format. Load reads
 each version of a Session against the fields and values that version can hold,
-and lists every value it drops or replaces. Two readings still keep a value as
-stored: an unknown text value of `track_type`, `scale_style`, `labels_mode`,
-`show_labels_linear` or `legend` in a Session, because the request format
-gives them no fixed list of values to check against.
+and lists every value it drops or replaces. One reading still keeps a value as
+stored: an unknown text value of `track_type`, `scale_style`, `labels_mode` or
+`show_labels_linear`, in a Session or a configuration file, because the
+request format gives them no fixed list of values to check against.
 
 - **Load** loads the file. **Cancel** changes nothing. The file itself is
   never changed.
@@ -274,7 +278,10 @@ of version 42, 44, 46 or 47 saved by the web app. A row says that the saved
 Results, the GenBank, GFF and FASTA inputs, the feature list and the caches
 are left out. A Session of version 42, 44 or 47 written by the CLI or the
 Python API, and a Session of version 31–41, has no saved settings that can be
-read without them, so it is refused. When the settings of the
+read without them, so it is refused; so is a Session of version 31–41 whose
+request names a record file the Session does not hold. A `null` request
+reads as a missing one in a file that holds saved Results or a feature list;
+in a file without them it marks a settings-only Session. When the settings of the
 other diagram mode's saved result cannot be read, that diagram and its Results
 are left out, with a row.
 
@@ -312,11 +319,11 @@ The Web app refuses these files and shows an error instead:
 - A file from which Load restores nothing: every part of its content that it
   holds (settings, the saved diagram, Results, input files, edits or caches)
   would be dropped or replaced by its default. A settings-only Session whose
-  `modes` is not an object, or whose settings were all dropped, is such a
-  file, and so is a Session of version 31–41, or one of version 42, 44 or 47
-  written by the CLI or the Python API, whose saved settings cannot be read. A
-  Session that holds no content, such as one of version 27–30 with
-  only its `format` and `version`, loads.
+  `modes` is not an object, or whose settings hold nothing or were all
+  dropped, is such a file, and so is a Session of version 31–41, or one of
+  version 42, 44 or 47 written by the CLI or the Python API, whose saved
+  settings cannot be read. A Session of version 27–30 that holds only its
+  `format` and `version` loads.
 
 Load refuses these before it asks anything or changes anything. Load does not
 refuse a file it loaded before. **Save Session** still refuses what it refused
@@ -451,8 +458,9 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings keep their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–42, 44, 46, and 47. Unknown or malformed bindings reject
-before import replaces the current work. Older schema-1 readers reject new
+Schema 2 is accepted with sessions 41–42, 44, 46, and 47. Python refuses unknown or malformed
+bindings; the Web app drops each one and lists it in the **Load this file?** dialog
+before the import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
 ## Fonts

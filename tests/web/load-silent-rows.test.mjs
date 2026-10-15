@@ -343,6 +343,32 @@ test('OV-893: a dropped comparison table binding drops its series with its files
   ]);
 });
 
+// An older Session (27-30) keeps its comparison files in `files` lists: an
+// entry that holds a file Load cannot read is listed, as a binding is; an
+// empty place is no row.
+test('a comparison file entry of an older Session that cannot be read is listed', async () => {
+  const session = fixture('precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz');
+  session.files.c_conservation_fastas = [5, null];
+  session.files.c_conservation_sequence_sources = [{ name: 'x' }];
+  assert.deepEqual((await load(session)).filter((row) => row.startsWith('file-entry-dropped')), [
+    'file-entry-dropped files.c_conservation_fastas[0]',
+    'file-entry-dropped files.c_conservation_sequence_sources[0]'
+  ]);
+  assert.deepEqual(state.files.c_conservation_fastas, [null, null]);
+});
+
+// OV-896: with no series left, the comparison is off, as Remove leaves it.
+test('OV-896: a Load that leaves out every comparison series turns the comparison off', async () => {
+  const session = fixture('synthetic_conservation.gbdraw-session.json.gz');
+  session.webFiles.bindings.c_conservation_blasts.forEach((binding) => { binding.resourceId = 'zz'; });
+  const result = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.deepEqual(result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path }) => path),
+    [2, 1, 0].map((index) => `config.circularConservation.series[${index}]`));
+  const conservation = state.drawings.circular.circularConservation;
+  assert.deepEqual([conservation.series.length, state.files.c_conservation_blasts.length], [0, 0]);
+  assert.equal(conservation.enabled, false);
+});
+
 // R2-B1: a null request of a full Session reads as an absent one (E-OD29):
 // the settings-only row names everything that is left out.
 test('R2-B1: a full Session 44 or 47 whose request is null loads as settings only with the request row', async () => {

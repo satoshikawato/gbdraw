@@ -95,7 +95,8 @@ export const orderedOptionalConservationFiles = (files, circularConservation) =>
  * Circular comparison panel, and Load for a series whose BLAST table it could
  * not read (OV-893, E-OD30). Each list holds one place per series, in series
  * order; the place `index` goes from every list, and the series after it keep
- * their own files and take the place before (`sourceIndex`).
+ * their own files and take the place before (`sourceIndex`). The comparison
+ * stays on while a series keeps its BLAST table (`enabled`).
  * @template F
  * @template {object} S
  * @param {{ blasts: F[], fastas: F[], sequenceSources: F[], series: S[] }} lists
@@ -105,12 +106,14 @@ export const withoutConservationSeries = ({ blasts, fastas, sequenceSources, ser
   /** @template T @param {T[]} list */
   const without = (list) => list.filter((_, place) => place !== index);
   const kept = without(series).map((entry, sourceIndex) => ({ ...entry, sourceIndex }));
+  const keptBlasts = without(blasts);
   return {
-    blasts: without(blasts),
+    blasts: keptBlasts,
     fastas: without(fastas),
     sequenceSources: without(sequenceSources),
     series: kept,
-    labels: kept.map((entry) => /** @type {{ label?: unknown }} */ (entry).label).join(',')
+    labels: kept.map((entry) => /** @type {{ label?: unknown }} */ (entry).label).join(','),
+    enabled: keptBlasts.length > 0
   };
 };
 

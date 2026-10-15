@@ -2976,7 +2976,7 @@ export const createAppSetup = () => {
       files.c_conservation_blasts_source = kept.blasts.length > 0
         ? 'losat-cache'
         : null;
-      drawing.circularConservation.enabled = kept.blasts.length > 0;
+      drawing.circularConservation.enabled = kept.enabled;
       losatCacheInfo.value = [];
       if (drawing.adv.circular_track_slots_enabled === true) {
         circularTrackSlotEditor.syncCircularConservationSlots();

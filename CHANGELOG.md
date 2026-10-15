@@ -299,8 +299,8 @@ write-up of a release.
   Depth series without a Depth file loads as saved, and so does a Depth row
   the app keeps when a Depth file is removed (a row with its own size or
   position) (OV-755). An unknown text value of `track_type`, `scale_style`,
-  `labels_mode`, `show_labels_linear` or `legend` in a Session is still kept as
-  stored, because the request format lists no values for them. No file that
+  `labels_mode` or `show_labels_linear` in a Session or configuration file is
+  still kept as stored, because the request format lists no values for them. No file that
   loaded before is refused: a feature shape or Linear Accession or Length /
   Coordinates visibility that is not text keeps the drawing's value, and an
   unknown shape for a feature type the defaults lack is dropped, each with a
@@ -334,7 +334,10 @@ write-up of a release.
   loads as settings only (the saved Results, inputs, feature list and caches
   are left out) when it is a Session of version 42, 44, 46 or 47 saved by the
   web app; a Session of version 42, 44 or 47 written by the CLI or the Python
-  API, and a Session of version 31 to 41, is refused. Eight search-scope
+  API, and a Session of version 31 to 41, is refused, and so is a Session of
+  version 31 to 41 whose request names a record file it does not hold. A
+  `null` request reads as a missing one in a file that holds saved Results or
+  a feature list. Eight search-scope
   spellings only the web app accepted are no longer read: a generated
   comparison that holds one is dropped with a row, and a Session's comparison
   settings that hold one read as the default, with a row. A file that holds
@@ -353,7 +356,10 @@ write-up of a release.
   file?** dialog lists what Load drops or replaces: an unknown or invalid
   setting, track slot, Legend or stroke edit, an unreadable Result, feature
   list, stored input file or saved diagram of the other mode, and a key that
-  Session version never held. Run notices, recomputable caches, empty
+  Session version never held. A comparison sequence file or Depth file that
+  cannot be read keeps its place empty, and a Circular comparison series whose
+  BLAST table cannot be read is left out with its sequence files, with a row
+  that names it. Run notices, recomputable caches, empty
   values and values with no effect on the figure give no row. Load still
   refuses a file that is not a gbdraw Session or configuration file, an
   unsupported or too old version, a file too large or with an unsafe name, and

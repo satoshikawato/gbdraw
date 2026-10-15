@@ -3888,8 +3888,9 @@ export const canonicalRenderArtifactOwner = Object.freeze({
  * OV-893 (E-OD30): a Circular comparison series whose BLAST table Load could
  * not read (an empty place of `c_conservation_blasts`) is left out with its
  * files, as Remove leaves a series out (`withoutConservationSeries`), and
- * listed; the series after it keep their own files. Writes the file lists of
- * `files`; returns the draft with the series left.
+ * listed; the series after it keep their own files, and with none left the
+ * comparison is off, as after Remove. Writes the file lists of `files`;
+ * returns the draft with the series left.
  * @param {Record<string, unknown>} config The Circular draft Load installs.
  * @param {Record<string, unknown>} files The candidate's file slots (`applyFiles`).
  * @param {string} at Where the draft's series are in the file.
@@ -3909,7 +3910,8 @@ const withoutUnreadConservationSeries = (config, files, at, repairs) => {
     fastas: inSeriesOrder(files.c_conservation_fastas),
     sequenceSources: inSeriesOrder(files.c_conservation_sequence_sources),
     series,
-    labels: ''
+    labels: '',
+    enabled: true
   };
   for (let index = kept.blasts.length - 1; index >= 0; index -= 1) {
     if (kept.blasts[index]) continue;
@@ -3925,8 +3927,11 @@ const withoutUnreadConservationSeries = (config, files, at, repairs) => {
   files.c_conservation_blasts = kept.blasts;
   files.c_conservation_fastas = kept.fastas;
   files.c_conservation_sequence_sources = kept.sequenceSources;
-  // A draft without series names its rings by `labels` (by place), which keeps its text.
-  return { ...config, circularConservation: { ...conservation, series: kept.series, ...(series.length ? { labels: kept.labels } : {}) } };
+  // A draft without series names its rings by `labels` (by place), which keeps its text;
+  // Load turns the comparison off only when no series is left.
+  return { ...config, circularConservation: {
+    ...conservation, series: kept.series, ...(series.length ? { labels: kept.labels } : {}), ...(kept.enabled ? {} : { enabled: false })
+  } };
 };
 
 /**
@@ -3942,11 +3947,24 @@ const readFileSlot = (stored, path, repairs) => {
   const entries = Array.isArray(stored) ? stored : [stored];
   const files = entries.map((entry) => (Array.isArray(entry) ? null : deserializeFile(entry)));
   const kept = files.findIndex(Boolean);
-  const dropped = entries.filter((entry, index) => index !== kept && entry != null
-    && !(isPlainObject(entry) && Object.keys(entry).length === 0) && !(Array.isArray(entry) && entry.length === 0)).length;
+  const dropped = entries.filter((entry, index) => index !== kept && !holdsNothing(entry)).length;
   if (dropped && repairs) repairs.push(loadRepair({ code: 'file-entry-dropped', path, effect: 'dropped', count: dropped }));
   return kept < 0 ? null : /** @type {FileLike} */ (files[kept]);
 };
+
+/**
+ * A file list's stored value, read by place: an entry `deserializeFile`
+ * cannot read keeps its place empty and is listed at `path[index]`; an entry
+ * that holds nothing is no row.
+ * @param {unknown} stored
+ * @param {string} path
+ * @param {LoadRepair[] | null} repairs
+ */
+const readFileList = (stored, path, repairs) => (Array.isArray(stored) ? stored : []).map((entry, index) => {
+  const file = deserializeFile(entry);
+  if (!file && !holdsNothing(entry)) repairs?.push(loadRepair({ code: 'file-entry-dropped', path: `${path}[${index}]`, effect: 'dropped' }));
+  return file;
+});
 
 /**
  * `targetDrawing` holds the Linear record layout and comparison plan that the
@@ -4005,19 +4023,15 @@ const applyFiles = (filesData, {
   targetState.files.c_fasta = fileSlot('c_fasta');
   // A Depth slot holds a list.
   targetState.files.c_depth = deserializeFile(filesData.c_depth);
+  /** @param {string} slot */
+  const fileList = (slot) => readFileList(filesData[slot], `${at}.${slot}`, repairs);
   // A table's place stays until Load leaves out its series (`withoutUnreadConservationSeries`).
-  targetState.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
-    ? filesData.c_conservation_blasts.map((entry) => deserializeFile(entry))
-    : [];
+  targetState.files.c_conservation_blasts = fileList('c_conservation_blasts');
   targetState.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
     ? 'losat-cache'
     : null;
-  targetState.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
-    ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry))
-    : [];
-  targetState.files.c_conservation_sequence_sources = Array.isArray(filesData.c_conservation_sequence_sources)
-    ? filesData.c_conservation_sequence_sources.map((entry) => deserializeFile(entry))
-    : [];
+  targetState.files.c_conservation_fastas = fileList('c_conservation_fastas');
+  targetState.files.c_conservation_sequence_sources = fileList('c_conservation_sequence_sources');
   targetState.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
     filesData.linearCanonicalComparisons,
     { adoptCanonicalPayloads, repairs }

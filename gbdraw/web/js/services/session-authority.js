@@ -1054,7 +1054,7 @@ const validateSettingsOnlyFlatDraft = (data) => {
  * - `receipt`: a receipt that is not of the request's plan (A19);
  * - `catalog`: a feature catalog of another schema; `catalog-null`: none for
  *   saved Results (A9).
- * @typedef {{ kind: 'results' | 'editorState' | 'receipt-missing' | 'receipt' | 'catalog' | 'catalog-null', message: string }} ResultSetFault
+ * @typedef {{ kind: 'results' | 'editorState' | 'receipt-missing' | 'receipt' | 'catalog' | 'catalog-null' }} ResultSetFault
  */
 /** @param {unknown} result */
 const isPlainSvgResult = (result) => {
@@ -1078,32 +1078,29 @@ const committedResultSetFaults = (set, version, storedSchema = storedRequestSche
   /** @type {ResultSetFault[]} */
   const faults = [];
   const results = set.results;
-  if (!Array.isArray(results)) faults.push({ kind: 'results', message: `Session version ${String(version)} requires a results array.` });
-  else if (!results.every(isPlainSvgResult)) faults.push({ kind: 'results', message: 'Each current Session Result must be a named plain SVG.' });
+  if (!Array.isArray(results) || !results.every(isPlainSvgResult)) faults.push({ kind: 'results' });
   const editorState = isPlainObject(set.editorState) ? set.editorState : {};
-  if (!Object.hasOwn(editorState, 'featureCatalog')) {
-    faults.push({ kind: 'editorState', message: `Session version ${String(version)} requires editorState.featureCatalog.` });
-  }
+  if (!Object.hasOwn(editorState, 'featureCatalog')) faults.push({ kind: 'editorState' });
   // Load read the request before (`readSessionRequests`); Save holds a canonical one.
   const request = /** @type {AlignmentResetRequest | null | undefined} */ (set.renderRequest);
   if (Number(storedSchema) >= 8 && request?.layout?.similarityAlignment && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
-    faults.push({ kind: 'receipt-missing', message: 'Current alignment Session requires editorState.alignmentResetReceipt.' });
+    faults.push({ kind: 'receipt-missing' });
   } else if (!alignmentResetReceiptShapeHolds(editorState.alignmentResetReceipt, request)) {
-    faults.push({ kind: 'receipt', message: 'ALIGNMENT_RESET_EVIDENCE' });
+    faults.push({ kind: 'receipt' });
   }
   const featureCatalog = Object.hasOwn(editorState, 'featureCatalog') ? editorState.featureCatalog : null;
   const expectedCatalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[Number(version)] ?? 3;
   if (featureCatalog !== null && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)) {
-    faults.push({ kind: 'catalog', message: `Session version ${String(version)} requires a schema-${expectedCatalogSchema} editorState.featureCatalog.` });
+    faults.push({ kind: 'catalog' });
   } else if (Array.isArray(results) && results.length > 0 && featureCatalog === null && faults[0]?.kind !== 'results') {
-    faults.push({ kind: 'catalog-null', message: `Session version ${String(version)} requires a feature catalog for saved results.` });
+    faults.push({ kind: 'catalog-null' });
   }
   return faults;
 };
 
 /**
  * Save: refuses the first fault of a committed Result set.
- * @param {readonly { kind: string, message: string }[]} faults
+ * @param {readonly { kind: string }[]} faults
  */
 const refuseFirstFault = ([fault]) => {
   if (!fault) return;
@@ -1174,29 +1171,29 @@ const validateCommittedResultSet = (set, version, storedSchema = storedRequestSc
  * @param {SessionInput} sessionData
  * @param {number | string} version
  * @param {StoredRequestSchemas} storedSchemas
- * @returns {{ kind: 'set' | 'request' | ResultSetFault['kind'], message: string }[]}
+ * @returns {{ kind: 'set' | 'request' | ResultSetFault['kind'] }[]}
  */
 const otherModeResultFaults = (sessionData, version, storedSchemas) => {
   const other = sessionData.otherModeResult;
   if (!isPlainObject(other) || Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.includes(key))) {
-    return [{ kind: 'set', message: 'Session otherModeResult must contain only a committed Result set.' }];
+    return [{ kind: 'set' }];
   }
   const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
   if (!isPlainObject(sessionData.renderRequest) || !isPlainObject(other.renderRequest)
     || !(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode) || mode === sessionData.renderRequest.mode) {
-    return [{ kind: 'request', message: 'Session otherModeResult requires a committed request of the other mode.' }];
+    return [{ kind: 'request' }];
   }
   const setFaults = committedResultSetFaults(other, version, storedSchemas.otherModeResult ?? storedRequestSchema(other));
   if (setFaults.some(({ kind }) => kind === 'results' || kind === 'editorState')) return setFaults;
-  /** @type {{ kind: 'set' | ResultSetFault['kind'], message: string }[]} */
+  /** @type {{ kind: 'set' | ResultSetFault['kind'] }[]} */
   const faults = [...setFaults];
   // The checks above proved `results` an array of named SVG Results and `editorState` an object.
   const results = /** @type {SessionResult[]} */ (other.results);
   const editorState = /** @type {Record<string, unknown>} */ (other.editorState);
-  if (results.length === 0) faults.push({ kind: 'set', message: 'Session otherModeResult requires a Result.' });
-  const missing = [...collectCanonicalResourceIds(other.renderRequest)]
-    .filter((resourceId) => !(isPlainObject(sessionData.resources) && Object.hasOwn(sessionData.resources, resourceId)));
-  if (missing.length > 0) faults.push({ kind: 'set', message: `Session otherModeResult names missing resource(s): ${missing.join(', ')}` });
+  if (results.length === 0) faults.push({ kind: 'set' });
+  const namesMissing = [...collectCanonicalResourceIds(other.renderRequest)]
+    .some((resourceId) => !(isPlainObject(sessionData.resources) && Object.hasOwn(sessionData.resources, resourceId)));
+  if (namesMissing) faults.push({ kind: 'set' });
   // One rule with gbdraw/session_io.py: a present field is an object (null is not).
   const ui = Object.hasOwn(other, 'ui') ? other.ui : {};
   const legend = Object.hasOwn(editorState, 'legend') ? editorState.legend : {};
@@ -1204,11 +1201,11 @@ const otherModeResultFaults = (sessionData, version, storedSchemas) => {
   if (!isPlainObject(ui) || Object.keys(ui).some((key) => !OTHER_MODE_RESULT_UI_FIELDS.includes(key))
     || Object.keys(editorState).some((key) => !OTHER_MODE_RESULT_EDITOR_FIELDS.includes(key))
     || !isPlainObject(legend) || Object.keys(legend).some((key) => !OTHER_MODE_RESULT_LEGEND_FIELDS.includes(key))) {
-    faults.push({ kind: 'set', message: 'Session otherModeResult editorState and ui hold only that Result set\'s fields.' });
+    faults.push({ kind: 'set' });
   }
   if (!isPlainObject(runMetadata)
     || Object.keys(runMetadata).some((key) => !OTHER_MODE_RESULT_RUN_METADATA_FIELDS.includes(key))) {
-    faults.push({ kind: 'set', message: 'Session otherModeResult.runMetadata holds only that Result set\'s metadata.' });
+    faults.push({ kind: 'set' });
   }
   return faults;
 };
@@ -1298,7 +1295,7 @@ const withReadRunNotices = (set) => {
  */
 export const readSessionAuthorityParts = (sessionData, version, storedSchemas, repairs, uncomposedSets = []) => {
   /** @param {ResultSetPath} at @returns {ResultSetFault[]} */
-  const uncomposed = (at) => (uncomposedSets.includes(at) ? [{ kind: 'results', message: 'RESULT_UNCOMPOSED' }] : []);
+  const uncomposed = (at) => (uncomposedSets.includes(at) ? [{ kind: 'results' }] : []);
   // A Session 27-39 holds no committed Result set Save checks: only Load's own fault.
   const topFaults = version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
     ? committedResultSetFaults(sessionData, version, storedSchemas.renderRequest ?? storedRequestSchema(sessionData)) : [];

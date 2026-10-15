@@ -92,18 +92,17 @@ const normalizedChecksum = (value) => (typeof value === 'string' && value !== ''
  * One thing a stored resource descriptor holds that the app cannot read. A
  * fault of `checksum` or `lastModified` names a field the app recomputes; a
  * fault of no field (`null`) leaves the resource unreadable.
- * @typedef {{ field: 'checksum' | 'lastModified' | null, message: string }} ResourceDescriptorFault
+ * @typedef {{ field: 'checksum' | 'lastModified' | null }} ResourceDescriptorFault
  */
 /**
  * The one check of a stored resource descriptor: Load drops what it names
  * (`readSessionResources`), the runtime refuses it (`validateDescriptor`).
- * @param {string} resourceId
  * @param {RawSessionResourceDescriptor | null | undefined} descriptor Unvalidated.
  * @returns {ResourceDescriptorFault[]}
  */
-const resourceDescriptorFaults = (resourceId, descriptor) => {
+const resourceDescriptorFaults = (descriptor) => {
   if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) {
-    return [{ field: null, message: `Session resource ${resourceId} must be an object.` }];
+    return [{ field: null }];
   }
   /** @type {ResourceDescriptorFault[]} */
   const faults = [];
@@ -111,22 +110,19 @@ const resourceDescriptorFaults = (resourceId, descriptor) => {
     ? typeof descriptor.data === 'string'
     // A `data` that is not an object (a string, or nothing) has no `schema`, so the guard reads false.
     : isEncodedDepthFileEntry(/** @type {{ encoding?: unknown, data?: { schema?: unknown } | null }} */ (descriptor));
-  if (!supportedPayload) faults.push({ field: null, message: `Session resource ${resourceId} has an unsupported encoded payload.` });
+  if (!supportedPayload) faults.push({ field: null });
   if (typeof descriptor.size !== 'number' || !Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
-    faults.push({ field: null, message: `Session resource ${resourceId} has an invalid declared byte size.` });
+    faults.push({ field: null });
   }
   if (
     descriptor.lastModified !== undefined
     && (typeof descriptor.lastModified !== 'number' || !Number.isFinite(descriptor.lastModified) || descriptor.lastModified < 0)
   ) {
-    faults.push({ field: 'lastModified', message: `Session resource ${resourceId} has an invalid lastModified value.` });
+    faults.push({ field: 'lastModified' });
   }
   const { checksum } = descriptor;
   if (checksum !== null && checksum !== undefined && checksum !== '') {
-    if (typeof checksum !== 'string') faults.push({ field: 'checksum', message: 'Session resource checksum must be a string.' });
-    else if (!CHECKSUM_PATTERN.test(normalizedChecksum(checksum) ?? '')) {
-      faults.push({ field: 'checksum', message: 'Session resource checksum must be a SHA-256 digest.' });
-    }
+    if (typeof checksum !== 'string' || !CHECKSUM_PATTERN.test(normalizedChecksum(checksum) ?? '')) faults.push({ field: 'checksum' });
   }
   return faults;
 };
@@ -138,7 +134,7 @@ const resourceDescriptorFaults = (resourceId, descriptor) => {
  */
 const validateDescriptor = (resourceId, descriptor) => {
   // R6: the typed Session-fields error; Load lists the fault's place before (`readSessionResources`).
-  if (resourceDescriptorFaults(resourceId, descriptor).length) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  if (resourceDescriptorFaults(descriptor).length) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   // `resourceDescriptorFaults` found none: an object with a supported payload and size.
   const checked = /** @type {SessionResourceDescriptor} */ (descriptor);
   return {
@@ -190,7 +186,7 @@ export const readSessionResources = (resources) => {
   let changed = false;
   const kept = Object.entries(resources).flatMap(([rawResourceId, descriptor]) => {
     const resourceId = tableResourceId(rawResourceId, seen);
-    const faults = resourceId === null ? [] : resourceDescriptorFaults(resourceId, descriptor);
+    const faults = resourceId === null ? [] : resourceDescriptorFaults(descriptor);
     if (resourceId === null || faults.some(({ field }) => field === null)) {
       dropped.push(rawResourceId);
       changed = true;
@@ -238,7 +234,7 @@ export const readSessionResources = (resources) => {
  * the keys of one binding under `webFiles.bindings` (`['c_gb']`,
  * `['c_conservation_blasts', 1]`, `['c_depth', 0, 0]`, `['linearSeqs', 0, 'gb']`),
  * or of a field no writer wrote (`field`). `webFileBindingPath` writes it as text.
- * @typedef {{ at: ReadonlyArray<string | number> | null, field?: boolean, message: string }} WebFileBindingFault
+ * @typedef {{ at: ReadonlyArray<string | number> | null, field?: boolean }} WebFileBindingFault
  */
 /**
  * The place of a binding as a row names it: `c_depth[0][0]`, `linearSeqs[0].gb`.
@@ -278,42 +274,36 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
    * @returns {value is Record<string, unknown>}
    */
   const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-  if (!object(bindings)) return [{ at: null, message: 'Session webFiles.bindings must be an object.' }];
-  if (!(/** @type {unknown[]} */ ([1, 2])).includes(bindings.schema)) return [{ at: null, message: 'Unsupported Web file binding schema.' }];
+  // The inventory: an object of a schema a writer wrote; schema 2 holds `c_gb`.
+  if (!object(bindings) || !(/** @type {unknown[]} */ ([1, 2])).includes(bindings.schema)) return [{ at: null }];
   const current = bindings.schema === 2;
-  if (current && !Object.hasOwn(bindings, 'c_gb')) return [{ at: null, message: 'Web binding schema 2 requires c_gb.' }];
-  /** @param {Record<string, unknown>} value @returns {string | null} */
-  const metadata = value => (typeof value.name !== 'string' || typeof value.type !== 'string'
-    || typeof value.lastModified !== 'number' || !Number.isFinite(value.lastModified) || value.lastModified < 0
-    ? 'Invalid Web file binding metadata.' : null);
-  /** @param {unknown} value @returns {string | null} */
-  const leaf = value => {
-    if (!object(value)) return 'Web file bindings must be objects or null.';
-    if (Object.hasOwn(value, 'kind') || Object.hasOwn(value, 'components')) {
-      return 'A composite component must be an ordinary Web file binding.';
-    }
+  if (current && !Object.hasOwn(bindings, 'c_gb')) return [{ at: null }];
+  /** @param {Record<string, unknown>} value @returns {boolean} Its file metadata cannot be read. */
+  const badMetadata = value => typeof value.name !== 'string' || typeof value.type !== 'string'
+    || typeof value.lastModified !== 'number' || !Number.isFinite(value.lastModified) || value.lastModified < 0;
+  /** @param {unknown} value @returns {boolean} The binding of one file cannot be read. */
+  const badLeaf = value => {
+    // A file binding is an object that is no composite and names a canonical resourceId.
+    if (!object(value) || Object.hasOwn(value, 'kind') || Object.hasOwn(value, 'components')) return true;
     const id = current ? value.resourceId : String(value.resourceId || '').trim();
-    if (typeof id !== 'string' || !id || id !== id.trim()) return 'A Web file binding requires a canonical resourceId.';
+    if (typeof id !== 'string' || !id || id !== id.trim()) return true;
     // A `resources` that is null holds no resource, like any other value without this id (OV-636).
-    if (resources === null || !Object.hasOwn(resources, id)) return `Missing canonical resource: ${id}`;
-    if (!current) return null;
-    if (Object.keys(value).some(key => !['resourceId', 'name', 'type', 'lastModified'].includes(key))) return 'Unknown Web file binding field.';
-    return metadata(value) ?? resourceDescriptorFaults(id, resources[id])[0]?.message ?? null;
+    if (resources === null || !Object.hasOwn(resources, id)) return true;
+    if (!current) return false;
+    return Object.keys(value).some(key => !['resourceId', 'name', 'type', 'lastModified'].includes(key))
+      || badMetadata(value) || resourceDescriptorFaults(resources[id]).length > 0;
   };
-  /** @param {unknown} binding @param {boolean} compositeAllowed @returns {string | null} */
-  const single = (binding, compositeAllowed) => {
-    if (!(object(binding) && Object.hasOwn(binding, 'kind'))) return leaf(binding);
-    if (!current || !compositeAllowed || binding.kind !== 'composite') return 'Unsupported Web composite file binding.';
-    if (Object.keys(binding).some(key => !['kind', 'components', 'name', 'type', 'lastModified'].includes(key))) {
-      return 'Unknown or mixed composite binding fields.';
-    }
+  /** @param {unknown} binding @param {boolean} compositeAllowed @returns {boolean} */
+  const badSingle = (binding, compositeAllowed) => {
+    if (!(object(binding) && Object.hasOwn(binding, 'kind'))) return badLeaf(binding);
+    // A composite is schema 2 `c_gb` only, with only its fields and two or more base64 components.
+    if (!current || !compositeAllowed || binding.kind !== 'composite') return true;
+    if (Object.keys(binding).some(key => !['kind', 'components', 'name', 'type', 'lastModified'].includes(key))) return true;
     const components = binding.components;
-    if (!Array.isArray(components) || components.length < 2) return metadata(binding) ?? 'A composite binding requires at least two components.';
-    return metadata(binding) ?? components.map(leaf).find((message) => message !== null)
-      // `leaf` proved that `resources` holds each component's id and that its entry is an object.
-      ?? (components.some((/** @type {{ resourceId: string }} */ component) => (
-        /** @type {Record<string, RawSessionResourceDescriptor>} */ (resources)[component.resourceId].encoding !== 'base64'))
-        ? 'Composite components require base64 resources.' : null);
+    if (!Array.isArray(components) || components.length < 2 || badMetadata(binding) || components.some(badLeaf)) return true;
+    // `badLeaf` proved that `resources` holds each component's id and that its entry is an object.
+    return components.some((/** @type {{ resourceId: string }} */ component) => (
+      /** @type {Record<string, RawSessionResourceDescriptor>} */ (resources)[component.resourceId].encoding !== 'base64'));
   };
   /** @type {WebFileBindingFault[]} */
   const faults = [];
@@ -324,8 +314,7 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
       binding.forEach((item, index) => value(item, [...at, index]));
       return;
     }
-    const message = single(binding, compositeAllowed);
-    if (message !== null) faults.push({ at, message });
+    if (badSingle(binding, compositeAllowed)) faults.push({ at });
   };
   const slots = [
     'c_gb', 'c_gff', 'c_fasta', 'c_depth', 'c_conservation_blasts',
@@ -335,7 +324,7 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
   if (current) {
     Object.keys(bindings).filter(key => ![
       'schema', ...slots, 'c_conservation_blasts_source', 'linearSeqs', 'linearComparisons'
-    ].includes(key)).forEach(key => faults.push({ at: [key], field: true, message: 'Unknown Web binding inventory field.' }));
+    ].includes(key)).forEach(key => faults.push({ at: [key], field: true }));
   }
   slots.forEach(slot => value(bindings[slot], [slot], slot === 'c_gb'));
   (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((/** @type {WebFileBindingRow} */ sequence, index) => {
