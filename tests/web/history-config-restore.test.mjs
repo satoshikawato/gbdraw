@@ -285,13 +285,17 @@ console.log('History restores nullable config values and preserves key guards.')
   });
   await restoreHistory.captureBaseline();
   await restoreHistory.initializeIntentBaseline();
-  await restoreHistory.runUndoable('Resolve Overlaps', () => {
-    state.activeDrawing().adv.resolve_overlaps = !state.activeDrawing().adv.resolve_overlaps;
-  });
+  // A `ui` step (the canvas padding) and a config step: Undo and Redo of the
+  // first go through the UI restore (`applyUiStateData`).
+  const padding = state.activeDrawing().canvasPadding.right;
+  await restoreHistory.runUndoable('Canvas padding', () => { state.activeDrawing().canvasPadding.right = padding + 50; });
   await restoreHistory.runUndoable('Label Mode', () => { state.activeDrawing().form.labels_mode = 'both'; });
   const edited = settings();
+  let position = 2;
   for (const direction of ['undo', 'redo', 'undo', 'undo', 'redo', 'redo']) {
     await restoreHistory[direction]();
+    position += direction === 'undo' ? -1 : 1;
+    assert.equal(state.activeDrawing().canvasPadding.right, position > 0 ? padding + 50 : padding, `intent ${direction} restores the padding`);
     assert.deepEqual(unsetValues(), unset, `intent ${direction} keeps unset values unset`);
   }
   assert.equal(settings(), edited, 'Undo and Redo return to the edited settings');

@@ -223,8 +223,12 @@ const ROWS = [
       await generateAndWaitForResult(page);
       const start = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
       await editFirstCdsLabel(page, 'UNDO_REDO_CHAIN');
-      const overlaps = await reveal(page.locator('label.option-label', { hasText: 'Resolve Overlaps' }).first());
-      await overlaps.locator('input[type="checkbox"]').click();
+      // A `ui` edit: the canvas padding.
+      await page.getByRole('button', { name: 'Toggle canvas padding controls' }).click();
+      const right = page.locator('.preview-canvas-padding input[type=number]').nth(2);
+      await right.fill('150');
+      await right.press('Tab');
+      await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.canvasPadding.right)).toBe(150);
       const labelMode = await reveal(page.locator('#circular-label-mode'));
       await labelMode.focus();
       await page.keyboard.press('ArrowDown');
@@ -235,9 +239,15 @@ const ROWS = [
     },
     operation: async (page) => {
       const [undo, redo] = await historyCounts(page);
+      const padding = () => page.evaluate(() => window.__GBDRAW_APP__.canvasPadding.right);
+      // The padding is the second of the three steps.
+      let position = 3;
       for (const action of ['undo', 'undo', 'undo', 'redo', 'redo', 'redo']) {
         await page.evaluate((name) => window.__GBDRAW_HISTORY__[name](), action);
         await settle(page);
+        position += action === 'undo' ? -1 : 1;
+        const padded = (await padding()) === 150;
+        expect(padded, `${action} to position ${position} restores the canvas padding`).toBe(position >= 2);
       }
       expect(await historyCounts(page), 'Redo returns to the last History position').toEqual([undo, redo]);
       await modeRoundTrip(page);

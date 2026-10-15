@@ -43,7 +43,7 @@ Circular and Linear mode now keep their own settings, edits, and Result.
 switching modes changes no setting; a mode without a Result says **No Circular
 Result yet** or **No Linear Result yet**. Input files, LOSAT run settings, and
 the rich feature popup are shared by both modes. **Reset Settings** resets both
-modes, and one **Undo** restores both.
+modes, and one **Undo** restores both, except the rich feature popup.
 
 **Load Session** asks **Replace the current work?** before it replaces unsaved
 changes. On gbdraw.app, **Load an example** opens any Gallery example, and the **Load
@@ -93,9 +93,10 @@ required. The fold is not saved in a Session, and Undo does not change it. A
 long file name in a file input now ends with an ellipsis instead of being cut
 at both ends.
 
-Each change of a checkbox, radio button, or button is one **Undo** step, except
-**Rich Feature Popup**: turning it on or off is a display preference that Undo
-and Redo do not change. Undo and Redo are unavailable while Generate runs, and
+Each change of a setting's checkbox, radio button, or button is one **Undo**
+step. Controls that change only the view, such as **Rich Feature Popup** and the
+search's **Regular expression**, are not Undo steps, and Undo and Redo do not
+change them. Undo and Redo are unavailable while Generate runs, and
 the header says why. Error
 messages name the field, track row, Depth series, table line, or setting
 involved. A value gbdraw cannot use, such as a GC window of 0, is reported
