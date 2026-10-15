@@ -93,8 +93,10 @@ required. The fold is not saved in a Session, and Undo does not change it. A
 long file name in a file input now ends with an ellipsis instead of being cut
 at both ends.
 
-Each change of a checkbox, radio button, or button is one **Undo** step. Undo
-and Redo are unavailable while Generate runs, and the header says why. Error
+Each change of a checkbox, radio button, or button is one **Undo** step, except
+**Rich Feature Popup**: turning it on or off is a display preference that Undo
+and Redo do not change. Undo and Redo are unavailable while Generate runs, and
+the header says why. Error
 messages name the field, track row, Depth series, table line, or setting
 involved. A value gbdraw cannot use, such as a GC window of 0, is reported
 instead of being replaced by a default without notice. Every visible control

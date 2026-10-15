@@ -258,13 +258,15 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
 
 // R11 input matrix (SE-02, SE-03, SE-04): control type x input means x focus
 // state. Every changed control adds exactly one step, and Undo is LIFO. The
-// text and label controls are edited in Circular, so their values are read from
-// the Circular drawing also while Linear is shown (PD-OI-086).
+// text, checkbox, and label controls are edited in Circular, so their values
+// are read from the Circular drawing also while Linear is shown (PD-OI-086).
+// The checkbox is a drawing setting: the Rich Feature Popup preference records
+// no step (D-03).
 const controlState = (page) => page.evaluate(async () => {
   const app = window.__GBDRAW_APP__;
   const { state } = await import('./js/state.js');
   return {
-    rich: app.richFeaturePopup,
+    overlaps: state.drawings.circular.adv.resolve_overlaps,
     input: app.cInputType,
     prefix: state.drawings.circular.form.prefix,
     mode: app.mode,
@@ -292,19 +294,19 @@ test('each discrete control change records one step for every input means and fo
       .toEqual([baseline + states.length - 1, 0]);
   };
 
-  const rich = page.locator('label.option-label', { hasText: 'Rich Feature Popup' }).first();
-  await reveal(rich);
-  const richBox = rich.locator('input[type="checkbox"]');
+  const overlaps = page.locator('label.option-label', { hasText: 'Resolve Overlaps' }).first();
+  await reveal(overlaps);
+  const overlapsBox = overlaps.locator('input[type="checkbox"]');
   const genbankLabel = page.locator('label', { hasText: 'GenBank' }).first();
   const prefix = page.locator('#output-prefix');
   const initial = states[0];
 
   // No focused text field: label text, Space, radio Arrow, and radio label text.
-  await rich.locator('span').first().click({ position: { x: 4, y: 4 } });
-  await expectSteps('checkbox label text', { rich: !initial.rich });
-  await richBox.focus();
+  await overlaps.locator('span').first().click({ position: { x: 4, y: 4 } });
+  await expectSteps('checkbox label text', { overlaps: !initial.overlaps });
+  await overlapsBox.focus();
   await page.keyboard.press('Space');
-  await expectSteps('checkbox Space', { rich: initial.rich });
+  await expectSteps('checkbox Space', { overlaps: initial.overlaps });
   await genbankLabel.locator('input[type="radio"]').focus();
   await page.keyboard.press('ArrowRight');
   await expectSteps('radio Arrow', { input: 'gff' });
@@ -313,13 +315,13 @@ test('each discrete control change records one step for every input means and fo
 
   // A focused text field, then a typed one, before a checkbox or a mode button.
   await prefix.click();
-  await richBox.click();
-  await expectSteps('checkbox after a focused text field', { rich: !initial.rich });
+  await overlapsBox.click();
+  await expectSteps('checkbox after a focused text field', { overlaps: !initial.overlaps });
   await prefix.click();
   await prefix.press('End');
   await page.keyboard.type('X');
-  await richBox.click();
-  await expectSteps('checkbox after typed text', { prefix: `${initial.prefix}X` }, { rich: initial.rich });
+  await overlapsBox.click();
+  await expectSteps('checkbox after typed text', { prefix: `${initial.prefix}X` }, { overlaps: initial.overlaps });
   await prefix.click();
   await prefix.press('End');
   await page.keyboard.type('Y');

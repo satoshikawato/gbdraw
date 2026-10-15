@@ -3236,7 +3236,7 @@
 
                         <div class="flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs">
                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                <input type="checkbox" v-model="richFeaturePopup" aria-describedby="help-rich-feature-popup" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                <input type="checkbox" v-model="richFeaturePopup" data-history-ignore aria-describedby="help-rich-feature-popup" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                 <span>Rich Feature Popup</span>
                             </label>
                             <help-tip id="help-rich-feature-popup" text="When enabled, feature clicks show Details, Qualifiers, and Sequence tabs. Disable for the compact edit-only popup."></help-tip>

@@ -300,18 +300,51 @@ test('clicking the text of a checkbox label records an Undo step', async ({ page
   test.setTimeout(300_000);
   await openFresh(page);
   await loadSessionFile(page, HMMT_SESSION);
-  const label = page.locator('label.option-label', { hasText: 'Rich Feature Popup' }).first();
+  const label = page.locator('label.option-label', { hasText: 'Resolve Overlaps' }).first();
   await reveal(label);
   const before = await page.evaluate(() => ({
-    value: window.__GBDRAW_APP__.richFeaturePopup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
+    value: window.__GBDRAW_APP__.adv.resolve_overlaps, undo: window.__GBDRAW_HISTORY__.getUndoCount()
   }));
   await label.locator('span').first().click();
   await settle(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.richFeaturePopup)).toBe(!before.value);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.resolve_overlaps)).toBe(!before.value);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.undo + 1);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.richFeaturePopup)).toBe(before.value);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.resolve_overlaps)).toBe(before.value);
+});
+
+// D-03: the Rich Feature Popup is a UI preference outside History. Its toggle
+// records no step, and Undo and Redo of another step leave it as set.
+test('the Rich Feature Popup toggle records no Undo step and Undo of other steps leaves it', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSessionFile(page, HMMT_SESSION);
+  const prefix = await reveal(page.locator('#output-prefix'));
+  const label = page.locator('label.option-label', { hasText: 'Rich Feature Popup' }).first();
+  await reveal(label);
+  const read = () => page.evaluate(() => ({
+    rich: window.__GBDRAW_APP__.richFeaturePopup,
+    prefix: window.__GBDRAW_APP__.form.prefix,
+    undo: window.__GBDRAW_HISTORY__.getUndoCount(),
+    redo: window.__GBDRAW_HISTORY__.getRedoCount()
+  }));
+  const before = await read();
+  await prefix.fill('audit');
+  await prefix.blur();
+  await settle(page);
+  await label.locator('span').first().click();
+  await settle(page);
+  expect(await read()).toEqual({ rich: !before.rich, prefix: 'audit', undo: before.undo + 1, redo: 0 });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect(await read()).toEqual({ rich: !before.rich, prefix: before.prefix, undo: before.undo, redo: 1 });
+  await label.locator('input[type=checkbox]').click();
+  await settle(page);
+  expect(await read()).toEqual({ rich: before.rich, prefix: before.prefix, undo: before.undo, redo: 1 });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect(await read()).toEqual({ rich: before.rich, prefix: 'audit', undo: before.undo + 1, redo: 0 });
 });
 
 test('a checkbox click while a text field has focus records its own Undo step', async ({ page }) => {
@@ -319,11 +352,11 @@ test('a checkbox click while a text field has focus records its own Undo step', 
   await openFresh(page);
   await loadSessionFile(page, HMMT_SESSION);
   const prefix = await reveal(page.locator('#output-prefix'));
-  const checkbox = page.locator('label.option-label', { hasText: 'Rich Feature Popup' }).first()
+  const checkbox = page.locator('label.option-label', { hasText: 'Resolve Overlaps' }).first()
     .locator('input[type=checkbox]');
   await reveal(checkbox);
   const before = await page.evaluate(() => ({
-    value: window.__GBDRAW_APP__.richFeaturePopup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
+    value: window.__GBDRAW_APP__.adv.resolve_overlaps, undo: window.__GBDRAW_HISTORY__.getUndoCount()
   }));
   await prefix.fill('audit');
   await checkbox.click();
@@ -332,7 +365,7 @@ test('a checkbox click while a text field has focus records its own Undo step', 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await page.evaluate(() => ({
-    value: window.__GBDRAW_APP__.richFeaturePopup, prefix: window.__GBDRAW_APP__.form.prefix
+    value: window.__GBDRAW_APP__.adv.resolve_overlaps, prefix: window.__GBDRAW_APP__.form.prefix
   }))).toEqual({ value: before.value, prefix: 'audit' });
 });
 

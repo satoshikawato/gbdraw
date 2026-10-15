@@ -223,8 +223,8 @@ const ROWS = [
       await generateAndWaitForResult(page);
       const start = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
       await editFirstCdsLabel(page, 'UNDO_REDO_CHAIN');
-      const rich = await reveal(page.locator('label.option-label', { hasText: 'Rich Feature Popup' }).first());
-      await rich.locator('input[type="checkbox"]').click();
+      const overlaps = await reveal(page.locator('label.option-label', { hasText: 'Resolve Overlaps' }).first());
+      await overlaps.locator('input[type="checkbox"]').click();
       const labelMode = await reveal(page.locator('#circular-label-mode'));
       await labelMode.focus();
       await page.keyboard.press('ArrowDown');
