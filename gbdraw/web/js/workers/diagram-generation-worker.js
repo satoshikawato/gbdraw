@@ -1,6 +1,6 @@
 import { sendBoundedJson } from '../services/bounded-json-transport.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
-import { DIAGRAM_HELPER_OPERATIONS } from '../services/diagram-worker-protocol.js';
+import { DIAGRAM_HELPER_OPERATIONS, readFeatureCatalogRevision } from '../services/diagram-worker-protocol.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
@@ -946,6 +946,7 @@ const runGeneration = async ({
   resourceManifest,
   stagedResources,
   fontIdentities = [],
+  heldFeatureCatalogRevision = null,
   requestId,
   testLifecycleEnabled = false
 } = {}) => {
@@ -955,6 +956,12 @@ const runGeneration = async ({
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     throw serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' });
   }
+  // The catalog revision the page holds for the shown drawing, with the
+  // digest of its bytes (gbdraw/web/CLAUDE.md, Runtime data flow).
+  const held = readFeatureCatalogRevision(
+    heldFeatureCatalogRevision,
+    () => serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' })
+  );
   const { pyodide } = runtime;
   try {
     fontRegistryFor(pyodide).requireRegistered(fontIdentities);
@@ -1027,7 +1034,8 @@ const runGeneration = async ({
       resourcePathsJson,
       workspace,
       testLifecycleEnabled,
-      preparedResourceIdentitiesJson
+      preparedResourceIdentitiesJson,
+      held?.revision ?? null
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });
@@ -1053,7 +1061,8 @@ const runGeneration = async ({
     }
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-transport-ready', {
       transport: 'transferable-binary',
-      featureCatalog: result?.featureCatalog == null ? 'unchanged' : 'sent',
+      featureCatalog: result?.featureCatalog != null ? 'sent' : result?.error ? 'none' : 'unchanged',
+      heldFeatureCatalogRevision: Boolean(held),
       bytes: collectGenerationResultTransferList(result).reduce(
         (total, buffer) => total + buffer.byteLength,
         0
@@ -1122,7 +1131,7 @@ const runGeneration = async ({
   if (outcome?.error) outcome.error = serializeError(outcome.error, { operation: 'generate' });
   if (!outcome?.error) {
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-start');
-    await resolveGeneratedFeatureCatalog(outcome, null);
+    await resolveGeneratedFeatureCatalog(outcome, held);
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-end', {
       fingerprint: outcome.artifactIdentity.fingerprint,
       retainedBytes: outcome.artifactIdentity.retainedBytes

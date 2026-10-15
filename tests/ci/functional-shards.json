@@ -111,6 +111,7 @@
       "tests/web/composition-layout-real.playwright.spec.js",
       "tests/web/contracts/session-regenerate-intent.playwright.spec.js",
       "tests/web/definition-replay-visual-state.playwright.spec.js",
+      "tests/web/feature-catalog-reuse.playwright.spec.js",
       "tests/web/gui-audit-20260930-comparisons.playwright.spec.js",
       "tests/web/live-generate-parity-legend.playwright.spec.js",
       "tests/web/mode-scoped-feature-edits.playwright.spec.js",

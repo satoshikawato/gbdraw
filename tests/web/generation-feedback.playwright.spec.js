@@ -115,6 +115,12 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   expect(coldRuntime.some(value => /: step \d of 5, /.test(value))).toBe(true);
   expect(cold.workers.constructions).toBe(1);
   expect(await keepCommitted(page, 'coldCommitted')).toBe(true);
+  // Step 3a: the warm Generate reuses the catalog build and keeps this object.
+  expect(cold.events.map(event => event.name)).toContain('catalog.admission-started');
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    window.coldCatalog = window.Vue.toRaw(state.featureCatalog.value);
+  });
 
   await resetObservations(page);
   await generate(page).click();
@@ -123,6 +129,12 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   expectRenderStages(warm);
   expect(warm.statuses.map(entry => entry.value).filter(value => value.startsWith('Preparing diagram runtime'))).toEqual([]);
   expect(warm.workers.constructions).toBe(1);
+  expect(warm.events.map(event => event.name)).toContain('catalog.reused');
+  expect(warm.events.map(event => event.name)).not.toContain('catalog.admission-started');
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return Boolean(window.coldCatalog) && window.Vue.toRaw(state.featureCatalog.value) === window.coldCatalog;
+  })).toBe(true);
 
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -174,7 +186,10 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   await resetObservations(page);
   await generate(page).click();
   await awaitSuccess(page);
-  expectRenderStages(await record(page, testInfo, 'retry-mobile'));
+  const retry = await record(page, testInfo, 'retry-mobile');
+  expectRenderStages(retry);
+  // Cancel ended the Worker: the retry's new Worker sends and admits the catalog.
+  expect(retry.events.map(event => event.name)).toContain('catalog.admission-started');
   expect(await committedIs(page, 'appliedBeforeCancel')).toBe(false);
   await screenshot(page, testInfo, 'ready-mobile');
   expect(external).toEqual([]);

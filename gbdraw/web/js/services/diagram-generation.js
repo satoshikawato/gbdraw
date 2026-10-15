@@ -211,6 +211,29 @@ const featureCatalogRevisions = new WeakMap();
  */
 const itemResultNames = (catalog) => catalog.items.map((item) => String(item?.resultName ?? ''));
 
+/**
+ * A feature catalog the page received, with the revision it arrived with.
+ * @typedef {{ catalog: FeatureCatalog, revision: Readonly<FeatureCatalogRevision> }} HeldFeatureCatalog
+ */
+
+/**
+ * The catalog the page may name to the Worker for the drawing it renders: one
+ * it received from this Worker, whose items still carry the Result names the
+ * render expects. A rerender expects the names its Results keep (`resultNames`,
+ * OV-136); a Generate expects the engine's names, recorded at receipt.
+ * @param {FeatureCatalog | null | undefined} catalog
+ * @param {readonly string[] | null} resultNames
+ * @returns {HeldFeatureCatalog | null}
+ */
+export const selectHeldFeatureCatalog = (catalog, resultNames) => {
+  const record = catalog && typeof catalog === 'object' ? featureCatalogRevisions.get(catalog) : undefined;
+  if (!catalog || !record) return null;
+  const expected = resultNames ?? record.resultNames;
+  const names = itemResultNames(catalog);
+  if (names.length !== expected.length || names.some((name, index) => name !== expected[index])) return null;
+  return { catalog, revision: record.revision };
+};
+
 const invalidGenerationResult = () => deserializeWorkerError({
   code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission'
 });
@@ -246,9 +269,10 @@ const normalizeGeneratedArtifactIdentity = (identity) => {
 
 /**
  * @param {unknown[] | WorkerGenerationPayload | string | number | boolean | null | undefined} payload
+ * @param {HeldFeatureCatalog | null} [held] The catalog the request named; an "unchanged" reply keeps it.
  * @returns {NormalizedGeneration}
  */
-export const normalizeGenerationResponse = (payload) => {
+export const normalizeGenerationResponse = (payload, held = null) => {
   if (Array.isArray(payload)) {
     return markCurrentWorkerGenerationResponse({
       results: decodeGenerationResults(payload),
@@ -288,7 +312,17 @@ export const normalizeGenerationResponse = (payload) => {
   // The catalog travels beside the metadata, never inside it (step 3a).
   if (Object.hasOwn(metadata, 'featureCatalog')) throw invalidGenerationResult();
   const replyRevision = readFeatureCatalogRevision(payload.featureCatalogRevision, invalidGenerationResult);
-  if (payload.featureCatalog != null) {
+  if (payload.featureCatalog == null) {
+    // "Unchanged": only for the revision this request named.
+    if (!replyRevision || !held || held.revision.revision !== replyRevision.revision) {
+      throw invalidGenerationResult();
+    }
+    metadata.featureCatalog = held.catalog;
+    recordStructuralMetric('featureCatalogReuseCount');
+    recordSessionLifecycleEvent('catalog.reused', {
+      resultCount: Array.isArray(payload.results) ? payload.results.length : 0
+    });
+  } else {
     const catalog = decodeGenerationJson(payload.featureCatalog, GENERATION_JSON_PARTS.featureCatalog);
     if (replyRevision && catalog && typeof catalog === 'object' && Array.isArray(/** @type {{ items?: unknown }} */ (catalog).items)) {
       const received = /** @type {FeatureCatalog} */ (catalog);
@@ -592,10 +626,12 @@ const settleActiveRequest = (request, callback) => {
 
 /**
  * @param {GenerationPayload} [payload]
- * @param {{ onProgress?: ((progress: RequestProgress) => void) | null }} [options]
+ * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: HeldFeatureCatalog | null }} [options]
+ *   `held`: the catalog the page holds for the drawing it renders (selectHeldFeatureCatalog);
+ *   only its revision is posted.
  * @returns {Promise<GenerationResponse>}
  */
-export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) => {
+export const runDiagramGeneration = (payload = {}, { onProgress = null, held = null } = {}) => {
   if (activeRequest) {
     return Promise.reject(new Error('A diagram generation request is already running.'));
   }
@@ -651,7 +687,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
         request: payload.request,
         resourceManifest: preparedResources.resourceManifest,
         stagedResources: preparedResources.stagedResources,
-        fontIdentities: requestFontIdentities(payload.request)
+        fontIdentities: requestFontIdentities(payload.request),
+        heldFeatureCatalogRevision: held?.revision ?? null
       };
 
       const cleanup = () => {
@@ -703,7 +740,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
           /** @type {NormalizedGeneration} */
           let normalized;
           try {
-            normalized = normalizeGenerationResponse(data.results);
+            normalized = normalizeGenerationResponse(data.results, held);
           } catch (error) {
             failWorker(error);
             return;

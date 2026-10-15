@@ -138,17 +138,41 @@ test('status, selection, and input build no tables; each Generate builds its lab
     featureOverrides: [expect.objectContaining({ labelVisibility: 'on' })]
   });
   // CW-02: one label projection per Generate, shared by the staged copy and the request.
-  expect(await applyBulkLabelEdit(page)).toBe(1);
+  let bulkRows = null;
+  const bulkEdit = await observe(page, async () => { bulkRows = await applyBulkLabelEdit(page); });
+  expect(bulkRows).toBe(1);
   const override = await observe(page, () => clickGenerate(page));
   expect(count(override, 'labelOverrideTableBuildCount')).toBe(1);
   expect((await committedRequest(page)).featureOverrides
     .some((row) => row.labelText === 'CW_BULK_LABEL')).toBe(true);
-  // CW-04: every Generate renders and admits its catalog, even for unchanged input.
-  for (const op of [override, await observe(page, () => clickGenerate(page))]) {
+  // CW-04: every Generate renders and leaves an admitted catalog; the catalog
+  // is sent and admitted again only when a catalog item was built again. The
+  // label edit rebuilds the item, and its automatic label reflow sends and
+  // admits it; the override Generate then reuses that build and keeps the
+  // catalog (tests/test_web_render_preparation_cache.py
+  // test_cw04_each_generate_leaves_the_catalog_a_fresh_cache_gives decides
+  // this outcome against a fresh cache), as does a Generate with no change.
+  const shownCatalog = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    window.__CW_SHOWN_CATALOG__ = window.Vue.toRaw(state.featureCatalog.value);
+  });
+  const sameShownCatalog = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return Boolean(window.__CW_SHOWN_CATALOG__)
+      && window.Vue.toRaw(state.featureCatalog.value) === window.__CW_SHOWN_CATALOG__;
+  });
+  expect(count(bulkEdit, 'featureCatalogAdmissionCount')).toBe(1);
+  expect(bulkEdit.counts.featureCatalogReuseCount || 0).toBe(0);
+  await shownCatalog();
+  const unchanged = await observe(page, () => clickGenerate(page));
+  for (const op of [override, unchanged]) {
     expect(op.runs).toBe(1);
-    expect(count(op, 'featureCatalogAdmissionCount')).toBe(1);
     expect(count(op, 'svgSanitizationCount')).toBeGreaterThan(0);
+    expect(count(op, 'featureCatalogReuseCount')).toBe(1);
+    expect(op.counts.featureCatalogAdmissionCount || 0).toBe(0);
+    expect(op.events).toContain('catalog.reused');
   }
+  expect(await sameShownCatalog()).toBe(true);
 
   // CW-01: operation acceptance and selection updates start no heavy work.
   const compareButton = (target) => page.getByRole('button', {

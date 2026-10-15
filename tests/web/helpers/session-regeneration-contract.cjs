@@ -87,11 +87,16 @@ const evaluateSessionRegenerationContract = ({
   }
 
   if (SUCCESS_PROFILES.has(profile)) {
+    // An unchanged second Generate reuses the catalog build the page holds:
+    // the page keeps the catalog it admitted and admits nothing (CW-04).
+    const catalogReused = profile === 'second-generate';
+    const catalogStep = catalogReused ? 'catalog.reused' : 'catalog.admission-started';
     exact('generatedArtifactHeavyTraversalCount', 0, 'REGEN_HEAVY_HISTORY_TRAVERSAL', 'SWC-WEB-REGEN-001');
     exact('generatedArtifactFullSignatureCount', 0, 'REGEN_FULL_ARTIFACT_SIGNATURE', 'SWC-WEB-REGEN-001');
     exact('generatedArtifactMutableIntentSnapshotCount', 2, 'REGEN_MUTABLE_INTENT_SNAPSHOTS', 'SWC-WEB-REGEN-001');
     exact('rendererExecutionCount', 1, 'REGEN_RENDERER_EXECUTION', 'SWC-WEB-REGEN-001');
-    exact('featureCatalogAdmissionCount', 1, 'REGEN_CATALOG_ADMISSION', 'SWC-WEB-REGEN-001');
+    exact('featureCatalogAdmissionCount', catalogReused ? 0 : 1, 'REGEN_CATALOG_ADMISSION', 'SWC-WEB-REGEN-001');
+    exact('featureCatalogReuseCount', catalogReused ? 1 : 0, 'REGEN_CATALOG_REUSE', 'SWC-WEB-REGEN-001');
     exact('featureCatalogSecondaryTraversalCount', 0, 'REGEN_CATALOG_SECONDARY_TRAVERSAL', 'SWC-WEB-REGEN-001');
     exact('svgSanitizationCount', count(resultCount), 'REGEN_SVG_SANITIZATION', 'SWC-WEB-REGEN-001');
 
@@ -143,8 +148,8 @@ const evaluateSessionRegenerationContract = ({
       ['history.before-capture-started', 'worker-post-start', 'ORDER_CAPTURE_BEFORE_WORKER'],
       ['worker-post-start', 'python-wrapper-start', 'ORDER_WORKER_BEFORE_RENDERER'],
       ['python-wrapper-start', 'python-wrapper-end', 'ORDER_RENDERER_COMPLETION'],
-      ['python-wrapper-end', 'catalog.admission-started', 'ORDER_RENDERER_BEFORE_ADMISSION'],
-      ['catalog.admission-started', 'svg.admission-started', 'ORDER_CATALOG_BEFORE_SVG'],
+      ['python-wrapper-end', catalogStep, 'ORDER_RENDERER_BEFORE_ADMISSION'],
+      [catalogStep, 'svg.admission-started', 'ORDER_CATALOG_BEFORE_SVG'],
       ['svg.admission-completed', 'artifact.candidate-completed', 'ORDER_ADMISSION_BEFORE_CANDIDATE'],
       ['artifact.candidate-completed', 'preview.readiness-expectation-registered', 'ORDER_CANDIDATE_BEFORE_EXPECTATION'],
       ['preview.readiness-expectation-registered', 'artifact.activation-started', 'ORDER_EXPECTATION_BEFORE_ACTIVATION'],
