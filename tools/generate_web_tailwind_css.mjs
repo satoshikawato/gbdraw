@@ -16,7 +16,9 @@
 // In the browser the compiler first saw the classes of the parsed markup, then
 // each class the app added later, and appended the later ones after the rules
 // of the same utility. The tool keeps that order with two batches: the classes
-// of the static markup of index.html, then every other token.
+// of the static markup of index.html, then every other token. The bindings
+// should not depend on that order: tests/web/tailwind-class-order.test.mjs
+// fails when an element applies two such utilities at once.
 // tests/web/tailwind-stylesheet.test.mjs fails when the file differs from a
 // fresh run.
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -29,7 +31,8 @@ export const TAILWIND_COMPILER_PATH = 'gbdraw/web/vendor/tailwindcss/tailwindcss
 export const TAILWIND_INPUT_PATH = 'gbdraw/web/css/tailwind.input.css';
 export const TAILWIND_OUTPUT_PATH = 'gbdraw/web/css/tailwind.css';
 // Every source that writes class names into the page: the page and its
-// templates, the modules, and the markup the hosted build inserts.
+// templates, the modules and any markup beside them, and the markup the hosted
+// build inserts.
 const CLASS_SOURCE_FILES = Object.freeze([
   'gbdraw/web/index.html',
   'tools/prepare_cloudflare_pages.py',
@@ -37,16 +40,18 @@ const CLASS_SOURCE_FILES = Object.freeze([
 ]);
 const CLASS_SOURCE_DIRECTORY = 'gbdraw/web/js';
 
-const listJavaScript = (root, directory) => readdirSync(join(root, directory), { withFileTypes: true })
+const CLASS_SOURCE_EXTENSION = /\.(?:js|mjs|html)$/;
+
+const listClassSources = (root, directory) => readdirSync(join(root, directory), { withFileTypes: true })
   .flatMap((entry) => {
     const path = `${directory}/${entry.name}`;
-    if (entry.isDirectory()) return listJavaScript(root, path);
-    return entry.isFile() && entry.name.endsWith('.js') ? [path] : [];
+    if (entry.isDirectory()) return listClassSources(root, path);
+    return entry.isFile() && CLASS_SOURCE_EXTENSION.test(entry.name) ? [path] : [];
   });
 
 export const classSourcePaths = (root = REPOSITORY_ROOT) => [
   ...CLASS_SOURCE_FILES,
-  ...listJavaScript(root, CLASS_SOURCE_DIRECTORY)
+  ...listClassSources(root, CLASS_SOURCE_DIRECTORY)
 ].sort();
 
 // A token is a run of characters outside quotes, markup, and code delimiters;

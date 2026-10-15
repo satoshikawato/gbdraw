@@ -4,7 +4,9 @@
 // the hosted-build markup, or a changed component rule, fails here until the
 // stylesheet is regenerated.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -28,15 +30,26 @@ test('the tracked Tailwind stylesheet equals a fresh generator run', async () =>
 test('the page links the stylesheet after its own styles and ships no Tailwind compiler', () => {
   const html = repositoryFile('gbdraw/web/index.html');
   const head = html.slice(0, html.indexOf('</head>'));
-  assert.doesNotMatch(html, /tailwindcss-play|text\/tailwindcss/);
+  for (const path of classSourcePaths().filter((source) => source.startsWith('gbdraw/web/'))) {
+    assert.doesNotMatch(repositoryFile(path), /tailwindcss-play|text\/tailwindcss/, path);
+  }
   const link = head.indexOf('<link rel="stylesheet" href="./css/tailwind.css">');
   assert.ok(link > head.lastIndexOf('</style>'), 'the stylesheet follows the last <style> of <head>');
 });
 
 test('the inventory reads every class source and keeps class tokens whole', () => {
   const sources = classSourcePaths();
-  for (const path of ['gbdraw/web/index.html', 'gbdraw/web/js/app/app-setup.js', 'tools/prepare_cloudflare_pages.py']) {
+  for (const path of ['gbdraw/web/index.html', 'gbdraw/web/js/app/app-setup.js', 'tools/prepare_cloudflare_pages.py', 'tools/stamp_web_build.py']) {
     assert.ok(sources.includes(path), path);
+  }
+  const root = mkdtempSync(join(tmpdir(), 'gbdraw-tailwind-sources-'));
+  try {
+    mkdirSync(join(root, 'gbdraw/web/js/app'), { recursive: true });
+    for (const name of ['a.js', 'b.mjs', 'c.html', 'package.json']) writeFileSync(join(root, 'gbdraw/web/js/app', name), '');
+    const modules = classSourcePaths(root).filter((path) => path.startsWith('gbdraw/web/js/'));
+    assert.deepEqual(modules, ['gbdraw/web/js/app/a.js', 'gbdraw/web/js/app/b.mjs', 'gbdraw/web/js/app/c.html']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
   const tokens = extractClassCandidates(
     `<div class="grid-cols-[minmax(0,1fr)_auto] hover:bg-blue-700" :class="{ hidden: !open, 'bg-slate-50/50': on }">`
