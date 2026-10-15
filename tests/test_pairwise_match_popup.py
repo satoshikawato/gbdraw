@@ -770,7 +770,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           .find((row) => row.proteinId === 'CAG34720.1');
         assert(!mismatchedReverseMember.canOpen, JSON.stringify(mismatchedReverseMember));
         featureLookup.get('display-space-rendered-id').stable_feature_id = 'source-space-stable-id';
-        featureLookup.set('source-space-stable-id', popupOptions.sourceFeatures[0]);
+        popupOptions.featureLookup.set('source-space-stable-id', popupOptions.sourceFeatures[0]);
         replaceCatalogs();
         popupOptions.orthogroups[0].members[2].recordIndex = 3;
         const wrongRecordPayload = buildMatchPopupPayload(element, popupOptions);
@@ -779,7 +779,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(!wrongRecordReverseMember.aaFasta, JSON.stringify(wrongRecordReverseMember));
         assert(!wrongRecordReverseMember.canOpen, JSON.stringify(wrongRecordReverseMember));
         popupOptions.orthogroups[0].members[2].recordIndex = 4;
-        featureLookup.delete('source-space-stable-id');
+        popupOptions.featureLookup.delete('source-space-stable-id');
         assert(payload.blockOrthogroups[1].id === 'og_2', JSON.stringify(payload.blockOrthogroups));
 
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
