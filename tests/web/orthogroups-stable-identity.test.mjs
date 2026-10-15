@@ -1483,6 +1483,14 @@ assert.match(copiedText, /AAAA/);
 assert.match(copiedText, /CCCC/);
 assert.match(copiedText, /GGGG/);
 const copiedNucleotidePayload = copiedText;
+// D-37: installing a Generate's artifact clears the feedback through the
+// editor's port; the pending timer then changes nothing.
+editor.clearCopyFeedback();
+assert.equal(editor.orthogroupCopyFeedbackLabel(group, 'nt', 'Copy nt'), 'Copy nt');
+advanceCopyFeedbackTime(2000);
+assert.equal(editor.orthogroupCopyFeedbackLabel(group, 'nt', 'Copy nt'), 'Copy nt');
+await editor.copyOrthogroupSequences(group, 'nt');
+assert.equal(editor.orthogroupCopyFeedbackLabel(group, 'nt', 'Copy nt'), 'Copied!');
 await editor.copyOrthogroupSequences(group, 'aa');
 assert.equal(
   editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa'),

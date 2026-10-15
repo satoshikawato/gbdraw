@@ -1921,10 +1921,14 @@ const createLayoutPreferences = () => ({
   };
   const authorityOwnersA = captureAuthorityOwners();
   let resultAdmissionCalls = 0;
+  // D-37: installing a Generate's artifact over other shown Results clears the
+  // similarity-group copy feedback, also when both share one groups array.
+  let copyFeedbackClears = 0;
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
     fileStore,
     nextTick: async () => {},
+    clearSimilarityGroupCopyFeedback: () => { copyFeedbackClears += 1; },
     buildUiStateData: () => ({
       mode: state.mode.value,
       cInputType: state.cInputType.value,
@@ -1977,6 +1981,20 @@ const createLayoutPreferences = () => ({
   }, { results: state.results.value });
 
   const handleA = snapshots.captureGeneratedArtifactHandle();
+  {
+    // A reused Generate's commit: new Results with the shown groups array.
+    const clears = copyFeedbackClears;
+    const reusedGenerate = { ...handleA.ownerSet, results: [{ ...resultA }] };
+    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate);
+    assert.equal(state.orthogroups.value, groupsA);
+    assert.equal(copyFeedbackClears, clears + 1);
+    // Installing the shown owner set again (a rollback before activation): no clear.
+    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate);
+    assert.equal(copyFeedbackClears, clears + 1);
+    snapshots.installGeneratedArtifactOwnerSet(handleA.ownerSet);
+    assert.equal(copyFeedbackClears, clears + 2);
+    assert.equal(state.results.value, handleA.ownerSet.results);
+  }
   assert.equal(Object.isFrozen(handleA), true);
   assert.equal(handleA.ownerSet.results, state.results.value);
   assert.equal(handleA.ownerSet.results[0], resultA);
@@ -2164,7 +2182,10 @@ const createLayoutPreferences = () => ({
   state.losatCache.value = new Map([['replacement', { text: 'replacement\n' }]]);
   state.losatDerivedCache.value = new Map([['replacement', { payload: {} }]]);
   state.losatCacheInfo.value = [{ key: 'replacement' }];
+  const clearsBeforeUndo = copyFeedbackClears;
   await snapshots.restoreGeneratedArtifactHandle(handleA);
+  // Undo of a Generate step clears the copy feedback.
+  assert.equal(copyFeedbackClears, clearsBeforeUndo + 1);
   assert.equal(resultAdmissionCalls, 0);
   assert.equal(state.results.value[0], resultA);
   assert.equal(state.extractedFeatures.value, extractedA);
