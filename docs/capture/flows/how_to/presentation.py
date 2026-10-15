@@ -676,21 +676,6 @@ def _fit_finished_circular_preview(page: Page) -> None:
         raise AssertionError("Could not reach the documented 60% preview zoom")
 
 
-def _park_feature_search(page: Page) -> None:
-    """Drag the public search palette above the clipped preview viewport."""
-
-    search = page.get_by_role("searchbox", name="Search features", exact=True)
-    box = search.bounding_box()
-    if box is None:
-        raise AssertionError("Could not resolve the feature-search palette")
-    x = box["x"] - 4
-    y = box["y"] + box["height"] + 3
-    page.mouse.move(x, y)
-    page.mouse.down()
-    page.mouse.move(x, 2, steps=10)
-    page.mouse.up()
-
-
 def _pan_preview_left(page: Page, distance_ratio: float = 0.27) -> None:
     """Use the public canvas gesture to reveal the right-side legend."""
 
@@ -816,7 +801,6 @@ def capture_gui_styling(
         final_report = generate_and_inspect(
             page, _inspect_presentation_svg, _assert_style_svg
         )
-        _park_feature_search(page)
         zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
         zoom_out.click()
         expect(
@@ -957,7 +941,6 @@ def capture_gui_feature_presentation(
         final_report = generate_and_inspect(
             page, _inspect_presentation_svg, _assert_feature_presentation_svg
         )
-        _park_feature_search(page)
         page.get_by_label(
             "Visibility rule 1 record ID", exact=True
         ).scroll_into_view_if_needed()
