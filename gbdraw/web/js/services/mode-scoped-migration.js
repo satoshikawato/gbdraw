@@ -14,6 +14,7 @@ import { FLAT_DRAFT_TOP_LEVEL_FIELDS, ROW_KEYED_LEGEND_SESSION_VERSION } from '.
 import { legendEntryKey } from './legend-svg.js';
 import { normalizeDefaultColor, normalizePaletteColors } from '../utils/color-utils.js';
 import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
+/** @import { LegendEditsUnread } from './style-overrides.js' */
 import { cloneJsonData } from './json-clone.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { featureIdentityKey } from './feature-placement.js';
@@ -60,19 +61,25 @@ export const MODE_SLICE_CONTAINERS = (() => {
 // A slice holds only registry fields: the writer and both validators reject
 // any other key (plan 4.2).
 /**
+ * The places of a slice that hold no registry field: a container that is no
+ * object (`field` null), or a key it may not hold.
  * @param {unknown} value
  * @param {string} [container]
+ * @returns {{ container: string, field: string | null }[]}
  */
-export const validateModeSliceFields = (value, container = '') => {
-  if (!isObject(value)) throw fieldsError();
+export const modeSliceFieldViolations = (value, container = '') => {
+  if (!isObject(value)) return [{ container, field: null }];
   const allowed = MODE_SLICE_CONTAINERS[container];
-  for (const [field, child] of Object.entries(/** @type {Record<string, unknown>} */ (value))) {
-    if (!allowed.has(field)) throw fieldsError();
+  return Object.entries(/** @type {Record<string, unknown>} */ (value)).flatMap(([field, child]) => {
+    if (!allowed.has(field)) return [{ container, field }];
     const childContainer = container ? `${container}.${field}` : field;
-    if (Object.hasOwn(MODE_SLICE_CONTAINERS, childContainer)) validateModeSliceFields(child, childContainer);
-  }
+    return Object.hasOwn(MODE_SLICE_CONTAINERS, childContainer) ? modeSliceFieldViolations(child, childContainer) : [];
+  });
 };
-
+/** Save: a slice holds only registry fields. @param {unknown} value */
+export const validateModeSliceFields = (value) => {
+  if (modeSliceFieldViolations(value).length) throw fieldsError();
+};
 // The modes a GUI-unmanaged config override leaf belongs to (`by-leaf`): the
 // leaf of one mode's renderer prefixes belongs to that mode, any other leaf to
 // both (gbdraw.api.options._MODE_CONFIG_OVERRIDE_PREFIXES).
@@ -482,14 +489,15 @@ const session46LegendRows = (legend) => {
 /**
  * @template {Record<string, unknown>} Legend
  * @param {Legend} legend
+ * @param {LegendEditsUnread | null} [unread] Written: the edits the stores' reading drops (Load lists them).
  * @returns {{ legend: Legend, outcomes: LegendEditRekey[] }}
  */
-export const legendEditsByRowKey = (legend) => {
+export const legendEditsByRowKey = (legend, unread = null) => {
   const { rowOf, renamedKeys } = session46LegendRows(legend);
   /** @param {string} key */
   const rowKeyOf = (key) => rowOf.get(key) || key;
-  const colors = normalizeLegendColorOverrides(legend.colorOverrides);
-  const strokes = normalizeStrokeOverrideMap(legend.strokeOverrides, { requireOverride: true });
+  const colors = normalizeLegendColorOverrides(legend.colorOverrides, unread?.colors);
+  const strokes = normalizeStrokeOverrideMap(legend.strokeOverrides, { requireOverride: true, losses: unread?.strokes });
   /** @type {Record<string, unknown>} */
   const read = { ...legend };
   /** @type {LegendEditRekey[]} */
@@ -536,9 +544,10 @@ export const legendEditsByRowKey = (legend) => {
  * @template {Record<string, unknown>} Session
  * @param {Session} session
  * @param {number} version
+ * @param {{ slice: string, unread: LegendEditsUnread }[] | null} [unread] Written: what each slice's reading drops.
  * @returns {{ session: Session, outcomes: LegendEditRekey[] }}
  */
-export const sessionLegendEditsByRowKey = (session, version) => {
+export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
   /** @type {LegendEditRekey[]} */
   const outcomes = [];
   if (version >= ROW_KEYED_LEGEND_SESSION_VERSION) return { session, outcomes };
@@ -547,8 +556,11 @@ export const sessionLegendEditsByRowKey = (session, version) => {
     const editor = holder.editorState;
     if (!isObject(editor) || !isObject(/** @type {Record<string, unknown>} */ (editor).legend)) return holder;
     const editorState = /** @type {Record<string, unknown>} */ (editor);
-    const read = legendEditsByRowKey(/** @type {Record<string, unknown>} */ (editorState.legend));
+    /** @type {LegendEditsUnread} */
+    const sliceUnread = { colors: [], strokes: { leaves: [], dropped: 0 } };
+    const read = legendEditsByRowKey(/** @type {Record<string, unknown>} */ (editorState.legend), unread ? sliceUnread : null);
     read.outcomes.forEach((outcome) => outcomes.push({ ...outcome, slice }));
+    unread?.push({ slice, unread: sliceUnread });
     return { ...holder, editorState: { ...editorState, legend: read.legend } };
   };
   const read = withRowKeyedLegend(session, 'draft');

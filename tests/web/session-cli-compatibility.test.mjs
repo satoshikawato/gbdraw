@@ -42,6 +42,7 @@ const {
   CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 // The composition root's transform of an older Session's Results (R13 port).
@@ -153,20 +154,18 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.equal(hash(await readFileBytes(state.files.c_gff)), hash(await readFile(args[1])));
           assert.equal(hash(await readFileBytes(state.files.c_fasta)), hash(await readFile(args[3])));
         }
-        // A draft outside `modes` is a Session-format error, even beside a
-        // valid request (Session 46 keeps the Web draft in `modes`).
+        // A draft in its retired home outside `modes` is dropped with no row
+        // (A7f, E-OD03: the slice fills its place); Save still refuses it.
         const before = getCommittedCanonicalRenderRequest();
-        const errorLog = console.error;
-        console.error = () => {};
-        try {
-          const rejected = await load(JSON.stringify({ ...session, config: { adv: {} } }));
-          assert.equal(rejected.status, 'error');
-          assert.equal(rejected.error.code, 'INPUT_INVALID');
-          assert.deepEqual(rejected.error.context, {field:'schema',reason:'FIELDS'});
-          assert.deepEqual(getCommittedCanonicalRenderRequest(), before);
-        } finally {
-          console.error = errorLog;
-        }
+        const retiredSession = { ...session, config: { adv: { label_font_size: 99 } } };
+        assert.throws(() => validateSessionAuthorityInventory(retiredSession, session.version),
+          (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS');
+        assert.doesNotThrow(() => validateSessionAuthorityInventory(session, session.version));
+        const retired = await load(JSON.stringify(retiredSession));
+        assert.equal(retired.status, 'ok', retired.error?.stack);
+        assert.deepEqual(retired.repairs, []);
+        assert.deepEqual(getCommittedCanonicalRenderRequest(), before);
+        assert.notEqual(state.activeDrawing().adv.label_font_size, 99);
         input = ['--session', file];
       }
     } finally {
@@ -454,9 +453,9 @@ await test('Load of a 0.13.0 Session records the track settings of its Result', 
   // A later edit of the form's slots leaves the record of the shown Result.
   state.activeDrawing().adv.linear_track_slots[1].params.positive_color = '#00ff00';
   assert.equal(getLoadedTrackSettings().slots[1].params.positive_color, '#ff0000');
-  // A failed Load keeps the Session that stays loaded, and its record.
+  // A failed Load keeps the Session that stays loaded, and its record (R3: too old).
   const broken = structuredClone(session);
-  broken.config.adv.circular_track_slots_enabled = true;
+  broken.version = 26;
   assert.equal((await load(Buffer.from(JSON.stringify(broken)))).status, 'error');
   assert.equal(getLoadedTrackSettings().slots[1].params.positive_color, '#ff0000');
   assert.equal((await load(await read('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'))).status, 'ok');
@@ -471,9 +470,9 @@ await test('Load of a 0.13.0 Session records the track settings of its Result', 
 
 // OV-38: the Web writers of Sessions 27–33 (release tags 0.12.0–0.13.0 and
 // main before Session 39) saved every schema-4 Circular track slot row with
-// `spacing: null`. With Custom Track Slots off the null is lossless, so the
-// 0.13.0 Gallery Session loads and the field is not kept; with the slots on, or
-// with a non-null value, Load fails and names the field and the row.
+// `spacing: null`. The null holds nothing, so the 0.13.0 Gallery Session loads
+// and the field is not kept, with Custom Track Slots off or on (E-OD06); a
+// non-null value is dropped with its row before the Load (OV-758, A10).
 await test('a 0.13.0 Gallery Session with Custom Track Slots off loads without the null slot spacing', async () => {
   const bytes = gunzipSync(await readFile(path.join(
     root, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'
@@ -487,17 +486,22 @@ await test('a 0.13.0 Gallery Session with Custom Track Slots off loads without t
   assert.equal(state.mode.value, 'linear');
   assert.equal(state.activeDrawing().adv.circular_track_slots.length, session.config.adv.circular_track_slots.length);
   assert.ok(state.activeDrawing().adv.circular_track_slots.every(slot => !Object.hasOwn(slot, 'spacing')));
-  for (const [label, edit, row] of [
-    ['Custom Track Slots on', adv => { adv.circular_track_slots_enabled = true; }, 1],
-    ['a non-null spacing', adv => { adv.circular_track_slots[1].spacing = '4px'; }, 2]
+  for (const [label, edit, enabled, rows] of [
+    ['Custom Track Slots on', adv => { adv.circular_track_slots_enabled = true; }, true, []],
+    ['a non-null spacing', adv => { adv.circular_track_slots[1].spacing = '4px'; }, false,
+      [['setting-replaced', 'config.adv.circular_track_slots[1].spacing', 'dropped']]]
   ]) {
     const document = structuredClone(session);
     edit(document.config.adv);
-    const failed = await load(JSON.stringify(document));
-    assert.equal(failed.status, 'error', label);
-    assert.equal(failed.error.code, 'TRACK_INVALID', label);
-    assert.deepEqual(failed.error.context, { field: 'spacing', reason: 'OBSOLETE_TRACK_FIELD', slotIndex: row - 1 }, label);
-    assert.match(failed.error.summary, new RegExp(`^The track settings are invalid\\. Track row ${row}\\. Field: spacing\\. `), label);
+    const loaded = await importSession({ target: {
+      files: [new File([JSON.stringify(document)], 'current.json', { type: 'application/json' })], value: 'selected'
+    } }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'ok', label);
+    assert.deepEqual(loaded.repairs.map(({ code, path, effect }) => [code, path, effect]), rows, label);
+    const { adv } = state.drawings.circular;
+    assert.equal(adv.circular_track_slots_enabled, enabled, label);
+    assert.equal(adv.circular_track_slots.length, session.config.adv.circular_track_slots.length, label);
+    assert.ok(adv.circular_track_slots.every(slot => !Object.hasOwn(slot, 'spacing')), label);
   }
 });
 

@@ -121,7 +121,7 @@ const functionBody = (name) => {
   }
   throw new Error(`${name} has no end`);
 };
-const DRAWING_WRITE = /\bdrawing\.[\w.]+(\.value)?\s*(=(?!=)|\+=|-=)|\bdrawing\.[\w.]+\.(splice|push|pop|shift|unshift)\(|\b(replaceReactiveObject|replaceReactiveArray|clearReactiveObject|applyConfigData)\(/;
+const DRAWING_WRITE = /\bdrawing\.[\w.]+(\.value)?\s*(=(?!=)|\+=|-=)|\bdrawing\.[\w.]+\.(splice|push|pop|shift|unshift)\(|\b(replaceReactiveObject|replaceReactiveArray|clearReactiveObject|apply(?:Captured)?ConfigData)\(/;
 
 test('the mode transition writes no drawing member and commits no Result edit', () => {
   const body = functionBody('transitionDiagramMode');

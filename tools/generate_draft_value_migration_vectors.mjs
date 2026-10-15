@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 // Writes the vectors of the Web Load value migrations of a Session 27-44 draft
 // config, which the Python twins in gbdraw/session_io.py read
-// (tests/test_draft_value_migrations.py). The expected outputs come from the
-// Web functions themselves, so the Web is the reference:
-//   - option values: the option-value steps of migratePersistedWebOptionValues;
-//   - Linear track slots: migrateImportedLinearTrackSlots;
+// (tests/test_draft_value_migrations.py). The outputs come from the Web's
+// current owners, so the Web is the reference:
+//   - option values: the reader table (`configFieldRepairs`) is what Load
+//     does; Python refuses the values the Web's strict readers refuse
+//     (`migratePersisted*` of current-option-values.js), so a case the Web
+//     repairs holds both: Python's `error` and the Web's `load` with its rows
+//     (E-OD02: the Web may repair more; Python accepts no less);
+//   - Linear track slots: migrateImportedLinearTrackSlots, the twin, then the
+//     reader table (`readImportedTrackSlots`) as Load reads the stack; what
+//     Python refuses there is declared per case (`pythonError`);
 //   - Session 27-33 shapes: withoutLegacyNullCircularSlotSpacing and
 //     migrateLegacyFeatureRenderingConfig.
 // services/config.js does not load outside a browser, so its module-private
@@ -19,12 +25,14 @@ import {
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout
 } from '../gbdraw/web/js/services/current-option-values.js';
+import { configFieldRepairs, defaultSettingsContainers } from '../gbdraw/web/js/services/config-field-readers.js';
 import {
   LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   migrateLinearTrackSlotsToCurrentSchema
 } from '../gbdraw/web/js/services/linear-track-slot-model.js';
 import { CIRCULAR_TRACK_SLOT_SCHEMA_VERSION } from '../gbdraw/web/js/services/session-active-config-contract.js';
+import { isPlainObject } from '../gbdraw/web/js/utils/contract-shape.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG_SOURCE = fs.readFileSync(path.join(ROOT, 'gbdraw/web/js/services/config.js'), 'utf8');
@@ -46,19 +54,6 @@ const load = (name, dependencies) => new Function(
   ...Object.keys(dependencies), `${definition(name)}\nreturn ${name};`
 )(...Object.values(dependencies));
 
-const isPlainObject = load('isPlainObject', {});
-const identity = (value) => value;
-const migratePersistedWebOptionValues = load('migratePersistedWebOptionValues', {
-  isPlainObject,
-  migratePersistedLinearTrackLayout,
-  migratePersistedLinearLabelPlacement,
-  migratePersistedCircularMultiRecordSizeMode,
-  // These steps have their own Python twins (field names; the split's profile
-  // rule), so the vectors hold the option-value steps only.
-  migratePersistedWebStateFieldNames: identity,
-  withHistoricalPairwiseMatchStyleFallback: identity,
-  withCurrentLinearLabelVisibility: identity
-});
 const migrateImportedLinearTrackSlots = load('migrateImportedLinearTrackSlots', {
   LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
@@ -75,13 +70,83 @@ const fixtureConfig = (fixture) => {
   return JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8')).config;
 };
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const caseConfig = (testCase) => (testCase.fixture ? fixtureConfig(testCase.fixture) : clone(testCase.input.config));
 const run = (step) => (testCase) => {
-  const config = testCase.fixture ? fixtureConfig(testCase.fixture) : clone(testCase.input.config);
+  const config = caseConfig(testCase);
   try {
     return { ...testCase, expected: { config: step(config, testCase) } };
   } catch (error) {
     return { ...testCase, error: error.message };
   }
+};
+
+/**
+ * What Load reads of `fields` ([container, field]) in `config`: the reader
+ * table's values of the fields `config` holds, and its rows at them in the
+ * drawing of either mode (a row names a setting only in the mode that draws it).
+ */
+const loadRead = (config, fields) => {
+  const targets = defaultSettingsContainers('linear');
+  configFieldRepairs(targets, clone(config), 'config', { mode: 'linear', resolveTrackPlacements: false });
+  const rows = [...new Set(/** @type {const} */ (['circular', 'linear']).flatMap((mode) => configFieldRepairs(
+    defaultSettingsContainers(mode), clone(config), 'config', { mode, resolveTrackPlacements: false }
+  ).map(({ code, path: at }) => `${code}@${at}`)))]
+    .filter((row) => fields.some(([container, field]) => {
+      const at = row.slice(row.indexOf('@') + 1);
+      const subject = `config.${container}.${field}`;
+      return at === subject || at.startsWith(`${subject}[`) || at.startsWith(`${subject}.`);
+    }));
+  const read = clone(config);
+  fields.forEach(([container, field]) => {
+    if (isPlainObject(read[container]) && Object.hasOwn(read[container], field)) read[container][field] = clone(targets[container][field]);
+  });
+  return { config: read, rows };
+};
+const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+
+const OPTION_FIELDS = [['form', 'linear_track_layout'], ['adv', 'label_placement'], ['adv', 'multi_record_size_mode']];
+const STRICT_OPTION_READERS = {
+  linear_track_layout: migratePersistedLinearTrackLayout,
+  label_placement: migratePersistedLinearLabelPlacement,
+  multi_record_size_mode: migratePersistedCircularMultiRecordSizeMode
+};
+// Python's outcome: the Web's strict readers of the fields the draft holds.
+const strictOptionValues = (config) => {
+  const read = clone(config);
+  OPTION_FIELDS.forEach(([container, field]) => {
+    if (isPlainObject(read[container]) && Object.hasOwn(read[container], field)) {
+      read[container][field] = STRICT_OPTION_READERS[field](read[container][field]);
+    }
+  });
+  return read;
+};
+const optionVector = (testCase) => {
+  const config = caseConfig(testCase);
+  const loaded = loadRead(config, OPTION_FIELDS);
+  const python = run(strictOptionValues)(testCase);
+  if ('expected' in python) {
+    // Where Python accepts a value, Load reads it the same, with no row.
+    if (loaded.rows.length || !same(loaded.config, python.expected.config)) {
+      throw new Error(`${testCase.name}: Load reads what Python accepts differently.`);
+    }
+    return python;
+  }
+  return { ...python, load: loaded };
+};
+
+const LINEAR_SLOT_FIELDS = [['adv', 'linear_track_slots'], ['adv', 'linear_track_slots_schema_version']];
+const slotVector = (testCase) => {
+  const config = caseConfig(testCase);
+  const migrated = migrateImportedLinearTrackSlots(config, testCase.sessionVersion);
+  const { pythonError, ...rest } = testCase;
+  // A stack the twin leaves to the reader (no list, no schema it migrates) is
+  // one Python refuses; Python also refuses a Session 27-33 stack whose stored
+  // schema the twin ignores (it reads every one as schema 1).
+  const leftToReader = migrated === config && isPlainObject(config.adv) && Object.hasOwn(config.adv, 'linear_track_slots');
+  if (leftToReader && !pythonError) throw new Error(`${testCase.name}: a stack the twin leaves to the reader needs pythonError.`);
+  const loaded = loadRead(migrated, LINEAR_SLOT_FIELDS);
+  const python = pythonError ? { error: pythonError } : { expected: { config: migrated } };
+  return { ...rest, ...python, ...(pythonError || loaded.rows.length || !same(loaded.config, migrated) ? { load: loaded } : {}) };
 };
 
 const BGC_V30 = 'tests/fixtures/sessions/BGC0000708-BGC0000713.v30.gbdraw-session.json.gz';
@@ -104,6 +169,7 @@ const OPTION_CASES = [
   { name: 'CLI-written Session 30 (release 0.13.0 era)', fixture: CLI_V30 }
 ];
 
+const OBSOLETE_SLOTS = `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`;
 const slotCase = (name, sessionVersion, adv) => ({ name, sessionVersion, input: { config: { adv } } });
 const featuresSlot = { id: 'features', renderer: 'features', height: 30, spacing: 4, params: { a: 1 } };
 const SLOT_CASES = [
@@ -130,10 +196,12 @@ const SLOT_CASES = [
       null
     ]
   }),
-  slotCase('Session 40 without a stored schema is refused', 40, { linear_track_slots: [] }),
-  slotCase('an unknown stored schema is refused', 30, { linear_track_slots_schema_version: 3, linear_track_slots: [] }),
-  slotCase('a non-integer stored schema is refused', 33, { linear_track_slots_schema_version: '2', linear_track_slots: [] }),
-  slotCase('slots that are not a list are refused', 30, { linear_track_slots: { id: 'x' } }),
+  // Python refuses these stacks; Load reads them (OV-758, E-OD02).
+  { ...slotCase('Session 40 without a stored schema is refused', 40, { linear_track_slots: [] }), pythonError: OBSOLETE_SLOTS },
+  { ...slotCase('an unknown stored schema is refused', 30, { linear_track_slots_schema_version: 3, linear_track_slots: [] }), pythonError: OBSOLETE_SLOTS },
+  { ...slotCase('a non-integer stored schema is refused', 33, { linear_track_slots_schema_version: '2', linear_track_slots: [] }), pythonError: OBSOLETE_SLOTS },
+  { ...slotCase('a Session 40 stack of an unknown schema is refused', 40, { linear_track_slots_schema_version: 3, linear_track_slots: [featuresSlot] }), pythonError: OBSOLETE_SLOTS },
+  { ...slotCase('slots that are not a list are refused', 30, { linear_track_slots: { id: 'x' } }), pythonError: 'Custom Track Slots must be an array.' },
   slotCase('a draft without Linear slots is unchanged', 30, { nt: 'GC' })
 ];
 
@@ -172,12 +240,12 @@ const SHAPE_STEPS = {
 
 const FILES = {
   'tests/fixtures/draft-option-value-migration-vectors.json': {
-    description: 'Option-value steps of migratePersistedWebOptionValues (services/config.js), Sessions 27-39; Python twin migrate_persisted_web_option_values.',
-    cases: OPTION_CASES.map(run((config) => migratePersistedWebOptionValues(config)))
+    description: 'Session 27-39 option values: expected or error is Python twin migrate_persisted_web_option_values (the Web strict readers migratePersisted* of services/current-option-values.js); load is what Web Load reads where it repairs (the reader table of services/config-field-readers.js, with its rows).',
+    cases: OPTION_CASES.map(optionVector)
   },
   'tests/fixtures/linear-track-slot-migration-vectors.json': {
-    description: 'migrateImportedLinearTrackSlots (services/config.js) with migrateLinearTrackSlotsToCurrentSchema; Python twin migrate_imported_linear_track_slots.',
-    cases: SLOT_CASES.map(run((config, testCase) => migrateImportedLinearTrackSlots(config, testCase.sessionVersion)))
+    description: 'expected is migrateImportedLinearTrackSlots (services/config.js) with migrateLinearTrackSlotsToCurrentSchema, and error what its Python twin migrate_imported_linear_track_slots refuses where the Web reads the stack; load is what Web Load reads where it differs (readImportedTrackSlots through the reader table, with its rows).',
+    cases: SLOT_CASES.map(slotVector)
   },
   'tests/fixtures/session-33-draft-shape-migration-vectors.json': {
     description: 'withoutLegacyNullCircularSlotSpacing and migrateLegacyFeatureRenderingConfig (services/config.js), Sessions 27-33.',

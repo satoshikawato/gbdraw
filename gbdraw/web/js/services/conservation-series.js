@@ -48,7 +48,7 @@ export const normalizeFileList = (files) => (Array.isArray(files) ? files.filter
 
 /**
  * @template {FileLike} T
- * @param {T[] | null | undefined} files
+ * @param {(T | null)[] | null | undefined} files An empty place is kept as one.
  * @param {CircularConservationLike | null | undefined} circularConservation
  * @returns {(T | null)[]}
  */
@@ -88,6 +88,33 @@ export const orderedOptionalConservationFiles = (files, circularConservation) =>
     if (!used.has(index)) ordered.push(file || null);
   });
   return ordered;
+};
+
+/**
+ * The one removal of a comparison series with its files: Remove in the
+ * Circular comparison panel, and Load for a series whose BLAST table it could
+ * not read (OV-893, E-OD30). Each list holds one place per series, in series
+ * order; the place `index` goes from every list, and the series after it keep
+ * their own files and take the place before (`sourceIndex`). The comparison
+ * stays on while a series keeps its BLAST table (`enabled`).
+ * @template F
+ * @template {object} S
+ * @param {{ blasts: F[], fastas: F[], sequenceSources: F[], series: S[] }} lists
+ * @param {number} index
+ */
+export const withoutConservationSeries = ({ blasts, fastas, sequenceSources, series }, index) => {
+  /** @template T @param {T[]} list */
+  const without = (list) => list.filter((_, place) => place !== index);
+  const kept = without(series).map((entry, sourceIndex) => ({ ...entry, sourceIndex }));
+  const keptBlasts = without(blasts);
+  return {
+    blasts: keptBlasts,
+    fastas: without(fastas),
+    sequenceSources: without(sequenceSources),
+    series: kept,
+    labels: kept.map((entry) => /** @type {{ label?: unknown }} */ (entry).label).join(','),
+    enabled: keptBlasts.length > 0
+  };
 };
 
 /**

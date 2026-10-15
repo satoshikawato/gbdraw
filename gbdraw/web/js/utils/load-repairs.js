@@ -11,11 +11,15 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
 /**
  * The rule of the producer that could not restore a value: one member per rule.
  * @typedef {'request-dropped'
+ *   | 'session-part-dropped'
+ *   | 'session-field-dropped'
  *   | 'other-result-set-dropped'
  *   | 'request-part-dropped'
  *   | 'request-reference-dropped'
  *   | 'setting-replaced'
  *   | 'setting-entries-dropped'
+ *   | 'file-entry-dropped'
+ *   | 'comparison-series-dropped'
  *   | 'pending-palette-dropped'
  *   | 'depth-row-disabled'
  *   | 'orthogroup-edit-dropped'
@@ -33,7 +37,6 @@ import { SESSION_TABLE_LABELS } from './error-normalization.js';
  *   | 'legend-edit-overwritten'
  *   | 'legend-edit-overwritten-session46'
  *   | 'legend-edit-rekey-dropped'
- *   | 'record-display-drafts-dropped'
  *   | 'feature-recovery-failed'
  *   | 'match-sequences-unrestored'
  * } LoadRepairCode
@@ -88,6 +91,23 @@ const LINE_LIMIT = 12;
 const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ ([
   'legend-edit-overwritten-session46', 'cache-entry-dropped', 'pending-palette-dropped', 'orthogroup-edit-dropped'
 ]));
+
+/**
+ * The content parts of a Session the reader may drop or replace whole
+ * (`readSessionDocument`), how the dialog names each, and the verb its name takes.
+ * @type {Readonly<Record<string, readonly [name: string, verb: 'is' | 'are']>>}
+ */
+const SESSION_PART_NAMES = Object.freeze({
+  results: ['the saved Results', 'are'],
+  editorState: ['the feature list and the Legend and stroke edits of the saved diagram', 'are'],
+  resources: ['the stored input files', 'are'],
+  otherModeResult: ['the saved diagram of the other mode', 'is'],
+  modes: ['the settings of both drawings', 'are'],
+  'modes.circular': ['the settings of the Circular drawing', 'are'],
+  'modes.linear': ['the settings of the Linear drawing', 'are']
+});
+/** The paths of `SESSION_PART_NAMES`. @type {readonly string[]} */
+export const SESSION_PART_PATHS = Object.freeze(Object.keys(SESSION_PART_NAMES));
 
 /** @param {string} value @param {number} limit */
 const bounded = (value, limit) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
@@ -151,6 +171,15 @@ const WORDING = {
   'request-dropped': (repairs) => repairs.map(({ path }) => (
     `Saved diagram: the settings of the saved diagram (${path}) could not be read. The file loads as settings only;`
     + ' the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.')),
+  // The Session document (services/session-authority.js `readSessionDocument`).
+  'session-part-dropped': (repairs) => repairs.map(({ path }) => {
+    const [name, verb] = SESSION_PART_NAMES[path] ?? [path, 'is'];
+    return `Session file: ${name} (${path}) could not be read and ${verb} left out.`;
+  }),
+  'session-field-dropped': (repairs) => [
+    `Session file: ${cappedList('the field', 'the fields', repairs.map(({ path, label }) => (label === undefined ? path : `${path} (${label})`)))}`
+    + ` could not be read and ${wasWere(repairs.length)} left out.`
+  ],
   'other-result-set-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Saved ${label ?? 'other'} diagram: its settings (${path}) could not be read; that diagram and its Results are left out.`)),
   'request-part-dropped': (repairs) => repairs.map(({ path, label, effect }) => (
@@ -168,6 +197,11 @@ const WORDING = {
     }[effect]}.`)),
   'setting-entries-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
     `Settings: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
+  'file-entry-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
+    `Input files: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
+  'comparison-series-dropped': (repairs) => repairs.map(({ path, label }) => (
+    `Comparison series: the series ${label === undefined ? '' : `"${label}" `}(${path}) has no BLAST table that could be read;`
+    + ' it is left out with its sequence files.')),
   'pending-palette-dropped': (repairs) => repairs.map(({ path, label }) => (
     `Palette: the palette "${label ?? ''}" (${path}) waits to be applied, but Instant Preview is on, which applies a palette at once;`
     + ' it was dropped.')),
@@ -227,9 +261,6 @@ const WORDING = {
   'match-sequences-unrestored': () => [
     'Comparisons: the sequences of the saved comparison matches could not be read again from the input files;'
     + ' the SVG preview stays, and the next Generate reads them.'
-  ],
-  'record-display-drafts-dropped': () => [
-    'Record display (recordDisplayDrafts): the stored record display settings could not be read and were dropped.'
   ]
 };
 

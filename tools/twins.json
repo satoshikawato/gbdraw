@@ -460,7 +460,7 @@
         "gbdraw/web/js/services/config.js:migrateImportedLinearTrackSlots"
       ],
       "vector": "tests/fixtures/linear-track-slot-migration-vectors.json",
-      "reason": "Both Load paths migrate; vectors generated from the Web function pin Python (tools/generate_draft_value_migration_vectors.mjs).",
+      "reason": "Both Load paths migrate; vectors generated from the Web function pin Python, and where Python refuses a stack they hold what Web Load reads through the reader table (tools/generate_draft_value_migration_vectors.mjs).",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
@@ -502,7 +502,7 @@
         "gbdraw/web/js/services/config.js:migratePersistedWebOptionValues"
       ],
       "vector": "tests/fixtures/draft-option-value-migration-vectors.json",
-      "reason": "Both Load paths migrate; vectors generated from the Web function pin Python's option-value steps.",
+      "reason": "Both Load paths read the retired option values; vectors generated from the Web's strict readers (services/current-option-values.js) pin Python, and where Python refuses they hold what Web Load reads through the reader table.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },

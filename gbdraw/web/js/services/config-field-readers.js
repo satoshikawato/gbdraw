@@ -1,7 +1,8 @@
 // @ts-check
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
-import { resolveColorToHex } from '../utils/color-utils.js';
+import { readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
+import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
 import {
   changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
   positiveNumberOrNull, textChoice, trueUnlessFalse, truthy
@@ -9,7 +10,10 @@ import {
 import { loadRepair } from '../utils/load-repairs.js';
 import { DECIMAL_NUMBER_PATTERN } from '../utils/optional-positive-number.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
-import { PAIRWISE_MATCH_STYLES } from './current-option-values.js';
+import {
+  CIRCULAR_MULTI_RECORD_SIZE_MODE_ALIASES, CIRCULAR_MULTI_RECORD_SIZE_MODES, LINEAR_LABEL_PLACEMENT_ALIASES, LINEAR_LABEL_PLACEMENTS,
+  LINEAR_TRACK_LAYOUT_ALIASES, LINEAR_TRACK_LAYOUTS, PAIRWISE_MATCH_STYLES, PROTEIN_BLASTP_MODES, migratePersistedWebStateFieldNames
+} from './current-option-values.js';
 import { readDefinitionLineStyles } from './definition-line-style-state.js';
 import { readDepthTracks } from './depth-track-state.js';
 import { IMPORTED_COMPARISON_ACTIONS } from './imported-comparison-intent.js';
@@ -20,12 +24,28 @@ import {
 } from './losat-normalization.js';
 import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
 import {
-  DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat,
-  createDefaultLosatpHitLimits, readLinearTypographyLinked
+  CIRCULAR_TRACK_SLOT_SCHEMA_VERSION, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, DEFAULT_PNG_DPI, PNG_DPI_CHOICES, RETIRED_STORED_FIELDS,
+  SESSION_INPUT_TYPES, STORED_CONFIG_DOMAINS, STORED_ROW_FIELDS, createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
+  createDefaultLosat, createDefaultLosatpHitLimits, readImportedTrackSlots, readLinearTypographyLinked
 } from './session-active-config-contract.js';
+import {
+  applyCircularTrackOrderPlacements, clampCircularTrackAxisIndex, inferLegacyAxisIndexFromFeature, normalizeCircularTrackSlots
+} from './circular-track-slot-model.js';
+import {
+  LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, clampLinearTrackAxisIndex, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
+} from './linear-track-slot-model.js';
+import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
+import { readRecordDisplayDrafts } from './record-display-model.js';
+import { isRecordDrawKey } from './record-draw-selection.js';
+import { isFeatureOverrideDraftRow, isFeaturePlacementDraftRow } from './feature-placement.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
-import { FEATURE_RENDERING_VALUES, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
+import {
+  DEFAULT_FEATURE_RENDERINGS, FEATURE_RENDERING_VALUES, readPersistedArrowHeadLengthRatio, readPersistedArrowShaftWidthRatio
+} from '../utils/feature-rendering.js';
 import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
+import { featureColorEditColor } from './specific-color-rules.js';
+import { isLabelOverrideRow } from './label-override-table.js';
 
 /** @import { FieldLeaf, FieldReader, FieldReading } from '../utils/field-reading.js' */
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
@@ -33,20 +53,24 @@ import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
 
 // The readers of the stored settings of a configuration (a drawing's draft, a
 // legacy configuration file) and of a Session's app `ui`, a drawing's `ui`
-// and its feature edits. `applyConfigData` and Load's apply read with these
-// readers, History restores included; before Load applies a file it reads the
-// file with the same readers and lists what they cannot restore (BA-D25,
-// B36, B37, B43), so the apply makes no repair of its own (G2).
+// and its feature edits. `applyConfigData` and Load's apply read with
+// these readers, History restores included; before Load applies a file it
+// reads the file with the same readers and lists what they cannot restore
+// (BA-D25, B36, B37, B43), so the apply makes no repair of its own (G2). A
+// value Save refuses is read here, not refused (E1a): the readers share their
+// predicates with Save's checks (E-OD02).
 
 /**
  * One stored field and its reader. A reader may read fields its table read
  * before it (`container`). `inPlace`: the list is replaced in its array.
- * `retired`: the field is no longer read and is deleted.
+ * `retired`: the field is no longer read and is deleted. `fileOnly`: only a
+ * file's value is read; captured settings keep the value the app wrote (R11).
  * @typedef {object} FieldRow
  * @property {string} field
  * @property {(value: unknown, container: Record<string, unknown>) => FieldReading<unknown>} read
  * @property {boolean} [inPlace]
  * @property {boolean} [retired]
+ * @property {boolean} [fileOnly]
  */
 /** @typedef {{ at: string, rows: readonly FieldRow[] }} FieldTable */
 /**
@@ -180,6 +204,58 @@ export const readConservationSeries = (value) => {
 };
 
 /**
+ * A crop endpoint of a Linear card: a whole number from 1 (its text reads as
+ * it), else unset (OV-568).
+ * @type {FieldReader<number | null>}
+ */
+const readRegionEndpoint = (value) => {
+  const classified = classifyOptionalNumber(value);
+  if (classified.status === 'auto') return { value: null, lost: false };
+  return classified.status === 'valid' && isPositiveInteger(classified.value)
+    ? { value: classified.value, lost: false } : { value: null, lost: true };
+};
+/**
+ * A Linear card's orientation: a boolean; any other value is not used, and
+ * the card is drawn as stored (OV-568).
+ * @type {FieldReader<boolean>}
+ */
+const readRegionReverse = (value) => (typeof value === 'boolean'
+  ? { value, lost: false } : { value: false, lost: !isUnsetValue(value) });
+/** A Linear card's text: text, else none (OV-568). @type {FieldReader<string>} */
+const readCardText = (value) => (typeof value === 'string' ? { value, lost: false } : { value: '', lost: !isUnsetValue(value) });
+/** A Linear card's genetic code, crop and texts. @type {readonly FieldRow[]} */
+const LINEAR_SEQ_ROWS = Object.freeze([
+  row('losat_gencode', readGencode),
+  row('region_start', readRegionEndpoint),
+  row('region_end', readRegionEndpoint),
+  row('region_reverse', readRegionReverse),
+  ...['definition', 'record_subtitle', 'file_definition', 'file_subtitle', 'inferred_definition', 'region_record_id']
+    .map((field) => row(field, readCardText))
+]);
+/** The Linear card fields the Files read (`readLinearSeqFields`); a binding copies them as stored. */
+export const LINEAR_SEQ_READ_FIELDS = Object.freeze(LINEAR_SEQ_ROWS.map(({ field }) => field));
+/**
+ * A Linear card's genetic code, crop and texts as the Files read them
+ * (`files.linearSeqs[i]` of a Session 27-30, `webFiles.bindings.linearSeqs[i]`
+ * after), with the rows of what they cannot restore at `path` (OV-568).
+ * @typedef {{ losat_gencode: number, region_start: number | null, region_end: number | null, region_reverse: boolean,
+ *   definition: string, record_subtitle: string, file_definition: string, file_subtitle: string,
+ *   inferred_definition: string, region_record_id: string }} LinearSeqFields
+ * @param {Record<string, unknown>} seq
+ * @param {string} path
+ * @returns {{ value: LinearSeqFields, repairs: LoadRepair[] }}
+ */
+export const readLinearSeqFields = (seq, path) => {
+  /** @type {Record<string, unknown>} */
+  const read = { ...seq };
+  const losses = readRows(read, LINEAR_SEQ_ROWS, '', seq);
+  return {
+    value: /** @type {LinearSeqFields} */ (Object.fromEntries(LINEAR_SEQ_READ_FIELDS.map((field) => [field, read[field]]))),
+    repairs: lossRepairs(losses, path, seq)
+  };
+};
+
+/**
  * @typedef {{ uid: string, row: number, canonicalCardinality?: 'exactly_one', canonicalRow?: number,
  *   canonicalColumn?: number }} LinearRecordRowEntry
  */
@@ -229,14 +305,19 @@ export const readLinearRecordRows = (value) => {
 export const readQualifierPriorityRules = (value) => {
   /** @type {QualifierPriorityRule[]} */
   const rules = [];
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
   let dropped = 0;
-  (Array.isArray(value) ? value : []).forEach((rule) => {
+  (Array.isArray(value) ? value : []).forEach((rule, index) => {
     const feat = isPlainObject(rule) ? String(rule.feat ?? '').trim() : '';
     const order = isPlainObject(rule) ? String(rule.order ?? '').trim() : '';
     if (!feat || !order) {
       dropped += 1;
       return;
     }
+    // A field no gbdraw writer wrote is not read (E-OD03).
+    Object.keys(/** @type {Record<string, unknown>} */ (rule)).filter((field) => field !== 'feat' && field !== 'order')
+      .forEach((field) => leaves.push({ at: `[${index}].${field}`, stored: /** @type {Record<string, unknown>} */ (rule)[field], used: undefined }));
     const existing = rules.find((entry) => entry.feat === feat);
     if (existing) {
       existing.order = order;
@@ -245,18 +326,19 @@ export const readQualifierPriorityRules = (value) => {
       rules.push({ feat, order });
     }
   });
-  return listReading(rules, value, dropped, []);
+  return listReading(rules, value, dropped, leaves);
 };
 
 /**
  * A list of rows read entry by entry: an entry that is no object is dropped
  * and counted; `readEntry` gives the row and the values of the entry it
- * replaced. A field the row does not name is not read.
+ * replaced. A field not in `fields` is not read (A17b).
  * @template T
  * @param {(entry: Record<string, unknown>) => { row: T, leaves: FieldLeaf[] }} readEntry
+ * @param {readonly string[]} fields
  * @returns {FieldReader<T[]>}
  */
-const rowList = (readEntry) => (value) => {
+const rowList = (readEntry, fields) => (value) => {
   /** @type {T[]} */
   const rows = [];
   /** @type {FieldLeaf[]} */
@@ -269,7 +351,9 @@ const rowList = (readEntry) => (value) => {
     }
     const reading = readEntry(entry);
     rows.push(reading.row);
-    reading.leaves.forEach((leaf) => leaves.push({ ...leaf, at: `[${index}]${leaf.at}` }));
+    const unread = Object.keys(entry).filter((field) => !fields.includes(field))
+      .map((field) => ({ at: `.${field}`, stored: entry[field], used: undefined }));
+    [...reading.leaves, ...unread].forEach((leaf) => leaves.push({ ...leaf, at: `[${index}]${leaf.at}` }));
   });
   return listReading(rows, value, dropped, leaves);
 };
@@ -309,7 +393,7 @@ export const readColorRules = listOrKept(rowList((entry) => {
         ? [{ at: '.fromFile', stored: entry.fromFile, used: Boolean(entry.fromFile) }] : [])
     ]
   };
-}));
+}, STORED_ROW_FIELDS.rules));
 
 /** @typedef {{ feat: string, qual: string, key: string }} StoredWhitelistRule */
 /**
@@ -320,7 +404,7 @@ export const readColorRules = listOrKept(rowList((entry) => {
 export const readWhitelistRules = listOrKept(rowList((entry) => {
   const row = { feat: ruleText(entry.feat), qual: ruleText(entry.qual), key: ruleText(entry.key) };
   return { row, leaves: textFieldLeaves(entry, row, ['feat', 'qual', 'key']) };
-}));
+}, STORED_ROW_FIELDS.whitelist));
 
 /**
  * The annotation sets of a drawing (`normalizeAnnotationSets`), with each
@@ -381,11 +465,11 @@ const readNonNegativeNumberOrNull = nonNegativeNumberOrNull;
 
 /**
  * The feature shapes after the merge (`adv.feature_shapes`): a shape is read
- * without case and outer spaces, a feature type without outer spaces. An
- * entry whose type is empty or whose shape names none is dropped (BA-OD100):
- * the merge copies the shape of a feature type the defaults lack as stored,
- * and a default type's shape of another kind is not used (a text one that
- * names no shape is refused before, `requireCurrentConfigFields`).
+ * without case and outer spaces, a feature type without outer spaces. A
+ * default feature type whose shape names none takes its default shape; any
+ * other entry whose type is empty or whose shape names none is dropped
+ * (BA-OD100, OV-757): the merge copies the shape of a feature type the
+ * defaults lack as stored.
  * @type {FieldReader<Record<string, string>>}
  */
 const readFeatureShapes = (value) => {
@@ -396,9 +480,16 @@ const readFeatureShapes = (value) => {
   Object.entries(isPlainObject(value) ? value : {}).forEach(([key, shape]) => {
     const featureType = key.trim();
     const name = typeof shape === 'string' ? shape.trim().toLowerCase() : '';
-    if (featureType && FEATURE_RENDERING_VALUES.includes(name)) shapes[featureType] = name;
+    if (featureType && FEATURE_RENDERING_VALUES.includes(name)) {
+      shapes[featureType] = name;
+      return;
+    }
+    // A default feature type keeps its default shape (OV-757).
+    const fallback = Object.hasOwn(DEFAULT_FEATURE_RENDERINGS, featureType)
+      ? /** @type {Readonly<Record<string, string>>} */ (DEFAULT_FEATURE_RENDERINGS)[featureType] : undefined;
+    if (fallback) shapes[featureType] = fallback;
     // An entry of no feature type, or an unset shape, drew nothing: no row.
-    else if (featureType && !isUnsetValue(shape)) leaves.push({ at: `.${key}`, stored: shape, used: undefined });
+    if (featureType && !isUnsetValue(shape)) leaves.push({ at: `.${key}`, stored: shape, used: fallback });
   });
   return { value: shapes, lost: leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
 };
@@ -408,6 +499,8 @@ const readLinearLabelVisibility = textChoice(LINEAR_LABEL_VISIBILITY_MODES, 'aut
 /** `adv`, in the order the rows depend on each other. @type {readonly FieldRow[]} */
 const ADV_ROWS = Object.freeze([
   row('label_rendering', normalizeLabelRendering),
+  row('label_placement', textChoice(LINEAR_LABEL_PLACEMENTS, 'auto', { aliases: LINEAR_LABEL_PLACEMENT_ALIASES })),
+  row('multi_record_size_mode', textChoice(CIRCULAR_MULTI_RECORD_SIZE_MODES, 'auto', { aliases: CIRCULAR_MULTI_RECORD_SIZE_MODE_ALIASES })),
   row('circular_label_placement', textChoice(['radial', 'horizontal'], 'horizontal')),
   row('circular_label_spacing', positiveNumberOrNull),
   row('linear_label_spacing', positiveNumberOrNull),
@@ -418,6 +511,8 @@ const ADV_ROWS = Object.freeze([
   row('multi_record_positions', readMultiRecordPositions),
   row('feature_overlap_tolerance_bp', numberOr((numeric) => Number.isSafeInteger(numeric) && numeric >= 0, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP)),
   row('plot_title_font_size', positiveNumberOrNull),
+  row('scale_font_size', positiveNumberOrNull),
+  row('ruler_label_font_size', positiveNumberOrNull),
   row('keep_full_definition_with_plot_title', onlyTrue),
   row('depth_color', (value) => ({ value: resolveColorToHex(String(value || '#4A90E2')), lost: false })),
   row('depth_normalize', onlyTrue),
@@ -464,7 +559,28 @@ const ADV_ROWS = Object.freeze([
   row('linear_length_visibility', readLinearLabelVisibility),
   row('feature_shapes', readFeatureShapes),
   row('pairwise_match_style', textChoice(PAIRWISE_MATCH_STYLES, 'ribbon')),
-  row('linear_definition_line_styles', readDefinitionLineStyles)
+  row('linear_definition_line_styles', readDefinitionLineStyles),
+  // The track stacks (OV-758): each axis index is read before its stack, as a
+  // stack read as the default unsets it; the stacks are read in the current
+  // slot schema. A captured stack keeps the drafts its rows show as invalid
+  // (TK-12), so only a file's stack is read.
+  .../** @type {const} */ ([['circular', CIRCULAR_TRACK_SLOT_SCHEMA_VERSION], ['linear', LINEAR_TRACK_SLOT_SCHEMA_VERSION]]).flatMap(([mode, schema]) => [
+    {
+      field: `${mode}_track_slots_axis_index`,
+      /** @type {FieldRow['read']} */
+      read: (value, adv) => (readImportedTrackSlots(mode, adv[`${mode}_track_slots`]).reset
+        ? { value: null, lost: !isUnsetValue(value) } : { value, lost: false }),
+      fileOnly: true
+    },
+    { field: `${mode}_track_slots`, read: (/** @type {unknown} */ value) => readImportedTrackSlots(mode, value), inPlace: true, fileOnly: true },
+    // A version up to the current one is migrated without a loss.
+    {
+      field: `${mode}_track_slots_schema_version`,
+      read: (/** @type {unknown} */ value) => ({
+        value: schema, lost: !isUnsetValue(value) && !(typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= schema)
+      })
+    }
+  ])
 ]);
 
 /**
@@ -474,7 +590,7 @@ const ADV_ROWS = Object.freeze([
  * @type {readonly FieldRow[]}
  */
 const LOSAT_SEARCH_ROWS = Object.freeze([
-  row('mode', textChoice(['pairwise', 'orthogroup', 'collinear'], 'orthogroup')),
+  row('mode', textChoice(PROTEIN_BLASTP_MODES, 'orthogroup')),
   row('maxHits', numberOr(isPositiveInteger, 5)),
   row('candidateLimit', numberOr(isPositiveInteger, null)),
   row('orthogroupMembershipMode', readOrthogroupMembershipMode),
@@ -552,22 +668,138 @@ export const DEFAULT_LINEAR_RECORD_GAP_PX = /** @type {number} */ (
 export const draftLinearRecordGap = (value) => (isUnsetValue(value) ? DEFAULT_LINEAR_RECORD_GAP_PX : value);
 /** A blank or absent gap reads as the default, as `draftLinearRecordGap` gives it. @type {FieldReader<number>} */
 export const readLinearRecordGap = numberOr(isNonNegative, DEFAULT_LINEAR_RECORD_GAP_PX);
+/** The Linear alignment plan: an object, else unset (OV-578). @type {FieldReader<Record<string, unknown> | null>} */
+export const readSimilarityAlignment = (value) => (isPlainObject(value) ? { value, lost: false } : { value: null, lost: !isUnsetValue(value) });
 export const readImportedComparisonAction = exactChoice(Object.values(IMPORTED_COMPARISON_ACTIONS), null);
 const readLosatProgramText = exactChoice(['blastn', 'tblastx', 'blastp'], 'blastn');
 /** The label filter, read without case. */
 export const readFilterMode = textChoice(['None', 'Whitelist', 'Blacklist'], 'None', {
   aliases: { none: 'None', whitelist: 'Whitelist', blacklist: 'Blacklist' }
 });
+/**
+ * The Label blacklist, text: a number reads as its text; another value keeps
+ * the text it always read as (`String`, nothing for an unset or false value),
+ * with its row (E-OD26). @type {FieldReader<string>}
+ */
+export const readBlacklistText = (value) => (typeof value === 'string' || typeof value === 'number'
+  ? { value: String(value), lost: false } : { value: String(value || ''), lost: !isUnsetValue(value) });
 /** Read as text. @type {FieldReader<string>} */
 export const readLosatProgram = (value) => readLosatProgramText(value ? String(value) : value);
 
+/** Text, else unset (the drawing's palette stays). @type {FieldReader<string>} */
+export const readPalette = (value) => (typeof value === 'string' ? { value: value.trim(), lost: false }
+  : { value: '', lost: !isUnsetValue(value) });
+/**
+ * The records a drawing of `mode` turns OFF: each a record key of its mode,
+ * once (a repeat names the same record: no loss).
+ * @param {'circular' | 'linear'} mode
+ * @returns {FieldReader<string[]>}
+ */
+export const recordsOffReader = (mode) => (value) => {
+  const entries = Array.isArray(value) ? value : [];
+  const keys = /** @type {string[]} */ (entries.filter((key) => isRecordDrawKey(mode, key)));
+  // A key of the other mode's records (a Session 27-44 draft both read) turned nothing off here.
+  const otherMode = mode === 'linear' ? 'circular' : 'linear';
+  const unread = entries.filter((key) => !isRecordDrawKey(mode, key) && !isRecordDrawKey(otherMode, key)).length;
+  return listReading([...new Set(keys)], value, unread, []);
+};
+/**
+ * The rows of an identity-keyed draft map that `accepts`.
+ * @param {(key: string, row: unknown) => boolean} accepts
+ * @returns {FieldReader<Record<string, unknown>>}
+ */
+const draftRows = (accepts) => (value) => {
+  /** @type {Record<string, unknown>} */
+  const rows = {};
+  let dropped = 0;
+  Object.entries(isPlainObject(value) ? value : {}).forEach(([key, row]) => {
+    if (accepts(key, row)) rows[key] = row;
+    else dropped += 1;
+  });
+  const notObject = !isPlainObject(value) && !isUnsetValue(value);
+  return { value: rows, lost: notObject || dropped > 0, ...(dropped && !notObject ? { dropped } : {}) };
+};
+/**
+ * The Feature placement draft rows of a drawing of `mode` that
+ * `canonicalFeaturePlacements` accepts (OV-764).
+ * @param {'circular' | 'linear'} mode
+ */
+export const featurePlacementsReader = (mode) => draftRows((key, row) => isFeaturePlacementDraftRow(key, row, mode));
+/** The feature edit draft rows `canonicalFeatureOverrides` accepts (A23'). */
+export const readFeatureOverrides = draftRows(isFeatureOverrideDraftRow);
+/**
+ * A Linear comparison plan as `normalizeLinearComparisonPlan` reads it, with
+ * what it does not use as stored (OV-764).
+ * @type {FieldReader<ReturnType<typeof normalizeLinearComparisonPlan>>}
+ */
+export const readLinearComparisonPlan = (value) => {
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  const plan = normalizeLinearComparisonPlan(value, (leaf) => leaves.push(leaf));
+  const notObject = !isPlainObject(value) && !isUnsetValue(value);
+  return { value: plan, lost: notObject || leaves.length > 0, ...(leaves.length && !notObject ? { leaves } : {}) };
+};
+const readHitLimit = numberOr(isPositiveInteger, null);
+/**
+ * The hit limits of each protein search mode (`losat.blastp.hitLimitsByMode`)
+ * over their defaults: a mode stored as null keeps its defaults; a mode or a
+ * limit of another kind, or one no mode has, is not used (OV-764).
+ * @type {FieldReader<Record<string, Record<string, number | null>>>}
+ */
+export const readHitLimitsByMode = (value) => {
+  /** @type {Record<string, Record<string, number | null>>} */
+  const limits = createDefaultLosatpHitLimits();
+  /** @type {FieldLeaf[]} */
+  const leaves = [];
+  Object.entries(isPlainObject(value) ? value : {}).forEach(([mode, stored]) => {
+    if (!Object.hasOwn(limits, mode)) {
+      leaves.push({ at: `.${mode}`, stored, used: undefined });
+      return;
+    }
+    if (stored === null) return;
+    if (!isPlainObject(stored)) {
+      leaves.push({ at: `.${mode}`, stored, used: limits[mode] });
+      return;
+    }
+    // A stored mode replaces its defaults, as it always did.
+    const defaults = limits[mode];
+    limits[mode] = {};
+    Object.entries(stored).forEach(([field, limit]) => {
+      if (!Object.hasOwn(defaults, field)) {
+        leaves.push({ at: `.${mode}.${field}`, stored: limit, used: undefined });
+        return;
+      }
+      const reading = readHitLimit(limit);
+      if (reading.lost) leaves.push({ at: `.${mode}.${field}`, stored: limit, used: reading.value });
+      limits[mode][field] = reading.value;
+    });
+  });
+  const notObject = !isPlainObject(value) && !isUnsetValue(value);
+  return { value: limits, lost: notObject || leaves.length > 0, ...(leaves.length && !notObject ? { leaves } : {}) };
+};
+
 /** The containers the merge reads first, then their rows (`installStoredSettings`). @type {readonly FieldTable[]} */
 const CONTAINER_TABLES = Object.freeze([
-  { at: 'form', rows: [] },
+  { at: 'form', rows: [
+    row('linear_track_layout', textChoice(LINEAR_TRACK_LAYOUTS, 'middle', { aliases: LINEAR_TRACK_LAYOUT_ALIASES })),
+    // A null lock is an omission, the historical OFF (`importSessionDocument`; E-OD24, no row); the merge keeps
+    // the target's value for one of another kind, with its row.
+    row('keep_definition_left_aligned', onlyTrue)
+  ] },
   { at: 'adv', rows: ADV_ROWS },
   { at: 'losat.blastp', rows: LOSAT_SEARCH_ROWS },
   { at: 'circularConservation', rows: CONSERVATION_ROWS }
 ]);
+/** The containers `installStoredSettings` merges. */
+const MERGED_CONTAINERS = Object.freeze(['form', 'adv', 'losat', 'circularConservation']);
+/**
+ * The fields of a drawing of `mode` read from the configuration as stored.
+ * @type {Readonly<Record<'circular' | 'linear', readonly FieldTable[]>>}
+ */
+const DRAWING_TABLES = Object.freeze({
+  circular: [{ at: '', rows: [row('recordsOff', recordsOffReader('circular')), row('featurePlacementOverrides', featurePlacementsReader('circular'))] }],
+  linear: [{ at: '', rows: [row('recordsOff', recordsOffReader('linear')), row('featurePlacementOverrides', featurePlacementsReader('linear'))] }]
+});
 /** The fields read from the configuration as stored. @type {readonly FieldTable[]} */
 const VALUE_TABLES = Object.freeze([
   { at: 'losat', rows: LOSAT_EXECUTION_ROWS },
@@ -576,7 +808,9 @@ const VALUE_TABLES = Object.freeze([
     rows: [
       row('enabled', readLinearRecordLayoutEnabled),
       row('recordGap', readLinearRecordGap),
-      row('rows', readLinearRecordRows)
+      row('rows', readLinearRecordRows),
+      row('similarityAlignment', readSimilarityAlignment),
+      row('recordTranslations', readList)
     ]
   },
   { at: 'importedComparisonResolution', rows: [row('action', readImportedComparisonAction)] },
@@ -602,9 +836,12 @@ const VALUE_TABLES = Object.freeze([
       row('rules', readColorRules),
       row('whitelist', readWhitelistRules),
       row('filterMode', readFilterMode),
+      row('blacklistText', readBlacklistText),
+      row('palette', readPalette),
       row('colors', readPlainObject),
-      row('featurePlacementOverrides', readPlainObject),
-      row('unmanagedConfigOverrides', readPlainObject)
+      row('unmanagedConfigOverrides', readPlainObject),
+      row('recordDisplayDrafts', (value) => readRecordDisplayDrafts(value)),
+      row('linearComparisonPlan', readLinearComparisonPlan)
     ]
   }
 ]);
@@ -629,15 +866,31 @@ export const readGeneratedCircularPlotTitlePosition = (value, ui) => {
  * that is no object is not read (`null`: the drawing's colors are used).
  * @type {FieldReader<Record<string, string> | null>}
  */
-export const readPaletteColors = (value) => (isPlainObject(value)
-  ? {
-      value: Object.fromEntries(Object.entries(value).map(([key, color]) => [key, resolveColorToHex(String(color || '').trim())])),
-      lost: false
-    }
-  : { value: null, lost: !isUnsetValue(value) });
+export const readPaletteColors = (value) => {
+  if (!isPlainObject(value)) return { value: null, lost: !isUnsetValue(value) };
+  // A color that names no color is dropped (OV-633).
+  const entries = Object.entries(value).filter(([, color]) => readCommittedPaint(color) !== null);
+  const dropped = Object.keys(value).length - entries.length;
+  return {
+    value: Object.fromEntries(entries.map(([key, color]) => [key, resolveColorToHex(String(color || '').trim())])),
+    lost: dropped > 0, ...(dropped ? { dropped } : {})
+  };
+};
 /** Shown unless `false`. @type {FieldReader<boolean>} */
 export const readRichFeaturePopup = trueUnlessFalse;
 export const readSessionUiMode = exactChoice(['circular', 'linear'], 'circular');
+/** An input type, else GenBank (OV-594). */
+export const readSessionInputType = exactChoice(SESSION_INPUT_TYPES, 'gb');
+/**
+ * The PNG DPI: one of the choices the DPI menu lists, kept as stored, else
+ * the default (OV-595).
+ * @type {FieldReader<unknown>}
+ */
+export const readDownloadDpi = (value) => {
+  if (isUnsetValue(value)) return { value: DEFAULT_PNG_DPI, lost: false };
+  const known = PNG_DPI_CHOICES.some((choice) => typeof value !== 'object' && choice.value === String(value).trim());
+  return known ? { value: typeof value === 'number' ? value : String(value).trim(), lost: false } : { value: DEFAULT_PNG_DPI, lost: true };
+};
 export const readFeaturePanelTab = exactChoice(['colors', 'labels'], 'colors');
 /** A Session's app `ui`. @type {readonly FieldTable[]} */
 const SESSION_UI_TABLE = Object.freeze([
@@ -649,6 +902,9 @@ const SESSION_UI_TABLE = Object.freeze([
       row('autoLabelReflow', truthy),
       row('paletteInstantPreviewEnabled', truthy),
       row('generatedMultiRecordCanvas', truthy),
+      row('cInputType', readSessionInputType),
+      row('lInputType', readSessionInputType),
+      row('downloadDpi', readDownloadDpi),
       { field: 'circularPlotTitlePosition', read: (value, ui) => (storedText(ui.generatedCircularPlotTitlePosition)
         ? { value, lost: false } : readCircularPlotTitlePosition(value)) },
       { field: 'generatedCircularPlotTitlePosition', read: readGeneratedCircularPlotTitlePosition },
@@ -673,6 +929,14 @@ export const readCanvasPadding = (value) => {
   const notObject = !isPlainObject(value) && !isUnsetValue(value);
   return { value: padding, lost: notObject || leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
 };
+/** Per-feature color edits: an edit whose paint names no color is dropped (RL-D). */
+export const readFeatureColorEdits = draftRows((_key, edit) => readCommittedPaint(featureColorEditColor(edit)) !== null);
+/** The label table rows the table serializes (RL-D). @type {FieldReader<unknown[]>} */
+export const readLabelOverrideRows = (value) => {
+  const entries = Array.isArray(value) ? value : [];
+  const rows = entries.filter(isLabelOverrideRow);
+  return listReading(rows, value, entries.length - rows.length, []);
+};
 /** A drawing's `ui` and its feature edits (a Session 46 slice). @type {readonly FieldTable[]} */
 const SLICE_TABLES = Object.freeze([
   {
@@ -685,9 +949,10 @@ const SLICE_TABLES = Object.freeze([
   {
     at: 'features',
     rows: [
-      row('featureColorOverrides', readPlainObject),
+      row('featureColorOverrides', readFeatureColorEdits),
+      row('featureOverrides', readFeatureOverrides),
       row('featureVisibilityManualRules', readList),
-      row('labelOverrideRows', readList),
+      row('labelOverrideRows', readLabelOverrideRows),
       row('labelTextBulkOverrides', readStringMap)
     ]
   }
@@ -699,9 +964,18 @@ const SLICE_TABLES = Object.freeze([
  * @returns {Record<string, unknown> | null}
  */
 const containerAt = (value, at) => {
+  const container = valueAt(value, at);
+  return isPlainObject(container) ? container : null;
+};
+/**
+ * @param {unknown} value
+ * @param {string} at Dotted; '' is the value itself.
+ * @returns {unknown}
+ */
+const valueAt = (value, at) => {
   let container = value;
   for (const key of at.split('.').filter(Boolean)) container = isPlainObject(container) ? container[key] : undefined;
-  return isPlainObject(container) ? container : null;
+  return container;
 };
 
 /**
@@ -724,16 +998,27 @@ const readRows = (container, rows, at, stored = container) => rows.flatMap(({ fi
   const reading = read(before, container);
   if (inPlace && Array.isArray(before) && Array.isArray(reading.value)) before.splice(0, before.length, ...reading.value);
   else container[field] = reading.value;
+  return readingLosses(reading, fieldAt, before);
+});
+
+/**
+ * What a reading of the value stored at `at` lost.
+ * @param {FieldReading<unknown>} reading
+ * @param {string} at
+ * @param {unknown} stored
+ * @returns {SettingLoss[]}
+ */
+const readingLosses = (reading, at, stored) => {
   if (!reading.lost) return [];
-  if (reading.kept) return [{ at: fieldAt, stored: before, used: undefined, kept: true }];
+  if (reading.kept) return [{ at, stored, used: undefined, kept: true }];
   if (reading.dropped || reading.leaves) {
     return [
-      ...(reading.dropped ? [{ at: fieldAt, stored: before, used: undefined, dropped: reading.dropped }] : []),
-      ...(reading.leaves ?? []).map((leaf) => ({ at: `${fieldAt}${leaf.at}`, stored: leaf.stored, used: leaf.used }))
+      ...(reading.dropped ? [{ at, stored, used: undefined, dropped: reading.dropped }] : []),
+      ...(reading.leaves ?? []).map((leaf) => ({ at: `${at}${leaf.at}`, stored: leaf.stored, used: leaf.used }))
     ];
   }
-  return [{ at: fieldAt, stored: before, used: reading.value }];
-});
+  return [{ at, stored, used: reading.value }];
+};
 
 /**
  * The comparison filters, whose writers store a number or its text
@@ -760,16 +1045,30 @@ const kindOf = (value, at) => {
 };
 /** Stored maps whose keys the user names, merged with their own keys. @type {readonly string[]} */
 const FREE_KEY_MAPS = Object.freeze(['adv.feature_shapes']);
+/**
+ * Stored keys the merge does not install and no loss of it: the retired and
+ * moved fields, and the fields a row reads from the stored value (the LOSAT
+ * execution settings of an older draft, a retired row).
+ * @type {ReadonlySet<string>}
+ */
+const READ_ELSEWHERE = new Set([
+  ...RETIRED_STORED_FIELDS,
+  ...LOSAT_EXECUTION_ROWS.map(({ field }) => `losat.${field}`),
+  ...LOSAT_SEARCH_ROWS.filter(({ retired }) => retired).map(({ field }) => `losat.blastp.${field}`)
+]);
 /** @type {readonly string[]} */
 const UNSAFE_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
 /**
  * Merges a stored settings object into `target`: a key `target` lacks is
- * ignored, except in a map of `FREE_KEY_MAPS`, where it is copied; an object merges into an object; a list replaces a list; a value
- * of `target`'s kind, or `null` on either side, is copied. An empty text of
- * another kind over a number (a cleared number input) is the field's value in
- * `defaults`, without a loss: a blank is the default (R7, OV-827). Any other
- * value of another kind (a list for an object included) is not used; it is
- * returned as a loss at `at`, and `target` keeps its value.
+ * not used, except in a map of `FREE_KEY_MAPS`, where it is copied; it is
+ * returned as a loss unless a gbdraw writer wrote it and later retired or
+ * moved it (`RETIRED_STORED_FIELDS`, E-OD03; TB19, TB32). An object merges
+ * into an object, and `null` over an object merges nothing; a list replaces
+ * a list; a value of `target`'s kind, or `null` on either side, is copied. An
+ * empty text of another kind over a number (a cleared number input) is the
+ * field's value in `defaults`, without a loss: a blank is the default (R7,
+ * OV-827). Any other value of another kind (a list for an object included) is
+ * not used; it is returned as a loss at `at`, and `target` keeps its value.
  * @param {Record<string, unknown>} target
  * @param {unknown} source
  * @param {string} at
@@ -781,16 +1080,17 @@ const mergeStoredSettings = (target, source, at, defaults) => {
   const stored = /** @type {Record<string, unknown>} */ (source);
   return Object.keys(stored).flatMap((key) => {
     if (UNSAFE_KEYS.includes(key)) return [];
+    const keyAt = at ? `${at}.${key}` : key;
     if (!Object.hasOwn(target, key)) {
       // A shape of a feature type the defaults do not name is the user's own.
       if (FREE_KEY_MAPS.includes(at)) target[key] = copied(stored[key]);
-      return [];
+      return FREE_KEY_MAPS.includes(at) || READ_ELSEWHERE.has(keyAt) ? [] : [{ at: keyAt, stored: stored[key], used: undefined }];
     }
     const targetValue = target[key];
     const sourceValue = stored[key];
-    const keyAt = at ? `${at}.${key}` : key;
     const fresh = defaults && Object.hasOwn(defaults, key) ? defaults[key] : undefined;
-    if (isPlainObject(targetValue) && isPlainObject(sourceValue)) {
+    // A null over a settings group holds nothing and merges nothing (OV-822, E-OD06).
+    if (isPlainObject(targetValue) && (isPlainObject(sourceValue) || sourceValue === null)) {
       return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null);
     }
     if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
@@ -824,33 +1124,36 @@ export const defaultSettingsContainers = (mode) => ({
   form: createDefaultForm(), adv: createDefaultAdv(mode), losat: createDefaultLosat(),
   circularConservation: createDefaultCircularConservation()
 });
-/** The `adv` fields copied as stored, whatever their kind, when the stored `adv` holds them: the two Linear font sizes. */
-const RAW_ADV_FIELDS = Object.freeze(['scale_font_size', 'ruler_label_font_size']);
 /**
- * Fields read as stored, whatever their kind (their merge losses are none):
- * the `RAW_ADV_FIELDS`; the arrow ratios, read as numbers below (a ratio
- * stored as its text reads as its number; one that is no number is refused
- * before, `requireCurrentConfigFields`); and the inference flag, copied with
+ * Fields read from the stored value after the merge (their merge losses are
+ * none): the arrow ratios (a ratio stored as its text reads as its number; one
+ * out of range is its default, with a row), and the inference flag, read with
  * the hit limits below.
  */
 const RAW_FIELDS = Object.freeze([
-  ...RAW_ADV_FIELDS.map((field) => `adv.${field}`), 'adv.arrow_head_length_ratio', 'adv.arrow_shaft_width_ratio',
-  'losat.blastp.collinearInferOrthogroups'
+  'adv.arrow_head_length_ratio', 'adv.arrow_shaft_width_ratio', 'losat.blastp.collinearInferOrthogroups'
 ]);
 /** @param {unknown} value */
 const copied = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
+/** @typedef {{ arrow_head_length_ratio: number | null, arrow_shaft_width_ratio: number | null }} StoredArrowRatios */
 /**
  * Installs a configuration's settings into `targets`: each container is
  * merged, then read by its rows. `applyConfigData` installs a drawing's
  * settings with it, and Load reads a file with it before it applies it, so
- * both lose the same values.
+ * both lose the same values. The arrow ratios are read, not installed: the
+ * caller that writes the drawing writes them (`applyConfigData`, R10).
  * @param {SettingsContainers} targets
- * @param {Record<string, unknown>} config
+ * @param {Record<string, unknown>} stored
  * @param {'circular' | 'linear'} mode The drawing's mode, whose defaults a blank reads as.
- * @returns {SettingLoss[]}
+ * @param {{ captured?: boolean }} [options] `captured`: settings the app wrote (History Undo and Redo, the Load
+ *   rollback), which the `fileOnly` rows leave as written (R11).
+ * @returns {{ losses: SettingLoss[], arrowRatios: StoredArrowRatios | null }} `arrowRatios` is null when the stored
+ *   `adv` is not used (the target keeps its ratios).
  */
-export const installStoredSettings = (targets, config, mode) => {
+export const installStoredSettings = (targets, stored, mode, { captured = false } = {}) => {
+  // A retired field name reads as its current name at every version (A17g).
+  const config = migratePersistedWebStateFieldNames(stored);
   const defaults = defaultSettingsContainers(mode);
   /**
    * A stored container that is no object is not used (the drawing's stays).
@@ -867,29 +1170,40 @@ export const installStoredSettings = (targets, config, mode) => {
   CONTAINER_TABLES.forEach(({ at, rows }) => {
     const container = at === 'losat.blastp' ? targets.losat.blastp
       : /** @type {Record<string, unknown>} */ (targets[/** @type {'form' | 'adv' | 'circularConservation'} */ (at)]);
-    losses.push(...readRows(container, rows, at, containerAt(config, at)));
+    losses.push(...readRows(container, captured ? rows.filter(({ fileOnly }) => !fileOnly) : rows, at, containerAt(config, at)));
   });
   // A stored group the merge did not use (its row says the target keeps its
   // value) gives no value below either.
   /** @param {string} at */
   const used = (at) => !losses.some((loss) => loss.kept && loss.at === at);
-  const storedAdv = used('adv') ? containerAt(config, 'adv') : null;
-  Object.assign(targets.adv, Object.fromEntries(RAW_ADV_FIELDS
-    .filter((field) => storedAdv && Object.hasOwn(storedAdv, field)).map((field) => [field, copied(storedAdv?.[field])])));
   // The arrow ratios the stored `adv` holds, else their defaults (an older
   // file draws the arrow it was drawn with); an `adv` not used keeps the target's.
-  Object.assign(targets.adv, normalizedPersistedArrowGeometryState(used('adv') ? storedAdv : targets.adv));
+  /** @type {StoredArrowRatios | null} */
+  let arrowRatios = null;
+  if (used('adv')) {
+    const storedAdv = containerAt(config, 'adv');
+    const head = readPersistedArrowHeadLengthRatio(storedAdv?.arrow_head_length_ratio);
+    const shaft = readPersistedArrowShaftWidthRatio(storedAdv?.arrow_shaft_width_ratio);
+    arrowRatios = { arrow_head_length_ratio: head.value, arrow_shaft_width_ratio: shaft.value };
+    losses.push(...readingLosses(head, 'adv.arrow_head_length_ratio', storedAdv?.arrow_head_length_ratio),
+      ...readingLosses(shaft, 'adv.arrow_shaft_width_ratio', storedAdv?.arrow_shaft_width_ratio));
+  }
   if (config.losat && used('losat') && used('losat.blastp')) {
-    // The hit limits of each mode over their defaults, as stored, unless
-    // they are not used; the inference flag as stored, else on for a collinear search.
+    // The inference flag as stored, else on for a collinear search; the hit
+    // limits of each mode over their defaults, unless they are not used.
     const blastp = containerAt(config, 'losat.blastp');
-    const limits = blastp?.hitLimitsByMode;
-    targets.losat.blastp.collinearInferOrthogroups = blastp?.collinearInferOrthogroups ?? (targets.losat.blastp.mode === 'collinear');
+    const inference = blastp?.collinearInferOrthogroups;
+    targets.losat.blastp.collinearInferOrthogroups = typeof inference === 'boolean' ? inference : targets.losat.blastp.mode === 'collinear';
+    if (!isUnsetValue(inference) && typeof inference !== 'boolean') {
+      losses.push({ at: 'losat.blastp.collinearInferOrthogroups', stored: inference, used: targets.losat.blastp.collinearInferOrthogroups });
+    }
     if (used('losat.blastp.hitLimitsByMode')) {
-      targets.losat.blastp.hitLimitsByMode = { ...createDefaultLosatpHitLimits(), ...(isPlainObject(limits) ? copied(limits) : {}) };
+      const limits = readHitLimitsByMode(blastp?.hitLimitsByMode);
+      targets.losat.blastp.hitLimitsByMode = limits.value;
+      losses.push(...readingLosses(limits, 'losat.blastp.hitLimitsByMode', blastp?.hitLimitsByMode));
     }
   }
-  return losses;
+  return { losses, arrowRatios };
 };
 
 /**
@@ -900,7 +1214,12 @@ export const installStoredSettings = (targets, config, mode) => {
  */
 const readValueTables = (tables, value) => tables.flatMap(({ at, rows }) => {
   const source = containerAt(value, at);
-  if (!source) return [];
+  if (!source) {
+    // A container that is no object is not read (its fields take their
+    // defaults); `installStoredSettings` lists the merged ones.
+    const stored = at && !MERGED_CONTAINERS.includes(at) ? valueAt(value, at) : undefined;
+    return isUnsetValue(stored) ? [] : [{ at, stored, used: {} }];
+  }
   /** @type {Record<string, unknown>} */
   const read = { ...source };
   return readRows(read, rows.filter(({ field }) => Object.hasOwn(source, field)), at, source);
@@ -909,7 +1228,9 @@ const readValueTables = (tables, value) => tables.flatMap(({ at, rows }) => {
 /** Free text: Load names the place of such a value, not the value (12.3). */
 const FREE_TEXT_KEYS = new Set([
   'label', 'name', 'fileName', 'sourceKey', 'uid', 'caption', 'prefix', 'species', 'strain', 'plot_title',
-  'circular_record_label', 'circular_record_subtitle', 'labels', 'blacklistText', 'legendLabel', 'description', 'id'
+  'circular_record_label', 'circular_record_subtitle', 'labels', 'blacklistText', 'legendLabel', 'description', 'id',
+  // A track stack holds slot ids.
+  'circular_track_slots', 'linear_track_slots'
 ]);
 /** @param {string} at */
 const isFreeText = (at) => FREE_TEXT_KEYS.has(at.replace(/\[\d+\]/g, '').split('.').pop() || '');
@@ -993,15 +1314,124 @@ const lossRepairs = (losses, path, stored, { mode = null, root = '', targets = '
  * @param {SettingsContainers} targets Written.
  * @param {Record<string, unknown>} config
  * @param {string} path Where the configuration is in the file.
- * @param {{ stored?: unknown, mode: 'circular' | 'linear', current?: boolean }} options
+ * @param {{ stored?: unknown, mode: 'circular' | 'linear', current?: boolean, resolveTrackPlacements?: boolean }} options
  *   `current`: `targets` are the drawing's current settings (a configuration
- *   file), so a value not used keeps the drawing's.
+ *   file), so a value not used keeps the drawing's. `resolveTrackPlacements`:
+ *   the apply resolves the track stacks (`resolvedTrackStacks`), so what that
+ *   replaces is listed too.
  * @returns {LoadRepair[]}
  */
-export const configFieldRepairs = (targets, config, path, { stored = config, mode, current = false }) => lossRepairs([
-  ...installStoredSettings(targets, config, mode),
-  ...readValueTables(VALUE_TABLES, config)
-], path, stored, { mode, root: 'config', targets: current ? 'current' : 'default' });
+export const configFieldRepairs = (targets, config, path, {
+  stored = config, mode, current = false, resolveTrackPlacements = true
+}) => {
+  const { losses } = installStoredSettings(targets, config, mode);
+  if (resolveTrackPlacements) resolvedTrackStacks(targets.adv, targets.form, losses);
+  return lossRepairs([
+    ...losses,
+    ...readValueTables(VALUE_TABLES, config),
+    ...readValueTables(DRAWING_TABLES[mode], config),
+    ...unknownDomainLosses(config)
+  ], path, stored, { mode, root: 'config', targets: current ? 'current' : 'default' });
+};
+
+/**
+ * The track stacks a drawing's settings resolve to: each stack with its axis
+ * index read and its placements applied (`applyConfigData`'s
+ * `resolveTrackPlacements`). Pure: Load reads the stacks it installs with it
+ * before the commit, and `losses` collects what the slot readers replace
+ * (OV-758; `at` under the settings).
+ * @param {Record<string, unknown>} adv The drawing's settings, read.
+ * @param {Record<string, unknown>} form
+ * @param {SettingLoss[] | null} [losses]
+ */
+export const resolvedTrackStacks = (adv, form, losses = null) => {
+  /** @type {FieldLeaf[]} */
+  const circularLosses = [];
+  /** @type {FieldLeaf[]} */
+  const circularAxisLosses = [];
+  /** @type {FieldLeaf[]} */
+  const linearLosses = [];
+  /** @type {FieldLeaf[]} */
+  const linearAxisLosses = [];
+  // The read settings hold text here (the reader rows); the casts name what the slot readers take.
+  const nt = /** @type {string | undefined} */ (adv.nt);
+  const trackType = /** @type {string | undefined} */ (form.track_type);
+  const normalizedSlots = normalizeCircularTrackSlots(adv.circular_track_slots, nt, trackType, circularLosses);
+  const importedAxis = clampCircularTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length, circularAxisLosses);
+  const circularAxis = importedAxis === null
+    ? inferLegacyAxisIndexFromFeature(normalizedSlots, trackType)
+    : importedAxis;
+  const linearStack = /** @type {Parameters<typeof normalizeLinearTrackSlots>[0]} */ (adv.linear_track_slots);
+  const normalizedLinearSlots = normalizeLinearTrackSlots(linearStack, nt, form.linear_track_layout, linearLosses);
+  const linearAxis = resolveLinearTrackAxisIndex(
+    normalizedLinearSlots,
+    clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length, linearAxisLosses)
+  );
+  losses?.push(...[
+    ...circularLosses.map((leaf) => ({ ...leaf, at: `adv.circular_track_slots${leaf.at}` })),
+    ...circularAxisLosses.map((leaf) => ({ ...leaf, at: 'adv.circular_track_slots_axis_index' })),
+    ...linearLosses.map((leaf) => ({ ...leaf, at: `adv.linear_track_slots${leaf.at}` })),
+    ...linearAxisLosses.map((leaf) => ({ ...leaf, at: 'adv.linear_track_slots_axis_index' }))
+  ]);
+  return {
+    circularAxis,
+    circularSlots: applyCircularTrackOrderPlacements(adv.circular_track_slots, nt, trackType, circularAxis),
+    linearAxis,
+    linearSlots: applyLinearTrackOrderPlacements(normalizedLinearSlots, linearAxis, nt, form.linear_track_layout)
+  };
+};
+
+/**
+ * The fields of a Session's stored draft its drawings do not install: they
+ * install the registry fields of a container that is an object only
+ * (`overlayModeSliceConfig`, the Session 27-44 split), so Load drops a field
+ * no gbdraw writer wrote and a container of another kind, listed as
+ * `configFieldRepairs` lists them in a configuration file (TB19, TB32).
+ * @param {unknown} stored The stored draft (a slice's, or a Session 27-44's).
+ * @param {string} path
+ * @param {'circular' | 'linear'} mode
+ * @param {{ slice?: boolean }} [options] `slice`: a Session 46 slice, whose
+ *   `losat` holds no LOSAT execution setting (the app `ui` does; E-OD03).
+ * @returns {LoadRepair[]}
+ */
+export const unreadFieldRepairs = (stored, path, mode, { slice = false } = {}) => {
+  if (!isPlainObject(stored)) return [];
+  const config = migratePersistedWebStateFieldNames(stored);
+  const targets = defaultSettingsContainers(mode);
+  const storedLosat = slice && isPlainObject(config.losat) ? config.losat : {};
+  const losses = [
+    ...MODE_SCOPED_SETTINGS.losatExecutionFields.filter((/** @type {string} */ field) => Object.hasOwn(storedLosat, field))
+      .map((/** @type {string} */ field) => ({ at: `losat.${field}`, stored: storedLosat[field], used: undefined })),
+    ...MERGED_CONTAINERS.flatMap((at) => {
+      const stored = config[at];
+      if (!isPlainObject(stored)) return isUnsetValue(stored) ? [] : [{ at, stored, used: {} }];
+      const target = /** @type {Record<string, unknown>} */ (targets[/** @type {keyof SettingsContainers} */ (at)]);
+      return mergeStoredSettings(target, stored, at, null).filter(({ used }) => used === undefined);
+    }),
+    ...unknownDomainLosses(config, slice ? SLICE_READ_DOMAINS : READ_DOMAINS),
+    // A domain the reading replaces whole (one of another kind).
+    ...readValueTables([...VALUE_TABLES, ...DRAWING_TABLES[mode]], config).filter(({ at, dropped }) => !dropped && !/[.[]/.test(at))
+  ];
+  return lossRepairs(losses, path, stored, { mode, root: 'config' });
+};
+
+const RETIRED_DOMAINS = RETIRED_STORED_FIELDS.filter((at) => !at.includes('.'));
+/** The configuration domains Load reads. @type {ReadonlySet<string>} */
+const READ_DOMAINS = new Set([...STORED_CONFIG_DOMAINS, ...RETIRED_DOMAINS]);
+/**
+ * The domains Load reads from a Session 46 slice: the registry's (a flat
+ * draft's `modeProfiles` or `cliOptions` is no slice field).
+ * @type {ReadonlySet<string>}
+ */
+const SLICE_READ_DOMAINS = new Set([...MODE_SLICE_CONTAINERS.config, ...RETIRED_DOMAINS]);
+/**
+ * A domain no gbdraw writer wrote is not read (TB19).
+ * @param {Record<string, unknown>} config
+ * @param {ReadonlySet<string>} [read]
+ * @returns {SettingLoss[]}
+ */
+const unknownDomainLosses = (config, read = READ_DOMAINS) => Object.keys(config).filter((domain) => !read.has(domain))
+  .map((domain) => ({ at: domain, stored: config[domain], used: undefined }));
 
 /**
  * The same for a Session's app `ui`.
@@ -1030,11 +1460,27 @@ export const valueRepairs = (read, value, path) => {
 };
 
 /**
- * The same for the LOSAT execution settings (`ui.losatExecution` of a Session
- * 46, `config.losat` of an older draft).
- * @param {unknown} execution
+ * The rows of what a normalizer noted it could not read (each loss at a place
+ * the file holds, `at` under `path`; a key may hold a dot).
+ * @param {readonly SettingLoss[]} losses
  * @param {string} path
  */
-export const losatExecutionRepairs = (execution, path) => lossRepairs(
-  readValueTables([{ at: '', rows: LOSAT_EXECUTION_ROWS }], execution), path, execution
-);
+export const notedLossRepairs = (losses, path) => losses.flatMap((loss) => lossRepairs(
+  [{ ...loss, at: '' }], [path, loss.at].filter(Boolean).join('.'), loss.stored
+));
+
+/**
+ * The same for the LOSAT execution settings (`ui.losatExecution` of a Session
+ * 46, `config.losat` of an older draft). `own`: the settings are a container
+ * of their own (`ui.losatExecution`), so a container that is no object and a
+ * key no execution setting names are not read either (A7e).
+ * @param {unknown} execution
+ * @param {string} path
+ * @param {{ own?: boolean }} [options]
+ */
+export const losatExecutionRepairs = (execution, path, { own = false } = {}) => lossRepairs([
+  ...(own && !isPlainObject(execution) && !isUnsetValue(execution) ? [{ at: '', stored: execution, used: undefined }] : []),
+  ...(own && isPlainObject(execution) ? Object.keys(execution).filter((field) => !LOSAT_EXECUTION_ROWS.some((row) => row.field === field))
+    .map((field) => ({ at: field, stored: execution[field], used: undefined })) : []),
+  ...readValueTables([{ at: '', rows: LOSAT_EXECUTION_ROWS }], execution)
+], path, execution);

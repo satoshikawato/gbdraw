@@ -3,6 +3,7 @@ import { resolveColorToHex } from '../utils/color-utils.js';
 import { parseSpecificRules } from './file-imports.js';
 import { legendColorIdentity as fillIdentity } from './legend-row-names.js';
 import { ruleMatcher } from './rule-matchers.js';
+import { isPlainObject } from '../utils/contract-shape.js';
 /** @import { PythonLegendKey, PythonLegendRow, SwatchColor } from './legend-svg.js' */
 
 /**
@@ -97,30 +98,42 @@ export const savedRuleCaption = (caption, color) => {
   return name.trim() ? name : caption;
 };
 /**
- * Saved rules with each caption read by `savedRuleCaption`.
+ * Saved rules with each caption read by `savedRuleCaption`; an entry that is
+ * no object stays (the rules' reader drops it, listed).
  * @template {{ readonly cap?: unknown, readonly color?: unknown }} Rule
  * @param {readonly Rule[]} rules
  * @returns {Rule[]}
  */
 export const savedSpecificRules = (rules) => rules.map((rule) => {
+  if (!rule || typeof rule !== 'object') return rule;
   const caption = String(rule.cap ?? '');
   const read = savedRuleCaption(caption, rule.color);
   return read === caption ? rule : { ...rule, cap: read };
 });
+/**
+ * The color of a per-feature color edit: an edit object's `color`, or an
+ * older bare color.
+ * @param {unknown} edit
+ * @returns {unknown}
+ */
+export const featureColorEditColor = (edit) => (
+  edit && typeof edit === 'object' && Object.hasOwn(edit, 'color') ? /** @type {{ color?: unknown }} */ (edit).color : edit
+);
 // Per-feature color edits as a saved Session is read: an older build wrote a
 // rule's rewritten caption into the edits of the features the rule colored,
 // so an edit's caption is read as its rule's is, by the edit's own color.
 /**
- * @template {Record<string, unknown>} Edits
- * @param {Edits | null | undefined} edits
- * @returns {Edits}
+ * @param {unknown} edits Unvalidated: a map of no object is no edit, as its
+ *   reader (`readFeatureColorEdits`) lists it (OV-866).
+ * @returns {Record<string, unknown>}
  */
-export const savedFeatureColorEdits = (edits) => /** @type {Edits} */ (Object.fromEntries(Object.entries(edits || {}).map(([key, edit]) => {
+export const savedFeatureColorEdits = (edits) => Object.fromEntries(Object.entries(isPlainObject(edits) ? edits : {}).map(
+  /** @param {[string, unknown]} entry @returns {[string, unknown]} */ ([key, edit]) => {
   if (!edit || typeof edit !== 'object' || typeof (/** @type {{ caption?: unknown }} */ (edit)).caption !== 'string') return [key, edit];
   const { caption, color } = /** @type {{ caption: string, color?: unknown }} */ (edit);
   const read = savedRuleCaption(caption, color);
   return [key, read === caption ? edit : { ...edit, caption: read }];
-})));
+}));
 /**
  * @param {string} caption
  * @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule

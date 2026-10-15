@@ -174,6 +174,7 @@ import {
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
+import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
@@ -3657,17 +3658,9 @@ const applyWebFileBindings = (
       fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta, resolveBinding, bindings.schema),
       depth: webBindingValueAsLegacyFile(resources, sequence?.depth, resolveBinding, bindings.schema),
       blast: webBindingValueAsLegacyFile(resources, sequence?.blast, resolveBinding, bindings.schema),
-      losat_gencode: integerSettingOr(sequence?.losat_gencode, 1, 1),
       losat_filename: String(sequence?.losat_filename || ''),
-      definition: String(sequence?.definition || ''),
-      record_subtitle: String(sequence?.record_subtitle || ''),
-      file_definition: String(sequence?.file_definition || ''),
-      file_subtitle: String(sequence?.file_subtitle || ''),
-      inferred_definition: String(sequence?.inferred_definition || ''),
-      region_record_id: String(sequence?.region_record_id || ''),
-      region_start: sequence?.region_start ?? null,
-      region_end: sequence?.region_end ?? null,
-      region_reverse: Boolean(sequence?.region_reverse)
+      // As stored: the Files read them once, with a row for what they cannot restore (OV-568).
+      ...Object.fromEntries(LINEAR_SEQ_READ_FIELDS.map((field) => [field, sequence?.[field]]))
     }));
   }
   if (Array.isArray(bindings.linearComparisons)) {
@@ -5778,8 +5771,10 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
  * @property {string} path
  * @property {boolean} [holdComparisons] Load holds the request's comparisons
  *   (a saved comparison kept read-only, or one that needs a decision): their
- *   unresolved references are what the Comparisons notice after Load shows
- *   (receipt 〔今までの知らせ〕), so they are not dropped.
+ *   unresolved record references are what the Comparisons notice after Load
+ *   shows (receipt 〔今までの知らせ〕), so they are not dropped. A reference to a
+ *   resource the Session lacks is dropped as any other is: no Save can write
+ *   it (OV-899).
  */
 /**
  * The committed Session: the request that drew the shown Result, with its
@@ -5876,7 +5871,7 @@ const RECORD_KEY_PLACE = /^layout\.(recordTranslations\[\*\]|similarityAlignment
  * @param {Readonly<Record<string, unknown>>} request The promoted request (schema 9 shape, unchecked).
  * @param {'circular' | 'linear'} mode
  * @param {ReadonlySet<string>} resourceIds
- * @param {boolean} holdComparisons The references of the comparisons are kept.
+ * @param {boolean} holdComparisons The record references of the comparisons are kept.
  * @returns {RepairPolicy<StoredReferenceReason>}
  */
 const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
@@ -5900,10 +5895,10 @@ const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
     lossless: (pattern) => (places.otherType.has(pattern) ? { value: places.otherType.get(pattern) } : null),
     discriminator: (pattern) => (pattern === '' ? 'mode' : places.tagged.has(pattern) ? 'kind' : null),
     reference: (pattern, value) => {
-      if (holdComparisons && HELD_COMPARISON_PLACE.test(pattern)) return null;
       if (/(^|\.)(resourceId|gffResourceId|fastaResourceId)$/.test(pattern)) {
         return typeof value === 'string' && !resourceIds.has(value) ? 'unknown-resource' : null;
       }
+      if (holdComparisons && HELD_COMPARISON_PLACE.test(pattern)) return null;
       if (RECORD_INDEX_PLACE.test(pattern)) {
         return Number.isInteger(value) && Number(value) >= 0 && Number(value) < records.length ? null : 'unknown-record';
       }

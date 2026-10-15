@@ -3,8 +3,14 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
+// R6 (R1-M3): the Save checks of a Result set, a resource and a Web binding refuse with the typed Session-fields error.
+const sessionFields = (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS';
 const {
   SESSION_TOP_LEVEL_AUTHORITY,
+  isArtifactBand,
+  isAuthorityBand,
+  isCanonicalBand,
+  isModeScopedBand,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
@@ -12,11 +18,15 @@ const {
   validateSessionAuthorityInventory
 } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
 
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.modes, 'editor-metadata');
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.cliOptions, 'provenance');
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.renderRequest, 'canonical-render');
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.resources, 'resource');
-assert.equal(SESSION_TOP_LEVEL_AUTHORITY.webFiles, 'resource-binding');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.modes.authority, 'editor-metadata');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.cliOptions.authority, 'provenance');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.renderRequest.authority, 'canonical-render');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.resources.authority, 'resource');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.webFiles.authority, 'resource-binding');
+// R4: the content part each key belongs to (null: no content part).
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.results.part, 'results');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.losatCache.part, 'cache');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.title.part, null);
 
 const session = {
   format: 'gbdraw-session', version: 39, createdAt: 'now', title: 'Canonical',
@@ -113,7 +123,7 @@ assert.throws(
       }
     }
   }, 40),
-  /Unsupported Web file binding schema/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
@@ -140,14 +150,14 @@ assert.throws(
       }
     }
   }, 40),
-  /Missing canonical resource/
+  sessionFields
 );
 // OV-636: a `resources` that holds no resource is a missing resource whatever it
 // is; `null` used to end in a TypeError. Python refuses each of them
 // (gbdraw/session_io.py:632-635).
 for (const resources of [null, undefined, [], 5, 'x']) assert.throws(
   () => validateSessionAuthorityInventory({ ...currentWebDraft, resources }, 40),
-  /^Error: Missing canonical resource: comparison-resource$/,
+  sessionFields,
   String(JSON.stringify(resources))
 );
 assert.throws(
@@ -221,7 +231,7 @@ assert.throws(
     results: 'not-an-array',
     editorState: { featureCatalog: null }
   }, 40),
-  /requires a results array/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
@@ -229,7 +239,7 @@ assert.throws(
     results: [],
     editorState: {}
   }, 40),
-  /requires editorState.featureCatalog/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
@@ -256,7 +266,7 @@ assert.throws(
       featureCatalog: { schema: 3, items: [] }
     }
   }, 40),
-  /named plain SVG/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({ ...currentSession, files: {} }, 40),
@@ -298,14 +308,14 @@ assert.throws(
     ...currentSession,
     editorState: { featureCatalog: { schema: 1 } }
   }, 40),
-  /requires a schema-3 editorState.featureCatalog/
+  sessionFields
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
     ...currentSession,
     editorState: { featureCatalog: null }
   }, 40),
-  /requires a feature catalog for saved results/
+  sessionFields
 );
 assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
   cInputType: 'gff',
@@ -465,21 +475,21 @@ assert.throws(() => validateSessionAuthorityInventory({
   }, 44), /cannot contain otherModeResult/);
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, otherModeResult: { ...otherModeResult, renderRequest: circularSession.renderRequest }
-  }, 46), /committed request of the other mode/);
+  }, 46), sessionFields);
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, renderRequest: null, results: [], editorState: { ...both.editorState, featureCatalog: null }
-  }, 46), /committed request of the other mode/);
+  }, 46), sessionFields);
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, otherModeResult: { ...otherModeResult, results: [], editorState: { ...otherModeResult.editorState, featureCatalog: null } }
-  }, 46), /requires a Result/);
+  }, 46), sessionFields);
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, otherModeResult: { ...otherModeResult, config: {} }
-  }, 46), /only a committed Result set/);
+  }, 46), sessionFields);
   const unboundRequest = structuredClone(linearSession.renderRequest);
   unboundRequest.records[0].source.resourceId = 'record-9-genbank';
   assert.throws(() => validateSessionAuthorityInventory({
     ...both, otherModeResult: { ...otherModeResult, renderRequest: unboundRequest }
-  }, 46), /missing resource\(s\): record-9-genbank/);
+  }, 46), sessionFields);
 }
 
 // `readSessionInput` is the one reader of a parsed Session file. Its refusals
@@ -515,5 +525,28 @@ assert.throws(() => validateSessionAuthorityInventory({
   for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47]) {
     const document = { format: 'gbdraw-session', version, anything: { unvalidated: true } };
     assert.equal(readSessionInput(document), document, `version ${version}`);
+  }
+}
+
+{
+  // K16: each band predicate narrows to the bands its type names, for every
+  // supported version, as the generated admission description places it.
+  const { SESSION_ADMISSION_DESCRIPTION } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/contracts/session-shape.generated.js')));
+  const { SUPPORTED_SESSION_VERSIONS } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/contracts/schema.generated.js')));
+  const predicates = [
+    [isCanonicalBand, ['SessionChecked31', 'SessionChecked39', 'SessionChecked40', 'SessionChecked46']],
+    [isArtifactBand, ['SessionChecked39', 'SessionChecked40', 'SessionChecked46']],
+    [isAuthorityBand, ['SessionChecked40', 'SessionChecked46']],
+    [isModeScopedBand, ['SessionChecked46']]
+  ];
+  const { bands } = SESSION_ADMISSION_DESCRIPTION;
+  assert.deepEqual(bands.flatMap(({ versions }) => versions), [...SUPPORTED_SESSION_VERSIONS].sort((a, b) => a - b));
+  assert.deepEqual(bands.map(({ root }) => root), ['SessionChecked27', ...predicates[0][1]]);
+  for (const version of SUPPORTED_SESSION_VERSIONS) {
+    const band = bands.find(({ versions }) => versions.includes(version));
+    assert.equal(band.minVersion, Math.min(...band.versions));
+    for (const [predicate, roots] of predicates) {
+      assert.equal(predicate({ format: 'gbdraw-session', version }), roots.includes(band.root), `${predicate.name} ${version}`);
+    }
   }
 }

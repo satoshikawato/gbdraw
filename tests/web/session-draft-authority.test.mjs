@@ -565,12 +565,21 @@ decisionRequiredSession.renderRequest.comparisons = [{
 }];
 decisionRequiredSession.losatCache = { entries: [] };
 decisionRequiredSession.losatDerivedCache = { entries: [] };
-const decisionRequiredImport = await importPayload(decisionRequiredSession);
+const decisionRequiredDialogs = [];
+const decisionRequiredImport = await importPayload(decisionRequiredSession, {
+  confirmLoadRepairs: async ({ items }) => { decisionRequiredDialogs.push(items); return true; }
+});
 assert.equal(
   decisionRequiredImport.status,
   'ok',
-  decisionRequiredImport.error?.message
+  JSON.stringify(decisionRequiredImport.error)
 );
+// Load lists the comparison that names a resource the Session lacks (OV-951)
+// and asks once; the drawing still records that a decision is required.
+assert.deepEqual(decisionRequiredImport.repairs.map(({ code, path, effect }) => [code, path, effect]), [
+  ['request-reference-dropped', 'renderRequest.comparisons[0]', 'dropped']
+]);
+assert.equal(decisionRequiredDialogs.length, 1);
 assert.equal(decisionRequiredImport.comparisonDisposition, 'DECISION_REQUIRED');
 assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   disposition: 'DECISION_REQUIRED',
@@ -908,16 +917,11 @@ assert.deepEqual(
   ['saved-annotations']
 );
 
-const stateBeforeInvalidActiveConfig = {
-  activeIntent: compactActiveIntentSnapshot(),
-  results: state.results.value,
-  featureCatalog: state.featureCatalog.value,
-  primaryFile: state.files.c_gb,
-  svgContainer: state.svgContainer.value,
-  sessionTitle: state.sessionTitle.value
-};
+// A form that is no object is read before the dialog (E2b-1 band reader): its
+// row says the default is used, the rest of the slice loads as saved, and the
+// Results stay. (A failed Load keeps the state; see `failedImport` below.)
 const invalidActiveConfigSession = structuredClone(activeIntentSession);
-invalidActiveConfigSession.modes.circular.config.form.linear_track_layout = 'spreadout';
+invalidActiveConfigSession.modes.circular.config.form = 'spreadout';
 const invalidActiveConfigEvent = {
   target: {
     files: [new Blob([JSON.stringify(invalidActiveConfigSession)], { type: 'application/json' })],
@@ -925,25 +929,25 @@ const invalidActiveConfigEvent = {
   }
 };
 alerts.length = 0;
-const consoleErrorBeforeInvalidActiveConfig = console.error;
-console.error = () => {};
-let invalidActiveConfigImport;
-try {
-  invalidActiveConfigImport = await importSession(invalidActiveConfigEvent);
-} finally {
-  console.error = consoleErrorBeforeInvalidActiveConfig;
-}
-assert.equal(invalidActiveConfigImport.status, 'error');
-assert.equal(invalidActiveConfigImport.error.code, 'INPUT_INVALID');
-assert.deepEqual(invalidActiveConfigImport.error.context, {field:'linear_track_layout',reason:'LINEAR_TRACK_LAYOUT'});
-assert.deepEqual(compactActiveIntentSnapshot(), stateBeforeInvalidActiveConfig.activeIntent);
-assert.strictEqual(state.results.value, stateBeforeInvalidActiveConfig.results);
-assert.strictEqual(state.featureCatalog.value, stateBeforeInvalidActiveConfig.featureCatalog);
-assert.strictEqual(state.files.c_gb, stateBeforeInvalidActiveConfig.primaryFile);
-assert.strictEqual(state.svgContainer.value, stateBeforeInvalidActiveConfig.svgContainer);
-assert.equal(state.sessionTitle.value, stateBeforeInvalidActiveConfig.sessionTitle);
+const invalidActiveConfigDialogs = [];
+const invalidActiveConfigImport = await importSession(invalidActiveConfigEvent, {
+  confirmLoadRepairs: async ({ items }) => { invalidActiveConfigDialogs.push(items); return true; }
+});
+assert.equal(invalidActiveConfigImport.status, 'ok', JSON.stringify(invalidActiveConfigImport.error));
+assert.deepEqual(invalidActiveConfigImport.repairs.map(({ code, path, effect }) => [code, path, effect]), [
+  ['setting-replaced', 'modes.circular.config.form', 'defaulted'],
+  // The off Depth row of the slice, as in the Load above (B45).
+  ['depth-row-disabled', 'modes.circular.config.adv.circular_track_slots', 'changed']
+]);
+assert.equal(invalidActiveConfigDialogs.length, 1);
+// The stored form's edits are not loaded (the committed request's form is
+// used); the slice's other settings load as saved.
+assert.notEqual(state.activeDrawing().form.plot_title, 'Saved active draft');
+assert.equal(state.activeDrawing().form.show_scale, true);
+assert.equal(state.activeDrawing().adv.axis_stroke_width, 7);
+assert.equal(state.activeDrawing().adv.label_font_size, 31);
+assert.ok(state.results.value.length > 0);
 assert.equal(invalidActiveConfigEvent.target.value, '');
-assert.deepEqual(state.errorLog.value, invalidActiveConfigImport.error);
 assert.equal(alerts.length, 0);
 
 const legacyActiveIntent = {

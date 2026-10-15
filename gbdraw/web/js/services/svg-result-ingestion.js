@@ -1170,7 +1170,7 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
  * The stroke and color edits a saved Result shows, as Load reads them for its
  * mode, and the values the Session recorded as Python's.
  * @typedef {object} SavedResultEdits
- * @property {Record<string, SavedFeatureColorEdit>} featureColorOverrides
+ * @property {Record<string, unknown>} featureColorOverrides Unvalidated: each a `SavedFeatureColorEdit` or anything else.
  * @property {Record<string, SavedStrokeEdit>} featureStrokeOverrides
  * @property {SavedLegendEntry[]} legendEntries
  * @property {Record<string, string>} legendColorOverrides
@@ -1251,8 +1251,10 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
   /** @type {Map<string, { fill_color?: unknown }>} */
   const renderedFeatures = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
   Object.entries(edits.featureColorOverrides).forEach(([key, edit]) => {
-    const color = text(edit && typeof edit === 'object' ? edit.color : edit);
-    const caption = text(edit && typeof edit === 'object' ? edit.caption : '');
+    // The cast: an object (the test), whose fields are unchecked.
+    const fields = edit && typeof edit === 'object' ? /** @type {{ color?: unknown, caption?: unknown }} */ (edit) : null;
+    const color = text(fields ? fields.color : edit);
+    const caption = text(fields ? fields.caption : '');
     renderedIdsOf(key).forEach((renderedId) => {
       if (color) editedFills.set(renderedId, color);
       if (caption) namedIdsByCaption.set(caption, [...(namedIdsByCaption.get(caption) || []), /** @type {RenderedFeatureId} */ (renderedId)]);

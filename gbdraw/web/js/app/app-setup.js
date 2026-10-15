@@ -33,7 +33,7 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendEntryKey, legendStructure
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
-import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
+import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
@@ -48,7 +48,7 @@ import {
 import { state, sessionOperationAvailability, createLinearSeq, normalizeLinearSeqList } from '../state.js';
 import {
   adoptCanonicalRenderArtifacts,
-  applyConfigData,
+  applyCapturedConfigData,
   applyEditorStateData,
   applyFeatureStateData,
   applyOrthogroupStateData,
@@ -206,6 +206,7 @@ import {
   adjacentRowPairs,
   buildLinearComparisonTimeline,
   createLinearComparisonEdge,
+  setComparisonEdgeFile,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
   missingUploadPairsToResolve,
@@ -247,7 +248,8 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles,
   parseConservationLabelText,
-  reconcileConservationSeries
+  reconcileConservationSeries,
+  withoutConservationSeries
 } from '../services/conservation-series.js';
 import {
   getDepthTrackFallbackLabel,
@@ -1198,8 +1200,7 @@ export const createAppSetup = () => {
     const next = selectedPlanForEdit(drawing);
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
-    edge.file = file || null;
-    edge.fileActive = Boolean(file);
+    setComparisonEdgeFile(edge, file);
     edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
     edge.included = Boolean(file) || edge.included;
     replaceLinearComparisonPlan(drawing, next);
@@ -1555,7 +1556,7 @@ export const createAppSetup = () => {
     nextTick,
     normalizeLinearSeqList,
     buildConfigData,
-    applyConfigData,
+    applyConfigData: applyCapturedConfigData,
     buildUiStateData,
     applyUiStateData,
     buildFeatureStateData,
@@ -2961,23 +2962,21 @@ export const createAppSetup = () => {
         files.c_conservation_sequence_sources,
         drawing.circularConservation
       );
-      orderedBlasts.splice(idx, 1);
-      orderedFastas.splice(idx, 1);
-      orderedSequenceSources.splice(idx, 1);
-      drawing.circularConservation.series.splice(idx, 1);
-      drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ seriesEntry, /** @type {number} */ seriesIndex) => {
-        seriesEntry.sourceIndex = seriesIndex;
-      });
-      drawing.circularConservation.labels = drawing.circularConservation.series
-        .map((/** @type {RawConservationSeriesEntry} */ seriesEntry) => seriesEntry.label)
-        .join(',');
-      files.c_conservation_blasts = orderedBlasts;
-      files.c_conservation_fastas = orderedFastas;
-      files.c_conservation_sequence_sources = orderedSequenceSources;
-      files.c_conservation_blasts_source = orderedBlasts.length > 0
+      const kept = withoutConservationSeries({
+        blasts: orderedBlasts,
+        fastas: orderedFastas,
+        sequenceSources: orderedSequenceSources,
+        series: drawing.circularConservation.series
+      }, idx);
+      drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
+      drawing.circularConservation.labels = kept.labels;
+      files.c_conservation_blasts = kept.blasts;
+      files.c_conservation_fastas = kept.fastas;
+      files.c_conservation_sequence_sources = kept.sequenceSources;
+      files.c_conservation_blasts_source = kept.blasts.length > 0
         ? 'losat-cache'
         : null;
-      drawing.circularConservation.enabled = orderedBlasts.length > 0;
+      drawing.circularConservation.enabled = kept.enabled;
       losatCacheInfo.value = [];
       if (drawing.adv.circular_track_slots_enabled === true) {
         circularTrackSlotEditor.syncCircularConservationSlots();
@@ -7347,6 +7346,7 @@ export const createAppSetup = () => {
     getDefinitionLineStyleSwatchValue,
     isDefinitionLineStyleMuted,
     downloadDpi,
+    pngDpiChoices: PNG_DPI_CHOICES,
     runAnalysis,
     generateFromError,
     cancelGeneration,

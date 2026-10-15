@@ -1119,12 +1119,16 @@ const syntheticConservationSession = () => JSON.parse(gunzipSync(readFileSync(ne
   import.meta.url
 ))).toString('utf8'));
 
-test('a Session that repeats a raw LOSAT cache key is rejected with a classified diagnostic', async () => {
+// E-OD02: Load drops the repeat of a cache key with an unlisted row
+// (E-OD05) and loads the rest; Save refuses the repeat
+// (`validateSessionLosatArtifacts`, the tests below).
+test('a Session that repeats a raw LOSAT cache key loads without the repeat', async () => {
   const valid = syntheticConservationSession();
   const accepted = await importSession({
     target: { files: [new Blob([JSON.stringify(valid)], { type: 'application/json' })], value: 'selected' }
   });
   assert.equal(accepted.status, 'ok');
+  const validKeys = state.losatCacheInfo.value.map((entry) => entry.key);
 
   alerts.length = 0;
   const repeated = syntheticConservationSession();
@@ -1133,14 +1137,13 @@ test('a Session that repeats a raw LOSAT cache key is rejected with a classified
     ...ringC,
     filename: 'comparison-c-copy.circular_conservation.losatn.tsv'
   });
-  const event = {
+  const result = await importSession({
     target: { files: [new Blob([JSON.stringify(repeated)], { type: 'application/json' })], value: 'selected' }
-  };
-  const result = await importSession(event);
-  assert.equal(result.status, 'error');
-  assert.equal(result.error.code, 'INPUT_INVALID');
-  assert.deepEqual(result.error.context, { field: 'schema', reason: 'FIELDS' });
-  assert.match(result.error.summary, /supported Session file/);
+  });
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(result.repairs.map((repair) => repair.code), ['cache-entry-dropped']);
+  // The first entry under the key stays; the repeat is dropped.
+  assert.deepEqual(state.losatCacheInfo.value.map((entry) => entry.key), validKeys);
   assert.deepEqual(alerts, []);
 });
 

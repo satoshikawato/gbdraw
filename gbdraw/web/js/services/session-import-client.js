@@ -30,6 +30,7 @@ const unavailable = () => diagnosticError('SESSION_IMPORT_UNAVAILABLE', {}, { st
 /**
  * @param {File} file
  * @param {{ signal?: AbortSignal }} [options]
+ * @returns {Promise<SessionImportCandidate>}
  */
 export const importSessionFile = (file, { signal } = {}) => new Promise((resolve, reject) => {
   const operationId = nextOperationId++;
@@ -37,12 +38,9 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
   let worker = null;
   let settled = false;
   const assembly = createBoundedJsonReceiver();
-  /**
-   * @param {Error | null} error
-   * @param {SessionImportCandidate} [reply]
-   */
-  const settle = (error, reply) => {
-    if (settled) return;
+  // Ends the operation once; false when it had already ended.
+  const release = () => {
+    if (settled) return false;
     settled = true;
     signal?.removeEventListener('abort', cancel);
     if (worker) {
@@ -53,36 +51,44 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
       recordSessionLifecycleEvent('session-import-worker-terminated', { operationId });
       worker = null;
     }
-    recordSessionLifecycleEvent('session-import-worker-settled', {
-      operationId, status: error ? 'error' : 'ok'
-    });
-    if (error) reject(error);
-    else resolve(reply);
+    return true;
   };
-  const cancel = () => settle(Object.assign(
+  /** @param {Error} error */
+  const fail = (error) => {
+    if (!release()) return;
+    recordSessionLifecycleEvent('session-import-worker-settled', { operationId, status: 'error' });
+    reject(error);
+  };
+  /** @param {SessionImportCandidate} reply */
+  const succeed = (reply) => {
+    if (!release()) return;
+    recordSessionLifecycleEvent('session-import-worker-settled', { operationId, status: 'ok' });
+    resolve(reply);
+  };
+  const cancel = () => fail(Object.assign(
     new Error('Session loading was canceled.'), { name: 'AbortError', code: 'SESSION_IMPORT_CANCELED', stage: 'transport' }
   ));
   /** @param {ErrorEvent} event */
   const crash = (event) => {
     event.preventDefault?.();
-    settle(unavailable());
+    fail(unavailable());
   };
-  const unreadable = () => settle(unavailable());
+  const unreadable = () => fail(unavailable());
   /** @param {MessageEvent<SessionImportReply>} event */
   const receive = ({ data: reply }) => {
     if (reply?.operationId !== operationId || settled) return;
     if (reply.status === 'part') {
       try {
         assembly.receivePart(reply);
-        // `settled` is false here, and only `settle` clears `worker`, so the started Worker is still held.
+        // `settled` is false here, and only `release` clears `worker`, so the started Worker is still held.
         /** @type {Worker} */ (worker).postMessage({ operationId, ack: true });
       } catch { unreadable(); }
     } else if (reply.status === 'error') {
       const { code = 'UNKNOWN', stage = 'transport', context = {} } = reply.error || {};
-      settle(diagnosticError(code, context, { stage }));
+      fail(diagnosticError(code, context, { stage }));
     } else if (reply.status === 'ok' && Number.isSafeInteger(reply.characters) && reply.characters >= 0) {
       try {
-        settle(null, { data: assembly.getValue(), characters: reply.characters, timings: reply.timings });
+        succeed({ data: assembly.getValue(), characters: reply.characters, timings: reply.timings });
       } catch { unreadable(); }
     } else {
       unreadable();
@@ -90,7 +96,7 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
   };
   if (signal?.aborted) { cancel(); return; }
   if (typeof Worker !== 'function') {
-    settle(unavailable());
+    fail(unavailable());
     return;
   }
   try {
@@ -102,6 +108,6 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
     recordSessionLifecycleEvent('session-import-worker-start', { operationId, fileBytes: file.size });
     worker.postMessage({ operationId, file });
   } catch {
-    settle(unavailable());
+    fail(unavailable());
   }
 });

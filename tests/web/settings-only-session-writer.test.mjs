@@ -21,7 +21,7 @@ const { SESSION_VERSION, exportSession, buildConfigData, importSession } = await
 const { state } = await import('../../gbdraw/web/js/state.js');
 globalThis.alert = () => {};
 installSessionImportWorker();
-const { adoptCurrentSessionDocument } = await import('../../gbdraw/web/js/services/session-authority.js');
+const { adoptCurrentSessionDocument, validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 
 const savedDocument = async title => {
   const result = await exportSession(title);
@@ -33,7 +33,9 @@ const savedDocument = async title => {
 // Load and fail the check.
 const refuseLoadDialog = async () => false;
 
-test('OV-591: a settings-only Session 46 needs form and adv in the settings of its mode, as Python requires', async () => {
+// E-OD02, E-OD06: Save refuses a settings-only Session 46 without the
+// settings of its mode; Load reads a missing `form` or `adv` as its default.
+test('OV-591: Save writes form and adv in the settings of its mode, as Python requires; Load reads them as defaults', async () => {
   // gbdraw/session_io.py `_validate_settings_only_session`: "requires an active Web configuration and mode".
   const fresh = await savedDocument('settings of its mode');
   for (const [name, mutate] of [
@@ -43,25 +45,27 @@ test('OV-591: a settings-only Session 46 needs form and adv in the settings of i
   ]) {
     const document = structuredClone(fresh);
     mutate(document);
-    assert.throws(() => adoptCurrentSessionDocument(structuredClone(document), SESSION_VERSION), /settings of its mode/, name);
+    assert.throws(() => validateSessionAuthorityInventory(structuredClone(document), SESSION_VERSION), /settings of its mode/, name);
     const loaded = await importSession({
       target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
     }, { confirmLoadRepairs: refuseLoadDialog });
-    assert.equal(loaded.status, 'error', name);
+    assert.equal(loaded.status, 'ok', name);
+    assert.deepEqual(loaded.repairs ?? [], [], name);
   }
   // The other mode's slice may hold less: Load fills it with that mode's defaults.
   const other = structuredClone(fresh);
   other.modes.linear.config = {};
   assert.equal(adoptCurrentSessionDocument(other, SESSION_VERSION).canonical, null);
+  validateSessionAuthorityInventory(other, SESSION_VERSION);
 });
 
-test('OV-612: a settings-only Session 46 names its mode slice by a string that is a key of modes', async () => {
+test('OV-612: Save names the mode slice of a settings-only Session 46 by a string that is a key of modes', async () => {
   // `modes[ui.mode]` converted `["circular"]` to the key "circular"; Python requires `ui.mode` to be a diagram mode.
   const fresh = await savedDocument('mode key');
   for (const mode of [['circular'], [['linear']], 'constructor', '__proto__', 0]) {
     const document = structuredClone(fresh);
     document.ui.mode = mode;
-    assert.throws(() => adoptCurrentSessionDocument(document, SESSION_VERSION), /settings of its mode/, JSON.stringify(mode));
+    assert.throws(() => validateSessionAuthorityInventory(document, SESSION_VERSION), /settings of its mode/, JSON.stringify(mode));
   }
 });
 
@@ -157,19 +161,22 @@ test('writer and current admission reject invalid scalar drafts without altering
     const before = buildConfigData(state.activeDrawing());
     await assert.rejects(exportSession('invalid scalar settings'), /width|positive|scalar/i);
     assert.deepEqual(buildConfigData(state.activeDrawing()), before);
-    // Session 46 Load checks each slice as a current-writer draft of its mode
-    // (a value JSON cannot write is the writer's check only).
+    // Session 46 Load lists a slot value Save refuses (OV-758; a value JSON
+    // cannot write is the writer's check only).
     const text = JSON.stringify(scalar);
     if (text === undefined || text === 'null' || /null/.test(text)) continue;
     const invalid = structuredClone(valid);
     invalid.modes.circular.config.adv.circular_track_slots[0].width = scalar;
     const invalidBefore = structuredClone(invalid);
+    /** @type {unknown} */
+    let listed = null;
     const loaded = await importSession({
       target: { files: [new Blob([JSON.stringify(invalid)], { type: 'application/json' })], value: 'selected' }
-    }, { confirmLoadRepairs: refuseLoadDialog });
-    assert.equal(loaded.status, 'error', text);
+    }, { confirmLoadRepairs: async (dialog) => { listed = dialog; return false; } });
+    assert.equal(loaded.status, 'canceled', text);
+    assert.match(JSON.stringify(listed), /circular_track_slots\[0\]\.width/, text);
     assert.deepEqual(invalid, invalidBefore);
-    // A rejected Load leaves the drawing as it was.
-    assert.deepEqual(buildConfigData(state.activeDrawing()), before, `drawing after the rejected Load of ${text}`);
+    // A refused Load leaves the drawing as it was.
+    assert.deepEqual(buildConfigData(state.activeDrawing()), before, `drawing after the refused Load of ${text}`);
   }
 });

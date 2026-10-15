@@ -4,7 +4,8 @@
 // GbdrawSession is a Session of the current version as its writers write it.
 // A reader takes a SessionInput: the keys a Session of any supported version may
 // hold, with unvalidated values; a SessionEnvelope is one whose format and version
-// were read.
+// were read. SessionChecked is a stored Session of any supported version as
+// validate_session proves it (describe_session_admission()): one type per band.
 
 /** @import { CanonicalRenderRequest } from './request.generated.js' */
 /**
@@ -379,4 +380,410 @@
  * @property {unknown} [files]
  */
 /** @typedef {SessionInput & { format: 'gbdraw-session', version: number }} SessionEnvelope */
+/**
+ * @typedef {{
+ *   name: string,
+ *   content: string,
+ *   [key: string]: unknown
+ * }} CheckedSessionResult
+ */
+/**
+ * @typedef {{
+ *   kind: 'raw-losat',
+ *   text: string,
+ *   key: string,
+ *   [key: string]: unknown
+ * }} CheckedLosatCacheEntry
+ */
+/**
+ * @typedef {{
+ *   entries?: CheckedLosatCacheEntry[],
+ *   [key: string]: unknown
+ * }} CheckedLosatCache
+ */
+/**
+ * @typedef {{
+ *   kind: 'derived-losatp-payload',
+ *   key: string,
+ *   payload: Record<string, unknown>,
+ *   [key: string]: unknown
+ * }} CheckedLosatDerivedCacheEntry
+ */
+/**
+ * @typedef {{
+ *   entries?: CheckedLosatDerivedCacheEntry[],
+ *   [key: string]: unknown
+ * }} CheckedLosatDerivedCache
+ */
+/**
+ * @typedef {object} CheckedRecordAnchorIntent
+ * @property {1} schema
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ * @property {'anchor' | 'feature-end'} placement
+ * @property {'five-prime' | 'midpoint' | 'three-prime' | null} anchor
+ * @property {number} offsetBp
+ * @property {boolean} orientForward
+ */
+/**
+ * @typedef {object} CheckedRecordDisplayDraft
+ * @property {string} sourceUid
+ * @property {string} selector
+ * @property {string} recordId
+ * @property {unknown} topologyOverride
+ * @property {unknown} startCoordinate
+ * @property {boolean | null} reverseComplementOverride
+ * @property {CheckedRecordAnchorIntent | null} anchorIntent
+ */
+/**
+ * @typedef {object} CheckedFeatureOverrideDraftRow
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ * @property {unknown} featureVisibility
+ * @property {unknown} labelVisibility
+ * @property {unknown} labelText
+ * @property {string | null} labelSourceText
+ */
+/**
+ * @typedef {object} CheckedSessionOtherModeLegend
+ * @property {unknown} [originalOrder]
+ * @property {unknown} [originalColors]
+ */
+/**
+ * @typedef {object} CheckedSessionOtherModeEditorState
+ * @property {unknown} featureCatalog
+ * @property {unknown} [alignmentResetReceipt]
+ * @property {CheckedSessionOtherModeLegend} [legend]
+ * @property {unknown} [originalSvgStroke]
+ */
+/**
+ * @typedef {object} CheckedSessionOtherModeUi
+ * @property {unknown} [selectedResultIndex]
+ * @property {unknown} [generatedLegendPosition]
+ * @property {unknown} [generatedMultiRecordCanvas]
+ * @property {unknown} [generatedCircularPlotTitlePosition]
+ * @property {unknown} [appliedPaletteName]
+ * @property {unknown} [appliedPaletteColors]
+ */
+/**
+ * @typedef {object} CheckedSessionRunMetadata
+ * @property {unknown} [trackSlotGeometry]
+ * @property {unknown} [annotationWarnings]
+ * @property {unknown} [featureIdentityNotices]
+ * @property {unknown} [comparisonWarnings]
+ */
+/**
+ * @typedef {object} CheckedSessionOtherModeResult
+ * @property {CheckedSessionResult[]} results
+ * @property {CheckedSessionRunMetadata} [runMetadata]
+ * @property {unknown} [cliInvocation]
+ * @property {unknown} renderRequest
+ * @property {CheckedSessionOtherModeEditorState} editorState
+ * @property {CheckedSessionOtherModeUi} [ui]
+ */
+/**
+ * @typedef {{
+ *   format: 'gbdraw-session',
+ *   version: 27 | 28 | 29 | 30,
+ *   otherModeResult?: never,
+ *   [key: string]: unknown
+ * }} SessionChecked27
+ */
+/**
+ * @typedef {{
+ *   format: 'gbdraw-session',
+ *   version: 31 | 32 | 33,
+ *   otherModeResult?: never,
+ *   renderRequest: unknown,
+ *   resources: Record<string, unknown>,
+ *   [key: string]: unknown
+ * }} SessionChecked31
+ */
+/**
+ * @typedef {{
+ *   format: 'gbdraw-session',
+ *   version: 39,
+ *   otherModeResult?: never,
+ *   renderRequest: unknown,
+ *   resources: Record<string, unknown>,
+ *   losatCache?: CheckedLosatCache | null,
+ *   losatDerivedCache?: CheckedLosatDerivedCache | null,
+ *   proteinIdentityManifest?: Record<string, unknown> | null,
+ *   [key: string]: unknown
+ * }} SessionChecked39
+ */
+/**
+ * @typedef {{
+ *   featureCatalog: unknown,
+ *   alignmentResetReceipt?: unknown,
+ *   legend?: unknown,
+ *   originalSvgStroke?: unknown,
+ *   [key: string]: unknown
+ * }} CheckedSessionEditorState
+ */
+/**
+ * @typedef {{
+ *   selectedOrthogroupId?: unknown,
+ *   selectedOrthogroupAlignmentFeature?: unknown,
+ *   [key: string]: unknown
+ * }} CheckedSessionOrthogroupState
+ */
+/**
+ * @typedef {object} SessionChecked40
+ * @property {CheckedSessionResult[]} results
+ * @property {unknown} [runMetadata]
+ * @property {unknown} [cliInvocation]
+ * @property {'gbdraw-session'} format
+ * @property {40 | 41 | 42 | 44} version
+ * @property {unknown} [createdAt]
+ * @property {unknown} renderRequest
+ * @property {Record<string, unknown>} resources
+ * @property {CheckedSessionEditorState} editorState
+ * @property {CheckedLosatCache | null} [losatCache]
+ * @property {CheckedLosatDerivedCache | null} [losatDerivedCache]
+ * @property {Record<string, unknown> | null} [proteinIdentityManifest]
+ * @property {unknown} [title]
+ * @property {unknown} [webFiles]
+ * @property {unknown} [ui]
+ * @property {CheckedSessionOrthogroupState} [orthogroupState]
+ * @property {unknown} [legacyArtifacts]
+ * @property {unknown} [config]
+ * @property {Record<string, unknown>} [features]
+ * @property {never} [modes]
+ * @property {never} [cliOptions]
+ * @property {never} [otherModeResult]
+ * @property {never} [files]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSliceConfigAdv
+ * @property {unknown} [alignment_length]
+ * @property {unknown} [arrow_head_length_ratio]
+ * @property {unknown} [arrow_shaft_width_ratio]
+ * @property {unknown} [axis_stroke_color]
+ * @property {unknown} [axis_stroke_width]
+ * @property {unknown} [block_stroke_color]
+ * @property {unknown} [block_stroke_width]
+ * @property {unknown} [center_reserved_radius]
+ * @property {unknown} [circular_definition_interval]
+ * @property {unknown} [circular_grouping_intent]
+ * @property {unknown} [circular_label_placement]
+ * @property {unknown} [circular_label_spacing]
+ * @property {unknown} [circular_track_slots]
+ * @property {unknown} [circular_track_slots_axis_index]
+ * @property {unknown} [circular_track_slots_enabled]
+ * @property {unknown} [circular_track_slots_schema_version]
+ * @property {unknown} [comparison_height]
+ * @property {unknown} [def_font_size]
+ * @property {unknown} [depth_color]
+ * @property {unknown} [depth_height]
+ * @property {unknown} [depth_large_tick_interval]
+ * @property {unknown} [depth_max]
+ * @property {unknown} [depth_min]
+ * @property {unknown} [depth_normalize]
+ * @property {unknown} [depth_share_axis]
+ * @property {unknown} [depth_show_axis]
+ * @property {unknown} [depth_show_ticks]
+ * @property {unknown} [depth_small_tick_interval]
+ * @property {unknown} [depth_step_size]
+ * @property {unknown} [depth_tick_font_size]
+ * @property {unknown} [depth_tracks]
+ * @property {unknown} [depth_width_circular]
+ * @property {unknown} [depth_window_size]
+ * @property {unknown} [evalue]
+ * @property {unknown} [feature_height]
+ * @property {number} [feature_overlap_tolerance_bp]
+ * @property {unknown} [feature_shapes]
+ * @property {unknown} [feature_width_circular]
+ * @property {unknown} [features]
+ * @property {unknown} [font_family]
+ * @property {unknown} [gc_content_max_percent]
+ * @property {unknown} [gc_content_min_percent]
+ * @property {unknown} [gc_content_mode]
+ * @property {unknown} [gc_content_radius_circular]
+ * @property {unknown} [gc_content_show_axis]
+ * @property {unknown} [gc_content_show_ticks]
+ * @property {unknown} [gc_content_small_tick_interval]
+ * @property {unknown} [gc_content_tick_font_size]
+ * @property {unknown} [gc_content_tick_interval]
+ * @property {unknown} [gc_content_width_circular]
+ * @property {unknown} [gc_height]
+ * @property {unknown} [gc_skew_radius_circular]
+ * @property {unknown} [gc_skew_width_circular]
+ * @property {unknown} [identity]
+ * @property {unknown} [inner_label_x_offset]
+ * @property {unknown} [inner_label_y_offset]
+ * @property {unknown} [keep_full_definition_with_plot_title]
+ * @property {unknown} [label_font_size]
+ * @property {unknown} [label_placement]
+ * @property {unknown} [label_rendering]
+ * @property {unknown} [label_rotation]
+ * @property {unknown} [legend_box_size]
+ * @property {unknown} [legend_font_size]
+ * @property {unknown} [line_stroke_color]
+ * @property {unknown} [line_stroke_width]
+ * @property {unknown} [linear_accession_visibility]
+ * @property {unknown} [linear_definition_line_styles]
+ * @property {unknown} [linear_label_spacing]
+ * @property {unknown} [linear_length_visibility]
+ * @property {unknown} [linear_show_replicon]
+ * @property {unknown} [linear_track_slots]
+ * @property {unknown} [linear_track_slots_axis_index]
+ * @property {unknown} [linear_track_slots_enabled]
+ * @property {unknown} [linear_track_slots_schema_version]
+ * @property {unknown} [min_bitscore]
+ * @property {unknown} [multi_record_column_gap_ratio]
+ * @property {unknown} [multi_record_min_radius_ratio]
+ * @property {unknown} [multi_record_positions]
+ * @property {unknown} [multi_record_row_gap_ratio]
+ * @property {unknown} [multi_record_size_mode]
+ * @property {unknown} [nt]
+ * @property {unknown} [outer_label_x_offset]
+ * @property {unknown} [outer_label_y_offset]
+ * @property {unknown} [pairwise_match_style]
+ * @property {unknown} [plot_title_font_size]
+ * @property {unknown} [resolve_overlaps]
+ * @property {unknown} [ruler_label_color]
+ * @property {unknown} [ruler_label_font_size]
+ * @property {unknown} [scale_font_size]
+ * @property {unknown} [scale_interval]
+ * @property {unknown} [scale_stroke_color]
+ * @property {unknown} [scale_stroke_width]
+ * @property {unknown} [step_size]
+ * @property {unknown} [tick_label_font_size]
+ * @property {unknown} [track_axis_gap]
+ * @property {unknown} [window_size]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSliceConfigForm
+ * @property {unknown} [align_center]
+ * @property {unknown} [circular_record_label]
+ * @property {unknown} [circular_record_selector]
+ * @property {unknown} [circular_record_subtitle]
+ * @property {unknown} [circular_region_end]
+ * @property {unknown} [circular_region_start]
+ * @property {unknown} [circular_reverse]
+ * @property {unknown} [keep_definition_left_aligned]
+ * @property {unknown} [labels_mode]
+ * @property {unknown} [linear_ruler_on_axis]
+ * @property {unknown} [linear_track_layout]
+ * @property {unknown} [multi_record_canvas]
+ * @property {unknown} [normalize_length]
+ * @property {unknown} [plot_title]
+ * @property {unknown} [prefix]
+ * @property {unknown} [scale_style]
+ * @property {unknown} [separate_strands]
+ * @property {unknown} [show_depth]
+ * @property {unknown} [show_gc]
+ * @property {unknown} [show_labels_linear]
+ * @property {unknown} [show_scale]
+ * @property {unknown} [show_skew]
+ * @property {unknown} [species]
+ * @property {unknown} [strain]
+ * @property {unknown} [suppress_gc]
+ * @property {unknown} [suppress_skew]
+ * @property {unknown} [track_type]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSliceConfigLosat
+ * @property {unknown} [blastn]
+ * @property {unknown} [blastp]
+ * @property {unknown} [outfmt]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSliceConfig
+ * @property {CheckedSessionModeSliceConfigAdv} [adv]
+ * @property {unknown} [annotationSets]
+ * @property {unknown} [blacklistText]
+ * @property {unknown} [circularConservation]
+ * @property {unknown} [colors]
+ * @property {Record<string, unknown>} [featurePlacementOverrides]
+ * @property {unknown} [filterMode]
+ * @property {CheckedSessionModeSliceConfigForm} [form]
+ * @property {unknown} [importedComparisonResolution]
+ * @property {unknown} [linearComparisonPlan]
+ * @property {unknown} [linearRecordLayout]
+ * @property {CheckedSessionModeSliceConfigLosat} [losat]
+ * @property {unknown} [losatProgram]
+ * @property {unknown} [palette]
+ * @property {unknown} [qualifierPriorityRules]
+ * @property {CheckedRecordDisplayDraft[]} [recordDisplayDrafts]
+ * @property {string[]} [recordsOff]
+ * @property {unknown} [rules]
+ * @property {unknown} [unmanagedConfigOverrides]
+ * @property {unknown} [webEdits]
+ * @property {unknown} [whitelist]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSliceEditorStateFeatureStrokes
+ * @property {unknown} [overrides]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSliceEditorStateLegend
+ * @property {unknown} [addedCaptions]
+ * @property {unknown} [colorOverrides]
+ * @property {unknown} [deletedEntries]
+ * @property {unknown} [entries]
+ * @property {unknown} [strokeOverrides]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSliceEditorState
+ * @property {CheckedSessionModeSliceEditorStateFeatureStrokes} [featureStrokes]
+ * @property {CheckedSessionModeSliceEditorStateLegend} [legend]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSliceFeatures
+ * @property {unknown} [featureColorOverrides]
+ * @property {Record<string, CheckedFeatureOverrideDraftRow>} [featureOverrides]
+ * @property {unknown} [featureVisibilityManualRules]
+ * @property {unknown} [labelOverrideRows]
+ * @property {unknown} [labelTextBulkOverrides]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSliceUi
+ * @property {unknown} [canvasPadding]
+ * @property {unknown} [layoutPreferences]
+ * @property {unknown} [linearTypographyLinked]
+ * @property {unknown} [pendingPaletteColors]
+ * @property {unknown} [pendingPaletteName]
+ * @property {unknown} [selectedFeatureRecordIdx]
+ */
+/**
+ * @typedef {object} CheckedSessionModeSlice
+ * @property {CheckedSessionModeSliceConfig} [config]
+ * @property {CheckedSessionModeSliceEditorState} [editorState]
+ * @property {CheckedSessionModeSliceFeatures} [features]
+ * @property {CheckedSessionModeSliceUi} [ui]
+ */
+/**
+ * @typedef {object} CheckedSessionModes
+ * @property {CheckedSessionModeSlice} [circular]
+ * @property {CheckedSessionModeSlice} [linear]
+ */
+/**
+ * @typedef {object} SessionChecked46
+ * @property {CheckedSessionResult[]} results
+ * @property {unknown} [runMetadata]
+ * @property {unknown} [cliInvocation]
+ * @property {'gbdraw-session'} format
+ * @property {46 | 47} version
+ * @property {unknown} [createdAt]
+ * @property {unknown} renderRequest
+ * @property {Record<string, unknown>} resources
+ * @property {CheckedSessionEditorState} editorState
+ * @property {CheckedLosatCache | null} [losatCache]
+ * @property {CheckedLosatDerivedCache | null} [losatDerivedCache]
+ * @property {Record<string, unknown> | null} [proteinIdentityManifest]
+ * @property {unknown} [title]
+ * @property {unknown} [webFiles]
+ * @property {unknown} [ui]
+ * @property {CheckedSessionOrthogroupState} [orthogroupState]
+ * @property {CheckedSessionModes | null} [modes]
+ * @property {Record<string, unknown>} [cliOptions]
+ * @property {unknown} [legacyArtifacts]
+ * @property {CheckedSessionOtherModeResult} [otherModeResult]
+ * @property {never} [config]
+ * @property {never} [features]
+ * @property {never} [files]
+ */
+/** @typedef {SessionChecked27 | SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} SessionChecked */
 export {};

@@ -40,19 +40,21 @@ export const normalizeFeatureRendering = (value) => {
   return normalized;
 };
 
+/** @param {unknown} value Unset or Auto. */
+const isAutoArrowHeadLengthRatio = (value) => value === null || value === undefined
+  || (typeof value === 'string' && ['', 'auto'].includes(value.trim().toLowerCase()));
+/** @param {unknown} value @returns {value is number} */
+const isArrowHeadLengthRatio = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
+/** @param {unknown} value Unset. */
+const isUnsetArrowShaftWidthRatio = (value) => value === null || value === undefined
+  || (typeof value === 'string' && value.trim() === '');
+/** @param {unknown} value @returns {value is number} */
+const isArrowShaftWidthRatio = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 1;
+
 /** @param {unknown} value */
 export const normalizeArrowHeadLengthRatio = (value) => {
-  if (
-    value === null ||
-    value === undefined ||
-    (
-      typeof value === 'string' &&
-      ['', 'auto'].includes(value.trim().toLowerCase())
-    )
-  ) {
-    return DEFAULT_ARROW_HEAD_LENGTH_RATIO;
-  }
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+  if (isAutoArrowHeadLengthRatio(value)) return DEFAULT_ARROW_HEAD_LENGTH_RATIO;
+  if (!isArrowHeadLengthRatio(value)) {
     throw new Error('Arrow head length ratio must be Auto or a positive finite number.');
   }
   return value;
@@ -60,19 +62,8 @@ export const normalizeArrowHeadLengthRatio = (value) => {
 
 /** @param {unknown} value */
 export const normalizeArrowShaftWidthRatio = (value) => {
-  if (
-    value === null ||
-    value === undefined ||
-    (typeof value === 'string' && value.trim() === '')
-  ) {
-    return DEFAULT_ARROW_SHAFT_WIDTH_RATIO;
-  }
-  if (
-    typeof value !== 'number' ||
-    !Number.isFinite(value) ||
-    value <= 0 ||
-    value > 1
-  ) {
+  if (isUnsetArrowShaftWidthRatio(value)) return DEFAULT_ARROW_SHAFT_WIDTH_RATIO;
+  if (!isArrowShaftWidthRatio(value)) {
     throw new Error('Arrow shaft width ratio must be a finite number greater than 0 and at most 1.');
   }
   return value;
@@ -111,6 +102,29 @@ export const normalizedPersistedArrowGeometryState = (adv = {}) =>
       adv?.arrow_shaft_width_ratio
     )
   });
+
+/**
+ * A stored arrow head length ratio as the drawing holds it (null for Auto);
+ * a value `normalizeArrowHeadLengthRatio` refuses is Auto, and lost.
+ * @param {unknown} value
+ * @returns {{ value: number | null, lost: boolean }}
+ */
+export const readPersistedArrowHeadLengthRatio = (value) => {
+  const persisted = persistedArrowGeometryValue(value);
+  if (isAutoArrowHeadLengthRatio(persisted)) return { value: null, lost: false };
+  return isArrowHeadLengthRatio(persisted) ? { value: persisted, lost: false } : { value: null, lost: true };
+};
+/**
+ * A stored arrow shaft width ratio; a value `normalizeArrowShaftWidthRatio`
+ * refuses is the default, and lost.
+ * @param {unknown} value
+ * @returns {{ value: number, lost: boolean }}
+ */
+export const readPersistedArrowShaftWidthRatio = (value) => {
+  const persisted = persistedArrowGeometryValue(value);
+  if (isUnsetArrowShaftWidthRatio(persisted)) return { value: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, lost: false };
+  return isArrowShaftWidthRatio(persisted) ? { value: persisted, lost: false } : { value: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, lost: true };
+};
 
 /** @param {unknown} source */
 export const normalizeFeatureRenderingMap = (source) => {

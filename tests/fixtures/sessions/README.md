@@ -267,3 +267,11 @@ config overrides name `objects.text.font_family`, and the Web app of the same
 commit loaded it and saved it again, keeping that path as a preserved override
 in its draft. `font-family-preserved.provenance.json` records the writers and
 the decompressed SHA-256 values.
+
+`BGC0000708-BGC0000713.v29.gbdraw-session.json.gz` is the unchanged Session
+`tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json` of first-parent
+`main` commit `10d3a3d28`, the only tracked version 29 Session of a size for a
+fixture, compressed with `gzip -n -9`. It is the version 29 base of the
+admission description's soundness test (`tests/test_session_contract.py`). Its
+decompressed SHA-256 is
+`71b923ce1a2b8fb587ed394e51571e5b15f289df58574fbc84734a1b2042b220`.

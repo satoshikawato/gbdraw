@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
 
 const NO_IMPLICIT_ANY_BASELINE = {
-  'services/config.js': 68,
+  'services/config.js': 21,
   'services/session-request.js': 59
 };
 

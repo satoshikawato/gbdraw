@@ -7,13 +7,13 @@
 /** @import { DrawingState, LegendCaption, LegendEntry, RecordedLegendColor } from '../state.js' */
 /** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
-import { appliedFeatureColors, normalizeDefaultColor, samePaint } from '../utils/color-utils.js';
+import { appliedFeatureColors, readCommittedPaint, samePaint } from '../utils/color-utils.js';
 import { hasOwnEntry } from '../utils/own-entry.js';
 import { defaultLegendKeyOrder, isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { generatedLegendRow, ruleLegendCaptions } from '../services/specific-color-rules.js';
+import { featureColorEditColor, generatedLegendRow, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
@@ -110,10 +110,8 @@ const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {
  * @param {string} label
  */
 const normalizePaint = (value, label) => {
-  const raw = text(value);
-  if (!raw) return '';
-  const color = normalizeDefaultColor(raw);
-  if (color) return color;
+  const color = readCommittedPaint(value);
+  if (color !== null) return color;
   throw new Error(`Invalid ${label} override in the committed editor state.`);
 };
 
@@ -561,12 +559,7 @@ const compilePlanBundle = ({
   // match is not known yet keeps the fill the Result shows (`color: null`).
   runStage('fills', () => {
     Object.entries(featureColorOverrides || {}).forEach(([key, rawOverride]) => {
-      const color = normalizePaint(
-        rawOverride && typeof rawOverride === 'object' && hasOwn(rawOverride, 'color')
-          ? rawOverride.color
-          : rawOverride,
-        'feature fill'
-      );
+      const color = normalizePaint(featureColorEditColor(rawOverride), 'feature fill');
       const targets = resolvedStableTargets(catalogAdmission, key);
       if (!color || targets.length === 0) return;
       normalizedFeatureColorOverrides[key] = rawOverride && typeof rawOverride === 'object'

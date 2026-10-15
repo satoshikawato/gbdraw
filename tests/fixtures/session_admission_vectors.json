@@ -3,10 +3,62 @@
   "Session documents and the verdict of each whole Load: Python's load_session",
   "(tests/test_session_admission_vectors.py) and the Web's importSession",
   "(tests/web/session-admission-vectors.test.mjs).",
-  "A vector applies its edits (JSON Pointer; set or remove) to a copy of its base and states",
-  "accept or refuse per side. pythonMessage is a fragment of Python's refusal.",
-  "A vector whose sides disagree names the open finding in difference; it records today's",
-  "behaviour, not a decision."
+  "A vector applies its edits (JSON Pointer; set or remove) to a copy of its base. python is",
+  "accept or refuse, with pythonMessage, a fragment of Python's refusal. web is loaded,",
+  "repaired (webRepairs: the code@path of each repair, listed or not) or refused (webClass:",
+  "R1-R4, the refusal classes of the Load repair receipt; the Web's diagnostic names the",
+  "class's reason).",
+  "S1: a vector Python accepts is not refused by the Web, unless difference names its open",
+  "finding. S2: a refusal has a class. S3: a vector Python accepts and the Web repairs lists",
+  "only repairs of webOnlyRepairs ({code, path, finding}: what the Web repairs and Python",
+  "does not read).",
+  "A vector whose id starts with row- takes its base out of one row of",
+  "describe_session_admission(); every row has one that Python refuses and the Web refuses",
+  "or repairs. A vector the Web loads with no row may leave a row only with a value that",
+  "holds nothing (null, [], {}) at an optional field (rule 1, E-OD06), or with a retired",
+  "top-level home (config, features) of a mode-scoped Session (E-OD03)."
+ ],
+ "webOnlyRepairs": [
+  {
+   "code": "setting-entries-dropped",
+   "path": "config.recordDisplayDrafts",
+   "finding": "OV-639 (BA-D19), OV-634: a Session 40 display draft whose selector is not text; Python checks drafts from Session 41"
+  },
+  {
+   "code": "setting-replaced",
+   "path": "ui.cInputType",
+   "finding": "OV-594 (BA-D13, BA-D25 c): Python does not read the app input type; the Web reads a type outside gb and gff as GenBank, with a row when no committed request names the type."
+  },
+  {
+   "code": "setting-replaced",
+   "path": "ui.lInputType",
+   "finding": "OV-594 (BA-D13, BA-D25 c): Python does not read the app input type; the Web reads a type outside gb and gff as GenBank, with a row when no committed request names the type."
+  },
+  {
+   "code": "session-field-dropped",
+   "path": "bogus",
+   "finding": "OV-590, TB6 (E2b-1 A6a): Python's Session 27-39 roots are open and keep an unknown top-level key unread; the Web lists it as left out."
+  },
+  {
+   "code": "session-field-dropped",
+   "path": "orthogroups",
+   "finding": "K17 (E-OD09): Python keeps the Session 27-30 orthogroups key unread; the Web no longer reads data.orthogroups and lists it as left out."
+  },
+  {
+   "code": "session-field-dropped",
+   "path": "modes",
+   "finding": "OV-638, A7a: Python's open roots below Session 40 keep modes unread; below Session 46 the Web lists it as left out."
+  },
+  {
+   "code": "session-field-dropped",
+   "path": "cliOptions",
+   "finding": "OV-638, A7a: Python's open roots below Session 40 keep cliOptions unread; below Session 46 the Web lists it as left out."
+  },
+  {
+   "code": "session-part-dropped",
+   "path": "results",
+   "finding": "A20 (E-OD16): Python does not compose the saved SVG; the Web drops a Result set its composition transform cannot compose, with a row, before the dialog"
+  }
  ],
  "bases": {
   "settings-only-46": {
@@ -827,6 +879,24 @@
   },
   "web-44-bound-file": {
    "fixture": "tests/fixtures/sessions/inactive-class-m.v44.gbdraw-session.json.gz"
+  },
+  "web-30": {
+   "fixture": "tests/fixtures/sessions/scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz"
+  },
+  "web-39": {
+   "fixture": "tests/fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
+  },
+  "settings-only-42": {
+   "fixture": "tests/fixtures/sessions/settings-only.v42.json.gz"
+  },
+  "web-44-linear": {
+   "fixture": "tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz"
+  },
+  "web-46": {
+   "fixture": "tests/fixtures/sessions/legend-renamed-rows.v46.gbdraw-session.json.gz"
+  },
+  "cli-42": {
+   "fixture": "tests/fixtures/sessions/se08-main-linear-cli.v42.gbdraw-session.json.gz"
   }
  },
  "vectors": [
@@ -836,7 +906,7 @@
    "base": "settings-only-46",
    "edits": [],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "A settings-only Session 46 as the Web's Save writes it."
   },
   {
@@ -845,7 +915,7 @@
    "base": "web-33",
    "edits": [],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "A tracked Web Session 33."
   },
   {
@@ -854,7 +924,7 @@
    "base": "web-44",
    "edits": [],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "A tracked Web Session 44 with a Result."
   },
   {
@@ -863,7 +933,7 @@
    "base": "web-44-bound-file",
    "edits": [],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "A tracked Web Session 44 whose Web file binding names a resource."
   },
   {
@@ -872,8 +942,26 @@
    "base": "web-40",
    "edits": [],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "A tracked Web Session 40 with a Result."
+  },
+  {
+   "id": "control-web-39",
+   "finding": "control",
+   "base": "web-39",
+   "edits": [],
+   "python": "accept",
+   "web": "loaded",
+   "note": "The base web-39."
+  },
+  {
+   "id": "control-web-30",
+   "finding": "control",
+   "base": "web-30",
+   "edits": [],
+   "python": "accept",
+   "web": "loaded",
+   "note": "The base web-30."
   },
   {
    "id": "ov591-mode-config-empty",
@@ -887,9 +975,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The settings of the shown mode hold neither form nor adv.",
-   "pythonMessage": "requires an active Web configuration and mode"
+   "pythonMessage": "requires an active Web configuration and mode",
+   "web": "loaded"
   },
   {
    "id": "ov591-mode-config-without-form",
@@ -902,9 +990,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The settings of the shown mode lack form.",
-   "pythonMessage": "requires an active Web configuration and mode"
+   "pythonMessage": "requires an active Web configuration and mode",
+   "web": "loaded"
   },
   {
    "id": "ov591-mode-config-without-adv",
@@ -917,9 +1005,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The settings of the shown mode lack adv.",
-   "pythonMessage": "requires an active Web configuration and mode"
+   "pythonMessage": "requires an active Web configuration and mode",
+   "web": "loaded"
   },
   {
    "id": "ov591-linear-mode-config-without-form",
@@ -937,9 +1025,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The same rule when the shown mode is Linear.",
-   "pythonMessage": "requires an active Web configuration and mode"
+   "pythonMessage": "requires an active Web configuration and mode",
+   "web": "loaded"
   },
   {
    "id": "ov591-linear-mode",
@@ -953,7 +1041,7 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "Control: the shown mode is Linear."
   },
   {
@@ -968,7 +1056,7 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "The other mode's slice may hold less; Load fills it with defaults."
   },
   {
@@ -982,9 +1070,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "No shown mode.",
-   "pythonMessage": "requires an active Web configuration and mode"
+   "pythonMessage": "requires an active Web configuration and mode",
+   "web": "loaded"
   },
   {
    "id": "ov591-mode-unknown",
@@ -998,9 +1086,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "A shown mode that is no diagram mode.",
-   "pythonMessage": "requires an active Web configuration and mode"
+   "pythonMessage": "requires an active Web configuration and mode",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-replaced@ui.mode"
+   ]
   },
   {
    "id": "ov592-losat-cache-entries-object",
@@ -1014,9 +1105,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The whole Load refused it before this fixture (the admission validator alone did not).",
-   "pythonMessage": "losatCache.entries must be an array"
+   "pythonMessage": "losatCache.entries must be an array",
+   "web": "loaded"
   },
   {
    "id": "ov592-losat-cache-entries-null",
@@ -1030,9 +1121,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "entries is present and null.",
-   "pythonMessage": "losatCache.entries must be an array"
+   "pythonMessage": "losatCache.entries must be an array",
+   "web": "loaded"
   },
   {
    "id": "ov592-losat-cache-array",
@@ -1046,9 +1137,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The cache container is an array.",
-   "pythonMessage": "losatCache must be an object when present"
+   "pythonMessage": "losatCache must be an object when present",
+   "web": "loaded"
   },
   {
    "id": "ov592-losat-cache-null",
@@ -1062,7 +1153,7 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "A null cache container is an empty cache on both sides."
   },
   {
@@ -1077,9 +1168,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The derived cache follows the same rule.",
-   "pythonMessage": "losatDerivedCache.entries must be an array"
+   "pythonMessage": "losatDerivedCache.entries must be an array",
+   "web": "loaded"
   },
   {
    "id": "ov592-committed-losat-cache-entries-object",
@@ -1093,9 +1184,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The same rule in a Session with a Result.",
-   "pythonMessage": "losatCache.entries must be an array"
+   "pythonMessage": "losatCache.entries must be an array",
+   "web": "loaded"
   },
   {
    "id": "ov593-circular-records-off-duplicate",
@@ -1112,9 +1203,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
-   "note": "The whole Load refused it before this fixture (the admission validator alone did not).",
-   "pythonMessage": "recordsOff must list distinct record keys of its mode"
+   "note": "The whole Load refused it before this fixture (the admission validator alone did not). The Web reads a repeat as one key, with no row (lossless).",
+   "pythonMessage": "recordsOff must list distinct record keys of its mode",
+   "web": "loaded"
   },
   {
    "id": "ov593-circular-records-off-malformed",
@@ -1130,9 +1221,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
-   "note": "A Circular key is a source selector #N.",
-   "pythonMessage": "recordsOff must list distinct record keys of its mode"
+   "note": "A Circular key is a source selector #N. It turned no record off: the Web drops it with no row (receipt: a value that had no effect).",
+   "pythonMessage": "recordsOff must list distinct record keys of its mode",
+   "web": "loaded"
   },
   {
    "id": "ov593-circular-records-off-zero",
@@ -1148,9 +1239,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
-   "note": "#0 is no selector.",
-   "pythonMessage": "recordsOff must list distinct record keys of its mode"
+   "note": "#0 is no selector. It turned no record off: the Web drops it with no row (receipt: a value that had no effect).",
+   "pythonMessage": "recordsOff must list distinct record keys of its mode",
+   "web": "loaded"
   },
   {
    "id": "ov593-circular-records-off-padded",
@@ -1166,9 +1257,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "A key is stored trimmed.",
-   "pythonMessage": "recordsOff must list distinct record keys of its mode"
+   "pythonMessage": "recordsOff must list distinct record keys of its mode",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordsOff"
+   ]
   },
   {
    "id": "ov593-circular-records-off-number",
@@ -1184,9 +1278,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "A key is a string.",
-   "pythonMessage": "recordsOff must list distinct record keys of its mode"
+   "pythonMessage": "recordsOff must list distinct record keys of its mode",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordsOff"
+   ]
   },
   {
    "id": "ov593-circular-records-off-string",
@@ -1200,9 +1297,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "recordsOff is a list.",
-   "pythonMessage": "recordsOff must list distinct record keys of its mode"
+   "pythonMessage": "recordsOff must list distinct record keys of its mode",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.recordsOff"
+   ]
   },
   {
    "id": "ov593-circular-records-off",
@@ -1219,7 +1319,7 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "Control: two distinct selectors."
   },
   {
@@ -1236,9 +1336,9 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
-   "note": "A Linear key is a bound record card uid.",
-   "pythonMessage": "recordsOff must list distinct record keys of its mode"
+   "note": "A Linear key is a bound record card uid. The Web drops an unbound uid with no row (it turned nothing off; E1a D10).",
+   "pythonMessage": "recordsOff must list distinct record keys of its mode",
+   "web": "loaded"
   },
   {
    "id": "ov593-linear-records-off",
@@ -1254,7 +1354,7 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "Control: the uid of the Session's record card."
   },
   {
@@ -1279,7 +1379,7 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "Control: one record display draft."
   },
   {
@@ -1306,9 +1406,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The selector is a string.",
-   "pythonMessage": "require a source UID and exact selector"
+   "pythonMessage": "require a source UID and exact selector",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov575-linear-display-draft-selector-array",
@@ -1334,9 +1437,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The same rule in the Linear slice.",
-   "pythonMessage": "require a source UID and exact selector"
+   "pythonMessage": "require a source UID and exact selector",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.linear.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov575-display-draft-selector-number",
@@ -1360,9 +1466,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "A number is no selector.",
-   "pythonMessage": "require a source UID and exact selector"
+   "pythonMessage": "require a source UID and exact selector",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov575-session-44-display-draft",
@@ -1387,7 +1496,7 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "Control: a Session 41-44 draft row, which also names its mode."
   },
   {
@@ -1415,9 +1524,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The same rule in the flat draft of a Session 41-44.",
-   "pythonMessage": "require a source UID and exact selector"
+   "pythonMessage": "require a source UID and exact selector",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-entries-dropped@config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov575-session-40-display-draft",
@@ -1442,7 +1554,7 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "Control: the same row in a Session 40."
   },
   {
@@ -1470,8 +1582,11 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
-   "note": "Python checks display drafts from Session 41; a Session 40 keeps the verdict it had."
+   "web": "repaired",
+   "note": "Python checks display drafts from Session 41. The Web drops the row with an array selector (BA-D19), listed.",
+   "webRepairs": [
+    "setting-entries-dropped@config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov634-session-40-display-draft-selector-number",
@@ -1496,9 +1611,11 @@
     }
    ],
    "python": "accept",
-   "web": "refuse",
-   "note": "A number as the selector of a Session 40 row.",
-   "difference": "Python does not check a Session 40 display draft; the Web matches its selector against #N, which a number fails. Unchanged by OV-575. Open (OV-634)."
+   "web": "repaired",
+   "note": "A number as the selector of a Session 40 row: the Web drops the row, listed (BA-D25 c); Python does not check a Session 40 draft.",
+   "webRepairs": [
+    "setting-entries-dropped@config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov611-display-draft-selector-unicode-digit",
@@ -1511,7 +1628,7 @@
      "value": [
       {
        "sourceUid": "circular",
-       "selector": "#1\u0663",
+       "selector": "#1٣",
        "recordId": "same",
        "topologyOverride": null,
        "startCoordinate": 25,
@@ -1523,8 +1640,11 @@
    ],
    "python": "refuse",
    "pythonMessage": "Record display drafts require a source UID and exact selector.",
-   "web": "refuse",
-   "note": "A selector with a digit outside 0-9: both read #N with the digits 0-9 only (BA-D18)."
+   "web": "repaired",
+   "note": "A selector with a digit outside 0-9: both read #N with the digits 0-9 only (BA-D18).",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
   },
   {
    "id": "ov636-resources-null",
@@ -1538,9 +1658,14 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "resources is null while a Web file binding names a resource.",
-   "pythonMessage": "requires a canonical resources object"
+   "pythonMessage": "requires a canonical resources object",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@resources",
+    "file-entry-dropped@webFiles.bindings.c_gb",
+    "request-dropped@renderRequest"
+   ]
   },
   {
    "id": "ov636-resources-array",
@@ -1554,9 +1679,14 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "The same for a resources that is no object.",
-   "pythonMessage": "requires a canonical resources object"
+   "pythonMessage": "requires a canonical resources object",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@resources",
+    "file-entry-dropped@webFiles.bindings.c_gb",
+    "request-dropped@renderRequest"
+   ]
   },
   {
    "id": "ov566-linear-row-null",
@@ -1572,9 +1702,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "A settings-only Linear row is an object.",
-   "pythonMessage": "cannot contain biological sources"
+   "pythonMessage": "cannot contain biological sources",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@webFiles.bindings.linearSeqs[0]"
+   ]
   },
   {
    "id": "ov566-linear-row-string",
@@ -1590,9 +1723,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "A settings-only Linear row is an object.",
-   "pythonMessage": "cannot contain biological sources"
+   "pythonMessage": "cannot contain biological sources",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@webFiles.bindings.linearSeqs[0]"
+   ]
   },
   {
    "id": "ov590-unknown-top-level-key-46",
@@ -1606,9 +1742,12 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "Both sides refuse an unknown top-level key from Session 40.",
-   "pythonMessage": "unclassified top-level field"
+   "pythonMessage": "unclassified top-level field",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@bogus"
+   ]
   },
   {
    "id": "ov590-unknown-top-level-key-33",
@@ -1622,9 +1761,11 @@
     }
    ],
    "python": "accept",
-   "web": "refuse",
+   "web": "repaired",
    "note": "An unknown top-level key in a Session 31-39.",
-   "difference": "Python checks the top-level keys from Session 40, the Web from Session 31. Expected today; the Owner decides (B6)."
+   "webRepairs": [
+    "session-field-dropped@bogus"
+   ]
   },
   {
    "id": "ov594-circular-input-type-fasta",
@@ -1638,9 +1779,11 @@
     }
    ],
    "python": "accept",
-   "web": "refuse",
+   "web": "repaired",
    "note": "ui.cInputType outside gb and gff.",
-   "difference": "Python does not read ui.cInputType; the Web requires gb or gff from Session 40. Expected today; the Owner decides (B6)."
+   "webRepairs": [
+    "setting-replaced@ui.cInputType"
+   ]
   },
   {
    "id": "ov594-linear-input-type-fasta",
@@ -1654,9 +1797,11 @@
     }
    ],
    "python": "accept",
-   "web": "refuse",
+   "web": "repaired",
    "note": "ui.lInputType outside gb and gff.",
-   "difference": "Python does not read ui.lInputType; the Web requires gb or gff from Session 40. Expected today; the Owner decides (B6)."
+   "webRepairs": [
+    "setting-replaced@ui.lInputType"
+   ]
   },
   {
    "id": "c4-losat-cache-entry",
@@ -1682,7 +1827,7 @@
     }
    ],
    "python": "accept",
-   "web": "accept",
+   "web": "loaded",
    "note": "Control: one raw nucleotide LOSAT cache entry."
   },
   {
@@ -1709,9 +1854,3743 @@
     }
    ],
    "python": "refuse",
-   "web": "refuse",
    "note": "From Session 39 a raw cache entry needs a string key.",
-   "pythonMessage": "requires a key"
+   "pythonMessage": "requires a key",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[0]"
+   ]
+  },
+  {
+   "id": "control-settings-only-42",
+   "finding": "control",
+   "base": "settings-only-42",
+   "edits": [],
+   "python": "accept",
+   "web": "loaded",
+   "note": "A settings-only Session 42 as the Web's Save wrote it."
+  },
+  {
+   "id": "ov780-settings-only-42-ui-null",
+   "finding": "OV-780",
+   "base": "settings-only-42",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/ui",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "requires an active Web configuration and mode",
+   "web": "loaded",
+   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780."
+  },
+  {
+   "id": "ov780-settings-only-42-ui-array",
+   "finding": "OV-780",
+   "base": "settings-only-42",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/ui",
+     "value": []
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "requires an active Web configuration and mode",
+   "web": "loaded",
+   "note": "A settings-only Session 41-44 whose ui is not an object names no mode; Python raised AttributeError before OV-780."
+  },
+  {
+   "id": "row-checkedfeatureoverridedraftrow-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": {
+      "[\"record-1\",\"feature-1\"]": {
+       "recordKey": "record-1",
+       "biologicalFeatureId": "feature-1",
+       "featureVisibility": "off",
+       "labelVisibility": null,
+       "labelText": null,
+       "labelSourceText": null
+      }
+     }
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides/[\"record-1\",\"feature-1\"]/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid feature override draft fields.",
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.*.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
+  },
+  {
+   "id": "row-checkedfeatureoverridedraftrow-biologicalfeatureid",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": {
+      "[\"record-1\",\"feature-1\"]": {
+       "recordKey": "record-1",
+       "biologicalFeatureId": "feature-1",
+       "featureVisibility": "off",
+       "labelVisibility": null,
+       "labelText": null,
+       "labelSourceText": null
+      }
+     }
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides/[\"record-1\",\"feature-1\"]/biologicalFeatureId",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "biological_feature_id must be a non-empty identity without NUL.",
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.biologicalFeatureId.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
+  },
+  {
+   "id": "row-checkedfeatureoverridedraftrow-featurevisibility",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": {
+      "[\"record-1\",\"feature-1\"]": {
+       "recordKey": "record-1",
+       "biologicalFeatureId": "feature-1",
+       "featureVisibility": "off",
+       "labelVisibility": null,
+       "labelText": null,
+       "labelSourceText": null
+      }
+     }
+    },
+    {
+     "op": "remove",
+     "path": "/modes/circular/features/featureOverrides/[\"record-1\",\"feature-1\"]/featureVisibility"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid feature override draft fields.",
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.featureVisibility.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
+  },
+  {
+   "id": "row-checkedfeatureoverridedraftrow-labelsourcetext",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": {
+      "[\"record-1\",\"feature-1\"]": {
+       "recordKey": "record-1",
+       "biologicalFeatureId": "feature-1",
+       "featureVisibility": "off",
+       "labelVisibility": null,
+       "labelText": null,
+       "labelSourceText": null
+      }
+     }
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides/[\"record-1\",\"feature-1\"]/labelSourceText",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Feature override labelSourceText must be text or null.",
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.labelSourceText.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
+  },
+  {
+   "id": "row-checkedfeatureoverridedraftrow-labeltext",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": {
+      "[\"record-1\",\"feature-1\"]": {
+       "recordKey": "record-1",
+       "biologicalFeatureId": "feature-1",
+       "featureVisibility": "off",
+       "labelVisibility": null,
+       "labelText": null,
+       "labelSourceText": null
+      }
+     }
+    },
+    {
+     "op": "remove",
+     "path": "/modes/circular/features/featureOverrides/[\"record-1\",\"feature-1\"]/labelText"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid feature override draft fields.",
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.labelText.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
+  },
+  {
+   "id": "row-checkedfeatureoverridedraftrow-labelvisibility",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": {
+      "[\"record-1\",\"feature-1\"]": {
+       "recordKey": "record-1",
+       "biologicalFeatureId": "feature-1",
+       "featureVisibility": "off",
+       "labelVisibility": null,
+       "labelText": null,
+       "labelSourceText": null
+      }
+     }
+    },
+    {
+     "op": "remove",
+     "path": "/modes/circular/features/featureOverrides/[\"record-1\",\"feature-1\"]/labelVisibility"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid feature override draft fields.",
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.labelVisibility.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
+  },
+  {
+   "id": "row-checkedfeatureoverridedraftrow-recordkey",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": {
+      "[\"record-1\",\"feature-1\"]": {
+       "recordKey": "record-1",
+       "biologicalFeatureId": "feature-1",
+       "featureVisibility": "off",
+       "labelVisibility": null,
+       "labelText": null,
+       "labelSourceText": null
+      }
+     }
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides/[\"record-1\",\"feature-1\"]/recordKey",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "record_key must be a non-empty identity without NUL.",
+   "web": "repaired",
+   "note": "Admission row CheckedFeatureOverrideDraftRow.recordKey.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.features.featureOverrides"
+   ]
+  },
+  {
+   "id": "row-checkedlosatcacheentry-kind",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache/entries/0/kind",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid current LOSAT cache entry at losatCache.entries[0].",
+   "web": "repaired",
+   "note": "Admission row CheckedLosatCacheEntry.kind.",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[0]"
+   ]
+  },
+  {
+   "id": "row-checkedlosatcacheentry-text",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache/entries/0/text",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid current LOSAT cache entry at losatCache.entries[0].",
+   "web": "repaired",
+   "note": "Admission row CheckedLosatCacheEntry.text.",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[0]"
+   ]
+  },
+  {
+   "id": "row-checkedlosatderivedcacheentry-key",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries/0/key",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid current derived LOSATP cache entry at losatDerivedCache.entries[0].",
+   "web": "repaired",
+   "note": "Admission row CheckedLosatDerivedCacheEntry.key.",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ]
+  },
+  {
+   "id": "row-checkedlosatderivedcacheentry-kind",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries/0/kind",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid current derived LOSATP cache entry at losatDerivedCache.entries[0].",
+   "web": "repaired",
+   "note": "Admission row CheckedLosatDerivedCacheEntry.kind.",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ]
+  },
+  {
+   "id": "row-checkedlosatderivedcacheentry-payload",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries/0/payload",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid current derived LOSATP cache entry at losatDerivedCache.entries[0].",
+   "web": "repaired",
+   "note": "Admission row CheckedLosatDerivedCacheEntry.payload.",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ]
+  },
+  {
+   "id": "row-checkedrecordanchorintent-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/anchorIntent/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display anchor intent.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.*.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecordanchorintent-anchor",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/anchorIntent/anchor",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display anchor intent.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.anchor.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecordanchorintent-biologicalfeatureid",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/anchorIntent/biologicalFeatureId",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display anchor intent.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.biologicalFeatureId.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecordanchorintent-offsetbp",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/anchorIntent/offsetBp",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display anchor intent.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.offsetBp.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecordanchorintent-orientforward",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/anchorIntent/orientForward",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display anchor intent.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.orientForward.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecordanchorintent-placement",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/anchorIntent/placement",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display anchor intent.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.placement.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecordanchorintent-recordkey",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/anchorIntent/recordKey",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display anchor intent.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.recordKey.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecordanchorintent-schema",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/anchorIntent/schema",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display anchor intent.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordAnchorIntent.schema.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecorddisplaydraft-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display draft fields.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.*.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecorddisplaydraft-anchorintent",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/anchorIntent",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display anchor intent.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.anchorIntent.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecorddisplaydraft-recordid",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/recordId",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Record display drafts require a source UID and exact selector.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.recordId.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecorddisplaydraft-reversecomplementoverride",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/reverseComplementOverride",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Record display reverse override must be a boolean or null.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.reverseComplementOverride.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecorddisplaydraft-sourceuid",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/sourceUid",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Record display drafts require a source UID and exact selector.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.sourceUid.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecorddisplaydraft-startcoordinate",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "remove",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/startCoordinate"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display draft fields.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.startCoordinate.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedrecorddisplaydraft-topologyoverride",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": [
+      {
+       "sourceUid": "circular",
+       "selector": "#1",
+       "recordId": "same",
+       "topologyOverride": null,
+       "startCoordinate": 25,
+       "reverseComplementOverride": null,
+       "anchorIntent": {
+        "schema": 1,
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "placement": "anchor",
+        "anchor": "midpoint",
+        "offsetBp": 0,
+        "orientForward": true
+       }
+      }
+     ]
+    },
+    {
+     "op": "remove",
+     "path": "/modes/circular/config/recordDisplayDrafts/0/topologyOverride"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid record display draft fields.",
+   "web": "repaired",
+   "note": "Admission row CheckedRecordDisplayDraft.topologyOverride.",
+   "webRepairs": [
+    "setting-entries-dropped@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "row-checkedsessioneditorstate-featurecatalog",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/editorState/featureCatalog"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 40 requires editorState.featureCatalog.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionEditorState.featureCatalog.",
+   "webRepairs": [
+    "session-part-dropped@editorState"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodeslice-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSlice.*.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodeslice-config",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSlice.config.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.config"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodeslice-config",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSlice.config."
+  },
+  {
+   "id": "row-checkedsessionmodeslice-editorstate",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSlice.editorState.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodeslice-editorstate",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSlice.editorState."
+  },
+  {
+   "id": "row-checkedsessionmodeslice-features",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.features must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSlice.features.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.features"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodeslice-features",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.features must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSlice.features."
+  },
+  {
+   "id": "row-checkedsessionmodeslice-ui",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/ui",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.ui must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSlice.ui.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.ui"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodeslice-ui",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/ui",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.ui must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSlice.ui."
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfig-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.*.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfig-adv",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/adv",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.adv must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.adv.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.adv"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodesliceconfig-adv",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/adv",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.adv must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSliceConfig.adv."
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfig-featureplacementoverrides",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/featurePlacementOverrides",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "config.featurePlacementOverrides must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.featurePlacementOverrides.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.featurePlacementOverrides"
+   ]
+  },
+  {
+   "id": "null-modes-circular-config-featureplacementoverrides",
+   "finding": "E-OD06",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/featurePlacementOverrides",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "config.featurePlacementOverrides must be an object.",
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceConfig.featurePlacementOverrides)."
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfig-form",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/form",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.form must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.form.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.form"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodesliceconfig-form",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/form",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.form must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSliceConfig.form."
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfig-losat",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/losat",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.losat must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.losat.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.losat"
+   ]
+  },
+  {
+   "id": "null-modes-circular-config-losat",
+   "finding": "E-OD06",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/losat",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.losat must be an object.",
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceConfig.losat)."
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfig-recorddisplaydrafts",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "config.recordDisplayDrafts must be an array.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfig.recordDisplayDrafts.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.recordDisplayDrafts"
+   ]
+  },
+  {
+   "id": "null-modes-circular-config-recorddisplaydrafts",
+   "finding": "E-OD06",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/recordDisplayDrafts",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "config.recordDisplayDrafts must be an array.",
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceConfig.recordDisplayDrafts)."
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfigadv-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/adv/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.adv cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfigAdv.*.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.adv.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfigadv-feature-overlap-tolerance-bp",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/adv/feature_overlap_tolerance_bp",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Feature overlap tolerance must be a non-negative integer.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfigAdv.feature_overlap_tolerance_bp.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.adv.feature_overlap_tolerance_bp"
+   ]
+  },
+  {
+   "id": "null-modes-circular-config-adv-feature-overlap-tolerance-bp",
+   "finding": "E-OD06",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/adv/feature_overlap_tolerance_bp",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Feature overlap tolerance must be a non-negative integer.",
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceConfigAdv.feature_overlap_tolerance_bp)."
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfigform-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/form/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.form cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfigForm.*.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.form.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodesliceconfiglosat-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/config/losat/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.config.losat cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceConfigLosat.*.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.config.losat.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodesliceeditorstate-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceEditorState.*.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodesliceeditorstate-featurestrokes",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState/featureStrokes",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState.featureStrokes must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceEditorState.featureStrokes.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.featureStrokes"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodesliceeditorstate-featurestrokes",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState/featureStrokes",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState.featureStrokes must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSliceEditorState.featureStrokes."
+  },
+  {
+   "id": "row-checkedsessionmodesliceeditorstate-legend",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState/legend",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState.legend must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceEditorState.legend.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.legend"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodesliceeditorstate-legend",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState/legend",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState.legend must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModeSliceEditorState.legend."
+  },
+  {
+   "id": "row-checkedsessionmodesliceeditorstatefeaturestrokes-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState/featureStrokes/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState.featureStrokes cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceEditorStateFeatureStrokes.*.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.featureStrokes.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodesliceeditorstatelegend-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/editorState/legend/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.editorState.legend cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceEditorStateLegend.*.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.editorState.legend.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodeslicefeatures-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.features cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceFeatures.*.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.features.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodeslicefeatures-featureoverrides",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "features.featureOverrides must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceFeatures.featureOverrides.",
+   "webRepairs": [
+    "setting-replaced@modes.circular.features.featureOverrides"
+   ]
+  },
+  {
+   "id": "null-modes-circular-features-featureoverrides",
+   "finding": "E-OD06",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/features/featureOverrides",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "features.featureOverrides must be an object.",
+   "web": "loaded",
+   "note": "A null holds nothing: the Web drops it with no row (rule 1, E-OD06); Python refuses it (CheckedSessionModeSliceFeatures.featureOverrides)."
+  },
+  {
+   "id": "row-checkedsessionmodesliceui-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular/ui/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular.ui cannot contain keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModeSliceUi.*.",
+   "webRepairs": [
+    "session-field-dropped@modes.circular.ui.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodes-unknown-key",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes holds a circular and a linear slice only.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModes.*.",
+   "webRepairs": [
+    "session-field-dropped@modes.keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-checkedsessionmodes-circular",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModes.circular.",
+   "webRepairs": [
+    "session-part-dropped@modes.circular"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodes-circular",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/circular",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModes.circular."
+  },
+  {
+   "id": "row-checkedsessionmodes-linear",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/linear",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.linear must be an object.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionModes.linear.",
+   "webRepairs": [
+    "session-part-dropped@modes.linear"
+   ]
+  },
+  {
+   "id": "null-checkedsessionmodes-linear",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/linear",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes.linear must be an object.",
+   "web": "loaded",
+   "note": "Admission row CheckedSessionModes.linear."
+  },
+  {
+   "id": "row-checkedsessionresult-content",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/content",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Each current Session Result must be a named plain SVG.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionResult.content.",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "row-checkedsessionresult-name",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/name",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Each current Session Result must be a named plain SVG.",
+   "web": "repaired",
+   "note": "Admission row CheckedSessionResult.name.",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "row-sessionchecked27-format",
+   "finding": "admission-row",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/format",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Not a gbdraw-session JSON file.",
+   "web": "refused",
+   "note": "Admission row SessionChecked27.format.",
+   "webClass": "R2"
+  },
+  {
+   "id": "row-sessionchecked27-othermoderesult",
+   "finding": "admission-row",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 30 cannot contain otherModeResult.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked27.otherModeResult.",
+   "webRepairs": [
+    "session-field-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "null-sessionchecked27-othermoderesult",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 30 cannot contain otherModeResult.",
+   "web": "loaded",
+   "note": "Admission row SessionChecked27.otherModeResult."
+  },
+  {
+   "id": "row-sessionchecked27-version",
+   "finding": "admission-row",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/version",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version is required and must be an integer.",
+   "web": "refused",
+   "note": "Admission row SessionChecked27.version.",
+   "webClass": "R2"
+  },
+  {
+   "id": "row-sessionchecked31-format",
+   "finding": "admission-row",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/format",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Not a gbdraw-session JSON file.",
+   "web": "refused",
+   "note": "Admission row SessionChecked31.format.",
+   "webClass": "R2"
+  },
+  {
+   "id": "row-sessionchecked31-othermoderesult",
+   "finding": "admission-row",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 33 cannot contain otherModeResult.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked31.otherModeResult.",
+   "webRepairs": [
+    "session-field-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "null-sessionchecked31-othermoderesult",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 33 cannot contain otherModeResult.",
+   "web": "loaded",
+   "note": "Admission row SessionChecked31.otherModeResult."
+  },
+  {
+   "id": "row-sessionchecked31-renderrequest",
+   "finding": "admission-row",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/renderRequest"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 33 requires a canonical renderRequest object.",
+   "web": "refused",
+   "note": "Admission row SessionChecked31.renderRequest.",
+   "webClass": "R4"
+  },
+  {
+   "id": "row-sessionchecked31-resources",
+   "finding": "admission-row",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 33 requires a canonical resources object.",
+   "web": "refused",
+   "note": "Admission row SessionChecked31.resources.",
+   "webClass": "R4"
+  },
+  {
+   "id": "row-sessionchecked31-version",
+   "finding": "admission-row",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/version",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version is required and must be an integer.",
+   "web": "refused",
+   "note": "Admission row SessionChecked31.version.",
+   "webClass": "R2"
+  },
+  {
+   "id": "row-sessionchecked39-format",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/format",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Not a gbdraw-session JSON file.",
+   "web": "refused",
+   "note": "Admission row SessionChecked39.format.",
+   "webClass": "R2"
+  },
+  {
+   "id": "row-sessionchecked39-losatcache",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session losatCache must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked39.losatCache.",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache"
+   ]
+  },
+  {
+   "id": "row-sessionchecked39-losatderivedcache",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session losatDerivedCache must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked39.losatDerivedCache.",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache"
+   ]
+  },
+  {
+   "id": "row-sessionchecked39-othermoderesult",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 39 cannot contain otherModeResult.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked39.otherModeResult.",
+   "webRepairs": [
+    "session-field-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "null-sessionchecked39-othermoderesult",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 39 cannot contain otherModeResult.",
+   "web": "loaded",
+   "note": "Admission row SessionChecked39.otherModeResult."
+  },
+  {
+   "id": "row-sessionchecked39-proteinidentitymanifest",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/proteinIdentityManifest",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid proteinIdentityManifest schema-2 artifact.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked39.proteinIdentityManifest.",
+   "webRepairs": [
+    "cache-entry-dropped@proteinIdentityManifest",
+    "cache-entry-dropped@losatCache.entries[0]",
+    "cache-entry-dropped@losatCache.entries[1]",
+    "cache-entry-dropped@losatCache.entries[2]",
+    "cache-entry-dropped@losatCache.entries[3]",
+    "cache-entry-dropped@losatCache.entries[4]",
+    "cache-entry-dropped@losatCache.entries[5]",
+    "cache-entry-dropped@losatCache.entries[6]",
+    "cache-entry-dropped@losatCache.entries[7]",
+    "cache-entry-dropped@losatCache.entries[8]",
+    "cache-entry-dropped@losatCache.entries[9]",
+    "cache-entry-dropped@losatCache.entries[10]",
+    "cache-entry-dropped@losatCache.entries[11]",
+    "cache-entry-dropped@losatCache.entries[12]",
+    "cache-entry-dropped@losatCache.entries[13]",
+    "cache-entry-dropped@losatCache.entries[14]",
+    "cache-entry-dropped@losatCache.entries[15]",
+    "cache-entry-dropped@losatCache.entries[16]",
+    "cache-entry-dropped@losatCache.entries[17]",
+    "cache-entry-dropped@losatCache.entries[18]",
+    "cache-entry-dropped@losatCache.entries[19]",
+    "cache-entry-dropped@losatCache.entries[20]",
+    "cache-entry-dropped@losatCache.entries[21]",
+    "cache-entry-dropped@losatCache.entries[22]",
+    "cache-entry-dropped@losatCache.entries[23]",
+    "cache-entry-dropped@losatCache.entries[24]",
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ]
+  },
+  {
+   "id": "row-sessionchecked39-renderrequest",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/renderRequest"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 39 requires a canonical renderRequest object.",
+   "web": "refused",
+   "note": "Admission row SessionChecked39.renderRequest.",
+   "webClass": "R4"
+  },
+  {
+   "id": "row-sessionchecked39-resources",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 39 requires a canonical resources object.",
+   "web": "refused",
+   "note": "Admission row SessionChecked39.resources.",
+   "webClass": "R4"
+  },
+  {
+   "id": "row-sessionchecked39-version",
+   "finding": "admission-row",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/version",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version is required and must be an integer.",
+   "web": "refused",
+   "note": "Admission row SessionChecked39.version.",
+   "webClass": "R2"
+  },
+  {
+   "id": "row-sessionchecked40-unknown-key",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/keyNoWriterWrites",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session contains unclassified top-level field(s): keyNoWriterWrites.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.*.",
+   "webRepairs": [
+    "session-field-dropped@keyNoWriterWrites"
+   ]
+  },
+  {
+   "id": "row-sessionchecked40-editorstate",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.editorState.",
+   "webRepairs": [
+    "session-part-dropped@editorState",
+    "feature-recovery-failed@editorState.featureCatalog"
+   ]
+  },
+  {
+   "id": "row-sessionchecked40-features",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/features",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session features must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.features.",
+   "webRepairs": [
+    "session-field-dropped@features"
+   ]
+  },
+  {
+   "id": "null-sessionchecked40-features",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/features",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session features must be an object when present.",
+   "web": "loaded",
+   "note": "Admission row SessionChecked40.features."
+  },
+  {
+   "id": "row-sessionchecked40-format",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/format",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Not a gbdraw-session JSON file.",
+   "web": "refused",
+   "note": "Admission row SessionChecked40.format.",
+   "webClass": "R2"
+  },
+  {
+   "id": "row-sessionchecked40-losatcache",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session losatCache must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.losatCache.",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache"
+   ]
+  },
+  {
+   "id": "row-sessionchecked40-losatderivedcache",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session losatDerivedCache must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.losatDerivedCache.",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache"
+   ]
+  },
+  {
+   "id": "row-sessionchecked40-orthogroupstate",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session orthogroupState must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.orthogroupState.",
+   "webRepairs": [
+    "session-field-dropped@orthogroupState"
+   ]
+  },
+  {
+   "id": "null-sessionchecked40-orthogroupstate",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session orthogroupState must be an object when present.",
+   "web": "loaded",
+   "note": "Admission row SessionChecked40.orthogroupState."
+  },
+  {
+   "id": "row-sessionchecked40-proteinidentitymanifest",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/proteinIdentityManifest",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid proteinIdentityManifest schema-2 artifact.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.proteinIdentityManifest.",
+   "webRepairs": [
+    "cache-entry-dropped@proteinIdentityManifest"
+   ]
+  },
+  {
+   "id": "row-sessionchecked40-renderrequest",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/renderRequest"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 44 requires a canonical renderRequest object.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.renderRequest.",
+   "webRepairs": [
+    "request-dropped@renderRequest"
+   ]
+  },
+  {
+   "id": "row-sessionchecked40-results",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 40 requires a results array.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked40.results.",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "row-sessionchecked40-version",
+   "finding": "admission-row",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/version",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version is required and must be an integer.",
+   "web": "refused",
+   "note": "Admission row SessionChecked40.version.",
+   "webClass": "R2"
+  },
+  {
+   "id": "row-sessionchecked46-clioptions",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/cliOptions",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session cliOptions must be an object.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.cliOptions.",
+   "webRepairs": [
+    "session-field-dropped@cliOptions"
+   ]
+  },
+  {
+   "id": "null-sessionchecked46-clioptions",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/cliOptions",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session cliOptions must be an object.",
+   "web": "loaded",
+   "note": "Admission row SessionChecked46.cliOptions."
+  },
+  {
+   "id": "row-sessionchecked46-editorstate",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 40 requires editorState.featureCatalog.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.editorState.",
+   "webRepairs": [
+    "session-part-dropped@editorState"
+   ]
+  },
+  {
+   "id": "row-sessionchecked46-format",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/format",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Not a gbdraw-session JSON file.",
+   "web": "refused",
+   "note": "Admission row SessionChecked46.format.",
+   "webClass": "R2"
+  },
+  {
+   "id": "row-sessionchecked46-losatderivedcache",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session losatDerivedCache must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.losatDerivedCache.",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache"
+   ]
+  },
+  {
+   "id": "row-sessionchecked46-modes",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session modes holds a circular and a linear slice only.",
+   "web": "refused",
+   "note": "Admission row SessionChecked46.modes.",
+   "webClass": "R4"
+  },
+  {
+   "id": "row-sessionchecked46-orthogroupstate",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session orthogroupState must be an object when present.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.orthogroupState.",
+   "webRepairs": [
+    "session-field-dropped@orthogroupState"
+   ]
+  },
+  {
+   "id": "null-sessionchecked46-orthogroupstate",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session orthogroupState must be an object when present.",
+   "web": "loaded",
+   "note": "Admission row SessionChecked46.orthogroupState."
+  },
+  {
+   "id": "row-sessionchecked46-othermoderesult",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session otherModeResult must contain only a committed Result set.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.otherModeResult.",
+   "webRepairs": [
+    "session-part-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "null-sessionchecked46-othermoderesult",
+   "finding": "E-OD06: a value that holds nothing at an optional field is dropped with no row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session otherModeResult must contain only a committed Result set.",
+   "web": "loaded",
+   "note": "Admission row SessionChecked46.otherModeResult."
+  },
+  {
+   "id": "row-sessionchecked46-proteinidentitymanifest",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/proteinIdentityManifest",
+     "value": true
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid proteinIdentityManifest schema-2 artifact.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.proteinIdentityManifest.",
+   "webRepairs": [
+    "cache-entry-dropped@proteinIdentityManifest"
+   ]
+  },
+  {
+   "id": "row-sessionchecked46-renderrequest",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/renderRequest"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 46 requires a canonical renderRequest object.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.renderRequest.",
+   "webRepairs": [
+    "request-dropped@renderRequest"
+   ]
+  },
+  {
+   "id": "row-sessionchecked46-resources",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 46 requires a canonical resources object.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.resources.",
+   "webRepairs": [
+    "session-part-dropped@resources"
+   ]
+  },
+  {
+   "id": "row-sessionchecked46-results",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 40 requires a results array.",
+   "web": "repaired",
+   "note": "Admission row SessionChecked46.results.",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "row-sessionchecked46-version",
+   "finding": "admission-row",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/version",
+     "value": null
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version is required and must be an integer.",
+   "web": "refused",
+   "note": "Admission row SessionChecked46.version.",
+   "webClass": "R2"
+  },
+  {
+   "id": "k17-orthogroups-30",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroups",
+     "value": [
+      {
+       "id": "g1",
+       "members": []
+      }
+     ]
+    }
+   ],
+   "finding": "K17 (E-OD09): no writer stored top-level orthogroups; dropped as an unknown key",
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@orthogroups"
+   ]
+  },
+  {
+   "id": "tb6-unknown-top-level-key-30",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/bogus",
+     "value": 1
+    }
+   ],
+   "finding": "TB6 (E-OD03): a key no Session 27-30 writer wrote",
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@bogus"
+   ]
+  },
+  {
+   "id": "a7a-modes-30",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": {}
+     }
+    }
+   ],
+   "finding": "A7a, OV-638: modes below 46",
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@modes"
+   ]
+  },
+  {
+   "id": "a7a-clioptions-33",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/cliOptions",
+     "value": {
+      "a": 1
+     }
+    }
+   ],
+   "finding": "A7a, OV-638: cliOptions below 46",
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@cliOptions"
+   ]
+  },
+  {
+   "id": "a7a-modes-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": {}
+     }
+    }
+   ],
+   "finding": "A7a: modes below 46",
+   "python": "refuse",
+   "pythonMessage": "Session version 44 cannot contain modes.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@modes"
+   ]
+  },
+  {
+   "id": "a7a-othermoderesult-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/otherModeResult",
+     "value": "x"
+    }
+   ],
+   "finding": "A7a: otherModeResult below 46",
+   "python": "refuse",
+   "pythonMessage": "Session version 44 cannot contain otherModeResult.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@otherModeResult"
+   ]
+  },
+  {
+   "id": "a6c-files-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/files",
+     "value": {
+      "c_gb": null
+     }
+    }
+   ],
+   "finding": "A6c: files at 40+ (generated band row)",
+   "python": "refuse",
+   "pythonMessage": "Session version 44 cannot contain legacy files; use resources and webFiles.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@files"
+   ]
+  },
+  {
+   "id": "a7c-features-text-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/features",
+     "value": "x"
+    }
+   ],
+   "finding": "A7c: features of another kind",
+   "python": "refuse",
+   "pythonMessage": "Session features must be an object when present.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@features"
+   ]
+  },
+  {
+   "id": "a7c-features-branch-only-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/features/extractedFeatures",
+     "value": [
+      1
+     ]
+    }
+   ],
+   "finding": "A7c, J3: a development-branch feature field",
+   "python": "refuse",
+   "pythonMessage": "Session version 40 cannot contain derived feature payloads in features: extracte",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@features.extractedFeatures"
+   ]
+  },
+  {
+   "id": "a7c-orthogroupstate-text-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
+     "value": "x"
+    }
+   ],
+   "finding": "A7c: orthogroupState of another kind",
+   "python": "refuse",
+   "pythonMessage": "Session orthogroupState must be an object when present.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@orthogroupState"
+   ]
+  },
+  {
+   "id": "a7c-orthogroupstate-groups-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/orthogroupState",
+     "value": {
+      "groups": [
+       1
+      ]
+     }
+    }
+   ],
+   "finding": "A7c: derived orthogroup groups, no row (BA-OD93 a)",
+   "python": "refuse",
+   "pythonMessage": "Session version 40 cannot contain derived orthogroupState.groups.",
+   "web": "loaded"
+  },
+  {
+   "id": "a7e-losat-execution-unknown-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/ui/losatExecution",
+     "value": {
+      "bogus": 1
+     }
+    }
+   ],
+   "finding": "A7e: an unknown LOSAT execution key",
+   "python": "refuse",
+   "pythonMessage": "ui.losatExecution holds only the LOSAT execution settings.",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-replaced@ui.losatExecution.bogus"
+   ]
+  },
+  {
+   "id": "a7e-losat-execution-text-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/ui/losatExecution",
+     "value": "x"
+    }
+   ],
+   "finding": "A7e: LOSAT execution settings of another kind",
+   "python": "refuse",
+   "pythonMessage": "ui.losatExecution holds only the LOSAT execution settings.",
+   "web": "repaired",
+   "webRepairs": [
+    "setting-replaced@ui.losatExecution"
+   ]
+  },
+  {
+   "id": "a7f-retired-config-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/config",
+     "value": {
+      "form": {}
+     }
+    }
+   ],
+   "finding": "A7f: a retired home, no row",
+   "python": "refuse",
+   "pythonMessage": "Session version 46 keeps the Web draft of each mode in modes; it cannot contain ",
+   "web": "loaded"
+  },
+  {
+   "id": "a7f-retired-ui-canvaspadding-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/ui/canvasPadding",
+     "value": {
+      "top": 1
+     }
+    }
+   ],
+   "finding": "A7f: a retired ui home, no row",
+   "python": "refuse",
+   "pythonMessage": "Session version 46 keeps the Web draft of each mode in modes; it cannot contain ",
+   "web": "loaded"
+  },
+  {
+   "id": "a7d-modes-extra-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/radial",
+     "value": {}
+    }
+   ],
+   "finding": "A7d: a mode no writer wrote",
+   "python": "refuse",
+   "pythonMessage": "Session modes holds a circular and a linear slice only.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@modes.radial"
+   ]
+  },
+  {
+   "id": "a7d-slice-text-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes/linear",
+     "value": "x"
+    }
+   ],
+   "finding": "A7d: a slice of another kind",
+   "python": "refuse",
+   "pythonMessage": "Session modes.linear must be an object.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@modes.linear"
+   ]
+  },
+  {
+   "id": "a15-settings-only-results-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results",
+     "value": [
+      {
+       "name": "a.svg",
+       "content": "<svg/>"
+      }
+     ]
+    }
+   ],
+   "finding": "A15: Results in a settings-only Session; a file whose request is null and that holds Results reads as one whose request is missing (E-OD29)",
+   "python": "refuse",
+   "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
+   "web": "repaired",
+   "webRepairs": [
+    "request-dropped@renderRequest"
+   ]
+  },
+  {
+   "id": "ov860-request-null-44",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": null
+    }
+   ],
+   "finding": "OV-860: a null request of a Session 44 that holds Results reads as a missing one: the file loads as settings only with the request row (E-OD29)",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session requires an explicit Web input inventory.",
+   "web": "repaired",
+   "webRepairs": [
+    "request-dropped@renderRequest"
+   ]
+  },
+  {
+   "id": "ov860-request-null-44-linear",
+   "base": "web-44-linear",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": null
+    }
+   ],
+   "finding": "OV-860: a null request of a Session 44 that holds Results reads as a missing one: the file loads as settings only with the request row (E-OD29)",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session requires an explicit Web input inventory.",
+   "web": "repaired",
+   "webRepairs": [
+    "request-dropped@renderRequest"
+   ]
+  },
+  {
+   "id": "ov860-settings-only-no-inventory-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/webFiles/bindings"
+    }
+   ],
+   "finding": "OV-860: a settings-only Session without its Web input inventory reads the empty one, which binds nothing (E-OD06)",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session requires an explicit Web input inventory.",
+   "web": "loaded"
+  },
+  {
+   "id": "a15-settings-only-unbound-resource-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources/extra",
+     "value": {
+      "name": "x.tsv",
+      "type": "",
+      "lastModified": 0,
+      "data": "",
+      "size": 0
+     }
+    }
+   ],
+   "finding": "A15, J4: an unbound resource, no row",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session contains an unbound resource.",
+   "web": "loaded"
+  },
+  {
+   "id": "r4-settings-only-modes-null-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": null
+    }
+   ],
+   "finding": "R4: a settings-only Session whose settings hold nothing",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session requires an active Web configuration and mode.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "r4-settings-only-modes-text-46",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": "x"
+    }
+   ],
+   "finding": "R4: a settings-only Session whose settings cannot be read",
+   "python": "refuse",
+   "pythonMessage": "Session modes holds a circular and a linear slice only.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "row-sessionchecked46-losatcache",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache",
+     "value": true
+    }
+   ],
+   "finding": "admission-row",
+   "note": "E-OD05: a cache that is not read is dropped with an unlisted row; R4 still counts it.",
+   "python": "refuse",
+   "pythonMessage": "Session losatCache must be an object when present.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache"
+   ]
+  },
+  {
+   "id": "row-checkedlosatcache-entries",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache/entries",
+     "value": "x"
+    }
+   ],
+   "finding": "admission-row",
+   "note": "E-OD05: a cache that is not read is dropped with an unlisted row; R4 still counts it.",
+   "python": "refuse",
+   "pythonMessage": "Session losatCache.entries must be an array.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries"
+   ]
+  },
+  {
+   "id": "row-checkedlosatderivedcache-entries",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries",
+     "value": "x"
+    }
+   ],
+   "finding": "admission-row",
+   "note": "E-OD05: a cache that is not read is dropped with an unlisted row; R4 still counts it.",
+   "python": "refuse",
+   "pythonMessage": "Session losatDerivedCache.entries must be an array.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries"
+   ]
+  },
+  {
+   "id": "a6b-bindings-not-object-30",
+   "finding": "A6b: webFiles.bindings that is no object",
+   "base": "web-30",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/webFiles",
+     "value": {
+      "bindings": 5
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session webFiles.bindings must be an object.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@webFiles.bindings"
+   ]
+  },
+  {
+   "id": "a6b-bindings-schema-7-44",
+   "finding": "A6b: a binding schema no writer wrote",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/webFiles/bindings/schema",
+     "value": 7
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Unsupported Web file binding schema.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@webFiles.bindings"
+   ]
+  },
+  {
+   "id": "a6b-binding-missing-resource-44",
+   "finding": "A6b: a binding that names no resource",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/webFiles/bindings/c_gb",
+     "value": {
+      "resourceId": "zzz"
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Web file binding references a missing resource: zzz.",
+   "web": "repaired",
+   "webRepairs": [
+    "file-entry-dropped@webFiles.bindings.c_gb"
+   ]
+  },
+  {
+   "id": "a6b-binding-missing-resource-46",
+   "finding": "A6b: a binding that names no resource",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/webFiles/bindings/c_gb",
+     "value": {
+      "resourceId": "zzz"
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Web file binding references a missing resource: zzz.",
+   "web": "repaired",
+   "webRepairs": [
+    "file-entry-dropped@webFiles.bindings.c_gb"
+   ]
+  },
+  {
+   "id": "a8-resource-size-44",
+   "finding": "A8: a resource whose declared size is invalid",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources/record-1-genbank/size",
+     "value": -1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Invalid Web file binding resource payload.",
+   "web": "repaired",
+   "webRepairs": [
+    "file-entry-dropped@resources.record-1-genbank",
+    "file-entry-dropped@webFiles.bindings.c_gb",
+    "request-dropped@renderRequest"
+   ]
+  },
+  {
+   "id": "a8-resource-checksum-44",
+   "finding": "A8: a resource checksum that is no digest (recomputed)",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources/record-1-genbank/checksum",
+     "value": "abc"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Canonical resource 'record-1-genbank' is invalid: Embedded resource checksum does not matc",
+   "web": "loaded"
+  },
+  {
+   "id": "a8-resource-last-modified-44",
+   "finding": "A8: a resource lastModified out of range (recomputed)",
+   "base": "web-44-bound-file",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/resources/record-1-genbank/lastModified",
+     "value": -1
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
+  },
+  {
+   "id": "a7b-result-not-svg-44",
+   "finding": "A7b, A20: a Result that is no SVG",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/content",
+     "value": "x"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Each current Session Result must be a named plain SVG.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "a20-result-interactive-44",
+   "finding": "A20: an interactive Result",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/name",
+     "value": "x.interactive.svg"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Each current Session Result must be a named plain SVG.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "a7b-editorstate-missing-44",
+   "finding": "A7b, A9: Results without an editorState",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/editorState"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@editorState",
+    "feature-recovery-failed@editorState.featureCatalog"
+   ]
+  },
+  {
+   "id": "a9-catalog-schema-1-44",
+   "finding": "A9, OV-711: a feature catalog of another schema",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState/featureCatalog/schema",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session feature catalog must contain one version-compatible item per Result.",
+   "web": "repaired",
+   "webRepairs": [
+    "feature-recovery-failed@editorState.featureCatalog"
+   ]
+  },
+  {
+   "id": "a9-catalog-items-empty-44",
+   "finding": "A9, OV-711: a feature catalog that names no feature of its Results",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState/featureCatalog/items",
+     "value": []
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Session feature catalog must contain one version-compatible item per Result.",
+   "web": "repaired",
+   "webRepairs": [
+    "feature-recovery-failed@editorState.featureCatalog"
+   ]
+  },
+  {
+   "id": "a19-receipt-bad-44",
+   "finding": "A19: an alignment reset receipt of a Session without an alignment",
+   "base": "web-44-linear",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState/alignmentResetReceipt",
+     "value": {
+      "binding": "0000000000000000000000000000000000000000000000000000000000000000",
+      "directions": [],
+      "referenceDeltaX": null
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Alignment reset receipt is malformed or stale.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@editorState.alignmentResetReceipt"
+   ]
+  },
+  {
+   "id": "a19-receipt-circular-46",
+   "finding": "A19: an alignment reset receipt of a Circular Session",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/editorState/alignmentResetReceipt",
+     "value": {
+      "binding": "0000000000000000000000000000000000000000000000000000000000000000",
+      "directions": [],
+      "referenceDeltaX": null
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Alignment reset receipt is malformed or stale.",
+   "web": "repaired",
+   "webRepairs": [
+    "session-field-dropped@editorState.alignmentResetReceipt"
+   ]
+  },
+  {
+   "id": "annotation-warnings-text-44",
+   "finding": "OV-638: run metadata annotation warnings of another kind (re-derived)",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/runMetadata/annotationWarnings",
+     "value": "x"
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
+  },
+  {
+   "id": "annotation-warnings-text-33",
+   "finding": "OV-638: run metadata annotation warnings of another kind (re-derived)",
+   "base": "web-33",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/runMetadata",
+     "value": {
+      "annotationWarnings": "x"
+     }
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
+  },
+  {
+   "id": "a13-entry-duplicate-key-39",
+   "finding": "A13: a LOSAT cache entry whose key repeats an earlier one",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatCache/entries/1/key",
+     "value": "DUP"
+    },
+    {
+     "op": "set",
+     "path": "/losatCache/entries/0/key",
+     "value": "DUP"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Duplicate LOSAT cache key: 'DUP'.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[1]"
+   ]
+  },
+  {
+   "id": "a13-manifest-missing-39",
+   "finding": "A13: no protein identity manifest for the protein cache entries",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/proteinIdentityManifest"
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "Current protein LOSATP cache entries require proteinIdentityManifest.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatCache.entries[0]",
+    "cache-entry-dropped@losatCache.entries[1]",
+    "cache-entry-dropped@losatCache.entries[2]",
+    "cache-entry-dropped@losatCache.entries[3]",
+    "cache-entry-dropped@losatCache.entries[4]",
+    "cache-entry-dropped@losatCache.entries[5]",
+    "cache-entry-dropped@losatCache.entries[6]",
+    "cache-entry-dropped@losatCache.entries[7]",
+    "cache-entry-dropped@losatCache.entries[8]",
+    "cache-entry-dropped@losatCache.entries[9]",
+    "cache-entry-dropped@losatCache.entries[10]",
+    "cache-entry-dropped@losatCache.entries[11]",
+    "cache-entry-dropped@losatCache.entries[12]",
+    "cache-entry-dropped@losatCache.entries[13]",
+    "cache-entry-dropped@losatCache.entries[14]",
+    "cache-entry-dropped@losatCache.entries[15]",
+    "cache-entry-dropped@losatCache.entries[16]",
+    "cache-entry-dropped@losatCache.entries[17]",
+    "cache-entry-dropped@losatCache.entries[18]",
+    "cache-entry-dropped@losatCache.entries[19]",
+    "cache-entry-dropped@losatCache.entries[20]",
+    "cache-entry-dropped@losatCache.entries[21]",
+    "cache-entry-dropped@losatCache.entries[22]",
+    "cache-entry-dropped@losatCache.entries[23]",
+    "cache-entry-dropped@losatCache.entries[24]",
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ]
+  },
+  {
+   "id": "a20-result-malformed-svg-44",
+   "finding": "A20 (E-OD16): a Result whose SVG the composition transform cannot compose",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/content",
+     "value": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g></svg>"
+    }
+   ],
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "a20-result-script-44",
+   "finding": "A20 (E-OD16): a Result whose SVG holds only a script, which sanitation removes",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/content",
+     "value": "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"
+    }
+   ],
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "a20-result-malformed-svg-46",
+   "finding": "A20 (E-OD16): a Result whose SVG the composition transform cannot compose",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/results/0/content",
+     "value": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g></svg>"
+    }
+   ],
+   "python": "accept",
+   "web": "repaired",
+   "webRepairs": [
+    "session-part-dropped@results"
+   ]
+  },
+  {
+   "id": "e-od16-feature-identity-notice-44",
+   "finding": "E-OD16: a feature identity notice that names no Result (derived run metadata, dropped with no row)",
+   "base": "web-44",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/runMetadata/featureIdentityNotices",
+     "value": [
+      {
+       "recordKey": "r",
+       "biologicalFeatureId": "f",
+       "status": "absent",
+       "kinds": [
+        "placement"
+       ],
+       "resultIndex": 99
+      }
+     ]
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
+  },
+  {
+   "id": "e-od16-comparison-warnings-46",
+   "finding": "E-OD16: comparison warnings that are no list (derived run metadata, dropped with no row)",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/runMetadata/comparisonWarnings",
+     "value": {
+      "bogus": 1
+     }
+    }
+   ],
+   "python": "accept",
+   "web": "loaded"
+  },
+  {
+   "id": "ov864-cli-42-request-missing",
+   "base": "cli-42",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/renderRequest"
+    }
+   ],
+   "finding": "OV-864, E-OD21: a CLI Session 42 holds no Web settings, so when its request cannot be read every content part it holds is dropped (the request with a row, the Results, inputs and caches with the settings-only reading) and Load restores nothing (R4), as for the same file with a null request",
+   "python": "refuse",
+   "pythonMessage": "Session version 42 requires a canonical renderRequest object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov864-cli-42-request-unreadable",
+   "base": "cli-42",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": "x"
+    }
+   ],
+   "finding": "OV-864, E-OD21: a CLI Session 42 holds no Web settings, so when its request cannot be read every content part it holds is dropped (the request with a row, the Results, inputs and caches with the settings-only reading) and Load restores nothing (R4), as for the same file with a null request",
+   "python": "refuse",
+   "pythonMessage": "Session version 42 requires a canonical renderRequest object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov864-cli-42-request-null",
+   "base": "cli-42",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": null
+    }
+   ],
+   "finding": "OV-864, E-OD21: a CLI Session 42 holds no Web settings, so when its request cannot be read every content part it holds is dropped (the request with a row, the Results, inputs and caches with the settings-only reading) and Load restores nothing (R4), as for the same file with a null request",
+   "python": "refuse",
+   "pythonMessage": "Settings-only Session cannot contain biological sources.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov864-web-46-request-unreadable-empty-modes",
+   "base": "web-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/renderRequest",
+     "value": "x"
+    },
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {}
+    }
+   ],
+   "finding": "OV-864, E-OD21: a Web Session 46 whose request cannot be read loads as settings only; when its settings hold nothing Load restores nothing (R4)",
+   "python": "refuse",
+   "pythonMessage": "requires a canonical renderRequest object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "control-settings-only-47",
+   "finding": "control",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/version",
+     "value": 47
+    }
+   ],
+   "python": "accept",
+   "web": "loaded",
+   "note": "A settings-only Session 47 as the Web's Save writes it (null request, settings present)."
+  },
+  {
+   "id": "ov865-settings-only-46-slices-unreadable",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": 5,
+      "linear": 5
+     }
+    }
+   ],
+   "finding": "OV-865: R4 counts a part whose every held member was dropped (the two drawing slices of `modes`) or that holds nothing below its members, as it counts a part dropped whole: Load restores nothing of this settings-only file",
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular must be an object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov865-settings-only-46-one-slice-unreadable",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": 5
+     }
+    }
+   ],
+   "finding": "OV-865: R4 counts a part whose every held member was dropped (the two drawing slices of `modes`) or that holds nothing below its members, as it counts a part dropped whole: Load restores nothing of this settings-only file",
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular must be an object.",
+   "web": "refused",
+   "webClass": "R4"
+  },
+  {
+   "id": "ov865-settings-only-46-slices-null",
+   "base": "settings-only-46",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/modes",
+     "value": {
+      "circular": null,
+      "linear": null
+     }
+    }
+   ],
+   "finding": "OV-865: R4 counts a part whose every held member was dropped (the two drawing slices of `modes`) or that holds nothing below its members, as it counts a part dropped whole: Load restores nothing of this settings-only file",
+   "python": "refuse",
+   "pythonMessage": "Session modes.circular must be an object.",
+   "web": "refused",
+   "webClass": "R4"
   }
  ]
 }

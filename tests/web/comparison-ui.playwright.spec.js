@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { answerLoadRepairs, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
 const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json';
 
@@ -526,6 +526,11 @@ test('imported comparison resolutions are explicit and create one History entry 
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(decisionRequiredComparisonSession()))
   });
+  // Load lists the comparison that names a resource the Session lacks (OV-951);
+  // the Comparisons panel still asks for a decision after Load.
+  await answerLoadRepairs(page, [
+    'Settings: renderRequest.comparisons[0] names a file or record this Session does not hold; it is left out.'
+  ]);
   await expectSessionLoadedWithoutWarnings(page);
   await expect(resolution).toContainText('Saved comparison needs a decision');
   await expect(resolution).toContainText('missing a required resource');

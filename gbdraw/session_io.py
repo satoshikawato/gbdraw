@@ -96,6 +96,13 @@ CURRENT_FEATURE_CATALOG_SCHEMA = 5
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
     44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
 }
+# The fields of a record display draft row (Session 41+), the two that Session
+# 44 added, and the fields of its anchor intent.
+RECORD_DISPLAY_DRAFT_FIELDS = frozenset({"sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate"})
+TYPED_RECORD_DISPLAY_DRAFT_FIELDS = frozenset({"reverseComplementOverride", "anchorIntent"})
+RECORD_ANCHOR_INTENT_FIELDS = frozenset(
+    {"schema", "recordKey", "biologicalFeatureId", "placement", "anchor", "offsetBp", "orientForward"}
+)
 # The field sets below are the keys of the Session document's declaration
 # (gbdraw.session_contract).
 # Every top-level key a Session of a supported version may hold.
@@ -822,9 +829,10 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     config = session.get("config", {})
     if not isinstance(config, Mapping):
         return
+    ui = session.get("ui")
     _validate_display_placement_draft_config(
         config,
-        mode=(session.get("renderRequest") or {}).get("mode") or session.get("ui", {}).get("mode"),
+        mode=(session.get("renderRequest") or {}).get("mode") or (ui.get("mode") if isinstance(ui, Mapping) else None),
         scoped=True,
         current=session.get("version", 0) >= TYPED_DRAFT_SESSION_MIN_VERSION,
     )
@@ -833,7 +841,7 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
 def _validate_display_placement_draft_config(
     config: Mapping[str, Any],
     *,
-    mode: str,
+    mode: object,
     scoped: bool,
     current: bool,
 ) -> None:
@@ -849,13 +857,11 @@ def _validate_display_placement_draft_config(
     drafts = config.get("recordDisplayDrafts", [])
     if not isinstance(drafts, list):
         raise ValidationError("config.recordDisplayDrafts must be an array.")
-    expected_fields = {
-        "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
-    }
+    expected_fields = set(RECORD_DISPLAY_DRAFT_FIELDS)
     if scoped:
         expected_fields.add("scope")
     if current:
-        expected_fields |= {"reverseComplementOverride", "anchorIntent"}
+        expected_fields |= TYPED_RECORD_DISPLAY_DRAFT_FIELDS
     keys = set()
     for row in drafts:
         if not isinstance(row, Mapping) or set(row) != expected_fields:
@@ -875,14 +881,10 @@ def _validate_display_placement_draft_config(
                 )
             intent = row["anchorIntent"]
             if intent is not None:
-                intent_fields = {
-                    "schema", "recordKey", "biologicalFeatureId", "placement",
-                    "anchor", "offsetBp", "orientForward",
-                }
                 offset = intent.get("offsetBp") if isinstance(intent, Mapping) else None
                 if (
                     not isinstance(intent, Mapping)
-                    or set(intent) != intent_fields
+                    or set(intent) != RECORD_ANCHOR_INTENT_FIELDS
                     or intent.get("schema") != 1
                     or isinstance(intent.get("schema"), bool)
                     or not isinstance(intent.get("recordKey"), str)
@@ -3669,7 +3671,9 @@ def migrate_persisted_web_option_values(config: object) -> object:
     Linear track layout ``spreadout``/``tuckin`` becomes ``above``/``below``,
     label placement ``on_feature`` becomes ``above_feature``, and multi-record
     size ``sqrt`` becomes ``auto``; any other value must be a current one. The
-    twin of the option-value steps of ``migratePersistedWebOptionValues``.
+    twin of the Web's strict readers (``migratePersisted*`` in
+    ``current-option-values.js``); Web Load reads these values with its reader
+    table, which reads an unknown one as the default with a row (E-OD02).
     """
 
     if not isinstance(config, Mapping):
@@ -3764,7 +3768,8 @@ def migrate_imported_linear_track_slots(config: object, source_version: object) 
     A Session up to 32 saved them with schema-1 meaning whatever it stored;
     later ones state their schema. A schema-1 features slot loses its height and
     spacing, and every slot gets its own ``params`` object. The twin of
-    ``migrateImportedLinearTrackSlots`` and ``migrateLinearTrackSlotsToCurrentSchema``.
+    ``migrateImportedLinearTrackSlots`` and ``migrateLinearTrackSlotsToCurrentSchema``;
+    a stack it refuses, Web Load reads with ``readImportedTrackSlots`` (E-OD02).
     """
 
     adv = config.get("adv") if isinstance(config, Mapping) else None

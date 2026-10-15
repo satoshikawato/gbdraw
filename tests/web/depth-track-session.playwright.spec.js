@@ -1622,7 +1622,7 @@ ORIGIN
     format: 'gbdraw-session',
     version: 33,
     renderRequest: readableRequest,
-    resources: recordResources,
+    resources: {},
     config: {
       adv: {
         linear_track_slots_schema_version: '1',
@@ -1635,7 +1635,11 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidSlotSchemaSession))
   });
-  await expectSchemaRejection(2, 'TRACK_SCHEMA');
+  // The slot list of an unknown schema is read in the current schema (OV-758),
+  // so it no longer refuses; the request names a record file the Session does
+  // not hold, and a Session 31 to 41 keeps nothing without its request: the
+  // Session-fields error, before the slot reading changes anything.
+  await expectSchemaRejection(2, 'FIELDS');
   expect(await snapshot()).toEqual(before);
 
   const unknownAuthoritySession = {
@@ -1667,7 +1671,11 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(unknownAuthoritySession))
   });
-  await expectSchemaRejection(3, 'SESSION_FIELDS');
+  // An unknown top-level field is not a refusal class (receipt 〔拒否〕): Load
+  // lists it before it changes anything (BA-D25), and Cancel keeps the work.
+  await answerLoadRepairs(page, ['Session file: the field unknownSemanticState could not be read and was left out.'], 'cancel');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
+  expect(await page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(2);
   expect(await snapshot()).toEqual(before);
 
   const invalidLegacyConfig = {
@@ -1681,8 +1689,11 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidLegacyConfig))
   });
-  await expectSchemaRejection(4, 'TRACK_SCHEMA');
-  expect(await snapshot()).toEqual(before);
+  // A Circular slot list without a schema version is an older file's list:
+  // the configuration loads with the older-file notice and no dialog.
+  await expect(page.locator('[data-app-notice]')).toContainText('Configuration loaded from an older gbdraw.', { timeout: 120_000 });
+  expect(await page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(2);
+  expect(dialogs).toEqual([]);
 
   const repairedCanonicalSession = {
     ...unknownAuthoritySession,

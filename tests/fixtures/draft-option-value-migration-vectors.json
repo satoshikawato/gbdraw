@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Option-value steps of migratePersistedWebOptionValues (services/config.js), Sessions 27-39; Python twin migrate_persisted_web_option_values.",
+  "description": "Session 27-39 option values: expected or error is Python twin migrate_persisted_web_option_values (the Web strict readers migratePersisted* of services/current-option-values.js); load is what Web Load reads where it repairs (the reader table of services/config-field-readers.js, with its rows).",
   "cases": [
     {
       "name": "retired Linear track layouts become above and below",
@@ -141,7 +141,17 @@
           }
         }
       },
-      "error": "Linear track layout must be one of: above, middle, below."
+      "error": "Linear track layout must be one of: above, middle, below.",
+      "load": {
+        "config": {
+          "form": {
+            "linear_track_layout": "middle"
+          }
+        },
+        "rows": [
+          "setting-replaced@config.form.linear_track_layout"
+        ]
+      }
     },
     {
       "name": "an unknown label placement is refused",
@@ -152,7 +162,17 @@
           }
         }
       },
-      "error": "Linear label placement must be one of: auto, above_feature."
+      "error": "Linear label placement must be one of: auto, above_feature.",
+      "load": {
+        "config": {
+          "adv": {
+            "label_placement": "auto"
+          }
+        },
+        "rows": [
+          "setting-replaced@config.adv.label_placement"
+        ]
+      }
     },
     {
       "name": "an unknown multi-record size mode is refused",
@@ -163,7 +183,17 @@
           }
         }
       },
-      "error": "Circular multi-record size mode must be one of: auto, linear, equal."
+      "error": "Circular multi-record size mode must be one of: auto, linear, equal.",
+      "load": {
+        "config": {
+          "adv": {
+            "multi_record_size_mode": "auto"
+          }
+        },
+        "rows": [
+          "setting-replaced@config.adv.multi_record_size_mode"
+        ]
+      }
     },
     {
       "name": "a draft without these fields is unchanged",

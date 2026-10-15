@@ -196,7 +196,7 @@ const WRITERS = {
   'app/app-setup.js': { removeCircularDepthTrack: 'reconcile', removeLinearDepthTrack: 'reconcile' },
   'app/feature-editor/placement-actions.js': { changeLayoutSetting: 'transition', restoreTrackLayout: 'transition' },
   'app/run-analysis.js': { runAnalysisInternal: 'reconcile' },
-  'services/config.js': { applyConfigData: 'restore', migratePersistedWebOptionValues: 'payload',
+  'services/config.js': { applyConfigData: 'restore',
     reconcileDepthTrackStateAfterSessionFiles: 'restore', restoreStoredNonCanonicalConfig: 'payload' },
   'services/gallery-session-migration.js': { migratePersistedGalleryConfig: 'payload' },
   'services/reset.js': { resetSettings: 'restore' }

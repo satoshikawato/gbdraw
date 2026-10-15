@@ -6,7 +6,9 @@
 // top-level request and `otherModeResult` (OV-670).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
@@ -343,11 +345,13 @@ test('a request whose comparisons Load holds is promoted like any other, and the
       'PRESERVED_READ_ONLY', []],
     ['se06 fixture', () => read('tests/fixtures/sessions/se06-main-linear-blast-cli.v42.gbdraw-session.json.gz'),
       'PRESERVED_READ_ONLY', []],
+    // A held comparison's reference to a resource the Session lacks is dropped
+    // with its row (OV-899): no Save could write it; the notice is as before.
     ['dangling comparison', () => {
       const session = gallery('BGC0000708-BGC0000713');
       session.renderRequest.comparisons[0].resourceId = 'missing';
       return session;
-    }, 'DECISION_REQUIRED', [], missing],
+    }, 'DECISION_REQUIRED', ['request-reference-dropped'], missing],
     ['unknown comparison kind', () => {
       const session = gallery('BGC0000708-BGC0000713');
       session.renderRequest.comparisons[0].kind = 'other';
@@ -508,6 +512,23 @@ test('a schema 2 request takes the rows a schema 9 one takes: an empty tracks ob
   assert.deepEqual(tracksRows(fixture('feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz')), dropped);
 });
 
+test('a schema 1 or 2 request whose record names a resource the Session lacks is unreadable (K22), and its Session 31-41 is refused (OV-894, E-OD30)', async () => {
+  const name = 'scale-interval-zero-circular-web.v33.gbdraw-session.json.gz';
+  for (const schema of [1, 2]) {
+    const session = fixture(name);
+    session.renderRequest.schema = schema;
+    delete session.resources['record-1-genbank'];
+    assert.deepEqual(readStoredRenderRequest(session.renderRequest, contextOf(session)),
+      { kind: 'request-dropped', path: 'renderRequest', reason: 'unknown-resource' }, String(schema));
+  }
+  const missing = fixture(name);
+  delete missing.resources['record-1-genbank'];
+  await assertRefusedUnread(missing, 'record resource missing');
+  const none = fixture(name);
+  none.resources = null;
+  await assertRefusedUnread(none, 'resources null');
+});
+
 test('a request whose schema is no integer is unreadable (K22): settings only with its Web settings, refused without them; an integer the app does not read stays a Session-format error (OV-863)', async () => {
   for (const request of UNREADABLE_REQUESTS.slice(1)) {
     const session = gallery('lambda_basic_linear');
@@ -528,6 +549,41 @@ test('a request whose schema is no integer is unreadable (K22): settings only wi
     session.renderRequest.schema = schema;
     const { result } = await load(session);
     assert.deepEqual([result.error?.code, result.error?.context?.reason], ['INPUT_INVALID', 'SESSION_FORMAT'], String(schema));
+  }
+});
+
+// R4 has one owner (E-OD22, C-OD27): a Session 42, 44 or 47 the CLI or the
+// Python API wrote keeps no settings apart from its request, so when Load
+// drops that request at its root (K22), `restoresNothing` refuses the file.
+test('R4 alone refuses a CLI or Python API Session 42, 44 or 47 whose request is missing, unreadable or of no integer schema: nothing restored, nothing committed (E-OD21, E-OD22)', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gbdraw-cli-47-'));
+  let cli47;
+  try {
+    const file = join(directory, 'cli.gbdraw-session.json.gz');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', fileURLToPath(new URL('tests/test_inputs/NC_001416.gb', REPO)),
+      '-o', join(directory, 'cli'), '-f', 'svg', '--session_output', file], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: fileURLToPath(REPO) }, stdio: 'pipe'
+    });
+    cli47 = JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  const sessions = [
+    ['se08-main-linear-cli.v42', fixture('se08-main-linear-cli.v42.gbdraw-session.json.gz')],
+    ['scale-interval-zero-circular-cli.v44', fixture('scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz')],
+    ['cli.v47', cli47]
+  ];
+  assert.equal(cli47.version, 47);
+  for (const [name, base] of sessions) {
+    assert.ok(!Object.hasOwn(base, 'config') && !Object.hasOwn(base, 'modes'), name);
+    const missing = clone(base);
+    delete missing.renderRequest;
+    await assertRefusedUnread(missing, `${name} missing`);
+    for (const request of [...UNREADABLE_REQUESTS, 'x', 5, []]) {
+      const session = clone(base);
+      session.renderRequest = clone(request);
+      await assertRefusedUnread(session, `${name} ${JSON.stringify(request)}`);
+    }
   }
 });
 

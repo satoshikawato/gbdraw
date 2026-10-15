@@ -5,12 +5,12 @@ globalThis.window = { Vue: {
   computed: getter => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { buildConfigData, applyConfigData } = await import('../../gbdraw/web/js/services/config.js');
+const { buildConfigData, applyCapturedConfigData } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const snapshots = createHistorySnapshotService({
-  state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData
+  state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
 });
 const history = createHistoryManager({
   buildIntent: snapshots.buildHistoryIntent, applyIntent: snapshots.applyHistoryIntent,
@@ -36,6 +36,24 @@ for (const [domain, key, first, second] of [
   assert.equal(state.activeDrawing()[domain][key], first, `${domain}.${key}: Redo explicit value`);
 }
 
+// R11, TK-12: a Width the row shows as invalid is a draft the app wrote, so
+// Undo and Redo install it as captured; only Load reads a file's stack.
+{
+  const drawing = state.drawings.circular;
+  const slot = () => drawing.adv.circular_track_slots.find(({ id }) => id === 'gc_content');
+  const original = structuredClone(slot().width ?? null);
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Width draft', () => { slot().width = { value: 'bad', unit: 'px' }; });
+  await history.runUndoable('Width unit', () => { slot().width = { value: 'bad', unit: 'factor' }; });
+  await history.undo();
+  assert.deepEqual(slot().width, { value: 'bad', unit: 'px' }, 'Undo keeps the invalid draft and its unit');
+  await history.redo();
+  assert.deepEqual(slot().width, { value: 'bad', unit: 'factor' }, 'Redo keeps the invalid draft');
+  await history.undo();
+  await history.undo();
+  assert.deepEqual(slot().width ?? null, original);
+}
+
 // Record selection: a toggle is one intent step, and Undo and Redo restore
 // the OFF records of the drawing it was made in.
 {
@@ -59,7 +77,7 @@ for (const [domain, key, first, second] of [
   const config = await import('../../gbdraw/web/js/services/config.js');
   const { RECORD_SETTINGS_DEFAULTS, removeRecordEdits } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
   const editorSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildFeatureStateData: config.buildFeatureStateData, applyFeatureStateData: config.applyFeatureStateData,
     buildEditorStateData: config.buildEditorStateData, applyEditorStateData: config.applyEditorStateData
   });
@@ -103,7 +121,7 @@ for (const [domain, key, first, second] of [
   delete drawing.featureOverrides[key];
 }
 
-applyConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
+applyCapturedConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
 assert.equal(Object.hasOwn(state.activeDrawing().form, 'unknown'), false);
 assert.equal({}.polluted, undefined);
 
@@ -186,7 +204,7 @@ console.log('History restores nullable config values and preserves key guards.')
   assert.strictEqual(liveCatalog(), catalog);
 
   const artifactSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildEditorStateData, applyEditorStateData
   });
   const artifactHistory = createHistoryManager({
@@ -255,7 +273,7 @@ console.log('History restores nullable config values and preserves key guards.')
     config: buildConfigData(state.activeDrawing()), layoutPreferences: buildUiStateData(state.activeDrawing()).layoutPreferences
   });
   const restoreSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
   });
   const restoreHistory = createHistoryManager({

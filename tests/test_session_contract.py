@@ -8,14 +8,15 @@ from typing import Any, Iterator
 import pytest
 
 from gbdraw import session_contract, session_drawings, session_io
-from gbdraw.contract_shapes import typed_dict_shape, violations
+from gbdraw.contract_shapes import shape_violations, typed_dict_shape, violations
 from gbdraw.exceptions import ValidationError
 from gbdraw.session import build_session_document, upgrade_session_document
-from gbdraw.session_contract import describe_session_document, keys_of
+from gbdraw.session_contract import describe_session_admission, describe_session_document, keys_of
 from gbdraw.session_io import CURRENT_SESSION_VERSION, SESSION_FORMAT, validate_session
 from gbdraw.session_request_codec import describe_canonical_request
 from gbdraw.web_support.mode_scoped_settings import DIAGRAM_MODES, MODE_SCOPED_SETTINGS
 from tests.test_canonical_request_shape import _request
+from tests.test_session_admission_vectors import VECTORS, _edited
 from tests.utils.contract_shape_check import REPO_ROOT, load_json, stored_json_files
 from tests.utils.two_mode_session import two_mode_session
 
@@ -194,3 +195,179 @@ def test_a_typed_dict_is_described_with_its_optional_keys() -> None:
     assert shape["optional"] == ["sessionExportable"] and not shape["open"]
     assert shape["fields"]["args"] == {"kind": "array", "items": {"kind": "string"}}
     assert typed_dict_shape(session_contract.SessionWebFiles, open=True)["open"]
+
+
+# --- The admission description: what validate_session proves per version band ---
+
+ADMISSION = describe_session_admission()
+ADMISSION_TYPES: dict[str, Any] = ADMISSION["types"]
+BAND_ROOT = {version: band["root"] for band in ADMISSION["bands"] for version in band["versions"]}
+# Supported versions with no stored Session that Python accepts: no tracked file
+# was written at 28; the tracked files at 27 are test inputs of 15 MB and more;
+# the Gallery Sessions of `main` at 31 and 32 are refused by the Web's Load
+# (its config override check reads their stored config unmigrated).
+VERSIONS_WITHOUT_A_BASE = {27, 28, 31, 32}
+# One value of each JSON kind, and an array and an object that hold a value.
+_CANDIDATES: tuple[object, ...] = (None, True, 1, 0.5, "x", [], {}, [1], {"keyNoWriterWrites": 1})
+_ABSENT = object()
+
+
+def _admission_problems(session: dict[str, Any], root: str | None = None) -> list[str]:
+    """Where ``session`` leaves the band of its version, or of the band ``root``."""
+    shape = ADMISSION_TYPES[root or BAND_ROOT[session["version"]]]
+    return violations(session, shape, ADMISSION_TYPES, "")
+
+
+def _admission_bases() -> list[tuple[str, dict[str, Any]]]:
+    """Per supported version the smallest stored Session that Python accepts, a
+    Session with a Result set of each mode and drafts, and every vector Python accepts."""
+
+    smallest: dict[int, tuple[int, str, dict[str, Any]]] = {}
+    for path in stored_json_files():
+        if path.stat().st_size > 1_000_000:
+            continue  # a base is small; this keeps the Gallery's large Sessions out
+        session = load_json(path)
+        if not isinstance(session, dict) or session.get("format") != SESSION_FORMAT:
+            continue
+        try:
+            validate_session(session)
+        except ValidationError:
+            continue
+        size = path.stat().st_size
+        if session["version"] not in smallest or size < smallest[session["version"]][0]:
+            smallest[session["version"]] = (size, str(path.relative_to(REPO_ROOT)), session)
+    two_mode = two_mode_session()
+    two_mode["legacyArtifacts"] = {}
+    two_mode["modes"]["circular"].setdefault("features", {})["featureOverrides"] = {
+        '["record-1","feature-1"]': {
+            "recordKey": "record-1", "biologicalFeatureId": "feature-1", "featureVisibility": "off",
+            "labelVisibility": None, "labelText": None, "labelSourceText": None,
+        }
+    }
+    return [
+        *((name, session) for _size, name, session in smallest.values()),
+        ("two-mode Session with drafts", two_mode),
+        *((f"vector {vector['id']}", _edited(vector)) for vector in VECTORS if vector["python"] == "accept"),
+    ]
+
+
+def _leaves_shape(value: object, shape: dict[str, Any]) -> bool:
+    return bool(shape_violations(value, shape, ADMISSION_TYPES, ""))
+
+
+def _admission_mutations(
+    value: object, shape: dict[str, Any], path: tuple[str | int, ...] = ()
+) -> Iterator[tuple[tuple[str | int, ...], str | int, object]]:
+    """Each edit that takes ``value`` out of ``shape``, found by walking the
+    description: (path of the container, key, new value or ``_ABSENT``).
+    A value of another kind or ``null``, an absent required field, and an
+    unknown key of a closed object; two items of an array or a record."""
+
+    kind = shape["kind"]
+    if kind == "ref":
+        yield from _admission_mutations(value, ADMISSION_TYPES[shape["name"]], path)
+        return
+    if kind == "union":
+        option = next((option for option in shape["options"] if not _leaves_shape(value, option)), None)
+        if option is not None:
+            yield from _admission_mutations(value, option, path)
+        return
+
+    def field(key: str | int, item: object, item_shape: dict[str, Any]) -> Iterator[
+        tuple[tuple[str | int, ...], str | int, object]
+    ]:
+        yield from ((path, key, candidate) for candidate in _CANDIDATES if _leaves_shape(candidate, item_shape))
+        yield from _admission_mutations(item, item_shape, (*path, key))
+
+    if kind == "array" and isinstance(value, list):
+        for index, item in enumerate(value[:2]):
+            yield from field(index, item, shape["items"])
+    elif kind == "record" and isinstance(value, dict):
+        for key, item in list(value.items())[:2]:
+            yield from field(key, item, shape["values"])
+    elif kind == "object" and isinstance(value, dict):
+        for key, item_shape in shape["fields"].items():
+            if key in value:
+                yield from field(key, value[key], item_shape)
+                if key not in shape["optional"]:
+                    yield path, key, _ABSENT
+            else:
+                yield from ((path, key, candidate) for candidate in _CANDIDATES if _leaves_shape(candidate, item_shape))
+        if not shape["open"]:
+            yield path, "keyNoWriterWrites", 1
+
+
+def test_every_supported_version_has_an_admission_band_and_a_base() -> None:
+    assert sorted(BAND_ROOT) == sorted(session_io.SUPPORTED_SESSION_VERSIONS)
+    assert [band["minVersion"] for band in ADMISSION["bands"]] == [
+        min(session_io.SUPPORTED_SESSION_VERSIONS), session_io.CANONICAL_SESSION_MIN_VERSION,
+        session_io.CURRENT_ARTIFACT_SESSION_MIN_VERSION, session_io.CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+        session_io.MODE_SCOPED_SESSION_MIN_VERSION,
+    ]
+    based = {session["version"] for _name, session in _admission_bases()}
+    assert session_io.SUPPORTED_SESSION_VERSIONS - based <= VERSIONS_WITHOUT_A_BASE
+    assert [band["root"] for band in ADMISSION["bands"] if not based & set(band["versions"])] == []
+
+
+def test_stored_sessions_python_accepts_are_inside_their_band() -> None:
+    problems = {}
+    for name, session in _stored_sessions():
+        try:
+            validate_session(session)
+        except ValidationError:
+            continue
+        if found := _admission_problems(session):
+            problems[name] = found
+    assert problems == {}
+
+
+def test_a_session_outside_its_band_is_one_python_refuses() -> None:
+    """Soundness (PLAN 9.3): for every base and every edit the description
+    makes, a violation implies that validate_session refuses the document."""
+
+    accepted: list[str] = []
+    crashed: list[str] = []
+    edits = 0
+    for name, session in _admission_bases():
+        validate_session(session)
+        assert _admission_problems(session) == [], name
+        band = BAND_ROOT[session["version"]]
+        for path, key, value in list(_admission_mutations(session, {"kind": "ref", "name": band})):
+            container: Any = session
+            for step in path:
+                container = container[step]
+            before = container[key] if (isinstance(container, list) or key in container) else _ABSENT
+            if value is _ABSENT:
+                del container[key]
+            else:
+                container[key] = deepcopy(value)
+            where = f"{name}: {'/'.join(map(str, (*path, key)))} = {'(absent)' if value is _ABSENT else value!r}"
+            try:
+                assert _admission_problems(session, band), where
+                edits += 1
+                validate_session(session)
+                accepted.append(where)
+            except ValidationError:
+                pass
+            except (AttributeError, TypeError, KeyError, ValueError) as error:
+                crashed.append(f"{where}: {type(error).__name__}")
+            finally:
+                if before is _ABSENT:
+                    del container[key]
+                else:
+                    container[key] = before
+    assert accepted == []
+    assert crashed == []
+    assert edits > 500
+
+
+def test_each_default_of_the_admission_description_fits_its_field() -> None:
+    defaulted = []
+    for name, shape in ADMISSION_TYPES.items():
+        for field, value in shape.get("defaults", {}).items():
+            defaulted.append(f"{name}.{field}")
+            assert not shape_violations(value, shape["fields"][field], ADMISSION_TYPES, field), field
+    assert sorted(defaulted) == sorted(
+        [f"SessionChecked{minimum}.resources" for minimum in (31, 39, 40, 46)]
+        + [f"SessionChecked{minimum}.{field}" for minimum in (40, 46) for field in ("results", "editorState")]
+    )

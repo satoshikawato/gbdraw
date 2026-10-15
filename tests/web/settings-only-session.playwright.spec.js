@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, answerLoadRepairs, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 
@@ -216,7 +216,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
   }
 });
 
-test('settings-only Load replaces existing work and rejected candidates preserve the complete prior Session', async ({ page }, testInfo) => {
+test('settings-only Load replaces existing work, and canceled or refused candidates preserve the complete prior Session', async ({ page }, testInfo) => {
   test.setTimeout(1_800_000);
   page.setDefaultTimeout(20000);
   page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'Full control' : undefined));
@@ -259,24 +259,42 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   await assertCoherent(visual, 'prior valid Session');
   // A Session 47 with no `renderRequest` key loads as settings only with a
   // row (K22, OV-785; tests/web/stored-request-read.test.mjs), so it is not here.
+  // Only the receipt's refusal classes refuse (〔拒否〕: a newer version); a
+  // file Load can read in part lists what it cannot restore before it changes
+  // anything (BA-D25), and Cancel keeps the prior Session. A retired home that
+  // the mode slice fills is dropped with no row (E-OD03), so that file loads as
+  // the same Session.
+  const unbound = slot => `Input files: 1 entry of webFiles.bindings.${slot} could not be read and was dropped.`;
+  const requestDropped = 'Saved diagram: the settings of the saved diagram (renderRequest) could not be read.'
+    + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
   const cases = [
-    ['null-request-with-result', d => { d.renderRequest = null; }, { field: 'schema' }],
-    ['resource', d => { d.resources = {}; }, { field: 'schema' }],
-    ['config', d => { d.modes.circular.config.form = []; }, { field: 'schema' }],
-    ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, { field: 'schema' }],
+    // A null request of a file that holds Results reads as a missing one (E-OD29).
+    ['null-request-with-result', d => { d.renderRequest = null; }, [requestDropped]],
+    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]],
+    ['config', d => { d.modes.circular.config.form = []; }, ['Settings: the value "[]" (modes.circular.config.form) cannot be used; its default is used.']],
+    ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
     ['version', d => { d.version = 999; }, { field: 'schema' }],
     // A Session 46 holds the draft in `modes` only (Session format).
-    ['retired-config', d => { d.config = structuredClone(d.modes.circular.config); }, { field: 'schema' }]
+    ['retired-config', d => { d.config = structuredClone(d.modes.circular.config); }, 'Session loaded']
   ];
-  for (const [name, mutate, error] of cases) {
+  for (const [name, mutate, expected] of cases) {
     const candidate = structuredClone(full.document);
     mutate(candidate);
     const file = testInfo.outputPath(`${name}.json`);
     await fs.writeFile(file, JSON.stringify(candidate));
-    const rejection = await loadFile(page, file, error);
-    expect(await snapshot(page), `${name}: complete state at failed Load completion`).toEqual({ ...before, error: rejection });
-    const after = await capture(page, testInfo, `rejected-${name}`);
-    await assertCoherent(after, `${name}: rejected Load`);
+    let error = null;
+    if (Array.isArray(expected)) {
+      await page.locator('input[accept^=".json,"]').setInputFiles(file);
+      await answerLoadRepairs(page, expected, 'cancel');
+      // The Cancel click leaves the pointer over the diagram; its hover is not Session state.
+      await page.mouse.move(0, 0);
+      await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+    } else {
+      error = (await loadFile(page, file, expected)) ?? null;
+    }
+    expect(await snapshot(page), `${name}: complete state at Load completion`).toEqual({ ...before, error });
+    const after = await capture(page, testInfo, `kept-${name}`);
+    await assertCoherent(after, `${name}: canceled, refused or same Load`);
     expect(after.completed.selected).toEqual(visual.completed.selected);
   }
   const priorActivity = await getDiagramWorkerActivity(page);

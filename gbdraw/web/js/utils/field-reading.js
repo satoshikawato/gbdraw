@@ -148,3 +148,16 @@ export const changedLeaves = (stored, read, at = '') => {
   }
   return keepsMeaning(stored, read) ? [] : [{ at, stored, used: read }];
 };
+
+/**
+ * Records in `losses` a stored value a reader replaced with `used`, unless the
+ * stored value was unset or `used` keeps its meaning (OV-758: the track-slot
+ * readers report what they replace this way).
+ * @param {FieldLeaf[] | null | undefined} losses
+ * @param {string} at
+ * @param {unknown} stored
+ * @param {unknown} used
+ */
+export const noteReplacedLeaf = (losses, at, stored, used) => {
+  if (losses && !isUnsetValue(stored) && !keepsMeaning(stored, used)) losses.push({ at, stored, used });
+};
