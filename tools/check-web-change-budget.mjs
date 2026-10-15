@@ -499,7 +499,8 @@ const DESIGN_RULE_ALLOWLIST_COMPARISONS = {
 };
 const isPythonAllowlistKind = (kind) => kind.startsWith('py-');
 // A JSON list of entries with ids: `json-entries` compares each entry's text,
-// `json-ids` only the ids (a shrink-only id set whose rows may change).
+// `json-ids` the ids and the length of each row's lists (a shrink-only id set
+// whose lists only shrink; a renamed item and the other fields may change).
 const JSON_ALLOWLIST_KINDS = new Set(['json-entries', 'json-ids']);
 const parseDesignRuleGuardRegistry = (source) => {
   const errors = [];
@@ -820,6 +821,12 @@ const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && 
 const mapObjectValues = (value, convert) => Object.fromEntries(
   Object.entries(value).map(([key, item]) => [key, convert(item)])
 );
+// A JSON entry's list items as slots `field#index`: a further item is a new
+// slot and a renamed one keeps its slot (R9: an owner added to a twin row is
+// authority-only, a renamed owner is not).
+const listSlots = (text) => Object.fromEntries(Object.entries(JSON.parse(text))
+  .filter(([, item]) => Array.isArray(item))
+  .flatMap(([field, items]) => items.map((_item, index) => [`${field}#${index}`, ''])));
 // The literal of one registered allowlist in the shape its comparison reads:
 // a path -> names map compares as a writer-map without categories, and a
 // Python `(count, note)` value as its count.
@@ -829,7 +836,7 @@ const readAllowlistLiteral = (source, symbol, kind) => {
     : JSON_ALLOWLIST_KINDS.has(kind) ? readJsonEntries : readJavaScriptLiteral;
   const { status, value } = read(source, symbol);
   if (status !== 'ok') return { status, value: null };
-  if (kind === 'json-ids') return { status, value: mapObjectValues(value, (byId) => mapObjectValues(byId, () => '')) };
+  if (kind === 'json-ids') return { status, value: mapObjectValues(value[symbol], listSlots) };
   if (kind === 'set-map') {
     if (!isPlainObject(value) || !Object.values(value).every(isStringList)) return UNREADABLE_ALLOWLIST;
     return { status, value: mapObjectValues(value, (names) => Object.fromEntries(names.map((name) => [name, '']))) };
