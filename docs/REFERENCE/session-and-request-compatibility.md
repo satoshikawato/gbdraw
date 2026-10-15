@@ -347,7 +347,8 @@ each matched item's offset into the new automatic layout for the same diagram;
 it does not pin an absolute page position. If the source, selected region,
 record set, or layout no longer matches a moved item, Generate keeps the saved
 Result and asks for that item's position reset, **Reset Layout**, or matching
-settings. Preview search placement and Layout edit hints are not saved. Keep
+settings. Preview search placement, whether the search bar is hidden, and Layout edit
+hints are not saved. Keep
 the Session when browser positioning must be reproduced; a raw Python render
 request alone does not contain those manual positions. Session version 40
 files that unreleased builds of early August 2026 saved recorded moved items
