@@ -181,7 +181,9 @@ const checkpointSvgBytes = (checkpoint) => (
 /**
  * What one History step captures about the intent: the intent, its signature, and the files it names.
  * @typedef {{ intent: HistoryIntent, signature: string, fileIds: Set<string> }} IntentRecord
- * @typedef {{ checkpoint: HistoryCheckpoint, signature: string, byteSize: number, fileIds: Set<string> }} CheckpointRecord
+ * @typedef {{ checkpoint: HistoryCheckpoint, signature: string, byteSize: number, fileIds: Set<string>, drawn?: boolean }} CheckpointRecord
+ *   `drawn`: the step's caller said whether the figure is the one its state
+ *   draws, so that restoring it needs no automatic rerender (D-24 (OV-731)).
  * @typedef {{ enabled: boolean, value: unknown }} ReplacementIntentCheckpoint
  *   The intent a replacement step also restores (`value` is the caller's own capture).
  * @typedef {{ type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string> }} IntentEntry
@@ -218,11 +220,15 @@ const checkpointSvgBytes = (checkpoint) => (
  *   captureIntentCheckpoint?: IntentCheckpointHooks['capture'] | null,
  *   restoreIntentCheckpoint?: IntentCheckpointHooks['restore'] | null,
  *   compareIntentCheckpoints?(before: unknown, after: unknown): boolean,
- *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown
+ *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown,
+ *   drawn?: { before: () => boolean, change: boolean }
  * }} HistoryStepBase
  *   What a step reads from its caller; a hook that is not a function is not called. The intent
  *   checkpoint is the caller's own value, so the three hooks take and return it opaque (they are
- *   declared as methods); a caller names its type on its own parameter.
+ *   declared as methods); a caller names its type on its own parameter. A checkpoint step also
+ *   reads `drawn`, whether the figure of each side is the one its state draws (`CheckpointRecord`):
+ *   `before()` as the before side is captured, and `change`, whether the step's own change shows
+ *   as its state draws it, so that the after side is drawn when the before side is.
  */
 /**
  * @template [R=unknown]
@@ -277,8 +283,9 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The snapshot service's restore of an intent; History awaits it.
  * @property {() => HistoryCheckpoint | Promise<HistoryCheckpoint>} buildCheckpoint
  *   The snapshot service's capture of an artifact checkpoint.
- * @property {(checkpoint: HistoryCheckpoint) => unknown} applyCheckpoint
- *   The snapshot service's restore of an artifact checkpoint; History awaits it.
+ * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean }) => unknown} applyCheckpoint
+ *   The snapshot service's restore of an artifact checkpoint; History awaits it. `restored.drawn`:
+ *   whether its figure is the one its state draws.
  * @property {(() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>) | null} [captureGeneratedArtifactHandle]
  *   The snapshot service's capture of the generated artifact for a replacement step.
  * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
@@ -935,9 +942,11 @@ export const createHistoryManager = ({
     if (restoring.value || capturing.value) return null;
     /**
      * @param {CheckpointRecord} before
+     * @param {boolean | undefined} drawn
      * @returns {HistoryTransaction}
      */
-    const createTransaction = (before) => {
+    const createTransaction = (before, drawn) => {
+      if (drawn !== undefined) before.drawn = drawn;
       if (currentCheckpoint !== null) setCurrentCheckpoint(before);
       emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-checkpoint', label });
       return {
@@ -949,15 +958,17 @@ export const createHistoryManager = ({
     };
     const captureBefore = () => {
       notifyCheckpointCapture(options, 'before-start');
+      // Read as the capture starts; the snapshot service takes the figure at once.
+      const drawn = options.drawn?.before();
       const before = captureCheckpoint();
       return isPromiseLike(before)
         ? Promise.resolve(before).then((record) => {
-            const transaction = createTransaction(record);
+            const transaction = createTransaction(record, drawn);
             notifyCheckpointCapture(options, 'before-end');
             return transaction;
           })
         : (() => {
-            const transaction = createTransaction(before);
+            const transaction = createTransaction(before, drawn);
             notifyCheckpointCapture(options, 'before-end');
             return transaction;
           })();
@@ -975,6 +986,7 @@ export const createHistoryManager = ({
     if (!transaction || transaction.closed) return false;
     notifyCheckpointCapture(options, 'after-start');
     const after = await captureCheckpoint();
+    if (options.drawn) after.drawn = transaction.before.drawn === true && options.drawn.change;
     const intent = await captureIntent();
     transaction.closed = true;
     setCurrentCheckpoint(after);
@@ -1063,6 +1075,29 @@ export const createHistoryManager = ({
     return isPromiseLike(transaction)
       ? Promise.resolve(transaction).then(execute)
       : execute(transaction);
+  };
+
+  // D-24 (OV-731): a rerender drawn from the current state is shown (D-36).
+  // While the last step is a checkpoint and nothing is open, the state is the
+  // one its after side holds, so a side not yet drawn keeps the figure the
+  // rerender drew: Redo then shows it without another Python run.
+  const keepRedrawnResult = async () => {
+    const entry = topEntry(undoStack);
+    if (entry?.type !== 'checkpoint') return false;
+    const keeps = () => entry === topEntry(undoStack) && entry.after.drawn === false
+      && !openTransaction() && !activeCheckpoint && !activeReplacement && !restoring.value && !capturing.value;
+    if (!keeps()) return false;
+    const after = await captureCheckpoint();
+    if (!keeps()) return false;
+    after.drawn = true;
+    removeEntryBytes(entry);
+    entry.after = after;
+    entry.byteSize = entry.before.byteSize + after.byteSize;
+    entry.fileIds = new Set([...entry.before.fileIds, ...after.fileIds]);
+    addEntryBytes(entry);
+    setCurrentCheckpoint(after);
+    enforceLimits();
+    return true;
   };
 
   /**
@@ -1484,7 +1519,7 @@ export const createHistoryManager = ({
   const applyCheckpointEntry = async (record) => {
     restoring.value = true;
     try {
-      await applyCheckpoint(record.checkpoint);
+      await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true });
     } finally {
       restoring.value = false;
     }
@@ -1631,6 +1666,7 @@ export const createHistoryManager = ({
     getUndoCount: () => undoStack.length,
     hasChangesSinceSavePoint,
     historyAvailability,
+    keepRedrawnResult,
     historyLimitMessage,
     traversalPending: () => traversals.value > 0,
     initializeIntentBaseline,

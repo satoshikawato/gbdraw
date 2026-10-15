@@ -58,6 +58,11 @@ export const editorPaintState = (state, drawing) => ({
     : ''
 });
 
+// Whether two paint states show the same fills: palette and color edits, and visibility.
+/** @param {Pick<EditorPaintState, 'colors' | 'visibility'>} left @param {Pick<EditorPaintState, 'colors' | 'visibility'>} right */
+const sameFills = (left, right) => left.colors[0] === right.colors[0] && left.colors[1] === right.colors[1]
+  && left.visibility === right.visibility;
+
 // A paint state no editor state equals: a Result recorded with it shows
 // every paint domain and the labels on its next display. The Legend order is
 // kept: replaying the default order needs the Result's generated inventory.
@@ -104,8 +109,7 @@ export const createResultPaintRecord = () => {
       });
       bound = displayed;
       const { colors, visibility } = drawn;
-      behind = colors[0] !== current.colors[0] || colors[1] !== current.colors[1] || visibility !== current.visibility
-        ? { colors, visibility } : null;
+      behind = sameFills(drawn, current) ? null : { colors, visibility };
     },
     /**
      * The displayed Result leaves (a mode switch) having followed every live
@@ -153,6 +157,17 @@ export const createResultPaintRecord = () => {
      */
     lacking(identity) {
       return bound === identity ? behind : null;
+    },
+    /**
+     * Whether a label rerender drawn from `drawn` shows the `current` editor
+     * state as Python draws it: the same fills and strokes (D-36). The labels
+     * and the Legend order are projected on any figure. Read when its Result
+     * is ready, so an edit made after its paint was committed counts too.
+     * @param {EditorPaintState | null | undefined} drawn
+     * @param {EditorPaintState} current
+     */
+    drewPaint(drawn, current) {
+      return drawn ? sameFills(drawn, current) && drawn.strokes === current.strokes : false;
     },
     /** @param {string} identity The Result shown again with the intent it left with (E1). */
     rebind(identity) {

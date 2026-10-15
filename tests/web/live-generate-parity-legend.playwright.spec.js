@@ -1009,8 +1009,9 @@ const U3A_PARITY = [
   },
   {
     // U3a review M1: the Rules panel relabels the whole row and asks for the
-    // rerender; Redo restores the Result the commit left before it, whose
-    // new row is appended, so Redo asks for it too.
+    // rerender. Redo restores the figure the step kept: the rerender's once it
+    // is shown (D-24 (OV-731)), else the commit's, whose new row is appended,
+    // so Redo asks for the rerender again.
     name: '(10) Undo and Redo of a Rules-panel caption change of a whole row',
     reflowOn: 'linear',
     setup: (page) => addColorRule(page, ALPHA_ROW),

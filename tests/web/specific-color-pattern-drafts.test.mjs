@@ -45,6 +45,7 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
   };
   const actions = createFeatureRuleActions({ state: withDrawings(state), ref: value => ({ value }), computed: get => ({ get value() { return get(); } }),
     rulePreparation: preparation, isPatternEditAvailable: () => available, nextTick: async () => {},
+    ports: { requestAutomaticRerender: () => true, isRedrawOwed: () => false },
     runUndoableCheckpoint: transact, runUndoable: transact,
     prepareFileLegendEntries: async (_, { isCurrent }) => isCurrent() && {
       diff: { add: [], remove: [] },
