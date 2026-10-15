@@ -1914,7 +1914,7 @@ export const createAppSetup = () => {
   specificRuleRestorePorts.followRestoredSpecificRules = featureActions.followRestoredSpecificRules;
   // R13: the drawer and the feature search come after the owners they react
   // through, so each receives its ports directly.
-  const rightDrawerActions = createRightDrawerController({ state, watch,
+  const rightDrawerActions = createRightDrawerController({ state, watch, computed,
     onClose: featureActions.suspendSpecificRulePatternDrafts,
     focusReturn: {
       isFocusInDrawer: () => Boolean(document.querySelector('.right-drawer')?.contains(document.activeElement)),
@@ -4718,6 +4718,7 @@ export const createAppSetup = () => {
     state,
     getOrthogroupById: orthogroupActions.getOrthogroupById,
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
+    selectedOrthogroupDetail: orthogroupActions.selectedOrthogroupDetail,
     getRecordCatalog: getAnnotationRecordCatalog,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     getCommittedSession: getCommittedCanonicalSession,
@@ -6993,14 +6994,13 @@ export const createAppSetup = () => {
     orthogroupCount: orthogroupActions.orthogroupCount,
     filteredOrthogroups: orthogroupActions.filteredOrthogroups,
     selectedOrthogroup: orthogroupActions.selectedOrthogroup,
-    selectedOrthogroupMembersByRecord: orthogroupActions.selectedOrthogroupMembersByRecord,
+    selectedOrthogroupDetail: orthogroupActions.selectedOrthogroupDetail,
     resolveOrthogroupName: orthogroupActions.resolveOrthogroupName,
     orthogroupDescriptionFieldText: orthogroupActions.orthogroupDescriptionFieldText,
     orthogroupScope: orthogroupActions.orthogroupScope,
     orthogroupScopeLabel: orthogroupActions.orthogroupScopeLabel,
     orthogroupRows: orthogroupActions.orthogroupRows,
     isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
-    hasOrthogroupSequence: orthogroupActions.hasOrthogroupSequence,
     hasOrthogroupMemberSequence: orthogroupActions.hasOrthogroupMemberSequence,
     orthogroupCopyFeedbackLabel: orthogroupActions.orthogroupCopyFeedbackLabel,
     copyOrthogroupSequences: orthogroupActions.copyOrthogroupSequences,
@@ -7032,8 +7032,8 @@ export const createAppSetup = () => {
     startSimilarityAlignmentFromPopup: similarityAlignmentActions.startFromPopup,
     startSimilarityAlignmentFromDrawer,
     similarityAlignmentDrawerReferenceOptions: similarityAlignmentActions.drawerReferenceOptions,
+    similarityAlignmentDrawer: similarityAlignmentActions.drawer,
     setSimilarityAlignmentDrawerReference: similarityAlignmentActions.setDrawerReference,
-    similarityAlignmentDrawerDisabledReason: similarityAlignmentActions.drawerDisabledReason,
     selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
     similarityAlignmentDirectionPreview: similarityAlignmentActions.directionPreview,

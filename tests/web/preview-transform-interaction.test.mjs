@@ -796,7 +796,10 @@ assert.match(
 );
 completeCase('preview replacement cancels the canonical lifecycle before rebinding');
 
-assert.match(indexHtml, /transition:\s*isPanning\s*\?\s*'none'\s*:\s*'transform 0\.2s'/);
+// OV-912: the surface's `v-preview-transform` (components.js) writes the transition.
+const componentsSource = await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'components.js'), 'utf8');
+assert.match(indexHtml, /ref="svgContainer"[^>]*\sv-preview-transform[\s>]/);
+assert.match(componentsSource, /transition\s*=\s*panning\s*\?\s*'none'\s*:\s*'transform 0\.2s'/);
 assert.match(indexHtml, /@pointercancel="endPan"/);
 assert.match(indexHtml, /@lostpointercapture="endPan"/);
 completeCase('template preserves transition and routes interrupted pan cleanup');

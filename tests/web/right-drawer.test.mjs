@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import vm from 'node:vm';
 
 import { createRightDrawerController } from '../../gbdraw/web/js/app/right-drawer.js';
 import {
@@ -19,7 +20,9 @@ const createWatchHarness = () => {
     return () => {};
   };
   const flush = () => registrations.forEach(({ source, callback }) => callback(source()));
-  return { watch, registrations, flush };
+  // No cache: each read evaluates, as the scans did before OV-921.
+  const computed = (getter) => ({ get value() { return getter(); } });
+  return { watch, computed, registrations, flush };
 };
 
 const createState = ({ open = false, tab = 'features', groups = [], plan = null } = {}) => ({
@@ -34,7 +37,7 @@ test('unavailable and unknown tabs resolve to Features instead of becoming no-op
   const harness = createWatchHarness();
   const drawer = createRightDrawerController({
     state,
-    watch: harness.watch
+    watch: harness.watch, computed: harness.computed
   });
 
   assert.equal(harness.registrations[0].options.flush, 'sync');
@@ -56,7 +59,7 @@ test('capability loss normalizes the selected tab synchronously while open or cl
   const harness = createWatchHarness();
   const drawer = createRightDrawerController({
     state,
-    watch: harness.watch
+    watch: harness.watch, computed: harness.computed
   });
 
   drawer.openRightDrawerTab('orthogroups');
@@ -90,7 +93,7 @@ test('close preserves a valid selection, reset clears it, and rollback restores 
   const harness = createWatchHarness();
   const drawer = createRightDrawerController({
     state,
-    watch: harness.watch
+    watch: harness.watch, computed: harness.computed
   });
   const snapshot = captureRightDrawerState(state);
 
@@ -116,7 +119,7 @@ test('close preserves a valid selection, reset clears it, and rollback restores 
 test('an active alignment keeps its inspector and Reset tab reachable without group rows', () => {
   const state = createState({ tab: 'orthogroups', plan: { schema: 1 } });
   const harness = createWatchHarness();
-  const drawer = createRightDrawerController({ state, watch: harness.watch });
+  const drawer = createRightDrawerController({ state, watch: harness.watch, computed: harness.computed });
 
   assert.equal(drawer.isRightDrawerTabAvailable('orthogroups'), true);
   assert.equal(drawer.openRightDrawerTab('orthogroups'), 'orthogroups');
@@ -154,7 +157,7 @@ test('closing the drawer returns focus from inside it to the Editor toggle', () 
     const events = [];
     const drawer = createRightDrawerController({
       state,
-      watch: harness.watch,
+      watch: harness.watch, computed: harness.computed,
       focusReturn: {
         isFocusInDrawer: () => focusInDrawer,
         focusToggle: () => events.push(`focus:${state.showRightDrawer.value}`)
@@ -164,4 +167,35 @@ test('closing the drawer returns focus from inside it to the Editor toggle', () 
     assert.equal(state.showRightDrawer.value, false);
     assert.deepEqual(events, focusInDrawer ? ['focus:false'] : []);
   }
+});
+
+// OV-921: the template asks for the Similarity groups tab's availability three
+// times per render. The group list is scanned once per change of the groups,
+// not per question.
+test('the tab availability scans the groups once per change, not per read (OV-921)', () => {
+  const context = vm.createContext({ console });
+  vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
+  const { ref: vueRef, computed, watch } = context.Vue;
+  let idReads = 0;
+  const counted = (id) => new Proxy({ id, members: [] }, {
+    get(target, key, receiver) {
+      if (key === 'id') idReads += 1;
+      return Reflect.get(target, key, receiver);
+    }
+  });
+  const state = {
+    showRightDrawer: vueRef(true),
+    rightDrawerTab: vueRef('features'),
+    orthogroups: vueRef([counted('og_1'), counted('og_2')]),
+    similarityAlignmentPlan: vueRef(null)
+  };
+  const drawer = createRightDrawerController({ state, watch, computed });
+  const afterSetup = idReads;
+  for (let render = 0; render < 5; render += 1) {
+    for (let read = 0; read < 3; read += 1) assert.equal(drawer.isRightDrawerTabAvailable('orthogroups'), true);
+  }
+  assert.equal(idReads, afterSetup, 'reads after setup reuse one scan');
+  state.orthogroups.value = [];
+  assert.equal(drawer.isRightDrawerTabAvailable('orthogroups'), false);
+  assert.equal(state.rightDrawerTab.value, 'features');
 });

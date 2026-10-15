@@ -844,3 +844,73 @@ test('a requested redraw stays owed until a rerender of its own drawing is shown
   harness.actions.redrawShown(linear);
   assert.equal(harness.actions.isRedrawOwed(linear), false);
 });
+
+// OV-923: opening the editor or a feature popup binds the labels of the
+// mounted Result, measuring every feature. While nothing the binding reads
+// has changed on that root since the last binding, the binding is reused; a
+// changed text, child, or geometry attribute binds again.
+test('opening the editor reuses a current label binding until the root changes (OV-923)', () => {
+  const observers = [];
+  const previous = globalThis.MutationObserver;
+  globalThis.MutationObserver = class {
+    constructor(callback) { this.callback = callback; this.pending = []; this.connected = false; observers.push(this); }
+    observe(target, options) { this.target = target; this.options = options; this.connected = true; }
+    disconnect() { this.connected = false; }
+    takeRecords() { const records = this.pending; this.pending = []; return records; }
+    mutate(record) { if (this.connected) this.pending.push(record); }
+    deliver() { const records = this.takeRecords(); if (records.length) this.callback(records, this); }
+  };
+  try {
+    const svg = new DOMParser().parseFromString([
+      '<svg>',
+      '<g id="record_1">',
+      '<path data-gbdraw-feature-id="feature-one" data-fake-bbox="0 0 10 10" />',
+      '<path data-gbdraw-feature-id="feature-two" data-fake-bbox="50 0 10 10" />',
+      '<text dominant-baseline="central" data-fake-bbox="0 12 10 4"></text>',
+      '</g>',
+      '</svg>'
+    ].join(''), 'image/svg+xml').documentElement;
+    const harness = buildHarness({ svg });
+    const proto = Object.getPrototypeOf(svg.querySelector('path'));
+    const getBBox = proto.getBBox;
+    let measured = 0;
+    proto.getBBox = function countedGetBBox() { measured += 1; return getBBox.call(this); };
+    try {
+      harness.actions.syncLabelEditor({ reuseCurrentBinding: true });
+      const firstBinding = measured;
+      assert.ok(firstBinding > 0, 'the first opening binds the labels');
+      const label = svg.querySelector('text');
+      const bound = [label.getAttribute('data-label-key'), label.getAttribute('data-label-feature-id')];
+      const observer = observers.at(-1);
+      assert.equal(observer.options.subtree, true);
+      assert.equal(observer.options.characterData, true);
+      assert.equal(observer.options.childList, true);
+      assert.ok(observer.options.attributeFilter.includes('transform'));
+      assert.equal(observer.options.attributeFilter.includes('style'), false, 'a hover highlight keeps the binding');
+
+      harness.actions.syncLabelEditor({ reuseCurrentBinding: true });
+      harness.actions.syncLabelEditor({ reuseCurrentBinding: true });
+      assert.equal(measured, firstBinding, 'reopening measures nothing');
+      assert.deepEqual([label.getAttribute('data-label-key'), label.getAttribute('data-label-feature-id')], bound);
+
+      // A sync without the reuse (an edit, a Result display) always binds.
+      harness.actions.syncLabelEditor();
+      assert.equal(measured, firstBinding * 2);
+
+      // A mutation the binding reads, delivered or still queued, binds again.
+      observers.at(-1).mutate({ type: 'characterData' });
+      harness.actions.syncLabelEditor({ reuseCurrentBinding: true });
+      assert.equal(measured, firstBinding * 3);
+      observers.at(-1).mutate({ type: 'attributes', attributeName: 'transform' });
+      observers.at(-1).deliver();
+      harness.actions.syncLabelEditor({ reuseCurrentBinding: true });
+      assert.equal(measured, firstBinding * 4);
+      harness.actions.syncLabelEditor({ reuseCurrentBinding: true });
+      assert.equal(measured, firstBinding * 4);
+    } finally {
+      proto.getBBox = getBBox;
+    }
+  } finally {
+    globalThis.MutationObserver = previous;
+  }
+});

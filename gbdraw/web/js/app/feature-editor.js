@@ -131,7 +131,8 @@ export const createFeatureEditor = ({
     // R13: the visibility owner prepares the matches the popup reads; it is
     // created after this owner, so the port registers in `editorPorts`.
     prepareDrawnFeatureMatches: (...args) => editorPorts.prepareDrawnFeatureMatches(...args),
-    onFeaturePopupOpened: (...args) => editorPorts.syncLabelEditor(...args),
+    // OV-923: an unchanged Result keeps its label binding.
+    onFeaturePopupOpened: () => editorPorts.syncLabelEditor({ reuseCurrentBinding: true }),
     featureSelection,
     previewTransformInteraction,
     previewPopupsHeld

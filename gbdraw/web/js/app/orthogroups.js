@@ -777,21 +777,50 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       }));
   };
 
-  const selectedOrthogroupMembersByRecord = computed(() => {
-    const group = selectedOrthogroup.value;
-    return groupOrthogroupMembersByRecord(getEnrichedOrthogroupMembers(group));
-  });
-
   /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
   const getOrthogroupSequenceCount = (groupOrId, sequenceKind) =>
     getEnrichedOrthogroupMembers(groupOrId).filter((member) => getMemberSequence(member, sequenceKind)).length;
 
-  /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
-  const hasOrthogroupSequence = (groupOrId, sequenceKind) => getOrthogroupSequenceCount(groupOrId, sequenceKind) > 0;
-
   /** @param {OrthogroupMember} member @param {unknown} sequenceKind */
   const hasOrthogroupMemberSequence = (member, sequenceKind) =>
     Boolean(getMemberSequence(enrichOrthogroupMember(member), sequenceKind));
+
+  // OV-920: what the drawer shows of the selected group, built when the group
+  // or a sequence source changes. Every render of the app reads it, with the
+  // drawer closed too, so the template asks no helper that enriches members.
+  /**
+   * @typedef {object} SelectedOrthogroupDetail
+   * @property {OrthogroupGroup} group
+   * @property {unknown} id the id the drawer's controls pass (`group.id`)
+   * @property {OrthogroupMember[]} members the enriched members
+   * @property {ReturnType<typeof groupOrthogroupMembersByRecord>} membersByRecord
+   * @property {{ nt: boolean, aa: boolean }} hasSequence whether a member has an nt or aa sequence
+   * @property {(member: OrthogroupMember, sequenceKind: 'nt' | 'aa') => boolean} hasMemberSequence
+   */
+  /** @type {{ readonly value: SelectedOrthogroupDetail | null }} */
+  const selectedOrthogroupDetail = computed(() => {
+    const group = selectedOrthogroup.value;
+    if (!group) return null;
+    const members = getEnrichedOrthogroupMembers(group);
+    /** @type {Map<OrthogroupMember, { nt: boolean, aa: boolean }>} */
+    const memberSequences = new Map(members.map((member) => [member, {
+      nt: hasOrthogroupMemberSequence(member, 'nt'),
+      aa: hasOrthogroupMemberSequence(member, 'aa')
+    }]));
+    return {
+      group,
+      id: group.id,
+      members,
+      membersByRecord: groupOrthogroupMembersByRecord(members),
+      hasSequence: {
+        nt: members.some((member) => getMemberSequence(member, 'nt')),
+        aa: members.some((member) => getMemberSequence(member, 'aa'))
+      },
+      hasMemberSequence: (/** @type {OrthogroupMember} */ member, /** @type {'nt' | 'aa'} */ sequenceKind) => (
+        Boolean(memberSequences.get(member)?.[sequenceKind])
+      )
+    };
+  });
 
   /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
   const buildOrthogroupFasta = (groupOrId, sequenceKind) => {
@@ -985,7 +1014,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     orthogroupCount,
     filteredOrthogroups,
     selectedOrthogroup,
-    selectedOrthogroupMembersByRecord,
+    selectedOrthogroupDetail,
     getEnrichedOrthogroupMembers,
     groupOrthogroupMembersByRecord,
     getOrthogroupById,
@@ -997,7 +1026,6 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     orthogroupRows,
     isOrthogroupRenamed,
     getOrthogroupSequenceCount,
-    hasOrthogroupSequence,
     hasOrthogroupMemberSequence,
     orthogroupCopyFeedbackLabel,
     clearCopyFeedback,

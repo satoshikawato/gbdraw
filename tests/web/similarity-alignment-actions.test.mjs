@@ -139,6 +139,7 @@ const create = ({
   const controllerState = state();
   controllerState.featureCatalog.value.items[0].biologicalFeatures=members;
   const currentGroup = { id: 'og-1', members, orthologEdges: [] };
+  let enrichCalls = 0;
   const helperCalls = [];
   const generationCalls = [];
   let svg = null;
@@ -176,7 +177,11 @@ const create = ({
   const actions = createSimilarityAlignmentActions({
     state: controllerState,
     getOrthogroupById: (id) => id === currentGroup.id ? currentGroup : null,
-    getEnrichedOrthogroupMembers: () => currentGroup.members,
+    getEnrichedOrthogroupMembers: () => { enrichCalls += 1; return currentGroup.members; },
+    // The orthogroup owner's detail of the selected group (OV-920).
+    selectedOrthogroupDetail: { get value() {
+      return { group: currentGroup, id: currentGroup.id, members: currentGroup.members };
+    } },
     getCommittedRequest:()=>getCommittedRequest?.()||canonical.renderRequest,
     getCommittedSession:()=>({...canonical,renderRequest:getCommittedRequest?.()||canonical.renderRequest}),
     projectCommittedAlignment,
@@ -229,7 +234,8 @@ const create = ({
     onError: (error) => { controllerState.errorLog.value = error; onError?.(error); },
     previewCandidate, clearCandidatePreview
   });
-  return { actions, state: controllerState, helperCalls, generationCalls, currentGroup, history };
+  return { actions, state: controllerState, helperCalls, generationCalls, currentGroup, history,
+    enrichCalls: () => enrichCalls };
 };
 const startReview = (fixture, selected = reference) => fixture.actions.startFromPopup({
   groupId: 'og-1', reference: selected, mode: 'review'
@@ -663,6 +669,23 @@ test('drawer requires a unique exact reference before starting the Worker', asyn
   const duplicate = create({ members: [reference, { ...reference }, targetA] });
   assert.deepEqual(duplicate.actions.drawerReferenceOptions('og-1')
     .filter(({ anchor: selected }) => selected.biologicalFeatureId === 'clicked'), []);
+});
+
+// OV-920: the drawer of the selected group reads the members the orthogroup
+// owner enriched for it; reading its options and reason enriches none again.
+test('the selected group drawer reads its members from the selected detail (OV-920)', () => {
+  const fixture = create({ members: [reference, otherReference, targetA, targetC] });
+  const before = fixture.enrichCalls();
+  const drawer = fixture.actions.drawer.value;
+  assert.equal(drawer.groupId, 'og-1');
+  assert.deepEqual(drawer.options.map(({ label }) => label), fixture.actions.drawerReferenceOptions('og-1').map(({ label }) => label));
+  assert.equal(drawer.options.length, 4);
+  assert.match(drawer.disabledReason, /Select an exact reference/);
+  assert.equal(fixture.actions.drawerDisabledReason('og-1'), drawer.disabledReason);
+  assert.equal(fixture.enrichCalls(), before, 'the selected group is not enriched again');
+  assert.equal(fixture.actions.setDrawerReference('og-1', drawer.options[1].key), true);
+  assert.equal(fixture.actions.drawer.value.disabledReason, '');
+  assert.deepEqual(fixture.actions.drawerReferenceOptions('og-missing'), []);
 });
 
 // OV-381: a committed plan (from the popup or a loaded Session) shows its exact

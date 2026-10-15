@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
-import { collectSpecificColorQualifierSuggestions } from './services/feature-selector.js';
+import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
 import { DEFAULT_LINEAR_RECORD_GAP_PX } from './services/config-field-readers.js';
 import {
   featureDrawnContext,
@@ -363,8 +363,11 @@ const featureCatalog = /** @type {{ value: FeatureCatalog | null }} */ (ref(null
 // Whether the rule preparation (app/rule-matching.js) is matching rules; it
 // records the matches, which live on the feature objects, before this falls back.
 const ruleMatchingPending = ref(false);
+// OV-924: the qualifier names of the drawn features, read from the raw rows
+// once per feature list; a rule edit or a mode switch only merges the rules.
+const extractedFeatureQualifierNames = computed(() => collectFeatureQualifierNames(toRaw(extractedFeatures.value)));
 const specificRuleQualifierSuggestions = computed(() =>
-  collectSpecificColorQualifierSuggestions(extractedFeatures.value, activeDrawing().manualSpecificRules)
+  specificColorQualifierSuggestions(extractedFeatureQualifierNames.value, activeDrawing().manualSpecificRules)
 );
 /**
  * What state.js reads of a listed feature (the Features list rows and the

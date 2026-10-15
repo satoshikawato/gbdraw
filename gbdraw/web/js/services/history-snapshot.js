@@ -1838,7 +1838,8 @@ export const createHistorySnapshotService = ({
     };
   };
 
-  const buildHistoryIntent = async () => {
+  // Synchronous: History captures it without an await (OV-922).
+  const buildHistoryIntent = () => {
     const shownMode = getRef(state.mode, 'circular') === 'linear' ? 'linear' : 'circular';
     const drawing = drawingOfMode(state, shownMode);
     const ui = typeof buildUiStateData === 'function'

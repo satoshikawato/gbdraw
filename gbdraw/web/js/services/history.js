@@ -472,21 +472,34 @@ export const createHistoryManager = ({
     return fileIds;
   };
 
-  const captureIntent = async () => {
-    capturing.value = true;
+  /**
+   * @param {HistoryIntent} intent
+   * @returns {IntentRecord}
+   */
+  const finishIntentCapture = (intent) => {
+    const signature = computeSignature(intent, 'intent');
+    emitHistoryDiagnostic({ type: 'capture', scope: 'intent' });
+    return {
+      intent,
+      signature,
+      fileIds: collectIntentFileIds(intent)
+    };
+  };
+
+  // OV-922: a synchronous capture writes no reactive state; nothing else
+  // runs while it does. `capturing` marks a capture only across its await,
+  // so a tracked control renders the app for its step, not for each capture.
+  /** @returns {IntentRecord | Promise<IntentRecord>} */
+  const captureIntent = () => {
     diagnostics.intentBuilds += 1;
-    try {
-      const intent = await buildIntent();
-      const signature = computeSignature(intent, 'intent');
-      emitHistoryDiagnostic({ type: 'capture', scope: 'intent' });
-      return {
-        intent,
-        signature,
-        fileIds: collectIntentFileIds(intent)
-      };
-    } finally {
-      capturing.value = false;
-    }
+    const intent = buildIntent();
+    if (!isPromiseLike(intent)) return finishIntentCapture(intent);
+    capturing.value = true;
+    return Promise.resolve(intent)
+      .then(finishIntentCapture)
+      .finally(() => {
+        capturing.value = false;
+      });
   };
 
   /**
@@ -688,11 +701,12 @@ export const createHistoryManager = ({
   // ownerless action, the same owner, or an action that owns the open commit
   // joins it; another owner first settles it.
   /**
-   * @param {string} [label]
-   * @param {HistoryStepBase} [options]
+   * @param {string} label
+   * @param {HistoryStepBase} options
+   * @param {boolean} ownedByAction `runUndoable` opens the step and commits it.
    * @returns {Promise<HistoryTransaction | null>}
    */
-  const begin = async (label = 'Edit', options = {}) => {
+  const openStep = async (label, options, ownedByAction) => {
     if (mutationAvailability()) return null;
     if (restoring.value || capturing.value) return null;
     const open = openTransaction();
@@ -707,7 +721,11 @@ export const createHistoryManager = ({
       if (reopened) return reopened;
     }
 
-    const before = await captureIntent();
+    // OV-946: a synchronous capture opens the step in this turn, so a
+    // control that begins meanwhile finds it and joins it; an asynchronous
+    // one holds `capturing` until it ends.
+    const capture = captureIntent();
+    const before = isPromiseLike(capture) ? await capture : capture;
     if (mutationAvailability()) return null;
     emitHistoryDiagnostic({ type: 'begin', scope: 'intent', label });
     /** @type {HistoryTransaction} */
@@ -718,12 +736,19 @@ export const createHistoryManager = ({
       beforeFileIds: before.fileIds,
       closed: false,
       source: options.source || '',
-      owner: options.owner
+      owner: options.owner,
+      deferAdapterCommit: ownedByAction
     };
     activeTransaction = tx;
     touchTransaction();
     return tx;
   };
+
+  /**
+   * @param {string} [label]
+   * @param {HistoryStepBase} [options]
+   */
+  const begin = (label = 'Edit', options = {}) => openStep(label, options, false);
 
   /** @param {HistoryTransaction | null | undefined} transaction */
   const cancel = (transaction) => {
@@ -905,7 +930,7 @@ export const createHistoryManager = ({
     if (restoring.value || capturing.value || activeCheckpoint) return fn();
 
     const open = openTransaction();
-    const tx = open || await begin(label, options);
+    const tx = open || await openStep(label, options, true);
     if (tx) { tx.deferAdapterCommit = true; touchTransaction(); }
     // OV-460: an edit made while another action is still running on the open
     // step applies at once and is a step under its own name: it names the

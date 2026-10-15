@@ -216,3 +216,84 @@ test('member tables name each record in plain text, as the diagram heading reads
   assert.deepEqual(rows.map(({ recordLabel }) => recordLabel),
     ['Streptomyces lividus CBS 844.73', 'S. fradiae', 'BGC0000711']);
 });
+
+// OV-920: the drawer shows the selected group's members, their sequences, and
+// the group's copy menu. One detail per selected group is built when the
+// group or a sequence source changes, not on every render that reads it.
+test('the selected group detail is built once per change of its inputs (OV-920)', () => {
+  let memberReads = 0;
+  const counted = (member) => new Proxy(member, {
+    get(target, key, receiver) {
+      memberReads += 1;
+      return Reflect.get(target, key, receiver);
+    }
+  });
+  const state = {
+    orthogroups: ref([{ id: 'og_1', members: [
+      counted({ recordIndex: 0, stableFeatureSvgId: 'stable-a', start: 0, end: 30, strand: '+' }),
+      counted({ recordIndex: 1, stableFeatureSvgId: 'stable-b', start: 3, end: 60, strand: '-' })
+    ] }, { id: 'og_2', members: [] }]),
+    orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
+    selectedOrthogroupId: ref('og_1'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]),
+    biologicalFeatures: ref([
+      { record_idx: 0, stable_svg_id: 'stable-a', nucleotide_sequence: 'AAAA', amino_acid_sequence: 'MK' },
+      { record_idx: 1, stable_svg_id: 'stable-b', nucleotide_sequence: 'CCCC' }
+    ])
+  };
+  const editor = createOrthogroupEditor({ state: withDrawings(state) });
+  const group = state.orthogroups.value[0];
+  const detail = editor.selectedOrthogroupDetail.value;
+  assert.equal(detail.group, group);
+  assert.equal(detail.id, 'og_1');
+  // The detail answers what the template asked the per-call helpers before.
+  const expected = editor.groupOrthogroupMembersByRecord(editor.getEnrichedOrthogroupMembers(group));
+  assert.deepEqual(detail.membersByRecord, expected);
+  assert.deepEqual(detail.hasSequence, {
+    nt: editor.getOrthogroupSequenceCount(group, 'nt') > 0,
+    aa: editor.getOrthogroupSequenceCount(group, 'aa') > 0
+  });
+  const shown = detail.membersByRecord.flatMap(({ members }) => members);
+  assert.deepEqual(shown.map((member) => [detail.hasMemberSequence(member, 'nt'), detail.hasMemberSequence(member, 'aa')]),
+    shown.map((member) => [editor.hasOrthogroupMemberSequence(member, 'nt'), editor.hasOrthogroupMemberSequence(member, 'aa')]));
+  assert.deepEqual(shown.map((member) => [detail.hasMemberSequence(member, 'nt'), detail.hasMemberSequence(member, 'aa')]),
+    [[true, true], [true, false]]);
+
+  const afterBuild = memberReads;
+  for (let render = 0; render < 20; render += 1) {
+    const again = editor.selectedOrthogroupDetail.value;
+    assert.equal(again, detail);
+    again.membersByRecord.forEach(({ members }) => members.forEach((member) => again.hasMemberSequence(member, 'nt')));
+  }
+  state.showRightDrawer.value = true;
+  state.orthogroupSearch.value = 'og';
+  assert.equal(editor.selectedOrthogroupDetail.value, detail, 'unrelated UI state reuses the detail');
+  assert.equal(memberReads, afterBuild, 'no member is enriched again');
+
+  // A new sequence source and another selected group build a new detail.
+  state.biologicalFeatures.value = [{ record_idx: 0, stable_svg_id: 'stable-a', amino_acid_sequence: 'MK' }];
+  assert.deepEqual(editor.selectedOrthogroupDetail.value.hasSequence, { nt: false, aa: true });
+  state.selectedOrthogroupId.value = 'og_2';
+  assert.equal(editor.selectedOrthogroupDetail.value.id, 'og_2');
+  assert.deepEqual(editor.selectedOrthogroupDetail.value.membersByRecord, []);
+  state.orthogroups.value = [];
+  assert.equal(editor.selectedOrthogroupDetail.value, null);
+});
+
+// OV-920: the Similarity groups panel is part of the app template, which
+// renders on every edit with the drawer closed too. Its bindings read the
+// selected group's detail; no binding enriches members on each render.
+test('the Similarity groups panel binds the selected detail, not enriching helpers (OV-920)', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const start = html.indexOf('id="right-drawer-panel-orthogroups"');
+  const end = html.indexOf('data-similarity-group-actions', start);
+  assert.ok(start > 0 && end > start, 'the panel markup is found');
+  const panel = html.slice(start, end);
+  for (const helper of ['hasOrthogroupSequence(', 'hasOrthogroupMemberSequence(', 'getEnrichedOrthogroupMembers(',
+    'similarityAlignmentDrawerReferenceOptions(', 'similarityAlignmentDrawerDisabledReason(']) {
+    assert.equal(panel.includes(helper), false, `${helper} is not called by the panel`);
+  }
+  assert.match(panel, /selectedOrthogroupDetail\.membersByRecord/);
+  assert.match(panel, /similarityAlignmentDrawer\.options/);
+});

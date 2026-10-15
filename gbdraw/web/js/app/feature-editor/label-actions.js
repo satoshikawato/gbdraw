@@ -414,6 +414,54 @@ const collectEditableLabelElements = (svg, mode) => {
   });
 };
 
+// OV-923: what the label binding reads of a mounted root besides its text
+// and children: feature identities, group ids, and geometry. A hover
+// highlight (style) or a selection (class) changes none of them.
+const LABEL_BINDING_INPUT_ATTRIBUTES = Object.freeze([
+  'id', 'data-gbdraw-feature-id', 'data-gbdraw-rendered-feature-id', 'display', 'transform', 'viewBox',
+  'preserveAspectRatio', 'd', 'points', 'x', 'y', 'dx', 'dy', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx',
+  'ry', 'width', 'height', 'href', 'startOffset', 'side', 'textLength', 'lengthAdjust', 'font-size',
+  'font-family', 'font-weight', 'font-style', 'letter-spacing', 'text-anchor', 'dominant-baseline'
+]);
+
+/**
+ * The one mounted root whose label binding is current: bound, and nothing the
+ * binding reads changed on it since. The binding measures every feature
+ * (getBBox), so opening the editor or a feature popup reuses a current one.
+ * Without MutationObserver no binding counts as current.
+ */
+const createLabelBindingMarker = () => {
+  /** @type {{ root: Element, viewport: string, stale: boolean, observer: MutationObserver } | null} */
+  let current = null;
+  // The root's CSS box sets its viewBox scale, which the binding's coordinates include.
+  /** @param {Element} root */
+  const viewportOf = (root) => `${root.clientWidth}x${root.clientHeight}`;
+  return {
+    /** @param {Element} root */
+    isCurrent: (root) => {
+      if (!current || current.root !== root) return false;
+      if (current.observer.takeRecords().length > 0) current.stale = true;
+      return !current.stale && current.viewport === viewportOf(root);
+    },
+    /** @param {Element} root */
+    markCurrent: (root) => {
+      current?.observer.disconnect();
+      current = null;
+      if (typeof MutationObserver !== 'function') return;
+      const observer = new MutationObserver(() => {
+        if (entry) entry.stale = true;
+        observer.disconnect();
+      });
+      const entry = { root, viewport: viewportOf(root), stale: false, observer };
+      observer.observe(root, {
+        subtree: true, childList: true, characterData: true, attributes: true,
+        attributeFilter: [...LABEL_BINDING_INPUT_ATTRIBUTES]
+      });
+      current = entry;
+    }
+  };
+};
+
 /** @param {SVGSVGElement} svg @returns {FeatureGeometry} */
 const collectFeatureGeometry = (svg) => {
   /** @type {Map<string, { id: string, x: number, y: number, n: number, groupId: string }>} */
@@ -900,15 +948,18 @@ export const createFeatureLabelActions = ({
    *   requiredFeatureIds?: readonly string[],
    *   optionalFeatureIds?: readonly string[],
    *   reportedLabelBinding?: { featureIds: readonly string[], report: (error: unknown) => void } | null,
-   *   queueIncompleteVisibility?: boolean
-   * }} [options]
+   *   queueIncompleteVisibility?: boolean,
+   *   reuseCurrentBinding?: boolean
+   * }} [options] `reuseCurrentBinding`: opening the editor or a feature
+   *   popup, which checks no feature ids, keeps a current binding (OV-923).
    * @returns {{ changed: boolean, rerender: boolean, textChanged: boolean } | undefined} The projection; undefined when no Result is mounted.
    */
   const syncLabelEditor = ({
     requiredFeatureIds = [],
     optionalFeatureIds = [],
     reportedLabelBinding = null,
-    queueIncompleteVisibility = true
+    queueIncompleteVisibility = true,
+    reuseCurrentBinding = false
   } = {}) => {
     const drawing = state.activeDrawing();
     // The retained Result can outlive its active mode. Keep its label intent
@@ -918,7 +969,33 @@ export const createFeatureLabelActions = ({
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
     boundLabelRoots.add(svg);
+    const reuse = reuseCurrentBinding && !requiredFeatureIds.length && !optionalFeatureIds.length
+      && !reportedLabelBinding && labelBinding.isCurrent(svg);
+    // A reused binding is one made with no feature ids to check (`reuse`).
+    const labelElements = reuse ? [] : bindLabels(svg, requiredFeatureIds, optionalFeatureIds);
 
+    const projection = projectLabelIntent(drawing, svg, { queueIncompleteVisibility });
+    // A label reflow keeps its Result: the same check reports to the reflow
+    // after the binding completes instead of failing it.
+    if (reportedLabelBinding) {
+      try {
+        requireUniqueEditableLabelBindings(labelElements, reportedLabelBinding.featureIds, { features: extractedFeatures.value });
+      } catch (error) {
+        reportedLabelBinding.report(error);
+      }
+    }
+    return projection;
+  };
+
+  const labelBinding = createLabelBindingMarker();
+  // Binds each editable label of the root to its feature, by geometry.
+  /**
+   * @param {SVGSVGElement} svg
+   * @param {readonly string[]} requiredFeatureIds
+   * @param {readonly string[]} optionalFeatureIds
+   * @returns {SVGTextElement[]} the editable labels, in key order
+   */
+  const bindLabels = (svg, requiredFeatureIds, optionalFeatureIds) => {
     // Label intent is keyed by feature identity, not by the mounted view: a
     // Result switch, record selection, hide, or reflow changes which labels
     // this SVG shows, never which overrides exist (FE-01, R2).
@@ -952,18 +1029,10 @@ export const createFeatureLabelActions = ({
       optionalFeatureIds,
       { allowMissing: true, features }
     );
-
-    const projection = projectLabelIntent(drawing, svg, { queueIncompleteVisibility });
-    // A label reflow keeps its Result: the same check reports to the reflow
-    // after the binding completes instead of failing it.
-    if (reportedLabelBinding) {
-      try {
-        requireUniqueEditableLabelBindings(labelElements, reportedLabelBinding.featureIds, { features });
-      } catch (error) {
-        reportedLabelBinding.report(error);
-      }
-    }
-    return projection;
+    // Marked after the binding's own writes and before the projection, so a
+    // text the projection changes counts as a change since the binding.
+    labelBinding.markCurrent(svg);
+    return labelElements;
   };
 
   // One projection of the label intent onto the mounted Result, shared by a
