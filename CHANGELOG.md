@@ -345,6 +345,16 @@ write-up of a release.
   `legacy` now loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
 - Fixed (web app): the shape set for a feature type added to the feature list
   was dropped when its Session was loaded again; Load now keeps it.
+- Fixed (web app): a cleared **Feature overlap tolerance (bp)** made Save
+  Session fail and Generate send an invalid value; it now draws and saves as
+  its default, 0. A blank number in a configuration file now reads as the
+  field's default instead of keeping the current drawing's value, and a blank
+  column gap, row gap, LOSAT merge-gap conflict count or Linear record gap no
+  longer reads as 0. Save Session before the first Generate no longer fails on
+  an enabled Depth row whose Depth file was removed: the saved diagram leaves
+  the row out, and the Session's settings keep it. A Session 44 whose font was
+  a preserved override and whose `adv` is not an object now lists the dropped
+  `adv` in the **Load this file?** dialog.
 - Fixed: the records of one multi-record File were named differently in
   **Record Layout**, **Selected pairs** and the **BLAST TSV missing** dialog
   (one by its definition, the next by its accession); each now shows the File's

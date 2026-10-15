@@ -1561,7 +1561,7 @@ Settings** (which also clears placements) do not ask; if their result has a lane
 the slot cannot draw, Generate names the feature.
 The [resolved-layout and resolver tables](palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement)
 explain availability and conflicts. **Feature overlap tolerance (bp)** defaults
-to 0. Generate applies these drafts together; Undo/Redo and Save/Load keep the draft separately from the last successful Result. On a freshly loaded session,
+to 0; a cleared field draws and saves as 0. Generate applies these drafts together; Undo/Redo and Save/Load keep the draft separately from the last successful Result. On a freshly loaded session,
 Generate rebuilds the final slot geometry before Main/side choices become
 available. Auto removal can use the source recorded in the Session without reading the
 input files.
