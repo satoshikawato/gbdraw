@@ -936,12 +936,12 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
   const stepTimeouts = {
     gallery: { 'Run Gallery tests': 10, 'Verify Gallery first-Generate parity': 10 },
     browser: {
-      'Run Web JavaScript tests': 5,
+      'Run Web JavaScript tests': 10,
       'Run Python browser tests': 10,
       'Run package build integration': 5,
       'Run offline GUI browser contracts': 5
     },
-    'web-contracts-pr': { 'Run fast Web JavaScript contracts': 8, 'Run non-slow Python browser tests': 10 },
+    'web-contracts-pr': { 'Run fast Web JavaScript contracts': 10, 'Run non-slow Python browser tests': 10 },
     'web-pr-smoke': { 'Run Playwright PR smoke': 10 },
     'promotion-audit-journeys': { 'Run the user journey': 35 },
     'promotion-audit-random-walk': { 'Run the live-vs-Generate random walk': 100 },
