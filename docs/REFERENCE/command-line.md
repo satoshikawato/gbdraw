@@ -107,10 +107,11 @@ mitochondrion, or plastome is circular even when its LOCUS line says linear;
 several circular records share one canvas; other sets are Linear rows), the
 drawn feature types (`D-loop`, `rep_origin`, `mat_peptide` of a polyprotein,
 `gene` when a file has no CDS), the label scope and the qualifier that labels
-the CDS (up to 150 labelable genes are all labelled, with `--label_blacklist`
-leaving out hypothetical products; up to 400 only the named genes and RNA
-genes; more none; products rather than gene names when the names repeat),
-separate strands, `--resolve_overlaps` when
+the CDS (every gene is labelled while they fit, 150 labels of a dozen
+characters and proportionally more when the labels are short gene names, with
+`--label_blacklist` leaving out hypothetical products; in a circle up to 400
+candidates only the named genes and RNA genes; more none; products rather than
+gene names when the names repeat), separate strands, `--resolve_overlaps` when
 features nest, the colors (a `-d` scheme of soft fills and muted rings, plus a
 `-t` color table generated from the annotation: COG categories of Bakta,
 Pharokka functions, antiSMASH `gene_kind`, plastid and mitochondrial gene
@@ -118,10 +119,17 @@ families), the GC content and skew tracks, the track preset, and the legend
 position. The tables the command needs are written
 next to the output as `<prefix>.auto.<table>.tsv`, so the printed command can
 be edited and rerun; the output and format options are those of the mode
-commands. A synthetic construct (a SnapGene, Benchling or Addgene file) is
-drawn as a plasmid map: its promoters, terminators, origins and LTRs, labelled
-from `/label`, without the composition rings; a Pharokka file is a phage, and a
-Bakta, Prokka, DFAST or PGAP file without a lineage is a bacterial record. A
+commands. A synthetic construct (a SnapGene, Benchling or Addgene file) and a
+plasmid shorter than 50 kb are drawn as plasmid maps, the way plasmid editors
+draw them: both strands on one ring with the arrows showing the direction,
+every overlap tiled onto its own lane, a bold backbone and outlined, wide
+parts, and no composition ring (a construct draws its promoters, terminators,
+origins and LTRs, labelled from `/label`). A circular record shorter than
+10 kb gets no composition ring either, and only chromosomes, large plasmids
+and organelles get the skew ring. The Pharokka and Bakta COG color tables of
+the Web app are applied with softened colors that keep each category's hue
+(`PRESET_SOFT_COLORS`). A Pharokka file is a phage, and a Bakta, Prokka, DFAST
+or PGAP file without a lineage is a bacterial record. A
 record without an organism name is titled by its ID, its LOCUS name or its
 definition (`--species`, or `--record_label` in Linear mode). The same proposal
 is available in Python as `gbdraw.recommend.propose(records)`.

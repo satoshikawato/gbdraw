@@ -51,13 +51,26 @@ ColorRule = tuple[str, str, str, str, str]
 
 # Label density: how many CDS and RNA genes a drawing can label.
 LABEL_ALL_MAX = 150
-"""Up to this many labelable features, every one of them is labelled."""
+"""Up to this many labelable features, every one of them is labelled (at the reference label length)."""
+LABEL_REFERENCE_LENGTH = 12
+"""Characters; labels shorter than this raise the all-labels limit, up to ``LABEL_BUDGET_MAX_FACTOR`` times."""
+LABEL_BUDGET_MAX_FACTOR = 2.5
+LABEL_BUDGET_MAX_FACTOR_CIRCULAR = 1.6
 LABEL_NAMED_MAX = 400
 """Up to this many, only features with a ``gene`` name and the rRNA/tRNA genes."""
 GENE_NAME_COVERAGE_MIN = 0.6
 """Fraction of CDS with a ``gene`` qualifier above which gene names make the labels."""
 OVERLAP_FRACTION_MIN = 0.2
 """Fraction of drawn features nested in another one above which lanes are split."""
+RING_MIN_LENGTH = 10_000
+"""Below this length a circular record gets no GC content or skew ring: too few windows."""
+SMALL_REPLICON_MAX_LENGTH = 50_000
+"""A plasmid shorter than this is drawn as a plasmid map: one ring, no skew ring."""
+PLASMID_MAP_AXIS_STROKE = 6.0
+PLASMID_MAP_BLOCK_STROKE = 3.0
+PLASMID_MAP_STROKE_COLOR = "#4d4d4d"
+PLASMID_MAP_FEATURE_WIDTH = 60.0
+"""The bold backbone, outlined parts and wide parts (px) of a plasmid map, as plasmid editors draw them."""
 HYPOTHETICAL_FRACTION_MIN = 0.05
 """Fraction of hypothetical CDS from which their labels are left out."""
 HYPOTHETICAL_LABEL_BLACKLIST = ("hypothetical", "uncharacterized", "unknown")
@@ -202,6 +215,8 @@ class RecordFacts:
     hypothetical_fraction: float
     cog_fraction: float
     distinct_gene_fraction: float
+    mean_gene_name_length: float
+    mean_product_length: float
     plus_strand_fraction: float
     gc_percent: float
     complete: bool
@@ -239,6 +254,10 @@ class Proposal:
     label_whitelist: tuple[tuple[str, str, str], ...] = ()
     label_blacklist: tuple[str, ...] = ()
     feature_shapes: tuple[tuple[str, str], ...] = ()
+    feature_width: float | None = None
+    axis_stroke_width: float | None = None
+    block_stroke_width: float | None = None
+    block_stroke_color: str | None = None
     separate_strands: bool = False
     resolve_overlaps: bool = False
     show_gc: bool = False
@@ -297,6 +316,14 @@ class Proposal:
             args += ["-k", ",".join(self.feature_types)]
         for kind, shape in self.feature_shapes:
             args += ["--feature_shape", f"{kind}={shape}"]
+        if self.feature_width is not None and self.mode == "circular":
+            args += ["--feature_width", f"{self.feature_width:g}"]
+        if self.axis_stroke_width is not None:
+            args += ["--axis_stroke_width", f"{self.axis_stroke_width:g}"]
+        if self.block_stroke_width is not None:
+            args += ["--block_stroke_width", f"{self.block_stroke_width:g}"]
+        if self.block_stroke_color:
+            args += ["--block_stroke_color", self.block_stroke_color]
         if self.mode == "circular":
             if self.label_scope != "none":
                 args += ["--labels", "out" if self.label_scope == "outer" else self.label_scope]
@@ -373,6 +400,10 @@ class Proposal:
             "labelWhitelist": [list(row) for row in self.label_whitelist],
             "labelBlacklist": list(self.label_blacklist),
             "featureShapes": [list(row) for row in self.feature_shapes],
+            "featureWidth": self.feature_width,
+            "axisStrokeWidth": self.axis_stroke_width,
+            "blockStrokeWidth": self.block_stroke_width,
+            "blockStrokeColor": self.block_stroke_color,
             "separateStrands": self.separate_strands,
             "resolveOverlaps": self.resolve_overlaps,
             "showGc": self.show_gc,
@@ -522,6 +553,7 @@ def inspect_record(record: SeqRecord) -> RecordFacts:
     )
     gene_names = [name for feature in cds for name in _qualifier_text(feature, "gene")[:1]]
     distinct = len(set(gene_names)) / len(gene_names) if gene_names else 1.0
+    products = [name for feature in cds for name in _qualifier_text(feature, "product")[:1]]
     stranded = [
         feature
         for feature in features
@@ -556,6 +588,8 @@ def inspect_record(record: SeqRecord) -> RecordFacts:
         hypothetical_fraction=hypothetical,
         cog_fraction=cog,
         distinct_gene_fraction=distinct,
+        mean_gene_name_length=sum(map(len, gene_names)) / len(gene_names) if gene_names else 0.0,
+        mean_product_length=sum(map(len, products)) / len(products) if products else 0.0,
         plus_strand_fraction=plus / len(stranded) if stranded else 0.5,
         gc_percent=_gc_percent(record),
         complete=complete,
@@ -616,8 +650,60 @@ def _overlap_fraction(records: Sequence[SeqRecord], types: set[str]) -> float:
     return nested / total if total else 0.0
 
 
+# The Web app's Pharokka and Bakta presets keep the tools' own colors. The
+# proposal keeps each category's hue, so the maps stay recognizable, but moves
+# the fills into the scheme's lightness band: the softened color by the
+# preset's color. A preset color not listed here is used as it is.
+PRESET_SOFT_COLORS: Mapping[str, Mapping[str, str]] = {
+    "pharokka": {
+    "#aaaaaa": "#cacaca",
+    "#4deeea": "#78d6db",
+    "#74ee15": "#86c660",
+    "#ffe700": "#f2d76c",
+    "#f000ff": "#cd509f",
+    "#001eff": "#3263c3",
+    "#8900ff": "#b49aed",
+    "#e0b0ff": "#e3c5ea",
+    "#ff008d": "#ee6e91",
+    "#5a5a5a": "#80787a",
+    "#ff0000": "#d02b31",
+},
+    # The 26 COG categories in four hue families: information storage and
+    # processing (blue, violet), cellular processes and signaling (green,
+    # teal), metabolism (warm), poorly characterized and the mobilome (gray).
+    "bakta": {
+    "#c5000b": "#98b8f2",
+    "#6a3d9a": "#c1c6f8",
+    "#bebada": "#ca5747",
+    "#ff7f00": "#3d8e53",
+    "#ffffb3": "#eec469",
+    "#e31a1c": "#b13554",
+    "#fb8072": "#f19a4b",
+    "#b2df8a": "#e08256",
+    "#ccebc5": "#fdce95",
+    "#a6cee3": "#547ecd",
+    "#b3de69": "#9889e3",
+    "#80b1d3": "#196ea9",
+    "#bc80bd": "#137b5e",
+    "#cab2d6": "#bcce83",
+    "#33a02c": "#7f9f53",
+    "#fccde5": "#cc6f9d",
+    "#1f78b4": "#f19d9d",
+    "#8dd3c7": "#bebebe",
+    "#222222": "#d7d7d7",
+    "#fdb462": "#8bc377",
+    "#fdbf6f": "#76c7d0",
+    "#fb9a99": "#3eb59e",
+    "#0084d1": "#299f9c",
+    "#d9d9d9": "#a89c92",
+    "#ffff38": "#a9e0c1",
+    "#ffff99": "#c1e1c6",
+},
+}
+
+
 def _preset_rules(name: str) -> tuple[ColorRule, ...]:
-    """The rows of a color table that ships with the Web app (Bakta COG, Pharokka).
+    """The rows of a color table that ships with the Web app (Bakta COG, Pharokka), softened.
 
     The browser wheel does not carry the preset files; there the rules are empty
     and the Web app applies its own copy of the table.
@@ -627,11 +713,13 @@ def _preset_rules(name: str) -> tuple[ColorRule, ...]:
         text = presets.joinpath(f"{name}_color_table.txt").read_text(encoding="utf-8")
     except OSError:
         return ()
+    soft = PRESET_SOFT_COLORS.get(name, {})
     rows: list[ColorRule] = []
     for line in text.splitlines():
         parts = line.rstrip("\n").split("\t")
         if len(parts) >= 5 and not line.startswith("#"):
-            rows.append((parts[0], parts[1], parts[2], parts[3], parts[4]))
+            color = soft.get(parts[3].lower(), parts[3])
+            rows.append((parts[0], parts[1], parts[2], color, parts[4]))
     return tuple(rows)
 
 
@@ -711,44 +799,60 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
     overlap = _overlap_fraction(
         records, {kind for kind in types if DEFAULT_FEATURE_RENDERINGS.get(kind) != "underlay"}
     )
-    if overlap >= OVERLAP_FRACTION_MIN:
+    plasmid_map = kinds <= {"vector", "plasmid"}
+    if overlap >= OVERLAP_FRACTION_MIN or (plasmid_map and overlap > 0):
         proposal.decide(
             "resolve_overlaps", True, f"{overlap:.0%} of the drawn features lie inside another one (--resolve_overlaps)"
         )
 
-    # Labels.
+    # Labels: first the text a CDS label would carry, then how many fit.
     labelable = (
         sum(counts[kind] for kind in proposal.feature_types) if kinds == {"vector"} else sum(f.labelable for f in facts)
     )
     gene_coverage = head.cds_qualifier_coverage.get("gene", 0.0)
+    mean_length: float
+    if kinds == {"vector"}:
+        priority, reason, mean_length = VECTOR_LABEL_PRIORITY, "plasmid editors name features in /label", LABEL_REFERENCE_LENGTH
+    elif gene_coverage >= GENE_NAME_COVERAGE_MIN and head.distinct_gene_fraction < 0.9:
+        priority = "product,gene,locus_tag"
+        reason = f"gene names repeat ({head.distinct_gene_fraction:.0%} distinct), so products label the CDS"
+        mean_length = head.mean_product_length
+    elif gene_coverage >= GENE_NAME_COVERAGE_MIN:
+        priority = "gene,product"
+        reason = f"gene names on {gene_coverage:.0%} of CDS are shorter than products"
+        mean_length = head.mean_gene_name_length
+    else:
+        priority = "product,gene,locus_tag"
+        reason = f"gene names on only {gene_coverage:.0%} of CDS, so products label the CDS"
+        mean_length = head.mean_product_length
+    # Short labels (gene names like OPG001) stack more densely than products;
+    # a circle has less room around it than rows have above them.
+    max_factor = LABEL_BUDGET_MAX_FACTOR if proposal.mode == "linear" else LABEL_BUDGET_MAX_FACTOR_CIRCULAR
+    budget_factor = min(max_factor, max(1.0, LABEL_REFERENCE_LENGTH / max(1.0, mean_length)))
+    budget = round(LABEL_ALL_MAX * budget_factor)
+    how_many = f"{labelable} labels" + (f" of about {mean_length:.0f} characters" if budget != LABEL_ALL_MAX else "")
     if proposal.mode == "circular":
-        if proposal.grouping == "single" and labelable <= LABEL_ALL_MAX:
-            proposal.decide("label_scope", "outer", f"{labelable} labels fit outside the circle")
-            proposal.decide("track_type", "middle", "the middle preset reads best with outer labels")
+        if proposal.grouping == "single" and labelable <= budget:
+            proposal.decide("label_scope", "outer", f"{how_many} fit outside the circle")
+            if proposal.resolve_overlaps and overlap >= 0.5 and not plasmid_map:
+                proposal.decide("track_type", "tuckin", "nested features on several lanes stay inside the circle")
+            else:
+                proposal.decide("track_type", "middle", "the middle preset reads best with outer labels")
         elif proposal.grouping == "single" and labelable <= LABEL_NAMED_MAX:
             proposal.decide("label_scope", "outer", f"{labelable} candidates: only named genes and RNA genes are labelled")
             proposal.label_whitelist = (("CDS", "gene", ".+"), ("rRNA", "product", ".+"), ("tRNA", "product", ".+"))
         else:
             proposal.decide("label_scope", "none", f"{labelable} labels would not be readable")
-    elif labelable <= LABEL_ALL_MAX:
-        proposal.decide("label_scope", "all", f"{labelable} labels over {count} record(s)" if count > 1 else f"one record with {labelable} labels")
-    elif count > 1 and labelable <= LABEL_ALL_MAX * count:
+    elif labelable <= budget:
+        proposal.decide("label_scope", "all", f"{how_many} over {count} record(s)" if count > 1 else f"one record with {how_many}")
+    elif count > 1 and labelable <= budget * count:
         proposal.decide("label_scope", "first", f"{count} records: only the first row is labelled")
     else:
         proposal.decide("label_scope", "none", f"{labelable // count} labels per record would not be readable")
     if proposal.label_scope != "none" and kinds == {"vector"}:
-        proposal.decide("qualifier_priority", VECTOR_LABEL_PRIORITY, "plasmid editors name features in /label")
+        proposal.decide("qualifier_priority", priority, reason)
         proposal.qualifier_priority = tuple((kind, VECTOR_LABEL_PRIORITY) for kind in proposal.feature_types)
     elif proposal.label_scope != "none":
-        if gene_coverage >= GENE_NAME_COVERAGE_MIN and head.distinct_gene_fraction < 0.9:
-            priority = "product,gene,locus_tag"
-            reason = f"gene names repeat ({head.distinct_gene_fraction:.0%} distinct), so products label the CDS"
-        elif gene_coverage >= GENE_NAME_COVERAGE_MIN:
-            priority = "gene,product"
-            reason = f"gene names on {gene_coverage:.0%} of CDS are shorter than products"
-        else:
-            priority = "product,gene,locus_tag"
-            reason = f"gene names on only {gene_coverage:.0%} of CDS, so products label the CDS"
         rows = [("CDS", priority)]
         if "mat_peptide" in proposal.feature_types:
             rows.append(("mat_peptide", "product,gene"))
@@ -798,17 +902,30 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
         proposal.decide("separate_strands", False, f"{max(plus, 1 - plus):.0%} of the genes are on one strand")
     elif head.kind == "gene_cluster":
         proposal.decide("separate_strands", False, "a gene cluster is more compact in one lane")
+    elif plasmid_map and head.length < SMALL_REPLICON_MAX_LENGTH:
+        proposal.decide("separate_strands", False, "a plasmid map keeps both strands on one ring; the arrows show the direction")
+        proposal.decide("axis_stroke_width", PLASMID_MAP_AXIS_STROKE, "a plasmid map draws a bold backbone")
+        proposal.decide("block_stroke_width", PLASMID_MAP_BLOCK_STROKE, "and outlines its parts")
+        proposal.block_stroke_color = PLASMID_MAP_STROKE_COLOR
+        if proposal.mode == "circular":
+            proposal.decide("feature_width", PLASMID_MAP_FEATURE_WIDTH, "wide parts on a ring that carries no composition track")
     else:
         proposal.decide("separate_strands", True, f"genes on both strands ({plus:.0%} on the plus strand)")
+    longest = max(f.length for f in facts)
     if kinds == {"vector"}:
         proposal.decide("show_gc", False, "a plasmid map shows parts, not composition")
         proposal.decide("show_skew", False, "a plasmid map shows parts, not composition")
+    elif proposal.mode == "circular" and longest < RING_MIN_LENGTH:
+        proposal.decide("show_gc", False, f"{longest:,} bp holds too few windows for a composition ring")
+        proposal.decide("show_skew", False, f"{longest:,} bp holds too few windows for a composition ring")
     elif proposal.mode == "circular":
         proposal.decide("show_gc", True, "a circular diagram shows the GC content ring")
-        if head.kind in {"bacterial_chromosome", "plasmid"}:
+        if head.kind == "bacterial_chromosome" or (head.kind == "plasmid" and longest >= SMALL_REPLICON_MAX_LENGTH):
             proposal.decide("show_skew", True, "the GC skew sign change marks the replication origin and terminus")
+        elif head.kind in {"mitochondrion", "plastid"}:
+            proposal.decide("show_skew", True, "strand asymmetry is part of an organelle map")
         else:
-            proposal.decide("show_skew", True, "the circular default")
+            proposal.decide("show_skew", False, "a skew ring says little about a replicon this small")
         if head.kind == "mitochondrion" and head.gc_percent < 45:
             proposal.notes.append(f"GC {head.gc_percent:.1f}%: an AT skew (-n AT) may read better")
     else:
@@ -842,9 +959,15 @@ __all__ = [
     "HYPOTHETICAL_FRACTION_MIN",
     "HYPOTHETICAL_LABEL_BLACKLIST",
     "LABEL_ALL_MAX",
+    "LABEL_BUDGET_MAX_FACTOR",
+    "LABEL_BUDGET_MAX_FACTOR_CIRCULAR",
+    "LABEL_REFERENCE_LENGTH",
     "LABEL_NAMED_MAX",
     "MITOCHONDRION_RULES",
     "PLASTOME_RULES",
+    "PRESET_SOFT_COLORS",
+    "RING_MIN_LENGTH",
+    "SMALL_REPLICON_MAX_LENGTH",
     "Proposal",
     "RecordFacts",
     "inspect_record",

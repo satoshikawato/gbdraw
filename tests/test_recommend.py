@@ -13,7 +13,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.cli_utils.auto import auto_main
 from gbdraw.mode_profiles import DEFAULT_FEATURE_TYPES
-from gbdraw.recommend import LABEL_ALL_MAX, LABEL_NAMED_MAX, inspect_record, propose
+from gbdraw.recommend import LABEL_NAMED_MAX, inspect_record, propose
 
 TEST_INPUTS = Path(__file__).resolve().parent / "test_inputs"
 
@@ -155,11 +155,24 @@ def test_complete_bacterial_genome_with_linear_locus_is_drawn_circular() -> None
 def test_many_labels_are_hidden_and_named_genes_are_whitelisted() -> None:
     crowded = _record(length=2_000_000, features=_genes(LABEL_NAMED_MAX + 1, name=False))
     assert propose([crowded]).label_scope == "none"
-    named = _record(length=1_000_000, features=_genes(LABEL_ALL_MAX + 1))
+    named = _record(length=1_000_000, features=_genes(300))
     proposal = propose([named])
     assert proposal.label_scope == "outer"
     assert proposal.label_whitelist[0] == ("CDS", "gene", ".+")
     assert proposal.track_type == "tuckin"
+
+
+def test_short_gene_names_raise_the_label_budget() -> None:
+    # 180 six-character names on one linear record are all labelled; 180 long products are not.
+    short = _record(topology="linear", definition="Monkeypox virus, complete genome", organism="Monkeypox virus", taxonomy=("Viruses",), length=200_000, features=_genes(180))
+    assert propose([short]).label_scope == "all"
+    long_products = [_feature("CDS", 100 + 1_000 * i, 1_000 + 1_000 * i, product=f"putative membrane transporter family protein {i}") for i in range(180)]
+    long = _record(topology="linear", definition="Monkeypox virus, complete genome", organism="Monkeypox virus", taxonomy=("Viruses",), length=200_000, features=long_products)
+    assert propose([long]).label_scope == "none"
+    # A circle has less room: 230 short names fit, 300 do not.
+    assert propose([_record(length=1_000_000, features=_genes(230))]).label_scope == "outer"
+    assert propose([_record(length=1_000_000, features=_genes(230))]).label_whitelist == ()
+    assert propose([_record(length=1_000_000, features=_genes(300))]).label_whitelist != ()
 
 
 def test_hypothetical_products_are_left_out_of_the_labels() -> None:
@@ -173,8 +186,8 @@ def test_hypothetical_products_are_left_out_of_the_labels() -> None:
     args = proposal.cli_args()
     assert args[args.index("--label_blacklist") + 1] == "hypothetical,uncharacterized,unknown"
     assert "--label_whitelist" not in args
-    # Only named genes are labelled above LABEL_ALL_MAX, so the whitelist replaces the blacklist.
-    crowded = propose([_record(length=1_000_000, features=[*_genes(LABEL_ALL_MAX + 1), *hypothetical])])
+    # Only named genes are labelled above the label budget, so the whitelist replaces the blacklist.
+    crowded = propose([_record(length=1_000_000, features=[*_genes(300), *hypothetical])])
     assert crowded.label_whitelist and not crowded.label_blacklist
     # Without hypothetical products there is nothing to leave out.
     assert not propose([_record(features=named)]).label_blacklist
@@ -222,7 +235,7 @@ def test_circular_records_share_one_canvas_and_rows_are_stacked_otherwise() -> N
     contigs = [_record(topology="linear", definition=f"contig_{i}", length=50_000, record_id=f"C{i}", features=_genes(10)) for i in range(3)]
     rows = propose(contigs)
     assert (rows.mode, rows.grouping, rows.label_scope) == ("linear", "single", "all")
-    clusters = [_record(topology="linear", definition=f"contig_{i}", length=100_000, record_id=f"C{i}", features=_genes(60)) for i in range(3)]
+    clusters = [_record(topology="linear", definition=f"contig_{i}", length=200_000, record_id=f"C{i}", features=_genes(150)) for i in range(3)]
     assert propose(clusters).label_scope == "first"
 
 
@@ -306,6 +319,44 @@ def test_repeated_gene_names_and_cog_free_bakta_fall_back() -> None:
     ])
     assert inspect_record(bakta).annotation_tool == "bakta"
     assert propose([bakta]).color_rules_name is None
+
+
+def test_plasmid_maps_keep_one_ring_and_tile_their_overlaps() -> None:
+    # A 9.6 kb natural plasmid: one ring, every overlap tiled, no composition ring.
+    small = _record(length=9_600, source={"plasmid": "pPCP1"}, definition="plasmid pPCP1, complete sequence", features=[
+        *_genes(8), _feature("CDS", 150, 700, -1, product="nested ORF"),
+    ])
+    proposal = propose([small])
+    assert proposal.facts[0].kind == "plasmid"
+    assert not proposal.separate_strands and proposal.resolve_overlaps
+    assert not proposal.show_gc and not proposal.show_skew
+    assert (proposal.axis_stroke_width, proposal.block_stroke_width, proposal.block_stroke_color) == (6.0, 3.0, "#4d4d4d")
+    assert proposal.feature_width == 60.0
+    args = proposal.cli_args()
+    assert args[args.index("--axis_stroke_width") + 1] == "6" and "--block_stroke_color" in args
+    # A 120 kb plasmid is drawn like a chromosome: strands split, GC content and skew rings.
+    large = _record(length=120_000, source={"plasmid": "pNDM"}, definition="plasmid pNDM, complete sequence", features=_genes(100))
+    big = propose([large])
+    assert big.separate_strands and big.show_gc and big.show_skew
+    assert big.feature_width is None and big.axis_stroke_width is None
+    # Deeply nested ORFs of a small circular virus go to lanes inside the circle.
+    hbv = _record(length=3_200, organism="Hepatitis B virus", taxonomy=("Viruses",), definition="Hepatitis B virus, complete genome", features=[
+        _feature("CDS", 100, 2_500, gene="P", product="polymerase"),
+        _feature("CDS", 300, 1_300, gene="S", product="small envelope protein"),
+        _feature("CDS", 1_400, 1_900, gene="X", product="X protein"),
+    ])
+    assert propose([hbv]).track_type == "tuckin"
+
+
+def test_presets_are_softened_but_keep_their_rows() -> None:
+    from gbdraw.recommend import PRESET_SOFT_COLORS, _preset_rules
+
+    pharokka = _preset_rules("pharokka")
+    assert pharokka and all(rule[3].lower() in set(PRESET_SOFT_COLORS["pharokka"].values()) for rule in pharokka)
+    assert dict((rule[2], rule[3]) for rule in pharokka)["unknown function"] == "#cacaca"
+    bakta = {rule[2]: rule[3] for rule in _preset_rules("bakta")}
+    assert bakta["^COG:S$"] == "#d7d7d7"  # the unknown-function majority is a light gray, not near-black
+    assert len(bakta) == 26
 
 
 def test_gene_only_annotation_draws_the_gene_features() -> None:
