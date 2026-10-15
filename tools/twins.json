@@ -3,6 +3,21 @@
   "description": "Logic that Python and the Web each implement (boundary audit M2). tests/web/twin-registry.test.mjs requires a row for every twin that twin.unregistered.v1 (tools/web-twin-detectors.mjs) detects and no vector: or function: row it does not detect; constant: and concern: rows record twins it does not see. Rows leave when a side is deleted; a new row is an authority change, made before its twin with \"pending\": true, which the change that adds the twin removes.",
   "twins": [
     {
+      "id": "vector:tests/fixtures/annotation-target-migration-vectors.json",
+      "concern": "Hash annotation targets to feature identity (Session 44 and older)",
+      "pythonOwner": [
+        "gbdraw/session_io.py:migrate_session_annotation_targets"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionAnnotationTargets"
+      ],
+      "vector": "tests/fixtures/annotation-target-migration-vectors.json",
+      "reason": "Web Load and CLI replay of a Session 44 or older must move the same hash annotation targets; 19 cases pin them.",
+      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
+      "source": "inventory C section B (annotation targets; OV-134)",
+      "pending": true
+    },
+    {
       "id": "vector:tests/fixtures/auto_size_vectors.json",
       "concern": "Auto size values by record length (size class)",
       "pythonOwner": [
@@ -256,6 +271,21 @@
       "reason": "A track-slot edit shows its Legend rows before Generate; the vector pins them.",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
+    },
+    {
+      "id": "vector:tests/fixtures/location-parts-vectors.json",
+      "concern": "Feature location parts written into the interactive SVG",
+      "pythonOwner": [
+        "gbdraw/render/interactive_svg.py:_normalize_location_parts"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/standalone-interactivity.js:normalizeLocationParts"
+      ],
+      "vector": "tests/fixtures/location-parts-vectors.json",
+      "reason": "Two writers normalize the location parts of a feature into the interactive SVG: the Python CLI writer and the Web export writer. The shared vector pins that both read a part alike: a null or blank start or end is missing, a number truncates toward zero, and a missing display is built from the 1-based start and the end.",
+      "retireWhen": "the Web writes the interactive SVG through the Python writer (Worker) instead of its own copy",
+      "source": "inventory C section B (interactive SVG vs app; FL-08, GX-08)",
+      "pending": true
     },
     {
       "id": "vector:tests/fixtures/losat-outfmt6-numeric-contract.json",
