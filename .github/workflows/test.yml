@@ -1587,6 +1587,20 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout trusted Node version
+        uses: actions/checkout@v4
+        with:
+          ref: refs/heads/${{ github.base_ref }}
+          path: .ci-node-version
+          sparse-checkout: .node-version
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .ci-node-version/.node-version
+
       - name: Validate required PR evidence
         env:
           CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
