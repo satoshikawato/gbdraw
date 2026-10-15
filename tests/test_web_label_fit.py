@@ -652,3 +652,16 @@ def test_a_web_row_stops_at_its_bound_and_says_no_value_was_found() -> None:
     assert bounded.row(str(failed), "combination")["status"] == "found"
     (deadline,) = rows.deadlines
     assert deadline is not None and before + WEB_ROW_SEARCH_SECONDS <= deadline <= time.monotonic() + WEB_ROW_SEARCH_SECONDS
+
+
+@pytest.mark.parametrize("digit", ("١", "²", "３"))
+def test_label_fit_row_token_with_non_ascii_digits_is_stale(digit: str) -> None:
+    rows = _Rows()
+    error = LabelsDoNotFitError("labels overlap", report=_report(drawn=False), row_search=rows)
+    searches = LabelFitRowSearches()
+    token = str(searches.retain_failure("circular", error))
+    mode, generation, index = token.split(":")
+    assert searches.row(token, "combination")["status"] == "found"
+    for stale in (f"{mode}:{digit}:{index}", f"{mode}:{generation}:{digit}"):
+        row = searches.row(stale, "combination")
+        assert row["status"] == "not_computed" and row["reason"]

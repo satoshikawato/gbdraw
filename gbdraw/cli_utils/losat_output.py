@@ -7,17 +7,15 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Sequence
 
+from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.render.output_paths import commit_staged_output_file
 
 
 def parse_positive_int(value: str) -> int:
     """argparse type of the LOSAT thread and genetic-code options."""
 
-    try:
-        parsed = int(str(value).strip())
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a positive integer") from exc
-    if parsed <= 0:
+    parsed = parse_ascii_integer(str(value).strip())
+    if parsed is None or parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
 

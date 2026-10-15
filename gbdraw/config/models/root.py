@@ -5,6 +5,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from numbers import Real
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping
 
+from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import USER_COLOR_FORMS, is_user_color
 
@@ -44,7 +45,8 @@ def _is_font_weight(text: str) -> bool:
     if text in _FONT_WEIGHT_KEYWORDS:
         return True
     # Digits only, the form CairoSVG reads; "700.0" and "7e2" errored under svgwrite.
-    return text.isascii() and text.isdigit() and 1 <= int(text) <= 1000
+    weight = parse_ascii_nonnegative_integer(text)
+    return weight is not None and 1 <= weight <= 1000
 
 
 _KEYWORD_LEAF_DOMAINS: dict[str, tuple[str, Callable[[str], bool]]] = {

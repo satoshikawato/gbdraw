@@ -14,6 +14,7 @@ import sys
 from dataclasses import replace
 from typing import Sequence
 
+from gbdraw.core.numeric import argparse_integer
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
@@ -73,7 +74,7 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--feature_overlap_tolerance_bp", metavar="BP", type=int, default=0,
+        "--feature_overlap_tolerance_bp", metavar="BP", type=argparse_integer, default=0,
         help="Non-negative permitted feature overlap in base pairs (default: 0).",
     )
     parser.add_argument(
@@ -81,7 +82,7 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
         help="Topology override for exactly one direct-input record (default: auto).",
     )
     parser.add_argument(
-        "--display_start_coordinate", type=int, default=None,
+        "--display_start_coordinate", type=argparse_integer, default=None,
         help="1-based source coordinate at the display start; requires one complete circular record.",
     )
     parser.add_argument(
@@ -109,12 +110,12 @@ def _add_window_step_args(parser: argparse.ArgumentParser) -> None:
         '-w',
         '--window',
         help='window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb)',
-        type=int)
+        type=argparse_integer)
     parser.add_argument(
         '-s',
         '--step',
         help='step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)',
-        type=int)
+        type=argparse_integer)
 
 
 def _add_feature_shape_arg(parser: argparse.ArgumentParser) -> None:
@@ -289,11 +290,11 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--depth_window',
         help='Depth aggregation window size. Defaults to one tenth of the GC/skew window, with a 100 bp minimum.',
-        type=int)
+        type=argparse_integer)
     parser.add_argument(
         '--depth_step',
         help='Depth aggregation step size. Defaults to one tenth of the GC/skew step.',
-        type=int)
+        type=argparse_integer)
     parser.add_argument(
         '--share_depth_axis',
         help='Use one depth y-axis scale across records.',
@@ -373,7 +374,7 @@ def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--alignment_length',
         help='Minimum BLAST alignment length retained for similarity rings (default: 0).',
-        type=int,
+        type=argparse_integer,
         default=thresholds.alignment_length)
 
 
@@ -538,12 +539,12 @@ def add_analysis_args(parser: argparse.ArgumentParser) -> None:
         '-w',
         '--window',
         help='window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb)',
-        type=int)
+        type=argparse_integer)
     parser.add_argument(
         '-s',
         '--step',
         help='step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)',
-        type=int)
+        type=argparse_integer)
 
 
 def add_feature_args(parser: argparse.ArgumentParser) -> None:

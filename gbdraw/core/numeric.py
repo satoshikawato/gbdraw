@@ -1,9 +1,18 @@
-"""Numeric helpers whose results must not depend on the Python version."""
+"""Numeric helpers whose results must not depend on the Python version or on Unicode digits."""
 
 from __future__ import annotations
 
+import argparse
 import math
+import re
 from collections.abc import Iterable
+
+# Python's ``\d`` and ``str.isdigit()`` accept other Unicode digits and ``int()`` reads the
+# decimal ones (``int("١") == 1``). Every integer gbdraw reads from user or file input is
+# ASCII; use these instead of ``\d``, ``isdigit()`` or a bare ``int()``.
+ASCII_NONNEGATIVE_INTEGER_PATTERN = "[0-9]+"
+_ASCII_NONNEGATIVE_INTEGER_RE = re.compile(ASCII_NONNEGATIVE_INTEGER_PATTERN)
+_ASCII_INTEGER_RE = re.compile(f"[+-]?{ASCII_NONNEGATIVE_INTEGER_PATTERN}")
 
 
 def compensated_sum(values: Iterable[float]) -> float:
@@ -54,4 +63,46 @@ def scaled_tick_text(position: int, divisor: int, interval: int | None) -> str:
     return f"{value:.{decimals}f}".rstrip("0").rstrip(".")
 
 
-__all__ = ["compensated_sum", "scaled_tick_text"]
+def _parse_ascii(pattern: re.Pattern[str], text: str) -> int | None:
+    if pattern.fullmatch(text) is None:
+        return None
+    try:
+        return int(text)
+    except ValueError:  # more digits than int() converts (4300)
+        return None
+
+
+def parse_ascii_nonnegative_integer(text: str) -> int | None:
+    """Return the integer ``text`` spells in ASCII digits, else ``None``.
+
+    The whole text must be digits: no sign, space, underscore, or non-ASCII
+    digit. A number too long for ``int()`` is ``None`` as well.
+    """
+    return _parse_ascii(_ASCII_NONNEGATIVE_INTEGER_RE, text)
+
+
+def parse_ascii_integer(text: str) -> int | None:
+    """Like :func:`parse_ascii_nonnegative_integer`, with an optional ``+`` or ``-`` sign."""
+    return _parse_ascii(_ASCII_INTEGER_RE, text)
+
+
+def argparse_integer(text: str) -> int:
+    """argparse ``type=`` of an integer option: what ``int()`` read, in ASCII digits only.
+
+    An optional sign and surrounding spaces are accepted, as ``int()`` did; other
+    digits and underscores (``"1_0"``) are refused with ``int()``'s own message.
+    """
+    value = parse_ascii_integer(text.strip())
+    if value is None:
+        raise argparse.ArgumentTypeError(f"invalid int value: {text!r}")
+    return value
+
+
+__all__ = [
+    "ASCII_NONNEGATIVE_INTEGER_PATTERN",
+    "argparse_integer",
+    "compensated_sum",
+    "parse_ascii_integer",
+    "parse_ascii_nonnegative_integer",
+    "scaled_tick_text",
+]

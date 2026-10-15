@@ -15,6 +15,7 @@ from .parsing import (
     validate_overlay_annotation_anchors,
 )
 from .scalars import ScalarSpec, parse_optional_pixel
+from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 
 
@@ -339,7 +340,10 @@ def parse_circular_track_slot(
                 elif key in {"enabled", "show", "visible"}:
                     enabled = parse_bool(value)
                 elif key in {"z", "z_index", "zindex"}:
-                    z = int(value)
+                    parsed_z = parse_ascii_integer(value)
+                    if parsed_z is None:
+                        raise ValueError(f"z must be an integer, got {value!r}")
+                    z = parsed_z
                 elif key in {"r", "radius"}:
                     radius = ScalarSpec.parse(value)
                 elif key in {"w", "width"}:

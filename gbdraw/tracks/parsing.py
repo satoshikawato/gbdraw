@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from numbers import Integral
 from typing import TYPE_CHECKING, Any, Collection, Literal, Mapping, Protocol, Sequence
 
+from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.mode_profiles import validate_dinucleotide
 
@@ -75,10 +75,11 @@ def parse_nonnegative_integer(raw: object, *, field_name: str) -> int:
         raise ValueError(f"{field_name} must be a nonnegative integer")
     if isinstance(raw, Integral):
         value = int(raw)
-    elif isinstance(raw, str) and re.fullmatch(r"[+-]?\d+", raw.strip()):
-        value = int(raw.strip())
     else:
-        raise ValueError(f"{field_name} must be a nonnegative integer")
+        parsed = parse_ascii_integer(raw.strip()) if isinstance(raw, str) else None
+        if parsed is None:
+            raise ValueError(f"{field_name} must be a nonnegative integer")
+        value = parsed
     if value < 0:
         raise ValueError(f"{field_name} must be >= 0")
     return value

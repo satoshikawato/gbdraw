@@ -11,6 +11,7 @@ from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord
 
+from ..core.numeric import parse_ascii_nonnegative_integer
 from ..core.record_metadata import (
     _copy_source_feature_identity,
     _feature_source_index_map,
@@ -47,9 +48,10 @@ def parse_record_selector(text: str | None) -> RecordSelector | None:
         return None
     if raw.startswith("#"):
         idx_text = raw[1:].strip()
-        if not idx_text.isdigit():
+        number = parse_ascii_nonnegative_integer(idx_text)
+        if number is None:
             raise ValueError(f"Invalid record selector '{raw}'. Use #<number> or record_id.")
-        idx = int(idx_text) - 1
+        idx = number - 1
         if idx < 0:
             raise ValueError(f"Record index must be >= 1 in selector '{raw}'.")
         return RecordSelector(raw=raw, record_id=None, record_index=idx)

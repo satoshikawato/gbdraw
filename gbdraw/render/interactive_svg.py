@@ -11,6 +11,7 @@ import re
 from typing import Callable, Literal, TypeGuard, cast, overload
 import xml.etree.ElementTree as ET
 
+from gbdraw.core.numeric import ASCII_NONNEGATIVE_INTEGER_PATTERN, parse_ascii_nonnegative_integer
 from gbdraw.exceptions import GbdrawError
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -22,10 +23,9 @@ INTERACTIVE_STYLE_ID = "gbdraw-interactive-feature-style"
 INTERACTIVE_SCRIPT_ID = "gbdraw-interactive-feature-script"
 INTERACTIVE_GLOW_FILTER_ID = "gbdraw-interactive-feature-glow"
 INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
-_FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
-_FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
-_FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_(\d+)$")
-_NONNEGATIVE_INTEGER_RE = re.compile(r"\d+")
+_FEATURE_ELEMENT_SUFFIX_RE = re.compile(rf"__(?:part|line){ASCII_NONNEGATIVE_INTEGER_PATTERN}$")
+_FEATURE_CONNECTOR_SUFFIX_RE = re.compile(rf"__line{ASCII_NONNEGATIVE_INTEGER_PATTERN}$")
+_FEATURE_RECORD_SUFFIX_RE = re.compile(rf"_record_({ASCII_NONNEGATIVE_INTEGER_PATTERN})$")
 _FEATURE_RECORD_INDEX_KEYS = (
     "record_idx",
     "record_index",
@@ -295,9 +295,7 @@ def _strict_nonnegative_integer(value: object) -> int | None:
     if type(value) is int:
         return value if value >= 0 else None
     text = value.strip() if type(value) is str else str(value).strip()
-    if not _NONNEGATIVE_INTEGER_RE.fullmatch(text):
-        return None
-    return int(text)
+    return parse_ascii_nonnegative_integer(text)
 
 
 def _consistent_nonnegative_integer_alias(
@@ -405,7 +403,7 @@ def _validate_match_fragments(attributes: Sequence[Mapping[str, object]]) -> Non
         fragment = str(item.get("data-gbdraw-match-fragment", ""))
         current = {key: value for key, value in item.items()
                    if key.startswith("data-") and key != "data-gbdraw-match-fragment"}
-        if (not dom_id or dom_id in dom_ids or not re.fullmatch(r"0|[1-9]\d*", fragment)
+        if (not dom_id or dom_id in dom_ids or not re.fullmatch(r"0|[1-9][0-9]*", fragment)
                 or fragment in fragments
                 or any(not str(item.get(key) or "").strip() for key in
                        ("data-qstart", "data-qend", "data-sstart", "data-send", "data-match-kind"))

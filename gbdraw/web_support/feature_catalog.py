@@ -14,6 +14,7 @@ from typing import Any, Iterable, TypeVar, cast
 
 from svgwrite import Drawing
 
+from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.render.group_content import ContentGroup, GroupContent, GroupKind
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
@@ -263,12 +264,9 @@ def promote_legacy_feature_catalog(
                 if stable_id and biological_id.startswith(f"{stable_id}~")
                 else ""
             )
-            if (
-                suffix.isascii()
-                and suffix.isdigit()
-                and _feature_source_index_status(feature) == (None, True)
-            ):
-                feature["sourceFeatureIndex"] = int(suffix)
+            suffix_index = parse_ascii_nonnegative_integer(suffix)
+            if suffix_index is not None and _feature_source_index_status(feature) == (None, True):
+                feature["sourceFeatureIndex"] = suffix_index
             raw_parts = feature.get("location_parts", feature.get("locationParts"))
             parts = (
                 raw_parts
@@ -1643,11 +1641,12 @@ def _match_endpoint_indexes(
         description=description,
         allow_duplicates=True,
     )
-    if any(not value.isascii() or not value.isdigit() for value in values):
+    indexes = [index for index in map(parse_ascii_nonnegative_integer, values) if index is not None]
+    if len(indexes) != len(values):
         raise GbdrawError(
             f"{description} contains an invalid source feature index."
         )
-    return [int(value) for value in values]
+    return indexes
 
 
 def _normalized_matches(
@@ -1861,6 +1860,7 @@ def _normalized_annotations(
             key,
             context_by_key.get((key[0], "", key[2], key[3]), {}),
         ).copy()
+        record_index = parse_ascii_nonnegative_integer(key[0])
         payload.update(
             {
                 "dom_id": _text(attributes.get("id")),
@@ -1870,9 +1870,7 @@ def _normalized_annotations(
                 "record_id": _text(
                     attributes.get("data-gbdraw-record-id")
                 ),
-                "record_index": (
-                    int(key[0]) if key[0].isdigit() else key[0]
-                ),
+                "record_index": key[0] if record_index is None else record_index,
                 "mark": _text(
                     attributes.get("data-gbdraw-annotation-mark")
                     or payload.get("mark")

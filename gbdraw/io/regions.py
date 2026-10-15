@@ -13,6 +13,7 @@ from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord
 
+from ..core.numeric import ASCII_NONNEGATIVE_INTEGER_PATTERN, parse_ascii_nonnegative_integer
 from ..core.record_metadata import _read_coord_map, _write_coord_map
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
 from .record_select import reverse_records
@@ -20,7 +21,8 @@ from .record_select import reverse_records
 logger = logging.getLogger(__name__)
 
 _REGION_COORD_RE = re.compile(
-    r"(?P<start>\d+)(?:\.\.|-)(?P<end>\d+)(?::(?P<strand>rc|rev|reverse|minus|-))?$",
+    rf"(?P<start>{ASCII_NONNEGATIVE_INTEGER_PATTERN})(?:\.\.|-)(?P<end>{ASCII_NONNEGATIVE_INTEGER_PATTERN})"
+    r"(?::(?P<strand>rc|rev|reverse|minus|-))?$",
     re.IGNORECASE,
 )
 
@@ -70,14 +72,16 @@ def parse_region_spec(spec: str) -> RegionSpec:
         raise ValueError("Region spec is empty.")
 
     match = _REGION_COORD_RE.search(text)
-    if not match or match.end() != len(text):
+    start = end = None
+    if match and match.end() == len(text):
+        start = parse_ascii_nonnegative_integer(match.group("start"))
+        end = parse_ascii_nonnegative_integer(match.group("end"))
+    if match is None or start is None or end is None:
         raise ValueError(
             "Invalid region spec: '{0}'. Expected format: record_id:start-end[:rc], "
             "#index:start-end[:rc], or file:record_selector:start-end[:rc].".format(text)
         )
 
-    start = int(match.group("start"))
-    end = int(match.group("end"))
     if start < 1 or end < 1:
         raise ValueError(f"Region coordinates must be >= 1: '{text}'.")
 
@@ -112,11 +116,12 @@ def parse_region_spec(spec: str) -> RegionSpec:
     if record_selector:
         if record_selector.startswith("#"):
             index_str = record_selector[1:].strip()
-            if not index_str.isdigit():
+            number = parse_ascii_nonnegative_integer(index_str)
+            if number is None:
                 raise ValueError(
                     f"Invalid record index in region spec '{text}'. Use #<number>:start-end."
                 )
-            record_index = int(index_str) - 1
+            record_index = number - 1
             if record_index < 0:
                 raise ValueError(
                     f"Record index must be >= 1 in region spec '{text}'."
