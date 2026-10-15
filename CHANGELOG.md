@@ -14,7 +14,7 @@ write-up of a release.
 
 - Added `gbdraw auto`: it reads GenBank files, proposes a complete first
   drawing from what they contain (mode and grouping, feature types, labels,
-  strands, nested-feature lanes, palette and annotation-derived color rules,
+  strands, nested-feature lanes, a color scheme and annotation-derived color rules,
   GC and skew tracks, track preset, legend), prints each setting with its
   reason and the equivalent `circular` or `linear` command, and draws it after
   confirmation, at once with `--yes`, or not at all with `--dry_run`. The

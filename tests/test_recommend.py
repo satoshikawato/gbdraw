@@ -140,7 +140,9 @@ def test_small_circular_genome_is_labelled_with_gene_names() -> None:
     assert "D-loop" in proposal.feature_types
     assert proposal.separate_strands and proposal.show_gc and proposal.show_skew
     assert proposal.color_rules_name == "mitochondrion_complexes"
-    assert {decision.setting for decision in proposal.decisions} >= {"mode", "label_scope", "palette", "legend"}
+    assert {decision.setting for decision in proposal.decisions} >= {"mode", "label_scope", "colors", "legend"}
+    assert dict(proposal.default_colors)["CDS"] == "#c3d3e4"  # the mitochondrial override of the base scheme
+    assert dict(proposal.default_colors)["gc_content"] == "#c8bca9"
 
 
 def test_complete_bacterial_genome_with_linear_locus_is_drawn_circular() -> None:
@@ -254,7 +256,8 @@ def test_cli_args_name_the_tables_and_default_feature_types_are_omitted() -> Non
     proposal = propose([_record(features=_genes(5))])
     assert proposal.feature_types == DEFAULT_FEATURE_TYPES
     args = proposal.cli_args({"qualifier_priority": Path("/tmp/p.tsv")})
-    assert "-k" not in args
+    assert "-k" not in args and "-p" not in args
+    assert args[args.index("-d") + 1] == "default_colors.tsv"
     assert args[args.index("--qualifier_priority") + 1] == "/tmp/p.tsv"
     assert args[-2:] == ["-l", "left"]
     payload = json.loads(proposal.to_json())
@@ -305,3 +308,5 @@ def test_auto_command_draws_and_writes_its_tables(tmp_path: Path, capsys: pytest
     color_table = tmp_path / "bgc.auto.color_table.tsv"
     assert color_table.read_text().splitlines()[0].split("\t")[:2] == ["CDS", "gene_kind"]
     assert (tmp_path / "bgc.auto.qualifier_priority.tsv").read_text() == "CDS\tgene,product\n"
+    defaults = dict(line.split("\t") for line in (tmp_path / "bgc.auto.default_colors.tsv").read_text().splitlines())
+    assert defaults["CDS"] == "#e3d5c2" and defaults["skew_high"] == "#89cdc3"

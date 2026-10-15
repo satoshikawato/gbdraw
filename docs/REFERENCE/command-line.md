@@ -110,10 +110,11 @@ drawn feature types (`D-loop`, `rep_origin`, `mat_peptide` of a polyprotein,
 the CDS (up to 150 labelable genes are all labelled, with `--label_blacklist`
 leaving out hypothetical products; up to 400 only the named genes and RNA
 genes; more none), separate strands, `--resolve_overlaps` when
-features nest, the palette and a color table generated from the annotation
-(COG categories of Bakta, Pharokka functions, antiSMASH `gene_kind`, plastid
-and mitochondrial gene families), the GC content and skew tracks, the track
-preset, and the legend position. The tables the command needs are written
+features nest, the colors (a `-d` scheme of soft fills and muted rings, plus a
+`-t` color table generated from the annotation: COG categories of Bakta,
+Pharokka functions, antiSMASH `gene_kind`, plastid and mitochondrial gene
+families), the GC content and skew tracks, the track preset, and the legend
+position. The tables the command needs are written
 next to the output as `<prefix>.auto.<table>.tsv`, so the printed command can
 be edited and rerun; the output and format options are those of the mode
 commands. The same proposal is available in Python as

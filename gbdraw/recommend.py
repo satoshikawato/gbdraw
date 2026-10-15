@@ -81,34 +81,75 @@ _TOOL_SIGNATURES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("mitos", re.compile(r"\bmitos\b", re.IGNORECASE)),
 )
 
-# Color rules generated from the annotation itself. The regex is searched
-# case-insensitively in the qualifier value, as the ``-t`` table is.
+# The auto color scheme. Fills carry black labels, so they sit at OKLCH
+# lightness 0.55-0.90 with moderate chroma; the quantitative rings are muted so
+# the features stay in front; the categories of one rule set were stepped in
+# lightness as well as hue so that neighbors stay apart under deuteranopia and
+# protanopia (OKLab distance >= 8 for the four mitochondrial complexes and the
+# four antiSMASH kinds). ``-d`` rows override the palette; ``-t`` rows color
+# the CDS that match a qualifier regex, searched case-insensitively.
+BASE_DEFAULT_COLORS: tuple[tuple[str, str], ...] = (
+    ("CDS", "#73b1e6"),
+    ("rRNA", "#6ed9d2"),
+    ("tRNA", "#e5d994"),
+    ("tmRNA", "#bdd594"),
+    ("ncRNA", "#a9e8c6"),
+    ("misc_RNA", "#bddbb6"),
+    ("repeat_region", "#e4e4e4"),
+    ("misc_feature", "#dedede"),
+    ("gene", "#73b1e6"),
+    ("D-loop", "#e2d6c2"),
+    ("rep_origin", "#625245"),
+    ("oriT", "#625245"),
+    ("mobile_element", "#d78e8d"),
+    ("mat_peptide", "#c5b3ea"),
+    ("gc_content", "#c8bca9"),
+    ("skew_high", "#89cdc3"),
+    ("skew_low", "#b89dd9"),
+)
+"""The palette overrides every proposal carries: soft blue CDS, sand GC ring, teal and lilac skew."""
+# Overrides of the base for the kinds with a rule set: the CDS a rule does not
+# match turn neutral so the categories stand out, and the plastome rings and
+# RNA genes move away from its many greens and yellows.
+_KIND_DEFAULT_COLORS: Mapping[str, tuple[tuple[str, str], ...]] = {
+    "mitochondrion": (("CDS", "#c3d3e4"),),
+    "plastid": (
+        ("CDS", "#ded6c9"),
+        ("rRNA", "#fda485"),
+        ("tRNA", "#c19c7f"),
+        ("repeat_region", "#ebebeb"),
+        ("gc_content", "#c8b39c"),
+        ("skew_high", "#96bbe3"),
+        ("skew_low", "#dda5ba"),
+    ),
+    "antismash": (("CDS", "#e3d5c2"),),
+}
 PLASTOME_RULES: tuple[ColorRule, ...] = (
-    ("CDS", "gene", r"^psa[A-Z]$", "#00662c", "Photosystem I"),
-    ("CDS", "gene", r"^psb[A-Z]$", "#328925", "Photosystem II"),
-    ("CDS", "gene", r"^pet[A-Z]$", "#799c13", "Cytochrome b/f complex"),
-    ("CDS", "gene", r"^atp[A-Z]$", "#97be0d", "ATP synthase"),
-    ("CDS", "gene", r"^ndh[A-Z]$", "#ffec00", "NADH dehydrogenase"),
-    ("CDS", "gene", r"^rbcL$", "#1fa12d", "RubisCO large subunit"),
-    ("CDS", "gene", r"^rpo[A-Z]\d?$", "#bd1220", "RNA polymerase"),
-    ("CDS", "gene", r"^rpl\d+$", "#9e7742", "Ribosomal proteins (LSU)"),
-    ("CDS", "gene", r"^rps\d+$", "#dbaa73", "Ribosomal proteins (SSU)"),
-    ("CDS", "gene", r"^(clpP|matK)$", "#e95d0f", "clpP, matK"),
-    ("CDS", "gene", r"^(accD|ccsA|cemA|infA)$", "#7a4e9c", "Other genes"),
-    ("CDS", "gene", r"^ycf\d+$", "#dadada", "Hypothetical reading frames (ycf)"),
+    ("CDS", "gene", r"^psa[A-Z]$", "#0b764d", "Photosystem I"),
+    ("CDS", "gene", r"^psb[A-Z]$", "#6db453", "Photosystem II"),
+    ("CDS", "gene", r"^pet[A-Z]$", "#1c989e", "Cytochrome b/f complex"),
+    ("CDS", "gene", r"^atp[A-Z]$", "#c4bb5a", "ATP synthase"),
+    ("CDS", "gene", r"^ndh[A-Z]$", "#f8dc86", "NADH dehydrogenase"),
+    ("CDS", "gene", r"^rbcL$", "#79dbb2", "RubisCO large subunit"),
+    ("CDS", "gene", r"^rpo[A-Z]\d?$", "#c04448", "RNA polymerase"),
+    ("CDS", "gene", r"^rpl\d+$", "#406eb3", "Ribosomal proteins (LSU)"),
+    ("CDS", "gene", r"^rps\d+$", "#90bff3", "Ribosomal proteins (SSU)"),
+    ("CDS", "gene", r"^(clpP|matK)$", "#8d6cc2", "clpP, matK"),
+    ("CDS", "gene", r"^(accD|ccsA|cemA|infA)$", "#e08bbc", "Other genes"),
+    ("CDS", "gene", r"^ycf\d+$", "#cacaca", "Hypothetical reading frames (ycf)"),
 )
 MITOCHONDRION_RULES: tuple[ColorRule, ...] = (
-    ("CDS", "gene", r"^(nd|nad)\d+l?$", "#f7c948", "Complex I (NADH dehydrogenase)"),
-    ("CDS", "gene", r"^(cytb|cob)$", "#f28e2b", "Complex III (cytochrome b)"),
-    ("CDS", "gene", r"^cox?\d$", "#e15759", "Complex IV (cytochrome c oxidase)"),
-    ("CDS", "gene", r"^atp\d$", "#76b7b2", "ATP synthase"),
+    ("CDS", "gene", r"^(nd|nad)\d+l?$", "#6da9e7", "Complex I (NADH dehydrogenase)"),
+    ("CDS", "gene", r"^(cytb|cob)$", "#fab45f", "Complex III (cytochrome b)"),
+    ("CDS", "gene", r"^cox?\d$", "#c75374", "Complex IV (cytochrome c oxidase)"),
+    ("CDS", "gene", r"^atp\d$", "#42a878", "ATP synthase"),
 )
 ANTISMASH_RULES: tuple[ColorRule, ...] = (
-    ("CDS", "gene_kind", r"^biosynthetic$", "#810e15", "Core biosynthetic"),
-    ("CDS", "gene_kind", r"^biosynthetic-additional$", "#f16d75", "Additional biosynthetic"),
-    ("CDS", "gene_kind", r"^transport$", "#6495ed", "Transport"),
-    ("CDS", "gene_kind", r"^regulatory$", "#2e8b57", "Regulatory"),
-    ("CDS", "gene_kind", r"^other$", "#bebebe", "Other"),
+    ("CDS", "gene_kind", r"^biosynthetic$", "#c13a46", "Core biosynthetic"),
+    ("CDS", "gene_kind", r"^biosynthetic-additional$", "#e88d94", "Additional biosynthetic"),
+    ("CDS", "gene_kind", r"^transport$", "#5497d9", "Transport"),
+    ("CDS", "gene_kind", r"^regulatory$", "#5dad70", "Regulatory"),
+    ("CDS", "gene_kind", r"^other$", "#b7b7b7", "Other"),
 )
 
 
@@ -159,6 +200,7 @@ class Proposal:
     grouping: Grouping = "single"
     feature_types: tuple[str, ...] = DEFAULT_FEATURE_TYPES
     palette: str = "default"
+    default_colors: tuple[tuple[str, str], ...] = BASE_DEFAULT_COLORS
     color_rules_name: str | None = None
     color_rules: tuple[ColorRule, ...] = ()
     label_scope: str = "none"
@@ -183,6 +225,8 @@ class Proposal:
     def tables(self) -> dict[str, tuple[tuple[str, ...], ...]]:
         """The header-less TSV tables the proposal needs, by table name."""
         tables: dict[str, tuple[tuple[str, ...], ...]] = {}
+        if self.default_colors:
+            tables["default_colors"] = self.default_colors
         if self.color_rules:
             tables["color_table"] = self.color_rules
         if self.qualifier_priority:
@@ -212,6 +256,8 @@ class Proposal:
             args.append("--multi_record_canvas")
         if self.palette != "default":
             args += ["-p", self.palette]
+        if "default_colors" in paths:
+            args += ["-d", paths["default_colors"]]
         if "color_table" in paths:
             args += ["-t", paths["color_table"]]
         if tuple(self.feature_types) != DEFAULT_FEATURE_TYPES:
@@ -281,6 +327,7 @@ class Proposal:
             "grouping": self.grouping,
             "featureTypes": list(self.feature_types),
             "palette": self.palette,
+            "defaultColors": [list(row) for row in self.default_colors],
             "colorRulesName": self.color_rules_name,
             "colorRules": [list(rule) for rule in self.color_rules],
             "labelScope": self.label_scope,
@@ -633,28 +680,33 @@ def propose(records: Sequence[SeqRecord]) -> Proposal:
                 )
             )
 
-    # Colors.
+    # Colors: the base scheme, then the rule set the annotation allows.
     tool = head.annotation_tool
     preset = _preset_rules(tool) if tool in {"bakta", "pharokka"} else ()
+    scheme = "base"
     if tool == "bakta" and preset:
         proposal.color_rules_name, proposal.color_rules = "bakta_cog", preset
-        proposal.decide("palette", "default", "Bakta COG categories (note COG:X) color the CDS")
+        proposal.decide("colors", "bakta COG", "Bakta COG categories (note COG:X) color the CDS")
     elif tool == "pharokka" and preset:
         proposal.color_rules_name, proposal.color_rules = "pharokka", preset
-        proposal.decide("palette", "default", "Pharokka functions (function, phrog) color the CDS")
+        proposal.decide("colors", "pharokka", "Pharokka functions (function, phrog) color the CDS")
     elif tool == "antismash":
+        scheme = "antismash"
         proposal.color_rules_name, proposal.color_rules = "antismash_gene_kind", ANTISMASH_RULES
-        proposal.decide("palette", "orange", "antiSMASH gene_kind colors the CDS")
+        proposal.decide("colors", "antiSMASH gene_kind", "core and additional biosynthetic, transport, regulatory and other CDS")
     elif head.kind == "plastid" and gene_coverage >= 0.5:
+        scheme = "plastid"
         proposal.color_rules_name, proposal.color_rules = "plastome_function", PLASTOME_RULES
-        proposal.decide("palette", "forest", "plastid gene names (psa, psb, pet, ndh, rpl, rps...) color the CDS by function")
+        proposal.decide("colors", "plastome families", "psa, psb, pet, atp, ndh, rbcL, rpo, rpl, rps, clpP/matK and ycf gene names")
     elif head.kind == "mitochondrion" and gene_coverage >= 0.5:
+        scheme = "mitochondrion"
         proposal.color_rules_name, proposal.color_rules = "mitochondrion_complexes", MITOCHONDRION_RULES
-        proposal.decide("palette", "ajisai", "mitochondrial gene names (nad, cob, cox, atp) color the CDS by complex")
-    elif head.kind == "gene_cluster":
-        proposal.decide("palette", "orange", "a gene cluster")
+        proposal.decide("colors", "respiratory complexes", "nad, cob, cox and atp gene names")
     else:
-        proposal.decide("palette", "default", "no functional annotation to color by")
+        proposal.decide("colors", "base scheme", "no functional annotation to color by; soft blue CDS")
+    colors = dict(BASE_DEFAULT_COLORS)
+    colors.update(_KIND_DEFAULT_COLORS.get(scheme, ()))
+    proposal.default_colors = tuple(colors.items())
 
     # Strands, GC content, skew.
     plus = head.plus_strand_fraction
