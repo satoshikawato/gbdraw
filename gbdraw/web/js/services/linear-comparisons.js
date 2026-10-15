@@ -204,6 +204,19 @@ export const createLinearComparisonEdge = ({
   losatFilename: String(losatFilename || '')
 });
 
+/**
+ * An edge's uploaded BLAST TSV, the one place that sets it: a file is the
+ * edge's active upload; none leaves the edge with no file and none active.
+ * The pair card's file input and its Remove set it, and so does Load where it
+ * drops the edge's file binding (OV-899).
+ * @param {LinearComparisonEdge} edge Changed in place.
+ * @param {File | null} file
+ */
+export const setComparisonEdgeFile = (edge, file) => {
+  edge.file = file || null;
+  edge.fileActive = Boolean(file);
+};
+
 /** @param {unknown} value */
 const isStored = (value) => value !== undefined && value !== null;
 /**

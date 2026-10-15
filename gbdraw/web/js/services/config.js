@@ -14,7 +14,7 @@ import {
 } from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
-import { orderedOptionalConservationFiles, withoutConservationSeries } from './conservation-series.js';
+import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import { isNoStrokeColor, normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
 import {
@@ -102,7 +102,8 @@ import {
   linearComparisonEdgeKey,
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
-  resolveLinearComparisonPlan
+  resolveLinearComparisonPlan,
+  setComparisonEdgeFile
 } from './linear-comparisons.js';
 import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
 import { buildSessionResources as assembleSessionResources } from './session-resources.js';
@@ -1015,12 +1016,13 @@ export const normalizeEditorStateData = (editorState = {}, {
   const unreadEdits = repairs ? { colors: [], strokes: { leaves: [], dropped: 0 } } : null;
   const droppedColors = unreadEdits?.colors ?? null;
   /**
-   * A map of edits that is no object is read as none.
+   * A map of edits that is no object is read as none; an empty value ('',
+   * null, [] or {}) holds no edit, so it loses nothing (E-OD36).
    * @param {unknown} map
    * @param {string} at
    */
   const noteNoMap = (map, at) => {
-    if (!isPlainObject(map) && !isUnsetValue(map)) losses?.push({ at, stored: map, used: {} });
+    if (!isUnsetValue(map) && !holdsNothing(map) && !isPlainObject(map)) losses?.push({ at, stored: map, used: {} });
   };
   // A Legend of another kind loses the Result's original Legend order and colors (R2-M5).
   noteNoMap(source.legend, 'legend');
@@ -3889,36 +3891,56 @@ export const canonicalRenderArtifactOwner = Object.freeze({
  * not read (an empty place of `c_conservation_blasts`) is left out with its
  * files, as Remove leaves a series out (`withoutConservationSeries`), and
  * listed; the series after it keep their own files, and with none left the
- * comparison is off, as after Remove. Writes the file lists of `files`;
- * returns the draft with the series left.
+ * comparison is off, as after Remove. OV-898 (E-OD35): a place past the
+ * draft's series (each place of a draft without series) is named by
+ * `labels`, by place, so those labels stand in for its series: the place
+ * leaves out its label, and the rings after it keep theirs. Such a place is
+ * listed at its table's place when it had a label or an entry Load cannot
+ * read; an empty place with neither is no row. Writes the file lists of
+ * `files`; returns the draft with the series and labels left.
  * @param {Record<string, unknown>} config The Circular draft Load installs.
  * @param {Record<string, unknown>} files The candidate's file slots (`applyFiles`).
- * @param {string} at Where the draft's series are in the file.
+ * @param {{ seriesAt: string, filesAt: string, stored: unknown }} where Where the
+ *   draft's series and the input files are in the file, and the stored table
+ *   list there (`files.c_conservation_blasts` of a Session 27-30; a dropped
+ *   binding of a later one is already listed).
  * @param {LoadRepair[]} repairs
  * @returns {Record<string, unknown>}
  */
-const withoutUnreadConservationSeries = (config, files, at, repairs) => {
+const withoutUnreadConservationSeries = (config, files, { seriesAt, filesAt, stored }, repairs) => {
   /** @param {unknown} list @returns {(FileLike | null)[]} */
   const placed = (list) => (Array.isArray(list) ? list : []);
   if (!placed(files.c_conservation_blasts).some((file) => !file)) return config;
   const conservation = isPlainObject(config.circularConservation) ? config.circularConservation : {};
   const series = /** @type {RawConservationSeriesEntry[]} */ (Array.isArray(conservation.series) ? conservation.series : []);
-  /** @param {unknown} list */
-  const inSeriesOrder = (list) => orderedOptionalConservationFiles(placed(list), { series });
+  /** @template {FileLike} T @param {(T | null)[]} list */
+  const inSeriesOrder = (list) => orderedOptionalConservationFiles(list, { series });
+  // Where each table, in series order, is in the stored list.
+  const storedPlaces = inSeriesOrder(placed(files.c_conservation_blasts).map((file, place) => ({ name: file?.name, place })))
+    .map((entry) => entry?.place ?? null);
+  const storedTables = placed(stored);
   let kept = {
-    blasts: inSeriesOrder(files.c_conservation_blasts),
-    fastas: inSeriesOrder(files.c_conservation_fastas),
-    sequenceSources: inSeriesOrder(files.c_conservation_sequence_sources),
-    series,
+    blasts: inSeriesOrder(placed(files.c_conservation_blasts)),
+    fastas: inSeriesOrder(placed(files.c_conservation_fastas)),
+    sequenceSources: inSeriesOrder(placed(files.c_conservation_sequence_sources)),
+    series: [...series, ...parseConservationLabelText(conservation.labels).slice(series.length).map((label) => ({ label }))],
     labels: '',
     enabled: true
   };
+  let keptSeries = series.length;
   for (let index = kept.blasts.length - 1; index >= 0; index -= 1) {
     if (kept.blasts[index]) continue;
-    if (index < kept.series.length) {
-      const label = kept.series[index].label;
+    const label = kept.series[index]?.label;
+    const place = storedPlaces[index];
+    if (index < series.length) {
+      keptSeries -= 1;
       repairs.push(loadRepair({
-        code: 'comparison-series-dropped', path: `${at}[${index}]`, effect: 'dropped',
+        code: 'comparison-series-dropped', path: `${seriesAt}[${index}]`, effect: 'dropped',
+        ...(typeof label === 'string' ? { label } : {})
+      }));
+    } else if (typeof label === 'string' || (place !== null && !holdsNothing(storedTables[place]))) {
+      repairs.push(loadRepair({
+        code: 'comparison-series-dropped', path: `${filesAt}.c_conservation_blasts[${place ?? index}]`, effect: 'dropped',
         ...(typeof label === 'string' ? { label } : {})
       }));
     }
@@ -3927,10 +3949,9 @@ const withoutUnreadConservationSeries = (config, files, at, repairs) => {
   files.c_conservation_blasts = kept.blasts;
   files.c_conservation_fastas = kept.fastas;
   files.c_conservation_sequence_sources = kept.sequenceSources;
-  // A draft without series names its rings by `labels` (by place), which keeps its text;
   // Load turns the comparison off only when no series is left.
   return { ...config, circularConservation: {
-    ...conservation, series: kept.series, ...(series.length ? { labels: kept.labels } : {}), ...(kept.enabled ? {} : { enabled: false })
+    ...conservation, series: kept.series.slice(0, keptSeries), labels: kept.labels, ...(kept.enabled ? {} : { enabled: false })
   } };
 };
 
@@ -4126,7 +4147,11 @@ const applyFiles = (filesData, {
     );
     const planWithFiles = normalizeLinearComparisonPlan(targetDrawing.linearComparisonPlan);
     planWithFiles.edges.forEach((edge) => {
-      edge.file = comparisonFiles.get(edge.id) || null;
+      const file = comparisonFiles.get(edge.id) || null;
+      // A retained file stays inactive; an edge Load leaves with no file (its
+      // binding dropped) is as the pair card's Remove leaves it (OV-899).
+      if (file) edge.file = file;
+      else setComparisonEdgeFile(edge, null);
     });
     replaceLinearComparisonPlan(
       targetDrawing.linearComparisonPlan,
@@ -5455,6 +5480,8 @@ const importSessionDocument = async (e, options = {}) => {
     const inputTypeOf = (field) => (field === requestInputField && (isUnsetValue(ui[field]) || requestInputTypeWins(field))
       ? /** @type {string} */ (canonicalProjection?.inputType) : readSessionInputType(ui[field]).value);
     const inputTypes = { cInputType: inputTypeOf('cInputType'), lInputType: inputTypeOf('lInputType') };
+    // Where the input files are in the file.
+    const filesAt = canonicalSession ? 'webFiles.bindings' : 'files';
     const candidateFiles = {
       // `applyFiles` fills the file slots.
       files: /** @type {Record<string, unknown>} */ ({}), linearSeqs: [], circularRecordList: { value: [] },
@@ -5469,7 +5496,7 @@ const importSessionDocument = async (e, options = {}) => {
       canonicalSession ? projectionResult.restoredFiles : data.files,
       {
         adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly,
-        targetState: candidateFiles, targetDrawing: candidateFiles, repairs, at: canonicalSession ? 'webFiles.bindings' : 'files'
+        targetState: candidateFiles, targetDrawing: candidateFiles, repairs, at: filesAt
       }
     );
     recordSessionLifecycleEvent('session-candidate-files-end');
@@ -5923,8 +5950,11 @@ const importSessionDocument = async (e, options = {}) => {
       if (Array.isArray(modeConfigs[mode].rules)) modeConfigs[mode].rules = savedSpecificRules(modeConfigs[mode].rules);
       if (mode === 'linear') modeConfigs.linear = withBoundLinearRecordsOff(modeConfigs.linear, candidateFiles.linearSeqs);
       if (mode === 'circular') {
-        modeConfigs.circular = withoutUnreadConservationSeries(modeConfigs.circular, candidateFiles.files,
-          `${modeScopedSession ? 'modes.circular.config' : 'config'}.circularConservation.series`, repairs);
+        modeConfigs.circular = withoutUnreadConservationSeries(modeConfigs.circular, candidateFiles.files, {
+          seriesAt: `${modeScopedSession ? 'modes.circular.config' : 'config'}.circularConservation.series`,
+          filesAt,
+          stored: canonicalSession ? null : /** @type {UnvalidatedFields<'c_conservation_blasts'>} */ (data.files)?.c_conservation_blasts
+        }, repairs);
       }
       // The form's legend position is the drawing's layout slot (state.js), which reads it in its mode.
       if (isPlainObject(modeConfigs[mode].form)) {

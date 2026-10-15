@@ -738,8 +738,9 @@ export const validateCurrentComparisonAuthority = (sessionData, { load = false }
     if (boundIds.has(id)) {
       throw new Error(`Current comparison file binding is duplicated: ${id}.`);
     }
-    // Load drops a file binding it cannot read and leaves the edge's file
-    // empty (`readSessionInputs`): the edge then has no file, as before one is chosen.
+    // Load drops a file binding it cannot read (`readSessionInputs`) and the
+    // Files apply leaves that edge with no file and none active, as the pair
+    // card's Remove does (`setComparisonEdgeFile`, OV-899).
     if (!isPlainObject(binding.file) && !(load && binding.file === null)) {
       throw new Error('Each current comparison file binding requires a file resource binding.');
     }

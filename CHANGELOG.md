@@ -359,7 +359,9 @@ write-up of a release.
   Session version never held. A comparison sequence file or Depth file that
   cannot be read keeps its place empty, and a Circular comparison series whose
   BLAST table cannot be read is left out with its sequence files, with a row
-  that names it. Run notices, recomputable caches, empty
+  that names it; the other series keep their own files and names. A Linear
+  comparison whose BLAST TSV cannot be read loads without that file, as after
+  removing it from its pair card. Run notices, recomputable caches, empty
   values and values with no effect on the figure give no row. Load still
   refuses a file that is not a gbdraw Session or configuration file, an
   unsupported or too old version, a file too large or with an unsafe name, and

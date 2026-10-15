@@ -55,7 +55,6 @@ const REASONS = Object.freeze({
   UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
   CIRCULAR_SETTING: 'It applies only to Circular diagrams. Reset it under Preserved session settings, or switch to Circular.',
   LINEAR_SETTING: 'It applies only to Linear diagrams. Reset it under Preserved session settings, or switch to Linear.',
-  RESOURCE_SIZE: 'Session resource byte sizes must be non-negative safe integers.',
   TRACK_SCHEMA: 'Recreate Custom Track Slots with the current schema.',
   SESSION_FIELDS: 'Remove unsupported top-level Session fields.',
   RECORDS_REQUIRED: 'Session render requests require at least one record.',
@@ -389,19 +388,6 @@ NATIVE_VALIDATIONS.set('GFF3 and FASTA files are required.', { code: 'FASTA_REQU
 for (const message of ['Current session is missing its active form or advanced settings.',
   'Current session is missing its canonical configuration projection.']) NATIVE_VALIDATIONS.set(message,
     { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'FIELDS' } });
-// Native Session binding validation emits these finite messages. Resource IDs
-// are discarded before the public model is constructed.
-for (const message of [
-  'Session webFiles.bindings must be an object.', 'Unsupported Web file binding schema.',
-  'Web binding schema 2 requires c_gb.', 'Invalid Web file binding metadata.',
-  'Web file bindings must be objects or null.',
-  'A composite component must be an ordinary Web file binding.',
-  'A Web file binding requires a canonical resourceId.', 'Unknown Web file binding field.',
-  'Unsupported Web composite file binding.', 'Unknown or mixed composite binding fields.',
-  'A composite binding requires at least two components.', 'Composite components require base64 resources.',
-  'Unknown Web binding inventory field.'
-]) NATIVE_VALIDATIONS.set(message, { code: 'INPUT_INVALID', stage: 'request-validation',
-  context: { field: 'schema', reason: 'FIELDS' } });
 for (const message of [
   'A canonical render request is required for adoptive ownership.',
   'Settings-only Session cannot contain biological sources.',
@@ -438,12 +424,11 @@ const nativeValidation = (message) => {
   if (typeof message !== 'string') return null;
   if (/^Circular region End \([0-9]+\) exceeds the selected record length \([0-9]+\)\.$/.test(message)) return { code: 'REGION_INVALID', stage: 'request-validation', context: { field: 'region', reason: 'RECORD_BOUNDS' } };
   for (const [template, reason] of /** @type {[RegExp, string][]} */ ([
-    [/^Session resource [\s\S]* has an invalid declared byte size\.$/, 'RESOURCE_SIZE'],
     [/^Custom Track Slots use an obsolete schema\. Recreate the slots with schema version [0-9]+\.$/, 'TRACK_SCHEMA'],
     [/^Session contains unclassified top-level field\(s\): [\s\S]*$/, 'SESSION_FIELDS']
   ])) if (template.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason } };
   if (/^Invalid managed flag for (?:circular|linear)\.[a-z_]+\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'FIELDS' } };
-  if (/^Missing canonical resource:/.test(message) || /^Session resource [\s\S]* has an unsupported encoded payload\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
+  if (/^Missing canonical resource:/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
   if (/^The SVG composition metadata is not valid JSON:/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' } };
   // has() holds here, and every stored entry is a NativeValidation.
   if (NATIVE_VALIDATIONS.has(message)) return /** @type {NativeValidation} */ (NATIVE_VALIDATIONS.get(message));

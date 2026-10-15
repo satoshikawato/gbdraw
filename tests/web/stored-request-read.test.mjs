@@ -345,11 +345,13 @@ test('a request whose comparisons Load holds is promoted like any other, and the
       'PRESERVED_READ_ONLY', []],
     ['se06 fixture', () => read('tests/fixtures/sessions/se06-main-linear-blast-cli.v42.gbdraw-session.json.gz'),
       'PRESERVED_READ_ONLY', []],
+    // A held comparison's reference to a resource the Session lacks is dropped
+    // with its row (OV-899): no Save could write it; the notice is as before.
     ['dangling comparison', () => {
       const session = gallery('BGC0000708-BGC0000713');
       session.renderRequest.comparisons[0].resourceId = 'missing';
       return session;
-    }, 'DECISION_REQUIRED', [], missing],
+    }, 'DECISION_REQUIRED', ['request-reference-dropped'], missing],
     ['unknown comparison kind', () => {
       const session = gallery('BGC0000708-BGC0000713');
       session.renderRequest.comparisons[0].kind = 'other';

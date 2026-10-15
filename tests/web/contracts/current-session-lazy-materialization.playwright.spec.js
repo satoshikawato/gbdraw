@@ -225,8 +225,10 @@ const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedP
       data: btoa('unused\n')
     };
     const recordResourceId = session.renderRequest.records[0].source.resourceId;
-    if (requestedVariant === 'invalid-size') {
-      session.resources['unused-lazy-contract'].size = -1;
+    if (requestedVariant === 'newer-version') {
+      // A Session version no writer has written yet is refused (receipt 〔拒否〕);
+      // a resource that nothing names is dropped, so its size no longer refuses a Load.
+      session.version += 1;
     } else if (requestedVariant === 'invalid-base64') {
       session.resources[recordResourceId].data = '%%%';
     }
@@ -1542,11 +1544,11 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     };
   });
 
-  const rejected = await loadSyntheticSession(page, 'invalid-size');
+  const rejected = await loadSyntheticSession(page, 'newer-version');
   expect(rejected.status).toBe('error');
   expect(rejected.message).toContain('Load a supported Session file or recreate it with the current writer.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'RESOURCE_SIZE' }
+    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' }
   });
   expect(rejected.message).not.toContain('unused-lazy-contract');
   expect(await page.evaluate(() => {

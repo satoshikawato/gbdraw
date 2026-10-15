@@ -206,6 +206,7 @@ import {
   adjacentRowPairs,
   buildLinearComparisonTimeline,
   createLinearComparisonEdge,
+  setComparisonEdgeFile,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
   missingUploadPairsToResolve,
@@ -1199,8 +1200,7 @@ export const createAppSetup = () => {
     const next = selectedPlanForEdit(drawing);
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
-    edge.file = file || null;
-    edge.fileActive = Boolean(file);
+    setComparisonEdgeFile(edge, file);
     edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
     edge.included = Boolean(file) || edge.included;
     replaceLinearComparisonPlan(drawing, next);

@@ -251,7 +251,6 @@ for (const [message, code, context] of [
   ['Circular region Start must not exceed End. Use Reverse complement to change display orientation.', 'REGION_INVALID', { field: 'region', reason: 'ORDER' }],
   ['The preserved comparison is missing a required resource.', 'COMPARISON_INPUT', { field: 'comparison', reason: 'REQUIRED' }],
   ['Canonical renderRequest records are required.', 'INPUT_INVALID', { field: 'schema', reason: 'RECORDS_REQUIRED' }],
-  ['Session resource PRIVATE_RESOURCE has an invalid declared byte size.', 'INPUT_INVALID', { field: 'schema', reason: 'RESOURCE_SIZE' }],
   ['Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2.', 'INPUT_INVALID', { field: 'schema', reason: 'TRACK_SCHEMA' }],
   ['Session contains unclassified top-level field(s): PRIVATE_FIELD', 'INPUT_INVALID', { field: 'schema', reason: 'SESSION_FIELDS' }]
 ]) {
@@ -262,6 +261,14 @@ for (const [message, code, context] of [
   assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
 }
 assert.equal(roundtrip(new Error('Circular region End (PRIVATE_VALUE) exceeds the selected record length (50466).')).code, 'UNKNOWN');
+// E4f m1 (E-OD36): Load reads the Web file bindings and resource descriptors
+// with rows (OV-895), so no code throws these texts any more; none is classified.
+for (const message of ['Unsupported Web file binding schema.', 'Web binding schema 2 requires c_gb.',
+  'A Web file binding requires a canonical resourceId.', 'Unknown Web binding inventory field.',
+  'Session resource PRIVATE_RESOURCE has an invalid declared byte size.',
+  'Session resource PRIVATE_RESOURCE has an unsupported encoded payload.']) {
+  assert.equal(roundtrip(new Error(message)).code, 'UNKNOWN', message);
+}
 
 // Use actual track validators so producer wording and the public projection
 // cannot drift; every physical field keeps its own bound and unit guidance.

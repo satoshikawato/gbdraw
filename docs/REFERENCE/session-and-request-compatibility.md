@@ -204,7 +204,10 @@ with a default, not use, or read with another meaning:
   keeps its place empty, so no later file changes series or track. A Circular
   comparison series whose BLAST table cannot be read is left out with its
   sequence files, with a row that names the series; the other series keep
-  their own files;
+  their own files and names (a Session 27–30 draft without series names its
+  rings by `labels`, by place, so the left-out ring's label goes with it). A
+  Linear comparison whose BLAST TSV cannot be read loads without that file,
+  as after removing the file from its pair card;
 - parts of the Session file that Load cannot read, each named by its place:
   the saved Results, the feature list and edits of the saved diagram, the
   stored input files, the saved diagram of the other mode, or the settings of
@@ -270,7 +273,9 @@ instead of refused, and each repair is a row in the dialog:
 - an unreadable entry of a list is dropped;
 - a part that cannot be read is left out with the settings inside it, or
   replaced by its default when it has one;
-- a reference to a file or record the Session does not hold is left out.
+- a reference to a file or record the Session does not hold is left out. A
+  saved comparison that the **Comparisons** card keeps read-only or asks
+  about keeps its record references, which that card reports.
 
 When the saved diagram's settings cannot be read at all (for example, their
 `schema` is not an integer), or are missing, the file loads as settings only if it holds the web app's own settings: a Session

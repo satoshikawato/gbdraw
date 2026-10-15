@@ -5771,8 +5771,10 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
  * @property {string} path
  * @property {boolean} [holdComparisons] Load holds the request's comparisons
  *   (a saved comparison kept read-only, or one that needs a decision): their
- *   unresolved references are what the Comparisons notice after Load shows
- *   (receipt 〔今までの知らせ〕), so they are not dropped.
+ *   unresolved record references are what the Comparisons notice after Load
+ *   shows (receipt 〔今までの知らせ〕), so they are not dropped. A reference to a
+ *   resource the Session lacks is dropped as any other is: no Save can write
+ *   it (OV-899).
  */
 /**
  * The committed Session: the request that drew the shown Result, with its
@@ -5869,7 +5871,7 @@ const RECORD_KEY_PLACE = /^layout\.(recordTranslations\[\*\]|similarityAlignment
  * @param {Readonly<Record<string, unknown>>} request The promoted request (schema 9 shape, unchecked).
  * @param {'circular' | 'linear'} mode
  * @param {ReadonlySet<string>} resourceIds
- * @param {boolean} holdComparisons The references of the comparisons are kept.
+ * @param {boolean} holdComparisons The record references of the comparisons are kept.
  * @returns {RepairPolicy<StoredReferenceReason>}
  */
 const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
@@ -5893,10 +5895,10 @@ const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
     lossless: (pattern) => (places.otherType.has(pattern) ? { value: places.otherType.get(pattern) } : null),
     discriminator: (pattern) => (pattern === '' ? 'mode' : places.tagged.has(pattern) ? 'kind' : null),
     reference: (pattern, value) => {
-      if (holdComparisons && HELD_COMPARISON_PLACE.test(pattern)) return null;
       if (/(^|\.)(resourceId|gffResourceId|fastaResourceId)$/.test(pattern)) {
         return typeof value === 'string' && !resourceIds.has(value) ? 'unknown-resource' : null;
       }
+      if (holdComparisons && HELD_COMPARISON_PLACE.test(pattern)) return null;
       if (RECORD_INDEX_PLACE.test(pattern)) {
         return Number.isInteger(value) && Number(value) >= 0 && Number(value) < records.length ? null : 'unknown-record';
       }

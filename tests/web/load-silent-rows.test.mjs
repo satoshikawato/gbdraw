@@ -357,6 +357,45 @@ test('a comparison file entry of an older Session that cannot be read is listed'
   assert.deepEqual(state.files.c_conservation_fastas, [null, null]);
 });
 
+// OV-898 (E-OD35): a 27-30 draft without series names its rings by `labels`,
+// by place; the labels stand in for the series, so a dropped place leaves out
+// its label too, with a row when it had a label or an entry Load cannot read,
+// and the rings after it keep their own labels.
+test('OV-898: a dropped table of a draft without series leaves out its label; later rings keep theirs', async () => {
+  const rings = (entry) => {
+    const session = fixture('precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz');
+    const [table] = session.files.c_conservation_blasts;
+    session.files.c_conservation_blasts = [entry, { ...table, name: 'second.tsv' }];
+    session.config.circularConservation.labels = 'a,b';
+    return session;
+  };
+  const drawn = () => orderedConservationSources(state.files.c_conservation_blasts, state.drawings.circular.circularConservation)
+    .map(({ label, file }) => [label, file.name]);
+  for (const entry of [5, null, {}]) {
+    const result = await importSession(input(rings(entry)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.deepEqual(result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]),
+      [['files.c_conservation_blasts[0]', 'a']], JSON.stringify(entry));
+    assert.deepEqual(drawn(), [['b', 'second.tsv']], JSON.stringify(entry));
+    assert.equal(state.drawings.circular.circularConservation.labels, 'b');
+  }
+  // An empty place with no label is no row; the labels are kept by place.
+  const unlabelled = rings(null);
+  unlabelled.files.c_conservation_blasts.push(null);
+  assert.deepEqual((await load(unlabelled)).filter((row) => row.startsWith('comparison-series-dropped')),
+    ['comparison-series-dropped files.c_conservation_blasts[0]']);
+  assert.deepEqual(drawn(), [['b', 'second.tsv']]);
+  // A place past the series of a draft with series keeps its label by place too.
+  const past = rings(null);
+  const [first] = fixture('precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz').files.c_conservation_blasts;
+  past.files.c_conservation_blasts = [first, null, past.files.c_conservation_blasts[1]];
+  past.config.circularConservation.series = [{ label: 'A', fileName: first.name }];
+  past.config.circularConservation.labels = 'A,b,c';
+  const pastRows = (await importSession(input(past), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })).repairs;
+  assert.deepEqual(pastRows.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]),
+    [['files.c_conservation_blasts[1]', 'b']]);
+  assert.deepEqual(drawn(), [['A', first.name], ['c', 'second.tsv']]);
+});
+
 // OV-896: with no series left, the comparison is off, as Remove leaves it.
 test('OV-896: a Load that leaves out every comparison series turns the comparison off', async () => {
   const session = fixture('synthetic_conservation.gbdraw-session.json.gz');
@@ -367,6 +406,42 @@ test('OV-896: a Load that leaves out every comparison series turns the compariso
   const conservation = state.drawings.circular.circularConservation;
   assert.deepEqual([conservation.series.length, state.files.c_conservation_blasts.length], [0, 0]);
   assert.equal(conservation.enabled, false);
+});
+
+// OV-899 (E-OD34): a dropped Linear comparison file binding leaves the
+// comparison as the pair card's Remove leaves it (no file, none active), and
+// the committed request names no resource the file lacks, so Save writes the
+// loaded state and the saved file loads with no dialog.
+test('OV-899: a dropped comparison file binding loads as a removed file; Save and reload succeed', async () => {
+  const { setMainSessionComparisonFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+  // A Session 42's stored tables go through the Worker frame conversion; the table here is in the search frame.
+  setMainSessionComparisonFrameConverter(async ({ tableText }) => ({ result: { tsv: tableText } }));
+  try {
+    const q42 = () => fixture('q-frame-main-web-upload.v42.gbdraw-session.json.gz');
+    const unknownId = q42();
+    unknownId.webFiles.bindings.linearComparisons[0].file.resourceId = 'zz';
+    const removed = q42();
+    delete removed.resources['comparison-nucleotide-1'];
+    for (const [name, session, rows, comparisons] of [
+      ['unknown resource id', unknownId, ['file-entry-dropped webFiles.bindings.linearComparisons[0].file'],
+        ['comparison-nucleotide-1']],
+      ['resource removed', removed, [
+        'file-entry-dropped webFiles.bindings.linearComparisons[0].file',
+        'request-reference-dropped renderRequest.comparisons[0]'
+      ], []]
+    ]) {
+      assert.deepEqual(await load(session), rows, name);
+      assert.deepEqual(state.drawings.linear.linearComparisonPlan.edges.map(({ file, fileActive, included, source }) => (
+        { file, fileActive, included, source })), [{ file: null, fileActive: false, included: true, source: 'upload' }], name);
+      const document = await saved();
+      assert.deepEqual(document.webFiles.bindings.linearComparisons ?? [], [], name);
+      assert.deepEqual(document.renderRequest.comparisons.map(({ resourceId }) => resourceId), comparisons, name);
+      comparisons.forEach((id) => assert.ok(document.resources[id], `${name}: ${id}`));
+      assert.deepEqual(await load(document), [], name);
+    }
+  } finally {
+    setMainSessionComparisonFrameConverter(null);
+  }
 });
 
 // R2-B1: a null request of a full Session reads as an absent one (E-OD29):
@@ -392,6 +467,26 @@ test('R2-M5: a top-level editorState.legend that is no object is listed', async 
   const session = set(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'), 'editorState.legend', 'x');
   assert.deepEqual(await load(session), ['setting-replaced editorState.legend']);
   assert.equal((state.originalLegendOrder?.value ?? []).length, 0);
+});
+
+// E4f m2 (E-OD36): an empty value of an optional editor map ([] as {} or
+// null) holds no edit, so it loses nothing and is no row; a value of another
+// kind still is.
+test('E4f m2: an empty editor map is no row; a map of another kind is listed', async () => {
+  const session = (path, value) => set(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'), path, value);
+  for (const empty of [[], {}, null]) {
+    assert.deepEqual(await load(session('editorState.legend', empty)), [], JSON.stringify(empty));
+  }
+  const withLegend = (key, value) => {
+    const file = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+    file.editorState.legend = { ...(file.editorState.legend ?? {}), [key]: value };
+    return file;
+  };
+  assert.deepEqual(await load(withLegend('originalColors', [])), []);
+  assert.deepEqual(await load(withLegend('originalColors', 'x')), ['setting-replaced editorState.legend.originalColors']);
+  for (const other of ['x', 5]) {
+    assert.deepEqual(await load(session('editorState.legend', other)), ['setting-replaced editorState.legend'], String(other));
+  }
 });
 
 // R2-m2: the verb agrees with each part's name (G1: the wording owner only).
