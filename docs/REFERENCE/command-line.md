@@ -2,12 +2,13 @@
 
 # Command line
 
-The executable has four entry points:
+The executable has five entry points:
 
 | Command | Purpose |
 |---|---|
 | `gbdraw circular` | Draw one Circular result, a multi-record canvas, or a batch of Circular results. |
 | `gbdraw linear` | Draw one ordered Linear result with optional comparisons. |
+| `gbdraw auto` | Propose a first drawing from what the GenBank records contain, explain it, and draw it with `circular` or `linear`. |
 | `gbdraw setup-losat` | Install the pinned native LOSAT release for protein comparisons. |
 | `gbdraw gui` | Serve the packaged web application locally. |
 
@@ -87,6 +88,35 @@ to the intended displayed record after selection and ordering. Use a manifest
 when it makes these record-to-setting relationships easier to verify. See
 [Input formats and TSV
 schemas](input-formats-and-tsv-schemas.md).
+
+## Propose a first drawing
+
+`gbdraw auto --gbk FILE...` reads the records and proposes one complete
+drawing from what they contain: the topology of the LOCUS line, the taxonomy,
+the `/organelle` and `/plasmid` qualifiers, the "complete genome" wording of
+the definition, the feature-type census, how many CDS carry a `gene` name, how
+many lie inside another feature, which strands the genes use, and the
+annotation tool that wrote the file (Bakta, Pharokka, antiSMASH, DFAST, PGAP,
+RefSeq). It prints every proposed setting with its reason and the equivalent
+`gbdraw circular` or `gbdraw linear` command, then draws the proposal with
+that command after a `y` answer, at once with `--yes`, or not at all with
+`--dry_run`. `--json` prints the proposal as JSON instead of text.
+
+The proposal decides the mode and grouping (a complete chromosome, plasmid,
+mitochondrion, or plastome is circular even when its LOCUS line says linear;
+several circular records share one canvas; other sets are Linear rows), the
+drawn feature types (`D-loop`, `rep_origin`, `mat_peptide` of a polyprotein,
+`gene` when a file has no CDS), the label scope and the qualifier that labels
+the CDS (up to 150 labelable genes are all labelled, up to 400 only the named
+genes and RNA genes, more none), separate strands, `--resolve_overlaps` when
+features nest, the palette and a color table generated from the annotation
+(COG categories of Bakta, Pharokka functions, antiSMASH `gene_kind`, plastid
+and mitochondrial gene families), the GC content and skew tracks, the track
+preset, and the legend position. The tables the command needs are written
+next to the output as `<prefix>.auto.<table>.tsv`, so the printed command can
+be edited and rerun; the output and format options are those of the mode
+commands. The same proposal is available in Python as
+`gbdraw.recommend.propose(records)`.
 
 ## Record selection and layout
 

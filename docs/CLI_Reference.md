@@ -36,6 +36,7 @@ Usage:
 Subcommands:
   circular  Generate a circular genome diagram
   linear    Generate a linear genome diagram
+  auto      Propose a drawing from the input, explain it, and draw it
   render    Render the drawings of a saved Session
   setup-losat  Install the pinned native LOSAT release
   gui       Launch the local web UI in your browser
@@ -50,6 +51,7 @@ Examples:
   gbdraw linear --gff input.gff --fasta input.fna
   gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
   gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
+  gbdraw auto --gbk input.gb
   gbdraw render --session project.gbdraw-session.json
   gbdraw gui
 
@@ -1587,6 +1589,46 @@ executable is available, install NCBI BLAST+ and make the program executable
 with `--ncbi_blast_bin`. You can force a native LOSAT executable on any
 platform with `--losat_bin`. NCBI BLAST+ fallback produces compatible outfmt 6
 comparisons, but its hit set is not guaranteed to be identical to LOSAT.
+
+## Auto mode
+
+<!-- BEGIN GENERATED AUTO HELP -->
+
+```text
+usage: gbdraw auto [-h] --gbk GBK_FILE [GBK_FILE ...] [-o OUTPUT] [-f FORMAT]
+                   [--overwrite] [--yes] [--dry_run] [--json]
+
+Read GenBank file(s), propose a complete drawing from what they contain (mode,
+palette and color rules, feature types, labels, strands, GC and skew tracks,
+legend), print the proposal with its reasons and the equivalent circular or
+linear command, then draw it. The tables the proposal needs are written next
+to the output as <prefix>.auto.<table>.tsv, so the printed command can be
+edited and rerun.
+
+options:
+  -h, --help            show this help message and exit
+  --gbk GBK_FILE [GBK_FILE ...]
+                        GenBank/DDBJ flat file(s)
+  -o, --output OUTPUT   output file prefix (default: accession number of the
+                        first record)
+  -f, --format FORMAT   Comma-separated list of output file formats (default:
+                        svg)
+  --overwrite           Replace existing output files (default: refuse to
+                        overwrite).
+  --yes                 Draw without asking. Without it, the proposal is drawn
+                        only after a y answer on a terminal; from a script it
+                        is printed and not drawn.
+  --dry_run             Print the proposal and the equivalent command and
+                        write nothing.
+  --json                Print the proposal as JSON instead of text.
+```
+
+<!-- END GENERATED AUTO HELP -->
+
+`gbdraw auto` proposes a drawing from the records and draws it with the
+`circular` or `linear` command whose equivalent it prints. What the proposal
+reads and decides is described in
+[Propose a first drawing](./REFERENCE/command-line.md#propose-a-first-drawing).
 
 ## Render mode
 

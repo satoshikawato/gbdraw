@@ -12,6 +12,14 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added `gbdraw auto`: it reads GenBank files, proposes a complete first
+  drawing from what they contain (mode and grouping, feature types, labels,
+  strands, nested-feature lanes, palette and annotation-derived color rules,
+  GC and skew tracks, track preset, legend), prints each setting with its
+  reason and the equivalent `circular` or `linear` command, and draws it after
+  confirmation, at once with `--yes`, or not at all with `--dry_run`. The
+  proposal is available in Python as `gbdraw.recommend.propose()`.
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.

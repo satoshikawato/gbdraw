@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_PATH = ROOT / "docs" / "CLI_Reference.md"
-MODES = ("circular", "linear", "render")
+MODES = ("circular", "linear", "auto", "render")
 
 
 def _marker(mode: str, edge: str) -> str:

@@ -23,6 +23,7 @@
 ## Features
 
 - Circular and linear genome diagrams from annotated sequence files
+- `gbdraw auto` proposes a first drawing from what a GenBank file contains, explains each setting, and draws it
 - Comparative genomics tracks from BLAST outfmt 6 or 7
 - Reusable coordinate- and feature-targeted annotation tracks
 - Browser-based GUI at [gbdraw.app](https://gbdraw.app/) and local GUI via `gbdraw gui`
