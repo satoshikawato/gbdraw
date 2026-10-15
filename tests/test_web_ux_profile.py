@@ -263,7 +263,8 @@ def test_file_uploader_exposes_a_native_keyboard_trigger() -> None:
     assert ':aria-label="`Choose ${$attrs[\'data-input-aria-label\'] || label}`"' in template
     assert '@keydown.enter.prevent="uploadAvailable && $refs.input.click()"' in template
     assert '@keydown.space.prevent="uploadAvailable && $refs.input.click()"' in template
-    assert '.upload-zone:focus-visible' in index
+    stylesheet = (WEB_INDEX.parent / "css" / "tailwind.input.css").read_text(encoding="utf-8")
+    assert '.upload-zone:focus-visible' in stylesheet
 
 
 def test_losatn_tutorial_controls_and_match_popup_are_accessible() -> None:
