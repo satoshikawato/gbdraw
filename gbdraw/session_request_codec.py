@@ -65,6 +65,7 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
+from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import (
@@ -921,12 +922,15 @@ def _decode_canonical_request(
             # Schemas 2-5 wrote one ``#<card>@<row>`` per record card; as Web
             # Load promotes them, each card's row becomes its gridRow, which
             # the records an ALL card expands to inherit.
-            rows = [token.rpartition("@")[2] for token in linear_layout.multi_record_positions]
+            rows = [
+                parse_ascii_nonnegative_integer(token.rpartition("@")[2])
+                for token in linear_layout.multi_record_positions
+            ]
             records = tuple(
-                replace(record, presentation=replace(record.presentation, grid_row=int(row)))
-                if row.isdigit() and int(row) > 0
+                replace(record, presentation=replace(record.presentation, grid_row=row))
+                if row is not None and row > 0
                 else record
-                for record, row in zip(records, [*rows, *[""] * len(records)])
+                for record, row in zip(records, [*rows, *[None] * len(records)])
             )
             linear_layout = replace(linear_layout, multi_record_positions=None)
         request = LinearDiagramRequest(

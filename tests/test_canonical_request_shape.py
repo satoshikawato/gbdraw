@@ -886,3 +886,17 @@ def test_a_current_request_outside_its_description_is_refused(mode: str, schema:
         match=r"does not match its description: renderRequest\.diagramOptions\.depthTrackColors: unknown field",
     ):
         _decode_at(schema, _request(mode), tmp_path, older_depth_input)
+
+
+@pytest.mark.parametrize("schema", [schema for schema in SCHEMAS if 2 <= schema < 6])
+@pytest.mark.parametrize(("row", "grid_row"), [("2", 2), ("١", None), ("²", None), ("x", None)])
+def test_older_linear_card_rows_are_read_as_ascii_integers_only(
+    schema: int, row: str, grid_row: int | None, tmp_path: Path
+) -> None:
+    """Schemas 2 to 5 wrote ``#<card>@<row>``; a row with other digits is not a row."""
+
+    def positions(payload: dict[str, Any]) -> None:
+        payload["layout"] = {"recordGapPx": 10, "multiRecordPositions": [f"#1@{row}"]}
+
+    decoded = _decode_at(schema, _request("linear"), tmp_path, positions)
+    assert [record.presentation.grid_row for record in decoded.records] == [grid_row]

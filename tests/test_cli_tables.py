@@ -415,3 +415,27 @@ def test_records_table_order_sort_is_stable_for_equal_and_missing_values(tmp_pat
         "missing_a.gbk",
         "missing_b.gbk",
     ]
+
+
+@pytest.mark.parametrize("digit", ("١", "²", "３"))
+def test_records_table_integer_cells_refuse_non_ascii_digits(tmp_path: Path, digit: str) -> None:
+    ok = tmp_path / "ok.tsv"
+    ok.write_text("gbk\trow\nrecord.gbk\t2\n", encoding="utf-8")
+    assert read_records_table(str(ok)).rows[0].row == 2
+
+    bad = tmp_path / "bad.tsv"
+    bad.write_text(f"gbk\trow\nrecord.gbk\t{digit}\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="expected a positive integer"):
+        read_records_table(str(bad))
+
+
+@pytest.mark.parametrize("digit", ("١", "²", "３", "1_0"))
+def test_conservation_table_losat_gencode_refuses_non_ascii_digits(tmp_path: Path, digit: str) -> None:
+    ok = tmp_path / "ok.tsv"
+    ok.write_text("comparison_sequence\tlosat_gencode\nref.gb\t11\n", encoding="utf-8")
+    assert read_conservation_table(str(ok), losat=True).rows[0].losat_gencode == 11
+
+    bad = tmp_path / "bad.tsv"
+    bad.write_text(f"comparison_sequence\tlosat_gencode\nref.gb\t{digit}\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="must be a positive integer"):
+        read_conservation_table(str(bad), losat=True)

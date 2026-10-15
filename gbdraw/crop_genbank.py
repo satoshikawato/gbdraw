@@ -10,6 +10,7 @@ from Bio.SeqFeature import (
     SeqFeature, FeatureLocation, CompoundLocation,
     BeforePosition, AfterPosition
 )
+from gbdraw.core.numeric import argparse_integer
 from gbdraw.core.record_metadata import (
     _copy_source_feature_identity,
     _feature_source_index_map,
@@ -35,13 +36,13 @@ def _get_args():
     parser.add_argument(
         "-s",
         "--start",
-        type=int,
+        type=argparse_integer,
         help="start position (1-based, inclusive)",
         required=True)
     parser.add_argument(
         "-e",
         "--end",
-        type=int,
+        type=argparse_integer,
         help="end position (1-based, inclusive)",
         required=True)
     args = parser.parse_args()

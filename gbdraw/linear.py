@@ -130,6 +130,7 @@ from .cli_utils.losat_output import (
     write_losat_output_files,
 )
 from .comparisons.losat_jobs import unique_losat_filenames
+from .core.numeric import argparse_integer, parse_ascii_integer
 
 
 # ``--losat`` choices (design 3.2).
@@ -155,11 +156,8 @@ def _parse_optional_positive_int(value: str) -> int | None:
     normalized = str(value or "").strip().lower()
     if normalized in {"", "none", "auto", "null"}:
         return None
-    try:
-        parsed = int(normalized)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a positive integer or 'none'") from exc
-    if parsed <= 0:
+    parsed = parse_ascii_integer(normalized)
+    if parsed is None or parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer or 'none'")
     return parsed
 
@@ -456,31 +454,31 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         '--collinear_min_anchors',
         dest='collinear_min_anchors',
         help='Minimum anchors/genes required for a rendered Collinear block; 1 allows singleton links (default: 1).',
-        type=int,
+        type=argparse_integer,
         default=_COLLINEARITY_PARAMETER_DEFAULTS.min_anchors)
     parser.add_argument(
         '--collinear_max_unit_gap',
         dest='collinear_max_unit_gap',
         help='Maximum unit gap between neighboring collinear anchors (default: 0).',
-        type=int,
+        type=argparse_integer,
         default=_COLLINEARITY_PARAMETER_DEFAULTS.max_unit_gap)
     parser.add_argument(
         '--collinear_max_diagonal_drift',
         dest='collinear_max_diagonal_drift',
         help='Maximum order-space diagonal drift allowed within or between collinear runs (default: 0).',
-        type=int,
+        type=argparse_integer,
         default=_COLLINEARITY_PARAMETER_DEFAULTS.max_diagonal_drift)
     parser.add_argument(
         '--collinear_max_conflicts_in_merge_gap',
         dest='collinear_max_conflicts_in_merge_gap',
         help=argparse.SUPPRESS,
-        type=int,
+        type=argparse_integer,
         default=_COLLINEARITY_PARAMETER_DEFAULTS.max_conflicts)
     parser.add_argument(
         '--collinear_max_paralog_links_per_orthogroup',
         dest='collinear_max_paralog_links_per_orthogroup',
         help=argparse.SUPPRESS,
-        type=int,
+        type=argparse_integer,
         default=_LINEAR_OPTION_DEFAULTS.collinear_max_paralog_links_per_orthogroup)
     parser.add_argument(
         '--collinear_color_mode',
@@ -585,7 +583,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--alignment_length',
         help='minimum BLAST alignment length threshold (default=0)',
-        type=int,
+        type=argparse_integer,
         default=LINEAR_MODE_PROFILE.comparison.alignment_length)
     parser.add_argument(
         '--pairwise_match_style',
@@ -738,7 +736,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--linear_track_axis_index',
         help='Axis boundary index for linear custom track slots.',
-        type=int,
+        type=argparse_integer,
         default=None,
     )
     parser.add_argument(
@@ -816,7 +814,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--scale_interval',
         help='Manual tick interval for "ruler" scale style (in bp; must be > 0). Overrides automatic calculation; optional',
-        type=int)
+        type=argparse_integer)
     _add_legend_size_args(parser)
     _add_font_args(parser)
     parser.add_argument(

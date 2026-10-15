@@ -18,6 +18,7 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.core.record_metadata import (
     _feature_source_index_map,
     _iter_source_features,
@@ -285,10 +286,12 @@ def project_comparison_frame(
     for row_index, row in frame.iterrows():
         flips = []
         for role, binding, prefix in (("query", query, "q"), ("subject", subject, "s")):
-            try:
-                indices = [int(value) for value in str(row[f"{role}_feature_index"]).split(";")]
-            except ValueError:
-                raise ValidationError("Comparison source feature indexes must be integers.") from None
+            parsed_indices = [
+                parse_ascii_integer(value.strip()) for value in str(row[f"{role}_feature_index"]).split(";")
+            ]
+            indices = [index for index in parsed_indices if index is not None]
+            if len(indices) != len(parsed_indices):
+                raise ValidationError("Comparison source feature indexes must be integers.")
             source_ids = str(row[f"{role}_feature_svg_id"]).split(";")
             view_ids = str(row.get(f"{role}_view_feature_svg_id", row[f"{role}_feature_svg_id"])).split(";")
             if not len(indices) == len(source_ids) == len(view_ids):
@@ -1354,13 +1357,13 @@ def _resolve_linear_comparison_selector(
     column: str,
 ) -> int:
     if selector.startswith("#"):
-        try:
-            index = int(selector[1:]) - 1
-        except ValueError as exc:
+        number = parse_ascii_integer(selector[1:].strip())
+        if number is None:
             raise ValidationError(
                 f"{table_path}: row {row_number}, column {column!r}: "
                 f"invalid record selector {selector!r}."
-            ) from exc
+            )
+        index = number - 1
         if 0 <= index < len(records):
             return index
     else:

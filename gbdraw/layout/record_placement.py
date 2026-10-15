@@ -6,6 +6,7 @@ from typing import Literal, Sequence
 
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.core.numeric import parse_ascii_integer, parse_ascii_nonnegative_integer
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import parse_record_selector
 
@@ -33,16 +34,13 @@ def parse_record_row_position(
         raise ValidationError(
             f"multi_record_position entry '{raw}' must include a selector before '@'."
         )
-    try:
-        row = int(row_text)
-    except ValueError as exc:
-        raise ValidationError(
-            f"multi_record_position entry '{raw}' must use a positive integer row."
-        ) from exc
-    if (
-        row <= 0
-        or (_compatibility == "circular" and not row_text.isdigit())
-    ):
+    parse_row = (
+        parse_ascii_nonnegative_integer
+        if _compatibility == "circular"
+        else parse_ascii_integer
+    )
+    row = parse_row(row_text)
+    if row is None or row <= 0:
         raise ValidationError(
             f"multi_record_position entry '{raw}' must use a positive integer row."
         )
@@ -67,12 +65,12 @@ def _resolve_record_selector_index(
     record_count = len(records)
     if compatibility == "linear":
         if selector.startswith("#"):
-            try:
-                record_index = int(selector[1:]) - 1
-            except ValueError as exc:
+            number = parse_ascii_integer(selector[1:].strip())
+            if number is None:
                 raise ValidationError(
                     f"multi_record_position selector '{selector}' is invalid."
-                ) from exc
+                )
+            record_index = number - 1
             if 0 <= record_index < record_count:
                 return record_index
             raise ValidationError(

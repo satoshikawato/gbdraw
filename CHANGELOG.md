@@ -660,6 +660,16 @@ write-up of a release.
   redraw is still running, or after a redraw that never finished, still draws
   again, so the diagram and its Legend always show the restored colors
   (OV-731).
+- Fixed (CLI, Python): an integer written with non-ASCII digits (for example
+  `#١` or `#²` as a record selector, or `-w ٣` as a window size) is refused
+  with the reader's usual error. This covers record selectors, regions, record
+  rows, table cells, Session slot indexes, track slot `z=`, GenBank
+  `/codon_start` and `/transl_table`, GFF3 `phase`, and every integer option
+  of the `gbdraw` commands. Before, some of them read the value as the ASCII
+  number and others ended in `invalid literal for int()`. An integer written
+  with underscores (`1_0`), or with more than 4300 digits, is refused too;
+  signs and surrounding spaces are still accepted (OV-674, OV-676, OV-960,
+  OV-961).
 - Web: when **Load Label TSV** is applied while the Label Not Shown dialog is
   open, the dialog is cancelled and the edited label text is not written.
   Before, the dialog disappeared without an answer, and Undo, Redo, Save and

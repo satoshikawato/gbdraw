@@ -34,6 +34,11 @@ from .analysis.protein_colinearity import (
     PROTEIN_LOSAT_CACHE_SCHEMA,
 )
 from .comparisons.losat_jobs import NUCLEOTIDE_LOSAT_CACHE_SCHEMA
+from .core.numeric import (
+    ASCII_NONNEGATIVE_INTEGER_PATTERN,
+    parse_ascii_integer,
+    parse_ascii_nonnegative_integer,
+)
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.colors import is_user_color, named_color_hex
@@ -153,7 +158,7 @@ DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _DEPTH_COLUMNS = ("reference_name", "position", "depth")
-_SLOT_PART_RE = re.compile(r"([^\[\]]+)|\[(\d+)\]")
+_SLOT_PART_RE = re.compile(rf"([^\[\]]+)|\[({ASCII_NONNEGATIVE_INTEGER_PATTERN})\]")
 # A Circular source record ``#N`` (N from 1, ASCII digits as the Web reads it,
 # OV-611): a record display draft's selector and a slice's OFF record key.
 _SOURCE_RECORD_SELECTOR = re.compile(r"#[1-9][0-9]*")
@@ -6959,7 +6964,10 @@ def _parse_slot(slot: str) -> list[str | int]:
             if key is not None:
                 parts.append(key)
             elif index is not None:
-                parts.append(int(index))
+                number = parse_ascii_nonnegative_integer(index)
+                if number is None:
+                    raise ValidationError(f"Invalid session slot: {slot}")
+                parts.append(number)
         if position != len(raw_part):
             raise ValidationError(f"Invalid session slot: {slot}")
     return parts
@@ -7004,11 +7012,8 @@ def _decode_depth_run(reference_name: str, run: Any, lines: list[str]) -> int:
 
 
 def _parse_positive_safe_integer(value: object) -> int | None:
-    text = str(value or "").strip()
-    if not re.fullmatch(r"[+-]?\d+", text):
-        return None
-    parsed = int(text)
-    if parsed <= 0 or parsed > JS_MAX_SAFE_INTEGER:
+    parsed = parse_ascii_integer(str(value or "").strip())
+    if parsed is None or parsed <= 0 or parsed > JS_MAX_SAFE_INTEGER:
         return None
     return parsed
 

@@ -19,6 +19,7 @@ from typing import Literal, TypeAlias, TypedDict, cast, get_args
 from svgwrite import Drawing
 
 from gbdraw.api.diagram import label_fit_report, label_fit_row
+from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.fit import (
     ALL_OUTSIDE_SCOPE,
@@ -306,16 +307,18 @@ class LabelFitRowSearches:
         mode_text, _, rest = token.partition(":")
         mode = label_fit_mode(mode_text)
         generation_text, _, index_text = rest.partition(":")
+        wanted_generation = parse_ascii_nonnegative_integer(generation_text)
+        wanted_index = parse_ascii_nonnegative_integer(index_text)
         source = (
             next(
                 (
-                    kept.get(int(index_text))
+                    kept.get(wanted_index)
                     for kept_mode, (generation, kept) in self._kept()
-                    if kept_mode == mode and generation == int(generation_text)
+                    if kept_mode == mode and generation == wanted_generation
                 ),
                 None,
             )
-            if generation_text.isdigit() and index_text.isdigit()
+            if wanted_generation is not None and wanted_index is not None
             else None
         )
         deadline = time.monotonic() + self._row_search_seconds
