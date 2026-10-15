@@ -535,6 +535,16 @@ test('a Session 27 to 30 loads as before whatever its renderRequest key holds: n
     assert.deepEqual(result.repairs, plain.result.repairs, JSON.stringify(request));
     assert.equal(JSON.stringify(getCommittedCanonicalSession()), committed, JSON.stringify(request));
   }
+  // Beside `resources`, a readable schema-5 request is still not committed, and
+  // Save still asks for Generate first (OV-819).
+  const v40 = fixture('BGC0000708-BGC0000713.v40-schema5.json');
+  const session = fixture(name);
+  Object.assign(session, { resources: v40.resources, renderRequest: v40.renderRequest });
+  const { result } = await load(session);
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.deepEqual(result.repairs, plain.result.repairs);
+  assert.equal(JSON.stringify(getCommittedCanonicalSession()), committed);
+  await assert.rejects(exportSession('probe', { askChoice: async () => 'download' }), { code: 'SESSION_SAVE_REQUIRES_GENERATE' });
 });
 
 const HARNESS_CANNOT_LOAD = new Map([

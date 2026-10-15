@@ -5928,7 +5928,9 @@ const importSessionDocument = async (e, options = {}) => {
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
     if (!currentSchemaSession) {
-      const committed = cloneCanonicalSession(data);
+      // Only a request Load read and projected is committed: a Session before
+      // 31 has none (`readSessionRequests`, OV-862), whatever its file holds (OV-819).
+      const committed = canonicalSession ? cloneCanonicalSession(data) : null;
       if (!committed && logicalImportedResults.length > 0) {
         const { adv } = shownDrawing;
         loadedTrackSettings = Object.freeze({
