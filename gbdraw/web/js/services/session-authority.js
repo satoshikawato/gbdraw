@@ -518,11 +518,17 @@ const withNullRequestAsMissing = (document) => {
  * each member it drops) as its path; a part dropped with no row still
  * counts (E-OD21): the `request-dropped` row of a
  * request Load cannot read (K22) loads the file as settings only, which drops
- * every other part, so it is judged as a settings-only file (OV-864).
+ * every other part, so it is judged as a settings-only file (OV-864); a
+ * Session of a version with no settings-only form (31-41) has nothing to load
+ * without its request, so that row alone restores nothing (C-OD17, BA-OD63 d).
+ * More repairs never turn a verdict of true to false, so Load may ask before
+ * every producer ran, once a row has decided it.
  * @param {SessionEnvelope} stored The document as the file holds it.
- * @param {readonly LoadRepair[]} repairs Every repair of the Load.
+ * @param {readonly LoadRepair[]} repairs The repairs of the Load so far.
  */
 export const restoresNothing = (stored, repairs) => {
+  const requestDropped = repairs.some(({ code }) => code === 'request-dropped');
+  if (requestDropped && !hasSettingsOnlyForm(stored)) return true;
   // The other mode's set dropped for its request is the part `otherModeResult`.
   const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted')
     .map(({ code, path }) => (code === 'other-result-set-dropped' ? 'otherModeResult' : path)));
@@ -545,7 +551,7 @@ export const restoresNothing = (stored, repairs) => {
   const held = (only) => Object.entries(SESSION_TOP_LEVEL_AUTHORITY)
     .filter(([key, { part }]) => part !== null && (only === undefined || part === only) && members(key).length > 0)
     .map(([key]) => key);
-  if (isSettingsOnlySessionDocument(stored) || repairs.some(({ code }) => code === 'request-dropped')) {
+  if (isSettingsOnlySessionDocument(stored) || requestDropped) {
     return held('settings').every(lost);
   }
   const parts = held();
@@ -792,6 +798,14 @@ export const hasBiologicalSessionInputs = (files = {}) => (
 export const isSettingsOnlySessionDocument = data => data != null && typeof data.version === 'number'
   && [42, 44, MODE_SCOPED_SESSION_VERSION, SESSION_VERSION].includes(data.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
+
+/**
+ * Whether a Session's version has a settings-only form (42, 44, 46, 47): one
+ * whose request cannot be read loads as settings only (K22, C-OD07).
+ * @param {SessionInput | null | undefined} data
+ * @returns {boolean}
+ */
+export const hasSettingsOnlyForm = (data) => data != null && isSettingsOnlySessionDocument({ ...data, renderRequest: null });
 
 /**
  * The request schemas a file stored, read before Load promoted its requests:

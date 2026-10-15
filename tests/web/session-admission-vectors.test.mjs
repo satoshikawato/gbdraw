@@ -7,9 +7,14 @@
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { register } from 'node:module';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+
+// R4 has one owner (E-OD22): an R4 vector passes only when `restoresNothing`
+// decided the refusal, not another producer of the same diagnostic.
+register('./helpers/restores-nothing-spy.mjs', import.meta.url);
 
 globalThis.window = {
   Vue: {
@@ -62,6 +67,8 @@ const diagnosticText = (error) => (error?.details ?? []).map(({ text }) => text)
 
 for (const vector of FIXTURE.vectors) {
   test(`${vector.id}: the Web's Load: ${vector.web} (${vector.finding})`, async () => {
+    const verdicts = [];
+    globalThis.restoresNothingVerdicts = verdicts;
     const outcome = await importSession({
       target: { files: [new Blob([JSON.stringify(edited(vector))], { type: 'application/json' })], value: 'selected' }
     }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
@@ -73,5 +80,7 @@ for (const vector of FIXTURE.vectors) {
       assert.equal(outcome.error.code, 'INPUT_INVALID', vector.id);
       assert.match(diagnosticText(outcome.error), new RegExp(`reason: ${CLASS_REASONS[vector.webClass]}$`, 'm'), vector.id);
     }
+    // R4's verdict is the last one Load asked for; no other class asks it to true.
+    assert.equal(verdicts.at(-1) === true, vector.webClass === 'R4', `${vector.id}: restoresNothing verdicts ${JSON.stringify(verdicts)}`);
   });
 }

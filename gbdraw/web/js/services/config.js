@@ -184,6 +184,7 @@ import {
   isCanonicalBand,
   hasBiologicalSessionInputs,
   holdsNothing,
+  hasSettingsOnlyForm,
   isSettingsOnlySessionDocument,
   projectArtifactState,
   projectDocumentMetadata,
@@ -2076,15 +2077,14 @@ const readSessionRequests = (rawData, version, repairs) => {
     renderRequest: /** @type {UnvalidatedFields<'schema'>} */ (top.renderRequest)?.schema,
     otherModeResult: /** @type {UnvalidatedFields<'schema'>} */ (other?.renderRequest)?.schema
   };
-  // A missing request of a version with a settings-only form is one its
-  // reader cannot read (K22, C-OD07; OV-785): no writer omits the key. An
-  // older version keeps its refusal (C-OD17). A Session before 31 holds no
-  // request (no writer wrote one), so Load reads none (OV-862).
-  const settingsOnlyForm = isSettingsOnlySessionDocument({ .../** @type {SessionEnvelope} */ (rawData), renderRequest: null });
-  if (
-    version < CANONICAL_SESSION_MIN_VERSION || top.renderRequest === null
-    || (!Object.hasOwn(top, 'renderRequest') && !settingsOnlyForm)
-  ) {
+  // A missing request is one its reader cannot read (K22, C-OD07; OV-785):
+  // no writer omits the key. A null one marks a settings-only Session of a
+  // version with that form (a full Session's null request was read as a
+  // missing one, `readSessionDocument`); at 31-41 it is one the reader cannot
+  // read. A Session before 31 holds no request (no writer wrote one), so Load
+  // reads none (OV-862).
+  const settingsOnlyForm = hasSettingsOnlyForm(/** @type {SessionEnvelope} */ (rawData));
+  if (version < CANONICAL_SESSION_MIN_VERSION || (top.renderRequest === null && settingsOnlyForm)) {
     return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification: null };
   }
   const resourceIds = new Set(isPlainObject(top.resources) ? Object.keys(/** @type {object} */ (top.resources)) : []);
@@ -2107,12 +2107,12 @@ const readSessionRequests = (rawData, version, repairs) => {
   const topRead = read(top, 'renderRequest', comparisonClassification);
   if ('kind' in topRead) {
     const envelope = /** @type {SessionEnvelope} */ (rawData);
-    // Without a settings-only form, an unread request is never committed
-    // (C-OD25). A settings-only reading that keeps no settings (a CLI or
-    // Python API Session 42, 44 or 47) restores nothing: R4 refuses it
-    // (`restoresNothing`, E-OD22).
-    if (!settingsOnlyForm) throw SESSION_FIELDS_ERROR();
     repairs.push(loadRepair({ code: 'request-dropped', path: topRead.path, effect: 'dropped' }));
+    // Without a settings-only form, an unread request is never committed
+    // (C-OD25): the row alone restores nothing, and so does a settings-only
+    // reading that keeps no settings (a CLI or Python API Session 42, 44 or
+    // 47). R4 refuses both (`restoresNothing`, E-OD22).
+    if (!settingsOnlyForm) return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification: null };
     return {
       data: /** @type {T} */ (settingsOnlySessionCandidate(envelope)), storedSchemas, settingsOnly: true,
       comparisonClassification: null
@@ -2179,11 +2179,12 @@ const readSettingsOnlyMode = (data, repairs) => {
 };
 
 /**
+ * @param {SessionEnvelope} stored The document as the file holds it (`restoresNothing`).
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
  * @param {readonly ResultSetPath[]} uncomposedSets The sets whose Results the composition transform could not compose.
  */
-const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
+const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSets) => {
   const sourceSessionVersion = sessionData.version;
   // A Session before 47 stored the Legend edits under the shown caption; every
   // reader below reads them by row key (PD-OI-061 revision 5). An edit a later
@@ -2210,11 +2211,8 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
   });
   const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs);
   const requestData = readSettingsOnlyMode(requestRead.data, repairs);
-  // K22 of a Session 31-41, which has no settings-only form: a Session whose
-  // request cannot be read restores nothing (R4; C-OD17, BA-OD63 d).
-  if (isCanonicalBand(requestData) && !isSettingsOnlySessionDocument(requestData) && !isPlainObject(requestData.renderRequest)) {
-    throw SESSION_FIELDS_ERROR();
-  }
+  // R4 decided by the request row of a Session 31-41 (K22): nothing after can restore it.
+  if (restoresNothing(stored, repairs)) throw SESSION_FIELDS_ERROR();
   const rawData = await readSessionResetReceipts(
     readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets), repairs
   );
@@ -5321,7 +5319,7 @@ const importSessionDocument = async (e, options = {}) => {
     const storedDocument = readSessionInput(parsed);
     const document = readSessionDocument(storedDocument);
     repairs.push(...document.repairs);
-    const preflight = await preflightSessionImport(document.value, repairs, uncomposedSets);
+    const preflight = await preflightSessionImport(storedDocument, document.value, repairs, uncomposedSets);
     // Preflight read the receipts against the requests Load read (RK-2).
     const { data } = preflight;
     recordSessionLifecycleEvent('current-session-preflight-end');
