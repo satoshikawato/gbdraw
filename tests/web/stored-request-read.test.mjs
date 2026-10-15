@@ -510,6 +510,23 @@ test('a schema 2 request takes the rows a schema 9 one takes: an empty tracks ob
   assert.deepEqual(tracksRows(fixture('feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz')), dropped);
 });
 
+test('a schema 1 or 2 request whose record names a resource the Session lacks is unreadable (K22), and its Session 31-41 is refused (OV-894, E-OD30)', async () => {
+  const name = 'scale-interval-zero-circular-web.v33.gbdraw-session.json.gz';
+  for (const schema of [1, 2]) {
+    const session = fixture(name);
+    session.renderRequest.schema = schema;
+    delete session.resources['record-1-genbank'];
+    assert.deepEqual(readStoredRenderRequest(session.renderRequest, contextOf(session)),
+      { kind: 'request-dropped', path: 'renderRequest', reason: 'unknown-resource' }, String(schema));
+  }
+  const missing = fixture(name);
+  delete missing.resources['record-1-genbank'];
+  await assertRefusedUnread(missing, 'record resource missing');
+  const none = fixture(name);
+  none.resources = null;
+  await assertRefusedUnread(none, 'resources null');
+});
+
 test('a request whose schema is no integer is unreadable (K22): settings only with its Web settings, refused without them; an integer the app does not read stays a Session-format error (OV-863)', async () => {
   for (const request of UNREADABLE_REQUESTS.slice(1)) {
     const session = gallery('lambda_basic_linear');
