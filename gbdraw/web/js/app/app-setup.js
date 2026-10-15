@@ -1602,22 +1602,22 @@ export const createAppSetup = () => {
     }
   };
   // A restore, or Reset Settings, that rewrites the rules: the rule owner
-  // follows the rules `write` replaced. A checkpoint figure History kept as
-  // drawn shows its rules as the step left them, so its restore asks for no
-  // rerender (D-24 (OV-731)); `step` is the step whose after side Redo restores.
+  // follows the rules `write` replaced. A checkpoint figure History recorded
+  // as drawn shows its rules as Python draws them, so its restore asks for no
+  // rerender (D-24 (OV-731)).
   /**
    * @template T
    * @param {DrawingState} drawing
    * @param {() => Promise<T>} write
-   * @param {{ drawn: boolean, step: symbol | null }} [restored]
+   * @param {{ drawn: boolean }} [restored]
    * @returns {Promise<T>}
    */
-  const followRuleEdits = async (drawing, write, { drawn, step } = { drawn: false, step: null }) => {
+  const followRuleEdits = async (drawing, write, { drawn } = { drawn: false }) => {
     const previousRules = drawing.manualSpecificRules.map((/** @type {SpecificColorRule} */ rule) => ({ ...rule }));
     specificRuleRestorePorts.retainRulesForRestore(previousRules);
     try {
       const written = await write();
-      if (!drawn) specificRuleRestorePorts.followRestoredSpecificRules(previousRules, step);
+      if (!drawn) specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
       return written;
     } finally {
       specificRuleRestorePorts.retainRulesForRestore([]);
@@ -3215,12 +3215,16 @@ export const createAppSetup = () => {
       }
     },
     afterReady(context) {
+      // D-36: a rerender that drew the current paint pays every redraw asked
+      // for; D-24 (OV-731): History keeps it as the figure of the last step.
+      const drewCurrent = rerenderDrewCurrentPaint(context);
       previewFeatureSearch.handleMountedResultReady();
       showEditsMadeWhileDrawn(context);
-      // D-24 (OV-731): a shown rerender is the figure of the History step that
-      // asked for it; History keeps it while that step is the last one.
-      const step = context.phase === 'label-reflow' ? featureActions.takeRedrawnStep() : null;
-      if (step) void history.keepRedrawnResult(step);
+      if (!drewCurrent) return;
+      featureActions.redrawShown();
+      history.keepRedrawnResult().catch((error) => {
+        console.error('History could not keep the redrawn figure.', normalizeUserFacingError(error));
+      });
     }
   });
   const {
@@ -4102,6 +4106,12 @@ export const createAppSetup = () => {
     }
   };
 
+  // D-36: a label rerender drew the current paint when its displayed Result
+  // lacks no edit made while it ran (OV-346) and no later rerender runs; read
+  // before those edits are shown on it.
+  /** @param {{ phase: string, resultIdentity: string }} context */
+  const rerenderDrewCurrentPaint = (context) => context.phase === 'label-reflow'
+    && !labelReflowProcessing.value && !resultPaintRecord.lacking(context.resultIdentity);
   // A label rerender's displayed Result, once bound, shows the fills and
   // visibility of the edits made while it ran (OV-346).
   /** @param {{ resultIdentity: string, bindingOptions: Readonly<import('./preview-runtime.js').PreviewBindingOptions> }} context */

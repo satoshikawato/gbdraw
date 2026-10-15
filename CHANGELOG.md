@@ -631,9 +631,10 @@ write-up of a release.
   removes a Legend row is being applied (OV-460, OV-461).
 - Changed (web app): Undo and Redo of a color change that adds or removes a
   Legend row no longer draw the diagram again in Python once the automatic
-  redraw of that change has been shown: its Undo step keeps the redrawn
-  diagram. An Undo or Redo made while that redraw is still running still
-  draws again, so the diagram and its Legend always show the restored colors
+  redraw of that change has been shown while the change was the last step:
+  its History step keeps the redrawn diagram. An Undo or Redo made while that
+  redraw is still running, or after a redraw that never finished, still draws
+  again, so the diagram and its Legend always show the restored colors
   (OV-731).
 - Web: when **Load Label TSV** is applied while the Label Not Shown dialog is
   open, the dialog is cancelled and the edited label text is not written.

@@ -187,8 +187,7 @@ const checkpointSvgBytes = (checkpoint) => (
  * @typedef {{ enabled: boolean, value: unknown }} ReplacementIntentCheckpoint
  *   The intent a replacement step also restores (`value` is the caller's own capture).
  * @typedef {{ type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string> }} IntentEntry
- * @typedef {{ type: 'checkpoint', label: string, before: CheckpointRecord, after: CheckpointRecord, byteSize: number, fileIds: Set<string>, step: symbol | null }} CheckpointEntry
- *   `step`: the identity key its caller gave the step (`keepRedrawnResult`).
+ * @typedef {{ type: 'checkpoint', label: string, before: CheckpointRecord, after: CheckpointRecord, byteSize: number, fileIds: Set<string> }} CheckpointEntry
  * @typedef {{
  *   type: 'artifact-replacement',
  *   label: string,
@@ -222,14 +221,12 @@ const checkpointSvgBytes = (checkpoint) => (
  *   restoreIntentCheckpoint?: IntentCheckpointHooks['restore'] | null,
  *   compareIntentCheckpoints?(before: unknown, after: unknown): boolean,
  *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown,
- *   step?: symbol,
  *   drawn?: { before: boolean, after: boolean }
  * }} HistoryStepBase
  *   What a step reads from its caller; a hook that is not a function is not called. The intent
  *   checkpoint is the caller's own value, so the three hooks take and return it opaque (they are
  *   declared as methods); a caller names its type on its own parameter. A checkpoint step also
- *   reads `step`, its identity key, and `drawn`, whether the figure of each side is the one its
- *   state draws (`CheckpointRecord`).
+ *   reads `drawn`, whether the figure of each side is the one its state draws (`CheckpointRecord`).
  */
 /**
  * @template [R=unknown]
@@ -284,9 +281,9 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The snapshot service's restore of an intent; History awaits it.
  * @property {() => HistoryCheckpoint | Promise<HistoryCheckpoint>} buildCheckpoint
  *   The snapshot service's capture of an artifact checkpoint.
- * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean, step: symbol | null }) => unknown} applyCheckpoint
- *   The snapshot service's restore of an artifact checkpoint; History awaits it. `restored`: whether
- *   its figure is the one its state draws, and the step whose after side Redo restores (else null).
+ * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean }) => unknown} applyCheckpoint
+ *   The snapshot service's restore of an artifact checkpoint; History awaits it. `restored.drawn`:
+ *   whether its figure is the one its state draws.
  * @property {(() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>) | null} [captureGeneratedArtifactHandle]
  *   The snapshot service's capture of the generated artifact for a replacement step.
  * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
@@ -1012,8 +1009,7 @@ export const createHistoryManager = ({
       before: transaction.before,
       after,
       byteSize: transaction.before.byteSize + after.byteSize,
-      fileIds,
-      step: options.step ?? null
+      fileIds
     };
     pushUndoEntry(entry);
     emitHistoryDiagnostic({
@@ -1076,15 +1072,14 @@ export const createHistoryManager = ({
       : execute(transaction);
   };
 
-  // D-24 (OV-731): the automatic rerender a checkpoint step asked for is
-  // shown. While that step is the last one and nothing is open, the state is
-  // the one its after side holds, so that side keeps the figure the rerender
-  // drew: Redo then shows it without another Python run.
-  /** @param {symbol} step The identity key the step's caller gave it. */
-  const keepRedrawnResult = async (step) => {
+  // D-24 (OV-731): a rerender drawn from the current state is shown (D-36).
+  // While the last step is a checkpoint and nothing is open, the state is the
+  // one its after side holds, so a side not yet drawn keeps the figure the
+  // rerender drew: Redo then shows it without another Python run.
+  const keepRedrawnResult = async () => {
     const entry = topEntry(undoStack);
     if (entry?.type !== 'checkpoint') return false;
-    const keeps = () => entry === topEntry(undoStack) && entry.step === step && entry.after.drawn === false
+    const keeps = () => entry === topEntry(undoStack) && entry.after.drawn === false
       && !openTransaction() && !activeCheckpoint && !activeReplacement && !restoring.value && !capturing.value;
     if (!keeps()) return false;
     const after = await captureCheckpoint();
@@ -1515,11 +1510,11 @@ export const createHistoryManager = ({
     });
   };
 
-  /** @param {CheckpointRecord} record @param {symbol | null} [step] The step Redo restores. */
-  const applyCheckpointEntry = async (record, step = null) => {
+  /** @param {CheckpointRecord} record */
+  const applyCheckpointEntry = async (record) => {
     restoring.value = true;
     try {
-      await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true, step });
+      await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true });
     } finally {
       restoring.value = false;
     }
@@ -1624,7 +1619,7 @@ export const createHistoryManager = ({
       }
       await refreshCurrentIntent();
     } else if (entry.type === 'checkpoint') {
-      await applyCheckpointEntry(entry.after, entry.step);
+      await applyCheckpointEntry(entry.after);
     } else if (entry.type === 'artifact-replacement') {
       await applyArtifactReplacementEntry(entry, 'redo');
     } else {

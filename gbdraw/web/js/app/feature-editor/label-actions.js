@@ -1029,27 +1029,20 @@ export const createFeatureLabelActions = ({
   // An edit whose Result Python must draw again asks for the automatic
   // rerender, Auto Reflow on or off: a specific-color rule edit or a History
   // step that changes a Legend source (Owner decision 2026-10-06, OV-43). A
-  // request while one is pending joins it. D-24 (OV-731): a request names the
-  // History step whose figure it draws, with the Results it was asked over;
-  // a rerender shown after it has replaced those Results, and the composition
-  // root takes the step then (`takeRedrawnStep`), so History keeps the figure.
-  /** @type {{ step: symbol, over: unknown } | null} */
-  let redrawAsked = null;
-  /** @param {symbol | null} [step] */
-  const requestAutomaticRerender = (step = null) => {
+  // request while one is pending joins it. D-36: an accepted request leaves a
+  // redraw owed until the composition root shows a rerender drawn from the
+  // current paint (`redrawShown`, OV-346); while one is owed, the shown
+  // figure can lack rows Python draws, so a History step does not record it
+  // as drawn (D-24 (OV-731)).
+  let redrawOwed = false;
+  const requestAutomaticRerender = () => {
     if (generatedMode.value !== mode.value || !svgContainer.value?.querySelector?.('svg')) return false;
-    if (step) redrawAsked = { step, over: results.value };
+    redrawOwed = true;
     queueLabelReflow(true);
     return true;
   };
-  // Called when a rerender's Results are shown: the step whose request they
-  // were drawn after, once; null when no step asked since they were.
-  const takeRedrawnStep = () => {
-    if (!redrawAsked || redrawAsked.over === results.value) return null;
-    const { step } = redrawAsked;
-    redrawAsked = null;
-    return step;
-  };
+  const isRedrawOwed = () => redrawOwed;
+  const redrawShown = () => { redrawOwed = false; };
 
   /** @param {string | null | undefined} labelKey @param {unknown} nextTextRaw */
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
@@ -1741,7 +1734,8 @@ export const createFeatureLabelActions = ({
     requestLabelTextChangeByKey,
     reconcileLabelOverrides,
     requestAutomaticRerender,
-    takeRedrawnStep,
+    isRedrawOwed,
+    redrawShown,
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,
     syncLabelEditor,
