@@ -1850,9 +1850,8 @@ const restoreStoredNonCanonicalConfig = (
     }
   });
   const storedAdv = storedConfig.adv;
-  const restoredAdv = restored.adv;
-  if (isPlainObject(storedAdv) && isPlainObject(restoredAdv)) {
-    [
+  if (isPlainObject(storedAdv) && isPlainObject(restored.adv)) {
+    for (const key of [
       'rich_feature_popup',
       'feature_width_circular',
       'depth_width_circular',
@@ -1860,11 +1859,11 @@ const restoreStoredNonCanonicalConfig = (
       'gc_content_radius_circular',
       'gc_skew_width_circular',
       'gc_skew_radius_circular'
-    ].forEach((key) => {
+    ]) {
       if (Object.prototype.hasOwnProperty.call(storedAdv, key)) {
-        restoredAdv[key] = cloneJsonData(storedAdv[key]);
+        restored.adv[key] = cloneJsonData(storedAdv[key]);
       }
-    });
+    }
   }
   const storedConservation = storedConfig?.circularConservation;
   if (!isPlainObject(storedConservation)) {
