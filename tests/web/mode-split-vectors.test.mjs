@@ -56,7 +56,7 @@ import json, sys
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 p = json.load(sys.stdin)
 print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['requireUnmanagedOnly']))
+    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
 `], { input: JSON.stringify(payload), encoding: 'utf8', cwd: fileURLToPath(REPO) })) }));
 const VECTORS = JSON.parse(readFileSync(new URL('tests/fixtures/sessions/mode-split-vectors.json', REPO), 'utf8'));
 const palettes = JSON.parse(readFileSync(new URL('gbdraw/web/gallery/palettes/palettes.json', REPO), 'utf8'));

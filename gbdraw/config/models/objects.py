@@ -22,6 +22,8 @@ _GC_CONTENT_MODES: tuple[GcContentMode, ...] = ("deviation", "percent")
 ScaleStyle = Literal["bar", "ruler"]
 _SCALE_STYLES: tuple[ScaleStyle, ...] = ("bar", "ruler")
 ArrowHeadLengthRatio = Literal["auto"] | float
+# The text an optional number of a config file reads as unset (None).
+UNSET_NUMBER_SPELLINGS = frozenset({"", "auto", "none", "null"})
 
 
 def normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
@@ -156,7 +158,7 @@ def _optional_depth_bound(value: Any) -> float | None:
         return None
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"", "auto", "none", "null"}:
+        if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         return float(normalized)
     return float(value)
@@ -167,7 +169,7 @@ def _optional_gc_content_bound(value: Any) -> float | None:
         return None
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"", "auto", "none", "null"}:
+        if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         value = normalized
     parsed = float(value)
@@ -181,7 +183,7 @@ def _optional_gc_content_positive(value: Any) -> float | None:
         return None
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"", "auto", "none", "null"}:
+        if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         value = normalized
     parsed = float(value)
@@ -279,7 +281,7 @@ def _optional_auto_positive_float(value: Any, *, field_name: str) -> float | Non
         return None
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"", "auto", "none", "null"}:
+        if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         value = normalized
     parsed = float(value)
@@ -651,6 +653,7 @@ class ObjectsConfig:
 
 
 __all__ = [
+    "UNSET_NUMBER_SPELLINGS",
     "ArrowHeadLengthRatio",
     "ObjectsConfig",
     "ObjectsFeaturesArrowGeometryConfig",

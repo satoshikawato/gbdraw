@@ -35,7 +35,7 @@ import json, sys
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 p = json.load(sys.stdin)
 print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['requireUnmanagedOnly']))
+    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
 `], { input: JSON.stringify(payload), encoding: 'utf8', cwd: new URL('../../', import.meta.url).pathname })) }));
 // A Session older than 40 has its Results transformed through the composition root's port.
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
@@ -1369,6 +1369,48 @@ test('a History restore reads a blank as the reader\'s default, other values as 
   assert.equal(drawing.losatProgram.value, 'blastn');
 });
 
+// Request schemas 1 and 2 (PR-D): an invalid Linear comparison height of the
+// stored full config is replaced by its default and listed (B17, F1), on the
+// direct read of a schema-1 Session and on the Gallery promotion of a schema-2
+// one; a flat override name loads as the decoder reads it (OV-799).
+test('a schema 1/2 request lists an invalid comparison height of its full config and loads (B17)', async () => {
+  for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz']) {
+    const session = fixture(name);
+    session.renderRequest.diagramOptions.config.canvas.linear.comparison_height = 0;
+    const dialogs = [];
+    const loaded = await importSession(input(session), {
+      transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; }
+    });
+    assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
+    assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'setting-replaced').map(({ path, effect, stored }) => [path, effect, stored]),
+      [['renderRequest.diagramOptions.config.canvas.linear.comparison_height', 'defaulted', '0']], name);
+    assert.ok(dialogs.flat().some((line) => line.includes('comparison_height') && line.includes('its default is used')), name);
+    assert.equal(state.drawings.linear.adv.comparison_height, 60, name);
+  }
+});
+
+test('a flat configuration override name of a schema-1 request loads as the decoder reads it (OV-799)', async () => {
+  const session = fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz');
+  delete session.renderRequest.diagramOptions.config;
+  session.renderRequest.diagramOptions.configOverrides = { show_gc: false };
+  const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(state.drawings.circular.form.suppress_gc, true);
+});
+
+// Only a stored request is read with the decoder's flat names (D-OD11): a
+// draft's unmanaged overrides keep the base check and its error.
+test('a flat override name in a draft is refused as before (OV-799)', async () => {
+  for (const [overrides, reason] of [[{ gc_stroke_color: 'red' }, 'UNKNOWN_CONFIG_PATH'], [{ label_blacklist: 'foo,bar' }, 'UNKNOWN_CONFIG_PATH']]) {
+    const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+    session.modes.circular.config.unmanagedConfigOverrides = overrides;
+    const refused = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(refused.status, 'error', JSON.stringify(overrides));
+    assert.deepEqual([refused.error.code, refused.error.context?.field, refused.error.context?.reason],
+      ['INPUT_INVALID', 'configOverrides', reason], JSON.stringify(refused.error));
+  }
+});
+
 // G3: every Gallery Session and every Session fixture loads without a repair;
 // a repair there is a producer bug. Two fixtures are lossy on purpose. Node
 // supplies no diagram Worker: a Session older than 40 reads its features again
@@ -1385,7 +1427,7 @@ const LOSSY_FIXTURES = {
 const FEATURES_NEED_DIAGRAM_WORKER = new Set([
   'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz',
   'cli-linear-protein.v30.gbdraw-session.json.gz', 'conservation-fasta.v39.gbdraw-session.json.gz',
-  'precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz', 'scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz',
+  'lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz', 'scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz',
   'scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
 ]);
 const NEEDS_DIAGRAM_WORKER = new Set([

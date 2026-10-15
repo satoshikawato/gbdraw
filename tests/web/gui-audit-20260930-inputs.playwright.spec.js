@@ -3,7 +3,10 @@
 // a current defect; the PR that fixes the audit ID removes the mark.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { generateAndWaitForResult, evaluateWithRetainedPromise, expectNoLoadRepairDialog, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { gunzipSync } = require('node:zlib');
+const {
+  CURRENT_REQUEST_SCHEMA, generateAndWaitForResult, evaluateWithRetainedPromise, expectNoLoadRepairDialog, openLinearFileCards
+} = require('./helpers/app-lifecycle.cjs');
 const {
   BATCH_FIXTURE,
   HMMT,
@@ -398,6 +401,41 @@ for (const fixture of [
   await page.locator('input[accept^=".json,"]').setInputFiles(`tests/fixtures/sessions/${fixture}.gbdraw-session.json.gz`);
   await expectNoLoadRepairDialog(page);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+});
+
+// OV-790, H2 (PR-D): a Session 31 stores a schema-1 request. Load lifts it
+// without the Load dialog and commits the current schema (read right after
+// Load, before the live edit commits its own request), so a live edit draws
+// before any Generate, and Save then writes the current request schema.
+test('a v31 schema-1 Session takes a live edit and Save before Generate', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await page.locator('input[accept^=".json,"]')
+    .setInputFiles('tests/fixtures/sessions/lambda_basic_linear.v31-schema1.gbdraw-session.json.gz');
+  await expectNoLoadRepairDialog(page);
+  await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+  await settle(page);
+  expect(await page.evaluate(async () => {
+    const { getCommittedCanonicalSession } = await import('/gbdraw/web/js/services/config.js');
+    return getCommittedCanonicalSession()?.renderRequest?.schema ?? null;
+  })).toBe(CURRENT_REQUEST_SCHEMA);
+  // The live edit: the forced rerender a label visibility edit asks for.
+  await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    window.__liveEditResults = state.results.value;
+    state.labelReflowForceRequestSeq.value += 1;
+  });
+  await expect.poll(() => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return state.labelReflowLastError.value?.code ?? (state.results.value !== window.__liveEditResults ? 'drawn' : null);
+  }), { timeout: 180_000 }).toBe('drawn');
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog?.code ?? null)).toBeNull();
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'audit'; });
+  const download = page.waitForEvent('download', { timeout: 120_000 });
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  const saved = JSON.parse(gunzipSync(readFileSync(await (await download).path())).toString('utf8'));
+  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
 });
 
 test('loading a JSON file that is not a Session reports a recognized diagnostic', async ({ page }) => {

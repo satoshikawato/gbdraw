@@ -12,7 +12,13 @@ import { buildCircularTrackSlotPayload } from '../../gbdraw/web/js/services/circ
 import {
   createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig
 } from '../../gbdraw/web/js/services/session-active-config-contract.js';
-import { projectCanonicalSessionRequest } from '../../gbdraw/web/js/services/session-request.js';
+import { projectCanonicalSessionRequest, readStoredRenderRequest } from '../../gbdraw/web/js/services/session-request.js';
+
+// A stored request as Load reads it (the one reader lifts schemas 1 and 2).
+const readStored = (session) => readStoredRenderRequest(session.renderRequest, {
+  featureCatalog: null, legacyOrthogroupState: null,
+  resourceIds: new Set(Object.keys(session.resources)), path: 'renderRequest'
+});
 
 const fixtures = JSON.parse(await readFile(new URL(
   '../../docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/scalar-fixtures.json', import.meta.url
@@ -173,22 +179,33 @@ test('current and historical request projection keeps zero pixel gaps separate f
     historical.renderRequest.diagramOptions.output.outputPrefix = 'legacy';
     delete historical.renderRequest.diagramOptions.featurePlacements;
     historical.renderRequest.records.forEach(record => delete record.display);
+    // The schema-2 writer's object slot (kind and every field; spacing set).
     historical.renderRequest.diagramOptions.tracks.circularTrackSlots = [{
-      id: 'legacy', renderer: 'dinucleotide_content', enabled: true, side: 'inside',
-      width: '20px', radius: '65%', spacing, z: 0, params: { nt: 'GC' }
+      kind: 'circularTrackSlot', id: 'legacy', renderer: 'dinucleotide_content', enabled: true, side: 'inside',
+      width: { value: 20, unit: 'px' }, radius: { value: 0.65, unit: 'factor' }, spacing, z: 0, params: { nt: 'GC' },
+      innerGapPx: null, outerGapPx: null
     }];
     const before = structuredClone(historical);
-    const restored = projectCanonicalSessionRequest(historical).config.adv.circular_track_slots[0];
+    const read = readStored(historical);
+    assert.deepEqual(read.repairs, []);
+    const restored = projectCanonicalSessionRequest({ ...historical, renderRequest: read.value }).config.adv.circular_track_slots[0];
     const pixels = typeof spacing === 'object' ? spacing.value : spacing === '0px' ? 0 : spacing;
     assert.equal(restored.inner_gap_px, String(pixels));
     assert.equal(restored.outer_gap_px, String(pixels));
     assert.deepEqual(buildCircularTrackSlotPayload(restored).width, { value: 20, unit: 'px' });
     assert.deepEqual(buildCircularTrackSlotPayload(restored).radius, { value: 0.65, unit: 'factor' });
     assert.deepEqual(historical, before);
-    // A factor or percent is not a physical pixel gap; do not invent an R conversion.
-    for (const invalid of [{ value: 0.1, unit: 'factor' }, { value: 5, unit: '%' }, '5%']) {
+    // A factor or percent is not a physical pixel gap; do not invent an R
+    // conversion: Load drops it and says so (D-OD10 open 2; it was refused).
+    // The lift drops the factor and the percent text; it leaves a spacing
+    // with another unit to the reader, whose row names the slot that held it.
+    for (const [invalid, rowPath] of [[{ value: 0.1, unit: 'factor' }, '.spacing'], [{ value: 5, unit: '%' }, ''], ['5%', '.spacing']]) {
       historical.renderRequest.diagramOptions.tracks.circularTrackSlots[0].spacing = invalid;
-      assert.throws(() => projectCanonicalSessionRequest(historical), /pixels/);
+      const dropped = readStored(historical);
+      assert.deepEqual(dropped.repairs.map(({ path, effect }) => [path, effect]),
+        [[`renderRequest.diagramOptions.tracks.circularTrackSlots[0]${rowPath}`, 'dropped']], JSON.stringify(invalid));
+      const [read] = dropped.value.diagramOptions.tracks.circularTrackSlots;
+      assert.deepEqual([read.innerGapPx, read.outerGapPx, Object.hasOwn(read, 'spacing')], [null, null, false]);
     }
   }
 });

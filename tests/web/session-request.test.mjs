@@ -23,9 +23,25 @@ const {
   promoteCanonicalRenderRequestToCurrent,
   projectCommittedEditorIntent: projectDrawingEditorIntent,
   projectCommittedRecordTransform,
-  projectCanonicalSessionRequest
+  projectCanonicalSessionRequest,
+  readStoredRenderRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+);
+// A stored request as Load projects it: read to the current schema by its one
+// reader (which lifts schemas 1 and 2 and promotes 5 to 8), then projected.
+// A stored Session's request as Load reads it: the projection takes only
+// the current schema (D3a).
+const readStoredSession = (canonical, context = {}) => {
+  const read = readStoredRenderRequest(canonical.renderRequest, {
+    featureCatalog: null, legacyOrthogroupState: null,
+    resourceIds: new Set(Object.keys(canonical.resources || {})), path: 'renderRequest', ...context
+  });
+  assert.ok(!('kind' in read), JSON.stringify(read));
+  return { ...canonical, renderRequest: read.value };
+};
+const projectStoredSession = (canonical, context = {}) => (
+  projectCanonicalSessionRequest(readStoredSession(canonical, context))
 );
 const { migrateLegacyOrthogroupMembers } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'legacy-similarity-alignment.js'))
@@ -563,11 +579,13 @@ assert.throws(
   state.featureOverrides = {};
   state.featurePlacementOverrides = {};
 }
+// The projection reads only a request of the current schema: a stored one is
+// read to it first (`readStoredRenderRequest`).
 const schema8WithRows = structuredClone(canonical);
 schema8WithRows.renderRequest.schema = 8;
 assert.throws(
   () => projectCanonicalSessionRequest(schema8WithRows),
-  { code: 'INPUT_INVALID', context: { field: 'featureOverrides', reason: 'SESSION_FORMAT' } }
+  { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'SESSION_FORMAT' } }
 );
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.grouping, 'grid');
@@ -1076,7 +1094,7 @@ for (const schema of [3, 4]) {
   }
   assert.throws(
     () => projectCanonicalSessionRequest(branchOnlyCanonical),
-    /Unsupported canonical renderRequest schema/
+    { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'SESSION_FORMAT' } }
   );
 }
 const missingCurrentGrouping = structuredClone(canonical);
@@ -1294,7 +1312,7 @@ legacyRepeatCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignore
 legacyRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
 delete legacyRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region;
 assert.equal(
-  projectCanonicalSessionRequest(legacyRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  projectStoredSession(legacyRepeatCanonical).config.adv.feature_shapes.repeat_region,
   'rectangle'
 );
 
@@ -1861,7 +1879,7 @@ legacyCircularLabelScope.renderRequest.diagramOptions.configOverrides = {
   allow_inner_labels: true
 };
 assert.equal(
-  projectCanonicalSessionRequest(legacyCircularLabelScope).config.form.labels_mode,
+  projectStoredSession(legacyCircularLabelScope).config.form.labels_mode,
   'both'
 );
 const intermediateCircularLabelScope = structuredClone(canonical);
@@ -1882,25 +1900,21 @@ if (2 < 7) {
 }
 legacyOutputCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored-nested';
 assert.equal(
-  projectCanonicalSessionRequest(legacyOutputCanonical).config.form.prefix,
+  projectStoredSession(legacyOutputCanonical).config.form.prefix,
   'web-session'
 );
-const missingLegacyOutputPrefix = structuredClone(legacyOutputCanonical);
-delete missingLegacyOutputPrefix.renderRequest.diagramOptions.output.outputPrefix;
-assert.throws(
-  () => projectCanonicalSessionRequest(missingLegacyOutputPrefix),
-  /outputPrefix/
-);
+// A current request with the retired output field: its reader drops it with
+// a row, which names the object that held the unknown entry.
 const currentWithLegacyOutputPrefix = structuredClone(canonical);
 currentWithLegacyOutputPrefix.renderRequest.diagramOptions.output.outputPrefix = 'stale';
-assert.throws(
-  () => projectCanonicalSessionRequest(currentWithLegacyOutputPrefix),
-  /outputPrefix/
-);
+assert.deepEqual(readStoredRenderRequest(currentWithLegacyOutputPrefix.renderRequest, {
+  featureCatalog: null, legacyOrthogroupState: null,
+  resourceIds: new Set(Object.keys(currentWithLegacyOutputPrefix.resources)), path: 'renderRequest'
+}).repairs.map(({ code, path }) => [code, path]), [['setting-entries-dropped', 'renderRequest.diagramOptions.output']]);
 const legacyCircularOptions = structuredClone(legacyOutputCanonical);
 legacyCircularOptions.renderRequest.layout = { multiRecordSizeMode: 'sqrt' };
 assert.equal(
-  projectCanonicalSessionRequest(legacyCircularOptions).config.adv.multi_record_size_mode,
+  projectStoredSession(legacyCircularOptions).config.adv.multi_record_size_mode,
   'auto'
 );
 const currentCircularOptions = structuredClone(canonical);
@@ -1925,7 +1939,7 @@ for (const schema of [1, 2]) {
   delete sparseCircularCanonical.renderRequest.diagramOptions.selectedFeaturesSet;
   delete sparseCircularCanonical.renderRequest.diagramOptions.config;
   delete sparseCircularCanonical.renderRequest.diagramOptions.configOverrides;
-  const sparseCircularProjection = projectCanonicalSessionRequest(sparseCircularCanonical);
+  const sparseCircularProjection = projectStoredSession(sparseCircularCanonical);
   assert.equal(sparseCircularProjection.config.adv.evalue, '0.00001');
   assert.equal(sparseCircularProjection.config.adv.min_bitscore, 50);
   assert.equal(sparseCircularProjection.config.adv.identity, 70);
@@ -2006,22 +2020,29 @@ if (2 < 7) {
 legacyCircularSlotsCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyCircularSlotsCanonical.renderRequest.diagramOptions.tracks = {
   circularTrackSlots: [
+    // A schema-2 writer stored every field of an object slot.
     {
+      kind: 'circularTrackSlot',
       id: 'legacy_object',
       renderer: 'dinucleotide_skew',
+      enabled: true,
       side: 'inside',
+      radius: null,
+      width: null,
       spacing: { value: 5, unit: 'px' },
-      strict: true,
-      params: { nt: 'GC', reserve: true }
+      z: 0,
+      params: { nt: 'GC', reserve: true },
+      innerGapPx: null,
+      outerGapPx: null
     },
     'legacy_spec:dinucleotide_content@side=inside,spacing=4,compress=true,nt=AT'
   ],
   circularTrackAxisIndex: 0,
+  linearTrackSlots: null,
+  linearTrackAxisIndex: null,
   centerReservedRadius: null
 };
-const legacyCircularSlotsProjection = projectCanonicalSessionRequest(
-  legacyCircularSlotsCanonical
-);
+const legacyCircularSlotsProjection = projectStoredSession(legacyCircularSlotsCanonical);
 assert.deepEqual(
   legacyCircularSlotsProjection.config.adv.circular_track_slots.map((slot) => ({
     id: slot.id,
@@ -2440,12 +2461,6 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     }
   });
 
-  // Load reads every stored request to schema 9 (except schema 1, kept as
-  // stored); the reflow reads only a committed request of the current schema.
-  const older = structuredClone(committed);
-  older.renderRequest.schema = 1;
-  assert.throws(() => projectCommittedEditorIntent({ committed: older, state: draft }),
-    /A current committed canonical Session is required/);
 }
 
 state.form.prefix = '';
@@ -2535,14 +2550,14 @@ if (2 < 7) {
   legacyLinearOptions.renderRequest.records.forEach((record) => delete record.display);
 }
 legacyLinearOptions.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+// A Linear writer stored a Linear plot title position.
+legacyLinearOptions.renderRequest.diagramOptions.output.plotTitlePosition = 'bottom';
 legacyLinearOptions.renderRequest.diagramOptions.configOverrides = {
   label_placement: 'on_feature',
   linear_track_layout: 'spreadout',
   show_labels: 'first'
 };
-const legacyLinearOptionsProjection = projectCanonicalSessionRequest(
-  legacyLinearOptions
-);
+const legacyLinearOptionsProjection = projectStoredSession(legacyLinearOptions);
 assert.equal(
   legacyLinearOptionsProjection.config.adv.label_placement,
   'above_feature'
@@ -3006,10 +3021,7 @@ for (const mutate of [
     { recordKey: 'first', x: 0, y: 0 }
   ),
   (request) => { request.layout.recordTranslations[0].x = Infinity; },
-  (request) => { request.layout.unknownTransform = true; },
   (request) => { request.layout.similarityAlignment.records[2].anchor = null; },
-  (request) => { request.layout.similarityAlignment.records[2].orientationPolicy = 'preserve'; },
-  (request) => { request.layout.similarityAlignment.records[2].effectiveReverseComplement = true; },
   (request) => { request.layout.similarityAlignment.schema = 1; }
 ]) {
   const invalid = structuredClone(resolvedProteinCanonical.renderRequest);
@@ -3019,8 +3031,24 @@ for (const mutate of [
       renderRequest: invalid,
       resources: resolvedProteinCanonical.resources
     }),
-    /duplicate record keys|finite numbers|missing or unknown fields|invalid plan combination|schema must be 2/
+    /duplicate record keys|finite numbers|invalid plan combination|schema must be 2/
   );
+}
+// A field the layout's description does not hold: its reader drops it with a
+// row that names the object that held it.
+for (const [mutate, path] of [
+  [(request) => { request.layout.unknownTransform = true; }, 'renderRequest.layout'],
+  [(request) => { request.layout.similarityAlignment.records[2].orientationPolicy = 'preserve'; },
+    'renderRequest.layout.similarityAlignment.records[2]'],
+  [(request) => { request.layout.similarityAlignment.records[2].effectiveReverseComplement = true; },
+    'renderRequest.layout.similarityAlignment.records[2]']
+]) {
+  const invalid = structuredClone(resolvedProteinCanonical.renderRequest);
+  mutate(invalid);
+  assert.deepEqual(readStoredRenderRequest(invalid, {
+    featureCatalog: null, legacyOrthogroupState: null,
+    resourceIds: new Set(Object.keys(resolvedProteinCanonical.resources)), path: 'renderRequest'
+  }).repairs.map(({ code, path: rowPath }) => [code, rowPath]), [['setting-entries-dropped', path]]);
 }
 
 const oldGroups = [{ id: 'og-legacy', members: [
@@ -3046,13 +3074,6 @@ const legacyGenerated = legacyAlignmentRequest.comparisons.find(
   (comparison) => comparison.kind === 'generatedProteinComparison'
 );
 legacyGenerated.settings.alignOrthogroupFeature = 'og-legacy';
-const legacyProjection = projectCanonicalSessionRequest({
-  renderRequest: legacyAlignmentRequest,
-  resources: losatPairCanonical.resources
-});
-assert.deepEqual(legacyProjection.pipelineState.legacySimilarityAlignment, {
-  target: 'og-legacy'
-});
 const legacyFeatureCatalog = {
   schema: 3,
   items: [{
@@ -3101,10 +3122,10 @@ malformedLegacyAlignment.comparisons.find(
   (comparison) => comparison.kind === 'generatedProteinComparison'
 ).settings.alignOrthogroupFeature = ' ';
 assert.throws(
-  () => projectCanonicalSessionRequest({
-    renderRequest: malformedLegacyAlignment,
-    resources: losatPairCanonical.resources
-  }),
+  () => promoteCanonicalRenderRequestToCurrent(
+    malformedLegacyAlignment,
+    { featureCatalog: legacyFeatureCatalog }
+  ),
   /non-empty text/
 );
 const ambiguousLegacyFeatureCatalog = structuredClone(legacyFeatureCatalog);
@@ -3412,6 +3433,8 @@ for (const schema of [1, 2]) {
     sparseLinearCanonical.renderRequest.records.forEach((record) => delete record.display);
   }
   sparseLinearCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+  // The Linear writer never stores 'none' (state.js keeps one slot per mode).
+  sparseLinearCanonical.renderRequest.diagramOptions.output.plotTitlePosition = 'bottom';
   delete sparseLinearCanonical.renderRequest.diagramOptions.evalue;
   delete sparseLinearCanonical.renderRequest.diagramOptions.bitscore;
   delete sparseLinearCanonical.renderRequest.diagramOptions.identity;
@@ -3419,7 +3442,7 @@ for (const schema of [1, 2]) {
   delete sparseLinearCanonical.renderRequest.diagramOptions.selectedFeaturesSet;
   delete sparseLinearCanonical.renderRequest.diagramOptions.config;
   delete sparseLinearCanonical.renderRequest.diagramOptions.configOverrides;
-  const sparseLinearProjection = projectCanonicalSessionRequest(sparseLinearCanonical);
+  const sparseLinearProjection = projectStoredSession(sparseLinearCanonical);
   assert.equal(sparseLinearProjection.config.adv.evalue, '0.00001');
   assert.equal(sparseLinearProjection.config.adv.min_bitscore, 50);
   assert.equal(sparseLinearProjection.config.adv.identity, 70);
@@ -3438,7 +3461,7 @@ nullOverrideSparseLinear.renderRequest.diagramOptions.configOverrides = {
   show_skew: null,
   linear_axis_stroke_color: null
 };
-const nullOverrideSparseLinearProjection = projectCanonicalSessionRequest(
+const nullOverrideSparseLinearProjection = projectStoredSession(
   nullOverrideSparseLinear
 );
 assert.equal(nullOverrideSparseLinearProjection.config.form.show_gc, true);
@@ -3473,7 +3496,7 @@ explicitLinearThresholds.renderRequest.diagramOptions.configOverrides = {
   show_skew: false,
   linear_axis_stroke_color: ''
 };
-const explicitLinearProjection = projectCanonicalSessionRequest(explicitLinearThresholds);
+const explicitLinearProjection = projectStoredSession(explicitLinearThresholds);
 assert.equal(explicitLinearProjection.config.adv.evalue, '0');
 assert.equal(explicitLinearProjection.config.adv.min_bitscore, 0);
 assert.equal(explicitLinearProjection.config.adv.identity, 0);
@@ -3679,13 +3702,6 @@ historicalInvalidHeight.renderRequest.diagramOptions.configOverrides.comparison_
 assert.throws(
   () => projectCanonicalSessionRequest(historicalInvalidHeight),
   { code: 'INPUT_INVALID', context: { field: 'match_height', reason: 'POSITIVE_OR_AUTO' } }
-);
-assert.equal(
-  projectCanonicalSessionRequest({
-    ...historicalInvalidHeight,
-    repairInvalidComparisonHeight: true
-  }).config.adv.comparison_height,
-  null
 );
 state.adv.comparison_height = 42.5;
 
@@ -3907,9 +3923,14 @@ assert.throws(
 );
 const missingCanonicalDepthField = structuredClone(sparseDepthCanonical);
 delete missingCanonicalDepthField.renderRequest.diagramOptions.depthTracks[0].label;
-assert.throws(
-  () => projectCanonicalSessionRequest(missingCanonicalDepthField),
-  /missing required field\(s\): label/
+// The reader, not the projection, checks the stored fields (D3a); a missing
+// label takes its writer's value, with a row.
+assert.deepEqual(
+  readStoredRenderRequest(missingCanonicalDepthField.renderRequest, {
+    featureCatalog: null, legacyOrthogroupState: null,
+    resourceIds: new Set(Object.keys(missingCanonicalDepthField.resources)), path: 'renderRequest'
+  }).repairs.map(({ code, path }) => [code, path]),
+  [['setting-replaced', 'renderRequest.diagramOptions.depthTracks[0].label']]
 );
 const blankCanonicalDepthLabel = structuredClone(sparseDepthCanonical);
 blankCanonicalDepthLabel.renderRequest.diagramOptions.depthTracks[0].label = ' ';
@@ -3925,9 +3946,13 @@ assert.throws(
 );
 const unknownCanonicalDepthField = structuredClone(sparseDepthCanonical);
 unknownCanonicalDepthField.renderRequest.diagramOptions.depthTracks[0].legacyLabel = 'old';
-assert.throws(
-  () => projectCanonicalSessionRequest(unknownCanonicalDepthField),
-  /contains unknown field\(s\): legacyLabel/
+// The reader, not the projection, checks the stored fields (D3a).
+assert.deepEqual(
+  readStoredRenderRequest(unknownCanonicalDepthField.renderRequest, {
+    featureCatalog: null, legacyOrthogroupState: null,
+    resourceIds: new Set(Object.keys(unknownCanonicalDepthField.resources)), path: 'renderRequest'
+  }).repairs.map(({ code, path }) => [code, path]),
+  [['setting-entries-dropped', 'renderRequest.diagramOptions.depthTracks[0]']]
 );
 assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 1);
 assert.deepEqual(
@@ -5517,7 +5542,7 @@ if (roundTripSessionIndex >= 0) {
 // C1 I03/I04/I14/I15/I23: explicit draft composition wins over table/request order.
 {
   const backing = await import(pathToFileURL(join(tempRoot, 'js/services/session-resource-backing.js')));
-  const frozen = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/single.v41-bindings1.json')));
+  const frozen = readStoredSession(JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/single.v41-bindings1.json'))));
   const oldProjection = projectCanonicalSessionRequest({ ...frozen,
     sessionResourceTable: backing.adoptCurrentSessionResources(frozen.resources) });
   assert.equal(oldProjection.files.c_gb.name, frozen.webFiles.bindings.c_gb.name);
@@ -5581,7 +5606,7 @@ for (const [fixture, locked] of [
 ]) {
   const bytes = await readFile(join(repoRoot, 'tests/fixtures/sessions', fixture));
   const session = JSON.parse(fixture.endsWith('.gz') ? gunzipSync(bytes) : bytes);
-  const projection = projectCanonicalSessionRequest(session);
+  const projection = projectStoredSession(session);
   assert.equal(projection.config.form.keep_definition_left_aligned, locked, fixture);
 }
 
@@ -5712,9 +5737,9 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   const { normalizeUserFacingError } = await import(
     pathToFileURL(join(tempRoot, 'js', 'utils', 'error-normalization.js'))
   );
-  const session = JSON.parse(gunzipSync(await readFile(join(
+  const session = readStoredSession(JSON.parse(gunzipSync(await readFile(join(
     repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
-  ))));
+  )))));
   assert.equal(session.version, 39);
   const project = (document, repairLegacyTableRows) => projectCanonicalSessionRequest({
     renderRequest: document.renderRequest, resources: document.resources, webFiles: document.webFiles || {},
@@ -5816,7 +5841,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     repoRoot, 'tests/fixtures/sessions/precomputed-ring-unlabelled-cli.v44.gbdraw-session.json.gz'
   ))));
   assert.equal(Object.hasOwn(session.renderRequest.diagramOptions, 'conservationLabels'), false);
-  const ringLabels = (renderRequest) => projectCanonicalSessionRequest({
+  const ringLabels = (renderRequest) => projectStoredSession({
     renderRequest, resources: session.resources
   }).config.circularConservation.series.map((entry) => entry.label);
   assert.deepEqual(ringLabels(session.renderRequest), ['caenorhabditis-human.tlosatx.tsv']);
@@ -5846,7 +5871,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   for (const { name, fixture: fixtureName, records, sourceReads } of cases) {
     const session = await fixture(fixtureName);
     const renderRequest = records ? { ...session.renderRequest, records } : session.renderRequest;
-    const { linearSeqs } = projectCanonicalSessionRequest({
+    const { linearSeqs } = projectStoredSession({
       renderRequest, resources: session.resources, webFiles: {}, storedConfig: null
     }).files;
     const context = buildLinearRegionExtractionContext(linearSeqs, 'gb');

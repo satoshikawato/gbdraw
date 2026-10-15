@@ -103,6 +103,10 @@ export const LEGEND_POSITIONS = Object.freeze({
   linear: Object.freeze(['left', 'right', 'top', 'bottom', 'none'])
 });
 
+// gbdraw/config/models/objects.py: UNSET_NUMBER_SPELLINGS
+/** @type {readonly string[]} */
+export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 'null']);
+
 // gbdraw/session_io.py: FLAT_DRAFT_TOP_LEVEL_FIELDS
 /** @type {readonly string[]} */
 export const FLAT_DRAFT_TOP_LEVEL_FIELDS = Object.freeze(['config', 'features']);
@@ -155,4 +159,73 @@ export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
     losatDerivedCacheSchema: 3,
     proteinIdentityManifestSchema: 2
   })
+});
+
+// gbdraw/config/modify.py: config_paths_reading_unset_spellings()
+/** @type {readonly string[]} */
+export const CONFIG_UNSET_NUMBER_PATHS = Object.freeze(['canvas.linear.track_axis_gap', 'objects.conservation.ring_gap', 'objects.conservation.ring_width', 'objects.definition.linear.line_styles.accession.font_size', 'objects.definition.linear.line_styles.accession.font_weight', 'objects.definition.linear.line_styles.length.font_size', 'objects.definition.linear.line_styles.length.font_weight', 'objects.definition.linear.line_styles.name.font_size', 'objects.definition.linear.line_styles.name.font_weight', 'objects.definition.linear.line_styles.replicon.font_size', 'objects.definition.linear.line_styles.replicon.font_weight', 'objects.definition.linear.line_styles.subtitle.font_size', 'objects.definition.linear.line_styles.subtitle.font_weight', 'objects.depth.large_tick_interval', 'objects.depth.max_depth', 'objects.depth.min_depth', 'objects.depth.small_tick_interval', 'objects.depth.tick_font_size', 'objects.gc_content.large_tick_interval', 'objects.gc_content.max_percent', 'objects.gc_content.min_percent', 'objects.gc_content.small_tick_interval', 'objects.gc_content.tick_font_size']);
+
+// gbdraw/session_request_codec.py: describe_legacy_request_tables()
+export const LEGACY_REQUEST_TABLES = Object.freeze({
+  comparisonDefaults: Object.freeze({
+    evalue: 1e-05,
+    bitscore: 50.0,
+    identity: 70.0,
+    alignmentLength: 0
+  }),
+  featureTypes: Object.freeze(['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'repeat_region']),
+  featureShapes: Object.freeze({
+    repeat_region: 'rectangle'
+  }),
+  multiRecordSizeModeRenames: Object.freeze({
+    sqrt: 'auto'
+  }),
+  privateSpacingParam: '__gbdraw_legacy_spacing',
+  configOverrides: Object.freeze({
+    circular: Object.freeze({
+      "canvas.show_gc": true,
+      "canvas.show_skew": true
+    }),
+    linear: Object.freeze({
+      "canvas.show_gc": true,
+      "canvas.show_skew": true,
+      "objects.axis.linear.stroke_color": 'gray'
+    })
+  }),
+  configOverrideRenames: Object.freeze({
+    depth_tick_interval: 'depth_large_tick_interval'
+  }),
+  linearConfigOverrideValues: Object.freeze({
+    label_placement: Object.freeze({
+      on_feature: 'above_feature'
+    }),
+    linear_track_layout: Object.freeze({
+      spreadout: 'above',
+      tuckin: 'below'
+    })
+  }),
+  configOverridePaths: Object.freeze({
+    linear_axis_stroke_color: Object.freeze(['objects.axis.linear.stroke_color']),
+    show_gc: Object.freeze(['canvas.show_gc']),
+    show_skew: Object.freeze(['canvas.show_skew']),
+    linear_track_layout: Object.freeze(['canvas.linear.track_layout']),
+    comparison_height: Object.freeze(['canvas.linear.comparison_height']),
+    label_placement: Object.freeze(['labels.linear.placement'])
+  }),
+  comparisonHeightDefault: 60,
+  diagramOptionRenames: Object.freeze({
+    featureTable: 'featureVisibilityTable',
+    featureTableFile: 'featureVisibilityTableFile'
+  }),
+  collinearityStandardParameters: Object.freeze(['minAnchors', 'maxGeneGap', 'blockMergeGap', 'singletonMergeGap', 'maxDiagonalDrift', 'maxConflictsInMergeGap', 'maxParalogLinksPerOrthogroup', 'gapPenalty', 'nearbyDuplicateWindow', 'scoreMode', 'constantAnchorScore', 'minBlockScore', 'blockEvalue']),
+  collinearityStandardFields: Object.freeze({
+    minAnchors: 'minAnchors',
+    maxGeneGap: 'maxUnitGap',
+    maxDiagonalDrift: 'maxDiagonalDrift',
+    maxConflictsInMergeGap: 'maxConflicts'
+  }),
+  collinearityMergeOrientation: 'either',
+  collinearityStandardParalogLinks: 'maxParalogLinksPerOrthogroup',
+  paralogLinksSetting: 'collinearMaxParalogLinksPerOrthogroup',
+  paralogLinksDefault: 2
 });

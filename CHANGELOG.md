@@ -343,6 +343,15 @@ write-up of a release.
   comparison that holds one is dropped with a row, and a Session whose
   comparison settings hold one is still refused. A file that holds `top1` or
   `legacy` now loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
+- Fixed (web app): since late August 2026, gbdraw.app had refused every Session
+  31–32 whose request has schema 1, and some Sessions 32–33 whose request has
+  schema 2, among them most older Gallery Sessions with schema 2 (OV-790). They
+  load again. Load reads the request in the current format, with no
+  **Load this file?** dialog when nothing is lost. Their saved comparisons,
+  protein comparison settings and similarity alignment stay editable (OV-796),
+  and a live edit works before the first **Generate Diagram**. **Save Session**
+  writes request schema 9; right after Load of a Session with a saved Result
+  it first asks for one Generate, as for other Sessions saved before Session 40.
 - Fixed (web app): the shape set for a feature type added to the feature list
   was dropped when its Session was loaded again; Load now keeps it.
 - Fixed (web app): a cleared **Feature overlap tolerance (bp)** made Save

@@ -15,7 +15,6 @@ import {
 import { countGenBankRecords } from '../services/genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
-import { isCurrentRequestSchema } from '../utils/request-schema.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
@@ -602,9 +601,9 @@ const validateCurrentSemanticCoverage = (request) => {
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
     const path = `records[${index}]`;
     coverObject(coverage, record, path, [
-      'cardinality', 'source', 'selector', 'region', 'presentation', ...(isCurrentRequestSchema(request) ? ['display'] : [])
+      'cardinality', 'source', 'selector', 'region', 'presentation', 'display'
     ], ['recordKey']);
-    if (isCurrentRequestSchema(request)) coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
+    coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
     if (!['all', 'exactly_one'].includes(record.cardinality)) {
       throw new SourceRecipeUnavailable(
         `Source recipe unavailable: record cardinality "${String(record.cardinality || 'missing')}" has no current CLI projection.`
@@ -665,8 +664,8 @@ const validateCurrentSemanticCoverage = (request) => {
   const options = request.diagramOptions;
   coverObject(coverage, options, 'diagramOptions', new Set([
     ...DIAGRAM_OPTION_FIELDS,
-    ...(isCurrentRequestSchema(request) ? ['featurePlacements'] : []),
-    ...(isCurrentRequestSchema(request) ? ['featureOverrides'] : [])
+    'featurePlacements',
+    'featureOverrides'
   ]));
   (options.featureOverrides || []).forEach((row, index) => {
     coverObject(coverage, row, `diagramOptions.featureOverrides[${index}]`, [
@@ -938,10 +937,10 @@ const appendInputArgs = async (args, request, files) => {
     }
   });
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
-  if (isCurrentRequestSchema(request) && recordsTableRequired) {
+  if (recordsTableRequired) {
     for (const [index, record] of records.entries()) {
       if (record.cardinality === 'exactly_one') continue;
-      if (isCurrentRequestSchema(request) && await files.resourceRecordCount(
+      if (await files.resourceRecordCount(
         specs[index].ids.at(-1), inputKind === 'genbank' ? 'genbank' : 'fasta'
       ) === 1) continue;
       throw new SourceRecipeUnavailable(
@@ -950,7 +949,7 @@ const appendInputArgs = async (args, request, files) => {
     }
   }
 
-  if (isCurrentRequestSchema(request) && !recordsTableRequired) {
+  if (!recordsTableRequired) {
     const loadComparison = request.mode === 'linear'
       && Array.isArray(request.comparisons)
       && request.comparisons.length > 0;
@@ -979,8 +978,8 @@ const appendInputArgs = async (args, request, files) => {
   if (recordsTableRequired) {
     const requestedTableRows = requestedRows;
     const columns = inputKind === 'genbank'
-      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(isCurrentRequestSchema(request) ? ['topology', 'display_start'] : [])]
-      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(isCurrentRequestSchema(request) ? ['topology', 'display_start'] : [])];
+      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start']
+      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start'];
     const rows = records.map((record, index) => {
       const region = isPlainObject(record.region) ? record.region : null;
       const selector = selectorText(region?.selector || record.selector);
@@ -1911,9 +1910,7 @@ export const buildSourceRecipe = async ({
     return unavailable('Source recipe unavailable: the committed render request is missing or invalid.');
   }
   try {
-    const semanticCoverage = isCurrentRequestSchema(renderRequest)
-      ? validateCurrentSemanticCoverage(renderRequest)
-      : { schema: renderRequest.schema, consumedPaths: [], metadataPaths: [] };
+    const semanticCoverage = validateCurrentSemanticCoverage(renderRequest);
     const files = createRecipeFiles(resources, webFiles, generatedFileNameHints, readResourceRecordCount);
     /** @type {string[]} */
     const args = [];

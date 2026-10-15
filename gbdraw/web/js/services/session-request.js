@@ -39,9 +39,6 @@ import {
   createDefaultCircularTrackSlots,
   hasCircularGeometryShortcuts,
   inferLegacyAxisIndexFromFeature,
-  migrateLegacyCircularTrackSlot,
-  migrateLegacyCircularTrackSlotSpec,
-  normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
@@ -81,7 +78,6 @@ import {
 import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
 import {
   assertValidCustomTrackPlan,
-  parseOptionalPixel,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from './track-slot-validation.js';
@@ -96,9 +92,11 @@ import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.genera
 import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
-import { isCurrentRequestSchema } from '../utils/request-schema.js';
+import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
+  CONFIG_UNSET_NUMBER_PATHS,
+  CONFIG_UNSET_NUMBER_SPELLINGS,
   SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 } from '../contracts/schema.generated.js';
@@ -126,9 +124,6 @@ import {
   updateActiveLayoutPreference
 } from './layout-preferences.js';
 import {
-  migratePersistedCircularMultiRecordSizeMode,
-  migratePersistedLinearLabelPlacement,
-  migratePersistedLinearTrackLayout,
   requireCurrentCircularMultiRecordSizeMode,
   requireCurrentCollinearAnchorMode,
   requireCurrentCollinearColorMode,
@@ -381,23 +376,16 @@ export { CANONICAL_REQUEST_SCHEMA };
 const SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET = new Set(SUPPORTED_CANONICAL_REQUEST_SCHEMAS);
 
 /**
- * @template {string} K
+ * A layout object of a request its reader read: its keys are those of its
+ * description (`readStoredRenderRequest`, or the writer), so no key is
+ * checked here.
  * @param {unknown} value
- * @param {readonly K[]} keys
  * @param {string} path
- * @returns {Record<K, unknown>} The object, whose own keys are exactly `keys`; no value is checked.
+ * @returns {Record<string, unknown>}
  */
-const requireExactCanonicalKeys = (value, keys, path) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`${path} must be an object.`);
-  }
-  const expected = [...keys].sort();
-  const actual = Object.keys(value).sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
-    throw new Error(`${path} contains missing or unknown fields.`);
-  }
-  // The own keys equal `keys`.
-  return /** @type {Record<K, unknown>} */ (value);
+const requireCanonicalObject = (value, path) => {
+  if (!isPlainObject(value)) throw new Error(`${path} must be an object.`);
+  return value;
 };
 
 /**
@@ -418,12 +406,7 @@ const requireCanonicalText = (value, path) => {
  * @returns {CanonicalAlignmentAnchorIdentity}
  */
 const canonicalAlignmentAnchor = (value, path) => {
-  const anchor = requireExactCanonicalKeys(value, [
-    'recordKey',
-    'biologicalFeatureId',
-    'sourceFeatureIndex',
-    'stableFeatureSvgId'
-  ], path);
+  const anchor = requireCanonicalObject(value, path);
   if (anchor.sourceFeatureIndex !== null && (
     // A safe integer is a number.
     !Number.isSafeInteger(anchor.sourceFeatureIndex) || /** @type {number} */ (anchor.sourceFeatureIndex) < 0
@@ -453,9 +436,7 @@ const canonicalAlignmentAnchor = (value, path) => {
  */
 const canonicalSimilarityAlignment = (value, recordKeys, path) => {
   if (value === null) return null;
-  const plan = requireExactCanonicalKeys(value, [
-    'schema', 'groupId', 'reference', 'records'
-  ], path);
+  const plan = requireCanonicalObject(value, path);
   if (plan.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA) throw new Error(`${path}.schema must be ${SIMILARITY_ALIGNMENT_PLAN_SCHEMA}.`);
   if (!Array.isArray(plan.records) || plan.records.length === 0) {
     throw new Error(`${path}.records must be a non-empty array.`);
@@ -463,9 +444,7 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
   const reference = canonicalAlignmentAnchor(plan.reference, `${path}.reference`);
   const records = /** @type {unknown[]} */ (plan.records).map((raw, index) => {
     const decisionPath = `${path}.records[${index}]`;
-    const decision = requireExactCanonicalKeys(raw, [
-      'recordKey', 'status', 'rationale', 'anchor'
-    ], decisionPath);
+    const decision = requireCanonicalObject(raw, decisionPath);
     const recordKey = requireCanonicalText(decision.recordKey, `${decisionPath}.recordKey`);
     const anchor = decision.anchor === null
       ? null
@@ -529,7 +508,7 @@ const canonicalRecordTranslations = (value, recordKeys, path, { requireCoverage 
   if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
   const translations = value.map((raw, index) => {
     const itemPath = `${path}[${index}]`;
-    const item = requireExactCanonicalKeys(raw, ['recordKey', 'x', 'y'], itemPath);
+    const item = requireCanonicalObject(raw, itemPath);
     if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) {
       throw new Error(`${itemPath} x and y must be finite numbers.`);
     }
@@ -577,7 +556,7 @@ export const linearDefinitionVisibilityOf = (renderRequest) => {
 /** @param {Record<string, any>} renderRequest */
 export const canonicalLinearRecordLayout = (renderRequest) => {
   const layout = renderRequest?.layout || {};
-  if (renderRequest?.mode !== 'linear' || !isCurrentRequestSchema(renderRequest) || Object.keys(layout).length === 0) {
+  if (renderRequest?.mode !== 'linear' || Object.keys(layout).length === 0) {
     return { similarityAlignment: null, recordTranslations: [] };
   }
   const recordKeys = (Array.isArray(renderRequest.records) ? renderRequest.records : [])
@@ -605,35 +584,6 @@ const canonicalRecordDisplay = (raw) => {
   }
   return { ...raw };
 };
-
-// Canonical schemas 1-2 omitted values that matched the former shared API
-// defaults. Keep those values stable when reading sparse persisted requests.
-const HISTORICAL_COMPARISON_DEFAULTS = Object.freeze({
-  bitscore: 50,
-  evalue: 1e-5,
-  identity: 70,
-  alignmentLength: 0
-});
-const HISTORICAL_FEATURE_TYPES = Object.freeze([
-  'CDS',
-  'rRNA',
-  'tRNA',
-  'tmRNA',
-  'ncRNA',
-  'misc_RNA',
-  'repeat_region'
-]);
-const HISTORICAL_CONFIG_OVERRIDES = Object.freeze({
-  circular: Object.freeze({
-    'canvas.show_gc': true,
-    'canvas.show_skew': true
-  }),
-  linear: Object.freeze({
-    'canvas.show_gc': true,
-    'canvas.show_skew': true,
-    'objects.axis.linear.stroke_color': 'gray'
-  })
-});
 
 // Fresh canonical requests use only these typed GbdrawConfig leaf paths.
 // The snake_case aliases derived below exist solely in the persisted-session
@@ -2934,16 +2884,6 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
   if (colorOverridesChanged) delete canonicalPublicationFiles.d_color;
   const features = featureEditsOverProjection(session?.features, projection), layout = config?.linearRecordLayout || {};
   const canonicalLayout = projection.config?.linearRecordLayout || {};
-  const legacyAlignment = projection.pipelineState?.legacySimilarityAlignment;
-  const materializedLegacyPlan = legacyAlignment
-      ? canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
-        target: legacyAlignment.target,
-        records: session?.renderRequest?.records || [],
-        featureCatalog: session?.editorState?.featureCatalog || null,
-        legacyOrthogroupState: session?.orthogroupState || null
-      }), (session?.renderRequest?.records || []).map((record) => record.recordKey),
-      'renderRequest.layout.similarityAlignment')
-    : null;
   const palette = String(config?.palette || 'default');
   const records = session?.renderRequest?.records || [];
   const circularRecordList = records.length === 1 && !records[0]?.selector
@@ -2959,13 +2899,8 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     lInputType: session?.ui?.lInputType || projection.inputType,
     circularRecordList,
     paletteDefinitions: { [palette]: {} }, editableLabels: [],
-    similarityAlignmentPlan: materializedLegacyPlan ||
-      canonicalLayout.similarityAlignment || null,
-    linearRecordTranslations: materializedLegacyPlan
-      ? (session?.renderRequest?.records || []).map((record) => ({
-          recordKey: String(record.recordKey || ''), x: 0, y: 0
-        }))
-      : publicationClone(canonicalLayout.recordTranslations || [])
+    similarityAlignmentPlan: canonicalLayout.similarityAlignment || null,
+    linearRecordTranslations: publicationClone(canonicalLayout.recordTranslations || [])
   };
   const drawingRefs = {
     currentColors: colorOverridesChanged ? activeColors : config.colors || {},
@@ -3417,12 +3352,24 @@ const generationResourceIdentity = (resource) => {
 
 // Successful render/import already validates these backings. Compare immutable
 // owners or their encoded payloads, without another genome read or digest.
+/**
+ * A record source by field: a resource reference field holds the parts of its
+ * resource (null when it has none), any other field its value.
+ * @typedef {{ payload: unknown, size: unknown, encoding: unknown }} CompositionSourcePart
+ * @typedef {Array<[string, unknown] | [string, CompositionSourcePart[] | null]>} CompositionSourceIdentity
+ */
+/**
+ * @param {Readonly<Record<string, unknown>> | null | undefined} source A record's `source`.
+ * @param {Readonly<Record<string, unknown>> | undefined} resources
+ */
 const compositionSourceIdentity = (source, resources) => {
   if (!source || typeof source !== 'object') return null;
   const fields = Object.keys(source).sort();
+  /** @type {CompositionSourceIdentity} */
   const identity = fields.map((key) => {
     if (!isCanonicalResourceReferenceField(key)) return [key, source[key]];
-    const descriptor = resources?.[source[key]];
+    // A reference field of a request its reader read holds a resource id.
+    const descriptor = resources?.[/** @type {string} */ (source[key])];
     if (!descriptor) return [key, null];
     const parts = generationResourceIdentity(descriptor)?.bindings;
     if (!Array.isArray(parts) || !parts.length) return [key, null];
@@ -3435,6 +3382,10 @@ const compositionSourceIdentity = (source, resources) => {
   return identity;
 };
 
+/**
+ * @param {CommittedCanonicalSession | null | undefined} canonical A committed Session, or a candidate's.
+ * @param {unknown} keys The record keys of one Result, unchecked; checked here.
+ */
 export const projectCompositionRecordIdentity = (canonical, keys) => {
   const request = canonical?.renderRequest;
   if (!request || !Array.isArray(keys) || !keys.length || new Set(keys).size !== keys.length) return null;
@@ -3448,18 +3399,19 @@ export const projectCompositionRecordIdentity = (canonical, keys) => {
         // With no region/selector, successful EXACTLY_ONE selects the sole
         // source record; FIRST selects #1, and unexpanded ALL also proves one.
         const selector = record.selector ?? (!record.region && ['exactly_one', 'first', 'all'].includes(record.cardinality)
-          ? { kind: 'recordIndex', index: 0 } : null);
+          ? { kind: /** @type {const} */ ('recordIndex'), index: 0 } : null);
         return [{ record, selector }];
       }
       const suffix = key.startsWith(`${record.recordKey}:`) ? key.slice(record.recordKey.length + 1) : '';
       if (record.cardinality !== 'all' || !/^[1-9]\d*$/.test(suffix)) return [];
-      return [{ record, selector: { kind: 'recordIndex', index: Number(suffix) - 1 } }];
+      return [{ record, selector: { kind: /** @type {const} */ ('recordIndex'), index: Number(suffix) - 1 } }];
     });
     if (matches.length !== 1) return null;
     const { record, selector } = matches[0];
     const source = compositionSourceIdentity(record.source, canonical.resources);
     if (!source || source.some(([field, value]) => isCanonicalResourceReferenceField(field)
-      && (!value || value.some(part => !part.payload || !Number.isSafeInteger(part.size))))) return null;
+      // A reference field holds its parts (`compositionSourceIdentity`).
+      && (!value || /** @type {CompositionSourcePart[]} */ (value).some(part => !part.payload || !Number.isSafeInteger(part.size))))) return null;
     records.push({ key, source, selector: publicationClone(selector),
       region: publicationClone(record.region ?? null) });
   }
@@ -3805,12 +3757,13 @@ export const normalizeWebGridColumnOrdering = (records = []) => {
   };
 };
 
+/** @param {{ collinearInferOrthogroups?: unknown }} settings @param {string} mode */
 const resolvePipelineCollinearInference = (settings, mode) =>
   settings.collinearInferOrthogroups ?? ['collinear', 'none'].includes(mode);
 
 const projectGeneratedProteinPipeline = (
   comparison,
-  { adoptCanonicalPayloads = false, currentRequest = true } = {}
+  { adoptCanonicalPayloads = false } = {}
 ) => {
   if (
     !comparison ||
@@ -3820,21 +3773,8 @@ const projectGeneratedProteinPipeline = (
     Array.isArray(comparison.settings)
   ) return null;
   const settings = comparison.settings;
-  if (currentRequest && Object.hasOwn(settings, 'alignOrthogroupFeature')) {
+  if (Object.hasOwn(settings, 'alignOrthogroupFeature')) {
     throw new Error('Current canonical protein settings cannot contain legacy alignment state.');
-  }
-  // A request of schema 1 or 2 (or a stored schema 5 that Gallery publication
-  // projects) names its alignment by a legacy target; Load promotes the others.
-  /** @type {{ target: string } | null} */
-  let legacySimilarityAlignment = null;
-  if (!currentRequest && settings.alignOrthogroupFeature !== null &&
-      settings.alignOrthogroupFeature !== undefined) {
-    legacySimilarityAlignment = {
-      target: requireCanonicalText(
-        settings.alignOrthogroupFeature,
-        'renderRequest.comparisons[].settings.alignOrthogroupFeature'
-      )
-    };
   }
   const parameters = settings.collinearityParams?.parameters || {};
   const mode = String(comparison.mode || 'orthogroup');
@@ -3842,7 +3782,6 @@ const projectGeneratedProteinPipeline = (
     generatedProteinComparison: adoptCanonicalPayloads
       ? comparison
       : cloneCanonicalJsonValue(comparison),
-    legacySimilarityAlignment,
     config: {
       blastSource: 'losat',
       losatProgram: 'blastp',
@@ -3895,26 +3834,7 @@ const LEGACY_DEPTH_OPTION_FIELDS = Object.freeze([
 const hasOptionValue = (value) => value !== null && value !== undefined;
 
 /**
- * @param {Readonly<Record<string, unknown>>} value
- * @param {readonly string[]} required
- * @param {string} fieldName
- */
-const requireExactCanonicalFields = (value, required, fieldName) => {
-  const keys = Object.keys(value);
-  const missing = required.filter(
-    (key) => !Object.prototype.hasOwnProperty.call(value, key)
-  );
-  if (missing.length > 0) {
-    throw new Error(`${fieldName} is missing required field(s): ${missing.join(', ')}.`);
-  }
-  const unknown = keys.filter((key) => !required.includes(key));
-  if (unknown.length > 0) {
-    throw new Error(`${fieldName} contains unknown field(s): ${unknown.join(', ')}.`);
-  }
-};
-
-/**
- * @param {{ resourceId?: unknown, representation?: unknown } | null | undefined} ref Unchecked; checked here.
+ * @param {unknown} ref
  * @param {StoredResources} resources
  * @param {string} fieldName
  * @param {ResourceFileResolver | null} [resolveResourceFile]
@@ -3925,11 +3845,10 @@ const canonicalDepthResourceFile = (
   fieldName,
   resolveResourceFile = null
 ) => {
-  if (!ref || typeof ref !== 'object' || Array.isArray(ref)) {
+  if (!isPlainObject(ref)) {
     throw new Error(`${fieldName} must be a canonical resource reference.`);
   }
-  requireExactCanonicalFields(ref, ['resourceId', 'representation'], fieldName);
-  if (!(/** @type {readonly unknown[]} */ (['file', 'canonicalTsv'])).includes(ref.representation)) {
+  if (ref.representation !== 'file' && ref.representation !== 'canonicalTsv') {
     throw new Error(`${fieldName} has unsupported representation '${ref.representation}'.`);
   }
   if (typeof ref.resourceId !== 'string' || !ref.resourceId.trim()) {
@@ -4004,19 +3923,6 @@ const projectCanonicalDepthTracks = ({
     if (!track || typeof track !== 'object' || Array.isArray(track)) {
       throw new Error(`${fieldName} must be an object.`);
     }
-    requireExactCanonicalFields(
-      track,
-      [
-        'source',
-        'label',
-        'color',
-        'height',
-        'largeTickInterval',
-        'smallTickInterval',
-        'tickFontSize'
-      ],
-      fieldName
-    );
     /** @type {unknown[]} */
     let sourceRefs;
     if (Array.isArray(track.source)) {
@@ -4236,9 +4142,9 @@ const legacyLabelScope = ({ mode, showLabels, allowInnerLabels }) => {
   return scope;
 };
 
-/** @param {ModeProfileName} mode */
+/** @param {unknown} config @param {ModeProfileName} mode */
 const projectFullConfigOverrides = (config, mode) => {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+  if (!isPlainObject(config)) return {};
   /** @type {Set<string>} */
   const paths = new Set(Object.values(CONFIG_OVERRIDE_PATHS));
   const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
@@ -4258,6 +4164,13 @@ const projectFullConfigOverrides = (config, mode) => {
   paths.forEach((path) => {
     const value = nestedConfigValue(config, path);
     if (value !== undefined) projected[path] = value;
+  });
+  // A number Python's config reads as unset ("none", "auto") is the Web's null (OV-791).
+  CONFIG_UNSET_NUMBER_PATHS.forEach((path) => {
+    const value = projected[path];
+    if (typeof value === 'string' && CONFIG_UNSET_NUMBER_SPELLINGS.includes(value.trim().toLowerCase())) {
+      projected[path] = null;
+    }
   });
   if (!Object.prototype.hasOwnProperty.call(projected, labelScopePath)) {
     const modeShowLabels = nestedConfigValue(config, `canvas.${mode}.show_labels`);
@@ -4399,33 +4312,10 @@ const projectCircularConservationConfig = (options, files) => {
   };
 };
 
-const projectCanonicalCircularPixel = (measure) => {
-  // Historical structured gaps/spacing are physical pixels, including zero.
-  if (measure && typeof measure === 'object' && !Array.isArray(measure)) {
-    if (String(measure.unit || '').trim().toLowerCase() !== 'px') {
-      throw new Error('Circular gap/spacing must use pixels.');
-    }
-    measure = measure.value;
-  }
-  const value = parseOptionalPixel(measure, 'Circular gap/spacing', { allowZero: true });
-  return value === null ? null : String(value);
-};
-
-const projectCanonicalCircularSlot = (slot) => ({
-  ...slot,
-  width: projectCircularMeasureDraft(slot?.width),
-  radius: projectCircularMeasureDraft(slot?.radius),
-  inner_gap_px: projectCanonicalCircularPixel(
-    slot?.innerGapPx ?? slot?.inner_gap_px
-  ),
-  outer_gap_px: projectCanonicalCircularPixel(
-    slot?.outerGapPx ?? slot?.outer_gap_px
-  )
-});
-
+/** @param {unknown} slot */
 const projectCurrentCanonicalCircularSlot = (slot) => {
   if (
-    !slot || typeof slot !== 'object' || Array.isArray(slot) ||
+    !isPlainObject(slot) ||
     ['spacing', 'inner_gap_px', 'outer_gap_px', 'strict'].some((field) => (
       Object.prototype.hasOwnProperty.call(slot, field)
     ))
@@ -4436,24 +4326,16 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
       throw new Error(`Canonical Circular track ${field} must be a nonnegative finite number or null.`);
     }
   }
-  const projected = projectCanonicalCircularSlot(slot);
   return {
-    id: String(projected.id || ''),
-    renderer: circularRendererName(projected.renderer),
-    enabled: projected.enabled !== false,
-    width: projected.width ?? null, radius: projected.radius ?? null,
+    id: String(slot.id || ''),
+    renderer: circularRendererName(slot.renderer),
+    enabled: slot.enabled !== false,
+    width: projectCircularMeasureDraft(slot.width) ?? null, radius: projectCircularMeasureDraft(slot.radius) ?? null,
     inner_gap_px: slot.innerGapPx == null ? null : String(slot.innerGapPx),
     outer_gap_px: slot.outerGapPx == null ? null : String(slot.outerGapPx),
-    side: projected.side ?? null, z: Number(projected.z) || 0,
-    params: cloneCanonicalJsonValue(projected.params || {})
+    side: slot.side ?? null, z: Number(slot.z) || 0,
+    params: cloneCanonicalJsonValue(slot.params || {})
   };
-};
-const projectLegacyCanonicalCircularSlot = (slot) => {
-  const projected = projectCanonicalCircularSlot(slot);
-  if (Object.prototype.hasOwnProperty.call(slot, 'spacing')) {
-    projected.spacing = projectCanonicalCircularPixel(slot.spacing);
-  }
-  return migrateLegacyCircularTrackSlot(projected);
 };
 
 /**
@@ -4498,45 +4380,12 @@ const combineCircularGenbankResources = (
   );
 };
 
-/**
- * @param {unknown} value
- * @param {number} schema
- */
-const validateCanonicalAssemblyOutput = (value, schema) => {
-  if (value === undefined || value === null) return;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Canonical diagramOptions.output must be an object.');
-  }
-  const required = schema <= 2
-    ? ['outputPrefix', 'legend', 'plotTitlePosition']
-    : ['legend', 'plotTitlePosition'];
-  const keys = Object.keys(value);
-  const missing = required.filter((key) => !Object.prototype.hasOwnProperty.call(value, key));
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required canonical diagramOptions.output field(s): ${missing.join(', ')}.`
-    );
-  }
-  const unknown = keys.filter((key) => !required.includes(key));
-  if (unknown.length > 0) {
-    throw new Error(
-      `Unknown canonical diagramOptions.output field(s): ${unknown.join(', ')}.`
-    );
-  }
-};
-
-/** @param {readonly unknown[]} records */
+/** @param {Readonly<Record<string, unknown>>} renderRequest @param {readonly unknown[]} records */
 const canonicalGrouping = (renderRequest, records) => {
-  if (renderRequest.schema <= 2) {
-    if (renderRequest.mode === 'linear') return 'single';
-    return Object.keys(renderRequest.layout || {}).length > 0 || records.length > 1
-      ? 'grid'
-      : 'single';
-  }
   const allowed = renderRequest.mode === 'circular'
     ? ['single', 'grid', 'batch']
     : ['single'];
-  if (!allowed.includes(renderRequest.grouping)) {
+  if (typeof renderRequest.grouping !== 'string' || !allowed.includes(renderRequest.grouping)) {
     throw new Error(`Unsupported canonical ${renderRequest.mode} grouping.`);
   }
   if (
@@ -4645,33 +4494,29 @@ export const projectCanonicalSessionRequest = ({
   initializeCliInputs = false,
   fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-  repairInvalidComparisonHeight = false,
   repairLegacyTableRows = false,
   sessionResourceTable = null,
   deferResourceContent = false,
   adoptCanonicalPayloads = false
 }) => {
-  if (!renderRequest || !SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET.has(renderRequest.schema)) {
-    throw new Error('Unsupported canonical renderRequest schema.');
+  // Every request reaches the projection at the current schema: a stored one
+  // through its reader (`readStoredRenderRequest`), a new one from the writer.
+  if (!renderRequest || renderRequest.schema !== CANONICAL_REQUEST_SCHEMA) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
   }
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
     throw new Error('Unsupported canonical renderRequest mode.');
   }
   const sourceRecords = Array.isArray(renderRequest.records) ? renderRequest.records : [];
-  const currentRequest = isCurrentRequestSchema(renderRequest);
-  if (currentRequest) {
-    sourceRecords.forEach((record) => canonicalRecordDisplay(record.display));
-    if (!Array.isArray(renderRequest.diagramOptions?.featurePlacements)) {
-      throw new Error('Canonical featurePlacements must be an array.');
-    }
-    canonicalFeaturePlacements(renderRequest.diagramOptions.featurePlacements, renderRequest.mode);
+  sourceRecords.forEach((record) => canonicalRecordDisplay(record.display));
+  if (!Array.isArray(renderRequest.diagramOptions?.featurePlacements)) {
+    throw new Error('Canonical featurePlacements must be an array.');
   }
-  if (currentRequest !== Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {
+  canonicalFeaturePlacements(renderRequest.diagramOptions.featurePlacements, renderRequest.mode);
+  if (!Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {
     throw diagnosticError('INPUT_INVALID', { field: 'featureOverrides', reason: 'SESSION_FORMAT' });
   }
-  const projectedFeatureOverrides = currentRequest
-    ? canonicalFeatureOverrides(renderRequest.diagramOptions.featureOverrides)
-    : [];
+  const projectedFeatureOverrides = canonicalFeatureOverrides(renderRequest.diagramOptions.featureOverrides);
   const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
   const records = normalizedRecordOrdering.records;
   const reorderRecordIndexedValues = (values) => (
@@ -4681,13 +4526,11 @@ export const projectCanonicalSessionRequest = ({
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
   /** @type {ReturnType<typeof canonicalSimilarityAlignment> | null} */
   let similarityAlignment = null;
+  /** @type {ReturnType<typeof canonicalRecordTranslations>} */
   let recordTranslations = [];
-  if (renderRequest.mode === 'linear' && currentRequest) {
+  if (renderRequest.mode === 'linear') {
     const layout = renderRequest.layout || {};
     if (Object.keys(layout).length > 0) {
-      requireExactCanonicalKeys(layout, [
-        'recordGapPx', 'multiRecordPositions', 'recordTranslations', 'similarityAlignment'
-      ], 'renderRequest.layout');
       if (!Number.isFinite(layout.recordGapPx) || layout.recordGapPx < 0) {
         throw new Error('renderRequest.layout.recordGapPx must be a finite non-negative number.');
       }
@@ -4835,7 +4678,7 @@ export const projectCanonicalSessionRequest = ({
     (renderRequest.comparisons || []).find(
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     ),
-    { adoptCanonicalPayloads, currentRequest: isCurrentRequestSchema(renderRequest) }
+    { adoptCanonicalPayloads }
   );
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []
@@ -4862,7 +4705,7 @@ export const projectCanonicalSessionRequest = ({
   if (renderRequest.mode === 'circular') {
     files.circularRecords = records.map((record) => {
       const source = record.source || {};
-      const resourceFile = (id) => resolveResourceFile
+      const resourceFile = (/** @type {string} */ id) => resolveResourceFile
         ? resolveResourceFile(id)
         : resourceAsLegacyFile(resources, id);
       return {
@@ -4948,16 +4791,10 @@ export const projectCanonicalSessionRequest = ({
     (renderRequest.comparisons || [])
       .filter((comparison) => comparison?.kind === 'nucleotideBlast')
       .forEach((comparison, index) => {
-        const sourceQueryIndex = Number.isInteger(Number(comparison.queryRecordIndex))
-          ? Number(comparison.queryRecordIndex)
-          : index;
-        const sourceSubjectIndex = Number.isInteger(Number(comparison.subjectRecordIndex))
-          ? Number(comparison.subjectRecordIndex)
-          : index + 1;
         const queryIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
-          .get(sourceQueryIndex);
+          .get(Number(comparison.queryRecordIndex));
         const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
-          .get(sourceSubjectIndex);
+          .get(Number(comparison.subjectRecordIndex));
         const file = resolveResourceFile
           ? resolveResourceFile(comparison.resourceId)
           : resourceAsLegacyFile(resources, comparison.resourceId);
@@ -5052,7 +4889,6 @@ export const projectCanonicalSessionRequest = ({
   }
 
   const options = renderRequest.diagramOptions || {};
-  validateCanonicalAssemblyOutput(options.output, renderRequest.schema);
   const canonicalDepth = projectCanonicalDepthTracks({
     options,
     records,
@@ -5061,15 +4897,7 @@ export const projectCanonicalSessionRequest = ({
     resolveResourceFile
   });
   const projectedCircularSizeMode = renderRequest.mode === 'circular'
-    ? (
-        renderRequest.schema <= 2
-          ? migratePersistedCircularMultiRecordSizeMode(
-              renderRequest.layout?.multiRecordSizeMode
-            )
-          : requireCurrentCircularMultiRecordSizeMode(
-              renderRequest.layout?.multiRecordSizeMode
-            )
-      )
+    ? requireCurrentCircularMultiRecordSizeMode(renderRequest.layout?.multiRecordSizeMode)
     : 'auto';
   const sourceDepthRows = canonicalDepth?.sourceRows || (
     Array.isArray(options.depthTrackFiles) ? options.depthTrackFiles : []
@@ -5261,20 +5089,17 @@ export const projectCanonicalSessionRequest = ({
       ([, value]) => value !== null && value !== undefined
     )
   );
-  const legacySparseDefaults = renderRequest.schema <= 2;
   const currentTrackDefaults = trackDefaultsForMode(renderRequest.mode);
-  const sparseConfigDefaults = legacySparseDefaults
-    ? HISTORICAL_CONFIG_OVERRIDES[renderRequest.mode]
-    : {
-        [CONFIG_OVERRIDE_PATHS.showGc]: currentTrackDefaults.gc,
-        [CONFIG_OVERRIDE_PATHS.showSkew]: currentTrackDefaults.skew,
-        ...(renderRequest.mode === 'linear'
-          ? {
-              [CONFIG_OVERRIDE_PATHS.linearAxisStrokeColor]:
-                modeProfile('linear').linearAxisColor
-            }
-          : {})
-      };
+  const sparseConfigDefaults = {
+    [CONFIG_OVERRIDE_PATHS.showGc]: currentTrackDefaults.gc,
+    [CONFIG_OVERRIDE_PATHS.showSkew]: currentTrackDefaults.skew,
+    ...(renderRequest.mode === 'linear'
+      ? {
+          [CONFIG_OVERRIDE_PATHS.linearAxisStrokeColor]:
+            modeProfile('linear').linearAxisColor
+        }
+      : {})
+  };
   const canonicalOverrides = {
     ...(
       options.config === null || options.config === undefined
@@ -5289,46 +5114,23 @@ export const projectCanonicalSessionRequest = ({
     ...projectLegacyFlatConfigOverrides(explicitOverrides)
   };
   const projectedLinearLabelPlacement = renderRequest.mode === 'linear'
-    ? (
-        renderRequest.schema <= 2
-          ? migratePersistedLinearLabelPlacement(overrides.label_placement)
-          : requireCurrentLinearLabelPlacement(overrides.label_placement)
-      )
+    ? requireCurrentLinearLabelPlacement(overrides.label_placement)
     : 'auto';
   const projectedLinearTrackLayout = renderRequest.mode === 'linear'
-    ? (
-        renderRequest.schema <= 2
-          ? migratePersistedLinearTrackLayout(overrides.linear_track_layout)
-          : requireCurrentLinearTrackLayout(overrides.linear_track_layout)
-      )
+    ? requireCurrentLinearTrackLayout(overrides.linear_track_layout)
     : 'middle';
   const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
   if (renderRequest.mode === 'linear' && comparisonHeight.status === 'invalid') {
-    if (!repairInvalidComparisonHeight) {
-      throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
-    }
+    throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
   }
   const tracks = options.tracks || {};
   const projectedCircularTrackSlots = renderRequest.mode === 'circular'
     ? (Array.isArray(tracks.circularTrackSlots)
-        ? tracks.circularTrackSlots.map((slot, index) => (
+        ? tracks.circularTrackSlots.map((slot) => (
           slot && typeof slot === 'object' && !Array.isArray(slot)
-              ? (
-                  renderRequest.schema <= 2
-                    ? normalizeCircularTrackSlot(
-                        projectLegacyCanonicalCircularSlot(slot),
-                        index,
-                        options.dinucleotide || 'GC',
-                        overrides.track_type || 'tuckin'
-                      )
-                    : projectCurrentCanonicalCircularSlot(slot)
-                )
+              ? projectCurrentCanonicalCircularSlot(slot)
               : parseCircularTrackSlotSpecs(
-                  [
-                    renderRequest.schema <= 2
-                      ? migrateLegacyCircularTrackSlotSpec(slot)
-                      : slot
-                  ],
+                  [slot],
                   options.dinucleotide || 'GC',
                   overrides.track_type || 'tuckin'
                 )[0]
@@ -5457,28 +5259,17 @@ export const projectCanonicalSessionRequest = ({
   const projectedFeatureShapes = normalizeFeatureRenderingMap(options.featureShapes || {});
   if (
     !Object.prototype.hasOwnProperty.call(projectedFeatureShapes, 'repeat_region') &&
-    (
-      renderRequest.schema <= 2 ||
-      (
-        Array.isArray(options.selectedFeaturesSet) &&
-        options.selectedFeaturesSet.includes('repeat_region')
-      )
-    )
+    Array.isArray(options.selectedFeaturesSet) &&
+    options.selectedFeaturesSet.includes('repeat_region')
   ) {
-    projectedFeatureShapes.repeat_region = renderRequest.schema <= 2
-      ? 'rectangle'
-      : defaultFeatureRendering('repeat_region');
+    projectedFeatureShapes.repeat_region = defaultFeatureRendering('repeat_region');
   }
-  const sparseFeatureTypes = legacySparseDefaults
-    ? HISTORICAL_FEATURE_TYPES
-    : MODE_DEFAULT_FEATURE_TYPES;
+  const sparseFeatureTypes = MODE_DEFAULT_FEATURE_TYPES;
   const currentComparisonDefaults = comparisonFiltersForMode(renderRequest.mode);
-  const sparseComparisonDefaults = legacySparseDefaults
-    ? HISTORICAL_COMPARISON_DEFAULTS
-    : {
-        ...currentComparisonDefaults,
-        alignmentLength: currentComparisonDefaults.alignment_length
-      };
+  const sparseComparisonDefaults = {
+    ...currentComparisonDefaults,
+    alignmentLength: currentComparisonDefaults.alignment_length
+  };
   const adv = {
     features: options.selectedFeaturesSet ?? [...sparseFeatureTypes],
     feature_shapes: projectedFeatureShapes,
@@ -5601,7 +5392,7 @@ export const projectCanonicalSessionRequest = ({
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
     })
   };
-  const presentationOwnsLinearRows = currentRequest && records.some(
+  const presentationOwnsLinearRows = records.some(
     (record) => record.presentation?.gridRow != null
   );
   const linearLayoutRows = presentationOwnsLinearRows
@@ -5628,12 +5419,10 @@ export const projectCanonicalSessionRequest = ({
           row: Number(String(token).slice(split + 1)) || index + 1
         };
       });
-  const linearLayout = renderRequest.mode === 'linear' && renderRequest.schema >= 2
+  const linearLayout = renderRequest.mode === 'linear'
     ? {
-        enabled: currentRequest
-          ? presentationOwnsLinearRows ||
-            (renderRequest.layout?.multiRecordPositions || []).length > 0
-          : Object.keys(renderRequest.layout || {}).length > 0,
+        enabled: presentationOwnsLinearRows ||
+          (renderRequest.layout?.multiRecordPositions || []).length > 0,
         recordGap: renderRequest.layout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX,
         rows: linearLayoutRows,
         recordTranslations,
@@ -5716,9 +5505,7 @@ export const projectCanonicalSessionRequest = ({
     pipelineState: projectedProteinPipeline
       ? {
           generatedProteinComparison:
-            projectedProteinPipeline.generatedProteinComparison,
-          legacySimilarityAlignment:
-            projectedProteinPipeline.legacySimilarityAlignment
+            projectedProteinPipeline.generatedProteinComparison
         }
       : null,
     legacyTableRepairs
@@ -5995,19 +5782,13 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
  *   (receipt 〔今までの知らせ〕), so they are not dropped.
  */
 /**
- * A request of schema 1 or 2, which `readStoredRenderRequest` returns as
- * stored until its reader (PR-D) lifts it; Load commits it so unless the
- * Gallery migration rebuilt it. No reader has checked its leaves.
- * @typedef {Readonly<Record<string, unknown>> & { schema: 1 | 2 }} StoredRenderRequest
- */
-/**
  * The committed Session: the request that drew the shown Result, with its
  * resources and Web file bindings. Generate and the automatic rerender commit
- * the schema 9 request they built; Load commits the request
- * `readStoredRenderRequest` read (schema 9, or a stored schema 1 or 2); History
- * and the Load rollback put a captured one back. `schema` tells the two apart.
+ * the schema 9 request they built; Load commits the request the Session
+ * stored, read to schema 9 (`readStoredRenderRequest`); History and the Load
+ * rollback put a captured one back.
  * @typedef {object} CommittedCanonicalSession
- * @property {CanonicalRenderRequest | StoredRenderRequest} renderRequest
+ * @property {CanonicalRenderRequest} renderRequest
  * @property {Readonly<Record<string, unknown>>} resources
  * @property {Readonly<Record<string, unknown>>} webFiles
  */
@@ -6259,16 +6040,16 @@ const keepConservationSlotsOnTheirRings = (request, rows, path) => {
 
 /**
  * The one reader of a stored render request: the only place in `js/` where an
- * unchecked value becomes a `CanonicalRenderRequest`. An integer schema
- * outside the supported set is refused as a Session-format error; schemas 1 and 2 are
- * returned as stored (schema 2 is rebuilt by the Gallery migration, whose
- * request is read again here); schemas 5 to 8 are promoted once, with the
- * Load context; then the request is repaired against its description. What
+ * unchecked value becomes a `CanonicalRenderRequest`. (1) An integer schema
+ * outside the supported set is refused as a Session-format error; (2) schemas
+ * 1 and 2 are lifted to schema 5 (`liftLegacyRenderRequest`, PR-D), with a row
+ * for what schema 5 cannot carry; (3) schemas 5 to 8 are promoted once, with
+ * the Load context; (4) the request is repaired against its description. What
  * cannot be read at its root, a schema that is no integer included, is a
  * dropped request (K22).
  * @param {unknown} value
  * @param {StoredRequestContext} context
- * @returns {Repaired<CanonicalRenderRequest | StoredRenderRequest> | StoredRequestDropped}
+ * @returns {Repaired<CanonicalRenderRequest> | StoredRequestDropped}
  */
 export const readStoredRenderRequest = (value, context) => {
   const { path } = context;
@@ -6279,17 +6060,20 @@ export const readStoredRenderRequest = (value, context) => {
   if (!SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET.has(/** @type {number} */ (value.schema))) {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
   }
-  // The test above is the type: an object whose `schema` is 1 or 2.
-  if (value.schema === 1 || value.schema === 2) return { value: /** @type {StoredRenderRequest} */ (value), repairs: [] };
+  const lifted = liftLegacyRenderRequest(value, path);
+  /** @type {LoadRepair[]} */
+  const repairs = [...lifted.repairs];
+  const stored = lifted.value;
   // The promotion walks the records and comparisons; lists of another kind
-  // leave nothing to read, as the repair would find at the root.
-  if (!Array.isArray(value.records) || (Object.hasOwn(value, 'comparisons') && !Array.isArray(value.comparisons))) {
+  // leave nothing to read, as the repair would find at the root; nor does a
+  // schema 1 or 2 request the lift cannot read (no options object or mode).
+  if (stored.schema === 1 || stored.schema === 2
+    || !Array.isArray(stored.records) || (Object.hasOwn(stored, 'comparisons') && !Array.isArray(stored.comparisons))) {
     return { kind: 'request-dropped', path, reason: 'wrong-kind' };
   }
-  /** @type {LoadRepair[]} */
-  const repairs = [];
-  const promoted = value.schema === CANONICAL_REQUEST_SCHEMA ? value : promoteCanonicalRenderRequestToCurrent(value, {
-    // Read as the legacy alignment reader reads them; it checks what it uses.
+  const promoted = stored.schema === CANONICAL_REQUEST_SCHEMA ? stored : promoteCanonicalRenderRequestToCurrent(stored, {
+    // The casts: the legacy alignment reader checks the catalog and the
+    // orthogroup state where it reads them (materializeLegacySimilarityAlignment).
     featureCatalog: /** @type {RequestPromotion['featureCatalog']} */ (context.featureCatalog),
     legacyOrthogroupState: /** @type {RequestPromotion['legacyOrthogroupState']} */ (context.legacyOrthogroupState),
     unreadAlignment: () => repairs.push(loadRepair({
@@ -6319,6 +6103,7 @@ export const readStoredRenderRequest = (value, context) => {
     /** @type {Record<string, unknown>} */ (repaired.value), repaired.rows, path
   );
   // The leaf returns the stored object itself when nothing changed (RK-3).
+  // The cast: repairByDescription checked it against the request description.
   return {
     value: /** @type {CanonicalRenderRequest} */ (/** @type {unknown} */ (rebound.request)),
     repairs: [
@@ -6331,15 +6116,15 @@ export const readStoredRenderRequest = (value, context) => {
 /**
  * A stored request as Gallery publication reads it: through the one reader,
  * refusing any repair (a published Session is written by the current writer,
- * so a row is a defect of its source) and any request that does not read to
- * the current schema. Returns a copy the caller may change.
+ * so a row is a defect of its source) and any request the reader drops.
+ * Returns a copy the caller may change.
  * @param {unknown} request
  * @param {Omit<StoredRequestContext, 'path' | 'holdComparisons'>} context
  * @returns {CanonicalRenderRequest}
  */
 export const readPublishedRenderRequest = (request, context) => {
   const read = readStoredRenderRequest(request, { ...context, path: 'renderRequest' });
-  if ('kind' in read || read.repairs.length > 0 || !isCurrentRequestSchema(read.value)) {
+  if ('kind' in read || read.repairs.length > 0) {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   }
   return /** @type {CanonicalRenderRequest} */ (cloneCanonicalJsonValue(read.value));
@@ -6491,15 +6276,14 @@ const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) =>
 );
 
 /**
- * The committed request, when it is of the current schema (a committed object's
- * `schema` is 9 exactly when `isCurrentRequestSchema` holds).
+ * The committed request (Load, Generate and the rerender commit schema 9 only)
+ * of a committed Session that holds its resources.
  * @param {CommittedCanonicalSession | null | undefined} committed
  * @returns {CanonicalRenderRequest}
  */
 const requireCurrentCommittedRequest = (committed) => {
   const request = committed?.renderRequest;
-  if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
-    || !['circular', 'linear'].includes(request.mode)
+  if (!request || !['circular', 'linear'].includes(request.mode)
     || !committed?.resources || typeof committed.resources !== 'object') {
     throw new Error('A current committed canonical Session is required.');
   }
@@ -6689,8 +6473,7 @@ export const projectCommittedEditorIntent = ({
  */
 export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
   const committedRequest = committed?.renderRequest;
-  if (!committedRequest || committedRequest.schema !== CANONICAL_REQUEST_SCHEMA
-    || committedRequest.mode !== 'linear' || !committed?.resources) {
+  if (!committedRequest || committedRequest.mode !== 'linear' || !committed?.resources) {
     throw new Error('Alignment requires a committed canonical Linear artifact.');
   }
   /** @type {CanonicalLinearRenderRequest} */

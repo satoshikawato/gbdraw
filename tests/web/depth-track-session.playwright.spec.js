@@ -1562,12 +1562,67 @@ test('Session preflight rejects invalid canonical data without resetting live st
     });
     expect(dialogs).toEqual([]);
   };
-  await expectSchemaRejection(1, 'RECORDS_REQUIRED');
+  // The one stored-request reader leaves a request with no record (or no
+  // layout) unread, and a Session 31 to 41 keeps nothing without it: the
+  // Session-fields error, as for a request of schema 5 to 9 (PR-D).
+  await expectSchemaRejection(1, 'FIELDS');
   expect(await snapshot()).toEqual(before);
 
+  const recordText = `LOCUS       PREFLIGHT                   4 bp    DNA     linear   UNK 01-JAN-1980
+DEFINITION  Session preflight fixture.
+ACCESSION   PREFLIGHT
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+`;
+  // A schema 2 request in the form its writers stored (every tracks key), which
+  // Load reads without a row, so each Session below reaches its own check.
+  const writtenTracks = {
+    circularTrackSlots: null, circularTrackAxisIndex: null,
+    linearTrackSlots: null, linearTrackAxisIndex: null, centerReservedRadius: null
+  };
+  const readableRequest = {
+    schema: 2,
+    mode: 'linear',
+    records: [{
+      recordKey: 'record-1',
+      source: { kind: 'genbank', resourceId: 'record-1-genbank' },
+      selector: null,
+      region: null,
+      presentation: {
+        label: null, subtitle: null, reverseComplement: false,
+        gridRow: null, gridColumn: null
+      }
+    }],
+    diagramOptions: {
+      configOverrides: {},
+      tracks: {
+        ...writtenTracks,
+        linearTrackSlots: ['features:features@side=overlay'],
+        linearTrackAxisIndex: 0
+      }
+    },
+    layout: {},
+    comparisons: [],
+    output: {
+      prefix: 'preflight', formats: ['interactive_svg'], overwrite: true,
+      interactiveMetadataPolicy: 'auto'
+    }
+  };
+  const recordResources = {
+    'record-1-genbank': {
+      kind: 'genbank', name: 'record.gb', type: 'text/plain',
+      size: Buffer.byteLength(recordText), lastModified: 0,
+      encoding: 'base64', data: Buffer.from(recordText).toString('base64')
+    }
+  };
+
   const invalidSlotSchemaSession = {
-    ...invalidCanonicalSession,
+    format: 'gbdraw-session',
     version: 33,
+    renderRequest: readableRequest,
+    resources: recordResources,
     config: {
       adv: {
         linear_track_slots_schema_version: '1',
@@ -1583,51 +1638,11 @@ test('Session preflight rejects invalid canonical data without resetting live st
   await expectSchemaRejection(2, 'TRACK_SCHEMA');
   expect(await snapshot()).toEqual(before);
 
-  const recordText = `LOCUS       PREFLIGHT                   4 bp    DNA     linear   UNK 01-JAN-1980
-DEFINITION  Session preflight fixture.
-ACCESSION   PREFLIGHT
-FEATURES             Location/Qualifiers
-ORIGIN
-        1 atgc
-//
-`;
   const unknownAuthoritySession = {
     format: 'gbdraw-session',
     version: 33,
-    renderRequest: {
-      schema: 2,
-      mode: 'linear',
-      records: [{
-        recordKey: 'record-1',
-        source: { kind: 'genbank', resourceId: 'record-1-genbank' },
-        selector: null,
-        region: null,
-        presentation: {
-          label: null, subtitle: null, reverseComplement: false,
-          gridRow: null, gridColumn: null
-        }
-      }],
-      diagramOptions: {
-        configOverrides: {},
-        tracks: {
-          linearTrackSlots: ['features:features@side=overlay'],
-          linearTrackAxisIndex: 0
-        }
-      },
-      layout: {},
-      comparisons: [],
-      output: {
-        prefix: 'preflight', formats: ['interactive_svg'], overwrite: true,
-        interactiveMetadataPolicy: 'auto'
-      }
-    },
-    resources: {
-      'record-1-genbank': {
-        kind: 'genbank', name: 'record.gb', type: 'text/plain',
-        size: Buffer.byteLength(recordText), lastModified: 0,
-        encoding: 'base64', data: Buffer.from(recordText).toString('base64')
-      }
-    },
+    renderRequest: readableRequest,
+    resources: recordResources,
     unknownSemanticState: { shouldNotBeAccepted: true },
     config: {
       adv: {
@@ -1681,7 +1696,7 @@ ORIGIN
           legend: 'bottom',
           plotTitlePosition: 'top'
         },
-        tracks: {}
+        tracks: writtenTracks
       }
     },
     config: {
@@ -1696,6 +1711,11 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(repairedCanonicalSession))
   });
+  // A Session 31 to 33 drew an invalid comparison height; Load lists it
+  // before it leaves the height unset (B17, D-OD05).
+  await answerLoadRepairs(page, [
+    'Settings: the value "-2" (renderRequest.diagramOptions.configOverrides.comparison_height) cannot be used; it is left unset.'
+  ]);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded: repaired-canonical.gbdraw-session.json', { timeout: 120_000 });
   await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
   expect(dialogs).toEqual([]);
@@ -2499,7 +2519,15 @@ ORIGIN
           gridRow: null, gridColumn: null
         }
       }],
-      diagramOptions: { configOverrides: {}, tracks: {} },
+      // Every tracks key, as the schema 2 writers stored them: Load reads the
+      // request without a row and reaches the commit.
+      diagramOptions: {
+        configOverrides: {},
+        tracks: {
+          circularTrackSlots: null, circularTrackAxisIndex: null,
+          linearTrackSlots: null, linearTrackAxisIndex: null, centerReservedRadius: null
+        }
+      },
       layout: {},
       comparisons: [],
       output: {
