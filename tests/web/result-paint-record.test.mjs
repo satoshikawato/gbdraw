@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createResultPaintRecord, drewPaint } from '../../gbdraw/web/js/app/result-paint-record.js';
+import { createResultPaintRecord } from '../../gbdraw/web/js/app/result-paint-record.js';
 
 // An editor paint state as app-setup reads it (`currentEditorProjectionState`).
 /** @param {string} step @returns {import('../../gbdraw/web/js/app/result-paint-record.js').EditorPaintState} */
@@ -136,6 +136,7 @@ test('a rerender drew the current paint only while its fills and strokes still m
   const record = createResultPaintRecord();
   record.commit(['a'], 'a', started, { drawn: started });
   assert.equal(record.lacking('a'), null, 'nothing was edited before the paint commit');
+  const drewPaint = record.drewPaint;
   assert.equal(drewPaint(started, started), true);
   assert.equal(drewPaint(started, { ...started, colors: [started.colors[0], 'rules written after the paint commit'] }), false,
     'a rule write after the paint commit');

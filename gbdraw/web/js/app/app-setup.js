@@ -24,7 +24,7 @@
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
-import { createResultPaintRecord, drewPaint, editorPaintState, sameColors } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -3221,13 +3221,13 @@ export const createAppSetup = () => {
       // D-36: a label rerender pays the redraw its drawing owes when, as its
       // Result is ready, no later rerender runs and its figure shows the
       // drawing's current paint, also after an edit made since its paint was
-      // committed (`drewPaint`; read before that edit is shown on it, OV-346).
+      // committed (read before that edit is shown on it, OV-346).
       // Its drawing is the shown one: a mode switch waits for a rerender
       // (`diagramModeSwitchBusy`). D-24 (OV-731): History keeps the figure
       // as the last step's.
       const drawing = state.activeDrawing();
       const drewCurrent = context.phase === 'label-reflow' && !labelReflowProcessing.value
-        && drewPaint(context.bindingOptions.drawnPaint, currentEditorProjectionState(drawing));
+        && resultPaintRecord.drewPaint(context.bindingOptions.drawnPaint, currentEditorProjectionState(drawing));
       previewFeatureSearch.handleMountedResultReady();
       showEditsMadeWhileDrawn(context);
       if (!drewCurrent) return;
@@ -3833,6 +3833,8 @@ export const createAppSetup = () => {
   let labelProjectionResultIdentity = '';
   /** @param {DrawingState} drawing @returns {EditorPaintState} */
   const currentEditorProjectionState = (drawing) => editorPaintState(state, drawing);
+  /** @param {readonly unknown[]} left @param {readonly unknown[]} right */
+  const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
   /** @param {DrawingState} drawing @param {MountedResultContext} context */
   const rememberCommittedEditorState = (drawing, context) => {
     const identities = liveResultIdentities();
