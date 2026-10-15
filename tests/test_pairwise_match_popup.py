@@ -103,7 +103,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("../services/match-sequences.js", "./match-sequences.mjs")
         .replace("../services/losat-normalization.js", "./losat-normalization.mjs")
         .replace("../services/feature-identity.js", "./feature-identity.mjs")
-        + "\nexport { buildFallbackOrthogroupWithContext, createPairwisePayloadContext, featureOrthogroupIdStatus, getOrthogroupById, integerAttr };\n",
+        + "\nexport { buildFallbackOrthogroupWithContext, createPairwisePayloadContext, featureOrthogroupIdStatus, integerAttr, orthogroupIndexFor, orthogroupInIndex };\n",
         encoding="utf-8",
     )
     check_path = tmp_path / "check-collinearity-popup.mjs"
@@ -115,10 +115,14 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           buildMatchPopupPayload,
           createPairwisePayloadContext,
           featureOrthogroupIdStatus,
-          getOrthogroupById,
-          integerAttr
+          integerAttr,
+          orthogroupIndexFor,
+          orthogroupInIndex
         }} from {module_path.as_uri()!r};
 
+        const getOrthogroupById = (groups, id, scope = '') => (
+          orthogroupInIndex(orthogroupIndexFor(groups), id, scope)
+        );
         const featureOrthogroupId = (feature) => {{
           const status = featureOrthogroupIdStatus(feature);
           return status.valid ? status.value : '';
@@ -753,13 +757,21 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(reverseMember.canOpen, JSON.stringify(reverseMember));
         assert(reverseMember.feature.svg_id === 'display-space-rendered-id', JSON.stringify(reverseMember));
         assert(payload.blockOrthogroups[0].memberAaFasta.includes('>CAG34720.1'), payload.blockOrthogroups[0].memberAaFasta);
+        // The payload caches its Feature index per catalog identity, so each edit below
+        // hands the popup replaced catalogs, as the app does.
+        const replaceCatalogs = () => {{
+          popupOptions.featureLookup = new Map(popupOptions.featureLookup);
+          popupOptions.sourceFeatures = [...popupOptions.sourceFeatures];
+        }};
         featureLookup.get('display-space-rendered-id').stable_feature_id = 'wrong-source-id';
+        replaceCatalogs();
         const mismatchedPayload = buildMatchPopupPayload(element, popupOptions);
         const mismatchedReverseMember = mismatchedPayload.blockOrthogroups[0].memberRows
           .find((row) => row.proteinId === 'CAG34720.1');
         assert(!mismatchedReverseMember.canOpen, JSON.stringify(mismatchedReverseMember));
         featureLookup.get('display-space-rendered-id').stable_feature_id = 'source-space-stable-id';
-        featureLookup.set('source-space-stable-id', popupOptions.sourceFeatures[0]);
+        popupOptions.featureLookup.set('source-space-stable-id', popupOptions.sourceFeatures[0]);
+        replaceCatalogs();
         popupOptions.orthogroups[0].members[2].recordIndex = 3;
         const wrongRecordPayload = buildMatchPopupPayload(element, popupOptions);
         const wrongRecordReverseMember = wrongRecordPayload.blockOrthogroups[0].memberRows
@@ -767,7 +779,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(!wrongRecordReverseMember.aaFasta, JSON.stringify(wrongRecordReverseMember));
         assert(!wrongRecordReverseMember.canOpen, JSON.stringify(wrongRecordReverseMember));
         popupOptions.orthogroups[0].members[2].recordIndex = 4;
-        featureLookup.delete('source-space-stable-id');
+        popupOptions.featureLookup.delete('source-space-stable-id');
         assert(payload.blockOrthogroups[1].id === 'og_2', JSON.stringify(payload.blockOrthogroups));
 
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);

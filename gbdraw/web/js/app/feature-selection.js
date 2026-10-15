@@ -22,6 +22,7 @@ export const FEATURE_SELECTION_CLASSES = Object.freeze([
   'feature-selection-marquee',
   'feature-selection-status'
 ]);
+const FEATURE_SELECTION_CLASS_SELECTOR = FEATURE_SELECTION_CLASSES.map((className) => `.${className}`).join(', ');
 
 const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
 const TWO_PI = Math.PI * 2;
@@ -426,13 +427,20 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     clearStatus = false,
     syncDom = true
   } = {}) => {
-    selectedFeatureIds.value = new Set();
+    // An empty selection stays the same Set, so a plain click or a background
+    // click re-renders nothing, and the Result is restyled only when it still
+    // shows a selection class (OV-913).
+    const alreadyEmpty = !selectedFeatureIds.value?.size;
+    if (!alreadyEmpty) selectedFeatureIds.value = new Set();
     selectedFeatureAnchorId.value = normalizeFeatureSelectionId(keepAnchorId);
     featureSelectionDrag.active = false;
     featureSelectionDrag.committed = false;
     pendingDrag = null;
     if (clearStatus) setStatus('', { timeoutMs: 0 });
-    if (syncDom) syncFeatureSelectionClasses();
+    if (!syncDom) return;
+    const svg = getCurrentSvg();
+    if (alreadyEmpty && !svg?.querySelector(FEATURE_SELECTION_CLASS_SELECTOR)) return;
+    syncFeatureSelectionClasses(svg);
   };
 
   /** @param {unknown} featureId */

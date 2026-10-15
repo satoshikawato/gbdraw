@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as featureUtils from '../../gbdraw/web/js/services/feature-utils.js';
-import { formatSearchMatchLine, runFeatureSearch } from '../../gbdraw/web/js/app/feature-search/search-core.js';
+import {
+  buildFeatureSearchIndex,
+  formatSearchMatchLine,
+  runFeatureSearch
+} from '../../gbdraw/web/js/app/feature-search/search-core.js';
 import { buildMatchPopupPayload } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
 import {
@@ -346,10 +350,9 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
     0: { 'data-gbdraw-record-source-start': '3000', 'data-gbdraw-record-source-end': '8000', 'data-gbdraw-record-source-step': '1' },
     1: { 'data-gbdraw-record-source-start': '1000', 'data-gbdraw-record-source-end': '12000', 'data-gbdraw-record-source-step': '-1' }
   };
-  const svg = { querySelector: (selector) => {
-    const group = groups[/data-gbdraw-record-index="(\d+)"/.exec(selector)?.[1] ?? ''];
-    return group ? { getAttribute: (name) => group[name] ?? null } : null;
-  } };
+  const svg = { querySelectorAll: () => Object.entries(groups).map(([index, group]) => ({
+    getAttribute: (name) => (name === 'data-gbdraw-record-index' ? index : group[name] ?? null)
+  })) };
   const attributes = {
     'data-gbdraw-pairwise-match-id': 'm1', 'data-match-kind': 'pairwise', 'data-source-index': '0',
     'data-query-record-id': 'Q', 'data-subject-record-id': 'S',
@@ -369,8 +372,45 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
   assert.match(payload.sequenceBundle.entries[0].fasta, /coords=3000\.\.3003\|strand=\+\nACGT\n$/);
   // A record shown as in its file (rotate only) keeps its coordinates.
   const plain = buildMatchPopupPayload(
-    { ownerSVGElement: { querySelector: () => null }, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
+    { ownerSVGElement: { querySelectorAll: () => [] }, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
     { resolveSequenceSource: (key) => ({ source: { recordId: key, sequence: sequences[key] } }) }
   );
   assert.deepEqual(plain.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`), ['1..4', '4..1']);
+});
+
+// A search index reads each similarity-group member once, not once per feature
+// and field (OV-914); a feature still takes the protein ID of its one member.
+test('the search index reads each group member a bounded number of times (OV-914)', () => {
+  const build = (count, { ambiguous = false } = {}) => {
+    let memberReads = 0;
+    const member = (index) => new Proxy({
+      record_index: 0, feature_index: index, rendered_svg_id: `f${index}`, source_protein_id: `PX${index}.1`
+    }, {
+      get(target, property, receiver) {
+        memberReads += 1;
+        return Reflect.get(target, property, receiver);
+      }
+    });
+    const members = Array.from({ length: count }, (_, index) => member(index));
+    if (ambiguous) members.push(member(0));
+    const index = buildFeatureSearchIndex({
+      features: Array.from({ length: count }, (_, index) => ({
+        svg_id: `f${index}`, rendered_svg_id: `f${index}`, record_index: 0, feature_index: index,
+        type: 'CDS', record_id: 'REC', start: index * 10, end: index * 10 + 9, strand: '+', orthogroup_id: 'OG1'
+      })),
+      orthogroups: [{ id: 'OG1', name: 'Group one', members }]
+    });
+    const proteinIds = index.featureOrder.map((svgId) => (
+      index.byId.get(svgId).itemsByField.get('orthogroup').find((item) => item.label === 'Protein ID')?.value || ''
+    ));
+    return { memberReads, proteinIds };
+  };
+  const small = build(10);
+  const large = build(40);
+  assert.deepEqual(large.proteinIds, Array.from({ length: 40 }, (_, index) => `PX${index}.1`));
+  // Linear in the group size: 4x the members cost about 4x the reads, not 16x.
+  assert.ok(large.memberReads < 6 * small.memberReads, `${small.memberReads} reads for 10, ${large.memberReads} for 40`);
+  // A feature that matches two members takes no member's protein ID.
+  const ambiguous = build(3, { ambiguous: true });
+  assert.deepEqual(ambiguous.proteinIds, ['', 'PX1.1', 'PX2.1']);
 });

@@ -281,6 +281,7 @@ export const createFeatureEditor = ({
     clearAlignmentCandidatePreview: featureSvgActions.clearAlignmentCandidatePreview,
     showAlignmentOverlay: featureSvgActions.showAlignmentOverlay,
     clearAlignmentOverlay: featureSvgActions.clearAlignmentOverlay,
+    markSelectedPairwiseMatch: featureSvgActions.markSelectedPairwiseMatch,
     showFeaturePopupAtFeature: featureSvgActions.showFeaturePopupAtFeature,
     dispose: featureSvgActions.dispose,
     openFeatureEditorForFeature,
