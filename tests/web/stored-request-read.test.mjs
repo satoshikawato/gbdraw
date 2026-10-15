@@ -499,6 +499,15 @@ test('a Session 31 to 41 whose request cannot be read at its root is refused wit
   }
 });
 
+test('a schema 2 request takes the rows a schema 9 one takes: an empty tracks object, which no writer stored, is a part left out (PR-D)', () => {
+  const tracksRows = (session) => readRequest(session, (request) => { request.diagramOptions.tracks = {}; }).repairs
+    .filter(({ path }) => path.startsWith('renderRequest.diagramOptions.tracks'))
+    .map(({ code, path, effect }) => ({ code, path, effect }));
+  const dropped = [{ code: 'request-part-dropped', path: 'renderRequest.diagramOptions.tracks', effect: 'dropped' }];
+  assert.deepEqual(tracksRows(gallery('lambda_basic_linear')), dropped);
+  assert.deepEqual(tracksRows(fixture('feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz')), dropped);
+});
+
 test('a request whose schema is no integer is unreadable (K22): settings only with its Web settings, refused without them; an integer the app does not read stays a Session-format error (OV-863)', async () => {
   for (const request of UNREADABLE_REQUESTS.slice(1)) {
     const session = gallery('lambda_basic_linear');
