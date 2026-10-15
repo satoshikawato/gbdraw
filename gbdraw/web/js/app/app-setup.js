@@ -1602,45 +1602,36 @@ export const createAppSetup = () => {
     }
   };
   // A restore, or Reset Settings, that rewrites the rules: the rule owner
-  // follows the rules `write` replaced.
+  // follows the rules `write` replaced. A checkpoint figure History kept as
+  // drawn shows its rules as the step left them, so its restore asks for no
+  // rerender (D-24 (OV-731)); `step` is the step whose after side Redo restores.
   /**
    * @template T
    * @param {DrawingState} drawing
    * @param {() => Promise<T>} write
+   * @param {{ drawn: boolean, step: symbol | null }} [restored]
    * @returns {Promise<T>}
    */
-  const followRuleEdits = async (drawing, write) => {
+  const followRuleEdits = async (drawing, write, { drawn, step } = { drawn: false, step: null }) => {
     const previousRules = drawing.manualSpecificRules.map((/** @type {SpecificColorRule} */ rule) => ({ ...rule }));
     specificRuleRestorePorts.retainRulesForRestore(previousRules);
     try {
       const written = await write();
-      specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
+      if (!drawn) specificRuleRestorePorts.followRestoredSpecificRules(previousRules, step);
       return written;
     } finally {
       specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
-  /**
-   * @template {unknown[]} A
-   * @template R
-   * @param {DrawingState} drawing
-   * @param {(...args: A) => R} restore
-   * @param {A} args
-   */
-  const restoreRuleEdits = (drawing, restore, ...args) => followRuleEdits(
-    drawing, () => restoreWithSpecificRuleDrafts(restore, ...args)
-  );
   const history = createHistoryManager(/** @type {HistoryManagerOptions} */ ({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: (...args) => {
-      const drawing = state.activeDrawing();
-      return restoreRuleEdits(drawing, historySnapshots.applyHistoryIntent, ...args);
-    },
+    applyIntent: (...args) => followRuleEdits(
+      state.activeDrawing(), () => restoreWithSpecificRuleDrafts(historySnapshots.applyHistoryIntent, ...args)
+    ),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: (...args) => {
-      const drawing = state.activeDrawing();
-      return restoreRuleEdits(drawing, historySnapshots.applyArtifactCheckpoint, ...args);
-    },
+    applyCheckpoint: (checkpoint, restored) => followRuleEdits(
+      state.activeDrawing(), () => restoreWithSpecificRuleDrafts(historySnapshots.applyArtifactCheckpoint, checkpoint), restored
+    ),
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
@@ -3226,6 +3217,10 @@ export const createAppSetup = () => {
     afterReady(context) {
       previewFeatureSearch.handleMountedResultReady();
       showEditsMadeWhileDrawn(context);
+      // D-24 (OV-731): a shown rerender is the figure of the History step that
+      // asked for it; History keeps it while that step is the last one.
+      const step = context.phase === 'label-reflow' ? featureActions.takeRedrawnStep() : null;
+      if (step) void history.keepRedrawnResult(step);
     }
   });
   const {

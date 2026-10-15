@@ -1029,11 +1029,26 @@ export const createFeatureLabelActions = ({
   // An edit whose Result Python must draw again asks for the automatic
   // rerender, Auto Reflow on or off: a specific-color rule edit or a History
   // step that changes a Legend source (Owner decision 2026-10-06, OV-43). A
-  // request while one is pending joins it.
-  const requestAutomaticRerender = () => {
+  // request while one is pending joins it. D-24 (OV-731): a request names the
+  // History step whose figure it draws, with the Results it was asked over;
+  // a rerender shown after it has replaced those Results, and the composition
+  // root takes the step then (`takeRedrawnStep`), so History keeps the figure.
+  /** @type {{ step: symbol, over: unknown } | null} */
+  let redrawAsked = null;
+  /** @param {symbol | null} [step] */
+  const requestAutomaticRerender = (step = null) => {
     if (generatedMode.value !== mode.value || !svgContainer.value?.querySelector?.('svg')) return false;
+    if (step) redrawAsked = { step, over: results.value };
     queueLabelReflow(true);
     return true;
+  };
+  // Called when a rerender's Results are shown: the step whose request they
+  // were drawn after, once; null when no step asked since they were.
+  const takeRedrawnStep = () => {
+    if (!redrawAsked || redrawAsked.over === results.value) return null;
+    const { step } = redrawAsked;
+    redrawAsked = null;
+    return step;
   };
 
   /** @param {string | null | undefined} labelKey @param {unknown} nextTextRaw */
@@ -1726,6 +1741,7 @@ export const createFeatureLabelActions = ({
     requestLabelTextChangeByKey,
     reconcileLabelOverrides,
     requestAutomaticRerender,
+    takeRedrawnStep,
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,
     syncLabelEditor,

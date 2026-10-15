@@ -191,6 +191,9 @@ export const createFeatureEditor = ({
     // O-2: the root asks Python for a Legend row a restore returns that the
     // displayed Result's bytes lack.
     requestAutomaticRerender: labelActions.requestAutomaticRerender,
+    // D-24 (OV-731): the root reads, once a rerender is shown, the History
+    // step whose figure it drew.
+    takeRedrawnStep: labelActions.takeRedrawnStep,
     specificRulePattern: ruleActions.specificRulePattern,
     specificRulePatternDraft: ruleActions.specificRulePatternDraft,
     specificRulePatternFieldId: ruleActions.specificRulePatternFieldId,

@@ -811,15 +811,13 @@ test('an Undo of a mode switch waits for a label rerender', async ({ page }) => 
   test.setTimeout(300_000);
   await bothResults(page);
   await showMode(page, 'circular');
-  await page.evaluate(async () => {
-    const app = window.__GBDRAW_APP__;
-    await app.setFeatureColorValue(app.extractedFeatures.find((feature) => feature.type === 'CDS'), '#123456');
-  });
-  await settleLive(page);
   const attempt = await evaluateWithRetainedPromise(page, async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
+    const app = window.__GBDRAW_APP__;
     const owner = window.__GBDRAW_HISTORY__;
-    // The Undo of the color restores the rule table and asks for the rerender.
+    // The color asks for the rerender, and its Undo comes while that draws,
+    // so the rerender draws the restored rule table (D-24 (OV-731)).
+    await app.setFeatureColorValue(app.extractedFeatures.find((feature) => feature.type === 'CDS'), '#123456');
     await owner.undo();
     for (let wait = 0; wait < 200 && !state.labelReflowProcessing.value; wait += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10));

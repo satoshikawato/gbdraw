@@ -42,8 +42,9 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
 /**
  * The label owner's reaction the composition root registers once that owner exists.
  * @typedef {object} RuleActionsPorts
- * @property {() => boolean} requestAutomaticRerender
- *   Asks for the automatic rerender of an edit Python must draw again (OV-43).
+ * @property {(step?: symbol | null) => boolean} requestAutomaticRerender
+ *   Asks for the automatic rerender of an edit Python must draw again (OV-43);
+ *   `step`: the History step whose figure the rerender draws (D-24 (OV-731)).
  */
 
 /**
@@ -246,14 +247,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // rerender, as the edit did. A removed whole-type rule asks for it only
   // when the restored Legend lacks the type's default row (OV-169): Undo of
   // an Apply to all returns the row it recolored, so it needs no Python run.
-  /** @param {Partial<SpecificColorRule>[]} previousRules */
-  const followRestoredRules = (previousRules) => {
+  // The composition root does not call this for a figure History kept as
+  // drawn (D-24 (OV-731)); `step` is the step whose after side Redo restored.
+  /** @param {Partial<SpecificColorRule>[]} previousRules @param {symbol | null} [step] */
+  const followRestoredRules = (previousRules, step = null) => {
     const drawing = state.activeDrawing();
     return (
       JSON.stringify(previousRules) !== JSON.stringify(drawing.manualSpecificRules)
       && redrawsLegendFor(drawing, previousRules, drawing.manualSpecificRules,
         { holdsRow: (caption) => legendHoldsRow(drawing, caption) })
-      && ports.requestAutomaticRerender()
+      && ports.requestAutomaticRerender(step)
     );
   };
   // The automatic rerender replaces the Results the candidate was prepared
@@ -451,6 +454,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     // draws (R13); a checkpoint when the legend gains or loses a row.
     const transact = legend.diff.add.length || legend.diff.remove.length
       ? runUndoableCheckpoint : runUndoable;
+    // D-24 (OV-731): a checkpoint step keeps the figure of each side, so Undo
+    // and Redo show it with no Python run. A rule write starts once the
+    // automatic rerender is idle (`rerenderIdle`), so the figure it starts
+    // from is drawn unless that rerender failed. The commit's own figure is
+    // drawn when it shows every row; otherwise the step takes the figure of
+    // the rerender it asks for once that is shown (`keepRedrawnResult`).
+    const step = Symbol(label);
+    const drawnBefore = !state.labelReflowProcessing?.value && !state.labelReflowLastError?.value;
     await transact(label, () => {
       if (!current() || !legend.isCurrent()) return false;
       drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
@@ -476,9 +487,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       // is an operation of the one compile (OV-146).
       projectPaletteAndRules({ prepareRules: false, legendRows });
       return legend.diff;
-    }, { joinsOpenStep });
+    }, { joinsOpenStep, step, drawn: { before: drawnBefore, after: drawnBefore && !redrawsLegend } });
     if (applied) appliedWrites += 1;
-    if (applied && redrawsLegend) ports.requestAutomaticRerender();
+    if (applied && redrawsLegend) ports.requestAutomaticRerender(step);
     return applied;
   };
   /**
