@@ -1065,9 +1065,8 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
   // '' (a cleared input) reads as the field's default; null is copied as
   // stored and read by the field's reader, whose unset value is its default
   // (the GC tick interval's is null, auto), and 0 only where the default is 0.
-  // The Linear record gap keeps reading a blank as 0, as Generate and Save
-  // project it (OV-828).
-  const READS = { '': [20, 0.10, 0.05, 1, 0, 0], null: [null, 0.10, 0.05, 1, 0, 0] };
+  // A blank Linear record gap is its default, 24 px (OV-828, BA-D30).
+  const READS = { '': [20, 0.10, 0.05, 1, 0, 24], null: [null, 0.10, 0.05, 1, 0, 24] };
   for (const blank of ['', null]) {
     edited();
     const file = {
@@ -1085,12 +1084,14 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
     Object.assign(session.modes[mode].config.adv, { gc_content_tick_interval: '', multi_record_column_gap_ratio: '' });
     session.modes[mode].config.losat.blastp.collinearMaxConflictsInMergeGap = '';
   }
+  session.modes.linear.config.linearRecordLayout = { ...session.modes.linear.config.linearRecordLayout, recordGap: '' };
   const { items } = await loadAnswering(session);
   assert.deepEqual(items, []);
   for (const mode of ['circular', 'linear']) {
     const { adv, losat } = state.drawings[mode];
     assert.deepEqual([adv.gc_content_tick_interval, adv.multi_record_column_gap_ratio, losat.blastp.collinearMaxConflictsInMergeGap], [20, 0.10, 1], mode);
   }
+  assert.equal(state.drawings.linear.linearRecordGap.value, 24);
 });
 
 // OV-823 (BA-OD110): a Session 44 whose GUI-unmanaged font override is now
@@ -1132,6 +1133,20 @@ test('a cleared Feature overlap tolerance saves and reads as its default (OV-826
     const { items } = await loadAnswering(saved);
     assert.deepEqual(items, []);
     assert.equal(state.drawings[mode].adv.feature_overlap_tolerance_bp, 0, mode);
+  }
+});
+
+// OV-828 (BA-D30): a cleared (or null) Linear record gap is its default,
+// 24 px: Save writes 24 and the Session reads back with it and no dialog.
+test('a cleared Linear record gap saves and reads as its default, 24 px (OV-828)', async () => {
+  for (const blank of ['', null]) {
+    await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+    state.drawings.linear.linearRecordGap.value = blank;
+    const saved = await savedSession(`record-gap-${JSON.stringify(blank)}`);
+    assert.equal(saved.modes.linear.config.linearRecordLayout.recordGap, 24, JSON.stringify(blank));
+    const { items } = await loadAnswering(saved);
+    assert.deepEqual(items, []);
+    assert.equal(state.drawings.linear.linearRecordGap.value, 24, JSON.stringify(blank));
   }
 });
 
@@ -1308,9 +1323,9 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH
 
 // A History restore applies captured settings with the same readers and
 // lists nothing (only Load asks): what it installs is unchanged (R11), but a
-// blank (null) reads as the reader's default (OV-827), except the Linear
-// record gap, which keeps 0 (OV-828).
-test('a History restore reads a blank as the reader\'s default except the Linear record gap, other values as before, and asks nothing', async () => {
+// blank (null) reads as the reader's default (OV-827), the Linear record
+// gap's too (OV-828, BA-D30).
+test('a History restore reads a blank as the reader\'s default, other values as before, and asks nothing', async () => {
   const { applyConfigData } = await import('../../gbdraw/web/js/services/config.js');
   const drawing = state.drawings.circular;
   applyConfigData(drawing, {
@@ -1349,7 +1364,7 @@ test('a History restore reads a blank as the reader\'s default except the Linear
   assert.deepEqual([circularConservation.source, circularConservation.series.map(({ color, losat_gencode, sourceIndex }) => [color, losat_gencode, sourceIndex])],
     ['upload', [['#4e79a7', 1, 0]]]);
   assert.deepEqual([drawing.linearRecordLayoutEnabled.value, drawing.linearRecordGap.value, [...drawing.linearRecordRows]],
-    [true, 0, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
+    [true, 24, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
   assert.equal(drawing.importedComparisonIntent.action, null);
   assert.equal(drawing.losatProgram.value, 'blastn');
 });

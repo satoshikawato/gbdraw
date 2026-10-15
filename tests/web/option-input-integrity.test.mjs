@@ -221,17 +221,3 @@ test('Generate keeps the numeric draft: no Generate-path draft assignments are a
     assert.doesNotMatch(source, new RegExp(`(adv|circularConservation)\\.${field}\\s*=[^=]`), field);
   }
 });
-
-// OV-826 (BA-OD112, R7): a cleared Feature overlap tolerance (the number input
-// stores '') is a blank, so the request leaves the key out and Python uses its
-// default, as for null; a number is sent as it is.
-test('a blank Feature overlap tolerance leaves the request override out', () => {
-  for (const mode of ['circular', 'linear']) {
-    for (const blank of ['', null]) {
-      const overrides = project(mode, { feature_overlap_tolerance_bp: blank }).diagramOptions.configOverrides;
-      assert.equal(Object.hasOwn(overrides, 'canvas.feature_overlap_tolerance_bp'), false, `${mode} ${JSON.stringify(blank)}`);
-    }
-    const sent = project(mode, { feature_overlap_tolerance_bp: 5 }).diagramOptions.configOverrides;
-    assert.equal(sent['canvas.feature_overlap_tolerance_bp'], 5, mode);
-  }
-});

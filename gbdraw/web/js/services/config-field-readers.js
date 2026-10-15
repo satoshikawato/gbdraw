@@ -1,5 +1,6 @@
 // @ts-check
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import {
   changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
@@ -28,6 +29,7 @@ import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
 
 /** @import { FieldLeaf, FieldReader, FieldReading } from '../utils/field-reading.js' */
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
+/** @import { ObjectShape } from '../utils/contract-shape.js' */
 
 // The readers of the stored settings of a configuration (a drawing's draft, a
 // legacy configuration file) and of a Session's app `ui`, a drawing's `ui`
@@ -536,8 +538,20 @@ const CONSERVATION_ROWS = Object.freeze([
 /** Omitted: the fresh default in every Session version. @type {FieldReader<boolean>} */
 export const readLinearRecordLayoutEnabled = (value) => (typeof value === 'boolean' ? { value, lost: false }
   : { value: WEB_UX_PROFILE.linear.arrangeInRowsByDefault, lost: !isUnsetValue(value) });
-/** A blank gap reads as 0, as Generate and Save project it (OV-828 decides its meaning). @type {FieldReader<number>} */
-export const readLinearRecordGap = (value) => numberOr(isNonNegative, 24)(value === null || value === '' ? 0 : value);
+/** The Linear record gap's default, in px: Python's (`CanonicalLinearLayout.recordGapPx`). */
+export const DEFAULT_LINEAR_RECORD_GAP_PX = /** @type {number} */ (
+  /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalLinearLayout).defaults?.recordGapPx);
+/**
+ * The Linear record gap a draft draws and saves with: a blank (the cleared
+ * number input stores '') or an unset value is the default, as R7 reads a
+ * blank (OV-828, BA-D30); any other value is the draft's own, which Generate
+ * and Save convert as before.
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+export const draftLinearRecordGap = (value) => (isUnsetValue(value) ? DEFAULT_LINEAR_RECORD_GAP_PX : value);
+/** A blank or absent gap reads as the default, as `draftLinearRecordGap` gives it. @type {FieldReader<number>} */
+export const readLinearRecordGap = numberOr(isNonNegative, DEFAULT_LINEAR_RECORD_GAP_PX);
 export const readImportedComparisonAction = exactChoice(Object.values(IMPORTED_COMPARISON_ACTIONS), null);
 const readLosatProgramText = exactChoice(['blastn', 'tblastx', 'blastp'], 'blastn');
 /** The label filter, read without case. */

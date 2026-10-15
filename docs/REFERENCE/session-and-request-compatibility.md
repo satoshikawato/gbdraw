@@ -220,8 +220,7 @@ configuration file drops a key it does not know.
 - No dialog opens for a reading that keeps the meaning (an older format,
   capitals, outer spaces, an alias, a number stored as its text, or a blank
   number, such as a cleared number field, which reads as the field's default
-  in a Session and in a configuration file; a blank Linear record gap reads
-  as 0), or for a
+  in a Session and in a configuration file), or for a
   value that had no effect on the figure: a dropped cache entry that the next
   comparison computes again, a Session 46 Legend edit that a later edit of the
   same row overwrote, a pending palette that Instant Preview drops, a name or

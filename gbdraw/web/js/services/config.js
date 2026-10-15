@@ -43,7 +43,7 @@ import {
 } from './depth-file-codec.js';
 import {
   configFieldRepairs, defaultSettingsContainers, installStoredSettings, losatExecutionRepairs, readAnnotationSets, readCanvasPadding,
-  readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, readLinearRecordGap, readLinearRecordLayoutEnabled,
+  readGeneratedCircularPlotTitlePosition, readImportedComparisonAction, draftLinearRecordGap, readLinearRecordGap, readLinearRecordLayoutEnabled,
   readLinearRecordRows, readFeaturePanelTab, readList, readLosatProgram, readPaletteColors, readPlainObject,
   readColorRules, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
   sessionUiFieldRepairs, sliceFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS
@@ -893,7 +893,7 @@ export const buildConfigData = (drawing) => ({
   featurePlacementOverrides: cloneJsonData(drawing.featurePlacementOverrides),
   linearRecordLayout: {
     enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
-    recordGap: Number(drawing.linearRecordGap.value) || 0,
+    recordGap: Number(draftLinearRecordGap(drawing.linearRecordGap.value)) || 0,
     // The rows as Load reads them (one reader; a row state holds is valid).
     rows: readLinearRecordRows(drawing.linearRecordRows).value
   },

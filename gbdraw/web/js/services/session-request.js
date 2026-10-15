@@ -93,6 +93,7 @@ import { loadRepair } from '../utils/load-repairs.js';
 import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { isCurrentRequestSchema } from '../utils/request-schema.js';
@@ -2843,7 +2844,7 @@ const buildLayout = (state, drawing, records = [], circularSourceIndexes = null)
         !records.some((record) => record.presentation.gridRow != null) &&
         plan === null && translations.length === 0) return {};
     return {
-      recordGapPx: Math.max(0, Number(drawing.linearRecordGap?.value) || 0),
+      recordGapPx: Math.max(0, Number(draftLinearRecordGap(drawing.linearRecordGap?.value)) || 0),
       multiRecordPositions: null,
       recordTranslations: translations,
       similarityAlignment: plan
@@ -2973,7 +2974,7 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []),
     losatProgram: config.losatProgram || 'blastn',
     linearRecordLayoutEnabled: Boolean(layout.enabled),
-    linearRecordGap: layout.recordGap ?? 24
+    linearRecordGap: layout.recordGap ?? DEFAULT_LINEAR_RECORD_GAP_PX
   };
   /** @param {Record<string, any>} values */
   const refsOf = (values) => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, publicationRef(value)]));
@@ -5633,7 +5634,7 @@ export const projectCanonicalSessionRequest = ({
           ? presentationOwnsLinearRows ||
             (renderRequest.layout?.multiRecordPositions || []).length > 0
           : Object.keys(renderRequest.layout || {}).length > 0,
-        recordGap: renderRequest.layout?.recordGapPx ?? 24,
+        recordGap: renderRequest.layout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX,
         rows: linearLayoutRows,
         recordTranslations,
         similarityAlignment
@@ -5961,9 +5962,9 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
     if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
     const hadLayout = Object.keys(promoted.layout || {}).length > 0;
     if (hadLayout || similarityAlignment !== null) {
-      const recordGapPx = Number(promoted.layout?.recordGapPx ?? 24);
+      const recordGapPx = Number(promoted.layout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX);
       promoted.layout = {
-        recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : 24,
+        recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : DEFAULT_LINEAR_RECORD_GAP_PX,
         multiRecordPositions: null,
         recordTranslations: records.map((record) => ({
           recordKey: String(record.recordKey || ''),
@@ -6703,7 +6704,7 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
   }
   // The test above gave every record key a boolean.
   request.records.forEach(record => writeCanonicalRecordReverseComplement(record, /** @type {boolean} */ (byKey.get(record.recordKey))));
-  request.layout = { recordGapPx: 24, multiRecordPositions: null, ...request.layout,
+  request.layout = { recordGapPx: DEFAULT_LINEAR_RECORD_GAP_PX, multiRecordPositions: null, ...request.layout,
     similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
     recordTranslations: cloneCanonicalJsonValue(translations) };
   projectCanonicalSessionRequest({ ...canonical, deferResourceContent: true });
