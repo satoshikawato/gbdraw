@@ -6660,16 +6660,18 @@ test('a count-baseline test follows a runtime move by path alongside runtime fil
 
 // BA-D10: a rule's text is authority. The Gate checks the candidate registry
 // whenever it changes; an unchanged trusted registry is not re-checked.
-// json-ids (schema 2): the ids of a JSON list are a shrink-only set; a row's
-// other fields (owners, reason, retireWhen) change freely.
-test('a json-ids allowlist compares only the entry ids', () => {
+// json-ids (schema 2): the ids of a JSON list are a shrink-only set, and so is
+// the length of each row's lists (R9: an owner added to a twin row is
+// authority-only); a renamed item and the row's other fields change freely.
+test('a json-ids allowlist compares the entry ids and the length of each row list', () => {
   const TWINS_PATH = 'tools/twins.json';
   const row = (id, extra = {}) => ({ id, pythonOwner: ['gbdraw/a.py:f'], jsOwner: ['gbdraw/web/js/services/a.js:f'], reason: 'r', retireWhen: 'w', ...extra });
   const twins = (rows) => `${JSON.stringify({ schemaVersion: 1, twins: rows }, null, 2)}\n`;
   const rules = designRuleRules2();
   rules[0].allowlists.push({ path: TWINS_PATH, symbol: 'twins', kind: 'json-ids' });
   const subject = `R10 ${TWINS_PATH}#twins`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const base = [row('function:a'), row('function:b')];
+  const rowA = (extra = {}) => row('function:a', { pythonOwner: ['gbdraw/a.py:f', 'gbdraw/a.py:g'], ...extra });
+  const base = [rowA(), row('function:b', { pending: true })];
   const run = (rows) => withDesignRuleGuardRepository(({ execute, write }) => {
     runtimeChange(write);
     write(TWINS_PATH, twins(rows));
@@ -6684,9 +6686,18 @@ test('a json-ids allowlist compares only the entry ids', () => {
   const removed = run([base[0]]);
   assert.equal(removed.status, 0, removed.output);
   assert.match(removed.output, new RegExp(`- contraction: ${subject}\\n`));
-  const edited = run([row('function:a', { jsOwner: ['gbdraw/web/js/services/b.js:f'], reason: 'moved', retireWhen: 'later' }), base[1]]);
+  const edited = run([rowA({ jsOwner: ['gbdraw/web/js/services/b.js:f'], reason: 'moved', retireWhen: 'later' }), row('function:b')]);
   assert.equal(edited.status, 0, edited.output);
   assert.doesNotMatch(edited.output, new RegExp(subject));
+  const ownerAdded = run([rowA({ jsOwner: ['gbdraw/web/js/services/a.js:f', 'gbdraw/web/js/services/b.js:f'] }), base[1]]);
+  assert.equal(ownerAdded.status, 1, ownerAdded.output);
+  assert.match(ownerAdded.output, new RegExp(`design-rule\\.co-change: [^\\n]*${subject} \\(expansion\\)`));
+  const ownerMoved = run([rowA({ pythonOwner: ['gbdraw/a.py:f'], jsOwner: ['gbdraw/web/js/services/a.js:f', 'gbdraw/web/js/services/b.js:f'] }), base[1]]);
+  assert.equal(ownerMoved.status, 1, ownerMoved.output);
+  assert.match(ownerMoved.output, new RegExp(`design-rule\\.co-change: [^\\n]*${subject} \\(expansion\\)`));
+  const ownerRemoved = run([rowA({ pythonOwner: ['gbdraw/a.py:f'] }), base[1]]);
+  assert.equal(ownerRemoved.status, 0, ownerRemoved.output);
+  assert.match(ownerRemoved.output, new RegExp(`- contraction: ${subject}\\n`));
 });
 
 test('a candidate guard registry names only authority paths as rule files', () => {
