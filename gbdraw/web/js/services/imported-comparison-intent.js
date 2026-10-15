@@ -1,4 +1,5 @@
 // @ts-check
+import { isCurrentRequestSchema } from '../utils/request-schema.js';
 /**
  * Whether and how a Session's saved comparison can be edited, as the Imported comparison state holds it.
  * @typedef {{ disposition: string, action: string | null, message: string, hasCommittedComparison: boolean }} ImportedComparisonIntent
@@ -535,11 +536,16 @@ const collectComparisonResourceIds = (value, target = new Set()) => {
 
 /**
  * @template {{ renderRequest?: SavedRenderRequest, resources: SavedResources }} C
- * @param {{ candidate: C, committed: { renderRequest?: SavedRenderRequest, resources?: SavedResources } | null | undefined }} drafts
+ * @param {{
+ *   candidate: C,
+ *   committed: { renderRequest?: SavedRenderRequest, resources?: Readonly<Record<string, unknown>> } | null | undefined
+ * }} drafts The committed Session's resources are read by id, and each entry read is checked.
  * @returns {C}
  */
 export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
-  if (!isObject(candidate?.renderRequest) || !isObject(committed?.renderRequest)) {
+  // A committed request Load kept as stored (schema 1) is no comparison owner.
+  if (!isObject(candidate?.renderRequest) || !isObject(committed?.renderRequest)
+    || !isCurrentRequestSchema(committed.renderRequest)) {
     throw new Error('The preserved comparison is unavailable. Reload the Session and try again.');
   }
   const comparisons = committed.renderRequest.comparisons;

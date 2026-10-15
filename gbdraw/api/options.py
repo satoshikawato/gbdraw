@@ -157,6 +157,13 @@ class ColorOptions:
 
 
 _DepthTrackSource: TypeAlias = str | Path | DataFrame
+# The DepthTrackInput fields that hold a finite number > 0 or None.
+DEPTH_TRACK_POSITIVE_FIELDS: tuple[str, ...] = (
+    "height",
+    "large_tick_interval",
+    "small_tick_interval",
+    "tick_font_size",
+)
 
 
 @dataclass(frozen=True)
@@ -216,12 +223,7 @@ class DepthTrackInput:
                 )
             object.__setattr__(self, field_name, value.strip())
 
-        for field_name in (
-            "height",
-            "large_tick_interval",
-            "small_tick_interval",
-            "tick_font_size",
-        ):
+        for field_name in DEPTH_TRACK_POSITIVE_FIELDS:
             object.__setattr__(
                 self,
                 field_name,

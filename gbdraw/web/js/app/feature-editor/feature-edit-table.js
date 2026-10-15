@@ -69,7 +69,7 @@ export const replaceFeatureEdits = (featureOverrides, rows, records) => {
  * @property {(value?: any) => { value: any }} ref Vue `ref`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
  * @property {() => Record<string, any> | null} getCommittedSession The committed canonical Session (render request and resources).
- * @property {((resourceId: string, kind: string) => any) | null} [readResourceRecordCount]
+ * @property {((resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>) | null} [readResourceRecordCount]
  *   Counts the records of a committed resource, for the Source recipe checks of the export.
  * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
  *   The diagram helper that reads a Feature Edits TSV (R7).

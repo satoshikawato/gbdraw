@@ -4,7 +4,6 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
 const { answerChoicePrompt, openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
-const { promoteRequest } = require('./helpers/request-schema.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -122,7 +121,7 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
     await load(fresh, failedFile);
     const restored = await snapshot(fresh);
     expect(restored.width).toEqual(before.width);
-    expect(restored.request).toEqual(await promoteRequest(fresh, before.request));
+    expect(restored.request).toEqual(before.request);
     expect(restored.results).toEqual(before.results);
     expect(restored.positions).toEqual(failed.positions);
     expect(restored.annotations).toEqual(failed.annotations);
@@ -174,7 +173,7 @@ test('canceled post-response Generate keeps valid bindings and old artifact thro
     && annotation.key?.endsWith('::[0,"NC_001879.2",155943]'))).toBe(true);
   const canceledFile = info.outputPath('canceled.gbdraw-session.json.gz');
   const saved = await save(page, canceledFile);
-  expect(saved.renderRequest).toEqual(await promoteRequest(page, before.request));
+  expect(saved.renderRequest).toEqual(before.request);
   expect(saved.modes.circular.config.adv.multi_record_positions).toEqual(canceled.positions);
   expect(await exportSvg(page)).toBe(oldExport);
   const freshContext = await browser.newContext({ baseURL, acceptDownloads: true });
@@ -182,7 +181,7 @@ test('canceled post-response Generate keeps valid bindings and old artifact thro
     const fresh = await freshContext.newPage();
     await load(fresh, canceledFile);
     const restored = await snapshot(fresh);
-    expect(restored.request).toEqual(await promoteRequest(fresh, before.request));
+    expect(restored.request).toEqual(before.request);
     expect(restored.results).toEqual(before.results);
     expect(restored.positions).toEqual(canceled.positions);
     expect(restored.annotations).toEqual(canceled.annotations);
@@ -269,7 +268,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
     const fresh = await freshContext.newPage();
     await load(fresh, failedFile);
     const restored = await snapshot(fresh);
-    expect(restored.request).toEqual(await promoteRequest(fresh, before.request));
+    expect(restored.request).toEqual(before.request);
     expect(restored.results).toEqual(before.results);
     expect(restored.positions).toEqual(failed.positions);
     expect(restored.annotations).toEqual(failed.annotations);

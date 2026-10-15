@@ -37,7 +37,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The committed canonical request (Python owns the option fields, R7).
  * @property {ReadDrawnTracksPort} readDrawnTracks
  * @property {() => Record<string, any> | null} [getCommittedSession] The committed canonical Session.
- * @property {((resourceId: string, kind: string) => any) | null} [readResourceRecordCount]
+ * @property {((resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>) | null} [readResourceRecordCount]
  *   Counts the records of a committed resource.
  * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
  *   The diagram helper that reads a Feature Edits TSV (R7).

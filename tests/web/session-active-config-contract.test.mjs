@@ -137,7 +137,7 @@ for (const blastp of [
   { mode: 'unsupported' },
   { candidateLimit: 0 },
   { maxHits: 0 },
-  { orthogroupMembershipMode: 'legacy' },
+  { orthogroupMembershipMode: 'banana' },
   { orthogroupMemberMaxHits: 0 },
   { collinearMinAnchors: 0 },
   { collinearMaxUnitGap: -1 },
@@ -145,7 +145,7 @@ for (const blastp of [
   { collinearMaxConflictsInMergeGap: -1 },
   { collinearMaxParalogLinksPerOrthogroup: 0 },
   { collinearUnitMode: 'gene' },
-  { collinearAnchorMode: 'top1' },
+  { collinearAnchorMode: 'top3' },
   { collinearMergeOrientation: 'both' },
   { collinearColorMode: 'score' },
   { collinearSearchScope: 'global' }

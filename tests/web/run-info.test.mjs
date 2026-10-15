@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
+import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-run-info-'));
@@ -89,13 +90,14 @@ const baseOptions = (mode) => ({
   plotTitle: null,
   plotTitleFontSize: null
 });
+// A committed request is of the current schema: Load reads a stored one to it.
 const canonical = ({ mode, records, resources, comparisons = [], webFiles = {} }) => ({
   renderRequest: {
-    schema: 6,
+    schema: CANONICAL_REQUEST_SCHEMA,
     mode,
     grouping: 'single',
-    records,
-    diagramOptions: baseOptions(mode),
+    records: records.map((record) => ({ display: { isCircular: null, startCoordinate: null }, ...record })),
+    diagramOptions: { featurePlacements: [], featureOverrides: [], ...baseOptions(mode) },
     layout: {},
     comparisons,
     output: {
@@ -719,7 +721,6 @@ const linearCanonical = canonical({
 
 {
   const positioned = structuredClone(linearCanonical);
-  positioned.renderRequest.schema = 8;
   positioned.renderRequest.records.forEach((record) => {
     record.display = { isCircular: null, startCoordinate: null };
   });
@@ -899,8 +900,9 @@ const linearCanonical = canonical({
   assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
   const table = sourceRecipe.generatedFiles.find((file) => file.name === 'records.tsv');
   assert.ok(table);
-  assert.match(table.data, /alpha\.gbk.*\t1\t1\n/);
-  assert.match(table.data, /beta\.gbk.*\t1\t2\n/);
+  // Columns `topology` and `display_start` follow, empty.
+  assert.match(table.data, /alpha\.gbk.*\t1\t1\t\t\n/);
+  assert.match(table.data, /beta\.gbk.*\t1\t2\t\t\n/);
 }
 
 {
@@ -1081,22 +1083,6 @@ const linearCanonical = canonical({
   assert.equal(info.invocation.sessionExportable, false);
 }
 
-// Until the atomic writer can represent display, no source recipe may claim a
-// lossless command for a request carrying this unrecognized schema-6 field.
-for (const mode of ['circular', 'linear']) {
-  for (const startCoordinate of [null, 1, 25]) {
-    const unsupported = canonical({
-      mode,
-      records: [{ recordKey: 'record', cardinality: 'exactly_one',
-        source: { kind: 'genbank', resourceId: 'source' }, selector: null, region: null,
-        presentation: presentation(), display: { isCircular: null, startCoordinate } }],
-      resources: { source: resource('genbank', 'source.gbk', 'LOCUS record\n//\n') }
-    });
-    const recipe = await buildSourceRecipe(unsupported);
-    assert.equal(recipe.available, false);
-    assert.match(recipe.unavailableReason, /display/);
-  }
-}
 
 // TR-07: a slot legend label that the CLI slot grammar cannot carry must make
 // the recipe unavailable instead of producing a command the CLI rejects.
@@ -1209,8 +1195,8 @@ test('a reordered Circular multi-record canvas keeps its order in the records ta
   const recipe = await buildSourceRecipe(session);
   assert.equal(recipe.available, true, recipe.unavailableReason);
   const table = recipe.generatedFiles.find((file) => file.name === 'records.tsv').data;
-  assert.match(table, /two\.gbk\t\t\tTESTA\t\t0\t1\t1\t2\n/);
-  assert.match(table, /two\.gbk\t\t\tTESTB\t\t0\t2\t1\t1\n/);
+  assert.match(table, /two\.gbk\t\t\tTESTA\t\t0\t1\t1\t2\t\t\n/);
+  assert.match(table, /two\.gbk\t\t\tTESTB\t\t0\t2\t1\t1\t\t\n/);
   const svg = await readFile(await materializeAndRunRecipe(
     session, recipe, buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe }), 'reordered records'
   ), 'utf8');
@@ -1257,7 +1243,6 @@ test('placement recipe names one of two identical features and the CLI replays i
     resources: { source: resource('genbank', 'source-dup.gbk', genbank) },
     webFiles: { resourceOriginalNames: { source: 'dup.gbk' } }
   });
-  session.renderRequest.schema = 8;
   session.renderRequest.diagramOptions.featurePlacements = [
     { recordKey: 'dup', biologicalFeatureId: second, placement: { kind: 'main' } }
   ];

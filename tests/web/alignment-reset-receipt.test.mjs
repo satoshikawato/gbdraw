@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
+import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 const { buildSimilarityAlignmentResetReceipt: build, validateSimilarityAlignmentResetReceipt: admit,
   validateAlignmentResetReceiptShape: admitShape } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
@@ -11,7 +12,7 @@ const resource = { name: 'record.gbk', kind: 'genbank', encoding: 'base64', data
 const anchor = (recordKey) => ({ recordKey, biologicalFeatureId: `gene-${recordKey}`, sourceFeatureIndex: 1, stableFeatureSvgId: null });
 const fixture = () => {
   const before = { resources: { source: resource }, renderRequest: {
-    schema: 8, mode: 'linear', records: ['a', 'b', 'c'].map(recordKey => ({
+    schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear', records: ['a', 'b', 'c'].map(recordKey => ({
       recordKey, source: {kind: 'genbank', resourceId: 'source'}, cardinality: 'exactly_one',
       selector: { kind: 'recordId', id: recordKey }, region: null,
       display: { isCircular: null, startCoordinate: null }, presentation: { reverseComplement: false }

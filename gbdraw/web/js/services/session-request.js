@@ -88,12 +88,14 @@ import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annota
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { loadRepair } from '../utils/load-repairs.js';
+import { repairByDescription } from '../utils/contract-repair.js';
+import { isPlainObject } from '../utils/contract-shape.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
+import { isCurrentRequestSchema } from '../utils/request-schema.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
-  DISPLAY_PLACEMENT_SCHEMA,
-  FEATURE_OVERRIDE_SCHEMA,
   SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
   SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 } from '../contracts/schema.generated.js';
@@ -146,9 +148,11 @@ import {
   requireCurrentWebStateFieldNames
 } from './current-option-values.js';
 import {
-  normalizeCollinearAnchorMode,
-  normalizeCollinearSearchScope,
-  normalizeOrthogroupMembershipMode
+  readCollinearAnchorMode,
+  readCollinearColorMode,
+  readCollinearSearchScope,
+  readCollinearUnitMode,
+  readOrthogroupMembershipMode
 } from './losat-normalization.js';
 import {
   canonicalComparisonResourceKind,
@@ -182,12 +186,14 @@ import { isCanonicalResourceReferenceField } from './canonical-resource-referenc
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
-/** @import { LoadRepair } from '../utils/load-repairs.js' */
+/** @import { LoadRepair, Repaired } from '../utils/load-repairs.js' */
+/** @import { ContractRepair, RepairPolicy } from '../utils/contract-repair.js' */
+/** @import { ContractShape } from '../utils/contract-shape.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
-/** @import { FileLike, RawSessionResourceDescriptor, SessionResourceTable } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor, SessionResourceTable, WebFileBindingRow, WebFileBindings } from './session-resource-backing.js' */
 /** @import { CircularRequestRecordSetOptions } from './record-options.js' */
 /** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
@@ -352,7 +358,7 @@ export { CANONICAL_REQUEST_SCHEMA };
 /**
  * @import {
  *   CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalCircularDiagramOptions,
- *   CanonicalFileRef, CanonicalRecord, CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan, CanonicalTableRef
+ *   CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalRecord, CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan, CanonicalTableRef
  * } from '../contracts/request.generated.js'
  */
 /**
@@ -568,7 +574,7 @@ export const linearDefinitionVisibilityOf = (renderRequest) => {
 /** @param {Record<string, any>} renderRequest */
 export const canonicalLinearRecordLayout = (renderRequest) => {
   const layout = renderRequest?.layout || {};
-  if (renderRequest?.mode !== 'linear' || renderRequest.schema < 8 || Object.keys(layout).length === 0) {
+  if (renderRequest?.mode !== 'linear' || !isCurrentRequestSchema(renderRequest) || Object.keys(layout).length === 0) {
     return { similarityAlignment: null, recordTranslations: [] };
   }
   const recordKeys = (Array.isArray(renderRequest.records) ? renderRequest.records : [])
@@ -1048,12 +1054,17 @@ const generatedResourceValues = new WeakMap();
 const canonicalTypedResourceBackings = new WeakMap();
 
 // The analysis helper supplies the bytes already emitted by the Python typed codec.
+/**
+ * @param {{ kind?: unknown, schema?: unknown } | null | undefined} value The decoded result, checked here.
+ * @param {RawSessionResourceDescriptor | null | undefined} descriptor Checked here.
+ */
 export const bindCanonicalTypedResource = (value, descriptor) => {
   const expectedKind = value?.kind === "result" ? "collinearity-result" : "orthogroup-result";
-  if (!value || value.schema !== 3 || !["result", "orthogroupResult"].includes(value.kind)
+  if (!value || value.schema !== 3 || !(/** @type {readonly unknown[]} */ (["result", "orthogroupResult"])).includes(value.kind)
     || descriptor?.kind !== expectedKind || descriptor.encoding !== "base64"
     || descriptor.type !== "application/json" || typeof descriptor.data !== "string"
-    || !Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
+    // `isSafeInteger` holds, so `size` is a number.
+    || !Number.isSafeInteger(descriptor.size) || /** @type {number} */ (descriptor.size) < 0) {
     throw new Error("Analysis canonical resource backing is invalid.");
   }
   canonicalTypedResourceBackings.set(value, descriptor);
@@ -2303,27 +2314,12 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
   const positiveInteger = (value, fallback) => integerSettingOr(value, fallback, 1);
   /** @param {unknown} value @param {number} fallback */
   const nonNegativeInteger = (value, fallback) => integerSettingOr(value, fallback, 0);
-  const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
   const collinearityUnitMode = blastpMode === 'collinear'
-    ? requireCurrentCollinearUnitMode(rawCollinearityUnitMode)
-    : (['auto', 'cds', 'locus'].includes(rawCollinearityUnitMode)
-        ? rawCollinearityUnitMode
-        : 'auto');
-  const rawCollinearityColorMode = String(
-    blastp.collinearColorMode || ''
-  ).trim().toLowerCase().replace(/-/g, '_');
-  const resolvedCollinearityColorMode = rawCollinearityColorMode === 'identity'
-    ? 'average_identity'
-    : rawCollinearityColorMode;
+    ? requireCurrentCollinearUnitMode(blastp.collinearUnitMode)
+    : readCollinearUnitMode(blastp.collinearUnitMode).value;
   const collinearityColorMode = blastpMode === 'collinear'
-    ? requireCurrentCollinearColorMode(resolvedCollinearityColorMode)
-    : ([
-        'average_identity',
-        'orientation',
-        'orientation_identity'
-      ].includes(resolvedCollinearityColorMode)
-        ? resolvedCollinearityColorMode
-        : 'orientation');
+    ? requireCurrentCollinearColorMode(blastp.collinearColorMode)
+    : readCollinearColorMode(blastp.collinearColorMode).value;
   const baselineCollinearity = baseline.collinearityParams &&
     typeof baseline.collinearityParams === 'object' &&
     !Array.isArray(baseline.collinearityParams)
@@ -2362,10 +2358,10 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
     collinearInferOrthogroups: requireCurrentCollinearInferOrthogroups(blastp.collinearInferOrthogroups),
     collinearityAnchorMode: blastpMode === 'collinear'
       ? requireCurrentCollinearAnchorMode(blastp.collinearAnchorMode)
-      : normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
+      : readCollinearAnchorMode(blastp.collinearAnchorMode).value,
     collinearitySearchScope: blastpMode === 'collinear'
       ? requireCurrentCollinearSearchScope(blastp.collinearSearchScope)
-      : normalizeCollinearSearchScope(blastp.collinearSearchScope),
+      : readCollinearSearchScope(blastp.collinearSearchScope).value,
     collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
@@ -2378,7 +2374,7 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
     ),
     orthogroupMembershipMode: ['orthogroup', 'collinear'].includes(blastpMode)
       ? requireCurrentOrthogroupMembershipMode(blastp.orthogroupMembershipMode)
-      : normalizeOrthogroupMembershipMode(blastp.orthogroupMembershipMode),
+      : readOrthogroupMembershipMode(blastp.orthogroupMembershipMode).value,
     orthogroupMemberMaxHits: ['orthogroup', 'collinear'].includes(blastpMode)
       ? requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits)
       : integerSettingOr(blastp.orthogroupMemberMaxHits, null, 1),
@@ -2397,6 +2393,12 @@ const PLAN_ISSUE_REASONS = Object.freeze({
   'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'SELECTED_PAIRS_NEED_PAIRWISE'
 });
 
+/**
+ * @template {{ edges?: unknown, errors?: unknown, error?: unknown }} S
+ * @param {S | null | undefined} snapshot The Generate run's plan (`resolveLinearComparisonPlan`, or the
+ *   snapshot its caller passed), checked here.
+ * @returns {S}
+ */
 export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   if (!snapshot || !Array.isArray(snapshot.edges)) {
     throw new Error('A resolved Linear comparison plan is required.');
@@ -3535,6 +3537,10 @@ const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings 
   return hints;
 };
 
+/**
+ * @param {StoredResources} resources
+ * @param {Readonly<Record<string, unknown>>} originalNameHints
+ */
 const resourcesWithOriginalNames = (resources, originalNameHints) => {
   const hints = originalNameHints && typeof originalNameHints === 'object' && !Array.isArray(originalNameHints)
     ? originalNameHints
@@ -3605,7 +3611,7 @@ const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = nul
 
 /**
  * @param {Record<string, any>} files
- * @param {Record<string, any> | null | undefined} webMetadata
+ * @param {{ readonly bindings?: WebFileBindings } | null | undefined} webMetadata `webFiles`, its bindings checked
  * @param {Record<string, any> | null | undefined} resources
  * @param {{
  *   resolveResourceFile?: ResourceFileResolver | null,
@@ -3657,7 +3663,7 @@ const applyWebFileBindings = (
     bindings.c_conservation_blasts_source === 'losat-cache' ? 'losat-cache' : null;
 
   if (Array.isArray(bindings.linearSeqs)) {
-    restored.linearSeqs = bindings.linearSeqs.map((sequence, index) => ({
+    restored.linearSeqs = bindings.linearSeqs.map((/** @type {WebFileBindingRow} */ sequence, /** @type {number} */ index) => ({
       uid: String(sequence?.uid || `canonical-seq-${index + 1}`),
       gb: webBindingValueAsLegacyFile(resources, sequence?.gb, resolveBinding, bindings.schema),
       gff: webBindingValueAsLegacyFile(resources, sequence?.gff, resolveBinding, bindings.schema),
@@ -3678,7 +3684,7 @@ const applyWebFileBindings = (
     }));
   }
   if (Array.isArray(bindings.linearComparisons)) {
-    restored.linearComparisons = bindings.linearComparisons.map((comparison, index) => ({
+    restored.linearComparisons = bindings.linearComparisons.map((/** @type {WebFileBindingRow} */ comparison, /** @type {number} */ index) => ({
       ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
       id: String(comparison?.id || `linear-comparison-restored-${index + 1}`),
       queryUid: String(comparison?.queryUid || ''),
@@ -3688,7 +3694,7 @@ const applyWebFileBindings = (
     }));
   }
   if (Array.isArray(bindings.linearCanonicalComparisons)) {
-    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((comparison) => ({
+    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((/** @type {WebFileBindingRow} */ comparison) => ({
       ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
       file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema)
     }));
@@ -3769,7 +3775,7 @@ const resolvePipelineCollinearInference = (settings, mode) =>
 
 const projectGeneratedProteinPipeline = (
   comparison,
-  { adoptCanonicalPayloads = false, requestSchema = CANONICAL_REQUEST_SCHEMA } = {}
+  { adoptCanonicalPayloads = false, currentRequest = true } = {}
 ) => {
   if (
     !comparison ||
@@ -3779,19 +3785,20 @@ const projectGeneratedProteinPipeline = (
     Array.isArray(comparison.settings)
   ) return null;
   const settings = comparison.settings;
-  if (requestSchema >= 8 && Object.hasOwn(settings, 'alignOrthogroupFeature')) {
+  if (currentRequest && Object.hasOwn(settings, 'alignOrthogroupFeature')) {
     throw new Error('Current canonical protein settings cannot contain legacy alignment state.');
   }
-  /** @type {{ target: string, sourceSchema: number } | null} */
+  // A request of schema 1 or 2 (or a stored schema 5 that Gallery publication
+  // projects) names its alignment by a legacy target; Load promotes the others.
+  /** @type {{ target: string } | null} */
   let legacySimilarityAlignment = null;
-  if (requestSchema <= 7 && settings.alignOrthogroupFeature !== null &&
+  if (!currentRequest && settings.alignOrthogroupFeature !== null &&
       settings.alignOrthogroupFeature !== undefined) {
     legacySimilarityAlignment = {
       target: requireCanonicalText(
         settings.alignOrthogroupFeature,
         'renderRequest.comparisons[].settings.alignOrthogroupFeature'
-      ),
-      sourceSchema: requestSchema
+      )
     };
   }
   const parameters = settings.collinearityParams?.parameters || {};
@@ -3872,6 +3879,7 @@ const requireExactCanonicalFields = (value, required, fieldName) => {
 };
 
 /**
+ * @param {{ resourceId?: unknown, representation?: unknown } | null | undefined} ref Unchecked; checked here.
  * @param {StoredResources} resources
  * @param {string} fieldName
  * @param {ResourceFileResolver | null} [resolveResourceFile]
@@ -3886,7 +3894,7 @@ const canonicalDepthResourceFile = (
     throw new Error(`${fieldName} must be a canonical resource reference.`);
   }
   requireExactCanonicalFields(ref, ['resourceId', 'representation'], fieldName);
-  if (!['file', 'canonicalTsv'].includes(ref.representation)) {
+  if (!(/** @type {readonly unknown[]} */ (['file', 'canonicalTsv'])).includes(ref.representation)) {
     throw new Error(`${fieldName} has unsupported representation '${ref.representation}'.`);
   }
   if (typeof ref.resourceId !== 'string' || !ref.resourceId.trim()) {
@@ -4028,7 +4036,10 @@ const projectCanonicalDepthTracks = ({
   return { sourceRows, fileRows, tracks };
 };
 
-/** @param {StoredResources} resources */
+/**
+ * @param {StoredResources} resources
+ * @param {string} resourceId
+ */
 export const decodeCanonicalResourceText = (resources, resourceId) => {
   const entry = ownEntry(resources, resourceId);
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
@@ -4080,7 +4091,8 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
  * @param {{ resourceId?: unknown } | null | undefined} ref
  */
 const resourceTextFromRef = (resources, ref) => (
-  ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
+  // A property key is the value's string form, so `String` reads the same entry.
+  ref?.resourceId ? decodeCanonicalResourceText(resources, String(ref.resourceId)) : null
 );
 
 // A table the Session stores is named in its failure: the user corrects the
@@ -4611,21 +4623,18 @@ export const projectCanonicalSessionRequest = ({
     throw new Error('Unsupported canonical renderRequest mode.');
   }
   const sourceRecords = Array.isArray(renderRequest.records) ? renderRequest.records : [];
-  if (renderRequest.schema >= DISPLAY_PLACEMENT_SCHEMA) {
+  const currentRequest = isCurrentRequestSchema(renderRequest);
+  if (currentRequest) {
     sourceRecords.forEach((record) => canonicalRecordDisplay(record.display));
     if (!Array.isArray(renderRequest.diagramOptions?.featurePlacements)) {
       throw new Error('Canonical featurePlacements must be an array.');
     }
     canonicalFeaturePlacements(renderRequest.diagramOptions.featurePlacements, renderRequest.mode);
-  } else if (sourceRecords.some((record) => Object.hasOwn(record, 'display'))
-    || Object.hasOwn(renderRequest.diagramOptions || {}, 'featurePlacements')) {
-    throw new Error(`Record display and feature placements require canonical schema ${DISPLAY_PLACEMENT_SCHEMA}.`);
   }
-  if ((renderRequest.schema >= FEATURE_OVERRIDE_SCHEMA)
-    !== Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {
+  if (currentRequest !== Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {
     throw diagnosticError('INPUT_INVALID', { field: 'featureOverrides', reason: 'SESSION_FORMAT' });
   }
-  const projectedFeatureOverrides = renderRequest.schema >= FEATURE_OVERRIDE_SCHEMA
+  const projectedFeatureOverrides = currentRequest
     ? canonicalFeatureOverrides(renderRequest.diagramOptions.featureOverrides)
     : [];
   const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
@@ -4638,7 +4647,7 @@ export const projectCanonicalSessionRequest = ({
   /** @type {ReturnType<typeof canonicalSimilarityAlignment> | null} */
   let similarityAlignment = null;
   let recordTranslations = [];
-  if (renderRequest.mode === 'linear' && renderRequest.schema >= 8) {
+  if (renderRequest.mode === 'linear' && currentRequest) {
     const layout = renderRequest.layout || {};
     if (Object.keys(layout).length > 0) {
       requireExactCanonicalKeys(layout, [
@@ -4658,27 +4667,8 @@ export const projectCanonicalSessionRequest = ({
       )) throw new Error(
         'Linear row placement must use record presentation or layout positions, not both.'
       );
-      const recordKeys = sourceRecords.map((record, index) => requireCanonicalText(
-        record.recordKey,
-        `renderRequest.records[${index}].recordKey`
-      ));
-      similarityAlignment = canonicalSimilarityAlignment(
-        layout.similarityAlignment,
-        recordKeys,
-        'renderRequest.layout.similarityAlignment'
-      );
-      recordTranslations = canonicalRecordTranslations(
-        layout.recordTranslations,
-        recordKeys,
-        'renderRequest.layout.recordTranslations',
-        { requireCoverage: similarityAlignment !== null }
-      );
+      ({ similarityAlignment, recordTranslations } = canonicalLinearRecordLayout(renderRequest));
     }
-  } else if (renderRequest.mode === 'linear' && (
-    Object.hasOwn(renderRequest.layout || {}, 'recordTranslations') ||
-    Object.hasOwn(renderRequest.layout || {}, 'similarityAlignment')
-  )) {
-    throw new Error('Typed similarity alignment requires canonical schema 8.');
   }
   const grouping = canonicalGrouping(renderRequest, records);
   const sourceOutputPrefixes = canonicalOutputPrefixes(
@@ -4692,6 +4682,8 @@ export const projectCanonicalSessionRequest = ({
   let webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
     ? webFiles
     : {};
+  // The checked bindings; the CLI initialization below rebuilds them field by field.
+  /** @type {Readonly<Record<string, unknown>> | undefined} */
   let explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
   // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
   // values, not a user's cleared inputs. Keep real original CLI bindings (in
@@ -4808,7 +4800,7 @@ export const projectCanonicalSessionRequest = ({
     (renderRequest.comparisons || []).find(
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     ),
-    { adoptCanonicalPayloads, requestSchema: renderRequest.schema }
+    { adoptCanonicalPayloads, currentRequest: isCurrentRequestSchema(renderRequest) }
   );
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []
@@ -5574,7 +5566,7 @@ export const projectCanonicalSessionRequest = ({
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
     })
   };
-  const presentationOwnsLinearRows = renderRequest.schema >= 6 && records.some(
+  const presentationOwnsLinearRows = currentRequest && records.some(
     (record) => record.presentation?.gridRow != null
   );
   const linearLayoutRows = presentationOwnsLinearRows
@@ -5603,7 +5595,7 @@ export const projectCanonicalSessionRequest = ({
       });
   const linearLayout = renderRequest.mode === 'linear' && renderRequest.schema >= 2
     ? {
-        enabled: renderRequest.schema >= 6
+        enabled: currentRequest
           ? presentationOwnsLinearRows ||
             (renderRequest.layout?.multiRecordPositions || []).length > 0
           : Object.keys(renderRequest.layout || {}).length > 0,
@@ -5856,8 +5848,17 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
   return null;
 };
 /**
+ * What a promotion of schemas 5 to 7 reads a legacy similarity alignment with.
+ * `unreadAlignment`, when given, receives an alignment that cannot be read,
+ * which is then left unset; without it the promotion throws.
+ * @typedef {object} RequestPromotion
+ * @property {Parameters<typeof materializeLegacySimilarityAlignment>[0]['featureCatalog']} [featureCatalog]
+ * @property {Parameters<typeof materializeLegacySimilarityAlignment>[0]['legacyOrthogroupState']} [legacyOrthogroupState]
+ * @property {(error: unknown) => void} [unreadAlignment]
+ */
+/**
  * @param {Record<string, any>} request A canonical request of schema 5 to 9.
- * @param {Record<string, any>} [promotion]
+ * @param {RequestPromotion} [promotion]
  * @returns {CanonicalRenderRequest}
  */
 export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) => {
@@ -5873,43 +5874,56 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
   return promoted;
 };
 
-const promoteRenderRequestToSchema8 = (
-  promoted,
-  { featureCatalog = null, legacyOrthogroupState = null }
-) => {
+/** @param {RequestPromotion} promotion */
+const promoteRenderRequestToSchema8 = (promoted, promotion) => {
+  const { featureCatalog = null, legacyOrthogroupState = null, unreadAlignment } = promotion;
   const sourceSchema = promoted.schema;
   const linearRows = promoted.mode === 'linear'
-    ? (promoted.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
+    ? (Array.isArray(promoted.layout?.multiRecordPositions) ? promoted.layout.multiRecordPositions : []).map((/** @type {unknown} */ token) => {
         const split = String(token).lastIndexOf('@');
         return Number(String(token).slice(split + 1)) || null;
       })
     : [];
   promoted.schema = 8;
+  // A malformed record is left to the repair that follows the promotion.
   (promoted.records || []).forEach((record, index) => {
+    if (!record || typeof record !== 'object') return;
     if (sourceSchema < 7) record.display = { isCircular: null, startCoordinate: null };
     if (sourceSchema === 5) record.cardinality = promoted.mode === 'linear' &&
       !record.selector && !record.region
       ? 'all'
       : 'exactly_one';
-    if (linearRows[index]) record.presentation.gridRow = linearRows[index];
+    if (linearRows[index] && record.presentation && typeof record.presentation === 'object') {
+      record.presentation.gridRow = linearRows[index];
+    }
   });
   if (sourceSchema < 7) {
     promoted.diagramOptions = { ...promoted.diagramOptions, featurePlacements: [] };
   }
   if (promoted.mode === 'linear') {
+    // A record that is not an object is the repair's, as above.
+    const records = (promoted.records || []).filter((/** @type {unknown} */ record) => isPlainObject(record));
     const generated = (promoted.comparisons || []).find(
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     );
     const rawLegacy = generated?.settings?.alignOrthogroupFeature;
-    const similarityAlignment = rawLegacy === null || rawLegacy === undefined
-      ? null
-      : canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
-          target: rawLegacy,
-          records: promoted.records || [],
-          featureCatalog,
-          legacyOrthogroupState
-        }), (promoted.records || []).map((record) => record.recordKey),
-        'renderRequest.layout.similarityAlignment');
+    const readAlignment = () => canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
+      target: rawLegacy,
+      records,
+      featureCatalog,
+      legacyOrthogroupState
+    }), records.map((record) => record.recordKey),
+    'renderRequest.layout.similarityAlignment');
+    /** @type {ReturnType<typeof canonicalSimilarityAlignment> | null} */
+    let similarityAlignment = null;
+    if (rawLegacy !== null && rawLegacy !== undefined) {
+      try {
+        similarityAlignment = readAlignment();
+      } catch (error) {
+        if (!unreadAlignment) throw error;
+        unreadAlignment(error);
+      }
+    }
     if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
     const hadLayout = Object.keys(promoted.layout || {}).length > 0;
     if (hadLayout || similarityAlignment !== null) {
@@ -5917,7 +5931,7 @@ const promoteRenderRequestToSchema8 = (
       promoted.layout = {
         recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : 24,
         multiRecordPositions: null,
-        recordTranslations: (promoted.records || []).map((record) => ({
+        recordTranslations: records.map((record) => ({
           recordKey: String(record.recordKey || ''),
           x: 0,
           y: 0
@@ -5929,6 +5943,371 @@ const promoteRenderRequestToSchema8 = (
     }
   }
   return promoted;
+};
+
+/**
+ * What a stored request is read with: the catalog and orthogroup state of its
+ * Result set (a legacy alignment of schemas 5 to 7 names their features), the
+ * resource ids of the Session, and where the request is in the file.
+ * @typedef {object} StoredRequestContext
+ * @property {unknown} featureCatalog
+ * @property {unknown} legacyOrthogroupState
+ * @property {ReadonlySet<string>} resourceIds
+ * @property {string} path
+ * @property {boolean} [holdComparisons] Load holds the request's comparisons
+ *   (a saved comparison kept read-only, or one that needs a decision): their
+ *   unresolved references are what the Comparisons notice after Load shows
+ *   (receipt 〔今までの知らせ〕), so they are not dropped.
+ */
+/**
+ * A request of schema 1 or 2, which `readStoredRenderRequest` returns as
+ * stored until its reader (PR-D) lifts it; Load commits it so unless the
+ * Gallery migration rebuilt it. No reader has checked its leaves.
+ * @typedef {Readonly<Record<string, unknown>> & { schema: 1 | 2 }} StoredRenderRequest
+ */
+/**
+ * The committed Session: the request that drew the shown Result, with its
+ * resources and Web file bindings. Generate and the automatic rerender commit
+ * the schema 9 request they built; Load commits the request
+ * `readStoredRenderRequest` read (schema 9, or a stored schema 1 or 2); History
+ * and the Load rollback put a captured one back. `schema` tells the two apart.
+ * @typedef {object} CommittedCanonicalSession
+ * @property {CanonicalRenderRequest | StoredRenderRequest} renderRequest
+ * @property {Readonly<Record<string, unknown>>} resources
+ * @property {Readonly<Record<string, unknown>>} webFiles
+ */
+/**
+ * A stored request that cannot be read at all (K22): its Session loads as
+ * settings only, or its Result set is left out.
+ * @typedef {{ kind: 'request-dropped', path: string, reason: string }} StoredRequestDropped
+ */
+/** @typedef {'unknown-resource' | 'unknown-record' | 'unknown-slot'} StoredReferenceReason */
+
+const STORED_REQUEST_ROOTS = /** @type {const} */ ({ circular: 'CanonicalCircularRenderRequest', linear: 'CanonicalLinearRenderRequest' });
+
+/**
+ * Per mode, from the description: the places a value of the other diagram
+ * type is read as this one's (a placeholder that holds only null or no item,
+ * and an option of the other type that this one holds at its default), the
+ * unions picked by their `kind`, and the places that have a default (a repair
+ * puts it there in place of a value it cannot read, so each is a part).
+ * @param {string} rootType
+ * @param {string} otherOptionsType
+ */
+const storedRequestPlaces = (rootType, otherOptionsType) => {
+  const { types } = CANONICAL_REQUEST_DESCRIPTION;
+  /** @type {Map<string, unknown>} */
+  const otherType = new Map();
+  /** @type {Set<string>} */
+  const tagged = new Set();
+  /** @type {Set<string>} */
+  const defaulted = new Set();
+  const otherOptions = /** @type {import('../utils/contract-shape.js').ObjectShape} */ (types[otherOptionsType]);
+  /** @param {ContractShape} shape @returns {ContractShape} */
+  const resolve = (shape) => (shape.kind === 'ref' ? resolve(types[shape.name]) : shape);
+  /**
+   * @param {ContractShape} shape @param {string} pattern @param {number} depth
+   * @param {boolean} [option] the shape is one option of the place's union
+   */
+  const walk = (shape, pattern, depth, option = false) => {
+    const resolved = resolve(shape);
+    if (depth > 40) return;
+    if (resolved.kind === 'null' && pattern && !option) otherType.set(pattern, null);
+    // A list only the other type fills (a Circular request's `comparisons`).
+    if (resolved.kind === 'tuple' && resolved.items.length === 0 && pattern && !option) otherType.set(pattern, []);
+    if (resolved.kind === 'literal' && resolved.values.length === 1 && /^diagramOptions\.[^.]+$/.test(pattern)) {
+      const other = otherOptions.fields[pattern.slice('diagramOptions.'.length)];
+      if (other && JSON.stringify(resolve(other)) !== JSON.stringify(resolved)) otherType.set(pattern, resolved.values[0]);
+    }
+    if (resolved.kind === 'union') {
+      const options = resolved.options.map(resolve);
+      if (options.every((option) => option.kind === 'object' && Object.hasOwn(option.fields, 'kind'))) tagged.add(pattern);
+      options.forEach((item) => walk(item, pattern, depth + 1, true));
+    } else if (resolved.kind === 'array') walk(resolved.items, `${pattern}[*]`, depth + 1);
+    else if (resolved.kind === 'tuple') resolved.items.forEach((item) => walk(item, `${pattern}[*]`, depth + 1));
+    else if (resolved.kind === 'record') walk(resolved.values, `${pattern}.*`, depth + 1);
+    else if (resolved.kind === 'object') {
+      Object.entries(resolved.fields).forEach(([key, field]) => {
+        const place = pattern ? `${pattern}.${key}` : key;
+        if (resolved.defaults && Object.hasOwn(resolved.defaults, key)) defaulted.add(place);
+        walk(field, place, depth + 1);
+      });
+    }
+  };
+  walk(types[rootType], '', 0);
+  return { otherType, tagged, defaulted, otherOptionKeys: new Set(Object.keys(otherOptions.fields)) };
+};
+const STORED_REQUEST_PLACES = {
+  circular: storedRequestPlaces(STORED_REQUEST_ROOTS.circular, 'CanonicalLinearDiagramOptions'),
+  linear: storedRequestPlaces(STORED_REQUEST_ROOTS.linear, 'CanonicalCircularDiagramOptions')
+};
+/**
+ * The optional places without a default that a repair drops as one part
+ * (rule 6); a place with a default is a part too. Each can go alone.
+ */
+const STORED_REQUEST_PARTS = new Set(['diagramOptions.tracks', 'diagramOptions.annotations']);
+/** The conservation ring columns, read by index together (B16). */
+const CONSERVATION_RING_COLUMNS = ['conservationBlastFiles', 'conservationLabels', 'conservationColors', 'conservationFastaFiles']
+  .map((key) => `diagramOptions.${key}`);
+/** The comparisons Load can hold: Linear comparisons and the conservation rings. */
+const HELD_COMPARISON_PLACE = /^(comparisons\[\*\]|diagramOptions\.conservation[A-Za-z]+\[\*\])/;
+const RECORD_INDEX_PLACE = /^comparisons\[\*\](\.pairs\[\*\])?\.(query|subject)RecordIndex$/;
+const RECORD_KEY_PLACE = /^layout\.(recordTranslations\[\*\]|similarityAlignment\.(reference|records\[\*\](\.anchor)?))\.recordKey$/;
+
+/**
+ * The request policy of the repair leaf: what the description cannot say
+ * about a stored request of `mode`.
+ * @param {Readonly<Record<string, unknown>>} request The promoted request (schema 9 shape, unchecked).
+ * @param {'circular' | 'linear'} mode
+ * @param {ReadonlySet<string>} resourceIds
+ * @param {boolean} holdComparisons The references of the comparisons are kept.
+ * @returns {RepairPolicy<StoredReferenceReason>}
+ */
+const storedRequestPolicy = (request, mode, resourceIds, holdComparisons) => {
+  const places = STORED_REQUEST_PLACES[mode];
+  const records = Array.isArray(request.records) ? request.records : [];
+  const recordKeys = new Set(records.map((/** @type {unknown} */ record) => (isPlainObject(record) ? record.recordKey : undefined)));
+  const options = isPlainObject(request.diagramOptions) ? request.diagramOptions : {};
+  const tracks = isPlainObject(options.tracks) ? options.tracks : {};
+  const slotKey = mode === 'linear' ? 'linearTrackSlots' : 'circularTrackSlots';
+  const slots = Array.isArray(tracks[slotKey]) ? tracks[slotKey] : null;
+  // An axis index names a slot by position, so no slot is dropped alone then.
+  const axisIndex = tracks[mode === 'linear' ? 'linearTrackAxisIndex' : 'circularTrackAxisIndex'];
+  return {
+    positionalArrays: [
+      // An alignment plan decides every record: one decision lost loses the plan.
+      'records', 'layout.multiRecordPositions', 'diagramOptions.depthTracks[*].source', 'layout.similarityAlignment.records',
+      ...(axisIndex === null || axisIndex === undefined ? [] : [`diagramOptions.tracks.${slotKey}`])
+    ],
+    partBoundary: (pattern) => STORED_REQUEST_PARTS.has(pattern) || places.defaulted.has(pattern),
+    parallelArrays: mode === 'circular' ? [CONSERVATION_RING_COLUMNS] : [],
+    lossless: (pattern) => (places.otherType.has(pattern) ? { value: places.otherType.get(pattern) } : null),
+    discriminator: (pattern) => (pattern === '' ? 'mode' : places.tagged.has(pattern) ? 'kind' : null),
+    reference: (pattern, value) => {
+      if (holdComparisons && HELD_COMPARISON_PLACE.test(pattern)) return null;
+      if (/(^|\.)(resourceId|gffResourceId|fastaResourceId)$/.test(pattern)) {
+        return typeof value === 'string' && !resourceIds.has(value) ? 'unknown-resource' : null;
+      }
+      if (RECORD_INDEX_PLACE.test(pattern)) {
+        return Number.isInteger(value) && Number(value) >= 0 && Number(value) < records.length ? null : 'unknown-record';
+      }
+      if (RECORD_KEY_PLACE.test(pattern)) return recordKeys.has(value) ? null : 'unknown-record';
+      if (pattern === 'diagramOptions.tracks.linearTrackAxisIndex' && value !== null) {
+        return slots && Number.isInteger(value) && Number(value) >= 0 && Number(value) < slots.length ? null : 'unknown-slot';
+      }
+      return null;
+    }
+  };
+};
+
+/**
+ * The Load rows of the leaf's rows. A setting of the other diagram type had
+ * no effect on the figure and gets none (〔出さないもの〕).
+ * @param {readonly ContractRepair<StoredReferenceReason>[]} rows
+ * @param {ReadonlySet<string>} otherOptionKeys
+ * @param {readonly string[]} droppedSlots The slots of dropped rings (B16), by their stored place.
+ * @returns {LoadRepair[]}
+ */
+const storedRequestRepairs = (rows, otherOptionKeys, droppedSlots) => {
+  /** @type {Map<string, number>} */
+  const droppedEntries = new Map();
+  /** @type {LoadRepair[]} */
+  const repairs = [];
+  rows.forEach((row) => {
+    const reference = row.reason === 'unknown-resource' || row.reason === 'unknown-record' || row.reason === 'unknown-slot';
+    if (row.rule === 2 && /^diagramOptions\.[^.]+$/.test(row.pattern)
+      && otherOptionKeys.has(row.pattern.slice('diagramOptions.'.length))) return;
+    if (reference) {
+      repairs.push(loadRepair({ code: 'request-reference-dropped', path: row.path, effect: row.effect }));
+    } else if (row.rule === 6) {
+      repairs.push(loadRepair({ code: 'request-part-dropped', path: row.path, effect: row.effect }));
+    } else if (row.rule === 2 || row.rule === 5) {
+      // One row per list or object: an element's path without its index, an
+      // unknown key's path without the key.
+      const list = row.path.replace(row.rule === 5 ? /\[\d+\]$/ : /\.[^.[\]]+$/, '');
+      droppedEntries.set(list, (droppedEntries.get(list) ?? 0) + 1);
+    } else {
+      const used = row.used;
+      repairs.push(loadRepair({
+        code: 'setting-replaced', path: row.path, effect: row.effect,
+        ...(typeof used === 'string' || typeof used === 'number' || typeof used === 'boolean' ? { used: String(used) } : {})
+      }));
+    }
+  });
+  droppedSlots.forEach((slot) => {
+    const list = slot.replace(/\[\d+\]$/, '');
+    droppedEntries.set(list, (droppedEntries.get(list) ?? 0) + 1);
+  });
+  droppedEntries.forEach((count, path) => {
+    repairs.push(loadRepair({ code: 'setting-entries-dropped', path, effect: 'dropped', count }));
+  });
+  return repairs;
+};
+
+/** The element places of the ring columns: a rule-5 row there drops a column. */
+const RING_COLUMN_ELEMENTS = new Set(CONSERVATION_RING_COLUMNS.map((pattern) => `${pattern}[*]`));
+/**
+ * A slot parameter as Python's `int()` reads it, or null.
+ * @param {unknown} value
+ */
+const slotIndexParam = (value) => (
+  typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value)
+    : typeof value === 'string' && /^\s*[+-]?\d+\s*$/.test(value) ? Number(value) : null);
+
+/**
+ * Keeps each managed conservation slot on its ring when the repair dropped
+ * ring columns (B16). Python binds a `sequence_conservation` slot to the ring
+ * whose index is its `source_index` (`gbdraw/api/diagram.py`), so the slot of
+ * a dropped ring is left out and a later slot's `source_index` and
+ * `track_index` go down by the rings dropped before it, in their stored type;
+ * the axis boundary goes down by the slots left out before it. Copies what it
+ * changes: the repaired request may share the stored objects.
+ * @param {Record<string, unknown>} request The repaired Circular request.
+ * @param {readonly ContractRepair<StoredReferenceReason>[]} rows
+ * @param {string} path
+ * @returns {{ request: Record<string, unknown>, droppedSlots: string[] }}
+ */
+const keepConservationSlotsOnTheirRings = (request, rows, path) => {
+  const droppedRings = rows.filter((row) => row.rule === 5 && RING_COLUMN_ELEMENTS.has(row.pattern))
+    .map((row) => Number(/\[(\d+)\]$/.exec(row.path)?.[1]));
+  const options = request.diagramOptions;
+  const tracks = isPlainObject(options) ? options.tracks : null;
+  const slots = isPlainObject(tracks) ? tracks.circularTrackSlots : null;
+  if (!droppedRings.length || !isPlainObject(options) || !isPlainObject(tracks) || !Array.isArray(slots)) {
+    return { request, droppedSlots: [] };
+  }
+  /** @param {number} index */
+  const droppedBefore = (index) => new Set(droppedRings.filter((ring) => ring < index)).size;
+  /** @param {unknown} stored @param {number} lower */
+  const lowered = (stored, lower) => {
+    const index = slotIndexParam(stored);
+    return index === null ? stored : typeof stored === 'number' ? index - lower : String(index - lower);
+  };
+  /** @type {string[]} */
+  const droppedSlots = [];
+  /** @type {unknown[]} */
+  const kept = [];
+  let axis = tracks.circularTrackAxisIndex;
+  slots.forEach((/** @type {unknown} */ slot, index) => {
+    const ringSlot = isPlainObject(slot) && slot.renderer === 'sequence_conservation' ? slot : null;
+    const params = ringSlot && isPlainObject(ringSlot.params) ? ringSlot.params : null;
+    const ring = params ? slotIndexParam(params.source_index) : null;
+    if (!ringSlot || !params || ring === null || !droppedBefore(ring + 1)) {
+      kept.push(slot);
+    } else if (droppedRings.includes(ring)) {
+      droppedSlots.push(`${path}.diagramOptions.tracks.circularTrackSlots[${index}]`);
+      if (typeof axis === 'number' && index < axis) axis -= 1;
+    } else {
+      const lower = droppedBefore(ring);
+      kept.push({
+        ...ringSlot,
+        params: {
+          ...params,
+          source_index: lowered(params.source_index, lower),
+          ...(Object.hasOwn(params, 'track_index') ? { track_index: lowered(params.track_index, lower) } : {})
+        }
+      });
+    }
+  });
+  if (kept.length === slots.length && kept.every((slot, index) => slot === slots[index])) return { request, droppedSlots };
+  return {
+    request: {
+      ...request,
+      diagramOptions: {
+        ...options,
+        tracks: { ...tracks, circularTrackSlots: kept, ...(Object.hasOwn(tracks, 'circularTrackAxisIndex') ? { circularTrackAxisIndex: axis } : {}) }
+      }
+    },
+    droppedSlots
+  };
+};
+
+/**
+ * The one reader of a stored render request: the only place in `js/` where an
+ * unchecked value becomes a `CanonicalRenderRequest`. An integer schema
+ * outside the supported set is refused as a Session-format error; schemas 1 and 2 are
+ * returned as stored (schema 2 is rebuilt by the Gallery migration, whose
+ * request is read again here); schemas 5 to 8 are promoted once, with the
+ * Load context; then the request is repaired against its description. What
+ * cannot be read at its root, a schema that is no integer included, is a
+ * dropped request (K22).
+ * @param {unknown} value
+ * @param {StoredRequestContext} context
+ * @returns {Repaired<CanonicalRenderRequest | StoredRenderRequest> | StoredRequestDropped}
+ */
+export const readStoredRenderRequest = (value, context) => {
+  const { path } = context;
+  if (!isPlainObject(value)) return { kind: 'request-dropped', path, reason: 'wrong-kind' };
+  // No writer wrote a schema that is no integer: the request is unreadable
+  // (K22, OV-863), not another format.
+  if (!Number.isInteger(value.schema)) return { kind: 'request-dropped', path: `${path}.schema`, reason: 'wrong-kind' };
+  if (!SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET.has(/** @type {number} */ (value.schema))) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
+  }
+  // The test above is the type: an object whose `schema` is 1 or 2.
+  if (value.schema === 1 || value.schema === 2) return { value: /** @type {StoredRenderRequest} */ (value), repairs: [] };
+  // The promotion walks the records and comparisons; lists of another kind
+  // leave nothing to read, as the repair would find at the root.
+  if (!Array.isArray(value.records) || (Object.hasOwn(value, 'comparisons') && !Array.isArray(value.comparisons))) {
+    return { kind: 'request-dropped', path, reason: 'wrong-kind' };
+  }
+  /** @type {LoadRepair[]} */
+  const repairs = [];
+  const promoted = value.schema === CANONICAL_REQUEST_SCHEMA ? value : promoteCanonicalRenderRequestToCurrent(value, {
+    // Read as the legacy alignment reader reads them; it checks what it uses.
+    featureCatalog: /** @type {RequestPromotion['featureCatalog']} */ (context.featureCatalog),
+    legacyOrthogroupState: /** @type {RequestPromotion['legacyOrthogroupState']} */ (context.legacyOrthogroupState),
+    unreadAlignment: () => repairs.push(loadRepair({
+      code: 'request-part-dropped', path: `${path}.layout.similarityAlignment`, effect: 'dropped'
+    }))
+  });
+  const mode = promoted.mode === 'linear' ? 'linear' : promoted.mode === 'circular' ? 'circular' : null;
+  if (mode === null) return { kind: 'request-dropped', path: `${path}.mode`, reason: 'not-in-set' };
+  const repaired = repairByDescription(
+    promoted, { type: STORED_REQUEST_ROOTS[mode], path }, CANONICAL_REQUEST_DESCRIPTION,
+    storedRequestPolicy(promoted, mode, context.resourceIds, context.holdComparisons === true)
+  );
+  const root = repaired.rows.find((row) => row.pattern === '');
+  if (repaired.value === undefined || root) return { kind: 'request-dropped', path, reason: String(root?.reason ?? 'wrong-kind') };
+  // The Linear layout's cross-record rules (translations cover the drawn
+  // records, the alignment plan names them) are its owner's, which Load and
+  // Generate run; a layout it refuses leaves no request to draw (C-OD20).
+  try {
+    canonicalLinearRecordLayout(/** @type {Record<string, unknown>} */ (repaired.value));
+  } catch (error) {
+    // The owner refuses a layout with a plain `Error` and no code; anything
+    // else (a TypeError, a typed error) is a defect and is not read as a refusal.
+    if (!(error instanceof Error) || Object.getPrototypeOf(error) !== Error.prototype || Object.hasOwn(error, 'code')) throw error;
+    return { kind: 'request-dropped', path: `${path}.layout`, reason: 'unknown-record' };
+  }
+  const rebound = keepConservationSlotsOnTheirRings(
+    /** @type {Record<string, unknown>} */ (repaired.value), repaired.rows, path
+  );
+  // The leaf returns the stored object itself when nothing changed (RK-3).
+  return {
+    value: /** @type {CanonicalRenderRequest} */ (/** @type {unknown} */ (rebound.request)),
+    repairs: [
+      ...repairs,
+      ...storedRequestRepairs(repaired.rows, STORED_REQUEST_PLACES[mode].otherOptionKeys, rebound.droppedSlots)
+    ]
+  };
+};
+
+/**
+ * A stored request as Gallery publication reads it: through the one reader,
+ * refusing any repair (a published Session is written by the current writer,
+ * so a row is a defect of its source) and any request that does not read to
+ * the current schema. Returns a copy the caller may change.
+ * @param {unknown} request
+ * @param {Omit<StoredRequestContext, 'path' | 'holdComparisons'>} context
+ * @returns {CanonicalRenderRequest}
+ */
+export const readPublishedRenderRequest = (request, context) => {
+  const read = readStoredRenderRequest(request, { ...context, path: 'renderRequest' });
+  if ('kind' in read || read.repairs.length > 0 || !isCurrentRequestSchema(read.value)) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  }
+  return /** @type {CanonicalRenderRequest} */ (cloneCanonicalJsonValue(read.value));
 };
 
 /**
@@ -5948,7 +6327,41 @@ const materializedRecordSelector = (selector) => {
   return { kind: 'recordIndex', index: Number(match[1]) - 1 };
 };
 
-/** @param {unknown} mode The mode of the committed request, compared as it is. */
+/**
+ * A member of a record collection that a feature rotation targets: the
+ * committed row of one source record (`targetForFeature`, record display),
+ * which `materializeCanonicalRecordCollection` checks.
+ * @typedef {object} RecordTransformTargetMember
+ * @property {unknown} [canonicalRecordKey]
+ * @property {unknown} [recordKey]
+ * @property {unknown} [selector]
+ * @property {unknown} [recordLength]
+ * @property {unknown} [committedDisplay]
+ * @property {unknown} [committedReverseComplement]
+ */
+/**
+ * The record a feature rotation targets, as the record display's
+ * `targetForFeature` port gives it. Its fields are unchecked:
+ * `validateRecordTransformTarget` checks them against the committed request.
+ * @typedef {object} RecordTransformTarget
+ * @property {unknown} [scope]
+ * @property {unknown} [recordKey]
+ * @property {unknown} [canonicalRecordKey]
+ * @property {unknown} [source]
+ * @property {unknown} [effectiveCircular]
+ * @property {unknown} [cropped]
+ * @property {unknown} [recordLength]
+ * @property {readonly (RecordTransformTargetMember | null | undefined)[]} [members]
+ */
+/**
+ * The transform a feature rotation resolved, before it is checked.
+ * @typedef {{ recordLength: unknown, startCoordinate: number | null, reverseComplement: boolean | null }} RecordTransformInput
+ */
+/**
+ * @param {RecordTransformTarget} target
+ * @param {RecordTransformInput} transform
+ * @param {unknown} mode The mode of the committed request, compared as it is.
+ */
 const validateRecordTransformTarget = (target, transform, mode) => {
   if (!target || target.scope !== mode || typeof target.recordKey !== 'string'
     || !target.recordKey || typeof target.canonicalRecordKey !== 'string'
@@ -5966,14 +6379,19 @@ const validateRecordTransformTarget = (target, transform, mode) => {
     || Number(transform?.recordLength) !== recordLength) {
     throw new Error('The target record length changed after the feature popup opened.');
   }
-  if (!Number.isSafeInteger(transform?.startCoordinate)
-    || transform.startCoordinate < 1 || transform.startCoordinate > recordLength
+  const startCoordinate = transform?.startCoordinate;
+  if (startCoordinate === null || !Number.isSafeInteger(startCoordinate)
+    || startCoordinate < 1 || startCoordinate > recordLength
     || typeof transform?.reverseComplement !== 'boolean') {
     throw new Error('Resolved record transform is invalid for the target record.');
   }
 };
 
-/** @param {number} recordIndex */
+/**
+ * @param {CanonicalRecord} record
+ * @param {RecordTransformTarget} target
+ * @param {number} recordIndex
+ */
 const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
   const members = Array.isArray(target.members) ? target.members : [];
   const identities = new Set();
@@ -6024,7 +6442,7 @@ const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) =>
       if (Number.isInteger(index) && index > recordIndex) shifted[field] = index + expansion;
     }
     if (Array.isArray(shifted?.pairs)) {
-      shifted.pairs = shifted.pairs.map((pair) => {
+      shifted.pairs = shifted.pairs.map((/** @type {Record<string, unknown>} */ pair) => {
         const next = { ...pair };
         for (const field of ['queryRecordIndex', 'subjectRecordIndex']) {
           const index = Number(next[field]);
@@ -6037,30 +6455,29 @@ const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) =>
   })
 );
 
-// A schema-8 request has no feature overrides, so a Session saved before schema 9
-// stays usable without Generate (design Q4).
-const withCurrentCommittedRequest = (committed) => (
-  committed?.renderRequest?.schema === 8
-    ? { ...committed, renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest) }
-    : committed
-);
-
-const requireCurrentCommittedRequest = (committed, request) => {
+/**
+ * The committed request, when it is of the current schema (a committed object's
+ * `schema` is 9 exactly when `isCurrentRequestSchema` holds).
+ * @param {CommittedCanonicalSession | null | undefined} committed
+ * @returns {CanonicalRenderRequest}
+ */
+const requireCurrentCommittedRequest = (committed) => {
+  const request = committed?.renderRequest;
   if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
     || !['circular', 'linear'].includes(request.mode)
     || !committed?.resources || typeof committed.resources !== 'object') {
     throw new Error('A current committed canonical Session is required.');
   }
+  return request;
 };
 
 /**
  * Clone the last committed canonical Session and overlay one record transform.
  * No live form state participates in this projection.
+ * @param {{ committed: CommittedCanonicalSession | null, target: RecordTransformTarget, transform: RecordTransformInput }} input
  */
-export const projectCommittedRecordTransform = ({ committed: source, target, transform }) => {
-  const committed = withCurrentCommittedRequest(source);
-  const request = committed?.renderRequest;
-  requireCurrentCommittedRequest(committed, request);
+export const projectCommittedRecordTransform = ({ committed, target, transform }) => {
+  const request = requireCurrentCommittedRequest(committed);
   validateRecordTransformTarget(target, transform, request.mode);
   const matchingIndexes = request.records
     .map((record, index) => ({ record, index }))
@@ -6174,21 +6591,15 @@ const referencedResourceIds = (value, ids = new Set()) => {
  * live editor intent: feature colors (rules and the applied palette), feature
  * visibility, and label overrides. A label reflow renders this request, so no
  * other draft setting reaches the Result before Generate (R1(c), N-16).
- * @param {{ committed: any, state: Record<string, any>, drawing: RequestDrawing,
- *   promotion?: Record<string, any> }} input
+ * @param {{ committed: any, state: Record<string, any>, drawing: RequestDrawing }} input
  */
 export const projectCommittedEditorIntent = ({
   committed,
   state,
-  drawing,
-  promotion = {}
+  drawing
 }) => {
-  // A Session loaded from an older supported request schema keeps that request
-  // until the next Generate; promote it the way Save does before overlaying.
-  const request = [5, 6, 7, 8].includes(committed?.renderRequest?.schema)
-    ? promoteCanonicalRenderRequestToCurrent(committed.renderRequest, promotion)
-    : committed?.renderRequest;
-  requireCurrentCommittedRequest(committed, request);
+  const request = committed?.renderRequest;
+  requireCurrentCommittedRequest(committed);
   const candidate = {
     ...committed,
     renderRequest: cloneCanonicalJsonValue(request),
@@ -6234,22 +6645,30 @@ export const projectCommittedEditorIntent = ({
   return candidate;
 };
 
-/** Project only alignment-owned fields of the last committed canonical artifact. */
-export const projectCommittedSimilarityAlignment = ({ committed: source, plan, translations, orientations }) => {
-  const committed = withCurrentCommittedRequest(source);
-  if (committed?.renderRequest?.schema !== CANONICAL_REQUEST_SCHEMA
-    || committed.renderRequest.mode !== 'linear' || !committed.resources) {
+/**
+ * Project only alignment-owned fields of the last committed canonical artifact.
+ * @param {{
+ *   committed: CommittedCanonicalSession | null, plan: unknown, translations: unknown,
+ *   orientations: readonly { recordKey: string, reverseComplement: boolean }[]
+ * }} input The plan and translations are cloned as they are.
+ */
+export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
+  const committedRequest = committed?.renderRequest;
+  if (!committedRequest || committedRequest.schema !== CANONICAL_REQUEST_SCHEMA
+    || committedRequest.mode !== 'linear' || !committed?.resources) {
     throw new Error('Alignment requires a committed canonical Linear artifact.');
   }
-  const canonical = { ...committed, renderRequest: cloneCanonicalJsonValue(committed.renderRequest) };
-  const request = canonical.renderRequest;
+  /** @type {CanonicalLinearRenderRequest} */
+  const request = cloneCanonicalJsonValue(committedRequest);
+  const canonical = { ...committed, renderRequest: request };
   const keys = request.records.map(({ recordKey }) => recordKey);
   const byKey = new Map((orientations || []).map((entry) => [entry.recordKey, entry.reverseComplement]));
   if (byKey.size !== keys.length || orientations.length !== keys.length
     || keys.some(key => typeof byKey.get(key) !== 'boolean')) {
     throw new Error('Alignment orientation coverage changed.');
   }
-  request.records.forEach(record => writeCanonicalRecordReverseComplement(record, byKey.get(record.recordKey)));
+  // The test above gave every record key a boolean.
+  request.records.forEach(record => writeCanonicalRecordReverseComplement(record, /** @type {boolean} */ (byKey.get(record.recordKey))));
   request.layout = { recordGapPx: 24, multiRecordPositions: null, ...request.layout,
     similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
     recordTranslations: cloneCanonicalJsonValue(translations) };
@@ -6257,11 +6676,18 @@ export const projectCommittedSimilarityAlignment = ({ committed: source, plan, t
   return canonical;
 };
 
-/** @param {{ [key: string]: JsonValue }} request A canonical request of schema 5 to 9, as stored or as written. */
-const normalizePublicationRequestAliases = (request) => {
-  const normalized = /** @type {readonly unknown[]} */ ([5, 6, 7, 8]).includes(request?.schema)
-    ? promoteCanonicalRenderRequestToCurrent(request)
-    : cloneCanonicalJsonValue(request);
+/**
+ * @param {{ [key: string]: JsonValue }} request A canonical request of schema 5 to 9, as stored or as written.
+ * @param {PublicationResources} resources
+ */
+const normalizePublicationRequestAliases = (request, resources) => {
+  // A request of schema 5 to 8 is read by the one reader (no context: a legacy
+  // alignment target refuses); any other is compared as written, with its aliases.
+  const normalized = /** @type {Record<string, any>} */ (!/** @type {readonly unknown[]} */ ([5, 6, 7, 8]).includes(request?.schema)
+    ? cloneCanonicalJsonValue(request)
+    : readPublishedRenderRequest(request, {
+        featureCatalog: null, legacyOrthogroupState: null, resourceIds: new Set(Object.keys(resources || {}))
+      }));
   for (const comparison of normalized.comparisons || []) {
     if (comparison.kind === 'generatedProteinComparison' && comparison.settings) {
       comparison.settings.collinearInferOrthogroups = resolvePipelineCollinearInference(
@@ -6292,7 +6718,7 @@ const normalizePublicationRequestAliases = (request) => {
  */
 const publicationRequestIdentity = async (request, resources, normalize, resourceIdentities) => {
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Canonical request equivalence requires a renderRequest object.');
-  const normalizedRequest = normalizePublicationRequestAliases(request);
+  const normalizedRequest = normalizePublicationRequestAliases(request, resources);
   const conservation = normalizedRequest.diagramOptions?.conservationBlastFiles;
   /** @type {PublicationContext} */
   const context = { bindings: [], normalize, resourceIdentities,

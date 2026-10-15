@@ -40,7 +40,6 @@ import {
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
-  promoteCanonicalRenderRequestToCurrent,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
   requestLabelTableTsv,
@@ -759,10 +758,10 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `files.linearCanonicalComparisons`.
  *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
- * @param options.committedSession The committed Session (`CommittedCanonicalSession` in services/config.js), left
- *   untyped: its request may be a stored one whose leaves no reader has checked (`StoredRenderRequest`), and the reads
- *   below use them as they are (a null record throws). The true type needs checks that change that result, so the
- *   member stays an implicit `any` until Load promotes the stored request.
+ * @param options.committedSession The committed Session (`CommittedCanonicalSession` in services/session-request.js),
+ *   left untyped: its request may be a stored one whose leaves no reader has checked (`StoredRenderRequest`), and the
+ *   reads below use them as they are (a null record throws). The true type needs checks that change that result, so
+ *   the member stays an implicit `any` until Load promotes the stored request.
  * @param {LinearSeq[]} options.sequences
  * @param {ResolvedProteinReuseActive} options.active
  */
@@ -5078,20 +5077,11 @@ export const createRunAnalysis = ({
         if (typeof getCommittedCanonicalSession !== 'function') {
           throw new Error('The preserved comparison owner is unavailable.');
         }
-        // The candidate is a current-schema request; an older committed
-        // request (for example a v42 CLI sidecar) is promoted before reuse.
-        const committedSession = getCommittedCanonicalSession();
+        // Load read the committed request (schema 9; a schema-1 request is
+        // refused as the inherited comparison's owner).
         inheritCommittedComparisonIntent({
           candidate: canonical,
-          committed: committedSession?.renderRequest
-            ? {
-                ...committedSession,
-                renderRequest: promoteCanonicalRenderRequestToCurrent(
-                  committedSession.renderRequest,
-                  { featureCatalog: featureCatalog?.value || null }
-                )
-              }
-            : committedSession
+          committed: getCommittedCanonicalSession()
         });
       }
       recordSessionLifecycleEvent('canonical-request-construction-end');
@@ -6144,10 +6134,6 @@ export const createRunAnalysis = ({
       const candidateRules = colorCandidate.rules;
       const canonical = projectCommittedEditorIntent({
         committed,
-        promotion: {
-          featureCatalog: featureCatalog?.value ?? null,
-          legacyOrthogroupState: { groups: cloneJsonData(orthogroups.value || []) }
-        },
         state,
         drawing: {
           ...drawing,

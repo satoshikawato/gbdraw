@@ -22,7 +22,7 @@ const {
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
   compareCanonicalRenderRequests,
-  promoteCanonicalRenderRequestToCurrent,
+  readPublishedRenderRequest,
   projectCanonicalSessionRequest
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { promoteGallerySessionToCurrent } = await import(
@@ -43,7 +43,7 @@ const {
   assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
   buildRequest: buildCanonicalRenderRequest,
   buildRequestState: buildCanonicalRequestState,
-  promoteRequest: promoteCanonicalRenderRequestToCurrent,
+  readRequest: readPublishedRenderRequest,
   projectRequest: projectCanonicalSessionRequest,
   resolveComparisonPlan: resolveLinearComparisonPlan
 });
@@ -335,7 +335,7 @@ assert.ok(metadataPolicyComparison.differences.some(
 ));
 
 const comparisonTableRequest = {
-  schema: 5,
+  schema: 9,
   mode: 'linear',
   grouping: 'single',
   records: [],

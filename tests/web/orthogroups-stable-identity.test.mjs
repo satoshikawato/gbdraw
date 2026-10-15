@@ -25,6 +25,9 @@ const copyModule = async (sourceRelative, targetRelative) => {
 await copyModule('gbdraw/web/js/services/feature-utils.js', 'services/feature-utils.js');
 await copyModule('gbdraw/web/js/services/feature-sequence-fasta.js', 'services/feature-sequence-fasta.js');
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
+// losat-normalization.js reads the comparison settings from the generated request description.
+await copyModule('gbdraw/web/js/contracts/request-shape.generated.js', 'contracts/request-shape.generated.js');
+await copyModule('gbdraw/web/js/utils/contract-shape.js', 'utils/contract-shape.js');
 await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js');
 // depth-track-state.js reads a Depth series color by name.
 await copyModule('gbdraw/web/js/utils/color-utils.js', 'utils/color-utils.js');

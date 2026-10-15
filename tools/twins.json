@@ -73,8 +73,7 @@
       "vector": "tests/fixtures/contract_shape_vectors.json",
       "reason": "Python's request decoder and the Web Load check a stored request against the same generated description (contracts/request-shape.generated.js); the vectors pin the reason codes, and jsonDifferences lists what JSON.parse and Python's json read differently. A stored request of schemas 5 to 8 can hold another spelling of a comparison setting, which both readers read as its name.",
       "retireWhen": "the Web checks a stored document through the Python Worker; Loading a saved preview leaves the Worker unconstructed (gbdraw/web/CLAUDE.md), so until then the Web keeps its checker",
-      "source": "boundary-audit stage 1d PLAN 3.2 and K3 (PR-C step C1)",
-      "pending": true
+      "source": "boundary-audit stage 1d PLAN 3.2 and K3 (PR-C step C1)"
     },
     {
       "id": "vector:tests/fixtures/default_color_domain.json",
@@ -726,20 +725,6 @@
       "reason": "The interactive SVG runs without the app; Python truncates start and end to integers and the Web keeps the number. No parity test.",
       "retireWhen": "never: the standalone interactive SVG has no Python at view time",
       "source": "inventory C section B (interactive SVG vs app; FL-08, GX-08)"
-    },
-    {
-      "id": "function:normalizeOrthogroupMembershipMode",
-      "concern": "Legacy orthogroup membership modes",
-      "pythonOwner": [
-        "gbdraw/analysis/protein_colinearity.py:normalize_orthogroup_membership_mode"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/losat-normalization.js:normalizeOrthogroupMembershipMode"
-      ],
-      "vector": null,
-      "reason": "Partly the same: one alias table; the Web falls back to the active model, Python refuses an unknown mode.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
       "id": "function:normalizeQualifierMap",

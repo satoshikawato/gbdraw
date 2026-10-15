@@ -36,7 +36,7 @@ export const ARTIFACT_KEYS = Object.freeze([
   'results', 'selectedResultIndex', 'lastRunInfo', 'trackSlotResolvedGeometry', 'annotationWarnings',
   'featureIdentityNotices', 'featureEditRemovalCount', 'comparisonWarnings', 'labelFitReports', 'pairwiseMatchFactors',
   'orthogroups', 'collinearGroups', 'featureOrthogroupIndex', 'similarityAlignmentPlan',
-  'similarityAlignmentResetReceipt', 'linearRecordTranslations', 'legacySimilarityAlignment',
+  'similarityAlignmentResetReceipt', 'linearRecordTranslations',
   'appliedPaletteName', 'appliedPaletteColors', 'extractedFeatures', 'biologicalFeatures', 'featureCatalog',
   'featureRecordIds', 'editableLabels', 'originalLegendOrder', 'originalLegendColors', 'originalSvgStroke',
   'legendCurrentOffset', 'diagramOffset', 'lengthBarUserOffset', 'plotTitleUserOffset',

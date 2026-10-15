@@ -1,6 +1,9 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
+import { isCurrentRequestSchema } from '../utils/request-schema.js';
+import { shapeViolations } from '../utils/contract-shape.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import {
   state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList
 } from '../state.js';
@@ -86,7 +89,6 @@ import {
   resolveCircularComparisonSequenceAvailability
 } from './match-sequences.js';
 import {
-  CANONICAL_REQUEST_SCHEMA,
   adoptPromotedPreservedOverrides,
   buildCanonicalRenderRequest,
   canonicalLinearRecordLayout,
@@ -94,10 +96,10 @@ import {
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
   managedConfigOverridePathsForMode,
-  promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
-  readCanonicalResourceRecordCount
+  readCanonicalResourceRecordCount,
+  readStoredRenderRequest
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -189,6 +191,8 @@ import {
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
   readSessionInput,
+  holdsSettingsOnlyContent,
+  settingsOnlySessionCandidate,
   validateSessionAuthorityInventory
 } from './session-authority.js';
 import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
@@ -271,7 +275,9 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { SettingsContainers } from './config-field-readers.js' */
-/** @import { CanonicalLinearLayout, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CommittedCanonicalSession } from './session-request.js' */
+/** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
@@ -290,8 +296,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // The Session document's types are generated from gbdraw/session_contract.py:
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
-/** @import { GbdrawSession, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
-/** @import { UnvalidatedFields } from './session-authority.js' */
+/** @import { GbdrawSession, SessionEnvelope, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
+/** @import { StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
 
@@ -770,24 +776,6 @@ const normalizeStringArray = (source) => {
 let lastSessionFilename = null;
 /** @type {Record<string, any> | null} */
 let preservedCliOptions = null;
-/**
- * A request as a Session stored it, admitted by Load without promotion: schema
- * 1, 2 or 5 to 8, or a schema 9 whose leaves the Web has not checked. Load
- * establishes only that it is a plain object (`adoptRuntimeCanonicalSession`,
- * `cloneCanonicalSession`); a reader checks what it reads. Stage 1d promotes
- * it once at Load, and this arm of the committed request then goes.
- * @typedef {Readonly<Record<string, unknown>>} StoredRenderRequest
- */
-/**
- * The committed Session: the request that drew the shown Result, with its
- * resources and Web file bindings. Generate and the automatic rerender commit
- * the schema 9 request they built; Load commits the request the Session
- * stored; History and the Load rollback put a captured one back.
- * @typedef {object} CommittedCanonicalSession
- * @property {CanonicalRenderRequest | StoredRenderRequest} renderRequest
- * @property {Readonly<Record<string, unknown>>} resources
- * @property {Readonly<Record<string, unknown>>} webFiles
- */
 // The variable keeps its earlier type: `applyResultsData` passes the request's
 // `diagramOptions.selectedFeaturesSet` on as feature types without a check,
 // which the true type refuses (stage 1d).
@@ -1752,6 +1740,113 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
   });
 };
 
+/**
+ * The stored requests of a Session, read before anything adopts them: the
+ * top-level request and `otherModeResult.renderRequest` (OV-670). Returns a
+ * new data object when a request changed (the parsed file is never changed),
+ * the request schemas the file stored (RK-1), and whether the Session loads as
+ * settings only because its request cannot be read (K22, C-OD07): only a
+ * Session version that has a settings-only form (42, 44, 46, 47) and holds the
+ * settings it keeps does; any other is refused (R4, C-OD25).
+ * The Comparisons notice after Load is classified on the stored top-level
+ * request, as before the reader (receipt 〔今までの知らせ〕, C-OD14); it is null
+ * when Load reads no stored request.
+ * @template {object} T
+ * @param {T} rawData
+ * @param {number} version The Session version Load read.
+ * @param {LoadRepair[]} repairs
+ * @returns {{ data: T, storedSchemas: StoredRequestSchemas, settingsOnly: boolean,
+ *   comparisonClassification: ImportedComparisonIntent | null }}
+ */
+const readSessionRequests = (rawData, version, repairs) => {
+  const top = /** @type {Record<string, unknown>} */ (rawData);
+  const other = isPlainObject(top.otherModeResult) ? /** @type {Record<string, unknown>} */ (top.otherModeResult) : null;
+  const storedSchemas = {
+    renderRequest: /** @type {UnvalidatedFields<'schema'>} */ (top.renderRequest)?.schema,
+    otherModeResult: /** @type {UnvalidatedFields<'schema'>} */ (other?.renderRequest)?.schema
+  };
+  // A missing request of a version with a settings-only form is one its
+  // reader cannot read (K22, C-OD07; OV-785): no writer omits the key. An
+  // older version keeps its refusal (C-OD17). A Session before 31 holds no
+  // request (no writer wrote one), so Load reads none (OV-862).
+  const settingsOnlyForm = isSettingsOnlySessionDocument({ .../** @type {SessionEnvelope} */ (rawData), renderRequest: null });
+  if (
+    version < CANONICAL_SESSION_MIN_VERSION || top.renderRequest === null
+    || (!Object.hasOwn(top, 'renderRequest') && !settingsOnlyForm)
+  ) {
+    return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification: null };
+  }
+  const resourceIds = new Set(isPlainObject(top.resources) ? Object.keys(/** @type {object} */ (top.resources)) : []);
+  /** @param {Record<string, unknown>} set */
+  const classify = (set) => classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
+    renderRequest: set.renderRequest, resources: top.resources
+  }));
+  /**
+   * @param {Record<string, unknown>} set @param {string} path
+   * @param {ImportedComparisonIntent} classification
+   */
+  const read = (set, path, classification) => readStoredRenderRequest(set.renderRequest, {
+    featureCatalog: /** @type {UnvalidatedFields<'featureCatalog'>} */ (set.editorState)?.featureCatalog ?? null,
+    legacyOrthogroupState: top.orthogroupState ?? null,
+    resourceIds,
+    path,
+    holdComparisons: classification.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+  });
+  const comparisonClassification = classify(top);
+  const topRead = read(top, 'renderRequest', comparisonClassification);
+  if ('kind' in topRead) {
+    const envelope = /** @type {SessionEnvelope} */ (rawData);
+    // Without a settings-only form, or without the settings it keeps, nothing
+    // can be restored (R4, C-OD25); an unread request is never committed.
+    if (!settingsOnlyForm || !holdsSettingsOnlyContent(envelope)) throw SESSION_FIELDS_ERROR();
+    repairs.push(loadRepair({ code: 'request-dropped', path: topRead.path, effect: 'dropped' }));
+    return {
+      data: /** @type {T} */ (settingsOnlySessionCandidate(envelope)), storedSchemas, settingsOnly: true,
+      comparisonClassification: null
+    };
+  }
+  repairs.push(...topRead.repairs);
+  /** @type {Record<string, unknown>} */
+  let data = topRead.value === top.renderRequest ? top : { ...top, renderRequest: topRead.value };
+  if (other && Object.hasOwn(other, 'renderRequest')) {
+    const otherRead = read(other, 'otherModeResult.renderRequest', classify(other));
+    if ('kind' in otherRead) {
+      const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
+      repairs.push(loadRepair({
+        code: 'other-result-set-dropped', path: otherRead.path, effect: 'dropped',
+        ...(mode === 'circular' || mode === 'linear' ? { label: mode === 'circular' ? 'Circular' : 'Linear' } : {})
+      }));
+      const { otherModeResult: _dropped, ...rest } = data;
+      data = rest;
+    } else {
+      repairs.push(...otherRead.repairs);
+      if (otherRead.value !== other.renderRequest) data = { ...data, otherModeResult: { ...other, renderRequest: otherRead.value } };
+    }
+  }
+  return { data: /** @type {T} */ (data), storedSchemas, settingsOnly: false, comparisonClassification };
+};
+
+/**
+ * A schema-2 Gallery Session's request, rebuilt by its migration, read like
+ * any stored request: a row here is a defect of that migration.
+ * @template {{ renderRequest?: unknown, editorState?: unknown, orthogroupState?: unknown, resources?: unknown }} T
+ * @param {T} data
+ * @param {LoadRepair[]} repairs
+ * @returns {T}
+ */
+const readRebuiltGalleryRequest = (data, repairs) => {
+  const read = readStoredRenderRequest(data.renderRequest, {
+    featureCatalog: /** @type {UnvalidatedFields<'featureCatalog'>} */ (data.editorState)?.featureCatalog ?? null,
+    legacyOrthogroupState: data.orthogroupState ?? null,
+    resourceIds: new Set(isPlainObject(data.resources) ? Object.keys(/** @type {object} */ (data.resources)) : []),
+    path: 'renderRequest'
+  });
+  // The migration rebuilt a request the reader cannot read: nothing is committed unread.
+  if ('kind' in read) throw SESSION_FIELDS_ERROR();
+  repairs.push(...read.repairs);
+  return read.value === data.renderRequest ? data : { ...data, renderRequest: read.value };
+};
+
 /** @param {LoadRepair[]} repairs Collects what Load cannot restore. */
 const preflightSessionImport = async (sessionData, repairs) => {
   const sourceSessionVersion = readSessionInput(sessionData).version;
@@ -1771,7 +1866,8 @@ const preflightSessionImport = async (sessionData, repairs) => {
       used: outcome.rowKey
     }));
   });
-  const rawData = legendRead.session;
+  const requestRead = readSessionRequests(legendRead.session, sourceSessionVersion, repairs);
+  const rawData = requestRead.data;
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
@@ -1787,7 +1883,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
 
   if (currentSession) {
     recordSessionLifecycleEvent('session-authority-validation-start');
-    adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion);
+    adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion, requestRead.storedSchemas);
     recordSessionLifecycleEvent('session-authority-validation-end');
     recordSessionLifecycleEvent('feature-catalog-validation-start');
     validatedFeatureCatalog = await validateCurrentWriterFeatureCatalog(rawData, {
@@ -1814,7 +1910,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
       ? Object.fromEntries(Object.entries(rawData).filter(([key]) => key !== 'config'))
       : rawData;
   } else {
-    validateSessionAuthorityInventory(rawData, sourceSessionVersion);
+    validateSessionAuthorityInventory(rawData, sourceSessionVersion, requestRead.storedSchemas);
     normalizedData = normalizeSessionData(rawData, repairs);
     migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   }
@@ -1823,7 +1919,7 @@ const preflightSessionImport = async (sessionData, repairs) => {
     sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
     Number(normalizedData.renderRequest?.schema) === 2
   )
-    ? promoteGallerySessionToCurrent(normalizedData)
+    ? readRebuiltGalleryRequest(promoteGallerySessionToCurrent(normalizedData), repairs)
     : normalizedData;
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
   await validateSessionLosatArtifactsForImport(promotedData, sourceSessionVersion);
@@ -1831,10 +1927,13 @@ const preflightSessionImport = async (sessionData, repairs) => {
   const data = adoptPromotedPreservedSettings(currentSession
     ? promotedData
     : migrateSessionDataToCurrent(promotedData, sourceSessionVersion));
-  const comparisonClassification = classifyImportedComparisonIntent(/** @type {Record<string, any>} */ ({
-    renderRequest: data.renderRequest,
-    resources: data.resources
-  }));
+  // A Gallery migration rebuilt its request, which is classified as rebuilt.
+  const comparisonClassification = promotedData === normalizedData && requestRead.comparisonClassification
+    ? requestRead.comparisonClassification
+    : classifyImportedComparisonIntent(/** @type {Record<string, any>} */ ({
+        renderRequest: data.renderRequest,
+        resources: data.resources
+      }));
   const projectionRenderRequest = (
     data.renderRequest?.mode === 'linear'
     && comparisonClassification.disposition
@@ -1881,7 +1980,8 @@ const preflightSessionImport = async (sessionData, repairs) => {
       )
     : data.config;
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
-  const settingsOnly = isSettingsOnlySessionDocument(data);
+  // The settings-only decision of the request read is passed on explicitly (C-OD07).
+  const settingsOnly = requestRead.settingsOnly || isSettingsOnlySessionDocument(data);
   const canonicalProjection = settingsOnly
     ? projectSettingsOnlySession(data, currentResourceTable)
     : sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
@@ -1910,18 +2010,6 @@ const preflightSessionImport = async (sessionData, repairs) => {
     : null;
   repairs.push(...(canonicalProjection?.legacyTableRepairs || []));
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
-  if (canonicalProjection?.pipelineState?.legacySimilarityAlignment) {
-    const promotedRequest = promoteCanonicalRenderRequestToCurrent(data.renderRequest, {
-      featureCatalog: data.editorState?.featureCatalog || null,
-      legacyOrthogroupState: data.orthogroupState || null
-    });
-    // Only a Linear request has a legacy similarity alignment; its layout may be empty.
-    canonicalProjection.config.linearRecordLayout = {
-      ...canonicalProjection.config.linearRecordLayout,
-      recordTranslations: /** @type {Partial<CanonicalLinearLayout>} */ (promotedRequest.layout).recordTranslations,
-      similarityAlignment: /** @type {Partial<CanonicalLinearLayout>} */ (promotedRequest.layout).similarityAlignment
-    };
-  }
   let restoredConfig = canonicalProjection
     ? sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
       ? cloneJsonData(canonicalProjection.config)
@@ -2055,8 +2143,6 @@ const preflightSessionImport = async (sessionData, repairs) => {
     ? (() => {
         const artifactState = projectArtifactState(data);
         if (currentSession) artifactState.editorState = normalizedEditorState;
-        artifactState.legacySimilarityAlignment =
-          canonicalProjection.pipelineState?.legacySimilarityAlignment || null;
         return {
           documentMetadata: projectDocumentMetadata(data),
           renderState: {
@@ -2083,7 +2169,8 @@ const preflightSessionImport = async (sessionData, repairs) => {
     currentResourceTable,
     otherModeCatalog,
     comparisonClassification,
-    unmanagedConfigValidation
+    unmanagedConfigValidation,
+    settingsOnly
   };
 };
 
@@ -3338,23 +3425,41 @@ export const serializeActiveRenderFiles = async (
   };
 };
 
+/** A generated comparison as the request describes it. */
+const GENERATED_COMPARISON_SHAPE = /** @type {const} */ ({ kind: 'ref', name: 'CanonicalGeneratedProteinComparison' });
 /**
+ * The saved comparisons of a draft. With `repairs` (Load), an entry that is
+ * neither resource-backed nor a generated comparison as the request describes
+ * it is dropped and listed (OV-750); Generate passes none.
  * @param {unknown} comparisons
- * @param {{ adoptCanonicalPayloads?: boolean }} [options]
+ * @param {{ adoptCanonicalPayloads?: boolean, repairs?: LoadRepair[] | null }} [options]
  */
 const deserializeCanonicalComparisons = (
   comparisons,
-  { adoptCanonicalPayloads = false } = {}
-) => (
-  Array.isArray(comparisons)
-    ? comparisons.map((comparison) => (
-        isResourceBackedCanonicalComparison(comparison)
-          ? mapResourceBackedCanonicalComparison(comparison, deserializeFile)
-          : adoptCanonicalPayloads ? comparison : cloneJsonData(comparison)
-      ))
-    : []
-);
+  { adoptCanonicalPayloads = false, repairs = null } = {}
+) => {
+  if (!Array.isArray(comparisons)) return [];
+  const read = repairs ? comparisons.filter((comparison) => isResourceBackedCanonicalComparison(comparison)
+    || shapeViolations(comparison, GENERATED_COMPARISON_SHAPE, CANONICAL_REQUEST_DESCRIPTION.types, '').length === 0)
+    : comparisons;
+  if (repairs && read.length < comparisons.length) {
+    repairs.push(loadRepair({
+      code: 'setting-entries-dropped', path: 'files.linearCanonicalComparisons', effect: 'dropped',
+      count: comparisons.length - read.length
+    }));
+  }
+  return read.map((comparison) => (
+    isResourceBackedCanonicalComparison(comparison)
+      ? mapResourceBackedCanonicalComparison(comparison, deserializeFile)
+      : adoptCanonicalPayloads ? comparison : cloneJsonData(comparison)
+  ));
+};
 
+/**
+ * @param {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown }} canonical A Generate candidate:
+ *   the request it built or projected, its resources and Web file bindings.
+ * @param {{ adoptOwnedRequest?: boolean }} [options]
+ */
 export const adoptCanonicalRenderArtifacts = (
   canonical,
   { adoptOwnedRequest = false } = {}
@@ -3446,7 +3551,9 @@ export const adoptCanonicalRenderArtifacts = (
   }
 };
 
-/** @returns {CommittedCanonicalSession['renderRequest'] | null} */
+// The port's readers take a stored request (schema 1 or 2) as an object of
+// unchecked leaves, so the return type leaves out its `schema` literal.
+/** @returns {CanonicalRenderRequest | Readonly<Record<string, unknown>> | null} */
 export const getCommittedCanonicalRenderRequest = () => {
   void committedCanonicalRevision.value;
   return committedCanonicalSession?.renderRequest || null;
@@ -3471,6 +3578,7 @@ export const getCommittedLinearDefinitionVisibility = () => (
 // it names records by #index (Export Feature Edits TSV).
 /**
  * @param {string} resourceId
+ * @param {'genbank' | 'fasta'} kind
  */
 export const readCommittedResourceRecordCount = (resourceId, kind) => (
   readCanonicalResourceRecordCount(committedCanonicalSession?.resources, resourceId, kind)
@@ -3493,11 +3601,12 @@ export const canonicalRenderArtifactOwner = Object.freeze({
  * @param {Record<string, any> | null} filesData
  * @param {{
  *   adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any>,
- *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'>
- * }} options
+ *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'>,
+ *   repairs?: LoadRepair[] | null
+ * }} options `repairs`: Load lists what it drops from the saved inputs.
  */
 const applyFiles = (filesData, {
-  adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state, targetDrawing
+  adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state, targetDrawing, repairs = null
 }) => {
   targetState.matchSequenceRegistry?.reset?.();
   targetState.circularRecordList.value = [];
@@ -3553,7 +3662,7 @@ const applyFiles = (filesData, {
     : [];
   targetState.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
     filesData.linearCanonicalComparisons,
-    { adoptCanonicalPayloads }
+    { adoptCanonicalPayloads, repairs }
   );
   targetState.files.d_color = deserializeFile(filesData.d_color);
   targetState.files.t_color = deserializeFile(filesData.t_color);
@@ -4519,20 +4628,19 @@ const admitSavedFeatureCatalog = (featureCatalog, logicalResults, mode) => {
   }
 };
 /**
- * @param {Record<string, any> | null} committed
- * @param {SessionArtifactView} view
- * @param {FeatureCatalog | null} featureCatalog
+ * Save writes the committed request as Load read it or Generate built it. A
+ * schema-1 request, which Load keeps as stored until its reader lifts it, is
+ * saved after a Generate in its mode.
+ * @template {{ renderRequest: unknown } | null} T
+ * @param {T} committed
+ * @param {'circular' | 'linear'} mode
+ * @returns {T}
  */
-const promoteSavedCanonicalSession = (committed, view, featureCatalog) => {
-  if (!committed || committed.renderRequest.schema >= CANONICAL_REQUEST_SCHEMA) return committed;
-  const promoted = {
-    ...committed,
-    renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest, {
-      featureCatalog,
-      legacyOrthogroupState: { groups: cloneJsonData(view.orthogroups || []) }
-    })
-  };
-  return isAdoptedCanonicalSession(committed) ? adoptRuntimeCanonicalSession(promoted) : promoted;
+const requireCurrentSavedRequest = (committed, mode) => {
+  if (committed && !isCurrentRequestSchema(committed.renderRequest)) {
+    throw sessionSaveRequiresGenerate(mode === state.mode.value ? {} : { diagramMode: mode });
+  }
+  return committed;
 };
 /** @param {SessionArtifactView} view */
 const artifactRunMetadata = (view) => ({
@@ -4569,12 +4677,11 @@ const prepareOtherModeArtifact = (view) => {
   const editorState = buildArtifactEditorState(view);
   editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, results, view.mode);
   if (!view.committedCanonicalSession) throw sessionSaveRequiresGenerate({ diagramMode: view.mode });
-  const committed = promoteSavedCanonicalSession(
+  const committed = requireCurrentSavedRequest(
     isAdoptedCanonicalSession(view.committedCanonicalSession)
       ? view.committedCanonicalSession
       : cloneCanonicalSession(view.committedCanonicalSession),
-    view,
-    editorState.featureCatalog
+    view.mode
   );
   return { view, results, editorState, committed };
 };
@@ -4736,7 +4843,7 @@ const exportSessionDocument = async (
       omittedAnnotationRecordKeys
     });
   }
-  committed = promoteSavedCanonicalSession(committed, artifact, editorState.featureCatalog);
+  committed = requireCurrentSavedRequest(committed, artifact.mode);
   const canonical = await assembleSessionResources(state, committed, state.drawings.linear, other?.committed ?? null);
   await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   if (other) {
@@ -4891,6 +4998,8 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {LoadRepair[]} */
     const repairs = [];
     const preflight = await preflightSessionImport(data, repairs);
+    // The receipts are checked against the requests Load read (RK-2).
+    data = preflight.data;
     await validateSimilarityAlignmentResetReceipt(
       data.editorState?.alignmentResetReceipt,
       { renderRequest: data.renderRequest, resources: data.resources }
@@ -4902,7 +5011,6 @@ const importSessionDocument = async (e, options = {}) => {
       );
     }
     recordSessionLifecycleEvent('current-session-preflight-end');
-    data = preflight.data;
     const {
       sourceSessionVersion,
       canonicalProjection,
@@ -4912,7 +5020,8 @@ const importSessionDocument = async (e, options = {}) => {
       currentResourceTable,
       otherModeCatalog,
       comparisonClassification,
-      unmanagedConfigValidation
+      unmanagedConfigValidation,
+      settingsOnly
     } = preflight;
     if (restoredConfig && unmanagedConfigValidation) {
       restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(
@@ -4920,7 +5029,6 @@ const importSessionDocument = async (e, options = {}) => {
       );
     }
     const canonicalSession = projectionResult !== null;
-    const settingsOnly = isSettingsOnlySessionDocument(data);
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
     const committedMode = projectionResult?.renderState.mode;
     const savedCurrentWriterMode = sourceSessionVersion >= TYPED_DRAFT_SESSION_VERSION
@@ -4975,7 +5083,7 @@ const importSessionDocument = async (e, options = {}) => {
       canonicalSession ? projectionResult.restoredFiles : data.files,
       {
         adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly,
-        targetState: candidateFiles, targetDrawing: candidateFiles
+        targetState: candidateFiles, targetDrawing: candidateFiles, repairs
       }
     );
     recordSessionLifecycleEvent('session-candidate-files-end');
@@ -5647,13 +5755,6 @@ const importSessionDocument = async (e, options = {}) => {
     if (canonicalLinearLayout && state.similarityAlignmentPlan) {
       state.similarityAlignmentPlan.value = canonicalLinearLayout.similarityAlignment
         ? cloneJsonData(canonicalLinearLayout.similarityAlignment)
-        : null;
-    }
-    if (state.legacySimilarityAlignment) {
-      state.legacySimilarityAlignment.value = canonicalSession
-        ? cloneJsonData(
-            projectionResult.artifactState.legacySimilarityAlignment || null
-          )
         : null;
     }
     restoreAppliedPaletteFromSession(shownDrawing, ui);

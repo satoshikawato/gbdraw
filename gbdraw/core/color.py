@@ -6,7 +6,10 @@ import re
 from gbdraw.exceptions import ValidationError
 
 
-_HEX_COLOR_PATTERN = re.compile(r"^#(?P<value>[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$")
+# The digits of a #RGB or #RRGGBB color (normalize_hex_color); the canonical
+# request description reads them as data.
+HEX_COLOR_DIGITS = r"[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}"
+_HEX_COLOR_PATTERN = re.compile(rf"^#(?P<value>{HEX_COLOR_DIGITS})$")
 
 COLLINEAR_ORIENTATION_COLOR_KEYS = {
     "plus": "collinear_block_plus",

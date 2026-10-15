@@ -276,7 +276,7 @@ const committed = {
     encoding: 'canonicalTsv',
     queryRecordIndex: 0,
     subjectRecordIndex: 1
-  }]),
+  }], { schema: 9 }),
   resources
 };
 const candidate = {
@@ -327,3 +327,9 @@ const circular = classifyImportedComparisonIntent({
 assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
 
 console.log('imported comparison intent tests passed');
+
+// A committed request Load kept as stored (schema 1) is no comparison owner.
+assert.throws(() => inheritCommittedComparisonIntent({
+  candidate: structuredClone(candidate),
+  committed: { ...committed, renderRequest: { ...committed.renderRequest, schema: 1 } }
+}), /Reload the Session/);

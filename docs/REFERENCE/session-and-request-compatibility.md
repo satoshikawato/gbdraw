@@ -236,6 +236,41 @@ configuration file drops a key it does not know.
   the feature they name, the notice of a loaded configuration file, and the
   **Comparisons** card notices still follow the load.
 
+### Saved diagram settings that cannot be read
+
+Load reads the saved diagram's settings (the stored render request of request
+schemas 5–9 and the other diagram mode's saved result) through one reader and
+checks them against the request description. What it cannot use is repaired
+instead of refused, and each repair is a row in the dialog:
+
+- an unknown setting is dropped;
+- an invalid value is reset to its default or left unset;
+- an unreadable entry of a list is dropped;
+- a part that cannot be read is left out with the settings inside it, or
+  replaced by its default when it has one;
+- a reference to a file or record the Session does not hold is left out.
+
+When the saved diagram's settings cannot be read at all (for example, their
+`schema` is not an integer), or are missing, the file loads as settings only if it holds the web app's own settings: a Session
+of version 42, 44, 46 or 47 saved by the web app. A row says that the saved
+Results, the GenBank, GFF and FASTA inputs, the feature list and the caches
+are left out. A Session of version 42, 44 or 47 written by the CLI or the
+Python API, and a Session of version 31–41, has no saved settings that can be
+read without them, so it is refused. When the settings of the
+other diagram mode's saved result cannot be read, that diagram and its Results
+are left out, with a row.
+
+The five comparison settings (unit, anchor, search scope, color and
+membership) read the same spellings in the web app and in Python in request
+schemas 5–8. In a schema 9 request the web app also reads another spelling of
+a value (such as `top1` or ` ALL `) as that value, without a row, while the CLI
+and the Python API refuse it. Eight search-scope spellings that only the web
+app accepted (`adjacent_pairs`, `adjacent_pair`, `neighbor_pairs`,
+`neighboring_pairs`, `all_records`, `all_pairs`, `all_record_pairs`, `global`)
+are no longer read: in the saved diagram's settings, a generated comparison
+that holds one is dropped, with a row; in a Session's comparison settings, Load
+refuses the file, as before. A file that holds `top1` or `legacy` now loads.
+
 The Web app refuses these files and shows an error instead:
 
 - A file that is not JSON, including a broken gzip file and text that is not

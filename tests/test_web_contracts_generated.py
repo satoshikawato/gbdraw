@@ -44,7 +44,7 @@ def test_generated_web_contracts_match_python_source() -> None:
 def test_the_contracts_directory_holds_only_the_generated_modules() -> None:
     # R14: `contracts/` holds the modules that `--check` compares and nothing else.
     generator = _generator()
-    targets = {generator.TARGET, generator.REQUEST_TARGET, generator.SESSION_TARGET}
+    targets = {generator.TARGET, generator.REQUEST_TARGET, generator.SESSION_TARGET, generator.REQUEST_SHAPE_TARGET}
 
     assert set(generator.TARGET.parent.rglob("*")) == targets
 
@@ -278,3 +278,50 @@ def test_an_open_object_renders_with_an_index_signature() -> None:
         " */\n"
     )
     assert generator._jsdoc_type(obj({}, open=True)) == "{ [key: string]: unknown }"
+
+
+def test_the_request_shape_module_is_the_description_as_frozen_data() -> None:
+    from gbdraw.session_request_codec import describe_canonical_request
+
+    source = _generator().render_request_shape_module()
+
+    # A leaf imports a leaf (R13): only the type the checker declares.
+    assert re.findall(r"\bimport\b.*|\bfrom\s+['\"].*", source) == [
+        "import { ContractDescription } from '../utils/contract-shape.js' */"
+    ]
+    assert re.search(r"\bany\b", source) is None
+    assert "defaults: Object.freeze({\n        collinearInferOrthogroups: true,\n        collinearityParams: null," in source
+    assert describe_canonical_request()["types"]["CanonicalProteinComparisonSettings"]["defaults"] == {
+        "collinearInferOrthogroups": True,
+        # A required field that holds null takes null (OV-777).
+        **{key: None for key in (
+            "collinearityParams", "losatpBin", "losatpThreads", "ncbiBlastpBin", "orthogroupMemberMaxHits",
+            "proteinBlastpCandidateLimit",
+        )},
+    }
+
+
+def test_a_changed_option_default_makes_the_request_shape_module_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.session_request_codec as codec
+    from gbdraw.api.options import LinearDiagramOptions
+
+    generator = _generator()
+    assert 'pairwiseMatchStyle: "ribbon"' in generator.render_request_shape_module()
+
+    monkeypatch.setattr(codec, "_DEFAULT_LINEAR_OPTIONS", LinearDiagramOptions(pairwise_match_style="curve"))
+
+    assert 'pairwiseMatchStyle: "curve"' in generator.render_request_shape_module()
+
+
+def test_description_data_renders_any_json_key_but_the_prototype() -> None:
+    generator = _generator()
+
+    assert generator._frozen_json({"a.b": [1, None, True, 0.5], "c": {}}) == (
+        'Object.freeze({"a.b": Object.freeze([1, null, true, 0.5]), c: Object.freeze({})})'
+    )
+    with pytest.raises(TypeError, match="__proto__"):
+        generator._frozen_json({"__proto__": 1})
+    with pytest.raises(ValueError):
+        generator._frozen_json(float("nan"))

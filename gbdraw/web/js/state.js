@@ -299,7 +299,6 @@ const selectedOrthogroupAlignmentFeature = ref('');
 const similarityAlignmentPlan = ref(null);
 const similarityAlignmentResetReceipt = ref(null);
 const linearRecordTranslations = ref([]);
-const legacySimilarityAlignment = ref(null);
 const selectedOrthogroupId = ref('');
 const orthogroupSearch = ref('');
 const orthogroupSortMode = ref('id');
@@ -1162,7 +1161,6 @@ export const state = {
   similarityAlignmentPlan,
   similarityAlignmentResetReceipt,
   linearRecordTranslations,
-  legacySimilarityAlignment,
   selectedOrthogroupId,
   orthogroupSearch,
   orthogroupSortMode,

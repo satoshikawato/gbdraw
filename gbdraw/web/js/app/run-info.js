@@ -15,7 +15,7 @@ import {
 import { countGenBankRecords } from '../services/genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
-import { DISPLAY_PLACEMENT_SCHEMA, FEATURE_OVERRIDE_SCHEMA } from '../contracts/schema.generated.js';
+import { isCurrentRequestSchema } from '../utils/request-schema.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
@@ -27,13 +27,13 @@ import { DISPLAY_PLACEMENT_SCHEMA, FEATURE_OVERRIDE_SCHEMA } from '../contracts/
  * @typedef {{ path: string, name: string, kind: 'generated' | 'uploaded', slot: string, resourceId?: string }} RecipeFileMetadata
  * @typedef {(path: string) => string} FinalNameForPath The visible name allocated to a generated file's path.
  * @typedef {{ path: string, name: string, slot: string, data?: string | Uint8Array, buildData?: (finalNameForPath: FinalNameForPath) => string | Uint8Array }} RecipeGeneratedFile
- * @typedef {(resourceId: string, kind: string) => number | Promise<number>} ResourceRecordCounter
+ * @typedef {(resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>} ResourceRecordCounter
  * @typedef {{ source?: boolean, fallback?: string, slot?: string, nameHintSlot?: string }} RecipeResourcePathOptions
  * @typedef {object} RecipeFiles The files a recipe names, by visible name and resource.
  * @property {(resourceId: unknown, options?: RecipeResourcePathOptions) => string} resourcePath
  * @property {(nameRaw: unknown, data: string | ((finalNameForPath: FinalNameForPath) => string), slot: string | undefined) => string} generatedTextPath
  * @property {(path: string) => string} visibleName
- * @property {(resourceId: unknown, kind: string) => Promise<number>} resourceRecordCount
+ * @property {(resourceId: unknown, kind: 'genbank' | 'fasta') => Promise<number>} resourceRecordCount
  * @property {Map<string, RecipeFileMetadata>} fileMetadata
  * @property {RecipeGeneratedFile[]} generatedFiles
  * @typedef {{ schema: number, consumedPaths: Set<string>, metadataPaths: Set<string> }} RecipeCoverage The semantic fields of a request, by path.
@@ -463,7 +463,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
   const visibleName = (path) => fileMetadata.get(path)?.name || fallbackNameFromPath(path);
   /**
    * @param {unknown} resourceIdRaw
-   * @param {string} kind
+   * @param {'genbank' | 'fasta'} kind
    * @returns {Promise<number>}
    */
   const resourceRecordCount = async (resourceIdRaw, kind) => {
@@ -602,9 +602,9 @@ const validateCurrentSemanticCoverage = (request) => {
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
     const path = `records[${index}]`;
     coverObject(coverage, record, path, [
-      'cardinality', 'source', 'selector', 'region', 'presentation', ...(request.schema >= DISPLAY_PLACEMENT_SCHEMA ? ['display'] : [])
+      'cardinality', 'source', 'selector', 'region', 'presentation', ...(isCurrentRequestSchema(request) ? ['display'] : [])
     ], ['recordKey']);
-    if (request.schema >= DISPLAY_PLACEMENT_SCHEMA) coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
+    if (isCurrentRequestSchema(request)) coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
     if (!['all', 'exactly_one'].includes(record.cardinality)) {
       throw new SourceRecipeUnavailable(
         `Source recipe unavailable: record cardinality "${String(record.cardinality || 'missing')}" has no current CLI projection.`
@@ -665,8 +665,8 @@ const validateCurrentSemanticCoverage = (request) => {
   const options = request.diagramOptions;
   coverObject(coverage, options, 'diagramOptions', new Set([
     ...DIAGRAM_OPTION_FIELDS,
-    ...(request.schema >= DISPLAY_PLACEMENT_SCHEMA ? ['featurePlacements'] : []),
-    ...(request.schema >= FEATURE_OVERRIDE_SCHEMA ? ['featureOverrides'] : [])
+    ...(isCurrentRequestSchema(request) ? ['featurePlacements'] : []),
+    ...(isCurrentRequestSchema(request) ? ['featureOverrides'] : [])
   ]));
   (options.featureOverrides || []).forEach((row, index) => {
     coverObject(coverage, row, `diagramOptions.featureOverrides[${index}]`, [
@@ -938,10 +938,10 @@ const appendInputArgs = async (args, request, files) => {
     }
   });
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
-  if (request.schema >= 6 && recordsTableRequired) {
+  if (isCurrentRequestSchema(request) && recordsTableRequired) {
     for (const [index, record] of records.entries()) {
       if (record.cardinality === 'exactly_one') continue;
-      if (request.schema >= 7 && await files.resourceRecordCount(
+      if (isCurrentRequestSchema(request) && await files.resourceRecordCount(
         specs[index].ids.at(-1), inputKind === 'genbank' ? 'genbank' : 'fasta'
       ) === 1) continue;
       throw new SourceRecipeUnavailable(
@@ -950,7 +950,7 @@ const appendInputArgs = async (args, request, files) => {
     }
   }
 
-  if (request.schema >= 6 && !recordsTableRequired) {
+  if (isCurrentRequestSchema(request) && !recordsTableRequired) {
     const loadComparison = request.mode === 'linear'
       && Array.isArray(request.comparisons)
       && request.comparisons.length > 0;
@@ -979,8 +979,8 @@ const appendInputArgs = async (args, request, files) => {
   if (recordsTableRequired) {
     const requestedTableRows = requestedRows;
     const columns = inputKind === 'genbank'
-      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= DISPLAY_PLACEMENT_SCHEMA ? ['topology', 'display_start'] : [])]
-      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= DISPLAY_PLACEMENT_SCHEMA ? ['topology', 'display_start'] : [])];
+      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(isCurrentRequestSchema(request) ? ['topology', 'display_start'] : [])]
+      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(isCurrentRequestSchema(request) ? ['topology', 'display_start'] : [])];
     const rows = records.map((record, index) => {
       const region = isPlainObject(record.region) ? record.region : null;
       const selector = selectorText(region?.selector || record.selector);
@@ -1911,7 +1911,7 @@ export const buildSourceRecipe = async ({
     return unavailable('Source recipe unavailable: the committed render request is missing or invalid.');
   }
   try {
-    const semanticCoverage = renderRequest.schema >= 6
+    const semanticCoverage = isCurrentRequestSchema(renderRequest)
       ? validateCurrentSemanticCoverage(renderRequest)
       : { schema: renderRequest.schema, consumedPaths: [], metadataPaths: [] };
     const files = createRecipeFiles(resources, webFiles, generatedFileNameHints, readResourceRecordCount);

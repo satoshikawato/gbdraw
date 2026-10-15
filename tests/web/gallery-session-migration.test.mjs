@@ -49,6 +49,7 @@ const {
   buildCanonicalRequestState,
   compareCanonicalRenderRequests,
   promoteCanonicalRenderRequestToCurrent,
+  readPublishedRenderRequest,
   projectCanonicalSessionRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
@@ -67,7 +68,7 @@ const {
   assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
   buildRequest: buildCanonicalRenderRequest,
   buildRequestState: buildCanonicalRequestState,
-  promoteRequest: promoteCanonicalRenderRequestToCurrent,
+  readRequest: readPublishedRenderRequest,
   projectRequest: projectCanonicalSessionRequest,
   resolveComparisonPlan: resolveLinearComparisonPlan
 });

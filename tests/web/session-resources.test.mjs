@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { drawingOf } from './helpers/drawing-state.mjs';
+import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -49,7 +50,7 @@ const sameMetadataDifferentB = makeFile('different-B', 'same.tsv', {
 
 const committed = {
   renderRequest: {
-    schema: 5,
+    schema: CANONICAL_REQUEST_SCHEMA,
     mode: 'circular',
     records: [
       {
@@ -373,7 +374,7 @@ assert.deepEqual(promoted.webFiles.bindings.c_gb, frozenLeaf);
 const descriptor = (text, name = 'same.gb') => ({ kind: 'genbank', name, type: 'text/plain',
   encoding: 'base64', size: Buffer.byteLength(text), data: base64(text), lastModified: 0 });
 for (const adopted of [false, true]) {
-  const committed = { renderRequest: { schema: 7, records: [{ source: { resourceId: 'occupied' } }] },
+  const committed = { renderRequest: { schema: CANONICAL_REQUEST_SCHEMA, records: [{ source: { resourceId: 'occupied' } }] },
     resources: { occupied: descriptor('committed\n', 'committed.gb'), same: descriptor('A\n') } };
   const parts = { occupied: descriptor('A\n'), unused: descriptor('B\n', 'unique.gb') };
   const table = backing.adoptCurrentSessionResources(parts);

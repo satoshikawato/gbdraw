@@ -11,9 +11,9 @@ from typing import Literal, Mapping, TypeAlias, cast
 
 from pandas import DataFrame
 
-from gbdraw.core.color import normalize_hex_color
+from gbdraw.core.color import HEX_COLOR_DIGITS, normalize_hex_color
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.colors import resolve_color_to_hex
+from gbdraw.io.colors import COLOR_NAMES, resolve_color_to_hex
 from gbdraw.io.record_select import RecordSelector
 
 
@@ -30,6 +30,18 @@ def _finite(value: object, name: str, *, positive: bool = False, nonnegative: bo
     if nonnegative and number < 0:
         raise ValidationError(f"{name} must be non-negative.")
     return number
+
+
+# What `_color` reads, as data (the canonical request description): outer
+# spaces, then a hex of 3 or 6 digits (normalize_hex_color) or one of
+# COLOR_NAMES in any case (named_color_hex); an optional color also reads a
+# blank text as unset. The name pattern spells each letter in both cases, so
+# Python's re and the Web's RegExp read it alike without a flag.
+HEX_COLOR_TEXT_PATTERN = rf"^\s*#(?:{HEX_COLOR_DIGITS})\s*$"
+COLOR_NAME_TEXT_PATTERN = r"^\s*(?:{})\s*$".format(
+    "|".join("".join(f"[{letter}{letter.upper()}]" for letter in name) for name in COLOR_NAMES)
+)
+BLANK_TEXT_PATTERN = r"^\s*$"
 
 
 def _color(value: object | None, name: str, *, optional: bool = False) -> str | None:

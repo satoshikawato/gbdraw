@@ -124,24 +124,25 @@
  * @property {string} defaultColorsPalette
  * @property {CanonicalFileRef | null} defaultColorsFile
  */
+/** @typedef {string | string} CanonicalAnnotationColor */
 /**
  * @typedef {object} CanonicalHatchStyle
  * @property {number} angle
  * @property {number} spacing
- * @property {string} color
+ * @property {CanonicalAnnotationColor} color
  * @property {number} width
  * @property {boolean} cross
  */
 /**
  * @typedef {object} CanonicalRegionAnnotationStyle
- * @property {string} stroke
+ * @property {CanonicalAnnotationColor} stroke
  * @property {number} strokeWidth
  * @property {number[]} strokeDasharray
  * @property {'none' | 'tick' | 'arrow'} lineCap
- * @property {string | null} fill
+ * @property {CanonicalAnnotationColor | string | null} fill
  * @property {number} fillOpacity
  * @property {CanonicalHatchStyle | null} hatch
- * @property {string} labelColor
+ * @property {CanonicalAnnotationColor} labelColor
  * @property {number | null} labelFontSize
  * @property {'auto' | 'horizontal' | 'tangent' | 'radial' | 'arc'} labelOrientation
  * @property {'center' | 'start' | 'end'} labelPosition
@@ -411,16 +412,16 @@
 /**
  * @typedef {object} CanonicalProteinComparisonSettings
  * @property {CanonicalCollinearityParameters | null} collinearityParams
- * @property {'auto' | 'cds' | 'locus' | string} collinearityUnitMode
- * @property {'all' | 'one_to_one' | 'rbh' | string} collinearityAnchorMode
- * @property {'adjacent' | 'all' | string} collinearitySearchScope
- * @property {'average_identity' | 'orientation' | 'orientation_identity' | string} collinearityColorMode
+ * @property {'auto' | 'cds' | 'locus'} collinearityUnitMode
+ * @property {'all' | 'one_to_one' | 'rbh'} collinearityAnchorMode
+ * @property {'adjacent' | 'all'} collinearitySearchScope
+ * @property {'average_identity' | 'orientation' | 'orientation_identity'} collinearityColorMode
  * @property {string | null} losatpBin
  * @property {string | null} ncbiBlastpBin
  * @property {number | null} losatpThreads
  * @property {number} proteinBlastpMaxHits
  * @property {number | null} proteinBlastpCandidateLimit
- * @property {'anchor_core_v1' | string} orthogroupMembershipMode
+ * @property {'anchor_core_v1'} orthogroupMembershipMode
  * @property {number | null} orthogroupMemberMaxHits
  * @property {boolean} [collinearInferOrthogroups]
  * @property {number} collinearMaxParalogLinksPerOrthogroup

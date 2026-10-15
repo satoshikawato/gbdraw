@@ -14,7 +14,9 @@ import { readDepthTracks } from './depth-track-state.js';
 import { IMPORTED_COMPARISON_ACTIONS } from './imported-comparison-intent.js';
 import { readCircularPlotTitlePosition } from './layout-preferences.js';
 import { isPlainObject } from './losat-cache.js';
-import { readCollinearAnchorMode, readCollinearSearchScope, readOrthogroupMembershipMode } from './losat-normalization.js';
+import {
+  readCollinearAnchorMode, readCollinearColorMode, readCollinearSearchScope, readCollinearUnitMode, readOrthogroupMembershipMode
+} from './losat-normalization.js';
 import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
 import {
   createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, createDefaultLosatpHitLimits,
@@ -480,10 +482,8 @@ const LOSAT_SEARCH_ROWS = Object.freeze([
   row('collinearMaxDiagonalDrift', numberOr(isNonNegativeInteger, 0, { coerceUnset: true })),
   row('collinearMaxConflictsInMergeGap', numberOr(isNonNegativeInteger, 1, { coerceUnset: true })),
   row('collinearMaxParalogLinksPerOrthogroup', numberOr(isPositiveInteger, 2)),
-  row('collinearColorMode', textChoice(['average_identity', 'orientation', 'orientation_identity'], 'orientation', {
-    aliases: { identity: 'average_identity' }, foldHyphens: true
-  })),
-  row('collinearUnitMode', textChoice(['auto', 'cds', 'locus'], 'auto')),
+  row('collinearColorMode', readCollinearColorMode),
+  row('collinearUnitMode', readCollinearUnitMode),
   row('collinearAnchorMode', readCollinearAnchorMode),
   row('collinearMergeOrientation', textChoice(['strand', 'order', 'either'], 'either')),
   row('collinearSearchScope', readCollinearSearchScope),

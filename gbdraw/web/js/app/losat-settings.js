@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeCollinearSearchScope } from '../services/losat-normalization.js';
+import { readCollinearSearchScope } from '../services/losat-normalization.js';
 import { buildLosatJobSpecs } from '../services/linear-comparisons.js';
 import { losatRecordGencode, losatSearchSequences, planLosatSourceJobs } from '../services/linear-sources.js';
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
@@ -125,7 +125,7 @@ export const createLosatSettings = ({ state }) => {
         program,
         blastpMode: String(drawing.losat.blastp?.mode || 'orthogroup'),
         collinearInferOrthogroups: drawing.losat.blastp?.collinearInferOrthogroups !== false,
-        collinearSearchScope: normalizeCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope)
+        collinearSearchScope: readCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope).value
       });
       return planLosatSourceJobs({
         ...search,

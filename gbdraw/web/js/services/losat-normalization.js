@@ -1,66 +1,76 @@
 // @ts-check
-import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
-import { textChoice } from '../utils/field-reading.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+import { readSpelling } from '../utils/contract-shape.js';
+/** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
+/** @import { FieldReader } from '../utils/field-reading.js' */
+/** @import { LiteralShape, ObjectShape } from '../utils/contract-shape.js' */
 
-// Each reader also says whether the stored value was lost (BA-D25).
-export const readCollinearAnchorMode = textChoice(['all', 'one_to_one', 'rbh'], 'rbh', {
-  foldHyphens: true,
-  aliases: {
-    all_hits: 'all',
-    raw: 'all',
-    top_n: 'all',
-    topn: 'all',
-    one2one: 'one_to_one',
-    one_to_ones: 'one_to_one',
-    mutual_best: 'one_to_one',
-    top1: 'one_to_one',
-    top_1: 'one_to_one',
-    reciprocal_best: 'rbh',
-    strict_rbh: 'rbh'
-  }
-});
-/** @param {unknown} value */
-export const normalizeCollinearAnchorMode = (value) => readCollinearAnchorMode(value).value;
+/**
+ * The five comparison settings whose other spellings Python reads
+ * (`read_spelling`); the Web reads them from the generated description, so it
+ * reads exactly what Python reads (OV-776).
+ * @typedef {'collinearityUnitMode' | 'collinearityAnchorMode' | 'collinearitySearchScope'
+ *   | 'collinearityColorMode' | 'orthogroupMembershipMode'} ComparisonSettingName
+ */
+const COMPARISON_SETTINGS = /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalProteinComparisonSettings).fields;
+/**
+ * Each of the five is a literal with spellings (tests/web/current-option-values.test.mjs).
+ * @param {ComparisonSettingName} name
+ */
+const settingShape = (name) => /** @type {LiteralShape} */ (COMPARISON_SETTINGS[name]);
 
-export const readOrthogroupMembershipMode = textChoice([ORTHOGROUP_INFERENCE_VERSION], ORTHOGROUP_INFERENCE_VERSION, {
-  foldHyphens: true,
-  aliases: {
-    legacy: ORTHOGROUP_INFERENCE_VERSION,
-    rbh: ORTHOGROUP_INFERENCE_VERSION,
-    rbh_only: ORTHOGROUP_INFERENCE_VERSION,
-    merge: ORTHOGROUP_INFERENCE_VERSION,
-    family: ORTHOGROUP_INFERENCE_VERSION,
-    family_merge: ORTHOGROUP_INFERENCE_VERSION,
-    local_split: ORTHOGROUP_INFERENCE_VERSION,
-    density_split: ORTHOGROUP_INFERENCE_VERSION,
-    outparalog_split: ORTHOGROUP_INFERENCE_VERSION,
-    distribution_split: ORTHOGROUP_INFERENCE_VERSION,
-    orthogroups: ORTHOGROUP_INFERENCE_VERSION,
-    anchor_core: ORTHOGROUP_INFERENCE_VERSION
-  }
-});
-/** @param {unknown} value */
-export const normalizeOrthogroupMembershipMode = (value) => readOrthogroupMembershipMode(value).value;
+/**
+ * The name of setting `name` that `value` spells, or null.
+ * @template {ComparisonSettingName} K
+ * @param {K} name
+ * @param {unknown} value
+ * @returns {CanonicalProteinComparisonSettings[K] | null}
+ */
+export const readComparisonSetting = (name, value) => (
+  // `readSpelling` returns one of the setting's values, which its typedef lists.
+  /** @type {CanonicalProteinComparisonSettings[K] | null} */ (readSpelling(value, settingShape(name)))
+);
 
-export const readCollinearSearchScope = textChoice(['adjacent', 'all'], 'adjacent', {
-  foldHyphens: true,
-  aliases: {
-    adjacent_pairs: 'adjacent',
-    adjacent_pair: 'adjacent',
-    neighbor_pairs: 'adjacent',
-    neighboring_pairs: 'adjacent',
-    all_records: 'all',
-    all_pairs: 'all',
-    all_record_pairs: 'all',
-    global: 'all'
-  }
-});
-/** @param {unknown} value */
-export const normalizeCollinearSearchScope = (value) => readCollinearSearchScope(value).value;
+/**
+ * The name of setting `name` that `value` spells; a value Python does not read
+ * is refused, naming the setting by `label`.
+ * @template {ComparisonSettingName} K
+ * @param {K} name
+ * @param {unknown} value
+ * @param {string} label
+ * @returns {CanonicalProteinComparisonSettings[K]}
+ */
+export const requireComparisonSetting = (name, value, label) => {
+  const read = readComparisonSetting(name, value);
+  if (read === null) throw new Error(`${label} must be one of: ${settingShape(name).values.join(', ')}.`);
+  return read;
+};
+
+/**
+ * Each reader also says whether the stored value was lost (BA-D25): a value
+ * Python does not read is the setting's default (its blank spelling).
+ * @template {ComparisonSettingName} K
+ * @param {K} name
+ * @returns {FieldReader<CanonicalProteinComparisonSettings[K]>}
+ */
+const comparisonSettingReader = (name) => {
+  // Each of the five has a blank spelling, so an unset value reads as a name.
+  const unset = /** @type {CanonicalProteinComparisonSettings[K]} */ (readComparisonSetting(name, null));
+  return (value) => {
+    const read = readComparisonSetting(name, value);
+    return read === null ? { value: unset, lost: true } : { value: read, lost: false };
+  };
+};
+
+export const readCollinearUnitMode = comparisonSettingReader('collinearityUnitMode');
+export const readCollinearAnchorMode = comparisonSettingReader('collinearityAnchorMode');
+export const readCollinearSearchScope = comparisonSettingReader('collinearitySearchScope');
+export const readCollinearColorMode = comparisonSettingReader('collinearityColorMode');
+export const readOrthogroupMembershipMode = comparisonSettingReader('orthogroupMembershipMode');
 
 /** @param {unknown} value */
 export const collinearGroupScopeForEvidenceScope = (value) =>
-  normalizeCollinearSearchScope(value) === 'all' ? 'global_collinear' : 'adjacent_local';
+  readCollinearSearchScope(value).value === 'all' ? 'global_collinear' : 'adjacent_local';
 
 /** @param {unknown} value */
 export const normalizeGroupMetadataScope = (value) => {

@@ -330,6 +330,19 @@ write-up of a release.
   a loss, such as every Gallery Session, opens no dialog. A Session older than
   version 27 (gbdraw 0.11.0 or older, or gbdraw.app before 0.12.0) is still
   refused, and the error now says so (OV-710, OV-712, OV-719).
+- Changed (web app): Load repairs the saved diagram's settings it cannot use
+  instead of refusing the file, and lists each repair in the **Load this
+  file?** dialog: an unknown setting, an invalid value, an unreadable list
+  entry, a part of the settings, or a reference to a file or record the
+  Session does not hold. A Session whose saved settings cannot be read at all
+  loads as settings only (the saved Results, inputs, feature list and caches
+  are left out) when it is a Session of version 42, 44, 46 or 47 saved by the
+  web app; a Session of version 42, 44 or 47 written by the CLI or the Python
+  API, and a Session of version 31 to 41, is refused. Eight search-scope
+  spellings only the web app accepted are no longer read: a generated
+  comparison that holds one is dropped with a row, and a Session whose
+  comparison settings hold one is still refused. A file that holds `top1` or
+  `legacy` now loads. See [Saved diagram settings that cannot be read](docs/REFERENCE/session-and-request-compatibility.md#saved-diagram-settings-that-cannot-be-read).
 - Fixed (web app): the shape set for a feature type added to the feature list
   was dropped when its Session was loaded again; Load now keeps it.
 - Fixed: the records of one multi-record File were named differently in

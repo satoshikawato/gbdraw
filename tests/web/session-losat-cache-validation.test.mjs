@@ -70,6 +70,7 @@ const {
   validateSessionLosatArtifacts
 } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { promoteCanonicalRenderRequestToCurrent } = await import('../../gbdraw/web/js/services/session-request.js');
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 
@@ -491,17 +492,29 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   const file = new Blob([JSON.stringify(payload)], { type: 'application/json' });
   const event = { target: { files: [file], value: 'selected' } };
 
-  const result = await importSession(event);
+  // Load promotes the held request with its context (C-OD14); the legacy
+  // alignment target names a feature no catalog holds, so it is listed.
+  const listed = [];
+  const result = await importSession(event, {
+    confirmLoadRepairs: async (dialog) => { listed.push(...dialog.items); return true; }
+  });
 
   assert.equal(result.status, 'ok');
+  assert.deepEqual(result.repairs.map(({ code, path }) => ({ code, path })), [
+    { code: 'request-part-dropped', path: 'renderRequest.layout.similarityAlignment' }
+  ]);
+  assert.equal(listed.length, 1);
   assert.equal(result.comparisonDisposition, 'DECISION_REQUIRED');
   assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'DECISION_REQUIRED');
   assert.equal(state.activeDrawing().importedComparisonIntent.action, null);
   assert.deepEqual(state.files.linearCanonicalComparisons, []);
   assert.equal(state.activeDrawing().linearComparisonPlan.edges.length, 0);
+  // The held comparisons are kept; the promotion moves only the alignment target.
+  const { alignOrthogroupFeature: _target, ...promotedSettings } = generatedProteinComparison.settings;
+  assert.equal(getCommittedCanonicalSession().renderRequest.schema, 9);
   assert.deepEqual(
     getCommittedCanonicalSession().renderRequest.comparisons,
-    renderRequest.comparisons
+    [...renderRequest.comparisons.slice(0, 3), { ...generatedProteinComparison, settings: promotedSettings }]
   );
   assert.equal(state.activeDrawing().losatProgram.value, 'blastn');
   assert.equal(state.losatExecution.executionMode, 'threaded');
@@ -513,7 +526,8 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   assert.equal(state.selectedOrthogroupAlignmentFeature.value, '');
 
   state.files.linearCanonicalComparisons = [];
-  adoptCanonicalRenderArtifacts({ renderRequest, resources });
+  // Generate adopts what Load committed: the request of schema 9.
+  adoptCanonicalRenderArtifacts({ renderRequest: getCommittedCanonicalSession().renderRequest, resources });
   const collinearityReencodesBefore = resourceReencodesByName.get('collinearity.json') || 0;
   assert.deepEqual(
     state.files.linearCanonicalComparisons.map((comparison) => comparison.kind),
@@ -542,7 +556,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   assert.equal(serialized.linearCanonicalComparisons[2].valueKind, 'blocks');
   assert.deepEqual(
     serialized.linearCanonicalComparisons[3],
-    generatedProteinComparison
+    { ...generatedProteinComparison, settings: promotedSettings }
   );
 });
 
@@ -942,7 +956,7 @@ ORIGIN
   );
 
   adoptCanonicalRenderArtifacts({
-    renderRequest,
+    renderRequest: promoteCanonicalRenderRequestToCurrent(renderRequest),
     resources,
     webFiles: {
       conservationBlastSource: 'losat-cache',
