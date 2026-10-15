@@ -93,17 +93,17 @@ const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ ([
 
 /**
  * The content parts of a Session the reader may drop or replace whole
- * (`readSessionDocument`), and how the dialog names each.
- * @type {Readonly<Record<string, string>>}
+ * (`readSessionDocument`), how the dialog names each, and the verb its name takes.
+ * @type {Readonly<Record<string, readonly [name: string, verb: 'is' | 'are']>>}
  */
 const SESSION_PART_NAMES = Object.freeze({
-  results: 'the saved Results',
-  editorState: 'the feature list and the Legend and stroke edits of the saved diagram',
-  resources: 'the stored input files',
-  otherModeResult: 'the saved diagram of the other mode',
-  modes: 'the settings of both drawings',
-  'modes.circular': 'the settings of the Circular drawing',
-  'modes.linear': 'the settings of the Linear drawing'
+  results: ['the saved Results', 'are'],
+  editorState: ['the feature list and the Legend and stroke edits of the saved diagram', 'are'],
+  resources: ['the stored input files', 'are'],
+  otherModeResult: ['the saved diagram of the other mode', 'is'],
+  modes: ['the settings of both drawings', 'are'],
+  'modes.circular': ['the settings of the Circular drawing', 'are'],
+  'modes.linear': ['the settings of the Linear drawing', 'are']
 });
 /** The paths of `SESSION_PART_NAMES`. @type {readonly string[]} */
 export const SESSION_PART_PATHS = Object.freeze(Object.keys(SESSION_PART_NAMES));
@@ -171,8 +171,10 @@ const WORDING = {
     `Saved diagram: the settings of the saved diagram (${path}) could not be read. The file loads as settings only;`
     + ' the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.')),
   // The Session document (services/session-authority.js `readSessionDocument`).
-  'session-part-dropped': (repairs) => repairs.map(({ path }) => (
-    `Session file: ${SESSION_PART_NAMES[path] ?? path} (${path}) could not be read and ${path === 'results' ? 'are' : 'is'} left out.`)),
+  'session-part-dropped': (repairs) => repairs.map(({ path }) => {
+    const [name, verb] = SESSION_PART_NAMES[path] ?? [path, 'is'];
+    return `Session file: ${name} (${path}) could not be read and ${verb} left out.`;
+  }),
   'session-field-dropped': (repairs) => [
     `Session file: ${cappedList('the field', 'the fields', repairs.map(({ path, label }) => (label === undefined ? path : `${path} (${label})`)))}`
     + ` could not be read and ${wasWere(repairs.length)} left out.`

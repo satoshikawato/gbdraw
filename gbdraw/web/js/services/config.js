@@ -1019,6 +1019,8 @@ export const normalizeEditorStateData = (editorState = {}, {
   const noteNoMap = (map, at) => {
     if (!isPlainObject(map) && !isUnsetValue(map)) losses?.push({ at, stored: map, used: {} });
   };
+  // A Legend of another kind loses the Result's original Legend order and colors (R2-M5).
+  noteNoMap(source.legend, 'legend');
   /**
    * @param {unknown} map
    * @param {string} at

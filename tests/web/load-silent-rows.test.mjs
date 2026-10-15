@@ -296,3 +296,54 @@ test('A configuration file: a Legend position outside its mode is listed (receip
   assert.deepEqual(await load(config), ['legend-position-defaulted form.legend']);
   await saved();
 });
+
+// E4d (review round 1, E-OD29). R1-B1: Circular comparison series read the
+// sequence lists by place (`sourceIndex`), so a dropped binding keeps its place
+// empty, as a Depth list does (E-OD28), and no later file changes series.
+test('R1-B1: a dropped comparison sequence binding keeps its place, so no later file changes series', async () => {
+  const session = fixture('synthetic_conservation.gbdraw-session.json.gz');
+  session.webFiles.bindings.c_conservation_fastas[1].resourceId = 'zz';
+  session.webFiles.bindings.c_conservation_sequence_sources[1].resourceId = 'zz';
+  assert.deepEqual(await load(session), [
+    'file-entry-dropped webFiles.bindings.c_conservation_fastas[1]',
+    'file-entry-dropped webFiles.bindings.c_conservation_sequence_sources[1]'
+  ]);
+  const names = (files) => files.map((file) => file?.name ?? null);
+  assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+  assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+});
+
+// R2-B1: a null request of a full Session reads as an absent one (E-OD29):
+// the settings-only row names everything that is left out.
+test('R2-B1: a full Session 44 or 47 whose request is null loads as settings only with the request row', async () => {
+  for (const base of ['v44', 'g47L']) {
+    const absent = BASES[base]();
+    delete absent.renderRequest;
+    const expected = await load(absent);
+    assert.deepEqual(expected, ['request-dropped renderRequest'], base);
+    assert.deepEqual(await load(set(BASES[base](), 'renderRequest', null)), expected, base);
+    assert.equal(state.results.value.length, 0);
+  }
+  // A settings-only file that holds Results is read the same way.
+  const results = BASES.g47L().results;
+  assert.deepEqual(await load({ ...BASES.so46(), results }), ['request-dropped renderRequest']);
+  assert.deepEqual(await load(BASES.so46()), []);
+});
+
+// R2-M5: an editor Legend of another kind loses the Result's original Legend
+// order and colors; Load keeps today's outcome (E-OD08) and lists it.
+test('R2-M5: a top-level editorState.legend that is no object is listed', async () => {
+  const session = set(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'), 'editorState.legend', 'x');
+  assert.deepEqual(await load(session), ['setting-replaced editorState.legend']);
+  assert.equal((state.originalLegendOrder?.value ?? []).length, 0);
+});
+
+// R2-m2: the verb agrees with each part's name (G1: the wording owner only).
+test('R2-m2: a dropped Session part is named with the verb its name takes', () => {
+  const text = JSON.stringify(describeLoadRepairs(['resources', 'editorState', 'modes', 'otherModeResult']
+    .map((path) => ({ code: 'session-part-dropped', path, effect: 'dropped' }))));
+  for (const plural of ['the stored input files (resources)', 'the saved diagram (editorState)', 'both drawings (modes)']) {
+    assert.match(text, new RegExp(`${plural.replace(/[()]/g, '\\$&')} could not be read and are left out`), plural);
+  }
+  assert.match(text, /other mode \(otherModeResult\) could not be read and is left out/);
+});

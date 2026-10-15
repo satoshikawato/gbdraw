@@ -2,7 +2,9 @@
 import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
-import { readSessionResources, validateWebFileBindings, webFileBindingFaults, webFileBindingPath } from './session-resource-backing.js';
+import {
+  POSITIONAL_BINDING_LISTS, readSessionResources, validateWebFileBindings, webFileBindingFaults, webFileBindingPath
+} from './session-resource-backing.js';
 import { SESSION_INPUT_TYPES, alignmentResetReceiptShapeHolds, requireActiveConfigContainers } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
@@ -407,9 +409,6 @@ const readWebOnlyFields = (document, repairs) => {
   return /** @type {SessionChecked} */ (next); // only fields the description leaves open were dropped
 };
 
-/** Depth file lists are positional (a list index is a track slot): a dropped binding leaves its place empty. */
-const POSITIONAL_BINDING_SLOTS = new Set(['c_depth', 'depth']);
-
 /**
  * The input files of a Session as the app reads them (A8, A6b): a resource
  * whose descriptor cannot be read is dropped, with a row when a binding or
@@ -453,7 +452,7 @@ const readSessionInputs = (document, repairs) => {
     // `webFileBindingFaults` reached the binding through these keys: each one holds an object or a list.
     /** @type {unknown} */
     const parent = keys.slice(0, -1).reduce((container, key) => /** @type {Record<string | number, unknown>} */ (container)[key], /** @type {unknown} */ (bindings));
-    if (Array.isArray(parent) && !field && !POSITIONAL_BINDING_SLOTS.has(String(keys.findLast((key) => typeof key === 'string')))) {
+    if (Array.isArray(parent) && !field && !POSITIONAL_BINDING_LISTS.has(String(keys.findLast((key) => typeof key === 'string')))) {
       removed.set(parent, (removed.get(parent) ?? new Set()).add(Number(last)));
     } else if (field) delete /** @type {Record<string | number, unknown>} */ (parent)[last];
     else /** @type {Record<string | number, unknown>} */ (parent)[last] = null;
@@ -484,7 +483,29 @@ export const readSessionDocument = (value) => {
   const repairs = read.rows.flatMap((row) => bandRepair(row, envelope, band.root) ?? []);
   const repaired = read.rows.some(({ path }) => path === 'results') ? withoutResultSetMembers(read.value) : read.value;
   const checked = /** @type {SessionChecked} */ (repaired); // the band's description holds, as repaired
-  return { value: readSettingsOnlyParts(readSessionInputs(readWebOnlyFields(checked, repairs), repairs), repairs), repairs };
+  return {
+    value: readSettingsOnlyParts(readSessionInputs(readWebOnlyFields(withNullRequestAsMissing(checked), repairs), repairs), repairs),
+    repairs
+  };
+};
+
+/**
+ * R2-B1 (E-OD29): a null request marks a settings-only Session; a file whose
+ * request is null but that holds saved Results or a feature list, which only
+ * a Session with a request holds, is a full Session whose request is null.
+ * Its request reads as a missing one, which has one reading: the request
+ * reader's `request-dropped` row and the settings-only Session of that row
+ * (K22), R4 when nothing is left. A new object.
+ * @param {SessionChecked} document
+ * @returns {SessionChecked}
+ */
+const withNullRequestAsMissing = (document) => {
+  if (!isSettingsOnlySessionDocument(document)) return document;
+  const editorState = /** @type {UnvalidatedFields<'featureCatalog'>} */ (document.editorState);
+  const results = /** @type {unknown} */ (document.results);
+  if (!(Array.isArray(results) && results.length > 0) && !isPlainObject(editorState?.featureCatalog)) return document;
+  const { renderRequest: _null, ...missing } = document;
+  return /** @type {SessionChecked} */ (missing); // the request is optional in the band of a settings-only form
 };
 
 /**
@@ -711,7 +732,9 @@ export const validateCurrentComparisonAuthority = (sessionData, { load = false }
     if (boundIds.has(id)) {
       throw new Error(`Current comparison file binding is duplicated: ${id}.`);
     }
-    if (!isPlainObject(binding.file)) {
+    // Load drops a file binding it cannot read and leaves the edge's file
+    // empty (`readSessionInputs`): the edge then has no file, as before one is chosen.
+    if (!isPlainObject(binding.file) && !(load && binding.file === null)) {
       throw new Error('Each current comparison file binding requires a file resource binding.');
     }
     boundIds.add(id);
@@ -846,8 +869,12 @@ const BIOLOGICAL_BINDINGS = Object.freeze(['c_gb', 'c_gff', 'c_fasta', 'c_conser
  * @param {SessionEnvelope} data
  */
 const settingsOnlyFaults = (data) => {
+  // Read as dev's Save read them (E-OD02): a value of another kind with a
+  // length or keys counts as held, as Python's `validate_session` refuses it.
+  /** @param {unknown} value */
+  const holdsKeys = (value) => Object.keys(value || {}).length > 0;
   /** @param {unknown} cache */
-  const holdsCacheEntries = (cache) => isPlainObject(cache) && Array.isArray(cache.entries) && cache.entries.length > 0;
+  const holdsCacheEntries = (cache) => (/** @type {{ entries?: { length?: unknown } } | null | undefined} */ (cache)?.entries || []).length;
   const bindings = /** @type {UnvalidatedFields<'bindings'>} */ (data.webFiles)?.bindings;
   const inventory = isPlainObject(data.resources) && isPlainObject(bindings) && Array.isArray(bindings.linearSeqs)
     && ['c_gb', 'c_gff', 'c_fasta'].every(key => Object.hasOwn(bindings, key));
@@ -871,9 +898,9 @@ const settingsOnlyFaults = (data) => {
     biological: rows && hasBiologicalSessionInputs(/** @type {Record<string, unknown>} */ (bindings)),
     results: /** @type {UnvalidatedFields<'length'>} */ (data.results)?.length !== 0,
     artifacts: /** @type {UnvalidatedFields<'featureCatalog'>} */ (data.editorState)?.featureCatalog !== null
-      || data.cliInvocation != null || (isPlainObject(data.runMetadata) && Object.keys(data.runMetadata).length > 0)
-      || holdsCacheEntries(data.losatCache) || holdsCacheEntries(data.losatDerivedCache)
-      || (isPlainObject(data.legacyArtifacts) && Object.keys(data.legacyArtifacts).length > 0)
+      || data.cliInvocation != null || holdsKeys(data.runMetadata)
+      || Boolean(holdsCacheEntries(data.losatCache) || holdsCacheEntries(data.losatDerivedCache))
+      || holdsKeys(data.legacyArtifacts)
       || ['proteinSets', 'recordAnalyses', 'recordInstances']
         .some(key => Object.keys(/** @type {UnvalidatedFields<string>} */ (data.proteinIdentityManifest)?.[key] || {}).length > 0)
       || /** @type {UnvalidatedFields<'c_conservation_blasts_source'>} */ (bindings)?.c_conservation_blasts_source === 'losat-cache',

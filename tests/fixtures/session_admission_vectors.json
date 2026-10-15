@@ -4838,12 +4838,12 @@
      ]
     }
    ],
-   "finding": "A15: Results in a settings-only Session",
+   "finding": "A15: Results in a settings-only Session; a file whose request is null and that holds Results reads as one whose request is missing (E-OD29)",
    "python": "refuse",
    "pythonMessage": "Session version 40 Results require editorState.featureCatalog.",
    "web": "repaired",
    "webRepairs": [
-    "session-part-dropped@results"
+    "request-dropped@renderRequest"
    ]
   },
   {
@@ -4856,12 +4856,12 @@
      "value": null
     }
    ],
-   "finding": "OV-860: a null request makes a Session 44 a settings-only one; its Results are dropped and its Web input inventory, which it never held, is the empty one (A15, E-OD06)",
+   "finding": "OV-860: a null request of a Session 44 that holds Results reads as a missing one: the file loads as settings only with the request row (E-OD29)",
    "python": "refuse",
    "pythonMessage": "Settings-only Session requires an explicit Web input inventory.",
    "web": "repaired",
    "webRepairs": [
-    "session-part-dropped@results"
+    "request-dropped@renderRequest"
    ]
   },
   {
@@ -4874,12 +4874,12 @@
      "value": null
     }
    ],
-   "finding": "OV-860: a null request makes a Session 44 a settings-only one; its Results are dropped and its Web input inventory, which it never held, is the empty one (A15, E-OD06)",
+   "finding": "OV-860: a null request of a Session 44 that holds Results reads as a missing one: the file loads as settings only with the request row (E-OD29)",
    "python": "refuse",
    "pythonMessage": "Settings-only Session requires an explicit Web input inventory.",
    "web": "repaired",
    "webRepairs": [
-    "session-part-dropped@results"
+    "request-dropped@renderRequest"
    ]
   },
   {

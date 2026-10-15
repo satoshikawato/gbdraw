@@ -265,12 +265,12 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   // the mode slice fills is dropped with no row (E-OD03), so that file loads as
   // the same Session.
   const unbound = slot => `Input files: 1 entry of webFiles.bindings.${slot} could not be read and was dropped.`;
+  const requestDropped = 'Saved diagram: the settings of the saved diagram (renderRequest) could not be read.'
+    + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
   const cases = [
-    ['null-request-with-result', d => { d.renderRequest = null; }, ['Session file: the saved Results (results) could not be read and are left out.',
-      'Session file: the field webFiles.bindings.c_gb could not be read and was left out.']],
-    ['resource', d => { d.resources = {}; }, ['Saved diagram: the settings of the saved diagram (renderRequest) could not be read.'
-      + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.',
-    unbound('c_gb'), unbound('d_color')]],
+    // A null request of a file that holds Results reads as a missing one (E-OD29).
+    ['null-request-with-result', d => { d.renderRequest = null; }, [requestDropped]],
+    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]],
     ['config', d => { d.modes.circular.config.form = []; }, ['Settings: the value "[]" (modes.circular.config.form) cannot be used; its default is used.']],
     ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
     ['version', d => { d.version = 999; }, { field: 'schema' }],

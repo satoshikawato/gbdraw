@@ -8,7 +8,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import {
-  readSessionAuthorityParts, readSessionDocument, restoresNothing, SESSION_TOP_LEVEL_AUTHORITY, validateSessionAuthorityInventory
+  readSessionAuthorityParts, readSessionDocument, restoresNothing, SESSION_TOP_LEVEL_AUTHORITY, validateCurrentComparisonAuthority,
+  validateSessionAuthorityInventory
 } from '../../gbdraw/web/js/services/session-authority.js';
 import { validateWebFileBindings } from '../../gbdraw/web/js/services/session-resource-backing.js';
 
@@ -270,4 +271,33 @@ test('a Result set Load\'s composition transform could not compose is read again
   assert.deepEqual(dropped.rows, ['session-part-dropped@otherModeResult']);
   assert.equal(Object.hasOwn(dropped.value, 'otherModeResult'), false);
   assert.equal(dropped.value.results.length, circular.results.length);
+});
+
+// E4d (review round 1, E-OD29). R1-M1: a comparison file binding the reader
+// dropped leaves the edge with no file, and the load-mode check accepts it.
+test('R1-M1: a comparison binding dropped at Load is not refused by the comparison check afterwards', () => {
+  const session = fixture('q-frame-main-web-upload.v42.gbdraw-session.json.gz');
+  session.webFiles.bindings.linearComparisons[0].file.resourceId = 'zz';
+  const read = readSessionDocument(session);
+  assert.deepEqual(read.repairs.map(({ code, path }) => `${code}@${path}`),
+    ['file-entry-dropped@webFiles.bindings.linearComparisons[0].file']);
+  assert.equal(read.value.webFiles.bindings.linearComparisons[0].file, null);
+  assert.doesNotThrow(() => validateCurrentComparisonAuthority(read.value, { load: true }));
+  // Save still requires each binding's file.
+  assert.throws(() => validateCurrentComparisonAuthority(read.value), /requires a file resource binding/);
+});
+
+// R1-M2: Save refuses the committed artifacts of a settings-only Session as
+// dev did (E-OD02); Load drops them with no row (E-OD05).
+test('R1-M2: Save refuses a settings-only Session holding run metadata, older artifacts or cache entries of another kind', () => {
+  const base = fixture('settings-only.v42.json.gz');
+  assert.doesNotThrow(() => validateSessionAuthorityInventory(structuredClone(base), 42));
+  for (const [field, value] of [['runMetadata', 'abc'], ['legacyArtifacts', [1]], ['losatCache', { entries: 'abc' }]]) {
+    const session = { ...structuredClone(base), [field]: value };
+    assert.throws(() => validateSessionAuthorityInventory(session, 42), /committed render artifacts/, field);
+    const read = readSessionDocument(session);
+    // A cache entry is dropped with a code the dialog does not list (E-OD05).
+    assert.ok(read.repairs.every(({ code }) => code === 'cache-entry-dropped'), field);
+    assert.notDeepEqual(read.value[field], value, field);
+  }
 });
