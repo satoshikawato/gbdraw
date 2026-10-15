@@ -289,7 +289,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // The Session document's types are generated from gbdraw/session_contract.py:
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
-/** @import { GbdrawSession, SessionChecked, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
+/** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
@@ -988,7 +988,7 @@ const legendEditRepairs = ({ colors, strokes }, path) => [
 ];
 
 /**
- * @param {Record<string, any>} [editorState]
+ * @param {unknown} [editorState] A stored editor state; one that is no object is read as none.
  * @param {{ featureCatalog?: unknown, repairs?: LoadRepair[] | null, path?: string, sessionVersion?: number }} [options]
  *   `repairs` collects what Load cannot restore of the editor state stored at `path`; `sessionVersion`: the
  *   version of the Session it was read from.
@@ -997,10 +997,12 @@ export const normalizeEditorStateData = (editorState = {}, {
   featureCatalog = undefined, repairs = null, path = 'editorState', sessionVersion = SESSION_VERSION
 } = {}) => {
   const defaults = defaultEditorStateData();
-  const source = isPlainObject(editorState) ? editorState : {};
-  const legend = isPlainObject(source.legend) ? source.legend : {};
-  const featureStrokes = isPlainObject(source.featureStrokes) ? source.featureStrokes : {};
-  const originalSvgStroke = isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {};
+  // The casts: `isPlainObject` in the same expression.
+  const source = /** @type {Record<string, unknown>} */ (isPlainObject(editorState) ? editorState : {});
+  const legend = /** @type {Record<string, unknown>} */ (isPlainObject(source.legend) ? source.legend : {});
+  const featureStrokes = /** @type {Record<string, unknown>} */ (isPlainObject(source.featureStrokes) ? source.featureStrokes : {});
+  const originalSvgStroke = /** @type {Record<string, unknown>} */ (
+    isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {});
   // A Session 46 slice lists the renamed rows its Result does not draw
   // (OV-120) after the shown rows, marked `dormant`.
   const legendLoad = { repairs, path: `${path}.legend`, sessionVersion };
@@ -1371,7 +1373,10 @@ const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'sc
 /**
  * A Session 27-39 (`readSessionDocument` read its band: a Session 31-39
  * holds a `resources` object, and preflight its request object).
+ * @template {SessionChecked27 | SessionChecked31 | SessionChecked39} T
+ * @param {T} data
  * @param {LoadRepair[]} repairs
+ * @returns {T}
  */
 const normalizeSessionData = (data, repairs) => {
   const version = data.version;
@@ -2228,6 +2233,7 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
   let otherModeCatalog = null;
   /** @type {ReturnType<typeof normalizeEditorStateData> | null} */
   let normalizedEditorState = null;
+  /** @type {SessionChecked} */
   let normalizedData;
 
   if (currentSession) {
@@ -2252,9 +2258,8 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
     recordSessionLifecycleEvent('resource-table-adoption-end');
     // A CLI-written Session 40-41 `config` is no Web draft (OV-269), as in
     // migrate_session_flat_draft.
-    normalizedData = withCurrentDraftFieldNames(holdsCliWriterConfig(catalogData)
-      ? Object.fromEntries(Object.entries(catalogData).filter(([key]) => key !== 'config'))
-      : catalogData);
+    const { config: _cliConfig, ...withoutCliConfig } = catalogData;
+    normalizedData = withCurrentDraftFieldNames(holdsCliWriterConfig(catalogData) ? withoutCliConfig : catalogData);
   } else {
     validateSessionAuthorityInventory(rawData, sourceSessionVersion, requestRead.storedSchemas, { load: true });
     normalizedData = normalizeSessionData(rawData, repairs);
@@ -2274,6 +2279,8 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
   const data = adoptPromotedPreservedSettings(currentSession
     ? cacheData
     : migrateSessionDataToCurrent(cacheData, sourceSessionVersion), repairs);
+  const storedRequest = /** @type {UnvalidatedFields<'mode'>
+    & UnvalidatedFields<'diagramOptions', UnvalidatedFields<'config' | 'configOverrides'>>} */ (data.renderRequest);
   // A Gallery migration rebuilt its request, which is classified as rebuilt.
   const comparisonClassification = promotedData === normalizedData && requestRead.comparisonClassification
     ? requestRead.comparisonClassification
@@ -2282,21 +2289,23 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
         resources: data.resources
       }));
   const projectionRenderRequest = (
-    data.renderRequest?.mode === 'linear'
+    storedRequest?.mode === 'linear'
     && comparisonClassification.disposition
       !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
   )
-    ? { ...data.renderRequest, comparisons: [] }
-    : data.renderRequest;
+    ? { ...storedRequest, comparisons: [] }
+    : storedRequest;
   let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
   if (sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION && isPlainObject(currentStoredConfig)
     && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'recordDisplayDrafts')) {
+    // The cast: `isPlainObject(currentStoredConfig)` above.
+    const storedConfig = /** @type {Record<string, unknown>} */ (currentStoredConfig);
     currentStoredConfig = {
-      ...currentStoredConfig,
+      ...storedConfig,
       recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
-        currentStoredConfig.recordDisplayDrafts
+        storedConfig.recordDisplayDrafts
       )
     };
   }
@@ -2304,9 +2313,11 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
   // its mode (Main rows both), and the Session 46 split moves it there (R2).
   if (sourceSessionVersion < MODE_SCOPED_SESSION_VERSION && isPlainObject(currentStoredConfig)
     && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'featurePlacementOverrides')) {
+    // The cast: `isPlainObject(currentStoredConfig)` above.
+    const storedConfig = /** @type {Record<string, unknown>} */ (currentStoredConfig);
     currentStoredConfig = {
-      ...currentStoredConfig,
-      featurePlacementOverrides: migrateSessionFeaturePlacements(currentStoredConfig.featurePlacementOverrides)
+      ...storedConfig,
+      featurePlacementOverrides: migrateSessionFeaturePlacements(storedConfig.featurePlacementOverrides)
     };
   }
   // Session 46 keeps each mode's draft in its slice (PD-OI-086): the committed
@@ -2315,7 +2326,8 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
   // Python writer's.
   const modeScopedSession = sourceSessionVersion >= MODE_SCOPED_SESSION_VERSION;
   const committedSliceConfig = modeScopedSession
-    ? data.modes?.[data.renderRequest?.mode === 'linear' ? 'linear' : 'circular']?.config
+    ? /** @type {UnvalidatedFields<'circular' | 'linear', UnvalidatedFields<'config'>>} */ (data.modes)
+      ?.[storedRequest?.mode === 'linear' ? 'linear' : 'circular']?.config
     : undefined;
   const hasStoredDraft = modeScopedSession
     ? isPlainObject(committedSliceConfig)
@@ -2342,7 +2354,7 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
         // derives its draft from the request (D-02); the comparison plan of a
         // Python re-save is stated the same way as the CLI's (OV-296).
         initializeCliInputs: !hasStoredDraft,
-        fileBindings: data.cliInvocation?.fileBindings,
+        fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (data.cliInvocation)?.fileBindings,
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
           : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
@@ -2367,7 +2379,7 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
           ),
           rules: applySpecificRuleProvenance(
             canonicalProjection.config.rules,
-            runtimeStoredConfig?.rules
+            /** @type {UnvalidatedFields<'rules'>} */ (runtimeStoredConfig)?.rules
           )
         }
     : data.config;
@@ -2375,17 +2387,19 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
     restoredConfig = withCurrentLinearLabelVisibility(restoredConfig);
   }
   if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION && restoredConfig) {
-    const sourceStoredConfig = isPlainObject(normalizedData.config)
+    // The cast: `isPlainObject(normalizedData.config)` in the same expression.
+    const sourceStoredConfig = /** @type {Record<string, unknown>} */ (isPlainObject(normalizedData.config)
       ? normalizedData.config
-      : {};
+      : {});
+    const storedUi = /** @type {UnvalidatedFields<'blastSource'>} */ (normalizedData.ui);
     const forceWebDraft = isPlainObject(sourceStoredConfig.linearRecordLayout)
       || !isPlainObject(sourceStoredConfig.cliOptions);
     const comparisonMigrationConfig = cloneJsonData(restoredConfig);
     if (
       !Object.prototype.hasOwnProperty.call(comparisonMigrationConfig, 'blastSource')
-      && normalizedData.ui?.blastSource
+      && storedUi?.blastSource
     ) {
-      comparisonMigrationConfig.blastSource = normalizedData.ui.blastSource;
+      comparisonMigrationConfig.blastSource = storedUi.blastSource;
     }
     const migratedComparisonDraft = migrateLegacyLinearComparisonDraft({
       config: comparisonMigrationConfig,
@@ -2421,14 +2435,16 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
       // As for Sessions 40-44: the stored draft owns the active controls and the
       // projection fills only what it omits.
       const restoredDomains = CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS
-        .filter((domain) => isPlainObject(runtimeStoredConfig) && Object.hasOwn(runtimeStoredConfig, domain));
+        // The cast: `isPlainObject(runtimeStoredConfig)` in the same expression.
+        .filter((domain) => isPlainObject(runtimeStoredConfig)
+          && Object.hasOwn(/** @type {Record<string, unknown>} */ (runtimeStoredConfig), domain));
       recordStructuralMetric('currentWriterActiveConfigRestoreCount', 1, { domains: restoredDomains });
       recordStructuralMetric('activeConfigCanonicalOverwriteCount', 0, { domains: restoredDomains });
     }
     recordSessionLifecycleEvent('current-draft-validation-end');
   }
   if (!canonicalProjection && restoredConfig) {
-    hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation);
+    hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, /** @type {UnvalidatedFields<'args'>} */ (data.cliInvocation));
   }
   // Saved omission means historical OFF, independently of fresh/reset defaults.
   restoredConfig = {
@@ -2445,7 +2461,8 @@ const preflightSessionImport = async (sessionData, repairs, uncomposedSets) => {
     ? hasCurrentStoredUnmanagedOverrides
       ? {
           mode: canonicalProjection.mode,
-          configOverrides: runtimeStoredConfig.unmanagedConfigOverrides,
+          // The cast: `hasCurrentStoredUnmanagedOverrides` tested `isPlainObject(runtimeStoredConfig)`.
+          configOverrides: /** @type {Record<string, unknown>} */ (runtimeStoredConfig).unmanagedConfigOverrides,
           source: /** @type {const} */ ('draft')
         }
       : {
@@ -5743,16 +5760,19 @@ const importSessionDocument = async (e, options = {}) => {
     const hasFlatDraft = !modeScopedSession && isPlainObject(data.config);
     /** @type {Record<'circular' | 'linear', Record<string, any>>} */
     let modeSlices = { circular: {}, linear: {} };
+    // The cast: `isPlainObject(data.ui)` in the same expression.
     /** @type {Record<string, any>} */
-    let appUi = modeScopedSession && isPlainObject(data.ui) ? data.ui : {};
+    let appUi = modeScopedSession && isPlainObject(data.ui) ? /** @type {Record<string, unknown>} */ (data.ui) : {};
     let sessionCliOptions = modeScopedSession ? data.cliOptions : undefined;
     // The stored draft a Session 27-44's drawings both read.
     /** @type {unknown} */
     let flatDraft = null;
     if (modeScopedSession) {
+      const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (data.modes);
+      // The casts: `isPlainObject` in the same expression.
       modeSlices = {
-        circular: isPlainObject(data.modes?.circular) ? data.modes.circular : {},
-        linear: isPlainObject(data.modes?.linear) ? data.modes.linear : {}
+        circular: isPlainObject(modes?.circular) ? /** @type {Record<string, unknown>} */ (modes?.circular) : {},
+        linear: isPlainObject(modes?.linear) ? /** @type {Record<string, unknown>} */ (modes?.linear) : {}
       };
     } else {
       const flatConfig = hasFlatDraft
@@ -5763,6 +5783,7 @@ const importSessionDocument = async (e, options = {}) => {
       // The split writes what the Session saved and its migrations wrote
       // (plan 4.2), not the empty defaults Load reads in their place.
       const savedDraft = (/** @type {unknown} */ value) => isPlainObject(value);
+      const storedEditorEdits = /** @type {UnvalidatedFields<'legend' | 'featureStrokes'>} */ (data.editorState);
       /**
        * @param {Record<string, any> | null | undefined} value
        * @param {unknown} saved
@@ -5787,8 +5808,8 @@ const importSessionDocument = async (e, options = {}) => {
           'selectedFeatureRecordIdx', ...(validatedSessionCatalog ? [] : ['featureOverrides'])
         ]) } : {}),
         editorState: {
-          ...(savedDraft(data.editorState?.legend) ? { legend } : {}),
-          ...(savedDraft(data.editorState?.featureStrokes)
+          ...(savedDraft(storedEditorEdits?.legend) ? { legend } : {}),
+          ...(savedDraft(storedEditorEdits?.featureStrokes)
             ? { featureStrokes: restoredEditorState?.featureStrokes || { overrides: {} } } : {})
         },
         // A saved layout goes to its slots (registry `layout`); legacy layout
@@ -5946,11 +5967,13 @@ const importSessionDocument = async (e, options = {}) => {
           selectedOrthogroupAlignmentFeature: features.selectedOrthogroupAlignmentFeature,
           orthogroupNameOverrides:
             features.orthogroupNameOverrides ||
-            data.config?.webEdits?.orthogroupNameOverrides ||
+            /** @type {UnvalidatedFields<'webEdits', UnvalidatedFields<'orthogroupNameOverrides'>>} */ (data.config)
+              ?.webEdits?.orthogroupNameOverrides ||
             {},
           orthogroupDescriptionOverrides:
             features.orthogroupDescriptionOverrides ||
-            data.config?.webEdits?.orthogroupDescriptionOverrides ||
+            /** @type {UnvalidatedFields<'webEdits', UnvalidatedFields<'orthogroupDescriptionOverrides'>>} */ (data.config)
+              ?.webEdits?.orthogroupDescriptionOverrides ||
             {}
       };
     {
@@ -6089,7 +6112,9 @@ const importSessionDocument = async (e, options = {}) => {
     // projection may name a thread count), the rich popup, CLI provenance.
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
-    preservedCliOptions = isPlainObject(sessionCliOptions) ? cloneJsonData(sessionCliOptions) : null;
+    // The cast: `isPlainObject(sessionCliOptions)` in the same expression.
+    preservedCliOptions = isPlainObject(sessionCliOptions)
+      ? cloneJsonData(/** @type {Record<string, unknown>} */ (sessionCliOptions)) : null;
     state.mode.value = displayMode;
     const shownDrawing = state.drawings[displayMode];
     const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;
@@ -6160,14 +6185,15 @@ const importSessionDocument = async (e, options = {}) => {
         adoptCurrent: currentSchemaSession, valid: loadedProteinManifestValid
       });
     } else {
+      const legacyArtifacts = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (data.legacyArtifacts);
       applyLosatCache(
         state.drawings.linear,
-        data.losatCache?.entries,
-        data.legacyArtifacts?.proteinRawCandidates
+        /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries,
+        legacyArtifacts?.proteinRawCandidates
       );
       applyLosatDerivedCache(
-        data.losatDerivedCache?.entries,
-        data.legacyArtifacts?.proteinDerivedEvidence
+        /** @type {UnvalidatedFields<'entries'>} */ (data.losatDerivedCache)?.entries,
+        legacyArtifacts?.proteinDerivedEvidence
       );
       applyProteinIdentityManifest(loadedProteinManifest, { valid: loadedProteinManifestValid });
     }

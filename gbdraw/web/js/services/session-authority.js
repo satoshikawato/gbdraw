@@ -770,10 +770,11 @@ export const hasBiologicalSessionInputs = (files = {}) => (
 );
 
 /**
- * @param {SessionEnvelope | null | undefined} data
+ * @param {SessionInput | null | undefined} data
  * @returns {boolean}
  */
-export const isSettingsOnlySessionDocument = data => data != null && [42, 44, MODE_SCOPED_SESSION_VERSION, SESSION_VERSION].includes(data.version)
+export const isSettingsOnlySessionDocument = data => data != null && typeof data.version === 'number'
+  && [42, 44, MODE_SCOPED_SESSION_VERSION, SESSION_VERSION].includes(data.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 /**
