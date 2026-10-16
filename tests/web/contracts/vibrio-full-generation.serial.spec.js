@@ -1341,9 +1341,13 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     workerBase64ResourceJsonStringifyCount: 0,
     resourceMaterializationCount: runs[0].referencedResourceCount + runs[1].stagedResourceCount,
     resourceReencodeCount: 0,
-    resultBinaryDecodeCount: 2,
+    // The first Generate after Load sends every children text in one buffer;
+    // the second draws the same document, so the page holds every revision
+    // and nothing is decoded (step 3b S).
+    resultBinaryDecodeCount: 1,
     resultMetadataBinaryDecodeCount: 2
   });
+  expect(secondStructural.resultBinaryDecodeCount).toBe(0);
   expect(structural.resultBinaryDecodedBytes).toBeGreaterThan(0);
   expect(structural.resultMetadataBinaryDecodedBytes).toBeGreaterThan(0);
   expect(resultTransportEvents).toHaveLength(2);

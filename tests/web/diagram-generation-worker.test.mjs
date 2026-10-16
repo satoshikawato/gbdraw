@@ -12,6 +12,7 @@ const {
   resolveGenerationCleanupOutcome,
   serializeError
 } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
+const { readHeldSegments } = await import('../../gbdraw/web/js/services/diagram-worker-protocol.js');
 
 const preparedIdentities = buildPreparedResourceIdentityMap([
   {
@@ -42,87 +43,152 @@ assert.throws(
   /duplicate/
 );
 
-const svgBytes = new TextEncoder().encode('<svg />');
-const metadataBytes = new TextEncoder().encode('{"legendRows":[]}');
+const encoder = new TextEncoder();
+const sha256 = async (bytes) => Array.from(
+  new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes)),
+  (value) => value.toString(16).padStart(2, '0')
+).join('');
+const metadataBytes = encoder.encode('{"legendRows":[]}');
 const catalogText = '{"schema":4,"items":[]}';
-const catalogBytes = new TextEncoder().encode(catalogText);
-// Step 3a: the feature catalog is its own transferred buffer beside the metadata.
+const catalogBytes = encoder.encode(catalogText);
+
+// Step 3b S: a Result is its document pieces; the children texts the page does
+// not hold travel in one `segments` buffer.
+const CHILDREN = ['<path d="M0,0"/>', '<text>µ</text>'];
+const childBytes = CHILDREN.map((text) => encoder.encode(text));
+const childRevisions = await Promise.all(childBytes.map(sha256));
+const heldList = (indexes) => indexes
+  .map((index) => ({ revision: childRevisions[index], bytes: childBytes[index].byteLength }))
+  .sort((left, right) => (left.revision < right.revision ? -1 : 1));
+const resultOf = (heldIndexes = [], { name = 'out.svg', head = '<svg>' } = {}) => {
+  let offset = 0;
+  const sent = [];
+  const pieces = [{ kind: 'raw', text: '<defs />' }, ...CHILDREN.map((_text, index) => {
+    const piece = { kind: 'content', start: `<g id="g${index}">`, revision: childRevisions[index], bytes: childBytes[index].byteLength };
+    if (heldIndexes.includes(index)) return piece;
+    sent.push(childBytes[index]);
+    const placed = { ...piece, offset, length: piece.bytes };
+    offset += piece.bytes;
+    return placed;
+  })];
+  const segments = new Uint8Array(offset);
+  sent.reduce((at, bytes) => { segments.set(bytes, at); return at + bytes.byteLength; }, 0);
+  return { name, document: { head, tail: '</svg>', pieces }, ...(sent.length ? { segments } : {}) };
+};
+const fullDocument = `<svg><defs />${CHILDREN.map((text, index) => `<g id="g${index}">${text}</g>`).join('')}</svg>`;
+
+// The feature catalog and each Result's segments are their own transferred buffers.
+const coldResult = resultOf();
 assert.deepEqual(
   collectGenerationResultTransferList({
-    results: [{ content: svgBytes }, { content: '<svg />' }],
+    results: [coldResult, resultOf([0, 1])],
     metadata: metadataBytes,
     featureCatalog: catalogBytes
   }),
-  [svgBytes.buffer, metadataBytes.buffer, catalogBytes.buffer]
+  [coldResult.segments.buffer, metadataBytes.buffer, catalogBytes.buffer]
 );
-const catalogDigest = {
-  bytes: catalogBytes.byteLength,
-  sha256: Array.from(
-    new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', catalogBytes)),
-    (value) => value.toString(16).padStart(2, '0')
-  ).join('')
-};
-const identityOf = (overrides = {}, digest = catalogDigest) => buildGeneratedArtifactTransportIdentity({
-  results: [{ name: 'out.svg', content: svgBytes }],
+const catalogDigest = { bytes: catalogBytes.byteLength, sha256: await sha256(catalogBytes) };
+const identityOf = (overrides = {}, digest = catalogDigest, held = []) => buildGeneratedArtifactTransportIdentity({
+  results: [resultOf()],
   metadata: metadataBytes,
   ...overrides
-}, digest);
+}, digest, held);
 const firstIdentity = await identityOf();
 const sameIdentity = await identityOf();
-const changedIdentity = await identityOf({ results: [{ name: 'changed.svg', content: svgBytes }] });
-const changedContentIdentity = await identityOf({
-  results: [{ name: 'out.svg', content: new TextEncoder().encode('<svg>b</svg>') }]
-});
-const changedMetadataIdentity = await identityOf({ metadata: new TextEncoder().encode('{"legendRows":[1]}') });
+const changedIdentity = await identityOf({ results: [resultOf([], { name: 'changed.svg' })] });
+const changedContentIdentity = await identityOf({ results: [resultOf([], { head: '<svg id="b">' })] });
+const changedMetadataIdentity = await identityOf({ metadata: encoder.encode('{"legendRows":[1]}') });
 const changedCatalogIdentity = await identityOf({}, { ...catalogDigest, sha256: '0'.repeat(64) });
 const noCatalogIdentity = await identityOf({}, null);
+// Held or sent, the same document is the same artifact with the same byte counts (B3).
+const partlyHeldIdentity = await identityOf({ results: [resultOf([1])] }, catalogDigest, heldList([1]));
+const allHeldIdentity = await identityOf({ results: [resultOf([0, 1])] }, catalogDigest, heldList([0, 1]));
 assert.match(firstIdentity.fingerprint, /^[0-9a-f]{64}$/);
 assert.equal(firstIdentity.fingerprint, sameIdentity.fingerprint);
+assert.deepEqual(partlyHeldIdentity, firstIdentity);
+assert.deepEqual(allHeldIdentity, firstIdentity);
 assert.notEqual(firstIdentity.fingerprint, changedIdentity.fingerprint);
 assert.notEqual(firstIdentity.fingerprint, changedContentIdentity.fingerprint);
 assert.notEqual(firstIdentity.fingerprint, changedMetadataIdentity.fingerprint);
 assert.notEqual(firstIdentity.fingerprint, changedCatalogIdentity.fingerprint);
 assert.notEqual(firstIdentity.fingerprint, noCatalogIdentity.fingerprint);
 assert.equal(firstIdentity.schema, 1);
+assert.equal(firstIdentity.resultBytes, encoder.encode(fullDocument).byteLength);
 assert.equal(firstIdentity.metadataBytes, metadataBytes.byteLength + catalogBytes.byteLength);
 assert.equal(
   firstIdentity.retainedBytes,
-  svgBytes.byteLength
+  encoder.encode(fullDocument).byteLength
     + (metadataBytes.byteLength + catalogBytes.byteLength) * 2
-    + new TextEncoder().encode('out.svg').byteLength
+    + encoder.encode('out.svg').byteLength
 );
+
+// A reply that does not match its request or its own bytes is a classified
+// result-admission error: a held text the request did not name, a sent text
+// whose sha256 or length differs, an unknown piece kind, a gap in the buffer.
+const rejectsReply = async (result, held = []) => {
+  await assert.rejects(identityOf({ results: [result] }, catalogDigest, held), (error) => {
+    assert.equal(error.code, 'RESULT_INVALID');
+    assert.equal(error.stage, 'result-admission');
+    return true;
+  });
+};
+await rejectsReply(resultOf([1]));
+await rejectsReply(resultOf([1]), heldList([0]));
+await rejectsReply(resultOf([1]), [{ ...heldList([1])[0], bytes: 1 }]);
+const badSha = resultOf();
+badSha.document.pieces[1] = { ...badSha.document.pieces[1], revision: '0'.repeat(64) };
+await rejectsReply(badSha);
+const badLength = resultOf();
+badLength.document.pieces[2] = { ...badLength.document.pieces[2], bytes: 3, length: 3 };
+await rejectsReply(badLength);
+const unknownKind = resultOf();
+unknownKind.document.pieces[0] = { kind: 'comment', text: '<!-- x -->' };
+await rejectsReply(unknownKind);
+const withGap = resultOf();
+withGap.segments = new Uint8Array([...withGap.segments, 32]);
+await rejectsReply(withGap);
+await rejectsReply({ name: 'out.svg', content: encoder.encode('<svg />') });
+
+// The run message's held segments: sorted, distinct, sha256 revisions with byte counts.
+const invalidHeld = () => Object.assign(new Error('invalid'), { code: 'HELPER_PROTOCOL' });
+assert.deepEqual(readHeldSegments(null, invalidHeld), []);
+assert.deepEqual(readHeldSegments(heldList([0, 1]), invalidHeld), heldList([0, 1]));
+for (const malformed of [
+  {}, [{ revision: 'e:1', bytes: 1 }], [{ revision: childRevisions[0], bytes: -1 }],
+  [...heldList([0, 1])].reverse(), [...heldList([0]), ...heldList([0])]
+]) assert.throws(() => readHeldSegments(malformed, invalidHeld), /invalid/);
 
 // A sent catalog is hashed; "unchanged" takes the held digest, so both name
 // one artifact; without a catalog and a held digest there is no revision.
 const sent = await resolveGeneratedFeatureCatalog({
-  results: [{ name: 'out.svg', content: svgBytes }],
+  results: [resultOf()],
   metadata: metadataBytes,
   featureCatalog: catalogBytes,
   featureCatalogRevision: 'e:1'
-}, null);
+}, null, []);
 assert.deepEqual(sent.featureCatalogRevision, { revision: 'e:1', ...catalogDigest });
 assert.equal(sent.artifactIdentity.fingerprint, firstIdentity.fingerprint);
 const unchanged = await resolveGeneratedFeatureCatalog({
-  results: [{ name: 'out.svg', content: svgBytes }],
+  results: [resultOf([0])],
   metadata: metadataBytes,
   featureCatalog: undefined,
   featureCatalogRevision: 'e:1'
-}, { revision: 'e:1', ...catalogDigest });
+}, { revision: 'e:1', ...catalogDigest }, heldList([0]));
 assert.deepEqual(unchanged.featureCatalogRevision, { revision: 'e:1', ...catalogDigest });
 assert.equal(unchanged.artifactIdentity.fingerprint, firstIdentity.fingerprint);
 const unnamed = await resolveGeneratedFeatureCatalog({
-  results: [{ name: 'out.svg', content: svgBytes }],
+  results: [resultOf()],
   metadata: metadataBytes,
   featureCatalog: catalogBytes,
   featureCatalogRevision: undefined
-}, null);
+}, null, []);
 assert.equal(unnamed.featureCatalogRevision, null);
 assert.equal(unnamed.artifactIdentity.fingerprint, firstIdentity.fingerprint);
 const neither = await resolveGeneratedFeatureCatalog({
-  results: [{ name: 'out.svg', content: svgBytes }],
+  results: [resultOf()],
   metadata: metadataBytes,
   featureCatalogRevision: 'e:1'
-}, null);
+}, null, []);
 assert.equal(neither.featureCatalogRevision, null);
 assert.equal(neither.artifactIdentity.fingerprint, noCatalogIdentity.fingerprint);
 
