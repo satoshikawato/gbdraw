@@ -336,7 +336,6 @@ const featureView = (anchor, displayFacts, fallback = '') => {
   return { label: parts.label, name: parts.name, ids: parts.ids.join(' · ') };
 };
 
-
 // A record's name for one-line summaries: its accession, else its definition.
 /** @param {{ name?: string, detail?: string } | undefined} names */
 const shortRecordName = (names) => names?.detail || names?.name || '';
