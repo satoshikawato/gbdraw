@@ -32,7 +32,7 @@ import {
   isDiagramGenerationCanceled,
   runDiagramGeneration,
   runDiagramHelperOperation,
-  selectHeldFeatureCatalog
+  selectHeldRenderState
 } from '../services/diagram-generation.js';
 import {
   projectCompositionRecordIdentity,
@@ -1393,7 +1393,7 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  * @property {string} [kind]
  * @property {((progress: any) => void) | null} [onProgress]
  * @property {() => boolean} [shouldAdmit]
- * @property {((payload: Record<string, any>, options?: { onProgress?: ((progress: any) => void) | null, held?: ReturnType<typeof selectHeldFeatureCatalog> }) => Promise<any>) | null} [generationExecutor] Test seam.
+ * @property {((payload: Record<string, any>, options?: { onProgress?: ((progress: any) => void) | null, held?: ReturnType<typeof selectHeldRenderState> }) => Promise<any>) | null} [generationExecutor] Test seam.
  * @property {typeof admitFeatureCatalog} [catalogAdmission]
  * @property {typeof prepareCandidateRenderCommit} [prepareCommit]
  * @property {Record<string, any>} [prepareCommitInput]
@@ -1403,6 +1403,8 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  *   which they keep (OV-136); Generate's Results take the names the engine gives them.
  * @property {FeatureCatalog | null} [heldFeatureCatalog] The catalog the page holds for the drawing it
  *   renders; when this render reuses its build, the reply says so and the page keeps it.
+ * @property {readonly unknown[] | null} [heldResults] The drawing's committed Results; Python
+ *   omits the children texts whose sanitized segments they keep.
  */
 
 /** @param {CanonicalRenderCandidateExecutionOptions} options */
@@ -1419,14 +1421,15 @@ export const executeCanonicalRenderCandidate = async ({
   decorationContinuity = null,
   timingEntries = [],
   resultNames = null,
-  heldFeatureCatalog = null
+  heldFeatureCatalog = null,
+  heldResults = null
 }) => {
   if (!canonical?.renderRequest || !canonical?.resources) {
     throw new Error('Canonical candidate execution requires a request and resources.');
   }
   recordStructuralMetric('canonicalCandidateExecutionCount', 1, { kind });
   const startedAt = getNow();
-  const held = selectHeldFeatureCatalog(heldFeatureCatalog, resultNames);
+  const held = selectHeldRenderState(heldFeatureCatalog, heldResults, resultNames);
   const generationResponse = generationExecutor
     ? await generationExecutor({
         request: canonical.renderRequest,
@@ -1686,13 +1689,18 @@ export const createRunAnalysis = ({
   }
   /**
    * Generate, a committed rerender and a label reflow render the shown
-   * drawing: they name its feature catalog, so a reused build keeps it.
+   * drawing: they name its feature catalog, so a reused build keeps it, and
+   * the children texts its Results keep sanitized, so Python omits them.
    * @param {CanonicalRenderCandidateExecutionOptions} options
    */
-  const executeShownDrawingCandidate = (options) => executeCanonicalRenderCandidate({
-    ...options,
-    heldFeatureCatalog: captureGeneratedArtifactOwnerSet().featureCatalog ?? null
-  });
+  const executeShownDrawingCandidate = (options) => {
+    const shown = captureGeneratedArtifactOwnerSet();
+    return executeCanonicalRenderCandidate({
+      ...options,
+      heldFeatureCatalog: shown.featureCatalog ?? null,
+      heldResults: shown.results ?? null
+    });
+  };
   /**
    * @param {LosatJob[]} jobs
    * @param {LosatRunOptions} [options]

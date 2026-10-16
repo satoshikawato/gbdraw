@@ -4,6 +4,7 @@
 /** @import { RenderedIdentityCollection } from './session-feature-metadata.js' */
 /** @import { SpecificColorRule } from './specific-color-rules.js' */
 /** @import { SvgSanitizer } from './svg-sanitization.js' */
+/** @import { DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 import {
   AUTO_FEATURE_UNDERLAY_STROKE,
   FEATURE_PART_CONNECTOR,
@@ -31,11 +32,11 @@ import {
   setsFeatureStroke,
   SPECIFIC_COLOR_FILE_OWNER
 } from './legend-svg.js';
-import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
+import { isCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { drawnLegendNames } from './legend-row-names.js';
 import { ruleLegendCaptions } from './specific-color-rules.js';
-import { sanitizeSvgContent } from './svg-sanitization.js';
+import { sanitizeSvgContent, unwrapSvgFragment, wrapSvgFragment } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
@@ -69,9 +70,13 @@ const text = (value) => String(value ?? '').trim();
 
 /**
  * One Result of a Worker response or a Session: its `name` and its SVG text
- * (`content`); the other members pass through unread. A committed copy holds
- * its runtime state under `COMMITTED_SVG_RESULT`.
- * @typedef {Record<string, any> & { [COMMITTED_SVG_RESULT]?: CommittedSvgState }} SvgResultEntry
+ * (`content`), or for a decoded Generate reply its `document`; the other
+ * members pass through unread. A committed copy holds its runtime state under
+ * `COMMITTED_SVG_RESULT`, and the segments of its document under `SEGMENTS`.
+ * @typedef {Record<string, any> & {
+ *   [COMMITTED_SVG_RESULT]?: CommittedSvgState,
+ *   [SEGMENTS]?: ReadonlyMap<string, Readonly<HeldSegment>>
+ * }} SvgResultEntry
  */
 
 /**
@@ -388,23 +393,129 @@ const hasSanitizedSvgEnvelope = (content) => {
 };
 
 /**
+ * Every Result text and every document piece is sanitized here, and only here.
+ * @param {unknown} source
+ * @param {SvgSanitizer | undefined} sanitizer
+ */
+const sanitizeText = (source, sanitizer) => sanitizeSvgContent(source, sanitizer);
+
+/**
+ * The sanitized start of a wrapped fragment, learned once per sanitizer, so a
+ * test's fake sanitizer never lends its prefix to DOMPurify.
+ * @type {WeakMap<SvgSanitizer, string>}
+ */
+const wrapPrefixes = new WeakMap();
+
+/** @param {SvgSanitizer | undefined} sanitizer */
+const wrapPrefix = (sanitizer) => {
+  if (!sanitizer) throw new Error('SVG sanitization is unavailable.');
+  let prefix = wrapPrefixes.get(sanitizer);
+  if (prefix === undefined) {
+    prefix = withoutSuffix(sanitizeText(wrapSvgFragment(''), sanitizer), '</svg>');
+    wrapPrefixes.set(sanitizer, prefix);
+  }
+  return prefix;
+};
+
+/**
+ * @param {string} fragment Whole SVG elements.
+ * @param {SvgSanitizer | undefined} sanitizer
+ */
+const sanitizeFragment = (fragment, sanitizer) => {
+  const sanitized = unwrapSvgFragment(sanitizeText(wrapSvgFragment(fragment), sanitizer), wrapPrefix(sanitizer));
+  if (sanitized === null) throw invalidResult();
+  return sanitized;
+};
+
+/**
+ * @param {string} text
+ * @param {string} suffix
+ */
+const withoutSuffix = (text, suffix) => {
+  if (!text.endsWith(suffix)) throw invalidResult();
+  return text.slice(0, text.length - suffix.length);
+};
+
+/**
+ * Sanitize a Generate document piece by piece: the root start tag, each start
+ * tag and raw piece, and each children text once per revision; a revision the
+ * candidate holds keeps its sanitized text. Joined in order, the pieces are the
+ * sanitization of the whole document for the pieces Python writes (gbdraw/web/CLAUDE.md,
+ * Runtime data flow).
+ * @param {Readonly<DecodedSvgDocument>} document
+ * @param {ReadonlyMap<string, Readonly<HeldSegment>>} held
+ * @param {SvgSanitizer | undefined} sanitizer
+ * @param {SvgAdmissionSite} site
+ * @returns {{ content: string, segments: Map<string, Readonly<HeldSegment>> }}
+ */
+const sanitizeDocumentPieces = (document, held, sanitizer, { phase, resultIndex }) => {
+  /** @type {Map<string, Readonly<HeldSegment>>} */
+  const segments = new Map();
+  const parts = [withoutSuffix(sanitizeText(`${document.head}</svg>`, sanitizer), '</svg>')];
+  let sanitizedPieces = 0;
+  let memoHits = 0;
+  for (const piece of document.pieces) {
+    if (piece.kind === 'raw') {
+      parts.push(sanitizeFragment(piece.text, sanitizer));
+      continue;
+    }
+    parts.push(withoutSuffix(sanitizeFragment(`${piece.start}</g>`, sanitizer), '</g>'));
+    let segment = segments.get(piece.revision) ?? held.get(piece.revision);
+    if (segment) {
+      memoHits += 1;
+    } else {
+      if (typeof piece.children !== 'string') throw invalidResult();
+      segment = Object.freeze({
+        revision: piece.revision,
+        bytes: piece.bytes,
+        sanitized: sanitizeFragment(piece.children, sanitizer)
+      });
+      sanitizedPieces += 1;
+    }
+    segments.set(piece.revision, segment);
+    parts.push(segment.sanitized, '</g>');
+  }
+  parts.push('</svg>');
+  recordStructuralMetric('svgSanitizedPieceCount', sanitizedPieces, { phase, resultIndex });
+  recordStructuralMetric('svgMemoHitCount', memoHits, { phase, resultIndex });
+  return { content: parts.join(''), segments };
+};
+
+/**
+ * Sanitize one Result: a current Worker document piece by piece, any other
+ * Result (a saved Session, a legacy import, a test) as its whole `content`.
  * @param {SvgResultEntry} result
  * @param {SvgSanitizer | undefined} sanitizer
  * @param {SvgAdmissionSite} site
+ * @returns {{ content: string, segments: Map<string, Readonly<HeldSegment>> | null }}
  */
-const sanitizeSvgResultContent = (
-  result,
-  sanitizer,
-  { phase, resultIndex }
-) => {
+const sanitizeAdmittedSvg = (result, sanitizer, site) => {
+  const { phase, resultIndex } = site;
+  /** @type {Readonly<DecodedSvgDocument> | undefined} */
+  const document = phase === SVG_RESULT_SOURCE_CLASSES.CURRENT_WORKER ? result.document : undefined;
+  const admitted = document
+    ? sanitizeDocumentPieces(document, result[SEGMENTS] ?? new Map(), sanitizer, site)
+    : { content: sanitizeText(result.content, sanitizer), segments: null };
   recordSessionLifecycleEvent('result-svg-characters', {
     phase,
     resultIndex,
-    value: String(result.content || '').length
+    value: document ? admitted.content.length : String(result.content || '').length
   });
-  const content = sanitizeSvgContent(result.content, sanitizer);
   recordStructuralMetric('svgSanitizationCount', 1, { phase, resultIndex });
-  return content;
+  return admitted;
+};
+
+/**
+ * The Result a sanitized candidate commits as: its members without the decoded
+ * document, the sanitized `content`, and under `SEGMENTS` the sanitized
+ * segment of each revision of its document (none for a whole-text Result).
+ * @param {SvgResultEntry} result
+ * @param {{ content: string, segments: Map<string, Readonly<HeldSegment>> | null }} admitted
+ * @returns {SvgResultEntry}
+ */
+const admittedResult = (result, { content, segments }) => {
+  const { document: _document, [SEGMENTS]: _held, ...rest } = result;
+  return segments ? { ...rest, content, [SEGMENTS]: segments } : { ...rest, content };
 };
 
 /**
@@ -1523,7 +1634,8 @@ const admitCurrentResult = (
   }
 ) => {
   const phase = sourceClass;
-  const sanitized = sanitizeSvgResultContent(result, sanitizer, { phase, resultIndex });
+  const admitted = admittedResult(result, sanitizeAdmittedSvg(result, sanitizer, { phase, resultIndex }));
+  const sanitized = admitted.content;
   if (!hasSanitizedSvgEnvelope(sanitized)) {
     throw new Error('The diagram engine returned malformed SVG content.');
   }
@@ -1531,7 +1643,7 @@ const admitCurrentResult = (
   // Keep its intent in the plan, but do not require transient mounted hooks on a
   // detached Worker SVG before PreviewRuntime has installed the candidate.
   if (!hasDetachedOperations(operations)) {
-    return commitCatalogBackedResult({ ...result, content: sanitized }, metadata);
+    return commitCatalogBackedResult(admitted, metadata);
   }
 
   const svg = parseSanitizedSvg(sanitized, parser);
@@ -1543,13 +1655,13 @@ const admitCurrentResult = (
   }), nameLegendRows(svg)].includes(true);
   // Every transform runs; one that returns false changed nothing.
   const transformed = operations.callerTransforms
-    .map((transform) => transform(svg, { result, resultIndex }) !== false).includes(true);
+    .map((transform) => transform(svg, { result: admitted, resultIndex }) !== false).includes(true);
   // A Result the plan leaves as it is keeps its bytes (OV-345).
   if (!index.changed && !rowsChanged && !transformed) {
-    return commitCatalogBackedResult({ ...result, content: sanitized }, metadata);
+    return commitCatalogBackedResult(admitted, metadata);
   }
   const content = serializeAdmittedSvg(svg, { phase, resultIndex });
-  return commitCatalogBackedResult({ ...result, content }, metadata);
+  return commitCatalogBackedResult({ ...admitted, content }, metadata);
 };
 
 /**
@@ -1666,7 +1778,7 @@ const ingestSvgResult = (
   }
 ) => {
   if (isCommittedSvgResult(result)) return result;
-  const content = sanitizeSvgResultContent(result, sanitizer, {
+  const { content } = sanitizeAdmittedSvg(result, sanitizer, {
     phase: sourceClass,
     resultIndex
   });

@@ -2139,6 +2139,14 @@ Retired names and their replacements are listed under
   Python returns it beside the metadata, not inside it, and the Worker render protocol is
   now 3, so a cached older wheel is reported as a version mismatch. The figure, the
   catalog, and Saved Sessions are unchanged.
+- Performance (web app): a Generate sends and sanitizes only the SVG groups whose content
+  changed. Python writes each SVG document as ordered pieces with a sha256 revision for
+  each group's content; the page keeps each group's sanitized text on its Result, and the
+  next Generate names those revisions so Python leaves their text out. The joined Result
+  equals DOMPurify of the whole document. Python (CLI and Python API too) now raises
+  `ExportError` for an SVG group that holds a comment, CDATA or a processing instruction;
+  gbdraw writes none. The Worker render protocol is now 4. The figure, SVG, PNG and PDF
+  bytes, and Saved Sessions are unchanged.
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
