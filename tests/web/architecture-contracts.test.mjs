@@ -4824,17 +4824,43 @@ test('persisted contract: a renamed export with the same value needs review only
   assert.doesNotMatch(renamed.output, PERSISTED_CONTRACT_REVIEW);
   assert.doesNotMatch(renamed.output, /new generated contract export/);
 
-  // The checker reads version exports by name, so renaming one stays a failure.
-  const version = runPersistedContractCase({
-    head: {
-      [CONTRACT_SCHEMA_PATH]: rename('SESSION_VERSION', 'CURRENT_SESSION_VERSION'),
-      [SESSION_HISTORY_PATH]: historyWith('SESSION_VERSION renamed.'),
-      [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nRenamed.\n',
-      'tests/fixtures/renamed.json': '{}\n'
+  // The checker reads version exports by name, so renaming any of them stays a failure, even
+  // with every document and fixture present.
+  const documented = {
+    [SESSION_HISTORY_PATH]: historyWith('A version export renamed.'),
+    [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nRenamed.\n',
+    'tests/fixtures/renamed.json': '{}\n'
+  };
+  const assertVersionRenameFails = (name, source, extra = {}) => {
+    const result = runPersistedContractCase({ head: { ...documented, [CONTRACT_SCHEMA_PATH]: source, ...extra } });
+    assertVendorGateFailure(result, PERSISTED_CONTRACT_FAILURE, `renamed ${name}`);
+    assert.ok(
+      result.output.includes(`a renamed or removed version export (${name}) needs a checker change`),
+      result.output
+    );
+  };
+  assertVersionRenameFails('SESSION_VERSION', rename('SESSION_VERSION', 'CURRENT_SESSION_VERSION'));
+  assertVersionRenameFails(
+    'SUPPORTED_CANONICAL_REQUEST_SCHEMAS',
+    rename('SUPPORTED_CANONICAL_REQUEST_SCHEMAS', 'SUPPORTED_REQUEST_SCHEMAS')
+  );
+  // A new Session version whose supported list is renamed cannot skip the old-version fixture.
+  assertVersionRenameFails(
+    'SUPPORTED_SESSION_VERSIONS',
+    withContractExport(
+      withContractExport(
+        rename('SUPPORTED_SESSION_VERSIONS', 'SESSION_VERSIONS_SUPPORTED'),
+        'SESSION_VERSIONS_SUPPORTED',
+        `Object.freeze([${[...CURRENT_SUPPORTED_SESSION_VERSIONS, NEXT_SESSION_VERSION].join(', ')}])`
+      ),
+      'SESSION_VERSION',
+      String(NEXT_SESSION_VERSION)
+    ),
+    {
+      [SESSION_HISTORY_PATH]: historyWith(`## Unreleased: Session ${NEXT_SESSION_VERSION} adds a key`),
+      [`tests/fixtures/sessions/x.v${NEXT_SESSION_VERSION}.gbdraw-session.json`]: '{}\n'
     }
-  });
-  assertVendorGateFailure(version, PERSISTED_CONTRACT_FAILURE, 'renamed version export');
-  assert.match(version.output, /SESSION_VERSION readable as an integer at base and head \(a renamed version export needs a checker change\)/);
+  );
 });
 
 test('a repeated key in the change policy fails closed', () => {

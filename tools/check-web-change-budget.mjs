@@ -1734,7 +1734,7 @@ const classifyPersistedContractChange = () => {
       });
       addedExports.push(...added);
     }
-    ['SESSION_VERSION', 'SUPPORTED_SESSION_VERSIONS', 'CANONICAL_REQUEST_SCHEMA'].forEach((name) => {
+    Object.keys(CONTRACT_VERSION_EXPORTS).forEach((name) => {
       versions[name] = {
         before: contractExportValue(before?.get(name)),
         after: contractExportValue(after?.get(name))
@@ -1768,12 +1768,20 @@ const persistedContractCoChangeGaps = ({ kinds, versions, paths }) => {
   if (![...paths].some((path) => path.startsWith(contractFixtureRoot))) {
     gaps.push(`a changed path under ${contractFixtureRoot}`);
   }
+  // The checker reads the version exports by name: one the base has must stay readable.
+  const versionValue = (value) => Number.isInteger(value)
+    || (Array.isArray(value) && value.every((item) => Number.isInteger(item)));
+  Object.entries(versions).forEach(([name, { before, after }]) => {
+    if (versionValue(before) && !versionValue(after)) {
+      gaps.push(`a renamed or removed version export (${name}) needs a checker change`);
+    }
+  });
   const headings = (readHeadFile(sessionFormatHistoryPath) || '').split('\n')
     .filter((line) => line.startsWith('## '));
   const versionHeading = (name, label, pattern) => {
     const { before, after } = versions[name] || {};
     if (!Number.isInteger(before) || !Number.isInteger(after)) {
-      gaps.push(`${name} readable as an integer at base and head (a renamed version export needs a checker change)`);
+      if (!versionValue(before)) gaps.push(`${name} readable at base`);
       return null;
     }
     if (before !== after && !headings.some((line) => pattern(after).test(line))) {
@@ -1788,6 +1796,7 @@ const persistedContractCoChangeGaps = ({ kinds, versions, paths }) => {
       (version) => new RegExp(`\\bSession (version )?${version}\\b`, 'i')
     );
     const supported = versions.SUPPORTED_SESSION_VERSIONS?.after;
+    // An unreadable supported list fails above; the fixture is needed while the old version is listed.
     if (older !== null && Array.isArray(supported) && supported.includes(older)) {
       const fixtures = runGit(repositoryRoot, head
         ? ['ls-tree', '-r', '--name-only', head, '--', sessionFixtureRoot]
