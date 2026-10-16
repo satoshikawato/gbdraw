@@ -192,7 +192,10 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
-/** @import { FileLike, RawSessionResourceDescriptor, SessionResourceTable, WebFileBindingRow, WebFileBindings } from './session-resource-backing.js' */
+/**
+ * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
+ *   WebFileBindings } from './session-resource-backing.js'
+ */
 /** @import { CircularRequestRecordSetOptions } from './record-options.js' */
 /** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
@@ -203,6 +206,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { ExportRef } from './svg-serialization.js' */
 /** @import { JsonValue } from './json-clone.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
+/** @import { TableRepair } from './file-imports.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -3475,13 +3479,24 @@ const addResourceOriginalNameHint = (target, resourceId, name) => {
   target[id] = originalName;
 };
 
+/**
+ * The projection's unvalidated Session parts, read through views.
+ * @param {{
+ *   renderRequest: UnvalidatedFields<'records' | 'mode'> & UnvalidatedFields<'diagramOptions', UnvalidatedFields<'colors',
+ *     UnvalidatedFields<'defaultColorsFile' | 'defaultColors' | 'colorTableFile' | 'colorTable', UnvalidatedFields<'resourceId'>>>>,
+ *   legacyFiles: unknown,
+ *   fileBindings: unknown
+ * }} input
+ */
 const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings }) => {
   /** @type {Record<string, string>} */
   const hints = {};
+  /** @type {readonly UnvalidatedFields<'source', UnvalidatedFields<'kind' | 'resourceId' | 'gffResourceId' | 'fastaResourceId'>>[]} */
   const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
   const options = renderRequest?.diagramOptions || {};
+  // The cast: an object other than an array, read through views of its properties.
   const files = legacyFiles && typeof legacyFiles === 'object' && !Array.isArray(legacyFiles)
-    ? legacyFiles
+    ? /** @type {Readonly<Record<string, UnvalidatedFields<'name'>>>} */ (legacyFiles)
     : {};
   const namedOptionResources = {
     d_color: referencedResourceId(options.colors?.defaultColorsFile || options.colors?.defaultColors),
@@ -3494,10 +3509,11 @@ const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings 
   });
 
   if (renderRequest?.mode === 'linear') {
+    /** @type {readonly UnvalidatedFields<'gb' | 'gff' | 'fasta', UnvalidatedFields<'name'>>[]} */
     const sequences = Array.isArray(files.linearSeqs) ? files.linearSeqs : [];
     records.forEach((record, index) => {
       const sequence = sequences[index] || {};
-      ['gb', 'gff', 'fasta'].forEach((field) => {
+      /** @type {const} */ (['gb', 'gff', 'fasta']).forEach((field) => {
         addResourceOriginalNameHint(
           hints,
           recordSourceResourceId(record, field),
@@ -3516,7 +3532,7 @@ const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings 
     });
   }
 
-  (Array.isArray(fileBindings) ? fileBindings : []).forEach((binding) => {
+  (Array.isArray(fileBindings) ? fileBindings : []).forEach((/** @type {UnvalidatedFields<'slot' | 'name'>} */ binding) => {
     const slot = String(binding?.slot || '');
     const normalizedSlot = slot.replace(/^files\./, '');
     if (Object.prototype.hasOwnProperty.call(namedOptionResources, normalizedSlot)) {
@@ -3591,7 +3607,7 @@ const resourceAsLegacyFile = (resources, resourceId) => {
 };
 
 /**
- * @typedef {(resourceId: string, metadata?: Record<string, any>) => unknown} ResourceFileResolver
+ * @typedef {(resourceId: unknown, metadata?: SessionResourceFileMetadata) => unknown} ResourceFileResolver
  *   Builds the file a Session binding stands for from its resource id and the
  *   binding's recorded name, type, and modification time.
  */
@@ -3825,6 +3841,10 @@ export const normalizeWebGridColumnOrdering = (records = []) => {
 const resolvePipelineCollinearInference = (settings, mode) =>
   settings.collinearInferOrthogroups ?? ['collinear', 'none'].includes(mode);
 
+/**
+ * @param {UnvalidatedFields<'kind' | 'mode' | 'settings'>} comparison A request's comparison (unvalidated).
+ * @param {{ adoptCanonicalPayloads?: boolean }} [options]
+ */
 const projectGeneratedProteinPipeline = (
   comparison,
   { adoptCanonicalPayloads = false } = {}
@@ -3836,7 +3856,12 @@ const projectGeneratedProteinPipeline = (
     typeof comparison.settings !== 'object' ||
     Array.isArray(comparison.settings)
   ) return null;
-  const settings = comparison.settings;
+  // The cast: an object other than an array (checked above), read through views.
+  const settings = /** @type {Readonly<Record<string, unknown>> & {
+    readonly collinearInferOrthogroups?: unknown,
+    readonly collinearityParams?: UnvalidatedFields<'parameters', UnvalidatedFields<
+      'minAnchors' | 'maxUnitGap' | 'maxDiagonalDrift' | 'maxConflicts' | 'mergeOrientation'>>
+  }} */ (comparison.settings);
   if (Object.hasOwn(settings, 'alignOrthogroupFeature')) {
     throw new Error('Current canonical protein settings cannot contain legacy alignment state.');
   }
@@ -4146,12 +4171,16 @@ export const committedFeatureVisibilityMatches = (committedSession, activeRulesT
   }
 };
 
-/** @param {string} path */
+/**
+ * @param {unknown} config
+ * @param {string} path
+ */
 const nestedConfigValue = (config, path) => {
   let current = config;
   for (const key of path.split('.')) {
     if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
-    current = current[key];
+    // The cast: an object other than an array; each property is an unvalidated value.
+    current = /** @type {Readonly<Record<string, unknown>>} */ (current)[key];
   }
   return current;
 };
@@ -4336,7 +4365,11 @@ const projectExplicitConfigOverrides = (overrides, mode) => {
   return projected;
 };
 
-/** @param {{ c_conservation_blasts?: FileLike[] }} files */
+/**
+ * @param {NonNullable<UnvalidatedFields<'conservationLabels' | 'conservationColors' | 'conservationReference'
+ *   | 'conservationRingWidth' | 'conservationRingGap'>>} options The request's `diagramOptions` (unvalidated), or `{}`.
+ * @param {{ c_conservation_blasts?: FileLike[] }} files
+ */
 const projectCircularConservationConfig = (options, files) => {
   const sourceFiles = Array.isArray(files.c_conservation_blasts)
     ? files.c_conservation_blasts
@@ -4584,6 +4617,11 @@ export const projectCanonicalSessionRequest = ({
   const projectedFeatureOverrides = canonicalFeatureOverrides(renderRequest.diagramOptions.featureOverrides);
   const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
   const records = normalizedRecordOrdering.records;
+  /**
+   * @template T
+   * @param {readonly T[]} values Indexed by the request's record order.
+   * @returns {T[]}
+   */
   const reorderRecordIndexedValues = (values) => (
     normalizedRecordOrdering.sourceIndexByProjectedIndex
       .map((sourceIndex) => values?.[sourceIndex])
@@ -4655,7 +4693,9 @@ export const projectCanonicalSessionRequest = ({
     // some records stays one File that draws only those records. A record
     // without a selector (a CLI Session that stored a copy of each drawn
     // record) takes the `#n` of its expanded recordKey.
+    /** @type {Map<string, string[]>} */
     const recordKeysByFile = new Map();
+    /** @type {Map<string, ProjectionRecordView>} */
     const recordsByKey = new Map();
     sourceRecords.forEach((record) => {
       const key = String(record.recordKey || '');
@@ -4670,7 +4710,8 @@ export const projectCanonicalSessionRequest = ({
       explicitBindings = {
         ...explicitBindings,
         linearSeqs: explicitBindings.linearSeqs.flatMap((sequence, index) => (
-          recordKeysByFile.get(fileRecordKeys[index]).map((uid) => {
+          // A key of the map: `fileRecordKeys` lists its keys.
+          /** @type {string[]} */ (recordKeysByFile.get(fileRecordKeys[index])).map((uid) => {
             const fields = linearSeqRecordFields(recordsByKey.get(uid));
             return {
               ...sequence,
@@ -4695,6 +4736,7 @@ export const projectCanonicalSessionRequest = ({
   const resources = sessionResourceTable
     ? canonicalResources
     : resourcesWithOriginalNames(canonicalResources, originalNameHints);
+  /** @type {ResourceFileResolver | null} */
   const resolveResourceFile = sessionResourceTable
     ? (resourceId, metadata = {}) => {
         const descriptor = adoptedSessionResourceDescriptor(
@@ -4708,7 +4750,8 @@ export const projectCanonicalSessionRequest = ({
           inferredName = inferredName.slice(prefix.length);
         }
         const displayName = normalizeOriginalResourceName(metadata.name)
-          || normalizeOriginalResourceName(originalNameHints[resourceId])
+          // `String` is the property key the read used before: an id is text or a JSON value.
+          || normalizeOriginalResourceName(originalNameHints[String(resourceId)])
           || inferredName;
         return createSessionResourceFileView(
           sessionResourceTable,
@@ -4728,12 +4771,15 @@ export const projectCanonicalSessionRequest = ({
     legacyCircularInputBinding?.name ||
     (records.length === 1 ? resources?.[records[0]?.source?.resourceId]?.name : '')
   );
+  /** @type {readonly unknown[]} */
   const savedLinearRecordMetadata = Array.isArray(webMetadata.linearRecordMetadata)
     ? webMetadata.linearRecordMetadata
     : [];
   const savedLinearRecordMetadataByKey = new Map(
     savedLinearRecordMetadata
-      .map((entry) => [String(entry?.recordKey || ''), entry])
+      .map((entry) => /** @type {const} */ ([
+        String(/** @type {UnvalidatedFields<'recordKey'>} */ (entry)?.recordKey || ''), entry
+      ]))
       .filter(([recordKey]) => recordKey)
   );
   const legacyLinearSequences = Array.isArray(legacyFiles?.linearSeqs)
@@ -4741,13 +4787,13 @@ export const projectCanonicalSessionRequest = ({
     : [];
   const projectedProteinPipeline = projectGeneratedProteinPipeline(
     (renderRequest.comparisons || []).find(
-      (comparison) => comparison?.kind === 'generatedProteinComparison'
+      (/** @type {UnvalidatedFields<'kind'>} */ comparison) => comparison?.kind === 'generatedProteinComparison'
     ),
     { adoptCanonicalPayloads }
   );
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []
-  ).some((comparison) => comparison?.kind === 'generatedProteinComparison');
+  ).some((/** @type {UnvalidatedFields<'kind'>} */ comparison) => comparison?.kind === 'generatedProteinComparison');
   // A CLI sidecar has no Web comparison draft, so its plan is the Web default
   // (No comparison) unless the projection states one. Its editable protein
   // pipeline is the adjacent LOSATP comparison the CLI drew. Without -b or a
@@ -4854,8 +4900,12 @@ export const projectCanonicalSessionRequest = ({
     files.linearComparisons = [];
     files.linearCanonicalComparisons = [];
     (renderRequest.comparisons || [])
-      .filter((comparison) => comparison?.kind === 'nucleotideBlast')
-      .forEach((comparison, index) => {
+      .filter((/** @type {UnvalidatedFields<'kind'>} */ comparison) => comparison?.kind === 'nucleotideBlast')
+      .forEach((
+        // The filter kept only comparisons with a kind: none is null.
+        /** @type {NonNullable<UnvalidatedFields<'queryRecordIndex' | 'subjectRecordIndex' | 'resourceId'>>} */ comparison,
+        /** @type {number} */ index
+      ) => {
         const queryIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
           .get(Number(comparison.queryRecordIndex));
         const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
@@ -4924,7 +4974,7 @@ export const projectCanonicalSessionRequest = ({
           ? { ...comparison }
           : cloneCanonicalJsonValue(comparison);
         projectedComparison.pairs = (Array.isArray(comparison.pairs) ? comparison.pairs : [])
-          .map((pair) => ({
+          .map((/** @type {UnvalidatedFields<'queryRecordIndex' | 'subjectRecordIndex'>} */ pair) => ({
             queryRecordIndex: normalizedRecordOrdering.projectedIndexBySourceIndex
               .get(Number(pair?.queryRecordIndex)),
             subjectRecordIndex: normalizedRecordOrdering.projectedIndexBySourceIndex
@@ -4934,7 +4984,10 @@ export const projectCanonicalSessionRequest = ({
           projectedComparison
         );
         (Array.isArray(comparison.pairs) ? comparison.pairs : [])
-          .forEach((pair, index) => {
+          .forEach((
+            /** @type {UnvalidatedFields<'queryRecordIndex' | 'subjectRecordIndex'>} */ pair,
+            /** @type {number} */ index
+          ) => {
             const queryIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
               .get(Number(pair?.queryRecordIndex));
             const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
@@ -4974,7 +5027,7 @@ export const projectCanonicalSessionRequest = ({
     ? reorderRecordIndexedValues(canonicalDepth.fileRows)
     : null;
   if (depthRows.length > 0) {
-    if (depthRows.length !== records.length || depthRows.some((row) => !Array.isArray(row))) {
+    if (depthRows.length !== records.length || depthRows.some((/** @type {unknown} */ row) => !Array.isArray(row))) {
       throw new Error(
         `Canonical ${renderRequest.mode === 'circular' ? 'Circular' : 'Linear'} Depth matrix must contain one row per record (${records.length}).`
       );
@@ -4982,7 +5035,8 @@ export const projectCanonicalSessionRequest = ({
   }
   if (renderRequest.mode === 'circular' && depthRows.length > 0) {
     files.c_depth = normalizeRecordMajorDepthFileRows(
-      depthFileRows || depthRows.map((row) => row.map((ref) => (
+      // Each row is an array: the check above throws otherwise.
+      depthFileRows || depthRows.map((/** @type {readonly UnvalidatedFields<'resourceId'>[]} */ row) => row.map((ref) => (
         ref?.resourceId
           ? (resolveResourceFile
               ? resolveResourceFile(ref.resourceId)
@@ -4993,7 +5047,11 @@ export const projectCanonicalSessionRequest = ({
     );
   }
   if (renderRequest.mode === 'linear') {
-    depthRows.forEach((row, index) => {
+    // Each row is an array: the check above throws otherwise.
+    depthRows.forEach((
+      /** @type {readonly UnvalidatedFields<'resourceId'>[]} */ row,
+      /** @type {number} */ index
+    ) => {
       if (!files.linearSeqs[index] || !Array.isArray(row)) return;
       const depth = depthFileRows?.[index] || row
         .map((ref) => ref?.resourceId
@@ -5008,11 +5066,19 @@ export const projectCanonicalSessionRequest = ({
   // current writer writes them; the Load dialog lists the rows read so.
   /** @type {LoadRepair[]} */
   const legacyTableRepairs = [];
+  /**
+   * @template {{ repairs?: readonly TableRepair[] | null }} P
+   * @param {string} table
+   * @param {{ resourceId: unknown }} ref Its `resourceId` is set: each caller checks it.
+   * @param {(text: string, options: { legacyRows: boolean }) => P} parse
+   * @returns {P}
+   */
   const readLegacyTable = (table, ref, parse) => {
+    // `resourceTextFromRef` read a set id so: a property key is the id's string form.
     const parsed = readSessionTable(table, () => parse(
-      resourceTextFromRef(resources, ref), { legacyRows: repairLegacyTableRows }
+      decodeCanonicalResourceText(resources, String(ref.resourceId)), { legacyRows: repairLegacyTableRows }
     ));
-    legacyTableRepairs.push(...(parsed.repairs || []).map((/** @type {{ row: number, repair: 'joined' | 'dropped' | 'invalid' }} */ { row, repair }) => loadRepair({
+    legacyTableRepairs.push(...(parsed.repairs || []).map(({ row, repair }) => loadRepair({
       code: `table-row-${repair}`, path: table, effect: repair === 'joined' ? 'changed' : 'dropped', line: row
     })));
     return parsed;
@@ -5091,7 +5157,7 @@ export const projectCanonicalSessionRequest = ({
     : [];
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationBlastFiles)) {
     files.c_conservation_blasts = options.conservationBlastFiles
-      .map((ref) => ref?.resourceId
+      .map((/** @type {UnvalidatedFields<'resourceId'>} */ ref) => ref?.resourceId
         ? (resolveResourceFile
             ? resolveResourceFile(ref.resourceId)
             : resourceAsLegacyFile(resources, ref.resourceId))
@@ -5108,7 +5174,7 @@ export const projectCanonicalSessionRequest = ({
     }
   }
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationFastaFiles)) {
-    files.c_conservation_sequence_sources = options.conservationFastaFiles.map((ref) => (
+    files.c_conservation_sequence_sources = options.conservationFastaFiles.map((/** @type {UnvalidatedFields<'resourceId'>} */ ref) => (
       ref?.resourceId
         ? (resolveResourceFile
             ? resolveResourceFile(ref.resourceId)
@@ -5120,7 +5186,7 @@ export const projectCanonicalSessionRequest = ({
     && Array.isArray(webMetadata.conservationSequenceSources)
   ) {
     files.c_conservation_sequence_sources = webMetadata.conservationSequenceSources.map(
-      (resourceId) => (resourceId
+      (/** @type {unknown} */ resourceId) => (resourceId
         ? (resolveResourceFile
             ? resolveResourceFile(resourceId)
             : resourceAsLegacyFile(resources, resourceId))
@@ -5132,7 +5198,7 @@ export const projectCanonicalSessionRequest = ({
     && Array.isArray(webMetadata.conservationLosatFastaSources)
   ) {
     files.c_conservation_fastas = webMetadata.conservationLosatFastaSources
-      .map((resourceId) => (
+      .map((/** @type {unknown} */ resourceId) => (
         resourceId
           ? (resolveResourceFile
               ? resolveResourceFile(resourceId)
@@ -5191,7 +5257,7 @@ export const projectCanonicalSessionRequest = ({
   const tracks = options.tracks || {};
   const projectedCircularTrackSlots = renderRequest.mode === 'circular'
     ? (Array.isArray(tracks.circularTrackSlots)
-        ? tracks.circularTrackSlots.map((slot) => (
+        ? tracks.circularTrackSlots.map((/** @type {unknown} */ slot) => (
           slot && typeof slot === 'object' && !Array.isArray(slot)
               ? projectCurrentCanonicalCircularSlot(slot)
               : parseCircularTrackSlotSpecs(
@@ -5232,7 +5298,7 @@ export const projectCanonicalSessionRequest = ({
     ? canonicalDepth.tracks.length
     : Math.max(
         0,
-        ...depthRows.map((row) => Array.isArray(row) ? row.length : 0),
+        ...depthRows.map((/** @type {unknown} */ row) => Array.isArray(row) ? row.length : 0),
         ...depthMetadataFields.map((values) => Array.isArray(values) ? values.length : 0),
         referencedDepthTrackWidth
       );

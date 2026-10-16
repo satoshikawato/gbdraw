@@ -481,7 +481,7 @@ export const adoptedSessionResourceDescriptor = (table, resourceId) => (
 
 /**
  * @param {SessionResourceTable} table
- * @param {string} resourceId
+ * @param {unknown} resourceId Checked against the table's own ids.
  * @param {SessionResourceFileMetadata} [metadata]
  * @returns {SessionResourceFileView}
  */
