@@ -6,7 +6,8 @@ import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
   DIAGRAM_HELPER_OPERATIONS,
-  readFeatureCatalogRevision
+  readFeatureCatalogRevision,
+  readSvgDocumentParts
 } from './diagram-worker-protocol.js';
 import {
   recordSessionLifecycleEvent,
@@ -14,7 +15,7 @@ import {
   runtimeTestHooksEnabled
 } from './runtime-test-hooks.js';
 import { createDiagramResourceTransport } from './diagram-resource-staging.js';
-import { markCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
+import { markCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
 import { normalizeLabelFitFailure } from './label-fit.js';
 /** @import { LabelFitFailure } from './label-fit.js' */
 import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
@@ -24,7 +25,8 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
-/** @import { FeatureCatalogRevision } from './diagram-worker-protocol.js' */
+/** @import { FeatureCatalogRevision, WorkerHeldSegment } from './diagram-worker-protocol.js' */
+/** @import { DecodedContentPiece, DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 
 /**
  * The fingerprint of the artifact a Generate returned.
@@ -61,8 +63,10 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
  */
 
 /**
- * A Result entry as the Worker sends it: its `content` is text or UTF-8 bytes.
- * @typedef {{ content?: unknown, [key: string]: unknown }} WorkerResultEntry
+ * A Result entry as the Worker sends it: its `document` pieces and the
+ * `segments` buffer of the children texts it sent, or (a test, a caller of
+ * the array shape) its `content` text.
+ * @typedef {{ document?: unknown, segments?: unknown, content?: unknown, [key: string]: unknown }} WorkerResultEntry
  */
 
 /**
@@ -115,43 +119,66 @@ export class DiagramGenerationCanceledError extends Error {
 export const isDiagramGenerationCanceled = (error) =>
   Boolean(error?.canceled || error?.name === 'DiagramGenerationCanceledError');
 
+/** @param {unknown} value */
+const viewBytes = (value) => (
+  value instanceof ArrayBuffer
+    ? new Uint8Array(value)
+    : ArrayBuffer.isView(value)
+      ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+      : null
+);
+
 /**
+ * Decode one Result of a Generate reply into its admission candidate: the
+ * document with each sent children text decoded once, and under `SEGMENTS`
+ * the segment of the request's snapshot that each held piece names. A held
+ * piece the snapshot lacks, or names with another length, is an invalid
+ * reply. A Result with `content` text passes unchanged.
  * @param {WorkerResultEntry | string | number | boolean | null | undefined} result
  * @param {number} resultIndex
+ * @param {ReadonlyMap<string, Readonly<HeldSegment>>} heldSegments The request's snapshot.
  */
-const decodeGenerationResultContent = (result, resultIndex) => {
-  if (!result || typeof result !== 'object' || typeof result.content === 'string') {
-    return result;
+const decodeGenerationResult = (result, resultIndex, heldSegments) => {
+  if (!result || typeof result !== 'object' || !Object.hasOwn(result, 'document')) return result;
+  const { document, segments, ...rest } = result;
+  const buffer = segments === undefined ? new Uint8Array(0) : viewBytes(segments);
+  if (!buffer) throw invalidGenerationResult();
+  const parts = readSvgDocumentParts(document, buffer.byteLength, invalidGenerationResult);
+  const decoder = new TextDecoder();
+  /** @type {Map<string, Readonly<HeldSegment>>} */
+  const held = new Map();
+  if (segments !== undefined) {
+    recordSessionLifecycleEvent('result-binary-decode-start', { resultIndex, bytes: buffer.byteLength });
   }
-  const bytes = result.content instanceof ArrayBuffer
-    ? new Uint8Array(result.content)
-    : ArrayBuffer.isView(result.content)
-      ? new Uint8Array(
-          result.content.buffer,
-          result.content.byteOffset,
-          result.content.byteLength
-        )
-      : null;
-  if (!bytes) return result;
-  recordSessionLifecycleEvent('result-binary-decode-start', {
-    resultIndex,
-    bytes: bytes.byteLength
+  const pieces = parts.pieces.map((piece) => {
+    if (piece.kind === 'raw') return piece;
+    const { start, revision, bytes } = piece;
+    if (piece.offset === undefined) {
+      const segment = heldSegments.get(revision);
+      if (!segment || segment.bytes !== bytes) throw invalidGenerationResult();
+      held.set(revision, segment);
+      return /** @type {Readonly<DecodedContentPiece>} */ (Object.freeze({ kind: 'content', start, revision, bytes }));
+    }
+    const children = decoder.decode(buffer.subarray(piece.offset, piece.offset + bytes));
+    return /** @type {Readonly<DecodedContentPiece>} */ (Object.freeze({ kind: 'content', start, revision, bytes, children }));
   });
-  const content = new TextDecoder().decode(bytes);
-  recordStructuralMetric('resultBinaryDecodeCount', 1, { resultIndex });
-  recordStructuralMetric('resultBinaryDecodedBytes', bytes.byteLength, { resultIndex });
-  recordSessionLifecycleEvent('result-binary-decode-end', {
-    resultIndex,
-    bytes: bytes.byteLength,
-    characters: content.length
-  });
-  return { ...result, content };
+  if (segments !== undefined) {
+    recordStructuralMetric('resultBinaryDecodeCount', 1, { resultIndex });
+    recordStructuralMetric('resultBinaryDecodedBytes', buffer.byteLength, { resultIndex });
+    recordSessionLifecycleEvent('result-binary-decode-end', { resultIndex, bytes: buffer.byteLength });
+  }
+  /** @type {Readonly<DecodedSvgDocument>} */
+  const decoded = Object.freeze({ head: parts.head, tail: parts.tail, pieces: Object.freeze(pieces) });
+  return { ...rest, document: decoded, [SEGMENTS]: held };
 };
 
-/** @param {unknown} results */
-const decodeGenerationResults = (results) => (
+/**
+ * @param {unknown} results
+ * @param {ReadonlyMap<string, Readonly<HeldSegment>>} heldSegments
+ */
+const decodeGenerationResults = (results, heldSegments) => (
   Array.isArray(results)
-    ? results.map(decodeGenerationResultContent)
+    ? results.map((result, resultIndex) => decodeGenerationResult(result, resultIndex, heldSegments))
     : results
 );
 
@@ -179,11 +206,7 @@ const GENERATION_JSON_PARTS = Object.freeze({
  * @returns {unknown}
  */
 const decodeGenerationJson = (value, { event, countMetric, bytesMetric }) => {
-  const bytes = value instanceof ArrayBuffer
-    ? new Uint8Array(value)
-    : ArrayBuffer.isView(value)
-      ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
-      : null;
+  const bytes = viewBytes(value);
   if (!bytes) return value;
   recordSessionLifecycleEvent(`${event}-start`, {
     bytes: bytes.byteLength
@@ -225,7 +248,7 @@ const itemResultNames = (catalog) => catalog.items.map((item) => String(item?.re
  * @param {readonly string[] | null} resultNames
  * @returns {HeldFeatureCatalog | null}
  */
-export const selectHeldFeatureCatalog = (catalog, resultNames) => {
+const selectHeldFeatureCatalog = (catalog, resultNames) => {
   const record = catalog && typeof catalog === 'object' ? featureCatalogRevisions.get(catalog) : undefined;
   if (!catalog || !record) return null;
   const expected = resultNames ?? record.resultNames;
@@ -233,6 +256,55 @@ export const selectHeldFeatureCatalog = (catalog, resultNames) => {
   if (names.length !== expected.length || names.some((name, index) => name !== expected[index])) return null;
   return { catalog, revision: record.revision };
 };
+
+/**
+ * What the page holds for one render of the shown drawing, taken once when the
+ * request starts: the feature catalog it may name, and the sanitized children
+ * texts its committed Results keep. The reply is resolved against this
+ * snapshot only, so a commit while the request runs changes nothing it names.
+ * @typedef {object} HeldRenderState
+ * @property {HeldFeatureCatalog | null} catalog
+ * @property {ReadonlyMap<string, Readonly<HeldSegment>>} segments
+ */
+
+/** @type {Readonly<HeldRenderState>} */
+const NOTHING_HELD = Object.freeze({ catalog: null, segments: new Map() });
+
+/**
+ * The raw object behind a Vue proxy: a reactive Result would hand out a
+ * reactive Map for its symbol key.
+ * @type {<T>(value: T) => T}
+ */
+const rawValue = (value) => globalThis.window?.Vue?.toRaw?.(value) ?? value;
+
+/**
+ * The held render state of the shown drawing: its catalog (as
+ * `selectHeldFeatureCatalog` above) and the segments of its committed Results.
+ * @param {FeatureCatalog | null | undefined} catalog
+ * @param {readonly unknown[] | null | undefined} results The drawing's committed Results.
+ * @param {readonly string[] | null} resultNames
+ * @returns {Readonly<HeldRenderState>}
+ */
+export const selectHeldRenderState = (catalog, results, resultNames) => {
+  /** @type {Map<string, Readonly<HeldSegment>>} */
+  const segments = new Map();
+  for (const result of rawValue(results) ?? []) {
+    const raw = result && typeof result === 'object' ? rawValue(result) : null;
+    /** @type {unknown} */
+    const held = raw ? /** @type {{ [SEGMENTS]?: unknown }} */ (raw)[SEGMENTS] : undefined;
+    if (held instanceof Map) held.forEach((segment, revision) => segments.set(revision, segment));
+  }
+  return Object.freeze({ catalog: selectHeldFeatureCatalog(catalog, resultNames), segments });
+};
+
+/**
+ * The held segments a run message names: revisions and byte counts only, sorted.
+ * @param {Readonly<HeldRenderState>} held
+ * @returns {WorkerHeldSegment[]}
+ */
+const heldSegmentList = (held) => [...held.segments.values()]
+  .map(({ revision, bytes }) => ({ revision, bytes }))
+  .sort((left, right) => (left.revision < right.revision ? -1 : left.revision > right.revision ? 1 : 0));
 
 const invalidGenerationResult = () => deserializeWorkerError({
   code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission'
@@ -269,13 +341,14 @@ const normalizeGeneratedArtifactIdentity = (identity) => {
 
 /**
  * @param {unknown[] | WorkerGenerationPayload | string | number | boolean | null | undefined} payload
- * @param {HeldFeatureCatalog | null} [held] The catalog the request named; an "unchanged" reply keeps it.
+ * @param {Readonly<HeldRenderState>} [held] What the request named: an "unchanged" reply keeps its
+ *   catalog, and a held piece takes its segment.
  * @returns {NormalizedGeneration}
  */
-export const normalizeGenerationResponse = (payload, held = null) => {
+export const normalizeGenerationResponse = (payload, held = NOTHING_HELD) => {
   if (Array.isArray(payload)) {
     return markCurrentWorkerGenerationResponse({
-      results: decodeGenerationResults(payload),
+      results: decodeGenerationResults(payload, held.segments),
       metadata: {},
       artifactIdentity: null
     });
@@ -297,7 +370,7 @@ export const normalizeGenerationResponse = (payload, held = null) => {
     });
   }
   const results = Array.isArray(payload.results)
-    ? decodeGenerationResults(payload.results)
+    ? decodeGenerationResults(payload.results, held.segments)
     : [];
   const decodedMetadata = decodeGenerationJson(payload.metadata, GENERATION_JSON_PARTS.metadata);
   // A copy: the catalog joins it below, and a decoded object is the caller's.
@@ -314,10 +387,11 @@ export const normalizeGenerationResponse = (payload, held = null) => {
   const replyRevision = readFeatureCatalogRevision(payload.featureCatalogRevision, invalidGenerationResult);
   if (payload.featureCatalog == null) {
     // "Unchanged": only for the revision this request named.
-    if (!replyRevision || !held || held.revision.revision !== replyRevision.revision) {
+    const heldCatalog = held.catalog;
+    if (!replyRevision || !heldCatalog || heldCatalog.revision.revision !== replyRevision.revision) {
       throw invalidGenerationResult();
     }
-    metadata.featureCatalog = held.catalog;
+    metadata.featureCatalog = heldCatalog.catalog;
     recordStructuralMetric('featureCatalogReuseCount');
     recordSessionLifecycleEvent('catalog.reused', {
       resultCount: Array.isArray(payload.results) ? payload.results.length : 0
@@ -626,12 +700,12 @@ const settleActiveRequest = (request, callback) => {
 
 /**
  * @param {GenerationPayload} [payload]
- * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: HeldFeatureCatalog | null }} [options]
- *   `held`: the catalog the page holds for the drawing it renders (selectHeldFeatureCatalog);
- *   only its revision is posted.
+ * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState> }} [options]
+ *   `held`: what the page holds for the drawing it renders (selectHeldRenderState); the
+ *   catalog's revision and each segment's revision and byte count are posted.
  * @returns {Promise<GenerationResponse>}
  */
-export const runDiagramGeneration = (payload = {}, { onProgress = null, held = null } = {}) => {
+export const runDiagramGeneration = (payload = {}, { onProgress = null, held = NOTHING_HELD } = {}) => {
   if (activeRequest) {
     return Promise.reject(new Error('A diagram generation request is already running.'));
   }
@@ -688,7 +762,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = n
         resourceManifest: preparedResources.resourceManifest,
         stagedResources: preparedResources.stagedResources,
         fontIdentities: requestFontIdentities(payload.request),
-        heldFeatureCatalogRevision: held?.revision ?? null
+        heldFeatureCatalogRevision: held.catalog?.revision ?? null,
+        heldSegments: heldSegmentList(held)
       };
 
       const cleanup = () => {
