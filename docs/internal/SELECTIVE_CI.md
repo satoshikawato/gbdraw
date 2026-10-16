@@ -402,6 +402,13 @@ minutes. The largest file, `linear-multi-record.playwright.spec.js` (about 17.5
 minutes on one worker), fits in one shard because its two workers share its
 cases.
 
+Since the diagram Worker boots from a Pyodide snapshot, the lists were rebuilt from
+the green `dev` runs 38944092373 and 38946503427 (all eight shards executed). The
+recorded minutes fell by about 55 percent in total, the largest file
+`live-generate-parity-legend.playwright.spec.js` from 17.4 to 7.1 minutes. The
+previous lists would have given a slowest shard of 10.6 minutes against a mean of
+9.1 (ratio 1.18); the new lists give 9.1 minutes in every shard.
+
 Rebalance when shard times drift apart, or when the inventory check reports a
 new spec file. Download the shard artifacts of a green run with
 `gh run download <run-id> -p 'playwright-functional-shard-*' -D <dir>`, then run
