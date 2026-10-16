@@ -1,25 +1,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { execFileSync } from 'node:child_process';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { DiagramGenerationCanceledError } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { evaluatePython } from './helpers/python-evaluator.mjs';
 
 const nativeEvaluate = async payload => {
-  const response = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
-import json,sys
+  const response = await evaluatePython(`
+import json
 from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.error_adapter import serialize_web_error,private_web_execution
-p=json.load(sys.stdin)
+p=payload
 try:
     with private_web_execution():
-        result=json.loads(evaluate_rules_json(json.dumps(p['features']),json.dumps(p['rules']),p['kind']))
-    print(json.dumps({'result':result}))
+        result={'result':json.loads(evaluate_rules_json(json.dumps(p['features']),json.dumps(p['rules']),p['kind']))}
 except Exception as e:
-    print(json.dumps({'error':serialize_web_error(e,operation='evaluateRules',stage='rule-validation')}))
-`], { input: JSON.stringify(payload), encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }));
+    result={'error':serialize_web_error(e,operation='evaluateRules',stage='rule-validation')}
+`, payload);
   if (response.error) throw response.error;
   return response.result;
 };

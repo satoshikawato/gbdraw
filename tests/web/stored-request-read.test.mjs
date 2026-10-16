@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
@@ -36,13 +37,7 @@ const {
   readStoredRenderRequest, readPublishedRenderRequest, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
-setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
-import json, sys
-from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
-p = json.load(sys.stdin)
-print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
-`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: fileURLToPath(REPO) })) }));
+setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 
@@ -309,10 +304,8 @@ test('a Linear layout whose record translations do not cover the drawn records d
 });
 
 test('the other diagram\'s request is read at Load: its repairs are listed, and an unreadable one leaves only that set out (OV-670)', async () => {
-  const twoMode = () => JSON.parse(execFileSync('python', ['-c',
-    'import json; from tests.utils.two_mode_session import two_mode_session; print(json.dumps(two_mode_session()))'
-  ], { encoding: 'utf8', cwd: fileURLToPath(REPO), maxBuffer: 1 << 30 }));
-  const listed = twoMode();
+  const twoMode = () => evaluatePython('from tests.utils.two_mode_session import two_mode_session\nresult = two_mode_session()');
+  const listed = await twoMode();
   // Unknown keys are counted under their object, one row per object (S7).
   Object.assign(listed.otherModeResult.renderRequest.records[0], { bogus: true, extra: 1 });
   const first = await load(listed);
@@ -320,7 +313,7 @@ test('the other diagram\'s request is read at Load: its repairs are listed, and 
   assert.deepEqual(first.dialogs.flat(), [
     'Settings: 2 entries of otherModeResult.renderRequest.records[0] could not be read and were dropped.'
   ]);
-  const dropped = twoMode();
+  const dropped = await twoMode();
   dropped.otherModeResult.renderRequest.records = [];
   const second = await load(dropped);
   assert.equal(second.result.status, 'ok', JSON.stringify(second.result.error));

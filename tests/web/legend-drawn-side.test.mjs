@@ -4,10 +4,9 @@
 // (BA-D25, PLAN 12.7 (4)); case and outer spaces read as the position. A Result saved without composition metadata (Session
 // 27 to 30) whose Session stored no side keeps `none`.
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -28,13 +27,7 @@ installSessionImportWorker();
 
 const { importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
-setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
-import json, sys
-from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
-p = json.load(sys.stdin)
-print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
-`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: fileURLToPath(new URL('../../', import.meta.url)) })) }));
+setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const {
   applyCompositionEdit,
@@ -176,9 +169,7 @@ test('OV-671: a 0.13.0 Linear Result drawn with upper_left keeps its SVG at Load
 
 test('OV-672: the other mode\'s Result set reads a stored side outside its mode as the mode\'s default', async () => {
   // tests/utils/two_mode_session.py: a Circular Session 46 with a Linear `otherModeResult`.
-  const session = JSON.parse(execFileSync('python', ['-c',
-    'import json; from tests.utils.two_mode_session import two_mode_session; print(json.dumps(two_mode_session()))'
-  ], { encoding: 'utf8', cwd: fileURLToPath(REPO), maxBuffer: 1 << 30 }));
+  const session = await evaluatePython('from tests.utils.two_mode_session import two_mode_session\nresult = two_mode_session()');
   assert.equal(session.otherModeResult.renderRequest.mode, 'linear');
   session.otherModeResult.results[0].content = withStoredSide(session.otherModeResult.results[0].content, 'upper_left');
   const { outcome, transformed, dialogs } = await load(session);

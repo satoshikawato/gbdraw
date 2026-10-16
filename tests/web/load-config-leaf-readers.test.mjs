@@ -4,10 +4,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
@@ -25,13 +25,7 @@ globalThis.alert = () => {};
 installSessionImportWorker();
 
 const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
-setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
-import json, sys
-from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
-p = json.load(sys.stdin)
-print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
-`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: new URL('../../', import.meta.url).pathname })) }));
+setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 
