@@ -4222,3 +4222,24 @@ def test_cli_resave_keeps_file_defaults_of_linear_cards() -> None:
     validate_session(payload)
     for card in payload["webFiles"]["bindings"]["linearSeqs"]:
         assert {key: card.get(key) for key in defaults} == defaults
+
+
+def test_legacy_renames_are_spelled_only_by_their_owner() -> None:
+    """OV-818: the `sqrt` and `repeat_region` renames are read from one owner."""
+
+    import ast
+
+    import gbdraw.session_io as session_io_module
+    import gbdraw.session_request_codec as codec_module
+    from gbdraw.session_legacy_values import LEGACY_FEATURE_SHAPES, LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES
+
+    renamed = {*LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES, *LEGACY_FEATURE_SHAPES}
+    assert renamed == {"sqrt", "repeat_region"}
+    for module in (session_io_module, codec_module):
+        tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+        literals = sorted(
+            f"{node.value}:{node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in renamed
+        )
+        assert literals == [], module.__name__

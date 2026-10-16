@@ -6,13 +6,17 @@ import argparse
 import math
 import re
 from collections.abc import Iterable
+from typing import SupportsFloat, SupportsIndex
 
 # Python's ``\d`` and ``str.isdigit()`` accept other Unicode digits and ``int()`` reads the
 # decimal ones (``int("١") == 1``). Every integer gbdraw reads from user or file input is
-# ASCII; use these instead of ``\d``, ``isdigit()`` or a bare ``int()``.
+# ASCII; use these instead of ``\d``, ``isdigit()`` or a bare ``int()``. Floats read from
+# user or file input go through :func:`ascii_float` instead of a bare ``float()``.
 ASCII_NONNEGATIVE_INTEGER_PATTERN = "[0-9]+"
 _ASCII_NONNEGATIVE_INTEGER_RE = re.compile(ASCII_NONNEGATIVE_INTEGER_PATTERN)
 _ASCII_INTEGER_RE = re.compile(f"[+-]?{ASCII_NONNEGATIVE_INTEGER_PATTERN}")
+# JavaScript's ``Number.MAX_SAFE_INTEGER``: the largest integer a JavaScript reader of the same value keeps exactly.
+JS_MAX_SAFE_INTEGER = 2**53 - 1
 
 
 def compensated_sum(values: Iterable[float]) -> float:
@@ -98,10 +102,54 @@ def argparse_integer(text: str) -> int:
     return value
 
 
+def ascii_float(value: str | SupportsFloat | SupportsIndex) -> float:
+    """``float(value)``, except that text with another digit or an underscore is refused.
+
+    ``float()`` reads the decimal digits of every script (``float("١.٥") == 1.5``)
+    and digit-grouping underscores (``float("1_0") == 10.0``); such text raises
+    ``float()``'s own ``ValueError``. Everything else ``float()`` accepts is
+    kept: a sign, surrounding whitespace, an exponent, ``.5`` and ``5.``, and
+    ``inf``, ``Infinity`` and ``nan`` in any case. A value that is not text goes
+    to ``float()`` unchanged.
+    """
+
+    if isinstance(value, str) and (
+        "_" in value or (not value.isascii() and any(char.isdecimal() and not char.isascii() for char in value))
+    ):
+        raise ValueError(f"could not convert string to float: {value!r}")
+    return float(value)
+
+
+def parse_ascii_float(text: str) -> float | None:
+    """The float :func:`ascii_float` reads from ``text``, or ``None``."""
+
+    try:
+        return ascii_float(text)
+    except ValueError:
+        return None
+
+
+def argparse_float(text: str) -> float:
+    """argparse ``type=`` of a float option: what ``float()`` read, in ASCII only.
+
+    Other digits and underscores (``"1_0"``) are refused with argparse's own
+    message for a ``float`` option.
+    """
+
+    value = parse_ascii_float(text)
+    if value is None:
+        raise argparse.ArgumentTypeError(f"invalid float value: {text!r}")
+    return value
+
+
 __all__ = [
     "ASCII_NONNEGATIVE_INTEGER_PATTERN",
+    "JS_MAX_SAFE_INTEGER",
+    "argparse_float",
     "argparse_integer",
+    "ascii_float",
     "compensated_sum",
+    "parse_ascii_float",
     "parse_ascii_integer",
     "parse_ascii_nonnegative_integer",
     "scaled_tick_text",

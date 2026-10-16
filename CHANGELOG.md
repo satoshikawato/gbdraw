@@ -678,6 +678,16 @@ write-up of a release.
   with underscores (`1_0`), or with more than 4300 digits, is refused too;
   signs and surrounding spaces are still accepted (OV-674, OV-676, OV-960,
   OV-961).
+- Fixed (CLI, Python): the same rule now covers decimal numbers. A number
+  written with non-ASCII digits or with underscores is refused with the
+  reader's usual error, where Python's `float()` read it as the ASCII number:
+  for example `--gc_content_radius ٠.٥`, `--evalue 1_0`, `--track_axis_gap ١`,
+  a track slot width `٢px`, a config or Session depth bound, or an annotation
+  table `stroke_width` of `1_0` (the table's `start` and `end` integers too).
+  This covers every decimal option of the `gbdraw` commands and the decimal
+  readers of config files, Sessions, and tables. Everything else `float()`
+  accepted is read as before: `0.5`, `+.5`, `5.`, `1e-5`, ` 2 `, and `inf` or
+  `nan` where a reader allowed them (OV-962, OV-1006).
 - Fixed (web app): **Load Session** of a Session 31 to 33 or 39 whose saved
   conservation series has an empty (`null`) row stopped with an unknown error.
   That row is now read like a row without a label (OV-963).
@@ -698,6 +708,9 @@ write-up of a release.
   is not text (for example `{}`) loads with the entry's default name,
   `losat_pair_<n>.tsv`. Before, **Save Raw LOSAT TSV** named the file
   `[object Object]` (OV-981).
+- Fixed (CLI, Python): a Session whose raw LOSAT cache entry has a file name
+  that is not text (for example `7` or `["a.tsv"]`) is read as having no name,
+  as the web app reads it, instead of writing that value as the name (OV-986).
 - Fixed (web app): loading a Session older than version 46 that recolored a
   Legend row named like a built-in JavaScript member (`constructor`,
   `toString`) without a saved original color no longer records that member as

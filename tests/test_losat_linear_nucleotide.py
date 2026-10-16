@@ -463,3 +463,28 @@ def test_edge_filenames_follow_the_shared_vectors() -> None:
     vectors = Path(__file__).parent / "fixtures" / "losat_edge_filename_cases.json"
     for case in json.loads(vectors.read_text(encoding="utf-8"))["cases"]:
         assert losat_edge_filename(case["left"], case["right"], case["suffix"]) == case["expected"]
+
+
+
+@pytest.mark.parametrize("filename", [{}, {"name": "a.tsv"}, ["a.tsv"], 7, None, ""])
+def test_a_losat_entry_filename_that_is_not_text_reads_as_the_default(
+    filename: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # OV-986: `str(... or ...)` named the raw TSVs `{}.tsv` and `# entry 1: {}`.
+    from types import SimpleNamespace
+
+    import gbdraw.linear as linear_module
+
+    entry = {"identityKind": "nucleotide", "display": True, "filename": filename}
+    comparison = SimpleNamespace(search_frame_text="rows\n", query_record_index=0, subject_record_index=1)
+    run_result = SimpleNamespace(
+        canonical_request=SimpleNamespace(options=SimpleNamespace(linear_comparisons=(comparison,))),
+        losat_cache_entries=(entry,),
+        protein_identity_manifest={},
+    )
+    files = linear_module._nucleotide_output_files(run_result)  # type: ignore[arg-type]
+    assert [name for name, _text in files] == ["losat.tsv", "comparisons.tsv"]
+    monkeypatch.setattr(linear_module, "is_protein_losat_cache_entry", lambda _entry: True)
+    monkeypatch.setattr(linear_module, "hydrate_protein_losat_tsv", lambda _entry, _manifest: "rows\n")
+    text = linear_module._losatp_raw_output_text(run_result)  # type: ignore[arg-type]
+    assert "# entry 1: losat_pair_1.tsv\n" in text

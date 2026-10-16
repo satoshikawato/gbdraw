@@ -14,7 +14,7 @@ from typing import Any, Iterable, TypeVar, cast
 
 from svgwrite import Drawing
 
-from gbdraw.core.numeric import parse_ascii_nonnegative_integer
+from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
 from gbdraw.render.group_content import ContentGroup, GroupContent, GroupKind
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
@@ -1916,7 +1916,7 @@ def _deduplicated_sequence_sources(
 
 def _integer_or_none(value: Any) -> int | None:
     try:
-        number = float(value)
+        number = ascii_float(value)
     except (TypeError, ValueError):
         return None
     if not math.isfinite(number) or not number.is_integer():
@@ -2000,7 +2000,7 @@ def _reconstruct_nucleotide_sequence(
         sequence = source_sequence[start:end]
         strand = _text(part.get("strand") or feature.get("strand"))
         try:
-            reverse = strand == "-" or float(strand) < 0
+            reverse = strand == "-" or ascii_float(strand) < 0
         except ValueError:
             reverse = strand == "-"
         reconstructed.append(

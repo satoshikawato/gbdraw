@@ -14,7 +14,7 @@ import sys
 from dataclasses import replace
 from typing import Sequence
 
-from gbdraw.core.numeric import argparse_integer
+from gbdraw.core.numeric import argparse_float, argparse_integer, ascii_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
@@ -159,7 +159,7 @@ def _add_block_stroke_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--block_stroke_width',
         help='Block stroke width (optional; float; default: 2 pt for genomes shorter than the short/long boundary (75 kb circular, 100 kb linear), 0 pt otherwise)',
-        type=float)
+        type=argparse_float)
 
 
 def _add_format_arg(parser: argparse.ArgumentParser) -> None:
@@ -302,11 +302,11 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--depth_min',
         help='Minimum depth for clipping/normalization (optional; must be >= 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--depth_max',
         help='Maximum depth for clipping/normalization (optional; must be >= 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--depth_log_scale',
         dest='depth_normalize',
@@ -343,15 +343,15 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--depth_large_tick_interval',
         help='Depth coverage large tick interval in x coverage units (optional; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--depth_small_tick_interval',
         help='Depth coverage small tick interval in x coverage units (optional; must be > 0; hidden by default).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--depth_tick_font_size',
         help='Depth coverage tick label font size (optional; must be > 0).',
-        type=float)
+        type=argparse_float)
 
 
 def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
@@ -359,17 +359,17 @@ def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--evalue',
         help='Maximum BLAST e-value retained for similarity rings (default: 1e-5).',
-        type=float,
+        type=argparse_float,
         default=thresholds.evalue)
     parser.add_argument(
         '--bitscore',
         help='Minimum BLAST bitscore retained for similarity rings (default: 50).',
-        type=float,
+        type=argparse_float,
         default=thresholds.bitscore)
     parser.add_argument(
         '--identity',
         help='Minimum BLAST identity percentage retained for similarity rings (default: 70).',
-        type=float,
+        type=argparse_float,
         default=thresholds.identity)
     parser.add_argument(
         '--alignment_length',
@@ -387,27 +387,27 @@ def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--gc_content_min_percent',
         help='Minimum GC percent for percent-mode clipping/axis (optional; finite number).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_max_percent',
         help='Maximum GC percent for percent-mode clipping/axis (optional; finite number).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_tick_interval',
         help='GC content percent-mode large tick interval (optional; must be > 0; alias for --gc_content_large_tick_interval).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_large_tick_interval',
         help='GC content percent-mode large tick interval (optional; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_small_tick_interval',
         help='GC content percent-mode small tick interval (optional; must be > 0; hidden by default).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_tick_font_size',
         help='GC content percent-mode tick label font size (optional; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--show_gc_content_axis',
         dest='gc_content_show_axis',
@@ -436,11 +436,11 @@ def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--legend_box_size',
         help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes shorter than the short/long boundary (75 kb circular, 100 kb linear), 20 otherwise).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--legend_font_size',
         help='Legend font size (optional; float; default: 20 (pt) for genomes shorter than the short/long boundary (75 kb circular, 100 kb linear), 16 otherwise).',
-        type=float)
+        type=argparse_float)
 
 
 def _add_font_args(parser: argparse.ArgumentParser) -> None:
@@ -655,7 +655,7 @@ def parse_arrow_head_length_ratio_arg(value: str) -> str | float:
     if text == "auto":
         return "auto"
     try:
-        parsed = float(text)
+        parsed = ascii_float(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(
             "arrow head length ratio must be 'auto' or a positive finite number"
@@ -669,7 +669,7 @@ def parse_arrow_head_length_ratio_arg(value: str) -> str | float:
 
 def parse_arrow_shaft_width_ratio_arg(value: str) -> float:
     try:
-        parsed = float(str(value).strip())
+        parsed = ascii_float(str(value).strip())
     except ValueError as exc:
         raise argparse.ArgumentTypeError(
             "arrow shaft width ratio must be a finite number in (0, 1]"

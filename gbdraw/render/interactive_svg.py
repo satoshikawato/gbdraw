@@ -8,10 +8,16 @@ from importlib import resources
 import json
 import math
 import re
+import string
 from typing import Callable, Literal, TypeGuard, cast, overload
 import xml.etree.ElementTree as ET
 
-from gbdraw.core.numeric import ASCII_NONNEGATIVE_INTEGER_PATTERN, parse_ascii_nonnegative_integer
+from gbdraw.core.numeric import (
+    ASCII_NONNEGATIVE_INTEGER_PATTERN,
+    JS_MAX_SAFE_INTEGER,
+    ascii_float,
+    parse_ascii_nonnegative_integer,
+)
 from gbdraw.exceptions import GbdrawError
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -740,8 +746,8 @@ def _number_or_none(value: object) -> float | int | None:
         return None
     try:
         # Any other object type raises TypeError, handled below.
-        number = float(cast("str | float", value))
-    except (TypeError, ValueError):
+        number = ascii_float(cast("str | float", value))
+    except (OverflowError, TypeError, ValueError):
         return None
     if not math.isfinite(number):
         return None
@@ -799,27 +805,63 @@ def _get_search_labels(
     return out
 
 
+# The location-part readers are the twins of ``locationPartNumber`` and
+# ``locationPartText`` in services/standalone-interactivity.js; both read
+# tests/fixtures/location-parts-vectors.json.
+def _location_part_number(value: object) -> int | None:
+    """A part's start or end: a number or ASCII number text, truncated toward zero.
+
+    A boolean, other text (other digits, underscores, hex), a non-finite number,
+    and a truncation beyond JavaScript's safe integers are missing. Text with
+    any non-ASCII character is missing, spaces included: Python and JavaScript
+    strip different Unicode spaces.
+    """
+
+    if isinstance(value, bool) or (isinstance(value, str) and not value.isascii()):
+        return None
+    number = _number_or_none(value)
+    if number is None:
+        return None
+    truncated = int(number)
+    return truncated if abs(truncated) <= JS_MAX_SAFE_INTEGER else None
+
+
+def _location_part_text(value: object) -> str:
+    """A part's display or strand: text without surrounding ASCII whitespace.
+
+    A list gives its first such non-empty text and a safe integer its digits;
+    anything else (a boolean, a fraction, an object) is empty.
+    """
+
+    if isinstance(value, list):
+        return next((text for item in value if (text := _location_part_text(item))), "")
+    if isinstance(value, str):
+        return value.strip(string.whitespace)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return ""
+    number = _location_part_number(value)
+    return str(number) if number is not None and number == value else ""
+
+
 def _normalize_location_parts(parts: object | None) -> list[dict[str, object]]:
-    if not isinstance(parts, Sequence) or isinstance(parts, (str, bytes)):
+    if not isinstance(parts, list):
         return []
     normalized: list[dict[str, object]] = []
     for part in parts:
         if not isinstance(part, Mapping):
             continue
-        start = _number_or_none(part.get("start"))
-        end = _number_or_none(part.get("end"))
-        display = _first_text(part.get("display"))
-        if not display:
-            start_text = str(int(start) + 1) if isinstance(start, (int, float)) else ""
-            end_text = str(int(end)) if isinstance(end, (int, float)) else ""
-            display = f"{start_text}..{end_text}"
-        if not display or display == "..":
+        start = _location_part_number(part.get("start"))
+        end = _location_part_number(part.get("end"))
+        display = _location_part_text(part.get("display")) or (
+            f"{'' if start is None else start + 1}..{'' if end is None else end}"
+        )
+        if display == "..":
             continue
         normalized.append(
             {
-                "start": int(start) if isinstance(start, (int, float)) else None,
-                "end": int(end) if isinstance(end, (int, float)) else None,
-                "strand": _first_text(part.get("strand")),
+                "start": start,
+                "end": end,
+                "strand": _location_part_text(part.get("strand")),
                 "display": display,
             }
         )

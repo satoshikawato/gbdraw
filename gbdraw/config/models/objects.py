@@ -10,6 +10,7 @@ from gbdraw.definition_line_styles import (
     normalize_definition_line_font_size,
     normalize_definition_line_font_weight,
 )
+from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import ValidationError
 
 from .common import ShortLongFloatConfig
@@ -160,8 +161,8 @@ def _optional_depth_bound(value: Any) -> float | None:
         normalized = value.strip().lower()
         if normalized in UNSET_NUMBER_SPELLINGS:
             return None
-        return float(normalized)
-    return float(value)
+        return ascii_float(normalized)
+    return ascii_float(value)
 
 
 def _optional_gc_content_bound(value: Any) -> float | None:
@@ -172,7 +173,7 @@ def _optional_gc_content_bound(value: Any) -> float | None:
         if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         value = normalized
-    parsed = float(value)
+    parsed = ascii_float(value)
     if not math.isfinite(parsed):
         raise ValidationError("gc_content_min_percent/gc_content_max_percent must be finite numbers")
     return parsed
@@ -186,7 +187,7 @@ def _optional_gc_content_positive(value: Any) -> float | None:
         if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         value = normalized
-    parsed = float(value)
+    parsed = ascii_float(value)
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValidationError("gc_content tick intervals and tick_font_size must be positive finite numbers")
     return parsed
@@ -284,7 +285,7 @@ def _optional_auto_positive_float(value: Any, *, field_name: str) -> float | Non
         if normalized in UNSET_NUMBER_SPELLINGS:
             return None
         value = normalized
-    parsed = float(value)
+    parsed = ascii_float(value)
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValidationError(f"{field_name} must be a positive finite number or auto")
     return parsed

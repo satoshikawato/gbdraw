@@ -1,5 +1,5 @@
 {
-  "description": "Feature location parts that the two interactive SVG writers normalize: the Python CLI writer (interactive_svg._normalize_location_parts) and the Web export writer (standalone-interactivity.js normalizeLocationParts). A null, absent, blank, non-numeric, or non-scalar start or end is missing; a number truncates toward zero; a missing display is built from the 1-based start and the end. Each case's input is the parts value and expected is the normalized list. The viewer script in the written file reads the parts with its own code and is not pinned here.",
+  "description": "Feature location parts that the two interactive SVG writers normalize: the Python CLI writer (interactive_svg._normalize_location_parts) and the Web export writer (standalone-interactivity.js normalizeLocationParts). A start or end is a number or ASCII number text (gbdraw.core.numeric.ascii_float) truncated toward zero; anything else, including a boolean and a truncation beyond the safe integers, is missing. A display or strand is text without surrounding ASCII whitespace, the first such text of a list, or a safe integer's digits; a missing display is built from the 1-based start and the end. Each case's input is the parts value and expected is the normalized list. The viewer script in the written file reads the parts with its own code and is not pinned here.",
   "cases": [
     {
       "name": "whole-number start and end give a 1-based display",
@@ -313,6 +313,269 @@
         "end": 2
       },
       "expected": []
+    },
+    {
+      "name": "a boolean start or end is missing, not 1 or 0",
+      "input": [
+        {
+          "start": true,
+          "end": 20
+        },
+        {
+          "start": 10,
+          "end": false
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        },
+        {
+          "start": 10,
+          "end": null,
+          "strand": "",
+          "display": "11.."
+        }
+      ]
+    },
+    {
+      "name": "hexadecimal text is not a number",
+      "input": [
+        {
+          "start": "0x10",
+          "end": 20
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        }
+      ]
+    },
+    {
+      "name": "text with an underscore is not a number",
+      "input": [
+        {
+          "start": 5,
+          "end": "1_0"
+        }
+      ],
+      "expected": [
+        {
+          "start": 5,
+          "end": null,
+          "strand": "",
+          "display": "6.."
+        }
+      ]
+    },
+    {
+      "name": "text with non-ASCII digits or spaces is not a number",
+      "input": [
+        {
+          "start": "\u0661\u0660",
+          "end": 20
+        },
+        {
+          "start": 5,
+          "end": "\u00a020"
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        },
+        {
+          "start": 5,
+          "end": null,
+          "strand": "",
+          "display": "6.."
+        }
+      ]
+    },
+    {
+      "name": "ASCII number text keeps its sign, exponent, and surrounding ASCII whitespace",
+      "input": [
+        {
+          "start": " +1e1\t",
+          "end": ".5e2"
+        },
+        {
+          "start": "-5.",
+          "end": "\n7\n"
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 50,
+          "strand": "",
+          "display": "11..50"
+        },
+        {
+          "start": -5,
+          "end": 7,
+          "strand": "",
+          "display": "-4..7"
+        }
+      ]
+    },
+    {
+      "name": "a number too large for a float or beyond the safe integers is missing",
+      "input": [
+        {
+          "start": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+          "end": 20
+        },
+        {
+          "start": 10,
+          "end": 1e+20
+        },
+        {
+          "start": "inf",
+          "end": "nan"
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        },
+        {
+          "start": 10,
+          "end": null,
+          "strand": "",
+          "display": "11.."
+        }
+      ]
+    },
+    {
+      "name": "a display or strand of 0 is kept as text",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": 0,
+          "display": 0
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "0",
+          "display": "0"
+        }
+      ]
+    },
+    {
+      "name": "a whole-number display or strand is its digits, a fraction is no text",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": -1.0,
+          "display": 1.5
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "-1",
+          "display": "2..2"
+        }
+      ]
+    },
+    {
+      "name": "a list display or strand gives its first non-blank text",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": [
+            null,
+            " ",
+            "-",
+            "+"
+          ],
+          "display": [
+            "",
+            [
+              " join(2..2) "
+            ],
+            "x"
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "-",
+          "display": "join(2..2)"
+        }
+      ]
+    },
+    {
+      "name": "a boolean or object display or strand is no text",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": true,
+          "display": {}
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "strand": {},
+          "display": false
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "",
+          "display": "2..2"
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "strand": "",
+          "display": "4..4"
+        }
+      ]
+    },
+    {
+      "name": "only ASCII whitespace is trimmed from a display",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "display": "\ufeff<2..2\u00a0 "
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "",
+          "display": "\ufeff<2..2\u00a0"
+        }
+      ]
     }
   ]
 }

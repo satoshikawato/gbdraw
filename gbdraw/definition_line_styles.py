@@ -8,6 +8,8 @@ from __future__ import annotations
 import math
 from typing import Iterable, cast
 
+from gbdraw.core.numeric import ascii_float
+
 DEFINITION_LINE_KINDS: tuple[str, ...] = ("name", "subtitle", "replicon", "accession", "length")
 DEFINITION_LINE_STYLE_PROPERTIES: tuple[str, ...] = ("font_size", "font_weight", "fill")
 
@@ -66,7 +68,7 @@ def normalize_definition_line_font_size(value: object) -> float | None:
         if normalized in {"", "auto", "none", "null", "default"}:
             return None
         value = normalized
-    parsed = float(cast("str | float", value))  # a non-numeric object still raises TypeError/ValueError
+    parsed = ascii_float(cast("str | float", value))  # a non-numeric object still raises TypeError/ValueError
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValueError("definition line font_size must be a positive finite number")
     return parsed
@@ -81,7 +83,7 @@ def normalize_definition_line_font_weight(value: object) -> str | None:
     if normalized in _NAMED_FONT_WEIGHTS:
         return normalized
     try:
-        numeric = float(normalized)
+        numeric = ascii_float(normalized)
     except ValueError as exc:
         raise ValueError(
             "definition line font_weight must be normal, bold, lighter, bolder, or 100 through 900"

@@ -5,6 +5,8 @@ from math import isfinite
 import re
 from typing import Literal
 
+from gbdraw.core.numeric import ascii_float
+
 ScalarUnit = Literal["px", "factor"]
 
 
@@ -62,10 +64,10 @@ class ScalarSpec:
         if not s:
             raise ValueError("empty scalar")
         if s.endswith("px"):
-            return cls(value=float(s[:-2]), unit="px")
+            return cls(value=ascii_float(s[:-2]), unit="px")
         if s.endswith("%"):
-            return cls(value=float(s[:-1]) / 100.0, unit="factor")
-        return cls(value=float(s), unit="factor")
+            return cls(value=ascii_float(s[:-1]) / 100.0, unit="factor")
+        return cls(value=ascii_float(s), unit="factor")
 
     def resolve(self, reference: float) -> float:
         return self.value if self.unit == "px" else (self.value * reference)

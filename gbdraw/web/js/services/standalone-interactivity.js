@@ -3,6 +3,7 @@
 /** @import { AliasSource } from './feature-identity.js' */
 /** @import { OrthogroupFeatureIndex, OrthogroupMetadataEntry } from './orthogroup-feature-metadata.js' */
 import { normalizeStringArray } from './feature-utils.js';
+import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
@@ -187,39 +188,65 @@ const normalizeQualifierMap = (qualifiers) => {
   return normalized;
 };
 
+// The location-part readers are the twins of `_location_part_number` and
+// `_location_part_text` in gbdraw/render/interactive_svg.py; both read
+// tests/fixtures/location-parts-vectors.json.
+const NON_ASCII = /[^\x00-\x7F]/;
+// The ASCII whitespace that Python's `float()` and `str.strip(string.whitespace)` remove.
+const ASCII_WHITESPACE_AT_ENDS = /^[\t\n\v\f\r ]+|[\t\n\v\f\r ]+$/g;
+
 /**
- * A part's start or end as the Python writer reads it
- * (`_normalize_location_parts`): null, blank, and non-numeric values are
- * missing, and a number truncates toward zero.
+ * A part's start or end: a number or ASCII number text, truncated toward zero.
+ * A boolean, other text (other digits, underscores, hex), a non-finite number,
+ * and a truncation beyond the safe integers are missing.
  * @param {unknown} value
  * @returns {number | null}
  */
 const locationPartNumber = (value) => {
-  if (typeof value !== 'number' && typeof value !== 'string') return null;
-  if (typeof value === 'string' && !value.trim()) return null;
-  const number = Number(value);
+  // Any non-ASCII text is missing, spaces included: Python and JavaScript strip different Unicode spaces.
+  if (typeof value === 'string' && NON_ASCII.test(value)) return null;
+  const number = classifyOptionalNumber(value).value ?? null;
+  if (number === null) return null;
   // `|| 0` turns the -0 of a negative fraction into 0, as Python's int() does.
-  return Number.isFinite(number) ? Math.trunc(number) || 0 : null;
+  const truncated = Math.trunc(number) || 0;
+  return Number.isSafeInteger(truncated) ? truncated : null;
+};
+
+/**
+ * A part's display or strand: text without surrounding ASCII whitespace. A
+ * list gives its first such non-empty text and a safe integer its digits;
+ * anything else (a boolean, a fraction, an object) is empty.
+ * @param {unknown} value
+ * @returns {string}
+ */
+const locationPartText = (value) => {
+  if (Array.isArray(value)) {
+    for (const item of /** @type {unknown[]} */ (value)) {
+      const text = locationPartText(item);
+      if (text) return text;
+    }
+    return '';
+  }
+  if (typeof value === 'string') return value.replace(ASCII_WHITESPACE_AT_ENDS, '');
+  return typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : '';
 };
 
 /** @param {unknown} parts */
 export const normalizeLocationParts = (parts) => {
   if (!Array.isArray(parts)) return [];
-  return parts
-    .map((/** @type {unknown} */ item) => {
-      const part = /** @type {Record<string, unknown>} */ (item && typeof item === 'object' ? item : {});
-      const start = locationPartNumber(part.start);
-      const end = locationPartNumber(part.end);
-      const display = String(part.display || '').trim() ||
-        `${start === null ? '' : start + 1}..${end === null ? '' : end}`;
-      return {
-        start,
-        end,
-        strand: String(part.strand || '').trim(),
-        display
-      };
-    })
-    .filter((part) => part.display && part.display !== '..');
+  /** @type {{ start: number | null, end: number | null, strand: string, display: string }[]} */
+  const normalized = [];
+  for (const item of /** @type {unknown[]} */ (parts)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const part = /** @type {Record<string, unknown>} */ (item);
+    const start = locationPartNumber(part.start);
+    const end = locationPartNumber(part.end);
+    const display = locationPartText(part.display) ||
+      `${start === null ? '' : start + 1}..${end === null ? '' : end}`;
+    if (display === '..') continue;
+    normalized.push({ start, end, strand: locationPartText(part.strand), display });
+  }
+  return normalized;
 };
 
 /**

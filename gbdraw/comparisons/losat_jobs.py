@@ -61,6 +61,17 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
 
 
+def losat_entry_filename(entry: Mapping[str, object]) -> str:
+    """The file name a raw LOSAT cache entry saved, or ``""`` when it saved no text.
+
+    A Session is unvalidated data: a ``filename`` that is not text (``{}``) is
+    read as none, as the Web reads it, so the caller's default name applies.
+    """
+
+    filename = entry.get("filename")
+    return filename if isinstance(filename, str) else ""
+
+
 def unique_losat_filenames(
     names: Sequence[str], *, reserved: Sequence[str] = ()
 ) -> tuple[str, ...]:
@@ -447,6 +458,7 @@ __all__ = [
     "LosatJob",
     "LosatpSpecMode",
     "NUCLEOTIDE_LOSAT_CACHE_SCHEMA",
+    "losat_entry_filename",
     "losat_fasta_text",
     "losat_record_uids",
     "losat_search_frame_fasta",

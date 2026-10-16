@@ -5,6 +5,7 @@ from numbers import Integral
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping, TypeAlias, cast
 
+from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import ValidationError
 
 LinearTrackLayoutMode: TypeAlias = Literal["above", "middle", "below"]
@@ -14,7 +15,7 @@ def _positive_finite_float(value: Any, *, field_name: str) -> float:
     if isinstance(value, bool):
         raise ValidationError(f"{field_name} must be a positive finite number")
     try:
-        parsed = float(value)
+        parsed = ascii_float(value)
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{field_name} must be a positive finite number") from exc
     if not math.isfinite(parsed) or parsed <= 0:
@@ -168,13 +169,13 @@ class LinearCanvasConfig:
                 track_axis_gap = None
             else:
                 try:
-                    parsed_gap = float(normalized_gap)
+                    parsed_gap = ascii_float(normalized_gap)
                 except ValueError:
                     parsed_gap = -1.0
                 track_axis_gap = parsed_gap if parsed_gap >= 0.0 else None
         else:
             try:
-                parsed_gap = float(track_axis_gap_raw)
+                parsed_gap = ascii_float(track_axis_gap_raw)
             except (TypeError, ValueError):
                 parsed_gap = -1.0
             track_axis_gap = parsed_gap if parsed_gap >= 0.0 else None

@@ -36,6 +36,8 @@ from .analysis.protein_colinearity import (
 from .comparisons.losat_jobs import NUCLEOTIDE_LOSAT_CACHE_SCHEMA
 from .core.numeric import (
     ASCII_NONNEGATIVE_INTEGER_PATTERN,
+    JS_MAX_SAFE_INTEGER,
+    ascii_float,
     parse_ascii_integer,
     parse_ascii_nonnegative_integer,
 )
@@ -45,6 +47,11 @@ from .io.colors import is_user_color, named_color_hex
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
+from .session_legacy_values import (
+    LEGACY_FEATURE_SHAPES,
+    LEGACY_FEATURE_TYPES,
+    LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
+)
 from .session_contract import (
     FeatureOverrideDraftRow,
     FlatDraftFields,
@@ -155,7 +162,6 @@ FEATURE_OVERRIDE_DRAFT_FIELDS = keys_of(FeatureOverrideDraftRow)
 _SESSION_FIELDS_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
-JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _DEPTH_COLUMNS = ("reference_name", "position", "depth")
 _SLOT_PART_RE = re.compile(rf"([^\[\]]+)|\[({ASCII_NONNEGATIVE_INTEGER_PATTERN})\]")
@@ -1934,7 +1940,6 @@ _FEATURE_VISIBILITY_EDIT_VALUES = {
     "suppress": "exclude_matching",
 }
 _FEATURE_EDIT_DRAFT_FIELDS = ("featureVisibility", "labelVisibility", "labelText", "labelSourceText")
-_JS_MAX_SAFE_INTEGER = 2**53 - 1
 
 
 def _rendered_id_without_part(rendered_id: object) -> str:
@@ -1971,7 +1976,7 @@ def _safe_integer(value: object) -> int | None:
         return None
     if isinstance(value, float) and value.is_integer():
         value = int(value)
-    if isinstance(value, int) and abs(value) <= _JS_MAX_SAFE_INTEGER:
+    if isinstance(value, int) and abs(value) <= JS_MAX_SAFE_INTEGER:
         return value
     return None
 
@@ -2041,7 +2046,7 @@ def _nonnegative_integer(value: object) -> int | None:
     if value is None or value == "":
         return None
     number = _js_number(value)
-    if math.isfinite(number) and number.is_integer() and 0 <= number <= _JS_MAX_SAFE_INTEGER:
+    if math.isfinite(number) and number.is_integer() and 0 <= number <= JS_MAX_SAFE_INTEGER:
         return int(number)
     return None
 
@@ -3663,7 +3668,7 @@ def _migrated_linear_label_placement(value: object) -> str:
 def _migrated_circular_multi_record_size_mode(value: object) -> str:
     normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "auto"
     return _current_option_value(
-        "auto" if normalized == "sqrt" else normalized,
+        LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(normalized, normalized),
         "auto",
         ("auto", "linear", "equal"),
         "Circular multi-record size mode",
@@ -3829,13 +3834,16 @@ def _with_legacy_repeat_region_shape(config: Mapping[str, Any]) -> Mapping[str, 
     if not isinstance(adv, Mapping):
         return config
     features = adv.get("features")
-    if isinstance(features, list) and "repeat_region" not in features:
-        return config
     shapes = adv.get("feature_shapes")
     shapes = shapes if isinstance(shapes, Mapping) else {}
-    if "repeat_region" in shapes:
+    missing = {
+        feature_type: shape
+        for feature_type, shape in LEGACY_FEATURE_SHAPES.items()
+        if (not isinstance(features, list) or feature_type in features) and feature_type not in shapes
+    }
+    if not missing:
         return config
-    return {**config, "adv": {**adv, "feature_shapes": {**shapes, "repeat_region": "rectangle"}}}
+    return {**config, "adv": {**adv, "feature_shapes": {**shapes, **missing}}}
 
 
 def migrate_session_draft_values(config: object, source_version: int) -> object:
@@ -5846,8 +5854,8 @@ def _canonicalize_legacy_session_cli_args(
         if separator:
             if mode == "circular" and option == "--circular_track_slot":
                 inline_value = _migrate_legacy_circular_track_slot_spec(inline_value)
-            if option == "--multi_record_size_mode" and inline_value == "sqrt":
-                inline_value = "auto"
+            if option == "--multi_record_size_mode":
+                inline_value = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(inline_value, inline_value)
             elif mode == "linear" and option == "--label_placement":
                 inline_value = {
                     "on_feature": "above_feature",
@@ -5862,8 +5870,8 @@ def _canonicalize_legacy_session_cli_args(
             token = option
             if canonical_args:
                 previous_option = canonical_args[-1].partition("=")[0]
-                if previous_option == "--multi_record_size_mode" and token == "sqrt":
-                    token = "auto"
+                if previous_option == "--multi_record_size_mode" and token in LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES:
+                    token = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES[token]
                 elif (
                     mode == "linear"
                     and previous_option == "--label_placement"
@@ -6011,18 +6019,12 @@ def _gui_session_to_cli_args(
     if int(session.get("version", 0)) <= 30:
         effective_features = adv.get("features")
         if not isinstance(effective_features, list):
-            effective_features = [
-                "CDS",
-                "rRNA",
-                "tRNA",
-                "tmRNA",
-                "ncRNA",
-                "misc_RNA",
-                "repeat_region",
-            ]
-        if "repeat_region" in effective_features:
+            effective_features = list(LEGACY_FEATURE_TYPES)
+        legacy_shapes = [item for item in LEGACY_FEATURE_SHAPES.items() if item[0] in effective_features]
+        if legacy_shapes:
             feature_shapes = dict(adv.get("feature_shapes") or {})
-            feature_shapes.setdefault("repeat_region", "rectangle")
+            for feature_type, shape in legacy_shapes:
+                feature_shapes.setdefault(feature_type, shape)
             adv["feature_shapes"] = feature_shapes
 
     run_args: list[str] = []
@@ -6391,11 +6393,8 @@ def _append_circular_gui_args(
     ):
         value = adv.get(key)
         if value not in (None, "", False):
-            if (
-                key == "multi_record_size_mode"
-                and str(value).strip().lower() == "sqrt"
-            ):
-                value = "auto"
+            if key == "multi_record_size_mode":
+                value = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(str(value).strip().lower(), value)
             _append_pair(run_args, invocation_args, option, str(value))
 
     input_type = str(ui.get("cInputType") or "gb")
@@ -7023,7 +7022,7 @@ def _is_depth_text(value: object) -> bool:
     if not text:
         return False
     try:
-        parsed = float(text)
+        parsed = ascii_float(text)
     except ValueError:
         return False
     return math.isfinite(parsed) and parsed >= 0
@@ -7096,20 +7095,15 @@ def migrate_legacy_repeat_feature_shape_args(
     effective_features = (
         {item.strip() for item in features_raw.split(",") if item.strip()}
         if features_raw is not None
-        else {
-            "CDS",
-            "rRNA",
-            "tRNA",
-            "tmRNA",
-            "ncRNA",
-            "misc_RNA",
-            "repeat_region",
-        }
+        else set(LEGACY_FEATURE_TYPES)
     )
-    if (
-        "repeat_region" in effective_features
-        and "repeat_region" not in _feature_shapes_from_cli_args(migrated)
-    ):
+    recorded_shapes = _feature_shapes_from_cli_args(migrated)
+    legacy_shapes = [
+        f"{feature_type}={shape}"
+        for feature_type, shape in LEGACY_FEATURE_SHAPES.items()
+        if feature_type in effective_features and feature_type not in recorded_shapes
+    ]
+    for legacy_shape in legacy_shapes:
         insertion_index = next(
             (
                 index
@@ -7118,10 +7112,7 @@ def migrate_legacy_repeat_feature_shape_args(
             ),
             len(migrated),
         )
-        migrated[insertion_index:insertion_index] = [
-            "--feature_shape",
-            "repeat_region=rectangle",
-        ]
+        migrated[insertion_index:insertion_index] = ["--feature_shape", legacy_shape]
     return migrated
 
 

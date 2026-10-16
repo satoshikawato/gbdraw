@@ -65,7 +65,12 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
-from gbdraw.core.numeric import parse_ascii_nonnegative_integer
+from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
+from gbdraw.session_legacy_values import (
+    LEGACY_FEATURE_SHAPES,
+    LEGACY_FEATURE_TYPES,
+    LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
+)
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import (
@@ -264,19 +269,6 @@ _LEGACY_SPARSE_COMPARISON_DEFAULTS = {
     "identity": 70.0,
     "alignment_length": 0,
 }
-_LEGACY_SPARSE_FEATURE_TYPES = (
-    "CDS",
-    "rRNA",
-    "tRNA",
-    "tmRNA",
-    "ncRNA",
-    "misc_RNA",
-    "repeat_region",
-)
-# The feature shapes a schema 1-2 request left unset.
-_LEGACY_SPARSE_FEATURE_SHAPES = {"repeat_region": "rectangle"}
-# Schemas 1-2 values of the Circular multi-record size mode.
-_LEGACY_SIZE_MODE_RENAMES = {"sqrt": "auto"}
 _LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
     "circular": {
         "canvas.show_gc": True,
@@ -1657,7 +1649,7 @@ def _decode_circular_layout(
         )
     size_mode = layout["multiRecordSizeMode"]
     if schema in {1, 2} and isinstance(size_mode, str):
-        size_mode = _LEGACY_SIZE_MODE_RENAMES.get(size_mode, size_mode)
+        size_mode = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(size_mode, size_mode)
     result = CircularMultiRecordOptions(
         multi_record_size_mode=size_mode,
         multi_record_min_radius_ratio=layout["multiRecordMinRadiusRatio"],
@@ -1938,7 +1930,7 @@ def _decode_diagram_options(
         )
     if schema in {1, 2}:
         feature_shapes = dict(decoded.get("feature_shapes") or {})
-        for feature_type, shape in _LEGACY_SPARSE_FEATURE_SHAPES.items():
+        for feature_type, shape in LEGACY_FEATURE_SHAPES.items():
             feature_shapes.setdefault(feature_type, shape)
         decoded["feature_shapes"] = feature_shapes
     if schema in {1, 2}:
@@ -2325,7 +2317,7 @@ def _restore_legacy_sparse_defaults(
 
     for name, default in _LEGACY_SPARSE_COMPARISON_DEFAULTS.items():
         decoded.setdefault(name, default)
-    decoded.setdefault("selected_features_set", _LEGACY_SPARSE_FEATURE_TYPES)
+    decoded.setdefault("selected_features_set", LEGACY_FEATURE_TYPES)
 
     if decoded.get("config") is not None:
         return
@@ -2396,7 +2388,7 @@ def _expanded_depth_numeric_metadata(
             items.append(None)
             continue
         try:
-            numeric = float(value)
+            numeric = ascii_float(value)
         except (TypeError, ValueError, OverflowError) as exc:
             raise CanonicalRequestEncodingError(
                 f"{field_name} values must be finite numbers > 0 or None."
@@ -5020,9 +5012,9 @@ def describe_legacy_request_tables() -> dict[str, Any]:
             _option_wire_key(name): value
             for name, value in _LEGACY_SPARSE_COMPARISON_DEFAULTS.items()
         },
-        "featureTypes": list(_LEGACY_SPARSE_FEATURE_TYPES),
-        "featureShapes": dict(_LEGACY_SPARSE_FEATURE_SHAPES),
-        "multiRecordSizeModeRenames": dict(_LEGACY_SIZE_MODE_RENAMES),
+        "featureTypes": list(LEGACY_FEATURE_TYPES),
+        "featureShapes": dict(LEGACY_FEATURE_SHAPES),
+        "multiRecordSizeModeRenames": dict(LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES),
         # The slot parameter the decoder reads a slot spacing from (A8, N3).
         "privateSpacingParam": _LEGACY_SPACING_PARAM,
         "configOverrides": {

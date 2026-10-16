@@ -129,8 +129,8 @@ from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
 )
-from .comparisons.losat_jobs import unique_losat_filenames
-from .core.numeric import argparse_integer, parse_ascii_integer
+from .comparisons.losat_jobs import losat_entry_filename, unique_losat_filenames
+from .core.numeric import argparse_float, argparse_integer, ascii_float, parse_ascii_integer
 
 
 # ``--losat`` choices (design 3.2).
@@ -206,7 +206,7 @@ def _parse_linear_track_axis_gap(value: str) -> float | None:
     if normalized in {"", "auto"}:
         return None
     try:
-        axis_gap = float(normalized)
+        axis_gap = ascii_float(normalized)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(
             "track axis gap must be a non-negative number or 'auto'"
@@ -292,7 +292,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         "--linear_record_gap",
         metavar="PX",
-        type=float,
+        type=argparse_float,
         default=24.0,
         help="Gap in pixels between records in the same Linear row (default: 24).",
     )
@@ -546,7 +546,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--depth_height',
         help='Depth track height for linear mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     _add_depth_axis_args(parser)
     parser.add_argument(
         '--align_center',
@@ -568,17 +568,17 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--evalue',
         help='evalue threshold (default=1e-2)',
-        type=float,
+        type=argparse_float,
         default=LINEAR_MODE_PROFILE.comparison.evalue)
     parser.add_argument(
         '--bitscore',
         help='bitscore threshold (default=50)',
-        type=float,
+        type=argparse_float,
         default=LINEAR_MODE_PROFILE.comparison.bitscore)
     parser.add_argument(
         '--identity',
         help='identity threshold (default=0)',
-        type=float,
+        type=argparse_float,
         default=LINEAR_MODE_PROFILE.comparison.identity)
     parser.add_argument(
         '--alignment_length',
@@ -607,7 +607,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--axis_stroke_width',
         help='Axis stroke width (optional; float; default: 5 pt for genomes < 100 kb, 2 pt for genomes >= 100 kb)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--line_stroke_color',
         help='Line stroke color (optional; str; default: "lightgray")',
@@ -615,11 +615,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--line_stroke_width',
         help='Line stroke width (optional; float; default: 5 pt for genomes < 100 kb, 1 pt for genomes >= 100 kb)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--definition_font_size',
         help='Definition font size (optional; float; default: 24 pt for genomes < 100 kb, 10 pt for genomes >= 100 kb)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--definition_line_style',
         dest='definition_line_style',
@@ -647,7 +647,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--plot_title_font_size',
         help='Shared plot title font size (optional; float; default: 32).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--record_label',
         help='Optional top record-label line (for example organism/strain; repeatable; order matches input records)',
@@ -680,7 +680,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 24 pt for genomes < 100 kb, 5 pt for genomes >= 100 kb)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--label_placement',
         help='Linear label placement mode ("auto" or "above_feature"; default: "auto"). "above_feature" draws labels above features (or below negative-strand features when --separate_strands is used).',
@@ -696,12 +696,12 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--label_rotation',
         help='Linear label rotation in degrees (optional; float; default: 0). In above_feature mode, rotated labels start from the feature midpoint.',
-        type=float,
+        type=argparse_float,
     )
     parser.add_argument(
         '--linear_label_spacing',
         help='Linear label-to-label vertical spacing in px (optional; float; must be > 0).',
-        type=float,
+        type=argparse_float,
     )
     parser.add_argument(
         '--track_layout',
@@ -772,15 +772,15 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--feature_height',
         help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes < 100 kb, 20 for genomes >= 100 kb)',
-        type=float),
+        type=argparse_float),
     parser.add_argument(
         '--gc_height',
         help='GC content/skew vertical width (optional; float; default: 20 (pixels, 96 dpi))',
-        type=float),
+        type=argparse_float),
     parser.add_argument(
         '--comparison_height',
         help='Comparison block height (optional; float; optional; default: 60 (pixels, 96 dpi))',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--hide_scale',
         help='Hide the coordinate scale while retaining each record axis (default: False).',
@@ -798,15 +798,15 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--scale_stroke_width',
         help='Scale bar/ruler stroke width (optional; float; default: 3 (pt))',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--scale_font_size',
         help='Scale bar/ruler font size (optional; float; default: 24 (pt) for genomes < 100 kb, 16 for genomes >= 100 kb).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--ruler_label_font_size',
         help='Ruler label font size (optional; float). Overrides --scale_font_size when both are set.',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--ruler_label_color',
         help='Ruler label color (optional; str; default follows axis color when --ruler_on_axis is active, otherwise black).',
@@ -938,7 +938,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
             if option_text in {"", "auto", "none", "null", "-"}:
                 continue
             try:
-                numeric_option_value = float(option_value)
+                numeric_option_value = ascii_float(option_value)
             except (TypeError, ValueError):
                 parser.error(f"--{option_name} values must be numbers or auto")
             if numeric_option_value <= 0:
@@ -1129,7 +1129,7 @@ def _losatp_raw_output_text(run_result: DiagramRunResult) -> str:
         "# Non-comment lines use the 12 BLAST outfmt 6 columns.",
     ]
     for index, entry in enumerate(entries, start=1):
-        filename = str(entry.get("filename") or f"losat_pair_{index}.tsv")
+        filename = losat_entry_filename(entry) or f"losat_pair_{index}.tsv"
         if "\n" in filename or "\r" in filename:
             raise ValidationError("Protein-search evidence filename contains a newline.")
         hydrated = hydrate_protein_losat_tsv(entry, manifest).rstrip("\r\n")
@@ -1148,7 +1148,7 @@ def _nucleotide_output_files(run_result: DiagramRunResult) -> list[tuple[str, st
         if comparison.search_frame_text is not None
     ]
     names = [
-        str(entry.get("filename") or "")
+        losat_entry_filename(entry)
         for entry in run_result.losat_cache_entries or ()
         if entry.get("identityKind") == "nucleotide" and entry.get("display") is not False
     ]
