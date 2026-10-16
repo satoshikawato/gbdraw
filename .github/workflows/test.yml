@@ -254,6 +254,24 @@ jobs:
         if: always()
         run: git diff --exit-code -- tests/reference_outputs/
 
+  fail-fast-core-pr:
+    # Cancels the rest of a pull request run once core-pr has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Core PR)
+    needs: core-pr
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
+
   recipes-standard:
     name: Recipes standard (Python 3.11)
     needs: ci-impact
@@ -285,6 +303,24 @@ jobs:
           python -m pytest tests/
           -m "recipe and not slow"
           --durations=30
+
+  fail-fast-recipes-standard:
+    # Cancels the rest of a pull request run once recipes-standard has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Recipes standard)
+    needs: recipes-standard
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
 
   gallery:
     name: Gallery (Python 3.11)
@@ -570,6 +606,24 @@ jobs:
           -m "browser and not slow"
           $COMPARISON_CONTRACTS_DESELECT
           --durations=30
+
+  fail-fast-web-contracts-pr:
+    # Cancels the rest of a pull request run once web-contracts-pr has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Web contracts)
+    needs: web-contracts-pr
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
 
   web-pr-smoke:
     name: Web PR smoke
