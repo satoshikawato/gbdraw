@@ -9,7 +9,9 @@ import {
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
-import { fetchPyodideSnapshot, installRuntimePackages } from './pyodide-snapshot.js';
+import {
+  fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep
+} from './pyodide-snapshot.js';
 
 let runtimePromise = null;
 let runtime = null;
@@ -343,20 +345,27 @@ const initializeRuntime = async ({
   runtimePromise = (async () => {
     reportStep(0);
     // A test server may serve a snapshot of the runtime this function builds
-    // (workers/pyodide-snapshot.js); any error restoring it rejects this init.
+    // (workers/pyodide-snapshot.js). An error in a step of its restore is a
+    // snapshot failure (pyodideSnapshotStep); any other error is an ordinary
+    // init error (OV-1021).
     const [{ loadPyodide }, snapshot] = await Promise.all([
       import(pyodideModuleUrl),
-      pyodideSnapshotUrl ? fetchPyodideSnapshot({ folderUrl: pyodideSnapshotUrl, gbdrawWheelUrl, localWheelUrls }) : null
+      pyodideSnapshotUrl
+        ? pyodideSnapshotStep(() => fetchPyodideSnapshot({ folderUrl: pyodideSnapshotUrl, gbdrawWheelUrl, localWheelUrls }))
+        : null
     ]);
-    const pyodide = await loadPyodide({
+    const load = () => loadPyodide({
       indexURL: pyodideIndexUrl,
       packageBaseUrl: pyodideIndexUrl,
       ...(snapshot && { _loadSnapshot: snapshot.memory, _snapshotDeserializer: snapshot.deserialize })
     });
+    const pyodide = await (snapshot ? pyodideSnapshotStep(load) : load());
     if (snapshot) {
       reportStep(4);
-      await snapshot.complete(pyodide);
-      runtime = bootedRuntime(pyodide, 'snapshot');
+      runtime = await pyodideSnapshotStep(async () => {
+        await snapshot.complete(pyodide);
+        return bootedRuntime(pyodide, 'snapshot');
+      });
       return runtime;
     }
     reportStep(1);
@@ -1323,10 +1332,11 @@ const handleWorkerMessage = async (data) => {
       try {
         initialized = await initializeRuntime(data);
       } catch (error) {
-        if (!data.pyodideSnapshotUrl) throw error;
-        // Any snapshot restore error: the page replaces this Worker with one
+        const snapshotError = pyodideSnapshotFailureDetail(error);
+        if (snapshotError === null) throw error;
+        // A snapshot restore error: the page replaces this Worker with one
         // that boots cold (services/diagram-generation.js).
-        self.postMessage({ id, type: 'init', ok: false, snapshotError: String(error?.context?.detail || error?.message || error) });
+        self.postMessage({ id, type: 'init', ok: false, snapshotError });
         return;
       }
       // The replay of the page's fonts into a new Worker, font by font; the

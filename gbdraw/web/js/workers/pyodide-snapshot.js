@@ -139,6 +139,32 @@ const snapshotFailure = (detail) => diagnosticError(
   'WORKER_INIT', { reason: 'pyodide-snapshot', detail }, { stage: 'initialization' }
 );
 
+/**
+ * The detail of a snapshot failure, or null for any other error, which is an
+ * ordinary Worker start failure (OV-1021).
+ * @param {unknown} error
+ * @returns {string | null}
+ */
+export const pyodideSnapshotFailureDetail = (error) => {
+  const context = /** @type {{ context?: { reason?: unknown, detail?: unknown } } | null} */ (error)?.context;
+  return context?.reason === 'pyodide-snapshot' ? String(context.detail || 'unknown') : null;
+};
+
+/**
+ * Runs one step of a snapshot restore: whatever it throws is a snapshot failure.
+ * @template T
+ * @param {() => T | Promise<T>} step
+ * @returns {Promise<T>}
+ */
+export const pyodideSnapshotStep = async (step) => {
+  try {
+    return await step();
+  } catch (error) {
+    if (pyodideSnapshotFailureDetail(error) !== null) throw error;
+    throw snapshotFailure(String(/** @type {{ message?: unknown } | null} */ (error)?.message || error));
+  }
+};
+
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 

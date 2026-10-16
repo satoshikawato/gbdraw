@@ -227,3 +227,40 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, d
 const workspaceError = new Error(sentinel);
 assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, workspaceError }),
   (error) => error === workspaceError && serializeError(error).code === 'CLEANUP_FAILED');
+
+// OV-1021: only a failed snapshot step asks the page for a Worker that boots
+// cold (snapshotError); any other init error is an ordinary init error, also
+// when the init message offers a snapshot.
+{
+  /** @param {Record<string, unknown>} message */
+  const initReply = (message) => new Promise((resolve) => {
+    self.postMessage = (reply) => { if (reply.type === 'init') resolve(reply); };
+    self.onmessage({ data: { type: 'init', ...message } });
+  });
+  const offline = 'http://127.0.0.1:9';
+  const init = {
+    pyodideIndexUrl: `${offline}/pyodide/`,
+    gbdrawWheelUrl: `${offline}/gbdraw.whl`,
+    pyodideSnapshotUrl: `${offline}/snapshot/`
+  };
+  const originalFetch = globalThis.fetch;
+  try {
+    // The snapshot download is still pending when the Pyodide module fails.
+    globalThis.fetch = () => new Promise(() => {});
+    const brokenModule = await initReply({
+      ...init, id: 'broken-module', pyodideModuleUrl: 'data:text/javascript,throw new Error("broken Pyodide module")'
+    });
+    assert.equal(brokenModule.ok, false);
+    assert.equal('snapshotError' in brokenModule, false);
+    assert.equal(brokenModule.error.code, 'WORKER_INIT');
+
+    globalThis.fetch = () => Promise.reject(new TypeError('fetch failed'));
+    const unreachableSnapshot = await initReply({
+      ...init, id: 'unreachable-snapshot', pyodideModuleUrl: 'data:text/javascript,export const loadPyodide = () => null;'
+    });
+    assert.equal(unreachableSnapshot.ok, false);
+    assert.equal(unreachableSnapshot.snapshotError, 'fetch failed');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}

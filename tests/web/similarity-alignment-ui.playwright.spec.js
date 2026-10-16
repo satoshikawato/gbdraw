@@ -2396,9 +2396,14 @@ test('the drawer list scrolls to the group a new alignment plan selects', async 
     return box.top >= view.top - 1 && box.bottom <= view.bottom + 1;
   });
 
-  // The Session's plan selected its group before the drawer opened.
+  // The Session's plan selected its group before the drawer opened. The row
+  // stays in view once the Result card has settled: the Session loaded notice
+  // above the card changes its margins, which must not slide the list after it
+  // scrolled (OV-1022).
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
   await expect(planRow).toHaveAttribute('aria-current', 'true');
+  await page.locator('[aria-label="Result Preview"]').evaluate(
+    (card) => Promise.all(card.getAnimations().map((animation) => animation.finished)));
   await expect.poll(() => rowInView(planRow)).toBe(true);
 
   // With the drawer open, the user picks the first group and the list is back at
