@@ -58,16 +58,27 @@ the catalog item of a Result. Key each of these by the complete inputs of the
 stage that built it: resource and record identities, the settings it declares,
 and every other argument. Every Generate still decodes and validates the
 request, runs the whole render path, and writes a complete SVG document; it
+writes it as ordered pieces: the root start tag, each top-level element, and
+the end tag. A placed group is its start tag, its children text, and that
+text's revision (its sha256). Joined in order, the pieces are the document. It
 rebuilds every part whose inputs changed. Publish cache fills only after the
 full render succeeds, and release them with the Worker; never reuse a final
 reply.
+
+The reply carries a piece's children text only when the request did not name
+its revision among the segments the page holds (`heldSegments`). The page
+sanitizes each children text once per revision, keeps the sanitized text on the
+Result it commits, and joins the sanitized pieces in order. For the pieces
+Python writes, which are whole SVG elements with escaped text and no comments,
+CDATA or processing instructions, the joined text equals the sanitization of
+the whole document; tests verify it.
 
 Every Generate leaves the page holding a complete feature catalog equal to the
 one a Generate with an empty cache returns. The reply carries that catalog
 unless the request names the catalog revision the page holds for the drawing
 and this Generate reused that same catalog build. A revision names one catalog
 build in one Worker lifetime: a build id with the Worker's epoch, never a
-content hash. For a matching revision the reply says the catalog is unchanged;
+content hash. (A segment revision is the opposite: only a content hash.) For a matching revision the reply says the catalog is unchanged;
 the Worker does not serialize, hash, or send it, and the page keeps the catalog
 object it admitted for that revision without admitting it again. A changed
 catalog is always sent and admitted. Session save, export, and History read
@@ -208,7 +219,9 @@ The current Result changes only through:
 
 A setting that none of these applies is **Applies on Generate**: say so beside
 the control, write only the draft, and leave the Result unchanged. Never patch
-the Result from a draft or with a helper's SVG fragment. A new Python helper that
+the Result from a draft or with a helper's SVG fragment. A Generate reply's
+pieces are not a helper fragment: they are the Generate compiler's input and
+are admitted whole into one new Result. A new Python helper that
 returns SVG text (`DIAGRAM_HELPER_OPERATIONS` in
 `services/diagram-worker-protocol.js`) needs architecture review.
 
