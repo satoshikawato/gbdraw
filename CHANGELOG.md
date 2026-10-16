@@ -678,6 +678,9 @@ write-up of a release.
   with underscores (`1_0`), or with more than 4300 digits, is refused too;
   signs and surrounding spaces are still accepted (OV-674, OV-676, OV-960,
   OV-961).
+- Fixed (web app): **Load Session** of a Session 31 to 33 or 39 whose saved
+  conservation series has an empty (`null`) row stopped with an unknown error.
+  That row is now read like a row without a label (OV-963).
 - Fixed (web app): a color change made while the automatic redraw of an
   earlier color change is still running is one Undo step again. Before, the
   Legend rows that redraw drew (or, after a Legend or title move, the moved

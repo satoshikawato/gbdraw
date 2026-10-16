@@ -93,7 +93,7 @@ export const truthy = (value) => ({ value: Boolean(value), lost: notBoolean(valu
 /**
  * One of `values` exactly, else `fallback`; a falsy value is unset.
  * @template {string} V
- * @template F
+ * @template {string | null} F
  * @param {readonly V[]} values
  * @param {F} fallback
  * @returns {FieldReader<V | F>}
