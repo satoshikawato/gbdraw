@@ -1711,6 +1711,9 @@ export const createAppSetup = () => {
   });
   const undoHistory = () => history.undo();
   const redoHistory = () => history.redo();
+  // D-03: the Rich Feature Popup preference records no Undo step, but a change
+  // of it is unsaved work that Load Session asks about (D-07 (b)).
+  const markRichFeaturePopupChanged = () => history.markChangeOutsideHistory();
   /** @param {unknown} value */
   const displayPreservedConfigValue = (value) => {
     const serialized = JSON.stringify(value) ?? String(value);
@@ -6962,6 +6965,7 @@ export const createAppSetup = () => {
     losat: drawingMember('losat'),
     losatExecution,
     richFeaturePopup,
+    markRichFeaturePopupChanged,
     ...losatSettings,
     losatCacheInfo,
     losatThreadingStatus,

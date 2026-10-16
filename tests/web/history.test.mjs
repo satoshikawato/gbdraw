@@ -3246,3 +3246,30 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(history.getUndoCount(), 1, 'the rename is in no step: the drawn array replaced it');
   console.log('history drawn write requester tests passed');
 }
+
+// D-07 (b) (Owner 2026-10-16 「確認を出す」): a change outside History (the
+// Rich Feature Popup preference, D-03) makes the work unsaved without a step:
+// Load Session asks before it replaces it. Save and Load clear the mark.
+{
+  let intent = { label: 'start' };
+  const history = createHistoryManager({
+    buildIntent: () => structuredClone(intent),
+    applyIntent: (restored) => { intent = structuredClone(restored); },
+    buildCheckpoint: () => structuredClone(intent),
+    applyCheckpoint: (checkpoint) => { intent = structuredClone(checkpoint); }
+  });
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Change label text', () => { intent.label = 'edited'; });
+  await history.undo();
+  history.markSavePoint();
+  assert.equal(await history.hasChangesSinceSavePoint(), false);
+  history.markChangeOutsideHistory();
+  assert.equal(await history.hasChangesSinceSavePoint(), true, 'a change outside History is unsaved');
+  assert.deepEqual([history.getUndoCount(), history.getRedoCount()], [0, 1], 'it records no step and keeps Redo');
+  history.markSavePoint();
+  assert.equal(await history.hasChangesSinceSavePoint(), false, 'a Save clears the mark');
+  history.markChangeOutsideHistory();
+  await history.initializeIntentBaseline('Loaded session');
+  assert.equal(await history.hasChangesSinceSavePoint(), false, 'a Load clears the mark');
+  console.log('history change outside History tests passed');
+}

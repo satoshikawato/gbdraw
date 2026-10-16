@@ -601,7 +601,7 @@ const state = {
   skipCaptureBaseConfig: ref(false),
   richFeaturePopup: ref(false)
 };
-const { createFeatureSvgActions } = await import(
+const { createFeatureSvgActions, HOVER_HIGHLIGHT_DWELL_MS } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'svg-actions.js'))
 );
 const featureActions = createFeatureSvgActions({
@@ -648,6 +648,9 @@ assert.equal(featureOne.style.cursor, '');
 completeCase('pairwise keyboard affordance remains separate from Feature cursor ownership');
 
 svg.dispatch('mouseover', eventAtFeature);
+// The highlight is written once the pointer has rested (OV-900).
+assert.equal(featureOne.style.opacity, '');
+runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
 assert.equal(metrics.filter((metric) => metric.name === 'featureDomFullScanCount').length, 1);
 assert.equal(featureOne.style.opacity, '0.7');
 assert.equal(featureTwo.style.opacity, '0.7');
@@ -699,6 +702,7 @@ runTimersAtDelay(220);
 featureInteractionWrapper.dispatch('transitionend', { propertyName: 'transform' });
 assert.equal(featurePanZoom.previewTransformInteraction.isActive(), false);
 flushFrames();
+runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
 assert.equal(featureOne.style.opacity, '0.7');
 assert.equal(metrics.filter((metric) => metric.name === 'previewTransformHoverReconcileCount').length, 1);
 assert.equal(metrics.filter((metric) => metric.name === 'featureDomFullScanCount').length, 1);
@@ -777,7 +781,7 @@ const svgActionsSource = await readFile(
   'utf8'
 );
 const trackedClearSource = svgActionsSource.match(
-  /const clearTrackedHoverStyles = \(\) => \{[\s\S]*?const clearActiveMatchHover = \(\) => \{[\s\S]*?\n\s*\};/
+  /const clearTrackedHoverStyles = \(\) => \{[\s\S]*?const clearHover = \(\) => \{[\s\S]*?\n\s*\};/
 )?.[0] || '';
 assert.match(trackedClearSource, /activeHoverElements/);
 assert.doesNotMatch(

@@ -23,14 +23,6 @@ import {
 
 const repositoryFile = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
-// OV-905 pairs, kept until the Owner decides D-09; the value is the number of
-// elements that carry the pair. Remove an entry when its elements change.
-const PENDING_OWNER_DECISION = new Map([
-  ['bg-amber-50 bg-white', 1], // Layout edit toggle, active
-  ['border-amber-300 border-slate-200', 1], // Layout edit toggle, active
-  ['text-amber-700 text-slate-600', 1], // Layout edit toggle, active
-  ['text-blue-600 text-slate-600', 2] // Canvas padding and Search toggles, active
-]);
 
 // ---- class bindings ---------------------------------------------------------
 
@@ -240,14 +232,10 @@ test('no element of index.html applies two order-dependent utilities for one pro
     components: componentNames(repositoryFile(TAILWIND_INPUT_PATH)),
     compilerSource
   });
-  const pending = new Map([...PENDING_OWNER_DECISION.keys()].map((name) => [name, 0]));
-  const unexpected = [];
-  for (const conflict of conflicts) {
-    if (pending.has(conflict.name)) pending.set(conflict.name, conflict.lines.length);
-    else unexpected.push(`${conflict.name} on index.html:${conflict.lines.join(',')} (${conflict.winner} wins today)`);
-  }
+  const unexpected = conflicts.map((conflict) => (
+    `${conflict.name} on index.html:${conflict.lines.join(',')} (${conflict.winner} wins today)`
+  ));
   assert.deepEqual(unexpected, [], 'give each state one of the two classes in the binding');
-  assert.deepEqual(pending, PENDING_OWNER_DECISION, 'update PENDING_OWNER_DECISION to the elements that still carry each pair');
 });
 
 test('the order guard tells bound conflicts from exclusive branches and fixed-order pairs', async () => {

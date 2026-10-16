@@ -1161,6 +1161,8 @@ const jsonClone = (value) => JSON.parse(JSON.stringify(value));
 const rollbackState = () => ({
   config: jsonClone(buildConfigData(state.activeDrawing())),
   ui: jsonClone(buildUiStateData(state.activeDrawing())),
+  // A UI preference outside History (D-03): the rollback keeps it on its own.
+  richFeaturePopup: state.richFeaturePopup.value,
   features: jsonClone(buildFeatureStateData(state.activeDrawing())),
   editorState: jsonClone(buildEditorStateData(state.activeDrawing())),
   orthogroupState: jsonClone(buildOrthogroupStateData(state.activeDrawing())),
@@ -1272,6 +1274,8 @@ state.activeDrawing().adv.circular_track_slots.forEach((slot) => {
 state.activeDrawing().adv.circular_track_slots_axis_index = null;
 state.activeDrawing().adv.linear_track_slots_axis_index = null;
 state.originalSvgStroke.value = { color: 'gray', width: 1 };
+// Not the default, which Reset Settings would also give.
+state.richFeaturePopup.value = false;
 const stateBeforeFailedImport = rollbackState();
 
 const malformedCompositionSvg = {
@@ -1285,13 +1289,15 @@ const malformedCompositionContainer = {
   querySelector: (selector) => selector === 'svg' ? malformedCompositionSvg : null
 };
 const legendCanvasActions = createLegendCanvasActions({ state });
+// The failing Session sets the other popup preference; the rollback restores it.
+const failingSession = { ...divergentSession, ui: { ...divergentSession.ui, richFeaturePopup: true } };
 alerts.length = 0;
 const originalConsoleError = console.error;
 console.error = () => {};
 let failedImport;
 const failedImportEvent = {
   target: {
-    files: [new Blob([JSON.stringify(divergentSession)], { type: 'application/json' })],
+    files: [new Blob([JSON.stringify(failingSession)], { type: 'application/json' })],
     value: 'selected'
   }
 };

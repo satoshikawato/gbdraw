@@ -653,16 +653,23 @@ export const createHistoryManager = ({
   const clearRedo = () => clearStack(redoStack);
 
   // UJ-09: the History position of the last Save or Load. Work is unsaved
-  // when an Undo or Redo step was added or traversed since then, or when an
-  // open control transaction already changed the intent it began with.
+  // when an Undo or Redo step was added or traversed since then, when an
+  // open control transaction already changed the intent it began with, or
+  // when a value outside History changed (D-07 (b): the Rich Feature Popup
+  // preference, which records no step).
   /** @param {HistoryEntry[]} stack */
   const topEntry = (stack) => stack[stack.length - 1] || null;
   /** @type {{ undo: HistoryEntry | null, redo: HistoryEntry | null }} */
   let savePoint = { undo: null, redo: null };
+  let changedOutsideHistory = false;
   const markSavePoint = () => {
     savePoint = { undo: topEntry(undoStack), redo: topEntry(redoStack) };
+    changedOutsideHistory = false;
   };
+  // Records no step and leaves Redo and an open transaction as they are.
+  const markChangeOutsideHistory = () => { changedOutsideHistory = true; };
   const hasChangesSinceSavePoint = async () => {
+    if (changedOutsideHistory) return true;
     if (topEntry(undoStack) !== savePoint.undo || topEntry(redoStack) !== savePoint.redo) return true;
     const open = openTransaction();
     if (!open) return false;
@@ -1730,6 +1737,7 @@ export const createHistoryManager = ({
     getRedoCount: () => redoStack.length,
     getUndoCount: () => undoStack.length,
     hasChangesSinceSavePoint,
+    markChangeOutsideHistory,
     historyAvailability,
     keepRedrawnResult,
     adoptDrawnWrite,
