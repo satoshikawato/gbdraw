@@ -528,13 +528,22 @@
           "residualRisk": "The DOM-free request contract compares one representative current Circular projection; alternate modes and browser admission are covered separately."
         },
         {
+          "ref": "tests/web/svg-result-ingestion.test.mjs::current-worker EMPTY admission of a document reply sanitizes each new piece once and performs zero application SVG work",
+          "checkpointRefs": [
+            "JRN-REGEN-001:current-result-admission"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The focused admission contract verifies piecewise current-Worker sanitization, revision reuse and bounded empty mutation work for the pieces Python writes, without exercising every editor mutation domain."
+        },
+        {
           "ref": "tests/web/svg-result-ingestion.test.mjs::current-worker EMPTY admission sanitizes once and performs zero application SVG work",
           "checkpointRefs": [
             "JRN-REGEN-001:current-result-admission"
           ],
           "sensitivity": "DIRECT_ASSERTION",
           "execution": "PR_GATE",
-          "residualRisk": "The focused admission contract verifies current-Worker sanitization and bounded empty mutation work without exercising every editor mutation domain."
+          "residualRisk": "The focused admission contract verifies current-Worker sanitization and bounded empty mutation work for the content-string reply shape that Session and legacy paths use, not the document reply a Generate uses, without exercising every editor mutation domain."
         }
       ]
     }
