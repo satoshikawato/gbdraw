@@ -4,14 +4,12 @@
 // Result names and committed metadata the list reads, so it does not list the
 // 12.6k-18.8k catalog features of a Gallery Session again; every input does.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import vm from 'node:vm';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-globalThis.window = { Vue: context.Vue };
-const { watch } = context.Vue;
+const Vue = loadPageVue();
+globalThis.window = { Vue };
+const { watch } = Vue;
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { createRulePreparation } = await import('../../gbdraw/web/js/app/rule-matching.js');
 const { setFeatureVisibilityOverride } = await import('../../gbdraw/web/js/services/feature-visibility.js');

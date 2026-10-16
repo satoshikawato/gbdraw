@@ -1597,7 +1597,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
   await page.goto('/');
   const origin = new URL(page.url()).origin;
   await page.addScriptTag({
-    url: '/gbdraw/web/vendor/vue/vue.global.js'
+    url: '/gbdraw/web/vendor/vue/vue.global.prod.js'
   });
   await page.addScriptTag({
     url: '/gbdraw/web/vendor/dompurify/purify.min.js'

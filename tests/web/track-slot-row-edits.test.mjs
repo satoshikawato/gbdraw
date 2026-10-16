@@ -4,14 +4,13 @@
 // Hide GC Skew reaches only the GC rows, Reset follows the loaded Depth
 // series, and Duplicate is unavailable while a Session operation runs.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import vm from 'node:vm';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-track-slot-row-edits-'));
@@ -282,10 +281,9 @@ test('circular: a hide that asks is one History step recorded at the answer, als
 
 // TK-07: `1.5` or `-1` became track index 1 without a message.
 test('circular: an invalid Depth track index stays visible with a field error and the row keeps its index', async () => {
-  const context = vm.createContext({ console });
-  vm.runInContext(readFileSync('gbdraw/web/vendor/vue/vue.global.js', 'utf8'), context);
-  globalThis.window = { Vue: context.Vue };
-  const { reactive, nextTick } = context.Vue;
+  const Vue = loadPageVue();
+  globalThis.window = { Vue };
+  const { reactive, nextTick } = Vue;
   const { DepthTrackIndexInput } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots', 'track-index-input.js')));
   const props = reactive({ modelValue: 1, slotId: 'depth_2', controlId: 'slot-track-index', helpId: 'help-index', disabled: false });
   const emissions = [];

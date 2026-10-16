@@ -4,12 +4,10 @@
 // labels, and Undo availability unchanged).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 import test from 'node:test';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-const { ref, computed, watchEffect, nextTick } = context.Vue;
+const { ref, computed, watchEffect, nextTick } = loadPageVue();
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 
 const settle = async () => { for (let i = 0; i < 5; i += 1) await nextTick(); };

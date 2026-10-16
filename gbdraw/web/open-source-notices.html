@@ -271,15 +271,15 @@
                         <td><strong>Vue.js</strong></td>
                         <td>3.5.25</td>
                         <td>MIT. See <a href="#license-mit">MIT</a>.</td>
-                        <td><code>vendor/vue/vue.global.js</code></td>
-                        <td><a href="https://unpkg.com/vue@3.5.25/dist/vue.global.js" target="_blank" rel="noopener noreferrer">https://unpkg.com/vue@3.5.25/dist/vue.global.js</a></td>
+                        <td><code>vendor/vue/vue.global.prod.js</code></td>
+                        <td><a href="https://unpkg.com/vue@3.5.25/dist/vue.global.prod.js" target="_blank" rel="noopener noreferrer">https://unpkg.com/vue@3.5.25/dist/vue.global.prod.js</a></td>
                     </tr>
                     <tr>
-                        <td><strong>Tailwind CSS Play CDN bundle</strong></td>
-                        <td>Vendored snapshot from the unversioned cdn.tailwindcss.com endpoint</td>
+                        <td><strong>Tailwind CSS (generated stylesheet)</strong></td>
+                        <td>3.4.17</td>
                         <td>MIT. See <a href="#license-mit">MIT</a>.</td>
-                        <td><code>vendor/tailwindcss/tailwindcss-play.js</code></td>
-                        <td><a href="https://cdn.tailwindcss.com" target="_blank" rel="noopener noreferrer">https://cdn.tailwindcss.com</a></td>
+                        <td><code>css/tailwind.css</code></td>
+                        <td><a href="https://tailwindcss.com" target="_blank" rel="noopener noreferrer">https://tailwindcss.com</a></td>
                     </tr>
                     <tr>
                         <td><strong>Pyodide core runtime</strong></td>
@@ -339,11 +339,6 @@
                     </tr>
                 </tbody>
             </table>
-            <p class="muted-note">
-                The Tailwind Play CDN script is fetched by the vendor refresh tool from an upstream endpoint that does
-                not expose an immutable version string in the downloaded bundle. gbdraw vendors that exact snapshot
-                locally and serves the local copy at runtime.
-            </p>
         </section>
 
         <section>
@@ -372,27 +367,27 @@
                     <dt>License</dt>
                     <dd>MIT. See <a href="#license-mit">MIT</a>.</dd>
                     <dt>Bundled path</dt>
-                    <dd><code>vendor/vue/vue.global.js</code></dd>
+                    <dd><code>vendor/vue/vue.global.prod.js</code></dd>
                     <dt>Notice</dt>
                     <dd>Copyright (c) 2018-present Yuxi (Evan) You and Vue contributors.</dd>
                     <dt>Source</dt>
-                    <dd><a href="https://unpkg.com/vue@3.5.25/dist/vue.global.js" target="_blank" rel="noopener noreferrer">https://unpkg.com/vue@3.5.25/dist/vue.global.js</a></dd>
+                    <dd><a href="https://unpkg.com/vue@3.5.25/dist/vue.global.prod.js" target="_blank" rel="noopener noreferrer">https://unpkg.com/vue@3.5.25/dist/vue.global.prod.js</a></dd>
                 </dl>
             </article>
 
-            <article class="component" id="component-tailwind-css-play-cdn-bundle">
-                <h3>Tailwind CSS Play CDN bundle</h3>
+            <article class="component" id="component-tailwind-css-generated-stylesheet">
+                <h3>Tailwind CSS (generated stylesheet)</h3>
                 <dl>
                     <dt>Version</dt>
-                    <dd>Vendored snapshot from the unversioned cdn.tailwindcss.com endpoint</dd>
+                    <dd>3.4.17</dd>
                     <dt>License</dt>
                     <dd>MIT. See <a href="#license-mit">MIT</a>.</dd>
                     <dt>Bundled path</dt>
-                    <dd><code>vendor/tailwindcss/tailwindcss-play.js</code></dd>
+                    <dd><code>css/tailwind.css</code></dd>
                     <dt>Notice</dt>
-                    <dd>Tailwind Labs, Inc. and contributors. The vendored Play CDN bundle also contains MIT-licensed runtime dependencies.</dd>
+                    <dd>Copyright (c) Tailwind Labs, Inc. The stylesheet is generated with the Tailwind CSS compiler and contains its base styles (Preflight).</dd>
                     <dt>Source</dt>
-                    <dd><a href="https://cdn.tailwindcss.com" target="_blank" rel="noopener noreferrer">https://cdn.tailwindcss.com</a></dd>
+                    <dd><a href="https://tailwindcss.com" target="_blank" rel="noopener noreferrer">https://tailwindcss.com</a></dd>
                 </dl>
             </article>
 
