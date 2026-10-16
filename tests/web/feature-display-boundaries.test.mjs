@@ -69,6 +69,24 @@ test('FASTA uses NCBI-style coordinates, identifiers, and wrapping', () => {
   assert.match(fallback.aminoAcidFasta, /M{60}\nM$/);
 });
 
+// OV-968: a null or blank start or end is missing, not 0: the header names
+// no coordinates for that part (the record ID and `feature`, when nothing else).
+test('FASTA headers read a missing location bound as missing', () => {
+  const header = (feature) => buildFeatureSequenceFastas({
+    record_id: 'rec', strand: '+', nucleotide_sequence: 'ACGT', ...feature
+  }).nucleotideFasta.split('\n')[0];
+  for (const missing of [null, '', '  ']) {
+    assert.equal(header({ location_parts: [{ start: missing, end: 20, strand: '+' }] }), '>rec:feature', JSON.stringify(missing));
+    assert.equal(header({ start: missing, end: 20 }), '>rec:feature', JSON.stringify(missing));
+    assert.equal(
+      header({ location_parts: [{ start: missing, end: 20 }, { start: 30, end: 40 }] }),
+      '>rec:31-40',
+      JSON.stringify(missing)
+    );
+  }
+  assert.equal(header({ location_parts: [{ start: 0, end: 20, strand: '+' }] }), '>rec:1-20');
+});
+
 test('protein FASTA skips internal IDs and uses biological aliases', () => {
   const { aminoAcidFasta } = buildFeatureSequenceFastas({
     record_id: 'record-a',

@@ -48,7 +48,11 @@ test('unsafe own keys remain untrusted after the production whole-object reply',
     const reply = await decode(new Blob([`{"nested":{"${key}":{}}}`]));
     assert.equal(reply.status, 'ok');
     assert.equal(Object.hasOwn(reply.data.nested, key), true);
-    assert.throws(() => assertSafeObjectKeys(reply.data, 'Session'), /unsafe key/);
+    // OV-952: the Session-schema diagnostic, never the key.
+    assert.throws(() => assertSafeObjectKeys(reply.data), (error) => (
+      error.code === 'INPUT_INVALID' && error.context.field === 'schema' && error.context.reason === 'FIELDS'
+      && !error.message.includes(key)
+    ));
   }
 });
 

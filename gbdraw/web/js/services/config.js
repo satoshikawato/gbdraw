@@ -102,6 +102,7 @@ import {
 import {
   createDefaultLinearComparisonPlan,
   linearComparisonEdgeKey,
+  losatEdgeOfPair,
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan,
@@ -3181,14 +3182,10 @@ const restoredLosatCacheInfoIdentity = (drawing, entry) => {
   const identity = losatCacheInfoIdentity(entry);
   if (state.mode.value !== 'linear') return identity;
 
+  // The search's records: the entry's record instances, or the row's own uids.
   const queryInstanceUid = String(entry?.queryRecordInstanceKey || '').trim();
   const subjectInstanceUid = String(entry?.subjectRecordInstanceKey || '').trim();
-  if (
-    Boolean(queryInstanceUid) !== Boolean(subjectInstanceUid)
-    || (queryInstanceUid && identity.queryUid && queryInstanceUid !== identity.queryUid)
-    || (subjectInstanceUid && identity.subjectUid && subjectInstanceUid !== identity.subjectUid)
-  ) return {};
-
+  if (Boolean(queryInstanceUid) !== Boolean(subjectInstanceUid)) return {};
   const queryUid = queryInstanceUid || identity.queryUid || '';
   const subjectUid = subjectInstanceUid || identity.subjectUid || '';
   if (!queryUid || !subjectUid || queryUid === subjectUid) return {};
@@ -3200,21 +3197,27 @@ const restoredLosatCacheInfoIdentity = (drawing, entry) => {
   );
   const queryIndex = indexByUid.get(queryUid);
   const subjectIndex = indexByUid.get(subjectUid);
-  if (!Number.isInteger(queryIndex) || !Number.isInteger(subjectIndex)) return {};
+  if (queryIndex === undefined || subjectIndex === undefined) return {};
 
-  const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
-  if (identity.edgeKey && identity.edgeKey !== edgeKey) return {};
-  const resolved = drawing.linearComparisonResolution.value.edges.find(
-    (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === edgeKey
-  );
+  // The row names the search's edge, which Generate takes in either
+  // orientation (OV-987); with no such edge, the search's own pair.
+  const resolved = losatEdgeOfPair(drawing.linearComparisonResolution.value.edges, queryIndex, subjectIndex);
+  const edge = resolved || {
+    edgeKey: linearComparisonEdgeKey(queryUid, subjectUid), queryUid, subjectUid, queryIndex, subjectIndex
+  };
+  if (
+    (identity.edgeKey && identity.edgeKey !== edge.edgeKey)
+    || (identity.queryUid && identity.queryUid !== edge.queryUid)
+    || (identity.subjectUid && identity.subjectUid !== edge.subjectUid)
+  ) return {};
   return {
     ...identity,
-    edgeKey,
-    queryUid,
-    subjectUid,
-    queryIndex,
-    subjectIndex,
-    ...(Number.isInteger(resolved?.ordinal) ? { ordinal: resolved.ordinal } : {})
+    edgeKey: edge.edgeKey,
+    queryUid: edge.queryUid,
+    subjectUid: edge.subjectUid,
+    queryIndex: edge.queryIndex,
+    subjectIndex: edge.subjectIndex,
+    ...(resolved ? { ordinal: resolved.ordinal } : {})
   };
 };
 
@@ -5423,7 +5426,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (!options.isCurrent()) return { status: 'canceled' };
     recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
     const parsed = candidate.data;
-    await assertSafeObjectKeysForImport(parsed, 'Session');
+    await assertSafeObjectKeysForImport(parsed);
     if (isLegacyConfigPayload(parsed)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
       // It is read, confirmed and then applied as one step that a failure
@@ -5514,9 +5517,13 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {'circular' | 'linear'} */
     const generatedMode = (committedMode || (invocationMode === 'linear' || invocationMode === 'circular' ? invocationMode : null)
       || ui.mode) === 'linear' ? 'linear' : 'circular';
-    // The legend position the shown Result was drawn with (OV-652, BA-D11).
+    // A Session 27-30 saved after a mode switch keeps the shown mode's form (OV-677).
+    const formIsResultMode = generatedMode === candidateMode || canonicalSession;
+    // The legend position the shown Result was drawn with (OV-652, BA-D11);
+    // when the form is not the Result's, it is that Result's side (OV-964).
     const generatedLegend = ui.generatedLegendPosition
-      ? readLegendPositionOfMode(ui.generatedLegendPosition, generatedMode, 'ui.generatedLegendPosition') : null;
+      ? readLegendPositionOfMode(ui.generatedLegendPosition, generatedMode, 'ui.generatedLegendPosition',
+        formIsResultMode ? 'legend-position-defaulted' : 'legend-side-defaulted') : null;
     if (generatedLegend) repairs.push(...generatedLegend.repairs);
     // PD-OI-086: each mode's drawing gets its own draft. A Session 46 keeps it
     // in its slice; the committed mode's slice lies over its request's
@@ -5684,7 +5691,6 @@ const importSessionDocument = async (e, options = {}) => {
     // Result was drawn with `ui.generatedLegendPosition` (OV-677), read as a
     // drawn side (blank is none) and listed once, above, and its mode's title
     // side, which 0.13.0 saved in `ui` (OV-969).
-    const formIsResultMode = generatedMode === candidateMode || canonicalSession;
     const legacyDrawnSide = formIsResultMode
       ? readDrawnLegendSideOfMode(restoredConfig?.form?.legend, generatedMode, 'config.form.legend')
       : { value: drawnLegendSideOfMode(ui.generatedLegendPosition, generatedMode), repairs: [] };

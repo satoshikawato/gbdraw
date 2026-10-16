@@ -623,6 +623,24 @@ test('one full payload request traverses each input once and builds one FASTA pa
   });
 });
 
+// OV-1010: a member's null or blank bound is missing, not 0.
+test('group member coordinates read a missing bound as missing (OV-1010)', () => {
+  for (const missing of [null, '', '  ']) {
+    const state = makeSyntheticState();
+    state.subjectMember.start = missing;
+    const payload = popupModule.buildMatchPopupPayload(elementFrom({
+      ...commonAttributes,
+      'data-match-kind': 'orthogroup',
+      'data-orthogroup-id': 'og-main'
+    }), {
+      featureLookup: state.featureLookup,
+      sourceFeatures: state.sourceFeatures,
+      orthogroups: [state.globalGroup]
+    });
+    assert.deepEqual(payload.group.memberRows.map((row) => row.coordinates), ['10..18 (+)', '38 (-)'], JSON.stringify(missing));
+  }
+});
+
 test('OV-930: hover summaries of similarity bands read the groups once per groups array', () => {
   let traversals = 0;
   const group = (id, scope, name) => ({ id, scope, name, member_count: 2, members: [] });

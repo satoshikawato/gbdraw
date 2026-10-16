@@ -83,7 +83,8 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
     const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
     // X-01 (SE-09): the Worker's final diagnostic reaches the panel unchanged.
     expect(error).toMatchObject(index === 0
-      ? { code: 'UNKNOWN', operation: 'session-load', stage: 'request-validation' }
+      // OV-952: an unsafe key is the Session-schema diagnostic.
+      ? { code: 'INPUT_INVALID', operation: 'session-load', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } }
       : index === 1
         ? { code: 'INPUT_INVALID', operation: 'session-load', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } }
         // Bytes that are not UTF-8 or not valid gzip fail while the Worker reads them.

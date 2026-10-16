@@ -172,3 +172,48 @@ test('a record with its own accession does not walk its catalog rows for one', (
   assert.deepEqual(labels(), ['SEQ-A · gene-x', 'ACC-b · gene-y']);
   assert.equal(recordIdReads.count, 0, 'the rows of record a are not read for an accession');
 });
+
+test('a member without facts and with a null start names no coordinates', () => {
+  const bare = { ...member('a', 'q', 5), start: null, end: 20, type: 'CDS' };
+  const { state, labels } = fixture(admitted(newCatalog()));
+  const group = { id: 'og-1', members: [bare] };
+  const actions = createSimilarityAlignmentActions({
+    state,
+    getOrthogroupById: () => group,
+    getEnrichedOrthogroupMembers: () => group.members,
+    selectedOrthogroupDetail: { get value() { return { group, id: group.id, members: group.members }; } },
+    getCommittedRequest: () => ({ records: [] }),
+    getCommittedSession: () => ({ renderRequest: { records: [] } }),
+    projectCommittedAlignment: () => assert.fail('no alignment runs'),
+    runRecordAlignment: () => assert.fail('no alignment runs'),
+    runHelperOperation: () => assert.fail('no helper runs'),
+    resolveOperation: 'resolveSimilarityAlignment'
+  });
+  assert.ok(labels().length > 0);
+  const [{ label }] = actions.drawerReferenceOptions('og-1');
+  assert.ok(label.endsWith(' · CDS'), label);
+  assert.ok(!label.includes('1..20'), label);
+});
+
+test('inparalog reference labels with a missing bound show only the present bound', () => {
+  const bare = (id, index, bounds) => ({ ...member('a', id, index), type: 'CDS', ...bounds });
+  const { state } = fixture(admitted(newCatalog()));
+  const group = { id: 'og-1', members: [bare('q', 5, { start: null, end: 20 }), bare('r', 6, { start: 10, end: null })] };
+  const actions = createSimilarityAlignmentActions({
+    state,
+    getOrthogroupById: () => group,
+    getEnrichedOrthogroupMembers: () => group.members,
+    selectedOrthogroupDetail: { get value() { return { group, id: group.id, members: group.members }; } },
+    getCommittedRequest: () => ({ records: [] }),
+    getCommittedSession: () => ({ renderRequest: { records: [] } }),
+    projectCommittedAlignment: () => assert.fail('no alignment runs'),
+    runRecordAlignment: () => assert.fail('no alignment runs'),
+    runHelperOperation: () => assert.fail('no helper runs'),
+    resolveOperation: 'resolveSimilarityAlignment'
+  });
+  const labels = actions.drawerReferenceOptions('og-1').map(({ label }) => label);
+  assert.equal(labels.length, 2);
+  assert.ok(labels[0].endsWith(' · ..20 (+)'), labels[0]);
+  assert.ok(labels[1].endsWith(' · 11.. (+)'), labels[1]);
+  labels.forEach((label) => assert.ok(!label.includes('NaN'), label));
+});

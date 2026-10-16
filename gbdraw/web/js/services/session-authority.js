@@ -1421,7 +1421,7 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
   if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
     throw new Error('Session authority inventory requires an object.');
   }
-  assertSafeObjectKeys(sessionData, 'Session');
+  assertSafeObjectKeys(sessionData);
   // Load read the keys and kinds of its band (`readSessionDocument`).
   if (!load) validateBandFields(sessionData, version);
   const bindings = validateWebFileBindings(

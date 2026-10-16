@@ -217,10 +217,26 @@ const catalogRuntime = new Function(`
     'expandCatalogItem',
     'consistentTextIdentity',
     'nonnegativeIntegerIdentity',
-    'reverseComplementMatchSequence'
+    'reverseComplementMatchSequence',
+    'locationPartBound'
   ].map(embeddedFunctionSource).join('\n')}
-  return { expandCatalogItem };
+  return { expandCatalogItem, catalogNucleotideSequence };
 `)();
+// OV-968: the viewer reads a null or blank part start as missing, not 0.
+{
+  const item = {
+    recordKeys: ['record-a'],
+    sequenceSources: [{ key: 'linear:record:0', origin: 'linear-record', recordIndex: 0, sequence: 'AACCGG' }]
+  };
+  const feature = (start) => ({
+    recordKey: 'record-a', sequenceSourceIndex: 0, strand: '+', location_parts: [{ start, end: 4, strand: '+' }]
+  });
+  const sources = ['AACCGG'];
+  assert.equal(catalogRuntime.catalogNucleotideSequence(item, feature(1), sources), 'ACC');
+  for (const missing of [null, '', '  ']) {
+    assert.equal(catalogRuntime.catalogNucleotideSequence(item, feature(missing), sources), '', JSON.stringify(missing));
+  }
+}
 const embeddedCatalogItem = {
   recordKeys: ['record-a'],
   biologicalFeatures: [{
@@ -247,6 +263,20 @@ const embeddedCatalogItem = {
     query_feature_index: 4
   }]
 };
+// OV-968: the compact catalog path builds a part only from a present start and
+// end; a null or blank start is missing, not 0.
+for (const missing of [null, '', '  ']) {
+  const compact = structuredClone(embeddedCatalogItem);
+  Object.assign(compact.biologicalFeatures[0], { start: missing, end: 4, strand: '+' });
+  const [expanded] = catalogRuntime.expandCatalogItem(compact, 'rich').features;
+  assert.equal(expanded.location_parts, undefined, JSON.stringify(missing));
+}
+{
+  const compact = structuredClone(embeddedCatalogItem);
+  Object.assign(compact.biologicalFeatures[0], { start: 0, end: 4, strand: '+' });
+  assert.deepEqual(catalogRuntime.expandCatalogItem(compact, 'rich').features[0].location_parts,
+    [{ start: 0, end: 4, strand: '+', display: '1..4' }]);
+}
 const expandedCatalogItem = catalogRuntime.expandCatalogItem(embeddedCatalogItem, 'rich');
 assert.equal(expandedCatalogItem.features[0].svg_id, 'rendered-a');
 assert.equal(expandedCatalogItem.features[0].sourceFeatureIndex, 4);
@@ -1393,6 +1423,17 @@ const state = {
 };
 
 const editor = createOrthogroupEditor({ state: withDrawings(state), runAnalysis: null });
+// OV-1010: a member's null or blank bound is missing, not 0, so a member
+// without identifiers gets no `1-20(+)` location as its display ID.
+for (const missing of [null, '', '  ']) {
+  const bare = { recordIndex: 0, featureIndex: 99, start: missing, end: 20, strand: '+' };
+  const [enriched] = editor.getEnrichedOrthogroupMembers({ orthogroupId: 'og_bound', members: [bare] });
+  assert.equal(enriched.displayProteinId, '', JSON.stringify(missing));
+}
+assert.equal(
+  editor.getEnrichedOrthogroupMembers({ orthogroupId: 'og_bound', members: [{ recordIndex: 0, featureIndex: 99, start: 0, end: 20, strand: '+' }] })[0].displayProteinId,
+  '1-20(+)'
+);
 const aliasedEditorGroup = {
   orthogroupId: 'og_editor_alias',
   orthogroup_id: 'og_editor_alias',

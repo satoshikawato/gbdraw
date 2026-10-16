@@ -230,6 +230,17 @@ test('OV-677: a blank drawn side of a Result saved after a mode switch reads as 
   assert.deepEqual(transformed.map(({ side, data }) => [data.mode, side]), [['circular', 'none']]);
 });
 
+// OV-964: an out-of-set drawn side of such a Result is listed once, with the
+// saved-Result row the same-mode path gives `config.form.legend`.
+test('OV-964: an out-of-set drawn side of a Result saved after a mode switch is listed as a saved Result side', async () => {
+  const session = fixture(MODE_SWITCH[1][0]);
+  session.ui.generatedLegendPosition = 'upper_left';
+  const { outcome, transformed, dialogs } = await load(session);
+  assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+  assert.deepEqual(dialogs, sideRows('upper_left', 'bottom', 'ui.generatedLegendPosition'));
+  assert.deepEqual(transformed.map(({ side, data }) => [data.mode, side]), [['linear', 'bottom']]);
+});
+
 // OV-969 (BA-OD121): the title of such a Result was drawn with the Result's
 // mode's title side, which 0.13.0 saved in `ui` (Circular:
 // `generatedCircularPlotTitlePosition`, Linear: `linearPlotTitlePosition`);

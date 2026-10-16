@@ -101,7 +101,7 @@ assert.throws(
     mode: 'circular',
     storedConfig: unsafeStoredConfig
   }),
-  /unsafe key __proto__/
+  { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } }
 );
 
 for (const [candidateLimit, collinearSearchScope] of [[null, 'adjacent'], [9, 'all']]) {
