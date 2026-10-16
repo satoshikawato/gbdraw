@@ -9,9 +9,12 @@ WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 VENDOR_ROOT = WEB_ROOT / "vendor"
 PYODIDE_RUNTIME_DIR = VENDOR_ROOT / "pyodide" / "v0.29.0" / "full"
 
+# The Vue build that index.html loads: the global production build, which
+# still contains the template compiler that the in-DOM templates need.
+VUE_RUNTIME_FILE = Path("vendor") / "vue" / "vue.global.prod.js"
+
 ASSET_URLS = {
-    "vue": "https://unpkg.com/vue@3.5.25/dist/vue.global.js",
-    "tailwindcss": "https://cdn.tailwindcss.com",
+    "vue": f"https://unpkg.com/vue@3.5.25/dist/{VUE_RUNTIME_FILE.name}",
     "pyodide_core": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2",
     "micropip": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
     "tzdata": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl",
@@ -98,19 +101,19 @@ WEB_ASSET_NOTICES = (
         version="3.5.25",
         license_expression="MIT",
         source_url=ASSET_URLS["vue"],
-        bundled_path="vendor/vue/vue.global.js",
+        bundled_path=VUE_RUNTIME_FILE.as_posix(),
         notice="Copyright (c) 2018-present Yuxi (Evan) You and Vue contributors.",
         license_text_anchors=("license-mit",),
     ),
     WebAssetNotice(
-        display_name="Tailwind CSS Play CDN bundle",
-        version="Vendored snapshot from the unversioned cdn.tailwindcss.com endpoint",
+        display_name="Tailwind CSS (generated stylesheet)",
+        version="3.4.17",
         license_expression="MIT",
-        source_url=ASSET_URLS["tailwindcss"],
-        bundled_path="vendor/tailwindcss/tailwindcss-play.js",
+        source_url="https://tailwindcss.com",
+        bundled_path="css/tailwind.css",
         notice=(
-            "Tailwind Labs, Inc. and contributors. The vendored Play CDN bundle also "
-            "contains MIT-licensed runtime dependencies."
+            "Copyright (c) Tailwind Labs, Inc. The stylesheet is generated with the "
+            "Tailwind CSS compiler and contains its base styles (Preflight)."
         ),
         license_text_anchors=("license-mit",),
     ),

@@ -12,6 +12,7 @@ from gbdraw.web_support.request_render import (
     render_staged_canonical_web_request,
 )
 from gbdraw.session_request_codec import encode_canonical_typed_resource
+from gbdraw.exceptions import ValidationError
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
 from gbdraw.web_support.rule_matching import evaluate_rules_json
@@ -82,6 +83,45 @@ def _web_losatp_payload_json(summary_json, canonical, canonical_resource_path):
     return "".join((summary_json[:-1], ", ", json.dumps(_WEB_LOSATP_CANONICAL_KEYS[kind]),
                     ": ", content.decode("utf-8"), "}"))
 
+def _web_held_segments(held_segments_json):
+    # The children-text revisions the page holds (sha256 hex), named by the run message.
+    if _is_blank_or_js_nullish(held_segments_json):
+        return frozenset()
+    revisions = json.loads(str(held_segments_json))
+    if not isinstance(revisions, list) or not all(isinstance(item, str) for item in revisions):
+        raise ValidationError(
+            "Held segments must be a JSON array of revisions.",
+            diagnostic={"code": "HELPER_PROTOCOL"},
+        )
+    return frozenset(revisions)
+
+def _web_result_transport(item):
+    # One Result for the Worker: the pieces, and the children texts it sends
+    # as one UTF-8 buffer that each sent piece addresses by offset and length.
+    chunks = []
+    offset = 0
+    pieces = []
+    for piece in item["document"]["pieces"]:
+        children = piece.get("children")
+        if children is None:
+            pieces.append(piece)
+            continue
+        data = children.encode("utf-8")
+        sent = {key: value for key, value in piece.items() if key != "children"}
+        sent["offset"] = offset
+        sent["length"] = len(data)
+        offset += len(data)
+        chunks.append(data)
+        pieces.append(sent)
+    document = item["document"]
+    transported = {
+        "name": item["name"],
+        "document": {"head": document["head"], "tail": document["tail"], "pieces": pieces},
+    }
+    if chunks:
+        transported["segments"] = b"".join(chunks)
+    return transported
+
 def _web_losatp_json_with_cache_stats(cached_payload, *, canonical_resource_path=None, **stats):
     summary_json, canonical = cached_payload
     payload = json.loads(summary_json)
@@ -110,6 +150,7 @@ def run_canonical_request_wrapper(
     diagnostics_enabled=False,
     resource_identities_json=None,
     held_feature_catalog_revision=None,
+    held_segments_json=None,
 ):
     try:
         with web_error_stage("request-validation"):
@@ -119,6 +160,7 @@ def run_canonical_request_wrapper(
                 if _is_blank_or_js_nullish(held_feature_catalog_revision)
                 else str(held_feature_catalog_revision)
             )
+            held_segments = _web_held_segments(held_segments_json)
             resource_paths = json.loads(str(resource_paths_json))
             resource_identities = None
             if resource_identities_json is not None and type(resource_identities_json).__name__ not in {"JsNull", "JsUndefined"}:
@@ -139,6 +181,7 @@ def run_canonical_request_wrapper(
             _resource_identities=resource_identities,
             _label_fit_searches=_WEB_LABEL_FIT_SEARCHES,
             _held_feature_catalog_revision=held_revision,
+            _held_segments=held_segments,
         )
         if diagnostics is not None:
             for name in (
@@ -177,10 +220,7 @@ def run_canonical_request_wrapper(
             ):
                 diagnostics["metrics"].setdefault(name, 0)
             result["_diagnostics"] = diagnostics
-        for item in result.get("results", []):
-            content = item.get("content")
-            if isinstance(content, str):
-                item["content"] = content.encode("utf-8")
+        result["results"] = [_web_result_transport(item) for item in result.get("results", [])]
         metadata = result.get("metadata")
         if isinstance(metadata, dict):
             result["metadata"] = json.dumps(

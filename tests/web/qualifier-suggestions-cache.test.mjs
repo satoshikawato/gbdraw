@@ -2,13 +2,11 @@
 // of the drawn features. They are read once per feature list, from the raw
 // rows, not again on each rule edit or mode switch.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 import test from 'node:test';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-globalThis.window = { Vue: context.Vue, setTimeout, clearTimeout };
+const Vue = loadPageVue();
+globalThis.window = { Vue, setTimeout, clearTimeout };
 const { state } = await import('../../gbdraw/web/js/state.js');
 
 test('qualifier suggestions scan the features once per feature list (OV-924)', () => {

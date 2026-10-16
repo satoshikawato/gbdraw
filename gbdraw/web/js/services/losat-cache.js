@@ -125,8 +125,9 @@ const hasRawShape = (entry) => (
   isPlainObject(entry) &&
   entry.kind === 'raw-losat' &&
   typeof entry.text === 'string' &&
-  // `RegExp.test` coerces a non-string `searchContext` to text; the cast only satisfies the signature.
-  (entry.searchContext === undefined || /^[0-9a-f]{64}$/.test(/** @type {string} */ (entry.searchContext)))
+  // `RegExp.test` coerces what it is given to text, so the type is tested first (OV-983).
+  (entry.searchContext === undefined
+    || (typeof entry.searchContext === 'string' && /^[0-9a-f]{64}$/.test(entry.searchContext)))
 );
 
 /**

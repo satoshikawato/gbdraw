@@ -2,7 +2,9 @@
 // docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md): a Generate whose
 // feature catalog build did not change keeps the catalog object the page
 // admitted; every other Generate sends and admits it. Each case below is one
-// invalidation row of the CW-06 table in the step 3a pull request.
+// invalidation row of the CW-06 table in the step 3a pull request. Step 3b S:
+// the page sanitizes each SVG children text once per revision; the last test
+// holds the browser rows of its invalidation table.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
@@ -13,7 +15,31 @@ const { generate, switchMode, download } = require('./helpers/mode-transition.cj
 const HMMT = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
 const SESSIONS = 'gbdraw/web/gallery/sessions';
 
-const start = async (browser) => {
+// Every Generate reply's pieces, with the children texts it sent decoded, as
+// the Worker posts them (registered before the page's own listener).
+const captureGenerateReplies = () => {
+  const NativeWorker = window.Worker;
+  window.__PIECES__ = [];
+  window.Worker = class extends NativeWorker {
+    constructor(...args) {
+      super(...args);
+      this.addEventListener('message', ({ data }) => {
+        if (data?.type !== 'run' || !data.ok || !Array.isArray(data.results?.results)) return;
+        const decoder = new TextDecoder();
+        window.__PIECES__.push(data.results.results.map(({ document, segments }) => {
+          const bytes = segments ? new Uint8Array(segments.buffer ?? segments, segments.byteOffset ?? 0, segments.byteLength) : null;
+          return {
+            document,
+            children: document.pieces.map((piece) => (piece.kind === 'content' && piece.offset !== undefined
+              ? decoder.decode(bytes.subarray(piece.offset, piece.offset + piece.length)) : null))
+          };
+        }));
+      });
+    }
+  };
+};
+
+const start = async (browser, { captureReplies = false } = {}) => {
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await context.newPage();
@@ -30,6 +56,7 @@ const start = async (browser) => {
       onStructuralMetric: (metric) => window.__REUSE__.metrics.push(metric)
     };
   });
+  if (captureReplies) await page.addInitScript(captureGenerateReplies);
   page.on('dialog', (dialog) => dialog.dismiss());
   await openApp(page);
   return page;
@@ -59,6 +86,7 @@ const since = (page, start) => page.evaluate((start) => {
   return {
     names: events.map((event) => event.name),
     transports: transport.map((event) => ({ held: event.heldFeatureCatalogRevision, catalog: event.featureCatalog })),
+    segments: transport.map((event) => event.heldSegmentCount),
     admission: metrics.featureCatalogAdmissionCount || 0,
     reuse: metrics.featureCatalogReuseCount || 0,
     undo: window.__GBDRAW_HISTORY__.getUndoCount() - start.undo
@@ -180,7 +208,9 @@ test('a Generate keeps the held catalog only while its build is current', async 
 
     console.log('STEP Pw-6', Date.now());
     // Pw-6: each mode shows its own slot; the Linear Generate evicted the
-    // Circular builds, so the Circular catalog is sent again.
+    // Circular builds, so the Circular catalog is sent again. SVG segments
+    // are content hashes on each slot's Results: Linear holds none, and the
+    // Circular slot still names its own.
     await switchMode(page, 'linear');
     await evaluateWithRetainedPromise(page, async (content) => {
       const app = window.__GBDRAW_APP__;
@@ -191,10 +221,12 @@ test('a Generate keeps the held catalog only while its build is current', async 
     }, HMMT);
     const linear = await observeGenerate(page);
     expect(linear.transports).toEqual([SENT]);
+    expect(linear.segments).toEqual([0]);
     await switchMode(page, 'circular');
     const back = await observeGenerate(page);
     expect(back.transports).toEqual([HELD_SENT]);
     expect(back.admission).toBe(1);
+    expect(back.segments[0]).toBeGreaterThan(0);
 
     console.log('STEP Pw-9', Date.now());
     // Pw-9: a failed Load rolls back to the same object, still current.
@@ -343,5 +375,225 @@ test('the similarity-group copy feedback clears when a Generate replaces the sho
     expect(page.externalRequests).toEqual([]);
   } finally {
     await page.context().close();
+  }
+});
+
+// What one Generate did with the SVG pieces: the segments the request named,
+// the children texts the page sanitized and reused, and its mount, bind and
+// ready receipt.
+const piecesSince = (page, start) => page.evaluate((start) => {
+  const metrics = {};
+  for (const { name, value } of window.__REUSE__.metrics.slice(start.metrics)) {
+    metrics[name] = (metrics[name] || 0) + Number(value || 0);
+  }
+  const transports = window.__REUSE__.events.slice(start.events).filter((event) => event.name === 'result-transport-ready');
+  return {
+    held: transports.map((event) => event.heldSegmentCount),
+    sanitized: metrics.svgSanitizedPieceCount || 0,
+    reused: metrics.svgMemoHitCount || 0,
+    decoded: metrics.resultBinaryDecodeCount || 0,
+    serialized: metrics.svgSerializationCount || 0,
+    mounts: metrics.previewMountAdoptionCount || 0,
+    binds: metrics.previewBinderInvocationCount || 0,
+    receipts: metrics.previewReadyReceiptAcceptedCount || 0,
+    content: window.__GBDRAW_APP__.results[0].content
+  };
+}, start);
+const generatePieces = async (page) => {
+  const before = await mark(page);
+  await generate(page);
+  return piecesSince(page, before);
+};
+const shownOnce = { mounts: 1, binds: 1, receipts: 1 };
+const counts = ({ mounts, binds, receipts }) => ({ mounts, binds, receipts });
+const contentPieceCount = (page) => page.evaluate(() =>
+  window.__PIECES__.at(-1)[0].document.pieces.filter((piece) => piece.kind === 'content').length);
+
+// The last reply's document joined from its pieces, sanitized whole by DOMPurify
+// with and without the XML declaration the file has; and the pieces sanitized
+// one by one as admission does.
+const wholeAndPieces = (page) => page.evaluate(async () => {
+  const { SVG_SANITIZE_OPTIONS, wrapSvgFragment, unwrapSvgFragment } = await import('./js/services/svg-sanitization.js');
+  const [{ document, children }] = window.__PIECES__.at(-1);
+  const raw = document.head + document.pieces.map((piece, index) => (piece.kind === 'raw'
+    ? piece.text : `${piece.start}${children[index]}</g>`)).join('') + document.tail;
+  const sanitize = (text) => window.DOMPurify.sanitize(text, SVG_SANITIZE_OPTIONS);
+  const prefix = sanitize(wrapSvgFragment('')).slice(0, -'</svg>'.length);
+  const fragment = (text) => unwrapSvgFragment(sanitize(wrapSvgFragment(text)), prefix);
+  const pieces = sanitize(`${document.head}</svg>`).slice(0, -'</svg>'.length) + document.pieces.map((piece, index) => (
+    piece.kind === 'raw' ? fragment(piece.text) : `${fragment(`${piece.start}</g>`).slice(0, -'</g>'.length)}${fragment(children[index])}</g>`
+  )).join('') + '</svg>';
+  return {
+    whole: sanitize(raw),
+    withDeclaration: sanitize(`<?xml version="1.0" encoding="utf-8" ?>\n${raw}`),
+    pieces
+  };
+});
+
+const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+const setTitle = (page, title) => undoable(page, 'Set the plot title', { fields: { 'form.plot_title': title } });
+// A live palette edit rewrites the mounted Result (hazard 6); the draft keeps the color.
+const livePalette = (page) => evaluateWithRetainedPromise(page, async () => {
+  const { state } = await import('./js/state.js');
+  state.paletteInstantPreviewEnabled.value = true;
+  await window.__GBDRAW_HISTORY__.runUndoable('Live palette', async () => {
+    state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS: '#123456' };
+    await window.Vue.nextTick();
+  });
+});
+
+// A Generate reply whose pieces carry hostile markup, admitted as the current
+// Worker's: every byte still passes DOMPurify.
+const admitHostileReply = (page) => evaluateWithRetainedPromise(page, async () => {
+  const { state } = await import('./js/state.js');
+  const { normalizeGenerationResponse } = await import('./js/services/diagram-generation.js');
+  const { admitFeatureCatalog } = await import('./js/services/feature-catalog.js');
+  const { admitCurrentGeneratedResults, createEmptySvgMutationPlan } = await import('./js/services/svg-result-ingestion.js');
+  const featureCatalog = JSON.parse(JSON.stringify(window.Vue.toRaw(state.featureCatalog.value)));
+  const children = [
+    '<path d="M0,0" onload="alert(1)"/><script>alert(2)</script>',
+    '<a href="javascript:alert(3)"><text>x</text></a><g onclick="alert(4)"/>',
+    '</g><script>alert(5)</script><g><image href="x" onerror="alert(6)"/>'
+  ];
+  const encoder = new TextEncoder();
+  const bytes = children.map((text) => encoder.encode(text));
+  const segments = new Uint8Array(bytes.reduce((total, item) => total + item.byteLength, 0));
+  let offset = 0;
+  const pieces = [{ kind: 'raw', text: '<foreignObject><div onclick="alert(7)"></div></foreignObject>' }];
+  bytes.forEach((item, index) => {
+    segments.set(item, offset);
+    pieces.push({
+      kind: 'content', start: `<g id="hostile${index}" onmouseover="alert(8)">`, revision: String(index).repeat(64),
+      bytes: item.byteLength, offset, length: item.byteLength
+    });
+    offset += item.byteLength;
+  });
+  const response = normalizeGenerationResponse({
+    results: [{ name: featureCatalog.items[0].resultName, document: { head: '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(9)">', tail: '</svg>', pieces }, segments }],
+    metadata: {},
+    featureCatalog
+  });
+  const catalogAdmission = admitFeatureCatalog(featureCatalog, response.results, { adopt: true, mode: window.__GBDRAW_APP__.mode });
+  const [committed] = admitCurrentGeneratedResults(response, { catalogAdmission, mutationPlan: createEmptySvgMutationPlan(1) });
+  return committed.content;
+});
+
+test('a Generate sanitizes each changed SVG group once and admits what a fresh page admits', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await start(browser, { captureReplies: true });
+  const fresh = await start(browser, { captureReplies: true });
+  try {
+    console.log('STEP S-1', Date.now());
+    // S-1 (Session Load): Results admitted from their saved text hold nothing,
+    // so the first Generate sends and sanitizes every children text once. The
+    // joined sanitized pieces equal DOMPurify of the whole document, with or
+    // without its XML declaration.
+    await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
+    const cold = await generatePieces(page);
+    const pieceCount = await contentPieceCount(page);
+    expect(pieceCount).toBeGreaterThan(1);
+    expect({ held: cold.held, sanitized: cold.sanitized, reused: cold.reused, decoded: cold.decoded, serialized: cold.serialized })
+      .toEqual({ held: [0], sanitized: pieceCount, reused: 0, decoded: 1, serialized: 0 });
+    expect(counts(cold)).toEqual(shownOnce);
+    const sanitizedWhole = await wholeAndPieces(page);
+    expect(sanitizedWhole.pieces).toBe(sanitizedWhole.whole);
+    expect(sanitizedWhole.withDeclaration).toBe(sanitizedWhole.whole);
+    expect(cold.content).toBe(sanitizedWhole.whole);
+
+    console.log('STEP S-2', Date.now());
+    // S-2: the same request holds every revision: nothing is sent or sanitized
+    // again, and the Result is the same text, mounted and bound once.
+    const warm = await generatePieces(page);
+    expect({ held: warm.held, sanitized: warm.sanitized, reused: warm.reused, decoded: warm.decoded })
+      .toEqual({ held: [pieceCount], sanitized: 0, reused: pieceCount, decoded: 0 });
+    expect(counts(warm)).toEqual(shownOnce);
+    expect(warm.content).toBe(cold.content);
+
+    console.log('STEP S-3', Date.now());
+    // S-3 (live-edit residue): a live palette edit and a title change; the
+    // Generate sanitizes only the groups whose children changed, and its Result
+    // equals a fresh page's that drew the same draft from nothing.
+    await livePalette(page);
+    await setTitle(page, 'Pieces title');
+    const edited = await generatePieces(page);
+    expect(edited.sanitized).toBeGreaterThan(0);
+    expect(edited.reused).toBeGreaterThan(0);
+    expect(edited.sanitized + edited.reused).toBe(await contentPieceCount(page));
+    expect(counts(edited)).toEqual(shownOnce);
+    await loadSession(fresh, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
+    await livePalette(fresh);
+    await setTitle(fresh, 'Pieces title');
+    const freshEdited = await generatePieces(fresh);
+    expect(freshEdited.reused).toBe(0);
+    expect(edited.content).toBe(freshEdited.content);
+
+    console.log('STEP S-4', Date.now());
+    // S-4 (Worker restart): revisions are content hashes, so a new Worker
+    // omits the same texts and the Result is unchanged.
+    await page.evaluate(async () => {
+      (await import('./js/services/diagram-generation.js')).disposeDiagramGenerationWorker();
+    });
+    const restarted = await generatePieces(page);
+    expect({ sanitized: restarted.sanitized, reused: restarted.reused }).toEqual({ sanitized: 0, reused: await contentPieceCount(page) });
+    expect(restarted.content).toBe(edited.content);
+
+    console.log('STEP S-5', Date.now());
+    // S-5 (Undo, Redo; Generate A, Generate B, Undo, Generate): restored
+    // Results keep their segments, so a Generate after Redo or after Undo
+    // sanitizes nothing and admits the restored Result's text again.
+    const restoredContent = () => page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    const allHeld = async () => ({ sanitized: 0, reused: await contentPieceCount(page) });
+    const beforeB = await undoCount(page);
+    await undoable(page, 'Show the plot title', { fields: { 'adv.plot_title_position': 'top', 'form.plot_title': 'Undo title' } });
+    const second = await generatePieces(page);
+    expect(second.content).not.toBe(restarted.content);
+    const steps = (await undoCount(page)) - beforeB;
+    for (let step = 0; step < steps; step += 1) await history(page, 'undo');
+    expect(await restoredContent()).toBe(restarted.content);
+    for (let step = 0; step < steps; step += 1) await history(page, 'redo');
+    expect(await restoredContent()).toBe(second.content);
+    const redone = await generatePieces(page);
+    expect({ sanitized: redone.sanitized, reused: redone.reused }).toEqual(await allHeld());
+    expect(redone.content).toBe(second.content);
+    const back = (await undoCount(page)) - beforeB;
+    for (let step = 0; step < back; step += 1) await history(page, 'undo');
+    expect(await restoredContent()).toBe(restarted.content);
+    const undone = await generatePieces(page);
+    expect({ sanitized: undone.sanitized, reused: undone.reused }).toEqual(await allHeld());
+    expect(undone.content).toBe(restarted.content);
+
+    console.log('STEP S-6', Date.now());
+    // S-6 (cancel after the reply, before the commit): nothing is committed;
+    // the next request names the same segments.
+    await setTitle(page, 'Cancelled title');
+    await page.evaluate(() => {
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
+        delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+        (await import('./js/services/diagram-generation.js')).cancelDiagramGeneration();
+      };
+    });
+    const cancelMark = await mark(page);
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.processing.value), { timeout: 180_000 }).toBe(false);
+    const cancelled = await piecesSince(page, cancelMark);
+    expect(cancelled.held).toEqual([await contentPieceCount(page)]);
+    expect(cancelled.content).toBe(restarted.content);
+    await page.evaluate(async () => { (await import('./js/state.js')).state.errorLog.value = null; });
+    const afterCancel = await generatePieces(page);
+    expect(afterCancel.held).toEqual(cancelled.held);
+    expect(afterCancel.reused).toBeGreaterThan(0);
+
+    console.log('STEP S-7', Date.now());
+    // S-7: hostile markup in the head, a start tag, a raw piece or a children
+    // text (also one that closes its group early) leaves no script, event
+    // handler or javascript: link.
+    const hostile = await admitHostileReply(page);
+    expect(hostile.startsWith('<svg')).toBe(true);
+    expect(hostile).not.toMatch(/<script|\son[a-z]+=|javascript:|<foreignObject|<image/i);
+    expect(page.externalRequests).toEqual([]);
+    expect(fresh.externalRequests).toEqual([]);
+  } finally {
+    await page.context().close();
+    await fresh.context().close();
   }
 });

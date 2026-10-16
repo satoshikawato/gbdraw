@@ -27,6 +27,7 @@ from svgwrite.container import Group
 from svgwrite.etree import etree
 from svgwrite.params import Parameter
 
+from gbdraw.exceptions import ExportError
 from gbdraw.layout.spatial import Aabb
 
 P = ParamSpec("P")
@@ -77,6 +78,25 @@ def element_text(element: BaseElement) -> str:
     """svgwrite's serialization of one element, as ``Drawing.tostring`` writes it."""
 
     return etree.tostring(element.get_xml(), encoding="utf-8").decode("utf-8")
+
+
+_NOT_AN_ELEMENT = (
+    "An SVG document piece holds markup that is not an element "
+    "(a comment, CDATA or a processing instruction)."
+)
+
+
+def require_element_markup(text: str) -> str:
+    """Return ``text`` if it holds no ``<!`` or ``<?`` (precondition P, gbdraw/web/CLAUDE.md).
+
+    svgwrite escapes ``<`` in text and attribute values, so ``<!`` and ``<?``
+    appear only as a comment, CDATA or a processing instruction, which the
+    page could not sanitize piece by piece as it sanitizes the whole document.
+    """
+
+    if "<!" in text or "<?" in text:
+        raise ExportError(_NOT_AN_ELEMENT)
+    return text
 
 
 def start_tag(element: BaseElement) -> str:
@@ -147,9 +167,22 @@ class GroupContent:
 
     @cached_property
     def children_text(self) -> str:
-        """The serialized children, computed when first asked for."""
+        """The serialized children, computed when first asked for.
 
-        return "".join(element_text(child) for child in self.children)
+        Each child is one whole element and the text holds no ``<!`` or ``<?``
+        (precondition P, ``require_element_markup``); otherwise this raises.
+        """
+
+        texts = []
+        for child in self.children:
+            text = element_text(child)
+            name = child.elementname
+            if not text.startswith(f"<{name}") or not (
+                text.endswith("/>") or text.endswith(f"</{name}>")
+            ):
+                raise ExportError(_NOT_AN_ELEMENT)
+            texts.append(text)
+        return require_element_markup("".join(texts))
 
     @cached_property
     def text(self) -> str:
@@ -162,10 +195,21 @@ class GroupContent:
         return start_tag(group) + self.children_text + "</g>"
 
     @cached_property
-    def revision(self) -> str:
-        """A digest of the serialized children."""
+    def _children_digest(self) -> tuple[str, int]:
+        data = self.children_text.encode("utf-8")
+        return hashlib.sha256(data).hexdigest(), len(data)
 
-        return hashlib.sha256(self.children_text.encode("utf-8")).hexdigest()
+    @property
+    def revision(self) -> str:
+        """The sha256 of the serialized children's UTF-8 bytes."""
+
+        return self._children_digest[0]
+
+    @property
+    def children_byte_length(self) -> int:
+        """The UTF-8 length of the serialized children."""
+
+        return self._children_digest[1]
 
     @property
     def definition_ids(self) -> tuple[str, ...]:
@@ -293,5 +337,6 @@ __all__ = [
     "element_text",
     "group_manifest",
     "place_content",
+    "require_element_markup",
     "start_tag",
 ]

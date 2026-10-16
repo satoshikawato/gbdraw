@@ -4,7 +4,7 @@
 // the hosted-build markup, or a changed component rule, fails here until the
 // stylesheet is regenerated.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -14,6 +14,7 @@ import {
   collectMarkupClasses,
   extractClassCandidates,
   generateTailwindStylesheet,
+  TAILWIND_COMPILER_PATH,
   TAILWIND_OUTPUT_PATH
 } from '../../tools/generate_web_tailwind_css.mjs';
 
@@ -35,6 +36,14 @@ test('the page links the stylesheet after its own styles and ships no Tailwind c
   }
   const link = head.indexOf('<link rel="stylesheet" href="./css/tailwind.css">');
   assert.ok(link > head.lastIndexOf('</style>'), 'the stylesheet follows the last <style> of <head>');
+});
+
+// The compiler runs only here, at maintenance time: it lives under tools/, with
+// its licence beside it, and not in the package the Web app ships.
+test('the Tailwind compiler is a maintenance input outside the Web package', () => {
+  assert.equal(TAILWIND_COMPILER_PATH, 'tools/vendor/tailwindcss/tailwindcss-play.js');
+  assert.ok(existsSync(new URL(`../../${TAILWIND_COMPILER_PATH}`, import.meta.url)), TAILWIND_COMPILER_PATH);
+  assert.match(repositoryFile('tools/vendor/tailwindcss/README.md'), /MIT License/);
 });
 
 test('the inventory reads every class source and keeps class tokens whole', () => {

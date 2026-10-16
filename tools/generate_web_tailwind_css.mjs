@@ -5,8 +5,9 @@
 //   node tools/generate_web_tailwind_css.mjs --check   exit 1 when it is stale
 //
 // The page loads this file instead of compiling Tailwind in the browser. The
-// compiler is the vendored Tailwind Play bundle, run here in a Node `vm`
-// context with the few DOM objects it reads. It receives the component rules
+// compiler is the Tailwind Play bundle kept in tools/vendor/tailwindcss/ (a
+// maintenance input: not served, deployed, or packaged), run here in a Node
+// `vm` context with the few DOM objects it reads. It receives the component rules
 // of gbdraw/web/css/tailwind.input.css and every class-like token of the
 // sources that put classes on the page, the input it compiled in the browser
 // from the live document.
@@ -27,7 +28,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 
 const REPOSITORY_ROOT = fileURLToPath(new URL('..', import.meta.url));
-export const TAILWIND_COMPILER_PATH = 'gbdraw/web/vendor/tailwindcss/tailwindcss-play.js';
+export const TAILWIND_COMPILER_PATH = 'tools/vendor/tailwindcss/tailwindcss-play.js';
 export const TAILWIND_INPUT_PATH = 'gbdraw/web/css/tailwind.input.css';
 export const TAILWIND_OUTPUT_PATH = 'gbdraw/web/css/tailwind.css';
 // Every source that writes class names into the page: the page and its

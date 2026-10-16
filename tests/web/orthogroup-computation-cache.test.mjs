@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 import test from 'node:test';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-globalThis.window = { Vue: context.Vue, setTimeout, clearTimeout };
+const Vue = loadPageVue();
+globalThis.window = { Vue, setTimeout, clearTimeout };
 const { createOrthogroupEditor } = await import('../../gbdraw/web/js/app/orthogroups.js');
 const { rekeyOrthogroupOverrides } = await import('../../gbdraw/web/js/services/orthogroup-feature-metadata.js');
-const { ref, reactive } = context.Vue;
+const { ref, reactive } = Vue;
 
 test('group lookup reuses valid identities and invalidates on ID edits, new aliases, duplicates and replacement', () => {
   let reads = 0;
@@ -79,7 +78,7 @@ test('the group list, a rendered name and the search follow the first rename of 
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
   };
   const editor = createOrthogroupEditor({ state: withDrawings(state) });
-  const rendered = context.Vue.computed(() => [
+  const rendered = Vue.computed(() => [
     editor.resolveOrthogroupName(editor.selectedOrthogroup.value),
     editor.resolveOrthogroupDescription(editor.selectedOrthogroup.value)
   ]);
@@ -108,7 +107,7 @@ test('the Edited marker of a group follows its first name and its first descript
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
   };
   const editor = createOrthogroupEditor({ state: withDrawings(state) });
-  const edited = context.Vue.computed(() => ['og_1', 'constructor'].map((id) => editor.isOrthogroupRenamed(id)));
+  const edited = Vue.computed(() => ['og_1', 'constructor'].map((id) => editor.isOrthogroupRenamed(id)));
   assert.deepEqual(edited.value, [false, false], 'a group id that names an inherited member is not edited');
   state.orthogroupNameOverrides.og_1 = 'My transporter';
   assert.deepEqual(edited.value, [true, false]);
@@ -146,14 +145,14 @@ test('the Description field shows only the group\'s own edit and follows its fir
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const markup = html.match(/<textarea id="similarity-group-description"[^>]*><\/textarea>/)?.[0];
   assert.ok(markup, 'the Description field is found');
-  const render = context.Vue.compile(markup);
+  const render = Vue.compile(markup);
   // What the composition root hands the template (app/app-setup.js).
   const bindings = {
     orthogroupDescriptionFieldText: editor.orthogroupDescriptionFieldText,
     setOrthogroupDescriptionOverride: editor.setOrthogroupDescriptionOverride,
     get selectedOrthogroup() { return editor.selectedOrthogroup.value; }
   };
-  const field = context.Vue.computed(() => render(bindings, []).props.value);
+  const field = Vue.computed(() => render(bindings, []).props.value);
   assert.equal(field.value, '', 'no edit: the field is empty, whatever the group id is');
   editor.setOrthogroupDescriptionOverride('constructor', 'Own text');
   assert.equal(field.value, 'Own text');

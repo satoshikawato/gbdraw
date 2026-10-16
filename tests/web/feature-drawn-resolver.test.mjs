@@ -8,7 +8,7 @@ import {
   setFeatureVisibilityOverride
 } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
-import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 // R4: tests/test_web_rule_matching.py runs the same cases through

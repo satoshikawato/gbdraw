@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import gzip
+import hashlib
 import io
+import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +15,7 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
+from svgwrite.container import Style
 
 import gbdraw.api.render as api_render
 from gbdraw.annotations import (
@@ -29,7 +34,15 @@ from gbdraw.api.diagram import (
 )
 from gbdraw.circular import circular_main
 from gbdraw.io.record_select import parse_record_selector
-from gbdraw.render.document import SvgDocument, write_svg_document
+from gbdraw.exceptions import ExportError
+from gbdraw.render.document import (
+    ContentPiece,
+    DocumentParts,
+    RawPiece,
+    SvgDocument,
+    document_parts,
+    write_svg_document,
+)
 from gbdraw.render.group_content import (
     ContentGroup,
     GroupContent,
@@ -42,6 +55,7 @@ from gbdraw.render.patterns import hatch_pattern
 from gbdraw.svg.elements import ClipPath, Group, Rect, Text
 from gbdraw.svg.elements import Path as SvgPath
 from gbdraw.render.export import has_cairosvg
+from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
 INPUTS = Path(__file__).parent / "test_inputs"
 HATCHED = RegionAnnotationStyle(fill="#88aaff", hatch=HatchStyle(cross=True))
@@ -367,3 +381,166 @@ def test_an_empty_drawing_is_written_as_svgwrite_writes_it() -> None:
     document = write_svg_document(drawing)
 
     assert document.prolog + document.body == _svgwrite_file_text(drawing)
+
+
+# Document pieces: the Web reply's form of the same text (STEP3B stage S, precondition P).
+
+SESSIONS = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions"
+_FRAGMENT_ROOT = (
+    '<g xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">%s</g>'
+)
+
+
+def _piece_text(piece: ContentPiece | RawPiece) -> str:
+    if isinstance(piece, ContentPiece):
+        return piece.start + piece.children + "</g>"
+    return piece.text
+
+
+def _joined(parts: DocumentParts) -> str:
+    return parts.prolog + parts.head + "".join(map(_piece_text, parts.pieces)) + parts.tail
+
+
+def _assert_pieces_are_the_document(drawing: Drawing) -> DocumentParts:
+    """prolog + head + pieces + tail is the file text, cold and warm; P holds per piece."""
+
+    cold = document_parts(drawing)
+    assert _joined(cold) == _svgwrite_file_text(drawing)
+    assert cold.head.startswith("<svg") and cold.tail == "</svg>"
+    contents = [piece for piece in cold.pieces if isinstance(piece, ContentPiece)]
+    assert contents, "the drawing places no content group"
+    for piece in contents:
+        data = piece.children.encode("utf-8")
+        assert piece.revision == hashlib.sha256(data).hexdigest()
+        assert piece.byte_length == len(data)
+        fragment = ET.fromstring(_FRAGMENT_ROOT % piece.children)
+        assert len(fragment) == len(piece.content.children)
+    warm = document_parts(drawing)
+    assert warm == cold
+    assert _joined(warm) == _joined(cold)
+    document = write_svg_document(drawing)
+    assert document.prolog + document.body == _joined(cold)
+    return cold
+
+
+def test_document_pieces_join_to_the_document_for_the_fixtures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for drawing in (
+        _linear_with_clip_and_hatch(),
+        _multi_record_circular_with_clip_and_hatch(),
+        _drawing()[0],
+        _circular_with_empty_label_groups(tmp_path, monkeypatch),
+    ):
+        _assert_pieces_are_the_document(drawing)
+
+
+def test_placed_contents_are_content_pieces_and_other_children_raw() -> None:
+    drawing, placed = _drawing()
+    parts = document_parts(drawing)
+    kinds = [type(piece).__name__ for piece in parts.pieces]
+    # defs, plain_empty, first, second, an empty content (raw: no children), plain_full.
+    assert kinds == ["RawPiece", "RawPiece", "ContentPiece", "ContentPiece", "RawPiece", "RawPiece"]
+    first, second = (piece for piece in parts.pieces if isinstance(piece, ContentPiece))
+    assert first.content is placed[0].content
+    assert first.revision == second.revision
+    assert 'data-request="0"' in first.start and 'data-request="1"' in second.start
+
+
+def _session_drawings(name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[Drawing]:
+    path = SESSIONS / name
+    with (gzip.open(path, "rt", encoding="utf-8") if name.endswith(".gz") else path.open(encoding="utf-8")) as handle:
+        document = json.load(handle)
+    drawings: list[Drawing] = []
+    original = api_render.write_svg_document
+
+    def capture(drawing: Drawing) -> SvgDocument:
+        drawings.append(drawing)
+        return original(drawing)
+
+    monkeypatch.setattr(api_render, "write_svg_document", capture)
+    render_embedded_canonical_web_request(
+        document["renderRequest"],
+        resources=document["resources"],
+        workspace=tmp_path / "workspace",
+    )
+    assert drawings
+    return drawings
+
+
+@pytest.mark.parametrize(
+    "session",
+    [
+        "tobacco-chloroplast.gbdraw-session.json",
+        pytest.param("Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz", marks=pytest.mark.slow),
+        pytest.param("hepatoplasmataceae_collinear.gbdraw-session.json.gz", marks=pytest.mark.slow),
+        pytest.param("vibrio-harveyi-group-collinear.gbdraw-session.json.gz", marks=pytest.mark.slow),
+    ],
+)
+def test_document_pieces_join_to_the_document_for_gallery_sessions(
+    session: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for drawing in _session_drawings(session, tmp_path, monkeypatch):
+        _assert_pieces_are_the_document(drawing)
+
+
+def test_a_record_added_before_another_changes_a_revision_only_with_its_text() -> None:
+    """Hazard 9: ids that depend on earlier records change the text, so they change the revision."""
+
+    def pieces(names: tuple[str, ...]) -> list[ContentPiece]:
+        records = [
+            SeqRecord(Seq("A" * 1000), id=f"record-{name}", name=f"record-{name}") for name in names
+        ]
+        drawing = assemble_circular_diagram_from_records(
+            records,
+            legend="none",
+            cfg=apply_config_overrides(None, {"labels.circular.scope": "none"}),
+        )
+        parts = _assert_pieces_are_the_document(drawing)
+        return [piece for piece in parts.pieces if isinstance(piece, ContentPiece)]
+
+    before = pieces(("a", "b"))
+    after = pieces(("z", "a", "b"))
+    for old in before:
+        for new in after:
+            assert (old.revision == new.revision) == (old.children == new.children)
+
+
+class _Annotated(Group):
+    """A group whose serialization carries a comment or processing instruction."""
+
+    def __init__(self, node: ET.Element, **extra: Any) -> None:
+        super().__init__(**extra)
+        self.node = node
+
+    def get_xml(self) -> ET.Element:
+        xml = super().get_xml()
+        xml.append(self.node)
+        return xml
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        lambda: Style("rect { fill: red; }"),
+        lambda: _Annotated(ET.Comment(" a note ")),
+        lambda: _Annotated(ET.ProcessingInstruction("xml-stylesheet", 'href="x.css"')),
+    ],
+    ids=["cdata", "comment", "processing-instruction"],
+)
+def test_markup_that_is_not_an_element_makes_document_parts_raise(markup: Any) -> None:
+    raw = Drawing(debug=False, size=("10px", "10px"))
+    raw.add(markup())
+    with pytest.raises(ExportError, match="not an element"):
+        document_parts(raw)
+
+    inside = Group(id="holder")
+    inside.add(Rect(insert=(0, 0), size=(1, 1)))
+    inside.add(markup())
+    placed = Drawing(debug=False, size=("10px", "10px"))
+    placed.add(place_content(placed, GroupContent.of(inside), GroupKey("canvas", GroupKind.FEATURES)))
+    with pytest.raises(ExportError, match="not an element"):
+        document_parts(placed)

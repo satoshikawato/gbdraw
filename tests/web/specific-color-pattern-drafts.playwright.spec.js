@@ -132,8 +132,25 @@ test('a root update renders no Specific color rule row; a rule edit does', async
       };
     };
     window.__ruleRowRenders = { root: 0, rows: 0 };
-    const root = document.querySelector('#app').__vue_app__._instance;
-    const rows = document.querySelector('[data-color-rule-row]').__vueParentComponent;
+    // The component that renders the first row: the nearest component whose
+    // rendered vnode tree holds the row element. Walks public runtime fields
+    // (`$`, `subTree`, `component`, `children`, `el`) that the production
+    // build keeps; `__vueParentComponent` exists only in the development build.
+    const root = window.__GBDRAW_APP__.$;
+    const rowElement = document.querySelector('[data-color-rule-row]');
+    const ownerOf = (vnode, owner) => {
+      if (!vnode || typeof vnode !== 'object') return null;
+      if (vnode.el === rowElement) return owner;
+      if (vnode.component) return ownerOf(vnode.component.subTree, vnode.component);
+      if (!Array.isArray(vnode.children)) return null;
+      for (const child of vnode.children) {
+        const found = ownerOf(child, owner);
+        if (found) return found;
+      }
+      return null;
+    };
+    const rows = ownerOf(root.subTree, root);
+    if (!rows) throw new Error('no component renders the first Specific color rule row');
     if (rows === root) counted(root, ['root', 'rows']);
     else { counted(root, ['root']); counted(rows, ['rows']); }
   });

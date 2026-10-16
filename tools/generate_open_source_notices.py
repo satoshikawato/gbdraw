@@ -659,11 +659,6 @@ def render_open_source_notices() -> str:
 {component_rows}
                 </tbody>
             </table>
-            <p class="muted-note">
-                The Tailwind Play CDN script is fetched by the vendor refresh tool from an upstream endpoint that does
-                not expose an immutable version string in the downloaded bundle. gbdraw vendors that exact snapshot
-                locally and serves the local copy at runtime.
-            </p>
         </section>
 
         <section>

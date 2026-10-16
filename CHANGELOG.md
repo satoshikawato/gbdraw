@@ -269,6 +269,14 @@ write-up of a release.
   default: a Linear Result saved by 0.13.0 with a corner position keeps its
   figure, and its first Legend edit places the Legend below the diagram; such
   a side with capitals or spaces no longer stops the load (OV-671, OV-672).
+- Fixed (web app): a Session that 0.13.0 saved after **Generate** and a switch
+  to the other diagram mode opened its Result in the shown mode, listed its
+  feature information as not restored, and moved the Legend and the title at
+  its first edit. When the Session records the mode of its last Generate, it
+  now opens in that mode, with the Legend side and title side the Result was
+  drawn with; the shown mode keeps its settings, without a Result. A Session
+  0.13.0 saved without that mode (for example after a Linear LOSAT comparison
+  run) still opens in the shown mode (OV-677, OV-969).
 - Changed (CLI `--session`, Python API): the canonical request reader refuses
   values the request format does not define: a comparison table path at any
   request schema; `null` or another kind of value where a field holds text, a
@@ -678,6 +686,27 @@ write-up of a release.
   Legend rows that redraw drew (or, after a Legend or title move, the moved
   position under the redrawn diagram) were recorded as an extra step under the
   same name, whose Undo changed nothing visible (OV-872, OV-873).
+- Fixed (web app): with LOSATP Collinear and **Search between** set to **All
+  records** on a CLI Session's record grid that places a record above one
+  listed before it, **Save Raw LOSAT TSV** on one comparison card saved the
+  search of another pair, and the other pair's card had no **Save Raw LOSAT
+  TSV** button. The reproducibility files of two such pairs were also numbered
+  alike, so one overwrote the other. Each card now saves the search of its own
+  two records under its own file name, and each pair has its own
+  reproducibility file (OV-980, OV-985).
+- Fixed (web app): a Session whose raw LOSAT cache entry has a file name that
+  is not text (for example `{}`) loads with the entry's default name,
+  `losat_pair_<n>.tsv`. Before, **Save Raw LOSAT TSV** named the file
+  `[object Object]` (OV-981).
+- Fixed (web app): loading a Session older than version 46 that recolored a
+  Legend row named like a built-in JavaScript member (`constructor`,
+  `toString`) without a saved original color no longer records that member as
+  the swatch's original color. Before, Reset set the swatch fill to
+  `function Object() { [native code] }` (OV-982).
+- Fixed (web app): Load drops a raw LOSAT cache entry whose `searchContext` is
+  not text (for example a list holding the 64-character hash), as it drops
+  other entries it cannot read. Before, the entry was kept, never reused, and
+  written again by Save Session (OV-983).
 - Web: when **Load Label TSV** is applied while the Label Not Shown dialog is
   open, the dialog is cancelled and the edited label text is not written.
   Before, the dialog disappeared without an answer, and Undo, Redo, Save and
@@ -2131,6 +2160,18 @@ Retired names and their replacements are listed under
   Python returns it beside the metadata, not inside it, and the Worker render protocol is
   now 3, so a cached older wheel is reported as a version mismatch. The figure, the
   catalog, and Saved Sessions are unchanged.
+- Performance (web app): a Generate sends and sanitizes only the SVG groups whose content
+  changed. Python writes each SVG document as ordered pieces with a sha256 revision for
+  each group's content; the page keeps each group's sanitized text on its Result, and the
+  next Generate names those revisions so Python leaves their text out. The joined Result
+  equals DOMPurify of the whole document. Python (CLI and Python API too) now raises
+  `ExportError` for an SVG group that holds a comment, CDATA or a processing instruction;
+  gbdraw writes none. The Worker render protocol is now 4. The figure, SVG, PNG and PDF
+  bytes, and Saved Sessions are unchanged.
+- Performance (web app): after a Generate that keeps the feature catalog, the page no
+  longer derives three values again whose inputs did not change: the feature set the
+  color and visibility rules match against, the record and feature names of the
+  Similarity alignment drawer, and the Features list. Nothing visible changes.
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 

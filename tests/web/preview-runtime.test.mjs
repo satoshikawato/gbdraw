@@ -35,7 +35,7 @@ await Promise.all(serviceNames.map(async (name) => {
 }));
 
 await mkdir(join(tempDir, 'utils'), { recursive: true });
-await Promise.all(['color-utils.js', 'contract-shape.js', 'error-normalization.js', 'named-colors.js', 'tsv-cell.js'].map(async (name) => {
+await Promise.all(['color-utils.js', 'contract-shape.js', 'error-normalization.js', 'named-colors.js', 'own-entry.js', 'tsv-cell.js'].map(async (name) => {
   await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'), 'utf8');
 }));
 

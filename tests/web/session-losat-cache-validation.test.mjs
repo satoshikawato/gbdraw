@@ -1147,6 +1147,43 @@ test('a Session that repeats a raw LOSAT cache key loads without the repeat', as
   assert.deepEqual(alerts, []);
 });
 
+// OV-981: a saved raw LOSAT file name that is no text is read as a missing
+// one (the entry's default name), so a download is never named
+// "[object Object]". The entry and its rows load; no row is listed.
+test('a Session raw LOSAT cache file name that is no text loads as the default name', async () => {
+  const session = syntheticConservationSession();
+  const [first, second] = session.losatCache.entries;
+  first.filename = {};
+  second.filename = 7;
+  alerts.length = 0;
+  const result = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  });
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(result.repairs, []);
+  assert.deepEqual(state.losatCacheInfo.value.map((entry) => entry.filename), [
+    'losat_pair_1.tsv', 'losat_pair_2.tsv', 'comparison-d.circular_conservation.losatn.tsv'
+  ]);
+  assert.deepEqual(alerts, []);
+});
+
+// OV-983: a search context that is no text (a list of the 64 hex characters)
+// is no current raw entry: Load drops it with an unlisted row, as any entry
+// it cannot read (E-OD05), and Save writes no such entry again.
+test('a Session raw LOSAT cache entry whose search context is a list is dropped', async () => {
+  const session = syntheticConservationSession();
+  const [, second] = session.losatCache.entries;
+  second.searchContext = ['a'.repeat(64)];
+  const result = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  });
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(result.repairs.map((repair) => [repair.code, repair.path]), [
+    ['cache-entry-dropped', 'losatCache.entries[1]']
+  ]);
+  assert.equal(state.losatCache.value.has(second.key), false);
+});
+
 for (const version of [39, 40]) {
   test(`version-${version} import rejects duplicate raw LOSAT cache keys`, () => {
     assert.throws(

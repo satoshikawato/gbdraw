@@ -4,7 +4,7 @@ import { createRulePreparation, runWhenPrepared } from '../../gbdraw/web/js/app/
 import { ruleMatcher, ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
 
 const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
-import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const setup = (evaluate = evaluatePythonRules) => {

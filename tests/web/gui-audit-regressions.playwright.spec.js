@@ -3,6 +3,7 @@ const { join } = require('node:path');
 const { readFileSync } = require('node:fs');
 const { readPdfText } = require('./helpers/pdf-text.cjs');
 const { openApp, generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json') => {
   page.on('dialog', (dialog) => dialog.dismiss());
@@ -275,6 +276,8 @@ test('PDF text flattening places each curved-label character by its UTF-16 index
 
 test('a failed PDF font request can be retried without reloading the diagram', async ({ page }) => {
   test.setTimeout(180000);
+  // Only the cold boot requests the wheel that the case makes fail.
+  await forceColdPyodideBoot(page);
   await session(page);
   await page.route('**/gbdraw-*-py3-none-any.whl*', (route) => route.abort());
   expect(await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF())).toMatchObject({

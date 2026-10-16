@@ -1,4 +1,4 @@
-import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

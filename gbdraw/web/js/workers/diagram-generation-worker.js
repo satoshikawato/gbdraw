@@ -1,6 +1,11 @@
 import { sendBoundedJson } from '../services/bounded-json-transport.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
-import { DIAGRAM_HELPER_OPERATIONS, readFeatureCatalogRevision } from '../services/diagram-worker-protocol.js';
+import {
+  DIAGRAM_HELPER_OPERATIONS,
+  readFeatureCatalogRevision,
+  readHeldSegments,
+  readSvgDocumentParts
+} from '../services/diagram-worker-protocol.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
@@ -78,7 +83,7 @@ export const collectGenerationResultTransferList = (payload) => {
     else if (ArrayBuffer.isView(value)) buffers.add(value.buffer);
   };
   (Array.isArray(payload?.results) ? payload.results : []).forEach((result) => {
-    addBuffer(result?.content);
+    addBuffer(result?.segments);
   });
   addBuffer(payload?.metadata);
   addBuffer(payload?.featureCatalog);
@@ -98,17 +103,63 @@ const hexDigest = async (bytes) => {
   return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
 };
 
+const invalidGenerationReply = () => serializeError({
+  code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission'
+});
+
+/**
+ * Check one Result's document against its `segments` buffer and the segments
+ * the request named, and describe the whole document: its UTF-8 length, and a
+ * manifest that names each children text by revision, held or sent.
+ * @param {{ document?: unknown, segments?: unknown }} result
+ * @param {ReadonlyMap<string, number>} heldBytes The request's held segments: revision -> bytes.
+ * @param {TextEncoder} encoder
+ */
+const describeResultDocument = async (result, heldBytes, encoder) => {
+  const segments = result.segments === undefined ? new Uint8Array(0) : bytesForDigest(result.segments);
+  if (!segments) throw invalidGenerationReply();
+  const parts = readSvgDocumentParts(result.document, segments.byteLength, invalidGenerationReply);
+  let bytes = encoder.encode(parts.head).byteLength + encoder.encode(parts.tail).byteLength;
+  const pieces = [];
+  for (const piece of parts.pieces) {
+    if (piece.kind === 'raw') {
+      bytes += encoder.encode(piece.text).byteLength;
+      pieces.push(piece);
+      continue;
+    }
+    const { start, revision } = piece;
+    if (piece.offset === undefined) {
+      if (heldBytes.get(revision) !== piece.bytes) throw invalidGenerationReply();
+    } else if (await hexDigest(segments.subarray(piece.offset, piece.offset + piece.bytes)) !== revision) {
+      throw invalidGenerationReply();
+    }
+    bytes += encoder.encode(start).byteLength + '</g>'.length + piece.bytes;
+    pieces.push({ kind: 'content', start, revision, bytes: piece.bytes });
+  }
+  return { bytes, manifest: { head: parts.head, tail: parts.tail, pieces } };
+};
+
 /**
  * Build a private identity from the buffers that are already being transferred.
- * SVG, metadata and feature catalog payloads are never re-encoded or concatenated
- * here. Each large buffer is hashed independently and only the compact digest
- * manifest is encoded for the final ordered digest. `featureCatalogDigest` is the
- * digest of the catalog bytes sent, or of the held catalog's bytes when Python
- * reported it unchanged, so equal artifacts get equal fingerprints either way.
+ * SVG children, metadata and feature catalog payloads are never re-encoded or
+ * concatenated here. Each sent children text is hashed and must equal its
+ * revision; a held one is named by the revision the request held, so a
+ * document has one fingerprint and one byte count whether its children were
+ * held or sent. `featureCatalogDigest` is the digest of the catalog bytes sent,
+ * or of the held catalog's bytes when Python reported it unchanged, so equal
+ * artifacts get equal fingerprints either way.
+ * @param {{ results?: unknown, metadata?: unknown }} payload The wrapper's reply.
+ * @param {{ bytes: number, sha256: string } | null} [featureCatalogDigest]
+ * @param {readonly { revision: string, bytes: number }[]} [heldSegments] The segments the request named.
  */
-export const buildGeneratedArtifactTransportIdentity = async (payload, featureCatalogDigest = null) => {
+export const buildGeneratedArtifactTransportIdentity = async (
+  payload,
+  featureCatalogDigest = null,
+  heldSegments = []
+) => {
   const results = Array.isArray(payload?.results) ? payload.results : [];
   const encoder = new TextEncoder();
+  const heldBytes = new Map(heldSegments.map(({ revision, bytes }) => [revision, bytes]));
   const resultManifest = [];
   let resultBytes = 0;
   let resultNameBytes = 0;
@@ -116,18 +167,15 @@ export const buildGeneratedArtifactTransportIdentity = async (payload, featureCa
   for (let index = 0; index < results.length; index += 1) {
     const result = results[index] || {};
     const nameBytes = encoder.encode(String(result.name || ''));
-    const contentBytes = bytesForDigest(result.content);
-    if (!contentBytes) {
-      throw new Error('Generated SVG content was not encoded for Worker transport.');
-    }
-    resultBytes += contentBytes.byteLength;
+    const document = await describeResultDocument(result, heldBytes, encoder);
+    resultBytes += document.bytes;
     resultNameBytes += nameBytes.byteLength;
     resultManifest.push({
       index,
       nameBytes: nameBytes.byteLength,
       nameSha256: await hexDigest(nameBytes),
-      contentBytes: contentBytes.byteLength,
-      contentSha256: await hexDigest(contentBytes)
+      documentBytes: document.bytes,
+      documentSha256: await hexDigest(encoder.encode(JSON.stringify(document.manifest)))
     });
   }
 
@@ -136,7 +184,7 @@ export const buildGeneratedArtifactTransportIdentity = async (payload, featureCa
     throw new Error('Generated metadata was not encoded for Worker transport.');
   }
   const manifest = {
-    schema: 2,
+    schema: 3,
     results: resultManifest,
     metadata: {
       bytes: metadataBytes.byteLength,
@@ -158,8 +206,9 @@ export const buildGeneratedArtifactTransportIdentity = async (payload, featureCa
     // Parsed metadata retains strings and object structure in addition to the
     // transferred UTF-8 representation. Two bytes per source byte is a bounded,
     // deliberately conservative owner estimate; Result UTF-16 strings are added
-    // separately by the main-thread handle. The feature catalog counts as
-    // metadata whether it was sent or kept (D-38 OQ-2).
+    // separately by the main-thread handle. `resultBytes` counts the whole
+    // admitted document, held or sent. The feature catalog counts as metadata
+    // whether it was sent or kept (D-38 OQ-2).
     retainedBytes: resultBytes + resultNameBytes + (metadataBytes.byteLength + catalogBytes) * 2
   });
 };
@@ -171,8 +220,9 @@ export const buildGeneratedArtifactTransportIdentity = async (payload, featureCa
  * page checks that "unchanged" names the revision it holds.
  * @param {{ featureCatalog?: unknown, featureCatalogRevision?: unknown, artifactIdentity?: unknown }} outcome
  * @param {{ revision: string, sha256: string, bytes: number } | null} held
+ * @param {readonly { revision: string, bytes: number }[]} heldSegments The segments the request named.
  */
-export const resolveGeneratedFeatureCatalog = async (outcome, held) => {
+export const resolveGeneratedFeatureCatalog = async (outcome, held, heldSegments) => {
   const catalogBytes = bytesForDigest(outcome.featureCatalog);
   const digest = catalogBytes
     ? { bytes: catalogBytes.byteLength, sha256: await hexDigest(catalogBytes) }
@@ -183,7 +233,7 @@ export const resolveGeneratedFeatureCatalog = async (outcome, held) => {
     ? outcome.featureCatalogRevision
     : null;
   outcome.featureCatalogRevision = pythonRevision && digest ? { revision: pythonRevision, ...digest } : null;
-  outcome.artifactIdentity = await buildGeneratedArtifactTransportIdentity(outcome, digest);
+  outcome.artifactIdentity = await buildGeneratedArtifactTransportIdentity(outcome, digest, heldSegments);
   return outcome;
 };
 
@@ -1042,6 +1092,7 @@ const runGeneration = async ({
   stagedResources,
   fontIdentities = [],
   heldFeatureCatalogRevision = null,
+  heldSegments: heldSegmentsInput = null,
   requestId,
   testLifecycleEnabled = false
 } = {}) => {
@@ -1055,6 +1106,11 @@ const runGeneration = async ({
   // digest of its bytes (gbdraw/web/CLAUDE.md, Runtime data flow).
   const held = readFeatureCatalogRevision(
     heldFeatureCatalogRevision,
+    () => serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' })
+  );
+  // The children texts the page holds (content revisions); Python omits their text.
+  const heldSegments = readHeldSegments(
+    heldSegmentsInput,
     () => serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' })
   );
   const { pyodide } = runtime;
@@ -1130,7 +1186,8 @@ const runGeneration = async ({
       workspace,
       testLifecycleEnabled,
       preparedResourceIdentitiesJson,
-      held?.revision ?? null
+      held?.revision ?? null,
+      JSON.stringify(heldSegments.map(({ revision }) => revision))
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });
@@ -1158,6 +1215,7 @@ const runGeneration = async ({
       transport: 'transferable-binary',
       featureCatalog: result?.featureCatalog != null ? 'sent' : result?.error ? 'none' : 'unchanged',
       heldFeatureCatalogRevision: Boolean(held),
+      heldSegmentCount: heldSegments.length,
       bytes: collectGenerationResultTransferList(result).reduce(
         (total, buffer) => total + buffer.byteLength,
         0
@@ -1226,7 +1284,7 @@ const runGeneration = async ({
   if (outcome?.error) outcome.error = serializeError(outcome.error, { operation: 'generate' });
   if (!outcome?.error) {
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-start');
-    await resolveGeneratedFeatureCatalog(outcome, held);
+    await resolveGeneratedFeatureCatalog(outcome, held, heldSegments);
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-end', {
       fingerprint: outcome.artifactIdentity.fingerprint,
       retainedBytes: outcome.artifactIdentity.retainedBytes

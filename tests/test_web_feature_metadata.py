@@ -112,21 +112,34 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
     assert marker.exists()
 
 
-def test_canonical_request_wrapper_returns_svg_content_as_utf8_bytes(
+def test_canonical_request_wrapper_returns_svg_pieces_and_segment_bytes(
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],
 ) -> None:
-    """The metadata and the feature catalog travel as separate UTF-8 JSON bytes (step 3a)."""
+    """Metadata, catalog and children texts travel as UTF-8 bytes; Results carry no content (step 3b S)."""
 
     wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
     original_renderer = python_helpers_namespace["render_staged_canonical_web_request"]
     held: list[object] = []
+    held_segments: list[object] = []
+    sent_revision, held_revision = "a" * 64, "b" * 64
 
     def renderer(*_args: object, **kwargs: object) -> dict[str, object]:
         held.append(kwargs["_held_feature_catalog_revision"])
+        held_segments.append(kwargs["_held_segments"])
         unchanged = kwargs["_held_feature_catalog_revision"] == "e:1"
+        pieces = [
+            {"kind": "raw", "text": "<defs />"},
+            {"kind": "content", "start": "<g>", "revision": sent_revision, "bytes": 15, "children": "<text>µ</text>"},
+            {"kind": "content", "start": '<g id="h">', "revision": held_revision, "bytes": 9},
+            {"kind": "content", "start": "<g>", "revision": sent_revision, "bytes": 15, "children": "<text>µ</text>"},
+        ]
         return {
-            "results": [{"name": "diagram.svg", "content": "<svg>µ</svg>"}],
+            "results": [{
+                "name": "diagram.svg",
+                "content": "unsent",
+                "document": {"head": "<svg>", "tail": "</svg>", "pieces": pieces},
+            }],
             "metadata": {},
             "featureCatalog": None if unchanged else {"schema": 1, "items": ["µ"]},
             "featureCatalogRevision": "e:1",
@@ -136,13 +149,31 @@ def test_canonical_request_wrapper_returns_svg_content_as_utf8_bytes(
     try:
         sent = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
         sent_null = wrapper("{}", "{}", str(tmp_path / "render"), True, None, "null")  # type: ignore[operator]
-        unchanged = wrapper("{}", "{}", str(tmp_path / "render"), True, None, "e:1")  # type: ignore[operator]
+        unchanged = wrapper(  # type: ignore[operator]
+            "{}", "{}", str(tmp_path / "render"), True, None, "e:1", json.dumps([held_revision])
+        )
+        malformed = wrapper(  # type: ignore[operator]
+            "{}", "{}", str(tmp_path / "render"), False, None, None, json.dumps([1])
+        )
     finally:
         python_helpers_namespace["render_staged_canonical_web_request"] = original_renderer
 
     assert held == [None, None, "e:1"]
+    assert held_segments == [frozenset(), frozenset(), frozenset({held_revision})]
+    children = "<text>µ</text>".encode()
     assert sent == {
-        "results": [{"name": "diagram.svg", "content": "<svg>µ</svg>".encode()}],
+        "results": [{
+            "name": "diagram.svg",
+            "document": {"head": "<svg>", "tail": "</svg>", "pieces": [
+                {"kind": "raw", "text": "<defs />"},
+                {"kind": "content", "start": "<g>", "revision": sent_revision, "bytes": 15,
+                 "offset": 0, "length": 15},
+                {"kind": "content", "start": '<g id="h">', "revision": held_revision, "bytes": 9},
+                {"kind": "content", "start": "<g>", "revision": sent_revision, "bytes": 15,
+                 "offset": 15, "length": 15},
+            ]},
+            "segments": children + children,
+        }],
         "metadata": b"{}",
         "featureCatalog": '{"schema":1,"items":["µ"]}'.encode(),
         "featureCatalogRevision": "e:1",
@@ -152,6 +183,37 @@ def test_canonical_request_wrapper_returns_svg_content_as_utf8_bytes(
     assert unchanged["featureCatalog"] is None
     assert unchanged["featureCatalogRevision"] == "e:1"
     assert unchanged["_diagnostics"]["metrics"]["featureCatalogSerializationCount"] == 0
+    assert malformed["error"]["code"] == "HELPER_PROTOCOL"
+    assert malformed["error"]["stage"] == "request-validation"
+
+
+def test_canonical_request_wrapper_reports_a_piece_that_is_not_an_element_as_a_render_error(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    from svgwrite import Drawing
+    from svgwrite.container import Style
+
+    from gbdraw.render.document import document_parts
+
+    wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
+    original_renderer = python_helpers_namespace["render_staged_canonical_web_request"]
+
+    def renderer(*_args: object, **_kwargs: object) -> dict[str, object]:
+        drawing = Drawing(debug=False)
+        drawing.add(Style("rect { fill: red; }"))
+        document_parts(drawing)
+        raise AssertionError("document_parts accepted CDATA")
+
+    python_helpers_namespace["render_staged_canonical_web_request"] = renderer
+    try:
+        failure = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
+    finally:
+        python_helpers_namespace["render_staged_canonical_web_request"] = original_renderer
+
+    assert failure["error"]["code"] == "RENDER_FAILED"
+    assert failure["error"]["stage"] == "render"
+    assert failure["error"]["context"] == {"exceptionType": "ExportError"}
 
 
 def test_importable_feature_metadata_matches_pyodide_wrapper(

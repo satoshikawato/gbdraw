@@ -13,7 +13,7 @@ import {
 import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
-import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 /**

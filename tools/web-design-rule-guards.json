@@ -505,12 +505,6 @@
           "retireWhen": "never"
         },
         {
-          "path": "tests/web/no-implicit-any-ratchet.test.mjs",
-          "rootCause": "P5",
-          "job": "web-contracts-pr",
-          "retireWhen": "NO_IMPLICIT_ANY_BASELINE is empty and noImplicitAny is on in tests/web/types/tsconfig.json"
-        },
-        {
           "path": "tests/web/typed-boundaries.test.mjs",
           "rootCause": "P5",
           "job": "web-contracts-pr",
@@ -521,12 +515,6 @@
           "rootCause": "P5",
           "job": "web-contracts-pr",
           "retireWhen": "never"
-        },
-        {
-          "path": "tests/web/types/tsconfig.no-implicit-any.json",
-          "rootCause": "P5",
-          "job": "web-contracts-pr",
-          "retireWhen": "NO_IMPLICIT_ANY_BASELINE is empty and noImplicitAny is on in tests/web/types/tsconfig.json"
         },
         {
           "path": "tests/web/types/web-globals.d.ts",
@@ -540,11 +528,6 @@
           "path": "tests/web/typed-boundaries.test.mjs",
           "symbol": "UNCHECKED_MODULES",
           "kind": "set"
-        },
-        {
-          "path": "tests/web/no-implicit-any-ratchet.test.mjs",
-          "symbol": "NO_IMPLICIT_ANY_BASELINE",
-          "kind": "count-map"
         },
         {
           "path": "tests/web/explicit-any-ratchet.test.mjs",

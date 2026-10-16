@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -73,6 +74,7 @@ await copyModule(
 );
 await copyModule('gbdraw/web/js/services/session-feature-metadata.js', 'services/session-feature-metadata.js');
 await copyModule('gbdraw/web/js/services/svg-result-ingestion.js', 'services/svg-result-ingestion.js');
+await copyModule('gbdraw/web/js/utils/own-entry.js', 'utils/own-entry.js');
 await copyModule('gbdraw/web/js/services/svg-result-normalization.js', 'services/svg-result-normalization.js');
 await copyModule('gbdraw/web/js/services/svg-sanitization.js', 'services/svg-sanitization.js');
 await copyModule('gbdraw/web/js/services/svg-serialization.js', 'services/svg-serialization.js');
@@ -202,19 +204,35 @@ const {
     metadata: {},
     artifactIdentity: null
   });
-  const binarySvg = new TextEncoder().encode('<svg>µ</svg>');
-  assert.deepEqual(
-    normalizeGenerationResponse({
-      results: [{ name: 'binary.svg', content: binarySvg }],
-      metadata: new TextEncoder().encode(JSON.stringify(metadata)),
-      featureCatalog: new TextEncoder().encode(JSON.stringify(featureCatalog))
-    }),
-    {
-      results: [{ name: 'binary.svg', content: '<svg>µ</svg>' }],
-      metadata: { ...metadata, featureCatalog },
-      artifactIdentity: null
-    }
-  );
+  // Step 3b S: a Result is its document pieces; the children texts arrive in
+  // one UTF-8 buffer and are decoded once each.
+  const { SEGMENTS } = await import(pathToFileURL(join(tempDir, 'services', 'current-worker-result-source.js')));
+  const children = new TextEncoder().encode('<text>µ</text>');
+  const revision = createHash('sha256').update(children).digest('hex');
+  const decoded = normalizeGenerationResponse({
+    results: [{
+      name: 'binary.svg',
+      document: { head: '<svg>', tail: '</svg>', pieces: [
+        { kind: 'raw', text: '<defs />' },
+        { kind: 'content', start: '<g>', revision, bytes: children.byteLength, offset: 0, length: children.byteLength }
+      ] },
+      segments: children
+    }],
+    metadata: new TextEncoder().encode(JSON.stringify(metadata)),
+    featureCatalog: new TextEncoder().encode(JSON.stringify(featureCatalog))
+  });
+  assert.deepEqual(decoded, {
+    results: [{
+      name: 'binary.svg',
+      document: { head: '<svg>', tail: '</svg>', pieces: [
+        { kind: 'raw', text: '<defs />' },
+        { kind: 'content', start: '<g>', revision, bytes: children.byteLength, children: '<text>µ</text>' }
+      ] },
+      [SEGMENTS]: new Map()
+    }],
+    metadata: { ...metadata, featureCatalog },
+    artifactIdentity: null
+  });
 }
 
 const parseAttributes = (source) => {
