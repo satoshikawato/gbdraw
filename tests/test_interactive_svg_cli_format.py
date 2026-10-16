@@ -33,6 +33,7 @@ from gbdraw.render.formats import (
 from gbdraw.render.interactive_svg import (
     InteractiveSvgContext,
     _feature_payloads,
+    _normalize_location_parts,
     enrich_svg,
 )
 from gbdraw.features.ids import compute_feature_hash, compute_feature_hash_from_parts
@@ -1868,3 +1869,19 @@ def test_cli_help_lists_interactive_svg(capsys) -> None:
 
     assert "interactive_svg" in circular_help
     assert "interactive_svg" in linear_help
+
+
+_LOCATION_PART_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "location-parts-vectors.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize(
+    "case", _LOCATION_PART_VECTORS, ids=[case["name"] for case in _LOCATION_PART_VECTORS]
+)
+def test_location_parts_normalize_to_the_vectors_shared_with_the_web_export_writer(
+    case: dict[str, object],
+) -> None:
+    # tests/web/standalone-location-parts.test.mjs checks the same vectors against
+    # normalizeLocationParts.
+    assert _normalize_location_parts(json.loads(json.dumps(case["input"]))) == case["expected"]

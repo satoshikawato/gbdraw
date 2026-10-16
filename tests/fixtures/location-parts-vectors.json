@@ -1,0 +1,318 @@
+{
+  "description": "Feature location parts that the two interactive SVG writers normalize: the Python CLI writer (interactive_svg._normalize_location_parts) and the Web export writer (standalone-interactivity.js normalizeLocationParts). A null, absent, blank, non-numeric, or non-scalar start or end is missing; a number truncates toward zero; a missing display is built from the 1-based start and the end. Each case's input is the parts value and expected is the normalized list. The viewer script in the written file reads the parts with its own code and is not pinned here.",
+  "cases": [
+    {
+      "name": "whole-number start and end give a 1-based display",
+      "input": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "+"
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "+",
+          "display": "11..20"
+        }
+      ]
+    },
+    {
+      "name": "a fractional start and end truncate toward zero",
+      "input": [
+        {
+          "start": 10.5,
+          "end": 20.9,
+          "strand": "-"
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "-",
+          "display": "11..20"
+        }
+      ]
+    },
+    {
+      "name": "a fraction below one truncates to zero",
+      "input": [
+        {
+          "start": 0.5,
+          "end": 3
+        }
+      ],
+      "expected": [
+        {
+          "start": 0,
+          "end": 3,
+          "strand": "",
+          "display": "1..3"
+        }
+      ]
+    },
+    {
+      "name": "negative whole numbers are kept",
+      "input": [
+        {
+          "start": -5,
+          "end": -1
+        }
+      ],
+      "expected": [
+        {
+          "start": -5,
+          "end": -1,
+          "strand": "",
+          "display": "-4..-1"
+        }
+      ]
+    },
+    {
+      "name": "a negative fraction truncates to zero",
+      "input": [
+        {
+          "start": -0.5,
+          "end": 3
+        }
+      ],
+      "expected": [
+        {
+          "start": 0,
+          "end": 3,
+          "strand": "",
+          "display": "1..3"
+        }
+      ]
+    },
+    {
+      "name": "a null start is missing, not zero",
+      "input": [
+        {
+          "start": null,
+          "end": 20
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        }
+      ]
+    },
+    {
+      "name": "an absent start is missing, not zero",
+      "input": [
+        {
+          "end": 20
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": 20,
+          "strand": "",
+          "display": "..20"
+        }
+      ]
+    },
+    {
+      "name": "an empty or blank end is missing, not zero",
+      "input": [
+        {
+          "start": 10,
+          "end": ""
+        },
+        {
+          "start": 10,
+          "end": "  "
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": null,
+          "strand": "",
+          "display": "11.."
+        },
+        {
+          "start": 10,
+          "end": null,
+          "strand": "",
+          "display": "11.."
+        }
+      ]
+    },
+    {
+      "name": "a non-numeric string is missing",
+      "input": [
+        {
+          "start": 5,
+          "end": "x"
+        }
+      ],
+      "expected": [
+        {
+          "start": 5,
+          "end": null,
+          "strand": "",
+          "display": "6.."
+        }
+      ]
+    },
+    {
+      "name": "numeric strings are numbers",
+      "input": [
+        {
+          "start": "10",
+          "end": "20.5"
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "",
+          "display": "11..20"
+        }
+      ]
+    },
+    {
+      "name": "an object or list is not a number",
+      "input": [
+        {
+          "start": {},
+          "end": [
+            5
+          ]
+        }
+      ],
+      "expected": []
+    },
+    {
+      "name": "a part with neither start nor end and no display is dropped",
+      "input": [
+        {
+          "strand": "+"
+        },
+        {
+          "start": null,
+          "end": null
+        }
+      ],
+      "expected": []
+    },
+    {
+      "name": "a part with neither start nor end keeps its display",
+      "input": [
+        {
+          "start": null,
+          "end": null,
+          "display": "join(1..2,5..6)"
+        }
+      ],
+      "expected": [
+        {
+          "start": null,
+          "end": null,
+          "strand": "",
+          "display": "join(1..2,5..6)"
+        }
+      ]
+    },
+    {
+      "name": "a display is kept as written, trimmed",
+      "input": [
+        {
+          "start": 10,
+          "end": 20,
+          "display": "  <11..20  "
+        }
+      ],
+      "expected": [
+        {
+          "start": 10,
+          "end": 20,
+          "strand": "",
+          "display": "<11..20"
+        }
+      ]
+    },
+    {
+      "name": "a strand is trimmed and a missing strand is empty",
+      "input": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": " + "
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "strand": null
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "+",
+          "display": "2..2"
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "strand": "",
+          "display": "4..4"
+        }
+      ]
+    },
+    {
+      "name": "entries that are not objects are skipped",
+      "input": [
+        1,
+        "x",
+        null,
+        [
+          1,
+          2
+        ],
+        {
+          "start": 1,
+          "end": 2
+        }
+      ],
+      "expected": [
+        {
+          "start": 1,
+          "end": 2,
+          "strand": "",
+          "display": "2..2"
+        }
+      ]
+    },
+    {
+      "name": "input that is not a list gives no parts",
+      "input": null,
+      "expected": []
+    },
+    {
+      "name": "a string is not a list of parts",
+      "input": "1..2",
+      "expected": []
+    },
+    {
+      "name": "an object is not a list of parts",
+      "input": {
+        "start": 1,
+        "end": 2
+      },
+      "expected": []
+    }
+  ]
+}

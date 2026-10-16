@@ -187,19 +187,35 @@ const normalizeQualifierMap = (qualifiers) => {
   return normalized;
 };
 
+/**
+ * A part's start or end as the Python writer reads it
+ * (`_normalize_location_parts`): null, blank, and non-numeric values are
+ * missing, and a number truncates toward zero.
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+const locationPartNumber = (value) => {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && !value.trim()) return null;
+  const number = Number(value);
+  // `|| 0` turns the -0 of a negative fraction into 0, as Python's int() does.
+  return Number.isFinite(number) ? Math.trunc(number) || 0 : null;
+};
+
 /** @param {unknown} parts */
-const normalizeLocationParts = (parts) => {
+export const normalizeLocationParts = (parts) => {
   if (!Array.isArray(parts)) return [];
   return parts
-    .map((part) => {
-      const start = Number(part?.start);
-      const end = Number(part?.end);
-      const display = String(part?.display || '').trim() ||
-        `${Number.isFinite(start) ? start + 1 : ''}..${Number.isFinite(end) ? end : ''}`;
+    .map((/** @type {unknown} */ item) => {
+      const part = /** @type {Record<string, unknown>} */ (item && typeof item === 'object' ? item : {});
+      const start = locationPartNumber(part.start);
+      const end = locationPartNumber(part.end);
+      const display = String(part.display || '').trim() ||
+        `${start === null ? '' : start + 1}..${end === null ? '' : end}`;
       return {
-        start: Number.isFinite(start) ? start : null,
-        end: Number.isFinite(end) ? end : null,
-        strand: String(part?.strand || '').trim(),
+        start,
+        end,
+        strand: String(part.strand || '').trim(),
         display
       };
     })

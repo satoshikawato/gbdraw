@@ -14,8 +14,7 @@
       "vector": "tests/fixtures/annotation-target-migration-vectors.json",
       "reason": "Web Load and CLI replay of a Session 44 or older must move the same hash annotation targets; 19 cases pin them.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (annotation targets; OV-134)",
-      "pending": true
+      "source": "inventory C section B (annotation targets; OV-134)"
     },
     {
       "id": "vector:tests/fixtures/auto_size_vectors.json",
@@ -116,7 +115,7 @@
         "gbdraw/web/js/services/session-request.js:projectCanonicalSessionRequest"
       ],
       "vector": "tests/fixtures/feature-edit-migration-vectors.json",
-      "reason": "Partly shared: the Web test runs only the source-read cases of the vector; the edit cases run in Python only.",
+      "reason": "Partly shared: the Web reads the source-read cases through projectCanonicalSessionRequest; the edit cases run through migrateSessionFeatureEdits (function row).",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (placement drafts, rendered-ID edits, annotation targets; OV-102, OV-114, OV-133)"
     },
@@ -284,8 +283,7 @@
       "vector": "tests/fixtures/location-parts-vectors.json",
       "reason": "Two writers normalize the location parts of a feature into the interactive SVG: the Python CLI writer and the Web export writer. The shared vector pins that both read a part alike: a null or blank start or end is missing, a number truncates toward zero, and a missing display is built from the 1-based start and the end.",
       "retireWhen": "the Web writes the interactive SVG through the Python writer (Worker) instead of its own copy",
-      "source": "inventory C section B (interactive SVG vs app; FL-08, GX-08)",
-      "pending": true
+      "source": "inventory C section B (interactive SVG vs app; FL-08, GX-08)"
     },
     {
       "id": "vector:tests/fixtures/losat-outfmt6-numeric-contract.json",
@@ -559,8 +557,8 @@
       "jsOwner": [
         "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionAnnotationTargets"
       ],
-      "vector": null,
-      "reason": "Both Load paths migrate. Only the Python test runs the 19 cases of tests/fixtures/annotation-target-migration-vectors.json; the Web test has its own inline cases (OV-714), so the row names no shared vector.",
+      "vector": "tests/fixtures/annotation-target-migration-vectors.json",
+      "reason": "Both Load paths migrate; the 19 cases of the shared vector pin them.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (annotation targets; OV-134)"
     },
@@ -573,8 +571,8 @@
       "jsOwner": [
         "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionFeatureEdits"
       ],
-      "vector": null,
-      "reason": "Both Load paths migrate. The Python test runs the edit cases of tests/fixtures/feature-edit-migration-vectors.json through this function; the Web test runs only the vector's source-read cases (through projectCanonicalSessionRequest) and has its own inline edit cases (OV-714), so the row names no shared vector.",
+      "vector": "tests/fixtures/feature-edit-migration-vectors.json",
+      "reason": "Both Load paths migrate; the 15 edit cases of the shared vector pin them.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (rendered-ID edits; OV-114)"
     },
@@ -743,16 +741,16 @@
     },
     {
       "id": "function:normalizeLocationParts",
-      "concern": "Feature location parts of the interactive SVG",
+      "concern": "Feature location parts written into the interactive SVG",
       "pythonOwner": [
         "gbdraw/render/interactive_svg.py:_normalize_location_parts"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/standalone-interactivity.js:normalizeLocationParts"
       ],
-      "vector": null,
-      "reason": "The interactive SVG runs without the app; Python truncates start and end to integers and the Web keeps the number. No parity test.",
-      "retireWhen": "never: the standalone interactive SVG has no Python at view time",
+      "vector": "tests/fixtures/location-parts-vectors.json",
+      "reason": "The Python CLI writer and the Web export writer both normalize the parts; the shared vector pins them.",
+      "retireWhen": "the Web writes the interactive SVG through the Python writer (Worker) instead of its own copy",
       "source": "inventory C section B (interactive SVG vs app; FL-08, GX-08)"
     },
     {

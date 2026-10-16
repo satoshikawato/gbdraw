@@ -373,3 +373,28 @@ test('hash color rules migrate to the vectors both readers share', () => {
     assert.deepEqual(saved, input, name);
   }
 });
+
+// The same vectors pin the Python reader (tests/test_session_compat.py).
+const featureEditVectors = JSON.parse(readFileSync(new URL('../fixtures/feature-edit-migration-vectors.json', import.meta.url), 'utf8'));
+
+test('rendered-ID feature edits migrate to the vectors both readers share', () => {
+  for (const { name, input, expected } of featureEditVectors.cases) {
+    const saved = structuredClone(input);
+    const { features, droppedCount, narrowedVisibilityCount } = migrateSessionFeatureEdits(saved);
+    assert.deepEqual({ features, droppedCount, narrowedVisibilityCount }, expected, name);
+    assert.deepEqual(saved, input, name);
+  }
+});
+
+// The same vectors pin the Python reader (tests/test_session_compat.py).
+const annotationTargetVectors = JSON.parse(readFileSync(new URL('../fixtures/annotation-target-migration-vectors.json', import.meta.url), 'utf8'));
+
+test('hash annotation targets migrate to the vectors both readers share', () => {
+  for (const { name, input, expected } of annotationTargetVectors.cases) {
+    const saved = structuredClone(input);
+    const { annotationSets: migrated, migratedCount } = migrateSessionAnnotationTargets(saved);
+    // The Session is JSON: a key the migration leaves undefined is not saved.
+    assert.deepEqual(JSON.parse(JSON.stringify({ annotationSets: migrated, migratedCount })), expected, name);
+    assert.deepEqual(saved, input, name);
+  }
+});
