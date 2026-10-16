@@ -351,6 +351,13 @@ def test_web_asset_notices_name_only_files_the_package_ships() -> None:
     # The Tailwind compiler is a maintenance input of the stylesheet generator
     # (tools/vendor/tailwindcss/); the package ships only the generated CSS.
     assert not list(WEB_ROOT.rglob("tailwindcss-play.js"))
+    # The Tailwind notice names the version the generated stylesheet reports.
+    (tailwind_notice,) = [n for n in WEB_ASSET_NOTICES if n.bundled_path == "css/tailwind.css"]
+    banner = re.search(
+        r"tailwindcss v(\S+) \| MIT License",
+        (WEB_ROOT / tailwind_notice.bundled_path).read_text(encoding="utf-8"),
+    )
+    assert banner is not None and banner.group(1) == tailwind_notice.version
 
 
 @pytest.mark.gallery

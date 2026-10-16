@@ -146,8 +146,8 @@ globalThis.MutationObserver = class {
   disconnect() {}
 };
 
-// The HTML the tooltip and the alignment overlay build, with the DOM changes
-// the vendored Tailwind runtime observes (node insertions and class changes).
+// The HTML the tooltip and the alignment overlay build, counting the DOM
+// changes that make the browser restyle (node insertions and class changes).
 const domLog = { childList: 0, classChanges: 0 };
 class FakeText {
   constructor(data) {
