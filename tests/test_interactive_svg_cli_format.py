@@ -32,8 +32,10 @@ from gbdraw.render.formats import (
 )
 from gbdraw.render.interactive_svg import (
     InteractiveSvgContext,
+    _feature_coordinates,
     _feature_payloads,
     _normalize_location_parts,
+    _normalize_orthogroup_member,
     enrich_svg,
 )
 from gbdraw.features.ids import compute_feature_hash, compute_feature_hash_from_parts
@@ -1871,9 +1873,10 @@ def test_cli_help_lists_interactive_svg(capsys) -> None:
     assert "interactive_svg" in linear_help
 
 
-_LOCATION_PART_VECTORS = json.loads(
+_SHARED_LOCATION_VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "location-parts-vectors.json").read_text(encoding="utf-8")
-)["cases"]
+)
+_LOCATION_PART_VECTORS = _SHARED_LOCATION_VECTORS["cases"]
 
 
 @pytest.mark.parametrize(
@@ -1885,3 +1888,28 @@ def test_location_parts_normalize_to_the_vectors_shared_with_the_web_export_writ
     # tests/web/standalone-location-parts.test.mjs checks the same vectors against
     # normalizeLocationParts.
     assert _normalize_location_parts(json.loads(json.dumps(case["input"]))) == case["expected"]
+
+
+_FEATURE_COORDINATE_VECTORS = _SHARED_LOCATION_VECTORS["featureCoordinateCases"]
+
+
+@pytest.mark.parametrize(
+    "case", _FEATURE_COORDINATE_VECTORS, ids=[case["name"] for case in _FEATURE_COORDINATE_VECTORS]
+)
+def test_feature_start_and_end_read_to_the_vectors_shared_with_the_web_export_writer(
+    case: dict[str, object],
+) -> None:
+    # OV-1011: the Web writer read a null start as 0. tests/web/standalone-location-parts.test.mjs
+    # checks the same vectors against featureCoordinates.
+    assert _feature_coordinates(json.loads(json.dumps(case["input"]))) == case["expected"]
+
+
+@pytest.mark.parametrize(
+    "case", _FEATURE_COORDINATE_VECTORS, ids=[case["name"] for case in _FEATURE_COORDINATE_VECTORS]
+)
+def test_orthogroup_member_start_and_end_read_like_a_feature(case: dict[str, object]) -> None:
+    # OV-1009: the Web writer read a member's null start as 0 (`Number(null)`)
+    # and the Python writer kept fractions; both now read a member like a feature.
+    member = _normalize_orthogroup_member(json.loads(json.dumps(case["input"])))
+    assert member is not None
+    assert {"start": member.get("start"), "end": member.get("end")} == case["expected"]

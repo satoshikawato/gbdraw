@@ -678,6 +678,18 @@ write-up of a release.
   with underscores (`1_0`), or with more than 4300 digits, is refused too;
   signs and surrounding spaces are still accepted (OV-674, OV-676, OV-960,
   OV-961).
+- Fixed (CLI, Python): the same rule now covers decimal numbers. A number
+  written with non-ASCII digits or with underscores is refused with the
+  reader's usual error, where Python's `float()` read it as the ASCII number:
+  for example `--gc_content_radius ٠.٥`, `--evalue 1_0`, `--track_axis_gap ١`,
+  a track slot width `٢px`, a config or Session depth bound, or an annotation
+  table `stroke_width` of `1_0` (the table's `start` and `end` integers too).
+  This covers every decimal option of the `gbdraw` commands, the decimal
+  readers of Sessions and tables, and every number, integers included, of a
+  config file or of the `config` of a Session or a Python API call
+  (`radius: "٣٩٠"` drew a radius of 390). Everything else `float()`
+  accepted is read as before: `0.5`, `+.5`, `5.`, `1e-5`, ` 2 `, and `inf` or
+  `nan` where a reader allowed them (OV-962, OV-1006).
 - Fixed (web app): **Load Session** of a Session 31 to 33 or 39 whose saved
   conservation series has an empty (`null`) row stopped with an unknown error.
   That row is now read like a row without a label (OV-963).
@@ -698,6 +710,37 @@ write-up of a release.
   is not text (for example `{}`) loads with the entry's default name,
   `losat_pair_<n>.tsv`. Before, **Save Raw LOSAT TSV** named the file
   `[object Object]` (OV-981).
+- Fixed (CLI, Python): a Session whose raw LOSAT cache entry has a file name
+  that is not text (for example `7` or `["a.tsv"]`) is read as having no name,
+  as the web app reads it, instead of writing that value as the name. A Session
+  saved again names such a shown entry `losat_pair_<n>.tsv`, the name the web
+  app gives it, and writes a hidden (`display: false`) entry without a name, as
+  the web app does; before, the CLI kept a hidden entry's name (OV-986,
+  OV-1007, OV-1013).
+- Fixed (web app, CLI, Python): in an interactive SVG, a feature or orthogroup
+  member whose start is missing (`null`) no longer shows as starting at 1. The
+  web app wrote such a start as 0, so the feature without location parts read
+  `1..20`. Both writers now read a feature's or member's start and end as they
+  read a location part's: a number or ASCII number text, truncated toward zero;
+  blank text, a boolean, or a list is missing (OV-1009, OV-1011).
+- Changed (web app, interactive SVG): the web app and the interactive SVG
+  viewer read the start or end of a location part, a feature, or a Similarity
+  Group member by the same rule as the two writers. This concerns hand-edited
+  Session or SVG data only; gbdraw writes whole numbers. A fraction is
+  truncated toward zero: a part from `1.5` to `20` shows `2..20` (was
+  `2.5..20`), its sequence is extracted, and Align accepts such a member
+  (it refused it with "invalid display facts"). Hex or binary text (`0x10`),
+  text with any non-ASCII character (a no-break space included), and whole
+  numbers beyond 2^53 - 1 are missing: the location, length, FASTA header
+  coordinates, and sequence are left out for them and Align refuses such a
+  member, where `0x10` read as 16 before. The member rows of a Similarity
+  group in the feature popup and the Similarity drawer show the location as
+  the member popup does: a missing start no longer shows as `1..20`, and a
+  start of `1.5` shows `2..20` (was `2.5..20`) (OV-1015). Rotating a record to
+  a feature reads the feature's location parts by this rule too, so a part
+  bound stored as text (`"20"`) is no longer refused as outside the record
+  (OV-1016). The Interactive SVG viewer shows a member with one missing
+  bound the same way as the app (OV-1017).
 - Fixed (web app): loading a Session older than version 46 that recolored a
   Legend row named like a built-in JavaScript member (`constructor`,
   `toString`) without a saved original color no longer records that member as

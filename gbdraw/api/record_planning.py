@@ -18,7 +18,7 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.core.numeric import parse_ascii_integer
+from gbdraw.core.numeric import ascii_float, parse_ascii_integer
 from gbdraw.core.record_metadata import (
     _feature_source_index_map,
     _iter_source_features,
@@ -667,7 +667,7 @@ def _optional_positive_float(value: object | None, *, field_name: str) -> float 
     }:
         return None
     try:
-        numeric = float(cast(Any, value))
+        numeric = ascii_float(cast(Any, value))
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{field_name} values must be numeric or auto.") from exc
     if numeric <= 0:

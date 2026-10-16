@@ -30,6 +30,7 @@ from typing import Callable, Dict, Iterable, Iterator, Literal, Optional, Sequen
 
 from fontTools.ttLib import TTCollection, TTFont
 
+from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -220,7 +221,7 @@ def _css_weight(font_weight: FontWeight) -> int:
     if value in {"bold", "bolder"}:
         return 700
     try:
-        return int(float(value))
+        return int(ascii_float(value))
     except (TypeError, ValueError):
         return 400
 

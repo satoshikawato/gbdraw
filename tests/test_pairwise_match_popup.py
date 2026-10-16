@@ -21,7 +21,19 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
 
     feature_utils_path = tmp_path / "feature-utils.mjs"
     feature_utils_path.write_text(
-        (WEB_ROOT / "js" / "services" / "feature-utils.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "services" / "feature-utils.js")
+        .read_text(encoding="utf-8")
+        .replace("../utils/optional-positive-number.js", "./optional-positive-number.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "optional-positive-number.mjs").write_text(
+        (WEB_ROOT / "js" / "utils" / "optional-positive-number.js")
+        .read_text(encoding="utf-8")
+        .replace("./error-normalization.js", "./error-normalization.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "error-normalization.mjs").write_text(
+        (WEB_ROOT / "js" / "utils" / "error-normalization.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"

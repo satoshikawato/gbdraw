@@ -335,3 +335,25 @@ test('feature-end keeps its signed offset along the feature strand', () => {
   const provenance = resolve({ intent: { placement: 'feature-end', anchor: null, offsetBp: 3 } }).provenance;
   assert.deepEqual([provenance.placement, provenance.anchor, provenance.offsetBp], ['feature-end', null, 3]);
 });
+
+// OV-1016 (PT-OD37): the anchor reads a part's bounds with the shared reader
+// (`locationPartBound`), as the anchor profile does, and uses the read values
+// for every check and coordinate. ASCII number text and fractions are read;
+// other text and missing bounds are outside the record.
+test('anchor parts read start and end with the shared location-part reader', () => {
+  assert.equal(coordinate({ parts: [{ start: '10', end: '16', strand: '+' }] }), 11);
+  assert.equal(coordinate({ parts: [{ start: ' 10 ', end: 16.9, strand: '+' }], intent: { anchor: 'three-prime' } }), 16);
+  assert.equal(coordinate({ strand: '-', parts: [{ start: '10', end: '16', strand: '-' }], intent: { anchor: 'midpoint' } }), 14);
+  assert.equal(coordinate({
+    parts: [{ start: '90', end: '100', strand: '+' }, { start: 0, end: '5', strand: '+' }],
+    intent: { placement: 'feature-end', anchor: null }
+  }), 6);
+  // Read values decide the overlap and wrap checks, not text comparison.
+  assert.equal(resolve({
+    parts: [{ start: '9', end: '12', strand: '+' }, { start: '10', end: 14, strand: '+' }]
+  }).eligibility.code, 'location-parts-overlap');
+  for (const start of [null, undefined, '', '0x10', '1_0', true, '١٠', 2 ** 53]) {
+    assert.equal(resolve({ parts: [{ start, end: 16, strand: '+' }] }).eligibility.code,
+      'location-parts-invalid', String(start));
+  }
+});

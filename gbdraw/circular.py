@@ -65,7 +65,7 @@ from .tracks import (
 
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
 from .comparisons.losat_jobs import unique_losat_filenames
-from .core.numeric import argparse_integer
+from .core.numeric import argparse_float, argparse_integer, ascii_float
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     _add_arrow_geometry_args,
@@ -243,7 +243,7 @@ def _get_args(
     parser.add_argument(
         '--axis_stroke_width',
         help='Axis stroke width (optional; float; default: 3 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--line_stroke_color',
         help='Line stroke color (str; default: "gray")',
@@ -251,11 +251,11 @@ def _get_args(
     parser.add_argument(
         '--line_stroke_width',
         help='Line stroke width (optional; float; default: 5 pt for genomes < 75 kb, 1 pt for genomes >= 75 kb)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--definition_font_size',
         help='Definition font size (optional; default: 18)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--plot_title',
         help='Circular plot title shown when plot_title_position is top or bottom (optional; defaults to species + strain).',
@@ -263,7 +263,7 @@ def _get_args(
     parser.add_argument(
         '--plot_title_font_size',
         help='Plot title font size for circular top/bottom title layout (optional; default: 32).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--keep_full_definition_with_plot_title',
         help='Keep the full species/strain center label when a circular plot title is shown (default: False).',
@@ -271,11 +271,11 @@ def _get_args(
     parser.add_argument(
         '--center_reserved_radius',
         help='Override the center-label reserved radius for circular track packing (in px; must be >= 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
-        type=float)
+        type=argparse_float)
     _add_format_arg(parser)
     _add_gc_skew_toggle_args(
         parser,
@@ -328,11 +328,11 @@ def _get_args(
     parser.add_argument(
         '--conservation_ring_width',
         help='Similarity ring width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--conservation_ring_gap',
         help='Similarity ring gap for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--losat',
         choices=_CLI_RING_LOSAT_PROGRAMS,
@@ -413,7 +413,7 @@ def _get_args(
     parser.add_argument(
         '--depth_width',
         help='Depth track width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     _add_depth_axis_args(parser)
     parser.add_argument(
         '-l',
@@ -434,17 +434,17 @@ def _get_args(
     parser.add_argument(
         '--multi_record_min_radius_ratio',
         help='Minimum radius ratio for multi-record scaling (0 < ratio <= 1; default: 0.55).',
-        type=float,
+        type=argparse_float,
         default=0.55)
     parser.add_argument(
         '--multi_record_column_gap_ratio',
         help='Additional horizontal gap ratio between visible content bounds in each multi-record row (>= 0; default: 0.10).',
-        type=float,
+        type=argparse_float,
         default=0.10)
     parser.add_argument(
         '--multi_record_row_gap_ratio',
         help='Additional gap ratio between multi-record row content bounds (>= 0; default: 0.05).',
-        type=float,
+        type=argparse_float,
         default=0.05)
     parser.add_argument(
         '--multi_record_position',
@@ -498,19 +498,19 @@ def _get_args(
     parser.add_argument(
         '--outer_label_x_radius_offset',
         help='Outer label x-radius offset factor (float; default from config)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--outer_label_y_radius_offset',
         help='Outer label y-radius offset factor (float; default from config)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--inner_label_x_radius_offset',
         help='Inner label x-radius offset factor (float; default from config)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--inner_label_y_radius_offset',
         help='Inner label y-radius offset factor (float; default from config)',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--scale_interval',
         help='Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation.',
@@ -522,15 +522,15 @@ def _get_args(
     parser.add_argument(
         '--tick_label_font_size',
         help='Tick label font size for circular mode (optional; float; default: 14 (pt)).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--circular_label_spacing',
         help='Circular label-to-label vertical spacing in px (optional; float; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--feature_width',
         help='Feature track width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--circular_track_order',
         help='Comma-separated circular slot order. Omitted built-in slot geometry inherits --track_type.',
@@ -553,20 +553,20 @@ def _get_args(
     parser.add_argument(
         '--gc_content_width',
         help='GC content track width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_content_radius',
         help='GC content track center radius for circular mode (as a ratio of base radius; must be > 0).',
-        type=float)
+        type=argparse_float)
     _add_gc_content_axis_args(parser)
     parser.add_argument(
         '--gc_skew_width',
         help='GC skew track width for circular mode (in px; must be > 0).',
-        type=float)
+        type=argparse_float)
     parser.add_argument(
         '--gc_skew_radius',
         help='GC skew track center radius for circular mode (as a ratio of base radius; must be > 0).',
-        type=float)
+        type=argparse_float)
     _add_legend_size_args(parser)
     _add_font_args(parser)
 
@@ -684,7 +684,7 @@ def _get_args(
             if option_text in {"", "auto", "none", "null", "-"}:
                 continue
             try:
-                numeric_option_value = float(option_value)
+                numeric_option_value = ascii_float(option_value)
             except (TypeError, ValueError):
                 parser.error(f"--{option_name} values must be numbers or auto")
             if numeric_option_value <= 0:

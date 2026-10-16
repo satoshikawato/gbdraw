@@ -248,8 +248,8 @@ export const migrateLegacyFeatureCatalog = (catalog) => {
         && !Array.isArray(feature.location_parts)
         && !Array.isArray(feature.locationParts)) {
         feature.location_parts = [{
-          start: Number(feature.start),
-          end: Number(feature.end),
+          start: locationPartBound(feature, 'start'),
+          end: locationPartBound(feature, 'end'),
           strand: profile.strand
         }];
       }

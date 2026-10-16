@@ -11,6 +11,7 @@ import {
   stableFeatureOverrideKey,
   validateFeatureCatalog
 } from '../../gbdraw/web/js/services/feature-catalog.js';
+import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
 
 const results = [{ name: 'diagram.svg', content: '<svg />' }];
 const featureCatalogSource = await readFile(
@@ -927,4 +928,27 @@ test('admission binds each Result rendered ID to its identity and drawn selector
     hash: 'f0001', location: '1..5', recordLocation: 'duplicated-accession:1..5:-'
   });
   assert.equal(admission.featureState.renderedFeaturesByResult, admission.renderedFeaturesByResult);
+});
+
+// PT-OD38: a migrated schema-3 part holds the bounds the anchor profile read
+// (`locationPartBound`), so the anchor accepts what the profile called exact.
+test('schema-3 migration writes the bounds its anchor profile read', () => {
+  const promoted = migrateLegacyFeatureCatalog({ schema: 3, items: [{ features: [], biologicalFeatures: [
+    { stableFeatureId: 's', biologicalFeatureId: 's', start: 1.5, end: 20, strand: '+' }
+  ] }] });
+  const [feature] = promoted.items[0].biologicalFeatures;
+  assert.equal(feature.anchorProfile.precision, 'exact');
+  assert.deepEqual(feature.location_parts, [{ start: 1, end: 20, strand: '+' }]);
+  const resolved = resolveFeatureAnchor({
+    recordLength: 100,
+    effectiveCircular: true,
+    cropped: false,
+    currentReverseComplement: false,
+    identity: { recordKey: 'record-1', biologicalFeatureId: 's' },
+    parts: feature.location_parts,
+    profile: feature.anchorProfile,
+    intent: { placement: 'anchor', anchor: 'five-prime', offsetBp: 0, orientForward: false }
+  });
+  assert.equal(resolved.eligibility.enabled, true, resolved.eligibility.message);
+  assert.equal(resolved.startCoordinate, 2);
 });

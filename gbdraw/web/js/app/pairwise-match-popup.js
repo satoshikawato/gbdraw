@@ -2,7 +2,7 @@
 import {
   formatFeatureLocation,
   isInternalProteinDisplayId,
-  locationPartBound,
+  locationRangeText,
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
 import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
@@ -1212,12 +1212,8 @@ const orthogroupTitle = (orthogroupId, displayName) => {
 /** @param {PopupMember | null | undefined} member */
 const memberLocationText = (member) => {
   if (!member || typeof member !== 'object') return '';
-  const start = locationPartBound(member, 'start');
-  const end = locationPartBound(member, 'end');
-  const startText = Number.isFinite(start) ? String(start + 1) : normalizeText(member.start);
-  const endText = Number.isFinite(end) ? String(end) : normalizeText(member.end);
+  const range = locationRangeText(member);
   const strand = normalizeMemberStrand(member.strand);
-  const range = startText && endText ? `${startText}..${endText}` : startText || endText;
   return range && strand ? `${range} (${strand})` : range;
 };
 

@@ -2,7 +2,7 @@
 /** @import { FeatureCatalog, FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
 /** @import { AliasSource } from './feature-identity.js' */
 /** @import { OrthogroupFeatureIndex, OrthogroupMetadataEntry } from './orthogroup-feature-metadata.js' */
-import { normalizeStringArray } from './feature-utils.js';
+import { locationPartNumber, normalizeStringArray } from './feature-utils.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
@@ -187,39 +187,59 @@ const normalizeQualifierMap = (qualifiers) => {
   return normalized;
 };
 
+// A part's start or end is read by `locationPartNumber` (feature-utils.js), the
+// display and strand by `locationPartText`, the twin of `_location_part_text` in
+// gbdraw/render/interactive_svg.py; both read tests/fixtures/location-parts-vectors.json.
+// The ASCII whitespace that Python's `str.strip(string.whitespace)` removes.
+const ASCII_WHITESPACE_AT_ENDS = /^[\t\n\v\f\r ]+|[\t\n\v\f\r ]+$/g;
+
 /**
- * A part's start or end as the Python writer reads it
- * (`_normalize_location_parts`): null, blank, and non-numeric values are
- * missing, and a number truncates toward zero.
+ * A part's display or strand: text without surrounding ASCII whitespace. A
+ * list gives its first such non-empty text and a safe integer its digits;
+ * anything else (a boolean, a fraction, an object) is empty.
  * @param {unknown} value
- * @returns {number | null}
+ * @returns {string}
  */
-const locationPartNumber = (value) => {
-  if (typeof value !== 'number' && typeof value !== 'string') return null;
-  if (typeof value === 'string' && !value.trim()) return null;
-  const number = Number(value);
-  // `|| 0` turns the -0 of a negative fraction into 0, as Python's int() does.
-  return Number.isFinite(number) ? Math.trunc(number) || 0 : null;
+const locationPartText = (value) => {
+  if (Array.isArray(value)) {
+    for (const item of /** @type {unknown[]} */ (value)) {
+      const text = locationPartText(item);
+      if (text) return text;
+    }
+    return '';
+  }
+  if (typeof value === 'string') return value.replace(ASCII_WHITESPACE_AT_ENDS, '');
+  return typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : '';
 };
+
+/**
+ * A feature's own start and end, read like a part's: the viewer builds the one
+ * part of a feature without parts from them (OV-1011). The twin of
+ * `_feature_coordinates` in gbdraw/render/interactive_svg.py.
+ * @param {AliasSource} feature
+ * @returns {{ start: number | null, end: number | null }}
+ */
+export const featureCoordinates = (feature) => ({
+  start: locationPartNumber(feature.start),
+  end: locationPartNumber(feature.end)
+});
 
 /** @param {unknown} parts */
 export const normalizeLocationParts = (parts) => {
   if (!Array.isArray(parts)) return [];
-  return parts
-    .map((/** @type {unknown} */ item) => {
-      const part = /** @type {Record<string, unknown>} */ (item && typeof item === 'object' ? item : {});
-      const start = locationPartNumber(part.start);
-      const end = locationPartNumber(part.end);
-      const display = String(part.display || '').trim() ||
-        `${start === null ? '' : start + 1}..${end === null ? '' : end}`;
-      return {
-        start,
-        end,
-        strand: String(part.strand || '').trim(),
-        display
-      };
-    })
-    .filter((part) => part.display && part.display !== '..');
+  /** @type {{ start: number | null, end: number | null, strand: string, display: string }[]} */
+  const normalized = [];
+  for (const item of /** @type {unknown[]} */ (parts)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const part = /** @type {Record<string, unknown>} */ (item);
+    const start = locationPartNumber(part.start);
+    const end = locationPartNumber(part.end);
+    const display = locationPartText(part.display) ||
+      `${start === null ? '' : start + 1}..${end === null ? '' : end}`;
+    if (display === '..') continue;
+    normalized.push({ start, end, strand: locationPartText(part.strand), display });
+  }
+  return normalized;
 };
 
 /**
@@ -771,8 +791,6 @@ const getStandaloneFeatureOrthogroupEntry = (feature, context) => {
  */
 const normalizeStandaloneOrthogroupMember = (member, renderedFeatureSvgId = '') => {
   if (!member || typeof member !== 'object' || Array.isArray(member)) return null;
-  const start = Number(member.start);
-  const end = Number(member.end);
   const record = standaloneMemberRecordIndexStatus(member);
   const recordIndex = record.valid ? record.value : null;
   const stableIdentity = standaloneConsistentTextAlias(member, [
@@ -823,8 +841,7 @@ const normalizeStandaloneOrthogroupMember = (member, renderedFeatureSvgId = '') 
     feature_svg_id: stableFeatureSvgId,
     stable_feature_svg_id: stableFeatureSvgId,
     rendered_feature_svg_id: String(renderedFeatureSvgId || ''),
-    start: Number.isFinite(start) ? start : null,
-    end: Number.isFinite(end) ? end : null,
+    ...featureCoordinates(member),
     strand: String(member.strand || ''),
     representative: Boolean(member.representative),
     gene: String(member.gene || ''),
@@ -1363,8 +1380,7 @@ const normalizeStandaloneBiologicalFeature = (feature, context) => {
     display_label: displayLabel,
     search_labels: getStandaloneSearchLabels(feature, fallbackLabel, displayLabel),
     type: String(feature.type || ''),
-    start: Number.isFinite(Number(feature.start)) ? Number(feature.start) : null,
-    end: Number.isFinite(Number(feature.end)) ? Number(feature.end) : null,
+    ...featureCoordinates(feature),
     strand: String(feature.strand || ''),
     locus_tag: String(feature.locus_tag || feature.locusTag || ''),
     gene_id: String(feature.gene_id || feature.geneId || ''),
@@ -1495,8 +1511,7 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       record_id: String(entry.recordId || feature?.record_id || feature?.recordId || ''),
       record_idx: Number.isInteger(recordIndex) ? recordIndex : null,
       type: String(feature?.type || ''),
-      start: Number.isFinite(Number(feature?.start)) ? Number(feature.start) : null,
-      end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
+      ...featureCoordinates(feature),
       strand: String(feature?.strand || ''),
       locus_tag: String(feature?.locus_tag || feature?.locusTag || ''),
       gene_id: String(feature?.gene_id || feature?.geneId || ''),

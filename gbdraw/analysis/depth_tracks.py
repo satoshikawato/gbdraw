@@ -14,6 +14,7 @@ from pandas import DataFrame
 
 from gbdraw.analysis.depth import depth_df, read_depth_tsv
 from gbdraw.configurators import DepthConfigurator
+from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
 from gbdraw.legend.sources import DepthLegendSource, LegendSlotSource
@@ -103,7 +104,7 @@ def _expand_track_float_metadata(
         if isinstance(value, str) and value.strip().lower() in {"", "auto", "none", "null", "-"}:
             items.append(None)
             continue
-        numeric = float(value)
+        numeric = ascii_float(value)
         if numeric <= 0:
             raise ValidationError(f"{field_name} values must be > 0.")
         items.append(numeric)

@@ -1,4 +1,6 @@
 // @ts-check
+import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
+
 /**
  * A feature or Orthogroup member row: Python and JSON fields read by name.
  * @typedef {{
@@ -59,20 +61,66 @@ const featureLocationParts = (feature) => (
     : [feature]
 );
 
+const NON_ASCII = /[^\x00-\x7F]/;
+
 /**
- * The Web's reader of a start or end coordinate (OV-968, OV-1010): a number or
- * numeric text; NaN when it is missing, null or blank, which a reader must not
- * take as 0 (a writer emits null for a missing bound). The Interactive SVG
- * runtime cannot import it and keeps one copy (`locationPartBound` in
- * standalone-interactivity-assets.js).
+ * The one reader of a start or end coordinate (PT-OD14, PT-OD23): a number or
+ * ASCII number text, truncated toward zero. Anything else is missing (null):
+ * a missing, null or blank value, a boolean, other text (other digits,
+ * underscores, hex, any non-ASCII character), a non-finite number, and a
+ * truncation beyond the safe integers. A reader must not take a missing bound
+ * as 0 (OV-968, OV-1010). The twin of `_location_part_number` in
+ * gbdraw/render/interactive_svg.py (tests/fixtures/location-parts-vectors.json);
+ * the Interactive SVG runtime cannot import it and keeps one copy
+ * (`locationPartBound` in standalone-interactivity-assets.js).
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+export const locationPartNumber = (value) => {
+  // Any non-ASCII text is missing, spaces included: Python and JavaScript strip different Unicode spaces.
+  if (typeof value === 'string' && NON_ASCII.test(value)) return null;
+  const number = classifyOptionalNumber(value).value ?? null;
+  if (number === null) return null;
+  // `|| 0` turns the -0 of a negative fraction into 0, as Python's int() does.
+  const truncated = Math.trunc(number) || 0;
+  return Number.isSafeInteger(truncated) ? truncated : null;
+};
+
+/**
+ * `locationPartNumber` of a part's field, NaN when missing.
  * @param {unknown} part A location part, a feature read as its one part, or a
  *   Similarity Group member row.
  * @param {'start' | 'end'} field
  * @returns {number}
  */
-export const locationPartBound = (part, field) => {
-  const value = part && typeof part === 'object' ? /** @type {Record<string, unknown>} */ (part)[field] : undefined;
-  return typeof value === 'number' || (typeof value === 'string' && value.trim()) ? Number(value) : NaN;
+export const locationPartBound = (part, field) => (
+  locationPartNumber(part && typeof part === 'object' ? /** @type {Record<string, unknown>} */ (part)[field] : undefined)
+  ?? NaN
+);
+
+/**
+ * The 1-based `start..end` text of a Similarity group member (or any part),
+ * read with `locationPartNumber`. A bound that does not read shows its stored
+ * text, and when one side is empty the other shows alone, so a missing start
+ * never reads as position 1 (OV-1015). The member popup, the feature popup's
+ * member table and the Similarity drawer show this text.
+ * @param {unknown} part
+ * @param {string} [locale] Group the digits for this locale (`toLocaleString`);
+ *   plain digits when omitted.
+ * @returns {string}
+ */
+export const locationRangeText = (part, locale) => {
+  if (!part || typeof part !== 'object') return '';
+  const fields = /** @type {Record<string, unknown>} */ (part);
+  /** @param {unknown} value @param {number} shift */
+  const boundText = (value, shift) => {
+    const bound = locationPartNumber(value);
+    if (bound === null) return String(value === null || value === undefined ? '' : value).trim();
+    return locale ? (bound + shift).toLocaleString(locale) : String(bound + shift);
+  };
+  const startText = boundText(fields.start, 1);
+  const endText = boundText(fields.end, 0);
+  return startText && endText ? `${startText}..${endText}` : startText || endText;
 };
 
 // The 1-based coordinates of every part, without the strand. Also the location

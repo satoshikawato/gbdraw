@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import gzip
 import json
 import hashlib
 import os
@@ -4222,3 +4223,74 @@ def test_cli_resave_keeps_file_defaults_of_linear_cards() -> None:
     validate_session(payload)
     for card in payload["webFiles"]["bindings"]["linearSeqs"]:
         assert {key: card.get(key) for key in defaults} == defaults
+
+
+def test_legacy_renames_are_spelled_only_by_their_owner() -> None:
+    """OV-818: the `sqrt` and `repeat_region` renames are read from one owner."""
+
+    import ast
+
+    import gbdraw.session_io as session_io_module
+    import gbdraw.session_request_codec as codec_module
+    from gbdraw.session_legacy_values import LEGACY_FEATURE_SHAPES, LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES
+
+    renamed = {*LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES, *LEGACY_FEATURE_SHAPES}
+    assert renamed == {"sqrt", "repeat_region"}
+    for module in (session_io_module, codec_module):
+        tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+        literals = sorted(
+            f"{node.value}:{node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in renamed
+        )
+        assert literals == [], module.__name__
+
+
+def test_a_cli_resave_names_a_losat_entry_without_a_text_name_as_the_web_does(
+    tmp_path: Path,
+) -> None:
+    # OV-1007: the CLI writer copied a saved `{}` or `7` through. The Web reads
+    # such a name as the entry's default, `losat_pair_<n>.tsv` (`n` counts the
+    # saved entries from 1), and saves that name: tests/web/session-losat-cache-
+    # validation.test.mjs ("... file name that is no text loads as the default
+    # name") pins the same values for the same edit of this fixture.
+    source = Path(__file__).parent / "fixtures" / "sessions" / "synthetic_conservation.gbdraw-session.json.gz"
+    session = json.loads(gzip.decompress(source.read_bytes()))
+    first, second, third = session["losatCache"]["entries"]
+    first["filename"] = {}
+    second["filename"] = 7
+    edited = tmp_path / "edited.gbdraw-session.json"
+    edited.write_text(json.dumps(session), encoding="utf-8")
+
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    circular_main(["--session", str(edited), "--output", str(tmp_path / "replay"),
+                   "--format", "svg", "--session_output", str(sidecar)])
+    assert [entry["filename"] for entry in load_session(sidecar)["losatCache"]["entries"]] == [
+        "losat_pair_1.tsv", "losat_pair_2.tsv", third["filename"]
+    ]
+
+    first["filename"] = ""
+    second["filename"] = ["b.tsv"]
+    second["display"] = False
+    written = copy.deepcopy(session)
+    session_io_module.normalize_current_session_artifacts(written)
+    assert [(entry["filename"], entry["display"]) for entry in written["losatCache"]["entries"]] == [
+        ("losat_pair_1.tsv", True), ("", False), (third["filename"], True)
+    ]
+
+
+def test_a_cli_resave_writes_a_hidden_losat_entry_without_a_name_as_the_web_does() -> None:
+    # OV-1013: a hidden (`display: false`) raw entry is cache only. The Web Load
+    # gives it no Raw LOSAT row (config.js applyLosatCache) and its Save writes
+    # an entry without a row with `filename: ""` (serializeLosatCache;
+    # tests/web/session-export-validation.test.mjs pins it). The CLI writer kept
+    # a hidden entry's text name.
+    source = Path(__file__).parent / "fixtures" / "sessions" / "synthetic_conservation.gbdraw-session.json.gz"
+    session = json.loads(gzip.decompress(source.read_bytes()))
+    first, second, third = session["losatCache"]["entries"]
+    assert isinstance(second["filename"], str) and second["filename"]
+    second["display"] = False
+    session_io_module.normalize_current_session_artifacts(session)
+    assert [(entry["filename"], entry["display"]) for entry in session["losatCache"]["entries"]] == [
+        (first["filename"], True), ("", False), (third["filename"], True)
+    ]

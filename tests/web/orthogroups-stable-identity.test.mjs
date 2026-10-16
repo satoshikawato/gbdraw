@@ -50,6 +50,8 @@ await copyModule(
 );
 // standalone-interactivity.js reads the bulk label table by own key.
 await copyModule('gbdraw/web/js/utils/own-entry.js', 'utils/own-entry.js');
+// It reads location-part numbers with the decimal-number owner.
+await copyModule('gbdraw/web/js/utils/optional-positive-number.js', 'utils/optional-positive-number.js');
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
 await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schema.generated.js');

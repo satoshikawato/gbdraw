@@ -545,6 +545,19 @@ def test_losatp_cache_records_runtime_outside_the_key_and_round_trips(
     assert replay.session_entries() == (entry,)
 
 
+
+@pytest.mark.parametrize("filename", [{}, {"name": "a.tsv"}, ["a.tsv"], 7, None])
+def test_a_loaded_losat_filename_that_is_not_text_reads_as_none(filename: object) -> None:
+    # OV-986: `str(entry.get("filename") or "")` kept a Session's non-empty
+    # non-text name (`7`, `["a.tsv"]`, `{"name": ...}`) as its text; `{}` and
+    # `None` were already "" (the other cases pin that).
+    from gbdraw.comparisons.losat_runtime import LosatRawCache
+
+    cache = LosatRawCache()
+    cache._add_loaded_entry("k", {"key": "k", "filename": filename, "display": True}, {})
+    assert [entry["filename"] for entry in cache.session_entries()] == [""]
+
+
 # Integration: the resolved native LOSAT reproduces tracked evidence.
 
 

@@ -1,4 +1,6 @@
 // @ts-check
+import { locationPartBound } from '../../services/feature-utils.js';
+
 /**
  * One capability verdict of the anchor resolver. `basis` is set on the offset
  * verdict only.
@@ -10,8 +12,19 @@
  */
 
 /**
- * One source-location part of a feature, as read from the extracted feature
- * row. The resolver validates every field, so the values are not trusted.
+ * One source-location part of a feature, as stored in the extracted feature
+ * row. The resolver reads and validates every field, so the values are not
+ * trusted.
+ * @typedef {object} AnchorPartInput
+ * @property {unknown} start
+ * @property {unknown} end
+ * @property {string} strand
+ */
+
+/**
+ * A part as the resolver read it: `start` and `end` come from the shared
+ * location-part reader (`locationPartBound`, NaN when missing), so the anchor
+ * reads a part by the same rule as its anchor profile (OV-1016).
  * @typedef {object} AnchorPart
  * @property {number} start
  * @property {number} end
@@ -49,7 +62,7 @@
  * @property {boolean} [cropped]
  * @property {boolean} currentReverseComplement
  * @property {AnchorIdentity} identity
- * @property {AnchorPart[] | undefined} parts
+ * @property {AnchorPartInput[] | undefined} parts
  * @property {AnchorProfile | null | undefined} profile
  * @property {AnchorIntent} intent
  */
@@ -145,7 +158,20 @@ const partStrandMatches = (partStrand, profileStrand) => {
 };
 
 /**
- * @param {AnchorPart[] | undefined} parts
+ * Reads each part once; every later check and coordinate uses the read values.
+ * @param {AnchorPartInput[] | undefined} parts
+ * @returns {Array<AnchorPart | null> | undefined}
+ */
+const readAnchorParts = (parts) => (Array.isArray(parts)
+  ? parts.map((part) => (part ? {
+    start: locationPartBound(part, 'start'),
+    end: locationPartBound(part, 'end'),
+    strand: part.strand
+  } : null))
+  : undefined);
+
+/**
+ * @param {Array<AnchorPart | null> | undefined} parts
  * @param {AnchorProfile} profile
  * @param {number} recordLength
  * @returns {AnchorCapability}
@@ -163,13 +189,15 @@ const partsCapability = (parts, profile, recordLength) => {
       return unavailable('location-strand-mismatch', 'Feature part strands disagree with the source profile.');
     }
   }
-  const sourceOrder = [...parts].sort((left, right) => left.start - right.start || left.end - right.end);
+  // The loop above returned for every missing part.
+  const readParts = /** @type {AnchorPart[]} */ (parts);
+  const sourceOrder = [...readParts].sort((left, right) => left.start - right.start || left.end - right.end);
   if (sourceOrder.some((part, index) => index > 0 && part.start < sourceOrder[index - 1].end)) {
     return unavailable('location-parts-overlap', 'Overlapping feature parts cannot be traversed safely.');
   }
   if (profile.partOrder === 'source-forward') {
-    const wraps = parts.reduce((count, part, index) => count
-      + (index > 0 && part.start < parts[index - 1].start ? 1 : 0), 0);
+    const wraps = readParts.reduce((count, part, index) => count
+      + (index > 0 && part.start < readParts[index - 1].start ? 1 : 0), 0);
     if (wraps > 1) {
       return unavailable('location-source-order-invalid', 'Feature parts do not form one source-forward circular path.');
     }
@@ -276,13 +304,14 @@ export const resolveFeatureAnchor = ({
 }) => {
   const record = recordCapability({ recordLength, effectiveCircular, cropped, currentReverseComplement });
   const profileState = profileCapability(profile);
+  const readParts = readAnchorParts(parts);
   const partsState = profileState.enabled
-    ? partsCapability(parts, /** @type {AnchorProfile} */ (profile), recordLength) : profileState;
+    ? partsCapability(readParts, /** @type {AnchorProfile} */ (profile), recordLength) : profileState;
   const positional = positionalCapability(record, profileState, partsState, profile || {});
   // Each use below is reached only when `positional` (or the eligibility
   // check) found the profile and the parts valid, so both exist there.
   const located = /** @type {AnchorProfile} */ (profile);
-  const locatedParts = /** @type {AnchorPart[]} */ (parts);
+  const locatedParts = /** @type {AnchorPart[]} */ (readParts);
 
   const midpoint = positional;
   const biologicalEnds = !positional.enabled ? positional

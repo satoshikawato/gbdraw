@@ -12,6 +12,7 @@ from typing import Literal, Mapping, TypeAlias, cast
 from pandas import DataFrame
 
 from gbdraw.core.color import HEX_COLOR_DIGITS, normalize_hex_color
+from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import COLOR_NAMES, resolve_color_to_hex
 from gbdraw.io.record_select import RecordSelector
@@ -20,7 +21,7 @@ from gbdraw.io.record_select import RecordSelector
 def _finite(value: object, name: str, *, positive: bool = False, nonnegative: bool = False) -> float:
     try:
         # TypeError/ValueError from non-numeric input is reported below.
-        number = float(cast("float | str", value))
+        number = ascii_float(cast("float | str", value))
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{name} must be numeric.") from exc
     if not isfinite(number):

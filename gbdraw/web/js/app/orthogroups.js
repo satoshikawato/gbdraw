@@ -12,6 +12,7 @@ import {
 import {
   isInternalProteinDisplayId,
   locationPartBound,
+  locationRangeText,
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -980,6 +981,8 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     selectedOrthogroupDetail,
     getEnrichedOrthogroupMembers,
     groupOrthogroupMembersByRecord,
+    // The location text of a member row of `groupOrthogroupMembersByRecord`.
+    memberRangeText: locationRangeText,
     getOrthogroupById,
     resolveOrthogroupName,
     resolveOrthogroupDescription,

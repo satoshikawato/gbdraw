@@ -5,6 +5,7 @@ from numbers import Integral
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping, TypeAlias, cast
 
+from gbdraw.core.numeric import ascii_float, ascii_int
 from gbdraw.exceptions import ValidationError
 
 LinearTrackLayoutMode: TypeAlias = Literal["above", "middle", "below"]
@@ -14,7 +15,7 @@ def _positive_finite_float(value: Any, *, field_name: str) -> float:
     if isinstance(value, bool):
         raise ValidationError(f"{field_name} must be a positive finite number")
     try:
-        parsed = float(value)
+        parsed = ascii_float(value)
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{field_name} must be a positive finite number") from exc
     if not math.isfinite(parsed) or parsed <= 0:
@@ -50,7 +51,7 @@ class CircularCanvasWidthConfig:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "CircularCanvasWidthConfig":
-        return cls(with_labels=int(d["with_labels"]), without_labels=int(d["without_labels"]))
+        return cls(with_labels=ascii_int(d["with_labels"]), without_labels=ascii_int(d["without_labels"]))
 
 
 @dataclass(frozen=True)
@@ -81,17 +82,17 @@ class CircularCanvasConfig:
             track_dict[str(length_param)] = {}
             for track_type, by_track_id in dict(by_track_type).items():
                 track_dict[str(length_param)][str(track_type)] = {
-                    str(k): float(v) for k, v in dict(by_track_id).items()
+                    str(k): ascii_float(v) for k, v in dict(by_track_id).items()
                 }
 
         return cls(
-            height=int(d["height"]),
-            radius=float(d["radius"]),
-            track_ratio=float(d["track_ratio"]),
+            height=ascii_int(d["height"]),
+            radius=ascii_float(d["radius"]),
+            track_ratio=ascii_float(d["track_ratio"]),
             track_type=str(d["track_type"]),
             width=CircularCanvasWidthConfig.from_dict(d["width"]),
             track_ratio_factors={
-                str(k): [float(x) for x in list(v)]
+                str(k): [ascii_float(x) for x in list(v)]
                 for k, v in dict(d["track_ratio_factors"]).items()
             },
             track_dict=track_dict,
@@ -105,7 +106,7 @@ class LinearCanvasDefaultCdsHeightConfig:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LinearCanvasDefaultCdsHeightConfig":
-        return cls(short=float(d["short"]), long=float(d["long"]))
+        return cls(short=ascii_float(d["short"]), long=ascii_float(d["long"]))
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,7 @@ class LinearCanvasArrowLengthParameterConfig:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LinearCanvasArrowLengthParameterConfig":
-        return cls(short=float(d["short"]), long=float(d["long"]))
+        return cls(short=ascii_float(d["short"]), long=ascii_float(d["long"]))
 
 
 @dataclass(frozen=True)
@@ -168,33 +169,33 @@ class LinearCanvasConfig:
                 track_axis_gap = None
             else:
                 try:
-                    parsed_gap = float(normalized_gap)
+                    parsed_gap = ascii_float(normalized_gap)
                 except ValueError:
                     parsed_gap = -1.0
                 track_axis_gap = parsed_gap if parsed_gap >= 0.0 else None
         else:
             try:
-                parsed_gap = float(track_axis_gap_raw)
+                parsed_gap = ascii_float(track_axis_gap_raw)
             except (TypeError, ValueError):
                 parsed_gap = -1.0
             track_axis_gap = parsed_gap if parsed_gap >= 0.0 else None
         return cls(
-            width=int(d["width"]),
-            vertical_offset=float(d["vertical_offset"]),
-            horizontal_offset=float(d["horizontal_offset"]),
-            vertical_padding=float(d["vertical_padding"]),
+            width=ascii_int(d["width"]),
+            vertical_offset=ascii_float(d["vertical_offset"]),
+            horizontal_offset=ascii_float(d["horizontal_offset"]),
+            vertical_padding=ascii_float(d["vertical_padding"]),
             track_spacing=max(
                 0.0,
-                float(d.get("track_spacing", 0.0)),
+                ascii_float(d.get("track_spacing", 0.0)),
             ),
             comparison_height=_positive_finite_float(
                 d["comparison_height"], field_name="comparison_height"
             ),
-            canvas_padding=float(d["canvas_padding"]),
-            definition_gap=max(0.0, float(d.get("definition_gap", 20))),
-            default_gc_height=float(d["default_gc_height"]),
-            depth_height=float(d.get("depth_height", d.get("default_gc_height", 20))),
-            depth_padding=float(d.get("depth_padding", d.get("vertical_padding", 8))),
+            canvas_padding=ascii_float(d["canvas_padding"]),
+            definition_gap=max(0.0, ascii_float(d.get("definition_gap", 20))),
+            default_gc_height=ascii_float(d["default_gc_height"]),
+            depth_height=ascii_float(d.get("depth_height", d.get("default_gc_height", 20))),
+            depth_padding=ascii_float(d.get("depth_padding", d.get("vertical_padding", 8))),
             track_layout=track_layout,
             track_axis_gap=track_axis_gap,
             ruler_on_axis=bool(d.get("ruler_on_axis", False)),
@@ -230,7 +231,7 @@ class CanvasConfig:
                 "labels.circular.scope and labels.linear.scope"
             )
         return cls(
-            dpi=int(d["dpi"]),
+            dpi=ascii_int(d["dpi"]),
             show_gc=bool(d["show_gc"]),
             show_skew=bool(d["show_skew"]),
             show_depth=bool(d.get("show_depth", False)),

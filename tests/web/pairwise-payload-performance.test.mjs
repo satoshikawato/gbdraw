@@ -24,6 +24,8 @@ const modulePaths = [
   'gbdraw/web/js/contracts/request-shape.generated.js',
   'gbdraw/web/js/utils/contract-shape.js',
   'gbdraw/web/js/utils/field-reading.js',
+  'gbdraw/web/js/utils/optional-positive-number.js',
+  'gbdraw/web/js/utils/error-normalization.js',
   'gbdraw/web/js/services/file-content-cache.js',
   'gbdraw/web/js/services/feature-catalog.js',
   'gbdraw/web/js/contracts/schema.generated.js',

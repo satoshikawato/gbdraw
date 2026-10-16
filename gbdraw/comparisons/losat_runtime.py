@@ -29,6 +29,7 @@ import tempfile
 from types import MappingProxyType
 from typing import Callable, Literal, Mapping, Sequence, cast
 
+from gbdraw.comparisons.losat_jobs import losat_entry_filename
 from gbdraw.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -824,7 +825,7 @@ class LosatRawCache:
         self._entries_by_key[key] = entry
         if entry.get("display") is not False and key not in self._display_info:
             self._display_order.append(key)
-            self._display_info[key] = (str(entry.get("filename") or ""), True)
+            self._display_info[key] = (losat_entry_filename(entry), True)
 
     def _add_search_entry(
         self,

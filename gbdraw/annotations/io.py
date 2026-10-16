@@ -11,6 +11,7 @@ from typing import Literal, cast
 import pandas as pd
 from pandas import DataFrame
 
+from gbdraw.core.numeric import parse_ascii_float, parse_ascii_integer
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.table_text import read_table_lines
@@ -90,11 +91,11 @@ def _bool(text: str, *, row_number: int, column: str, default: bool = False) -> 
 
 
 def _number(text: str, *, row_number: int, column: str, integer: bool = False):
-    try:
-        return int(text) if integer else float(text)
-    except (TypeError, ValueError) as exc:
+    value = parse_ascii_integer(text.strip()) if integer else parse_ascii_float(text)
+    if value is None:
         kind = "integer" if integer else "number"
-        raise _error(row_number, column, f"expected a {kind}, got {text!r}") from exc
+        raise _error(row_number, column, f"expected a {kind}, got {text!r}")
+    return value
 
 
 def _style(row: pd.Series, row_number: int) -> RegionAnnotationStyle | None:

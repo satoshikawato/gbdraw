@@ -6991,6 +6991,7 @@ export const createAppSetup = () => {
     isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
     hasOrthogroupMemberSequence: orthogroupActions.hasOrthogroupMemberSequence,
     orthogroupCopyFeedbackLabel: orthogroupActions.orthogroupCopyFeedbackLabel,
+    orthogroupMemberRangeText: orthogroupActions.memberRangeText,
     copyOrthogroupSequences: orthogroupActions.copyOrthogroupSequences,
     downloadOrthogroupSequences: orthogroupActions.downloadOrthogroupSequences,
     copyOrthogroupMemberSequence: orthogroupActions.copyOrthogroupMemberSequence,
