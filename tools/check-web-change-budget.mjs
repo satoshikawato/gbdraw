@@ -1643,13 +1643,24 @@ const canonicalDescription = (source) => {
   return JSON.stringify(inline(rest, []));
 };
 const persistedContractPolicyKey = 'persistedContractCoChange';
+// `unit`: the branch whose Session version a breaking change must raise (sessionVersionUnit).
 const validatePersistedContractPolicy = (candidatePolicy, headExports = null) => {
   const data = candidatePolicy[persistedContractPolicyKey];
-  if (data === undefined) return { active: false, exempt: [], errors: [] };
+  if (data === undefined) return { active: false, exempt: [], unit: null, errors: [] };
   const errors = [];
   const names = data?.exemptGeneratedExports;
-  if (!isPlainObject(data) || Object.keys(data).join() !== 'exemptGeneratedExports') {
-    errors.push(`${persistedContractPolicyKey} must be an object with exactly the key exemptGeneratedExports`);
+  if (
+    !isPlainObject(data)
+    || !Object.hasOwn(data, 'exemptGeneratedExports')
+    || Object.keys(data).some((key) => !['exemptGeneratedExports', 'sessionVersionUnit'].includes(key))
+  ) {
+    errors.push(
+      `${persistedContractPolicyKey} must be an object with the key exemptGeneratedExports `
+      + 'and optionally sessionVersionUnit'
+    );
+  }
+  if (isPlainObject(data) && Object.hasOwn(data, 'sessionVersionUnit') && data.sessionVersionUnit !== 'main') {
+    errors.push(`${persistedContractPolicyKey}.sessionVersionUnit must be "main"`);
   }
   if (
     !Array.isArray(names)
@@ -1667,7 +1678,12 @@ const validatePersistedContractPolicy = (candidatePolicy, headExports = null) =>
       });
     }
   }
-  return { active: true, exempt: errors.length ? [] : names, errors };
+  return {
+    active: true,
+    exempt: errors.length ? [] : names,
+    unit: errors.length ? null : data.sessionVersionUnit || null,
+    errors
+  };
 };
 const trustedPersistedContractPolicy = basePolicySource === null
   ? validatePersistedContractPolicy({})
@@ -1831,6 +1847,37 @@ const persistedContractAdditions = [
   ...persistedContractChange.addedExports,
   ...persistedContractChange.addedModules
 ];
+// Session version unit (WEB_CHANGE_POLICY.md): a breaking change that reaches main raises the
+// Session version to main's + 1, and later ones fold into that version until it reaches main, so
+// a pull request that changes SESSION_VERSION may set only main's or main's + 1. main's version
+// comes from origin/main, which the trusted checkout fetches with every branch.
+const sessionVersionUnitRef = 'refs/remotes/origin/main';
+const sessionVersionIn = (source) => contractExportValue(
+  generatedContractExports(source)?.get('SESSION_VERSION')
+);
+const sessionVersionUnit = (() => {
+  if (trustedPersistedContractPolicy.unit === null || !persistedContractChange.kinds.size) return null;
+  const main = sessionVersionIn(readRevisionFile(sessionVersionUnitRef, contractSchemaModulePath));
+  const headVersion = sessionVersionIn(readHeadFile(contractSchemaModulePath));
+  const { before, after } = persistedContractChange.versions.SESSION_VERSION || {};
+  const unit = { main, head: headVersion, violation: '', review: '' };
+  const unreadable = [
+    !Number.isInteger(main) && `main (${sessionVersionUnitRef}; fetch main and rerun)`,
+    !Number.isInteger(headVersion) && 'the head'
+  ].filter(Boolean);
+  if (unreadable.length) {
+    unit.violation = `SESSION_VERSION cannot be read at ${unreadable.join(' or ')}`;
+  } else if (headVersion === main) {
+    unit.review = `Material behavior/output risk: the head and main both write Session ${main}; `
+      + `confirm that main reads what the head writes the same way, or raise SESSION_VERSION to ${main + 1}`;
+  } else if (before !== after && headVersion !== main + 1) {
+    unit.violation = `SESSION_VERSION changes ${before} -> ${after}, but main (${sessionVersionUnitRef}) `
+      + `writes Session ${main}, so the head may write only Session ${main} or ${main + 1}; until `
+      + `Session ${main + 1} reaches main, later breaking changes fold into it: rewrite its history entry `
+      + 'and fixtures, and remove the reader of any version that never reached main';
+  }
+  return unit;
+})();
 
 const emptyRuleRegistry = () => ({ schemaVersion: 1, rules: [] });
 const candidateArchitectureErrors = [];
@@ -2565,9 +2612,20 @@ if (
     `Governance and authority: persisted-contract rule turned ${candidatePersistedContractPolicy.active ? 'on' : 'off'}`
   );
 }
+if (
+  candidatePersistedContractPolicy
+  && !candidatePersistedContractPolicy.errors.length
+  && candidatePersistedContractPolicy.unit !== trustedPersistedContractPolicy.unit
+) {
+  reviewReasons.push(
+    'Governance and authority: Session version unit changed '
+    + `(${trustedPersistedContractPolicy.unit || 'none'} -> ${candidatePersistedContractPolicy.unit || 'none'})`
+  );
+}
 if (persistedContractKinds) {
   reviewReasons.push(`Material behavior/output risk: persisted contract changed (${persistedContractKinds})`);
 }
+if (sessionVersionUnit?.review) reviewReasons.push(sessionVersionUnit.review);
 if (persistedContractChange.renamedExports.length) {
   reviewReasons.push(
     'Material behavior/output risk: generated contract export(s) renamed '
@@ -2696,6 +2754,9 @@ if (persistedContractGaps.length) {
       ? ''
       : '; if this branch is behind dev, update it from dev first')
   );
+}
+if (sessionVersionUnit?.violation) {
+  blockingViolations.push(`persisted-contract.fold: ${sessionVersionUnit.violation}`);
 }
 if (
   productionPaths.length
@@ -3362,9 +3423,19 @@ const report = [
   '',
   `- Rule: ${trustedPersistedContractPolicy.active ? 'active' : 'off'} `
     + `(trusted base ${policyPath} ${persistedContractPolicyKey}); `
-    + `exempt: ${trustedPersistedContractPolicy.exempt.join(', ') || 'none'}`,
+    + `exempt: ${trustedPersistedContractPolicy.exempt.join(', ') || 'none'}; `
+    + `Session version unit: ${trustedPersistedContractPolicy.unit || 'none'}`,
+  ...(sessionVersionUnit
+    ? [
+      `- Session version: main ${sessionVersionUnit.main ?? 'unreadable'}, `
+        + `head ${sessionVersionUnit.head ?? 'unreadable'}`
+    ]
+    : []),
   ...(candidatePersistedContractPolicy?.active && !candidatePersistedContractPolicy.errors.length
-    ? [`- Candidate rule data: valid; exempt: ${candidatePersistedContractPolicy.exempt.join(', ') || 'none'}`]
+    ? [
+      `- Candidate rule data: valid; exempt: ${candidatePersistedContractPolicy.exempt.join(', ') || 'none'}; `
+        + `Session version unit: ${candidatePersistedContractPolicy.unit || 'none'}`
+    ]
     : []),
   `- Changed: ${persistedContractKinds || 'none'}`,
   `- New exports or modules: ${persistedContractAdditions.join(', ') || 'none'}`,

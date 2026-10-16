@@ -4596,14 +4596,30 @@ const contractPolicyFile = (key) => ({
   )}\n`
 });
 // Commits the base (with the rule data when `policyKey` is not null), then the head files. With
-// `dev`, the base moves on after the head's branch point, so the head is behind its base.
-const runPersistedContractCase = ({ policyKey = PERSISTED_CONTRACT_KEY, base = {}, dev = null, head }) => (
+// `dev`, the base moves on after the head's branch point, so the head is behind its base. With
+// `main`, refs/remotes/origin/main points at the base with those files applied (`{}`: the base).
+const runPersistedContractCase = ({
+  policyKey = PERSISTED_CONTRACT_KEY,
+  main = null,
+  base = {},
+  dev = null,
+  head
+}) => (
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const writeAll = (files) => Object.entries(files).forEach(([path, content]) => (
       content === null ? rmSync(join(root, path)) : write(path, content)
     ));
-    writeAll({ ...PERSISTED_CONTRACT_BASE_FILES, ...contractPolicyFile(policyKey), ...base });
+    const baseFiles = { ...PERSISTED_CONTRACT_BASE_FILES, ...contractPolicyFile(policyKey), ...base };
+    let mainRevision = '';
+    if (main && Object.keys(main).length) {
+      writeAll({ ...baseFiles, ...main });
+      mainRevision = commit('main');
+    }
+    writeAll(baseFiles);
     const branchPoint = commit('persisted contract base');
+    if (main) {
+      assert.equal(git(['update-ref', 'refs/remotes/origin/main', mainRevision || branchPoint]).status, 0);
+    }
     let baseRevision = branchPoint;
     if (dev) {
       writeAll(dev);
@@ -4742,11 +4758,22 @@ test('persisted contract: malformed rule data fails closed in the base and the c
     head: { 'gbdraw/web/js/app/secondary.js': 'export const editSecondaryOwner = () => 2;\n' }
   });
   assertVendorGateFailure(trusted, /trusted persisted-contract policy: /, 'trusted base');
+  const trustedUnit = runPersistedContractCase({
+    policyKey: { ...PERSISTED_CONTRACT_KEY, sessionVersionUnit: 'dev' },
+    head: { 'gbdraw/web/js/app/secondary.js': 'export const editSecondaryOwner = () => 2;\n' }
+  });
+  assertVendorGateFailure(
+    trustedUnit,
+    /trusted persisted-contract policy: .*sessionVersionUnit must be "main"/,
+    'trusted unit'
+  );
 
   const candidates = [
     [{ exemptGeneratedExports: ['SESSION_VERSION'] }, /exempts the version export SESSION_VERSION/],
     [{ exemptGeneratedExports: ['NOT_AN_EXPORT'] }, /exempts NOT_AN_EXPORT, which .* does not export/],
-    [{ exemptGeneratedExports: [], note: 'extra' }, /must be an object with exactly the key exemptGeneratedExports/],
+    [{ exemptGeneratedExports: [], note: 'extra' }, /must be an object with the key exemptGeneratedExports and/],
+    [{ sessionVersionUnit: 'main' }, /must be an object with the key exemptGeneratedExports and/],
+    [{ exemptGeneratedExports: [], sessionVersionUnit: 'dev' }, /sessionVersionUnit must be "main"/],
     [{ exemptGeneratedExports: ['lower', 'lower'] }, /must be unique export names/]
   ];
   candidates.forEach(([key, pattern]) => {
@@ -4870,6 +4897,175 @@ test('persisted contract: a renamed export with the same value needs review only
       [`tests/fixtures/sessions/x.v${NEXT_SESSION_VERSION}.gbdraw-session.json`]: '{}\n'
     }
   );
+});
+
+// Session version unit: main's SESSION_VERSION (refs/remotes/origin/main) is the unit.
+const SESSION_UNIT_KEY = Object.freeze({ ...PERSISTED_CONTRACT_KEY, sessionVersionUnit: 'main' });
+const SESSION_UNIT_FAILURE = /persisted-contract\.fold: /;
+const SESSION_UNIT_REVIEW = /the head and main both write Session /;
+const sessionVersionSchema = (version) => withContractExport(
+  withContractExport(CONTRACT_SCHEMA_SOURCE, 'SESSION_VERSION', String(version)),
+  'SUPPORTED_SESSION_VERSIONS',
+  `Object.freeze([${[...CURRENT_SUPPORTED_SESSION_VERSIONS, NEXT_SESSION_VERSION, version]
+    .filter((item, index, items) => item <= version && items.indexOf(item) === index).join(', ')}])`
+);
+// Raises the Session version from `from` to `to` with every co-change the Gate asks for.
+const sessionRaise = (from, to) => ({
+  [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(to),
+  [SESSION_HISTORY_PATH]: historyWith(`## Unreleased: Session ${to} adds a key`),
+  [COMPATIBILITY_REFERENCE_PATH]: `# Compatibility\n\nSession ${to}.\n`,
+  [`tests/fixtures/sessions/x.v${from}.gbdraw-session.json`]: '{}\n'
+});
+const SESSION_ADMISSION_CHANGE = Object.freeze({
+  [CONTRACT_SESSION_SHAPE_PATH]: sessionShapeModule({ extraField: ', note: Object.freeze({kind: "string"})' }),
+  [SESSION_HISTORY_PATH]: historyWith('The current Session admits a note.'),
+  [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nA note.\n',
+  'tests/fixtures/session_admission_vectors.json': '{}\n'
+});
+
+test('persisted contract: a Session version above main takes later breaking changes', () => {
+  // dev already writes NEXT, which main (CURRENT) has not reached; raising it again fails.
+  const raiseAgain = {
+    main: { [CONTRACT_SCHEMA_PATH]: CONTRACT_SCHEMA_SOURCE },
+    base: { [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(NEXT_SESSION_VERSION) },
+    head: sessionRaise(NEXT_SESSION_VERSION, NEXT_SESSION_VERSION + 1)
+  };
+  const folded = runPersistedContractCase({ ...raiseAgain, policyKey: SESSION_UNIT_KEY });
+  assertVendorGateFailure(folded, SESSION_UNIT_FAILURE, 'raised again');
+  assert.ok(folded.output.includes(
+    `SESSION_VERSION changes ${NEXT_SESSION_VERSION} -> ${NEXT_SESSION_VERSION + 1}, `
+    + `but main (refs/remotes/origin/main) writes Session ${CURRENT_SESSION_VERSION}, so the head may write `
+    + `only Session ${CURRENT_SESSION_VERSION} or ${NEXT_SESSION_VERSION}`
+  ), folded.output);
+  assert.doesNotMatch(folded.output, PERSISTED_CONTRACT_FAILURE);
+  assert.match(folded.output, new RegExp(`Session version: main ${CURRENT_SESSION_VERSION}, head `));
+
+  // A jump of two from main fails the same way.
+  const jump = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    head: sessionRaise(CURRENT_SESSION_VERSION, NEXT_SESSION_VERSION + 1)
+  });
+  assertVendorGateFailure(jump, SESSION_UNIT_FAILURE, 'jump of two');
+
+  // Lowering it below main fails too.
+  const lowered = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    base: { [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(NEXT_SESSION_VERSION) },
+    head: {
+      [CONTRACT_SCHEMA_PATH]: CONTRACT_SCHEMA_SOURCE,
+      [SESSION_HISTORY_PATH]: historyWith('Session version lowered.'),
+      [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nLowered.\n',
+      'tests/fixtures/sessions/lowered.json': '{}\n'
+    }
+  });
+  assertVendorGateFailure(lowered, SESSION_UNIT_FAILURE, 'lowered below main');
+  assert.doesNotMatch(lowered.output, PERSISTED_CONTRACT_FAILURE);
+
+  // A version already more than one above main that the pull request leaves alone passes.
+  const inherited = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: { [CONTRACT_SCHEMA_PATH]: CONTRACT_SCHEMA_SOURCE },
+    base: { [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(NEXT_SESSION_VERSION + 1) },
+    head: SESSION_ADMISSION_CHANGE
+  });
+  assert.equal(inherited.status, 0, inherited.output);
+  assert.doesNotMatch(inherited.output, /persisted-contract\.fold|both write Session/);
+
+  // Without sessionVersionUnit in the base policy the rule is off.
+  const inert = runPersistedContractCase(raiseAgain);
+  assert.equal(inert.status, 0, inert.output);
+  assert.doesNotMatch(inert.output, /persisted-contract\.fold|both write Session|Session version: main/);
+
+  // Folding a change into the version above main passes without the main question.
+  const fold = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: raiseAgain.main,
+    base: raiseAgain.base,
+    head: SESSION_ADMISSION_CHANGE
+  });
+  assert.equal(fold.status, 0, fold.output);
+  assert.match(fold.output, PERSISTED_CONTRACT_REVIEW);
+  assert.doesNotMatch(fold.output, SESSION_UNIT_REVIEW);
+});
+
+test('persisted contract: raising the Session version above main passes', () => {
+  const result = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    head: sessionRaise(CURRENT_SESSION_VERSION, NEXT_SESSION_VERSION)
+  });
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /persisted contract changed \(session-version: /);
+  assert.doesNotMatch(result.output, /persisted-contract\.fold|both write Session/);
+});
+
+test('persisted contract: a change while the head writes main\'s Session version asks whether it breaks main', () => {
+  const result = runPersistedContractCase({ policyKey: SESSION_UNIT_KEY, main: {}, head: SESSION_ADMISSION_CHANGE });
+  assert.equal(result.status, 0, result.output);
+  assert.ok(result.output.includes(
+    `the head and main both write Session ${CURRENT_SESSION_VERSION}; confirm that main reads what the head `
+    + `writes the same way, or raise SESSION_VERSION to ${NEXT_SESSION_VERSION}`
+  ), result.output);
+
+  // A contract change that leaves the schema module alone reads the head's version too.
+  const losat = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    head: { ...LOSAT_SCHEMA_CHANGE, [SESSION_HISTORY_PATH]: historyWith('LOSAT cache schema raised.') }
+  });
+  assert.equal(losat.status, 0, losat.output);
+  assert.match(losat.output, SESSION_UNIT_REVIEW);
+
+  // A new export alone is not a persisted contract change and asks nothing.
+  const added = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    head: {
+      [CONTRACT_SCHEMA_PATH]: `${CONTRACT_SCHEMA_SOURCE}\n// gbdraw/session_io.py: NEW_SCHEMA\n`
+        + 'export const NEW_SCHEMA = "new";\n'
+    }
+  });
+  assert.equal(added.status, 0, added.output);
+  assert.match(added.output, /new generated contract export\(s\) \(NEW_SCHEMA\)/);
+  assert.doesNotMatch(added.output, /persisted-contract\.fold|both write Session/);
+});
+
+test('persisted contract: main\'s Session version that cannot be read fails closed', () => {
+  const result = runPersistedContractCase({ policyKey: SESSION_UNIT_KEY, head: SESSION_ADMISSION_CHANGE });
+  assertVendorGateFailure(result, SESSION_UNIT_FAILURE, 'no origin/main');
+  assert.match(result.output, /SESSION_VERSION cannot be read at main \(refs\/remotes\/origin\/main; fetch main/);
+  assert.match(result.output, /Session version: main unreadable/);
+
+  // An unreadable head names the head, not main.
+  const head = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    main: {},
+    head: {
+      ...SESSION_ADMISSION_CHANGE,
+      [CONTRACT_SCHEMA_PATH]: withContractExport(
+        CONTRACT_SCHEMA_SOURCE,
+        'SESSION_VERSION',
+        `Object.freeze([${NEXT_SESSION_VERSION}])`
+      )
+    }
+  });
+  assertVendorGateFailure(head, SESSION_UNIT_FAILURE, 'unreadable head');
+  assert.match(head.output, /persisted-contract\.fold: SESSION_VERSION cannot be read at the head/);
+});
+
+test('persisted contract: setting or removing the Session version unit needs governance review', () => {
+  const set = runPersistedContractCase({ head: contractPolicyFile(SESSION_UNIT_KEY) });
+  assert.equal(set.status, 0, set.output);
+  assert.match(set.output, /Governance and authority: Session version unit changed \(none -> main\)/);
+  assert.match(set.output, /Candidate rule data: valid; exempt: [A-Z_]+; Session version unit: main/);
+
+  const removed = runPersistedContractCase({
+    policyKey: SESSION_UNIT_KEY,
+    head: contractPolicyFile(PERSISTED_CONTRACT_KEY)
+  });
+  assert.equal(removed.status, 0, removed.output);
+  assert.match(removed.output, /Governance and authority: Session version unit changed \(main -> none\)/);
 });
 
 test('a repeated key in the change policy fails closed', () => {
