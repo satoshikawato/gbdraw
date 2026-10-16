@@ -44,6 +44,7 @@ PREPRINT_TITLE = "gbdraw: a genome diagram generator for microbes and organelles
 PREPRINT_DOI = "10.64898/2026.04.07.716863"
 BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/assets/",
+    "gbdraw/web/css/",
     "gbdraw/web/gallery/",
     "gbdraw/web/js/",
     "gbdraw/web/presets/",
@@ -1363,7 +1364,7 @@ def test_conda_recipe_does_not_copy_entire_web_tree() -> None:
     assert "gbdraw/web/open-source-notices.html" in build_sh
     assert "gbdraw/web/gbdraw-*.whl" in build_sh
     assert (
-        "for web_asset_dir in assets js presets tutorial-data vendor wasm" in build_sh
+        "for web_asset_dir in assets css js presets tutorial-data vendor wasm" in build_sh
     )
 
 
@@ -1388,6 +1389,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
 
     required = [
         build_root / "gbdraw" / "web" / "index.html",
+        build_root / "gbdraw" / "web" / "css" / "tailwind.css",
         build_root / "gbdraw" / "web" / "open-source-notices.html",
         build_root / "gbdraw" / "web" / "assets" / "favicon.ico",
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo.svg",
