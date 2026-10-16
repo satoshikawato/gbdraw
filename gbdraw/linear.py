@@ -129,7 +129,7 @@ from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
 )
-from .comparisons.losat_jobs import losat_entry_filename, unique_losat_filenames
+from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
 from .core.numeric import argparse_float, argparse_integer, ascii_float, parse_ascii_integer
 
 
@@ -1129,7 +1129,7 @@ def _losatp_raw_output_text(run_result: DiagramRunResult) -> str:
         "# Non-comment lines use the 12 BLAST outfmt 6 columns.",
     ]
     for index, entry in enumerate(entries, start=1):
-        filename = losat_entry_filename(entry) or f"losat_pair_{index}.tsv"
+        filename = losat_pair_filename(entry, index)
         if "\n" in filename or "\r" in filename:
             raise ValidationError("Protein-search evidence filename contains a newline.")
         hydrated = hydrate_protein_losat_tsv(entry, manifest).rstrip("\r\n")

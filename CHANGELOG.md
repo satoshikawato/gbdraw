@@ -684,8 +684,10 @@ write-up of a release.
   for example `--gc_content_radius ٠.٥`, `--evalue 1_0`, `--track_axis_gap ١`,
   a track slot width `٢px`, a config or Session depth bound, or an annotation
   table `stroke_width` of `1_0` (the table's `start` and `end` integers too).
-  This covers every decimal option of the `gbdraw` commands and the decimal
-  readers of config files, Sessions, and tables. Everything else `float()`
+  This covers every decimal option of the `gbdraw` commands, the decimal
+  readers of Sessions and tables, and every number, integers included, of a
+  config file or of the `config` of a Session or a Python API call
+  (`radius: "٣٩٠"` drew a radius of 390). Everything else `float()`
   accepted is read as before: `0.5`, `+.5`, `5.`, `1e-5`, ` 2 `, and `inf` or
   `nan` where a reader allowed them (OV-962, OV-1006).
 - Fixed (web app): **Load Session** of a Session 31 to 33 or 39 whose saved
@@ -710,7 +712,15 @@ write-up of a release.
   `[object Object]` (OV-981).
 - Fixed (CLI, Python): a Session whose raw LOSAT cache entry has a file name
   that is not text (for example `7` or `["a.tsv"]`) is read as having no name,
-  as the web app reads it, instead of writing that value as the name (OV-986).
+  as the web app reads it, instead of writing that value as the name. A Session
+  saved again names such a shown entry `losat_pair_<n>.tsv`, the name the web
+  app gives it (OV-986, OV-1007).
+- Fixed (web app, CLI, Python): in an interactive SVG, a feature or orthogroup
+  member whose start is missing (`null`) no longer shows as starting at 1. The
+  web app wrote such a start as 0, so the feature without location parts read
+  `1..20`. Both writers now read a feature's or member's start and end as they
+  read a location part's: a number or ASCII number text, truncated toward zero;
+  blank text, a boolean, or a list is missing (OV-1009, OV-1011).
 - Fixed (web app): loading a Session older than version 46 that recolored a
   Legend row named like a built-in JavaScript member (`constructor`,
   `toString`) without a saved original color no longer records that member as

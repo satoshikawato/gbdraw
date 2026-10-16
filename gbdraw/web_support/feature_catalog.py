@@ -14,7 +14,7 @@ from typing import Any, Iterable, TypeVar, cast
 
 from svgwrite import Drawing
 
-from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
+from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, parse_ascii_nonnegative_integer
 from gbdraw.render.group_content import ContentGroup, GroupContent, GroupKind
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
@@ -188,7 +188,7 @@ def _legacy_exact_coordinate(value: Any) -> int | None:
         return None
     if isinstance(value, str) and value.strip() != str(number):
         return None
-    return number if abs(number) <= 9_007_199_254_740_991 else None
+    return number if abs(number) <= JS_MAX_SAFE_INTEGER else None
 
 
 _MISSING = object()

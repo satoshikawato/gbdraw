@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping, cast
 
+from gbdraw.core.numeric import ascii_float, ascii_int
+
 from gbdraw.exceptions import ValidationError
 from gbdraw.labels.policy import LabelRenderingPolicy, normalize_label_rendering
 from gbdraw.labels.circular_types import (
@@ -41,7 +43,7 @@ class LabelsLengthThresholdConfig:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsLengthThresholdConfig":
-        return cls(circular=int(d["circular"]), linear=int(d["linear"]))
+        return cls(circular=ascii_int(d["circular"]), linear=ascii_int(d["linear"]))
 
 
 @dataclass(frozen=True)
@@ -53,8 +55,8 @@ class LabelsFontSizeConfig:
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsFontSizeConfig":
         return cls(
-            short=float(d["short"]),
-            long=float(d["long"]),
+            short=ascii_float(d["short"]),
+            long=ascii_float(d["long"]),
             linear=ShortLongFloatConfig.from_dict(d["linear"]),
         )
 
@@ -79,8 +81,8 @@ class LabelsArcOffsetConfig:
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsArcOffsetConfig":
         return cls(
-            x_radius_offset=float(d.get("x_radius_offset", 1.0)),
-            y_radius_offset=float(d.get("y_radius_offset", 1.0)),
+            x_radius_offset=ascii_float(d.get("x_radius_offset", 1.0)),
+            y_radius_offset=ascii_float(d.get("y_radius_offset", 1.0)),
         )
 
 
@@ -129,7 +131,7 @@ class LabelsLinearConfig:
                 "labels.linear.placement must be one of: auto, above_feature"
             )
         placement = cast(Literal["auto", "above_feature"], placement_raw)
-        rotation = float(raw.get("rotation", 0.0))
+        rotation = ascii_float(raw.get("rotation", 0.0))
         return cls(
             scope=cast(LinearLabelScope, scope),
             placement=placement,
@@ -170,8 +172,8 @@ class LabelsSpacingConfig:
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsSpacingConfig":
         raw = d if isinstance(d, dict) else dict(d)
         return cls(
-            circular=float(raw.get("circular", 3.0)),
-            linear=float(raw.get("linear", 3.0)),
+            circular=ascii_float(raw.get("circular", 3.0)),
+            linear=ascii_float(raw.get("linear", 3.0)),
         )
 
 
@@ -205,12 +207,12 @@ class LabelsConfig:
             for k1, v1 in dict(table).items():
                 out[str(k1)] = {}
                 for k2, v2 in dict(v1).items():
-                    out[str(k1)][str(k2)] = {str(k3): float(v3) for k3, v3 in dict(v2).items()}
+                    out[str(k1)][str(k2)] = {str(k3): ascii_float(v3) for k3, v3 in dict(v2).items()}
             return out
 
         def _factor_2level(table: Mapping[str, Any]) -> dict[str, dict[str, float]]:
             return {
-                str(k): {str(k2): float(v2) for k2, v2 in dict(v).items()}
+                str(k): {str(k2): ascii_float(v2) for k2, v2 in dict(v).items()}
                 for k, v in dict(table).items()
             }
 

@@ -33,10 +33,15 @@ from .analysis.protein_colinearity import (
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
 )
-from .comparisons.losat_jobs import NUCLEOTIDE_LOSAT_CACHE_SCHEMA
+from .comparisons.losat_jobs import (
+    NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+    losat_entry_filename,
+    losat_pair_filename,
+)
 from .core.numeric import (
     ASCII_NONNEGATIVE_INTEGER_PATTERN,
     JS_MAX_SAFE_INTEGER,
+    JS_WHITESPACE,
     ascii_float,
     parse_ascii_integer,
     parse_ascii_nonnegative_integer,
@@ -912,7 +917,7 @@ def _validate_display_placement_draft_config(
                     )
                     or not isinstance(offset, int)
                     or isinstance(offset, bool)
-                    or abs(offset) > 9_007_199_254_740_991
+                    or abs(offset) > JS_MAX_SAFE_INTEGER
                     or not isinstance(intent.get("orientForward"), bool)
                 ):
                     raise ValidationError("Invalid record display anchor intent.")
@@ -1869,12 +1874,8 @@ def _migrate_session_feature_placements(placements: object) -> object:
     return migrated
 
 
-# The Web readers' ``String(value ?? '')`` and ``.trim()`` (ECMAScript white
-# space and line terminators), so the twins below read text as the Web does.
-_JS_WHITESPACE = (
-    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
-    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
-)
+# The Web readers' ``String(value ?? '')`` and ``.trim()`` (JS_WHITESPACE), so
+# the twins below read text as the Web does.
 
 
 def _js_string(value: object) -> str:
@@ -1894,7 +1895,7 @@ def _js_string(value: object) -> str:
 
 
 def _js_text(value: object) -> str:
-    return _js_string(value).strip(_JS_WHITESPACE)
+    return _js_string(value).strip(JS_WHITESPACE)
 
 
 def _feature_identity_key(scope: object, record_key: object, feature_id: object) -> str:
@@ -1907,8 +1908,8 @@ def _feature_identity_key(scope: object, record_key: object, feature_id: object)
         scope in DRAFT_SCOPES
         and isinstance(record_key, str)
         and isinstance(feature_id, str)
-        and record_key.strip(_JS_WHITESPACE)
-        and feature_id.strip(_JS_WHITESPACE)
+        and record_key.strip(JS_WHITESPACE)
+        and feature_id.strip(JS_WHITESPACE)
         and "\0" not in record_key + feature_id
     ):
         return _draft_identity_key(str(scope), record_key, feature_id)
@@ -2564,7 +2565,7 @@ def migrate_session_feature_edits(
 
         def assign_label_text(row: dict[str, Any], value: object) -> bool:
             label_text = re.sub(r"[\t\r\n\0]+", " ", _js_string(value))
-            if label_text.strip(_JS_WHITESPACE):
+            if label_text.strip(JS_WHITESPACE):
                 if row["labelText"] is None:
                     row["labelText"] = label_text
             elif row["labelVisibility"] != "on":
@@ -3097,7 +3098,7 @@ def _annotation_binding_mode(annotation: object) -> DiagramMode | None:
     # A record key starts with its source key, a JSON array whose first item
     # is the mode (``annotationSourceKey``).
     try:
-        source_key, _ = _JSON_DECODER.raw_decode(binding.strip(_JS_WHITESPACE))
+        source_key, _ = _JSON_DECODER.raw_decode(binding.strip(JS_WHITESPACE))
     except ValueError:
         return None
     return _diagram_mode(source_key[0]) if isinstance(source_key, list) and source_key else None
@@ -3641,7 +3642,7 @@ def _js_integer(value: object) -> bool:
 def _current_option_value(value: object, fallback: str, supported: tuple[str, ...], label: str) -> str:
     """``requireCurrentValue`` in the Web ``services/current-option-values.js``."""
 
-    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or fallback
+    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or fallback
     if normalized not in supported:
         raise ValidationError(
             f"{label} must be one of: {', '.join(supported)}.", diagnostic=_SESSION_FIELDS_INVALID
@@ -3650,13 +3651,13 @@ def _current_option_value(value: object, fallback: str, supported: tuple[str, ..
 
 
 def _migrated_linear_track_layout(value: object) -> str:
-    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "middle"
+    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or "middle"
     normalized = {"spreadout": "above", "tuckin": "below"}.get(normalized, normalized)
     return _current_option_value(normalized, "middle", ("above", "middle", "below"), "Linear track layout")
 
 
 def _migrated_linear_label_placement(value: object) -> str:
-    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "auto"
+    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or "auto"
     return _current_option_value(
         "above_feature" if normalized == "on_feature" else normalized,
         "auto",
@@ -3666,7 +3667,7 @@ def _migrated_linear_label_placement(value: object) -> str:
 
 
 def _migrated_circular_multi_record_size_mode(value: object) -> str:
-    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "auto"
+    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or "auto"
     return _current_option_value(
         LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(normalized, normalized),
         "auto",
@@ -3767,7 +3768,7 @@ def _without_legacy_null_circular_slot_spacing(config: Mapping[str, Any]) -> Map
 
 
 def _linear_track_renderer(value: object) -> str:
-    text = (_js_string(value) if _js_truthy(value) else "features").strip(_JS_WHITESPACE).lower()
+    text = (_js_string(value) if _js_truthy(value) else "features").strip(JS_WHITESPACE).lower()
     renderer = _LINEAR_TRACK_RENDERER_ALIASES.get(text) or text
     return renderer if renderer in _LINEAR_TRACK_RENDERERS else "features"
 
@@ -3901,7 +3902,7 @@ def _js_number(value: object) -> float:
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
-        text = value.strip(_JS_WHITESPACE)
+        text = value.strip(JS_WHITESPACE)
         if not text:
             return 0.0
         try:
@@ -3918,7 +3919,7 @@ def _js_integral(value: float) -> int | float:
 
 
 def _clean_id(value: object, fallback: str) -> str:
-    return (_js_string(value) if _js_truthy(value) else "").strip(_JS_WHITESPACE) or fallback
+    return (_js_string(value) if _js_truthy(value) else "").strip(JS_WHITESPACE) or fallback
 
 
 def _draft_annotation_target(target: object) -> dict[str, Any]:
@@ -4270,7 +4271,15 @@ def normalize_current_session_artifacts(
     for index, entry in enumerate(source_raw_entries):
         classification = classify_raw_losat_cache_entry(entry)
         if classification in {"protein-current", "nucleotide-current"}:
-            current_raw_entries.append(_json_clone(entry))
+            clone = _json_clone(entry)
+            # A name that is no text is none, as the Web reads it; a shown
+            # entry then gets the Web's default name (OV-1007).
+            clone["filename"] = (
+                losat_entry_filename(entry)
+                if entry.get("display") is False
+                else losat_pair_filename(entry, index + 1)
+            )
+            current_raw_entries.append(clone)
         elif classification == "protein-legacy":
             imported_legacy_entries.append(_json_clone(entry))
         else:

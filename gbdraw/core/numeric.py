@@ -6,7 +6,7 @@ import argparse
 import math
 import re
 from collections.abc import Iterable
-from typing import SupportsFloat, SupportsIndex
+from typing import SupportsFloat, SupportsIndex, SupportsInt
 
 # Python's ``\d`` and ``str.isdigit()`` accept other Unicode digits and ``int()`` reads the
 # decimal ones (``int("١") == 1``). Every integer gbdraw reads from user or file input is
@@ -17,6 +17,12 @@ _ASCII_NONNEGATIVE_INTEGER_RE = re.compile(ASCII_NONNEGATIVE_INTEGER_PATTERN)
 _ASCII_INTEGER_RE = re.compile(f"[+-]?{ASCII_NONNEGATIVE_INTEGER_PATTERN}")
 # JavaScript's ``Number.MAX_SAFE_INTEGER``: the largest integer a JavaScript reader of the same value keeps exactly.
 JS_MAX_SAFE_INTEGER = 2**53 - 1
+# The white space and line terminators JavaScript's ``String.prototype.trim()``
+# removes, for Python readers that read text as the Web does.
+JS_WHITESPACE = (
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
 
 
 def compensated_sum(values: Iterable[float]) -> float:
@@ -102,6 +108,24 @@ def argparse_integer(text: str) -> int:
     return value
 
 
+def _has_other_digit_or_underscore(value: object) -> bool:
+    return isinstance(value, str) and (
+        "_" in value or (not value.isascii() and any(char.isdecimal() and not char.isascii() for char in value))
+    )
+
+
+def ascii_int(value: str | SupportsInt | SupportsIndex) -> int:
+    """``int(value)``, except that text with another digit or an underscore is refused.
+
+    The integer half of :func:`ascii_float`, for readers that take a number or
+    its text (config leaves): such text raises ``int()``'s own ``ValueError``.
+    """
+
+    if _has_other_digit_or_underscore(value):
+        raise ValueError(f"invalid literal for int() with base 10: {value!r}")
+    return int(value)
+
+
 def ascii_float(value: str | SupportsFloat | SupportsIndex) -> float:
     """``float(value)``, except that text with another digit or an underscore is refused.
 
@@ -113,9 +137,7 @@ def ascii_float(value: str | SupportsFloat | SupportsIndex) -> float:
     to ``float()`` unchanged.
     """
 
-    if isinstance(value, str) and (
-        "_" in value or (not value.isascii() and any(char.isdecimal() and not char.isascii() for char in value))
-    ):
+    if _has_other_digit_or_underscore(value):
         raise ValueError(f"could not convert string to float: {value!r}")
     return float(value)
 
@@ -145,9 +167,11 @@ def argparse_float(text: str) -> float:
 __all__ = [
     "ASCII_NONNEGATIVE_INTEGER_PATTERN",
     "JS_MAX_SAFE_INTEGER",
+    "JS_WHITESPACE",
     "argparse_float",
     "argparse_integer",
     "ascii_float",
+    "ascii_int",
     "compensated_sum",
     "parse_ascii_float",
     "parse_ascii_integer",

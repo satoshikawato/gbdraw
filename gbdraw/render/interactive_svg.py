@@ -843,6 +843,20 @@ def _location_part_text(value: object) -> str:
     return str(number) if number is not None and number == value else ""
 
 
+def _feature_coordinates(feature: Mapping[str, object]) -> dict[str, int | None]:
+    """A feature's own start and end, read like a part's.
+
+    The viewer builds the one part of a feature without parts from them
+    (OV-1011). The twin of ``featureCoordinates`` in
+    services/standalone-interactivity.js.
+    """
+
+    return {
+        "start": _location_part_number(feature.get("start")),
+        "end": _location_part_number(feature.get("end")),
+    }
+
+
 def _normalize_location_parts(parts: object | None) -> list[dict[str, object]]:
     if not isinstance(parts, list):
         return []
@@ -900,8 +914,6 @@ def _normalize_orthogroup_member(
         return None
     record_index = _int_or_none(_first_text(member.get("recordIndex"), member.get("record_index")))
     feature_index = _number_or_none(_first_text(member.get("featureIndex"), member.get("feature_index")))
-    start = _number_or_none(member.get("start"))
-    end = _number_or_none(member.get("end"))
     stable_feature_svg_id = _first_text(
         member.get("stableFeatureSvgId"),
         member.get("stable_feature_svg_id"),
@@ -918,8 +930,7 @@ def _normalize_orthogroup_member(
         "label": _first_text(member.get("label")),
         "feature_svg_id": stable_feature_svg_id,
         "stable_feature_svg_id": stable_feature_svg_id,
-        "start": start,
-        "end": end,
+        **_feature_coordinates(member),
         "strand": _strand_symbol(member.get("strand")),
         "representative": bool(member.get("representative")),
         "gene": _first_text(member.get("gene")),
@@ -1145,8 +1156,7 @@ def _feature_payloads_from_rendered(
             "record_idx": record_index,
             "feature_index": feature_index,
             "type": _first_text(feature.get("type")),
-            "start": _int_or_none(feature.get("start")),
-            "end": _int_or_none(feature.get("end")),
+            **_feature_coordinates(feature),
             "strand": _first_text(feature.get("strand")),
             "locus_tag": _first_text(feature.get("locus_tag"), feature.get("locusTag")),
             "gene_id": _first_text(feature.get("gene_id"), feature.get("geneId")),

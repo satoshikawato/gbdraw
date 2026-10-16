@@ -470,7 +470,9 @@ def test_edge_filenames_follow_the_shared_vectors() -> None:
 def test_a_losat_entry_filename_that_is_not_text_reads_as_the_default(
     filename: object, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # OV-986: `str(... or ...)` named the raw TSVs `{}.tsv` and `# entry 1: {}`.
+    # OV-986: `str(... or ...)` named the raw TSVs after a non-empty non-text
+    # name (`7`, `["a.tsv"]`, `{"name": ...}`); `{}`, `None` and "" already gave
+    # the default (the other cases pin that).
     from types import SimpleNamespace
 
     import gbdraw.linear as linear_module

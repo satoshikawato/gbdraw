@@ -54,6 +54,17 @@ def test_ascii_float_refuses_other_characters_with_the_errors_of_float(text: str
         argparse_float(text)
 
 
+def test_ascii_int_is_int_without_other_digits_or_underscores() -> None:
+    import re
+
+    from gbdraw.core.numeric import ascii_int
+
+    assert [ascii_int(value) for value in ("12", " -3\t", "\u00a04 ", 7.9, True)] == [12, -3, 4, 7, 1]
+    for text in ("١٢", "\uff13", "1_0", "x", ""):
+        with pytest.raises(ValueError, match=f"^{re.escape(f'invalid literal for int() with base 10: {text!r}')}$"):
+            ascii_int(text)
+
+
 def test_no_argparse_option_reads_its_float_with_bare_float() -> None:
     import ast
     from pathlib import Path
@@ -244,3 +255,63 @@ def test_annotation_table_integer_coordinates_refuse_non_ascii_digits() -> None:
     for text in ("١٢", "1_2", "1.0"):
         with pytest.raises(ValidationError, match="expected a integer"):
             _number(text, row_number=1, column="start", integer=True)
+
+
+ConfigPath = tuple[str | int, ...]
+
+
+def _numeric_config_leaves(value: object, path: ConfigPath = ()) -> list[ConfigPath]:
+    items = value.items() if isinstance(value, dict) else enumerate(value) if isinstance(value, list) else None
+    if items is not None:
+        return [leaf for key, item in items for leaf in _numeric_config_leaves(item, (*path, key))]
+    return [path] if isinstance(value, (int, float)) and not isinstance(value, bool) else []
+
+
+def _value_at(raw: object, path: ConfigPath) -> object:
+    value = raw
+    for key in path:
+        value = value[key]  # type: ignore[index]
+    return value
+
+
+def _config_with(raw: dict[str, object], path: ConfigPath, value: object) -> tuple[str, object]:
+    import copy
+
+    from gbdraw.config.models import GbdrawConfig
+
+    edited = copy.deepcopy(raw)
+    _value_at(edited, path[:-1])[path[-1]] = value  # type: ignore[index]
+    return _outcome(GbdrawConfig.from_dict, edited)
+
+
+def test_config_numbers_read_non_ascii_text_as_not_a_number() -> None:
+    """Review r1 #1: a Session's or request's ``config`` (``GbdrawConfig.from_dict``)
+    read its numbers with a bare ``float()`` or ``int()``, so ``radius: "٣٩٠"``
+    drew a radius of 390. Each number of the default config now reads other
+    digits and underscores as it reads ``"x"``, and its ASCII text as before
+    (a leaf that takes only a number refuses all text).
+    """
+
+    from gbdraw.config.toml import load_config_toml
+
+    raw = load_config_toml("gbdraw.data", "config.toml")
+    leaves = _numeric_config_leaves(raw)
+    assert {("canvas", "circular", "radius"), ("canvas", "dpi"), ("objects", "sliding_window", "default", 0)} <= set(leaves)
+    to_arabic_indic = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+    failures = []
+    for path in leaves:
+        number = _value_at(raw, path)
+        text = repr(number)
+        read = _config_with(raw, path, number)
+        not_a_number = _config_with(raw, path, "x")
+        if not_a_number == read:
+            continue  # GbdrawConfig does not read this leaf (png_output).
+        ascii_text = _config_with(raw, path, f" {text} ")
+        if ascii_text != read and ascii_text[0] != not_a_number[0]:
+            failures.append((path, text, "ASCII text read differently"))
+        grouped = f"{text[0]}_{text[1:]}" if len(text) > 1 and text[1].isdigit() else None
+        for edited in filter(None, (text.translate(to_arabic_indic), grouped)):
+            outcome = _config_with(raw, path, edited)
+            if outcome == read or outcome[0] != not_a_number[0]:
+                failures.append((path, edited, outcome[0]))
+    assert failures == []

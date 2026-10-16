@@ -5,20 +5,14 @@ from math import isfinite
 import re
 from typing import Literal
 
-from gbdraw.core.numeric import ascii_float
+from gbdraw.core.numeric import JS_WHITESPACE, ascii_float
 
 ScalarUnit = Literal["px", "factor"]
 
 
-# Match JavaScript whitespace, including BOM, at both text boundaries.
-_PIXEL_WHITESPACE = (
-    " \t\n\r\f\v\u00a0\u1680"
-    + "".join(map(chr, range(0x2000, 0x200B)))
-    + "\u2028\u2029\u202f\u205f\u3000\ufeff"
-)
 _PIXEL_TEXT = re.compile(
     r"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)(?:["
-    + re.escape(_PIXEL_WHITESPACE)
+    + re.escape(JS_WHITESPACE)
     + r"]*[pP][xX])?"
 )
 
@@ -32,7 +26,7 @@ def parse_optional_pixel(
     relation = "nonnegative" if allow_zero else "positive"
     message = f"{field_name} must be {relation} finite number of pixels (px optional)"
     if isinstance(raw, str):
-        text = raw.strip(_PIXEL_WHITESPACE)
+        text = raw.strip(JS_WHITESPACE)
         if not text:
             return None
         match = _PIXEL_TEXT.fullmatch(text)

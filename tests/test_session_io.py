@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import gzip
 import json
 import hashlib
 import os
@@ -4243,3 +4244,37 @@ def test_legacy_renames_are_spelled_only_by_their_owner() -> None:
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in renamed
         )
         assert literals == [], module.__name__
+
+
+def test_a_cli_resave_names_a_losat_entry_without_a_text_name_as_the_web_does(
+    tmp_path: Path,
+) -> None:
+    # OV-1007: the CLI writer copied a saved `{}` or `7` through. The Web reads
+    # such a name as the entry's default, `losat_pair_<n>.tsv` (`n` counts the
+    # saved entries from 1), and saves that name: tests/web/session-losat-cache-
+    # validation.test.mjs ("... file name that is no text loads as the default
+    # name") pins the same values for the same edit of this fixture. A hidden
+    # entry has no name in either writer.
+    source = Path(__file__).parent / "fixtures" / "sessions" / "synthetic_conservation.gbdraw-session.json.gz"
+    session = json.loads(gzip.decompress(source.read_bytes()))
+    first, second, third = session["losatCache"]["entries"]
+    first["filename"] = {}
+    second["filename"] = 7
+    edited = tmp_path / "edited.gbdraw-session.json"
+    edited.write_text(json.dumps(session), encoding="utf-8")
+
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    circular_main(["--session", str(edited), "--output", str(tmp_path / "replay"),
+                   "--format", "svg", "--session_output", str(sidecar)])
+    assert [entry["filename"] for entry in load_session(sidecar)["losatCache"]["entries"]] == [
+        "losat_pair_1.tsv", "losat_pair_2.tsv", third["filename"]
+    ]
+
+    first["filename"] = ""
+    second["filename"] = ["b.tsv"]
+    second["display"] = False
+    written = copy.deepcopy(session)
+    session_io_module.normalize_current_session_artifacts(written)
+    assert [(entry["filename"], entry["display"]) for entry in written["losatCache"]["entries"]] == [
+        ("losat_pair_1.tsv", True), ("", False), (third["filename"], True)
+    ]

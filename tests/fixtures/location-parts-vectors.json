@@ -1,5 +1,5 @@
 {
-  "description": "Feature location parts that the two interactive SVG writers normalize: the Python CLI writer (interactive_svg._normalize_location_parts) and the Web export writer (standalone-interactivity.js normalizeLocationParts). A start or end is a number or ASCII number text (gbdraw.core.numeric.ascii_float) truncated toward zero; anything else, including a boolean and a truncation beyond the safe integers, is missing. A display or strand is text without surrounding ASCII whitespace, the first such text of a list, or a safe integer's digits; a missing display is built from the 1-based start and the end. Each case's input is the parts value and expected is the normalized list. The viewer script in the written file reads the parts with its own code and is not pinned here.",
+  "description": "Feature location parts that the two interactive SVG writers normalize: the Python CLI writer (interactive_svg._normalize_location_parts) and the Web export writer (standalone-interactivity.js normalizeLocationParts). A start or end is a number or ASCII number text (gbdraw.core.numeric.ascii_float) truncated toward zero; anything else, including a boolean and a truncation beyond the safe integers, is missing. A display or strand is text without surrounding ASCII whitespace, the first such text of a list, or a safe integer's digits; a missing display is built from the 1-based start and the end. Each case's input is the parts value and expected is the normalized list. Each featureCoordinateCases input is a feature without parts and expected its start and end in the written feature (interactive_svg._feature_coordinates, standalone-interactivity.js featureCoordinates): they are read like a part's start and end, because the viewer builds the feature's one part from them. The viewer script in the written file reads the parts with its own code and is not pinned here.",
   "cases": [
     {
       "name": "whole-number start and end give a 1-based display",
@@ -576,6 +576,117 @@
           "display": "\ufeff<2..2\u00a0"
         }
       ]
+    }
+  ],
+  "featureCoordinateCases": [
+    {
+      "name": "whole-number start and end are kept",
+      "input": {
+        "start": 10,
+        "end": 20
+      },
+      "expected": {
+        "start": 10,
+        "end": 20
+      }
+    },
+    {
+      "name": "a null start is missing, not zero",
+      "input": {
+        "start": null,
+        "end": 20
+      },
+      "expected": {
+        "start": null,
+        "end": 20
+      }
+    },
+    {
+      "name": "an absent start and end are missing",
+      "input": {},
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "an empty or blank start or end is missing, not zero",
+      "input": {
+        "start": "",
+        "end": "  "
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "ASCII number text is a number",
+      "input": {
+        "start": "10",
+        "end": " 20 "
+      },
+      "expected": {
+        "start": 10,
+        "end": 20
+      }
+    },
+    {
+      "name": "non-numeric text and a boolean are missing",
+      "input": {
+        "start": "abc",
+        "end": true
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "a list is missing, not zero",
+      "input": {
+        "start": [],
+        "end": [
+          5
+        ]
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "a fraction truncates toward zero",
+      "input": {
+        "start": 10.7,
+        "end": 20.2
+      },
+      "expected": {
+        "start": 10,
+        "end": 20
+      }
+    },
+    {
+      "name": "a negative whole number is kept",
+      "input": {
+        "start": -5,
+        "end": -1
+      },
+      "expected": {
+        "start": -5,
+        "end": -1
+      }
+    },
+    {
+      "name": "a number beyond the safe integers is missing",
+      "input": {
+        "start": 9007199254740993,
+        "end": 1e+300
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
     }
   ]
 }

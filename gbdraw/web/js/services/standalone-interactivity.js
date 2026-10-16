@@ -231,6 +231,18 @@ const locationPartText = (value) => {
   return typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : '';
 };
 
+/**
+ * A feature's own start and end, read like a part's: the viewer builds the one
+ * part of a feature without parts from them (OV-1011). The twin of
+ * `_feature_coordinates` in gbdraw/render/interactive_svg.py.
+ * @param {AliasSource} feature
+ * @returns {{ start: number | null, end: number | null }}
+ */
+export const featureCoordinates = (feature) => ({
+  start: locationPartNumber(feature.start),
+  end: locationPartNumber(feature.end)
+});
+
 /** @param {unknown} parts */
 export const normalizeLocationParts = (parts) => {
   if (!Array.isArray(parts)) return [];
@@ -798,8 +810,6 @@ const getStandaloneFeatureOrthogroupEntry = (feature, context) => {
  */
 const normalizeStandaloneOrthogroupMember = (member, renderedFeatureSvgId = '') => {
   if (!member || typeof member !== 'object' || Array.isArray(member)) return null;
-  const start = Number(member.start);
-  const end = Number(member.end);
   const record = standaloneMemberRecordIndexStatus(member);
   const recordIndex = record.valid ? record.value : null;
   const stableIdentity = standaloneConsistentTextAlias(member, [
@@ -850,8 +860,7 @@ const normalizeStandaloneOrthogroupMember = (member, renderedFeatureSvgId = '') 
     feature_svg_id: stableFeatureSvgId,
     stable_feature_svg_id: stableFeatureSvgId,
     rendered_feature_svg_id: String(renderedFeatureSvgId || ''),
-    start: Number.isFinite(start) ? start : null,
-    end: Number.isFinite(end) ? end : null,
+    ...featureCoordinates(member),
     strand: String(member.strand || ''),
     representative: Boolean(member.representative),
     gene: String(member.gene || ''),
@@ -1390,8 +1399,7 @@ const normalizeStandaloneBiologicalFeature = (feature, context) => {
     display_label: displayLabel,
     search_labels: getStandaloneSearchLabels(feature, fallbackLabel, displayLabel),
     type: String(feature.type || ''),
-    start: Number.isFinite(Number(feature.start)) ? Number(feature.start) : null,
-    end: Number.isFinite(Number(feature.end)) ? Number(feature.end) : null,
+    ...featureCoordinates(feature),
     strand: String(feature.strand || ''),
     locus_tag: String(feature.locus_tag || feature.locusTag || ''),
     gene_id: String(feature.gene_id || feature.geneId || ''),
@@ -1522,8 +1530,7 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       record_id: String(entry.recordId || feature?.record_id || feature?.recordId || ''),
       record_idx: Number.isInteger(recordIndex) ? recordIndex : null,
       type: String(feature?.type || ''),
-      start: Number.isFinite(Number(feature?.start)) ? Number(feature.start) : null,
-      end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
+      ...featureCoordinates(feature),
       strand: String(feature?.strand || ''),
       locus_tag: String(feature?.locus_tag || feature?.locusTag || ''),
       gene_id: String(feature?.gene_id || feature?.geneId || ''),
