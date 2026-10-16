@@ -196,6 +196,152 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   expect(external).toEqual([]);
 });
 
+// 3c B3 (PD-OI-101): after the first status a Generate yields a task, not
+// frames. A Cancel that a user clicks while the main thread works at a later
+// status is a queued input event, and Chromium dispatches it before the posted
+// continuation. These cases click Cancel as a user does: the mouse is pressed
+// on Cancel while the run waits for its first paint (frames held there), and
+// released while the main thread is busy at the target status, so the mouseup
+// and its click are queued there. Pins Chromium only.
+const cancelByQueuedClick = async (page, testInfo, target) => {
+  let mouseUp = null;
+  const notifications = [];
+  await page.route('**/__gbdraw-test/relay/**', async (route) => {
+    // The release is sent while the page's task still runs and waits in the
+    // renderer's input queue until that task ends.
+    const busy = route.request().url().endsWith('/busy');
+    notifications.push({ busy, at: Date.now() });
+    if (busy && !mouseUp) mouseUp = page.mouse.up();
+    await route.fulfill({ status: 204, body: '' });
+  });
+  await page.evaluate((targetStatus) => {
+    const nativeFrame = window.requestAnimationFrame;
+    const queued = { target: targetStatus, armed: false, holding: false, held: [], busy: null, input: [] };
+    window.queuedCancel = queued;
+    // A request made by the busy task itself reaches Playwright only when that
+    // task ends (its Network event is sent then), so a Worker that is not busy
+    // makes it at once.
+    const relay = new Worker(URL.createObjectURL(new Blob([`onmessage = async ({ data }) => {
+      await fetch(${JSON.stringify(`${location.origin}/__gbdraw-test/relay/`)} + data, { cache: 'no-store' }).catch(() => {});
+      postMessage(data);
+    };`], { type: 'text/javascript' })));
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      document.addEventListener(type, (event) => {
+        if (!event.target.closest?.('button')?.textContent?.includes('Cancel')) return;
+        queued.input.push({ type, timeStamp: event.timeStamp, dispatchedAt: performance.now() });
+      }, { capture: true });
+    }
+    // afterPaint keeps the function it read, so the hold is a flag, not a swap.
+    const heldFrame = (callback) => {
+      if (!queued.holding) return nativeFrame(callback);
+      queued.held.push(callback);
+      return 0;
+    };
+    queued.release = () => {
+      queued.holding = false;
+      window.requestAnimationFrame = nativeFrame;
+      for (const callback of queued.held.splice(0)) nativeFrame(callback);
+    };
+    const stopWatch = window.Vue.watch(() => window.__GBDRAW_APP__.processingStatus, (value) => {
+      if (value === 'Preparing input files...' && !queued.armed) {
+        queued.armed = true;
+        queued.holding = true;
+        window.requestAnimationFrame = heldFrame;
+      }
+      if (value !== queued.target || queued.busy) return;
+      const start = performance.now();
+      relay.postMessage('busy');
+      while (performance.now() - start < 400) { /* the user's click arrives while this task runs */ }
+      const end = performance.now();
+      queued.busy = { start, end };
+    }, { flush: 'sync' });
+    queued.stop = () => { stopWatch(); relay.terminate(); };
+    // The relay runs and has made one request before the Generate starts.
+    return new Promise((resolve) => {
+      relay.onmessage = () => { relay.onmessage = null; resolve(); };
+      relay.postMessage('ready');
+    });
+  }, target);
+  await generate(page).click();
+  const cancel = page.getByRole('button', { name: /Cancel$/ });
+  await expect(cancel).toBeVisible();
+  const box = await cancel.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect.poll(() => page.evaluate(() => window.queuedCancel.input.map(({ type }) => type))).toEqual(['mousedown']);
+  await page.evaluate(() => window.queuedCancel.release());
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.processing), { timeout: 60_000 }).toBe(false);
+  await mouseUp;
+  await page.unroute('**/__gbdraw-test/relay/**');
+  const queued = await page.evaluate(() => {
+    const { busy, input } = window.queuedCancel;
+    window.queuedCancel.stop();
+    return { busy, input };
+  });
+  expect(queued.busy).not.toBeNull();
+  const path = testInfo.outputPath('queued-click.json');
+  writeFileSync(path, JSON.stringify({ ...queued, notifications }, null, 2));
+  await testInfo.attach('queued-click', { path, contentType: 'application/json' });
+  const [, up, click] = queued.input;
+  expect(queued.input.map(({ type }) => type)).toEqual(['mousedown', 'mouseup', 'click']);
+  // The release reached the page during the busy task (an input event's
+  // timeStamp is when it arrived; compared on the page's clock, not Node's) and
+  // was dispatched after it.
+  expect(up.timeStamp).toBeLessThan(queued.busy.end);
+  expect(click.dispatchedAt).toBeGreaterThanOrEqual(queued.busy.end);
+};
+const warmReady = async (page, baseURL) => {
+  const external = await prepare(page, baseURL);
+  await page.evaluate(async content => {
+    const app = window.__GBDRAW_APP__;
+    app.files.c_gb = new File([content], 'HmmtDNA.gbk', { type: 'text/plain' });
+    await window.Vue.nextTick();
+  }, source);
+  await generate(page).click();
+  await awaitSuccess(page);
+  await page.evaluate(() => { window.committedResults = window.__GBDRAW_APP__.results; });
+  await resetObservations(page);
+  return external;
+};
+const expectCanceledWarm = async (page, testInfo, label) => {
+  const evidence = await record(page, testInfo, label);
+  expect(await page.evaluate(() => ({
+    status: window.__GBDRAW_APP__.processingStatus,
+    sameResult: window.__GBDRAW_APP__.results === window.committedResults
+  }))).toEqual({ status: 'Canceled.', sameResult: true });
+  expect(evidence.statuses.filter(entry => entry.value === 'Canceled.')).toHaveLength(1);
+  // GE-09: no Worker request was active, so the warm Worker stays.
+  expect(evidence.workers.constructions).toBe(1);
+  expect(evidence.workers.instances[0].terminated).toBe(false);
+  return evidence;
+};
+
+test('A Cancel clicked during input resolution keeps the warm Worker for the next Generate', async ({ page, baseURL }, testInfo) => {
+  test.setTimeout(240_000);
+  const external = await warmReady(page, baseURL);
+  const runsBefore = await page.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__.instances[0].runs.length);
+  await cancelByQueuedClick(page, testInfo, 'Preparing render inputs and session...');
+  const evidence = await expectCanceledWarm(page, testInfo, 'cancel-input-resolution');
+  // Seen before the post: the run sent no request.
+  expect(evidence.workers.instances[0].runs).toHaveLength(runsBefore);
+  await resetObservations(page);
+  await generate(page).click();
+  await awaitSuccess(page);
+  const next = await record(page, testInfo, 'after-cancel-warm');
+  expect(next.statuses.some(entry => entry.value.startsWith('Preparing diagram runtime'))).toBe(false);
+  expect(next.workers.constructions).toBe(1);
+  expect(external).toEqual([]);
+});
+
+test('A Cancel clicked during SVG admission ends the Generate before the candidate mounts', async ({ page, baseURL }, testInfo) => {
+  test.setTimeout(240_000);
+  const external = await warmReady(page, baseURL);
+  await cancelByQueuedClick(page, testInfo, 'Preparing preview...');
+  const evidence = await expectCanceledWarm(page, testInfo, 'cancel-admission');
+  expect(evidence.events.filter(event => event.name === 'preview.mount-observed')).toEqual([]);
+  expect(external).toEqual([]);
+});
+
 test('Linear comparison preparation, real search counts, cache reuse, and no-comparison generation use the same status', async ({ page, baseURL }, testInfo) => {
   test.setTimeout(180_000);
   const external = await prepare(page, baseURL);

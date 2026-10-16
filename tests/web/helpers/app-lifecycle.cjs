@@ -16,7 +16,7 @@ const DEFAULT_APP_TIMEOUT_MS = 180_000;
 const DEFAULT_APP_PATH = '/gbdraw/web/index.html';
 const pageDiagnostics = new WeakMap();
 const workerTrackingPages = new WeakSet();
-// The pages of `warmAppTest` (below): page -> { contextOptions, baseline, ready }.
+// The pages of `warmAppTest` (below): page -> { contextOptions, baseline, ready, savedSessions }.
 const warmPages = new WeakMap();
 
 const compactJson = (value, maxLength = 6_000) => {
@@ -610,12 +610,19 @@ const WARM_RESTORE_MAX_UNDO = 40;
 // a page that has not generated has none. A global missing here costs speed,
 // not correctness: every case after a Generate falls back, naming the global.
 const GENERATE_GLOBALS = ['__GBDRAW_LAST_LOSAT_TELEMETRY__', '_origPairwiseMin', '_origPairwiseMax'];
+// A Session file name (services/config.js `buildSessionFilename`). The app
+// remembers the Session file it downloaded last and asks before it downloads
+// one of that name again; the restore cannot reach that memory, so a page
+// that saved a Session after it booted serves no later case (OV-1001).
+const SESSION_FILE = /session\.json\.gz$/;
 
 // What the restore compares: both drawings' user-owned state, the inputs and
-// Results, and what a case can leave in the page outside the app.
+// Results, the Session files saved, and what a case can leave in the page
+// outside the app.
 const readWarmFacts = async (page) => ({
   url: page.url(),
   viewport: page.viewportSize(),
+  savedSessions: [...warmPages.get(page).savedSessions],
   circular: (await snapshotUserOwnedState(page, { mode: 'circular' })),
   linear: (await snapshotUserOwnedState(page, { mode: 'linear' })),
   page: await page.evaluate(async () => {
@@ -772,7 +779,11 @@ const warmAppTest = baseTest.extend({
     if (reasons.length) {
       if (page && !page.isClosed()) await page.context().close().catch(() => {});
       page = await (await browser.newContext(options)).newPage();
-      warmPages.set(page, { contextOptions, baseline: null, ready: false });
+      const savedSessions = [];
+      page.on('download', (file) => {
+        if (SESSION_FILE.test(file.suggestedFilename())) savedSessions.push(file.suggestedFilename());
+      });
+      warmPages.set(page, { contextOptions, baseline: null, ready: false, savedSessions });
     } else {
       warmPages.get(page).ready = true;
     }

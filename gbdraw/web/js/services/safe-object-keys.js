@@ -1,11 +1,14 @@
 // @ts-check
+import { diagnosticError } from '../utils/error-normalization.js';
+
 const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
+ * Walks every own key; an unsafe key is the Session-schema diagnostic that
+ * Load and Save give for any other malformed Session structure (OV-952).
  * @param {unknown} value
- * @param {string} path
  */
-function* safeObjectKeySteps(value, path) {
+function* safeObjectKeySteps(value) {
   if (!value || typeof value !== 'object') return;
   /** @type {unknown[]} */
   const pending = [value];
@@ -15,9 +18,7 @@ function* safeObjectKeySteps(value, path) {
     if (!current || typeof current !== 'object' || seen.has(current)) continue;
     seen.add(current);
     for (const key of Object.keys(current)) {
-      if (UNSAFE_OBJECT_KEYS.has(key)) {
-        throw new Error(`${path} contains unsafe key ${key}.`);
-      }
+      if (UNSAFE_OBJECT_KEYS.has(key)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
       // `key` comes from `Object.keys(current)`.
       pending.push(/** @type {Record<string, unknown>} */ (current)[key]);
       yield;
@@ -26,21 +27,15 @@ function* safeObjectKeySteps(value, path) {
 };
 
 
-/**
- * @param {unknown} value
- * @param {string} [path]
- */
-export const assertSafeObjectKeys = (value, path = 'value') => {
-  for (const _step of safeObjectKeySteps(value, path)) { /* exhaust validation */ }
+/** @param {unknown} value */
+export const assertSafeObjectKeys = (value) => {
+  for (const _step of safeObjectKeySteps(value)) { /* exhaust validation */ }
 };
 
-/**
- * @param {unknown} value
- * @param {string} [path]
- */
-export const assertSafeObjectKeysForImport = async (value, path = 'value') => {
+/** @param {unknown} value */
+export const assertSafeObjectKeysForImport = async (value) => {
   let deadline = performance.now() + 16;
-  for (const _step of safeObjectKeySteps(value, path)) {
+  for (const _step of safeObjectKeySteps(value)) {
     if (performance.now() >= deadline) {
       await new Promise((resolve) => setTimeout(resolve, 0));
       deadline = performance.now() + 16;

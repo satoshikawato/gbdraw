@@ -707,6 +707,35 @@ write-up of a release.
   not text (for example a list holding the 64-character hash), as it drops
   other entries it cannot read. Before, the entry was kept, never reused, and
   written again by Save Session (OV-983).
+- Fixed (web app): when a Session is loaded, a LOSATP Collinear comparison card
+  whose search ran in the other direction than the card (a CLI Session's record
+  grid that places a record above one listed before it) keeps its **Save Raw
+  LOSAT TSV** button, both for the CLI Session itself and after Save Session
+  and Load. Before, the button was missing until the next Generate (OV-987).
+- Fixed (web app): a Session with an unsafe key (`__proto__`, `constructor`,
+  `prototype`) anywhere in the file, for example under `resources`, is refused
+  with "An input value is invalid" and the advice to load a supported Session
+  file. Before, it was refused as a failure without recognized diagnostic
+  information (OV-952).
+- Fixed (web app): when a Session saved by 0.13.0 after a mode switch stores a
+  Legend side outside its Result's mode, the Load dialog lists it as the side
+  of a saved Result ("Legend of a saved Result: ..."), as it does for the same
+  value in a Session saved without a mode switch. Before, it was listed as a
+  Legend setting ("Legend: the position ...") (OV-964).
+- Fixed (web app, interactive SVG): a feature location part whose start or end
+  is missing (null or blank) is read as missing, not as 0. The interactive SVG
+  viewer and the web app's feature details show no location or length for
+  such a part, the FASTA header names no coordinates for it, and neither takes
+  its sequence from the record start. Before, the location began at 1 and the
+  sequence at the record start (OV-968).
+- Fixed (web app, interactive SVG): a Similarity Group member whose start or
+  end is missing (null or blank) shows no coordinate for it in the group
+  popups of the web app and the interactive SVG, gets no `1-20(+)` location as
+  its display ID, and makes Align, and Generate with a saved alignment of
+  that Similarity Group, refuse the whole group with "Similarity Group member
+  N has invalid display facts." (at Generate, after "Alignment needs
+  repair: "), as an undefined start already did; this concerns hand-edited
+  Session data only. Before, the missing value was read as 0 (OV-1010).
 - Web: when **Load Label TSV** is applied while the Label Not Shown dialog is
   open, the dialog is cancelled and the edited label text is not written.
   Before, the dialog disappeared without an answer, and Undo, Redo, Save and
@@ -2172,6 +2201,11 @@ Retired names and their replacements are listed under
   longer derives three values again whose inputs did not change: the feature set the
   color and visibility rules match against, the record and feature names of the
   Similarity alignment drawer, and the Features list. Nothing visible changes.
+- Performance (web app): after "Preparing render inputs and session..." and "Preparing
+  preview..." a Generate no longer waits two animation frames; it yields one task, so these
+  two statuses may not be painted or announced on a fast Generate. The first status still
+  paints before the work starts. A Cancel clicked during either step is still honored there
+  in Chromium: no Worker restart, and the canceled Result is never shown (PD-OI-101).
 - Performance (web app, CLI, Python API): a Generate spends less time in Python. On
   every surface the request contract check is compiled once per type and the overlay
   Legend search stops at the first conflicting obstacle. In the web app, a linear

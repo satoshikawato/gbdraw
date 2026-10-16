@@ -3,7 +3,8 @@ import {
   GBDRAW_WHEEL_CACHE_BUST,
   GBDRAW_WHEEL_NAME,
   PYODIDE_INDEX_URL,
-  PYODIDE_LOCAL_WHEELS
+  PYODIDE_LOCAL_WHEELS,
+  PYODIDE_SNAPSHOT_URL
 } from '../config.js';
 
 const getDefaultBaseUrl = () => globalThis.window?.location?.href || globalThis.location?.href || './';
@@ -48,5 +49,6 @@ export const buildPyodideAssetManifest = (baseUrl = getDefaultBaseUrl()) => ({
   pyodideIndexUrl: resolvePyodideIndexUrl(baseUrl),
   pyodideModuleUrl: resolvePyodideModuleUrl(baseUrl),
   gbdrawWheelUrl: resolveGbdrawWheelUrl(baseUrl),
-  localWheelUrls: resolveLocalDependencyWheelUrls(baseUrl)
+  localWheelUrls: resolveLocalDependencyWheelUrls(baseUrl),
+  pyodideSnapshotUrl: PYODIDE_SNAPSHOT_URL ? resolveAssetUrl(PYODIDE_SNAPSHOT_URL, baseUrl) : null
 });

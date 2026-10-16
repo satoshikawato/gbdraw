@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `55`
+- Contract revision: `56`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -39,7 +39,7 @@ Status: active Product authority
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
-  `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, and `PD-OI-100`
+  `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, and `PD-OI-101`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -1223,6 +1223,32 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 56 changes: `PD-OI-101` is added (`O-B3 / TASK-YIELD`, concern
+  `web.generate.later-status-paint-yields`). It comes from the Product
+  Decision Owner `satoshikawato`'s reply of `2026-10-16` to question
+  `S3C-Q1` of the decision packet in campaign `incremental-render-20261013`,
+  `design/STEP3C-DESIGN.md` revision 3, section 9 (outcomes and their
+  consequences in sections 2 B and 5; `DECISIONS.md` `D-53`).
+  - The question: what a Generate does at its two later paint waits, after
+    "Preparing render inputs and session..." and "Preparing preview...". The
+    outcomes: **O-B3** replace both frame waits by a task yield (recommended),
+    **O-B4** one frame instead of two, **O-B1** drop the yield after
+    "Preparing render inputs and session...", **O-B2** drop both, **O-B0**
+    keep both.
+  - Reply:
+    「S3C-Q1: B3」
+  - The reply names the outcome. The field texts of the receipt below are the
+    O-B3 parts of the receipt fields that the packet proposed (its section 5),
+    with nothing added. The receipt takes effect with the Owner's approval on
+    the pull request that adds this revision; that pull request does not merge
+    without it.
+  - Scope: only the two later status paint waits of a Generate. The paint
+    wait after the first status and the post-bind frame are unchanged.
+    `PD-OI-016` and every other record keep their text; no record is amended
+    or retired.
+  - This change is a static Product Contract co-change: the runtime and tests
+    that implement it are in the same pull request, and the Review is
+    `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -5887,6 +5913,48 @@ Decision date: 2026-10-16
   "mustPreserve": "(a) 「どちらも今の値のまま」 (b) 「確認を出す」",
   "mayRetire": "not stated",
   "acceptedResidualRisk": "not stated",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-16"
+}
+```
+
+### PD-OI-101: Task yield after the later Generate statuses
+
+- Concern key: `web.generate.later-status-paint-yields`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `O-B3 / TASK-YIELD`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner reply quoted verbatim in the Revision 56 entry
+  above. The runtime and tests that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `7f295b16535ec23ede9fdafca1391754fce7f7db250617ce3679b1e563cb658c`.
+
+```text
+PRODUCT_DECISION
+Concern: web.generate.later-status-paint-yields
+Scenario revision: 1
+Choice: O-B3 / TASK-YIELD
+Rationale: warm Generates wait up to 21-50 ms of frame waits for text that lives about one frame
+Must preserve: overlay and first status paint; Worker progress texts; every status value in order; `generate.paint-opportunity-completed` before capture; GE-09 and the pre-commit Cancel in Chromium
+May retire: the paint opportunity of "Preparing render inputs and session..." and "Preparing preview..."
+Accepted residual risk: texts missed on fast Generates; in Firefox or WebKit a queued Cancel may be dispatched after the continuation, giving B1's consequence (cold start after a Cancel in a 42-69 ms window) or B2's (a candidate mounted then restored) in that window
+Owner: satoshikawato
+Decision date: 2026-10-16
+```
+
+```json
+{
+  "concern": "web.generate.later-status-paint-yields",
+  "scenarioRevision": 1,
+  "choice": "O-B3 / TASK-YIELD",
+  "rationale": "warm Generates wait up to 21-50 ms of frame waits for text that lives about one frame",
+  "mustPreserve": "overlay and first status paint; Worker progress texts; every status value in order; `generate.paint-opportunity-completed` before capture; GE-09 and the pre-commit Cancel in Chromium",
+  "mayRetire": "the paint opportunity of \"Preparing render inputs and session...\" and \"Preparing preview...\"",
+  "acceptedResidualRisk": "texts missed on fast Generates; in Firefox or WebKit a queued Cancel may be dispatched after the continuation, giving B1's consequence (cold start after a Cancel in a 42-69 ms window) or B2's (a candidate mounted then restored) in that window",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-16"
 }

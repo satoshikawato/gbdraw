@@ -288,6 +288,17 @@ test('normal Align applies only-usable and unusable targets with one helper and 
   assert.notEqual(fixture.state.results.value, priorResult);
 });
 
+// OV-1010: a member's null or blank bound is missing, not 0, so the member
+// has no display facts and Align sends the helper nothing.
+for (const missing of [null, '', '  ']) {
+  test(`Align refuses a member whose start is ${JSON.stringify(missing)} (OV-1010)`, async () => {
+    const fixture = create({ members: [reference, { ...targetA, start: missing }, targetC] });
+    const outcome = await startAlign(fixture);
+    assert.notEqual(outcome.status, 'ok');
+    assert.equal(fixture.helperCalls.length, 0);
+  });
+}
+
 test('normal Align keeps a missing target unchanged in the resolved plan', async () => {
   const fixture = create({ members: [reference, targetA],
     helper: (_operation, { request }) => ({ result: responseFor(request, { missing: true }) }) });

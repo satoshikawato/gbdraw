@@ -6,6 +6,7 @@ import {
 import {
   createOrthogroupFeatureProjection
 } from './orthogroup-feature-metadata.js';
+import { locationPartBound } from './feature-utils.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -191,8 +192,8 @@ const legacyAnchorProfile = (feature) => {
   const rawParts = feature?.location_parts ?? feature?.locationParts;
   const parts = Array.isArray(rawParts) && rawParts.length ? rawParts : [feature];
   const exactSingle = parts.length === 1
-    && Number.isSafeInteger(Number(parts[0]?.start))
-    && Number.isSafeInteger(Number(parts[0]?.end));
+    && Number.isSafeInteger(locationPartBound(parts[0], 'start'))
+    && Number.isSafeInteger(locationPartBound(parts[0], 'end'));
   return exactSingle ? {
     precision: 'exact',
     operator: 'single',
@@ -1047,8 +1048,8 @@ const reconstructCatalogNucleotideSequence = (
     : [feature];
   const sequences = [];
   for (const part of parts) {
-    const start = Number(part?.start);
-    const end = Number(part?.end);
+    const start = locationPartBound(part, 'start');
+    const end = locationPartBound(part, 'end');
     if (
       !Number.isInteger(start)
       || !Number.isInteger(end)
@@ -1142,8 +1143,8 @@ const restoreCompactBiologicalDefaults = (feature) => {
     if (note) restored.note = Array.from(note).slice(0, 50).join('');
   }
   const parts = restored.location_parts ?? restored.locationParts;
-  const start = Number(restored.start);
-  const end = Number(restored.end);
+  const start = locationPartBound(restored, 'start');
+  const end = locationPartBound(restored, 'end');
   if (
     !Array.isArray(parts)
     && Number.isInteger(start)

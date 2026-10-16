@@ -9,6 +9,7 @@ import {
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
+import { fetchPyodideSnapshot, installRuntimePackages } from './pyodide-snapshot.js';
 
 let runtimePromise = null;
 let runtime = null;
@@ -291,13 +292,25 @@ const ensureLocalAsset = async (url, label) => {
   return url;
 };
 
-const readRuntimeCapabilities = (pyodide) => {
+// The booted runtime with its capabilities. A runtime restored from a Pyodide
+// snapshot first starts this Worker's own state, since the snapshot holds the
+// state of the process that made it (OV-1000), and calls numpy and pandas, so
+// a side module the restore linked wrongly fails here and the page boots cold.
+const SNAPSHOT_BOOT_CHECK = `
+_start_web_worker_state()
+import numpy as _numpy, pandas as _pandas
+if int(_numpy.arange(3).sum()) != 3 or _pandas.DataFrame({'a': [1]}).shape != (1, 1):
+    raise RuntimeError('numpy or pandas returned a wrong result after the snapshot restore')
+del _numpy, _pandas
+`;
+const bootedRuntime = (pyodide, boot) => {
   const raw = pyodide.runPython(`
+${boot === 'snapshot' ? SNAPSHOT_BOOT_CHECK : ''}
 import json as _json
 from gbdraw.api import get_web_runtime_capabilities as _get_web_runtime_capabilities
 _json.dumps(_get_web_runtime_capabilities(), sort_keys=True)
   `);
-  return JSON.parse(String(raw));
+  return { pyodide, capabilities: JSON.parse(String(raw)), boot };
 };
 
 // The first-use preparation steps, reported as they start: a real step
@@ -311,7 +324,8 @@ const initializeRuntime = async ({
   pyodideIndexUrl,
   pyodideModuleUrl,
   localWheelUrls = [],
-  gbdrawWheelUrl
+  gbdrawWheelUrl,
+  pyodideSnapshotUrl = null
 } = {}) => {
   if (runtime) return runtime;
   if (runtimePromise) return runtimePromise;
@@ -328,30 +342,41 @@ const initializeRuntime = async ({
   });
   runtimePromise = (async () => {
     reportStep(0);
-    const { loadPyodide } = await import(pyodideModuleUrl);
+    // A test server may serve a snapshot of the runtime this function builds
+    // (workers/pyodide-snapshot.js); any error restoring it rejects this init.
+    const [{ loadPyodide }, snapshot] = await Promise.all([
+      import(pyodideModuleUrl),
+      pyodideSnapshotUrl ? fetchPyodideSnapshot({ folderUrl: pyodideSnapshotUrl, gbdrawWheelUrl, localWheelUrls }) : null
+    ]);
     const pyodide = await loadPyodide({
       indexURL: pyodideIndexUrl,
-      packageBaseUrl: pyodideIndexUrl
+      packageBaseUrl: pyodideIndexUrl,
+      ...(snapshot && { _loadSnapshot: snapshot.memory, _snapshotDeserializer: snapshot.deserialize })
     });
+    if (snapshot) {
+      reportStep(4);
+      await snapshot.complete(pyodide);
+      runtime = bootedRuntime(pyodide, 'snapshot');
+      return runtime;
+    }
     reportStep(1);
-    await pyodide.loadPackage('micropip');
-    const micropip = pyodide.pyimport('micropip');
-
-    reportStep(2);
-    await Promise.all(
-      localWheelUrls.map((url, index) =>
-        ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
-      )
-    );
-    await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
-    reportStep(3);
-    await micropip.install(localWheelUrls);
-    await micropip.install(gbdrawWheelUrl);
+    await installRuntimePackages(pyodide, {
+      localWheels: localWheelUrls,
+      gbdrawWheel: gbdrawWheelUrl,
+      beforeInstall: async () => {
+        reportStep(2);
+        await Promise.all(
+          localWheelUrls.map((url, index) =>
+            ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
+          )
+        );
+        await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
+        reportStep(3);
+      }
+    });
     reportStep(4);
     await pyodide.runPythonAsync(PYTHON_HELPERS);
-
-    const capabilities = readRuntimeCapabilities(pyodide);
-    runtime = { pyodide, capabilities };
+    runtime = bootedRuntime(pyodide, 'cold');
     return runtime;
   })();
 
@@ -1294,7 +1319,16 @@ const handleWorkerMessage = async (data) => {
   const { id, requestId, type } = data;
   try {
     if (type === 'init') {
-      const initialized = await initializeRuntime(data);
+      let initialized;
+      try {
+        initialized = await initializeRuntime(data);
+      } catch (error) {
+        if (!data.pyodideSnapshotUrl) throw error;
+        // Any snapshot restore error: the page replaces this Worker with one
+        // that boots cold (services/diagram-generation.js).
+        self.postMessage({ id, type: 'init', ok: false, snapshotError: String(error?.context?.detail || error?.message || error) });
+        return;
+      }
       // The replay of the page's fonts into a new Worker, font by font; the
       // reply names each font it lost (OV-686), and a Generate that names one
       // fails (FONT_NOT_LOADED).
@@ -1304,7 +1338,8 @@ const handleWorkerMessage = async (data) => {
         type: 'init',
         ok: true,
         capabilities: initialized.capabilities,
-        lostFonts
+        lostFonts,
+        boot: initialized.boot
       });
       return;
     }

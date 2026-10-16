@@ -1082,6 +1082,78 @@ test('visible protein cache entries from the frozen v39 session recover stable e
   );
 });
 
+// OV-987: a Collinear display search can run in the other orientation than the
+// edge whose card shows it (a CLI grid that places a record above one listed
+// before it). Save writes the search's record instance keys and the edge's
+// fields; Load keeps the edge, as Generate does.
+test('a visible cache entry stored against its edge orientation keeps the edge at Load', async () => {
+  alerts.length = 0;
+  const sessionData = frozenV39Session();
+  const entries = sessionData.losatCache.entries;
+  const [edgeEntry] = entries.filter((entry) => entry.display !== false);
+  const reversed = entries.find((entry) => (
+    entry.queryRecordInstanceKey === edgeEntry.subjectRecordInstanceKey
+    && entry.subjectRecordInstanceKey === edgeEntry.queryRecordInstanceKey
+  ));
+  const edgeQueryUid = edgeEntry.queryRecordInstanceKey;
+  const edgeSubjectUid = edgeEntry.subjectRecordInstanceKey;
+  edgeEntry.display = false;
+  Object.assign(reversed, {
+    display: true,
+    filename: 'reversed.tsv',
+    edgeKey: `${edgeQueryUid}->${edgeSubjectUid}`,
+    queryUid: edgeQueryUid,
+    subjectUid: edgeSubjectUid,
+    queryIndex: 0,
+    subjectIndex: 1,
+    ordinal: 0
+  });
+  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const result = await importSession(
+    { target: { files: [file], value: 'selected' } },
+    { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
+  );
+
+  assert.equal(result.status, 'ok');
+  const row = state.losatCacheInfo.value.find((entry) => entry.key === reversed.key);
+  assert.deepEqual(
+    [row?.edgeKey, row?.queryUid, row?.subjectUid, row?.queryIndex, row?.subjectIndex, row?.ordinal],
+    [`${edgeQueryUid}->${edgeSubjectUid}`, edgeQueryUid, edgeSubjectUid, 0, 1, 0]
+  );
+});
+
+// OV-987, CLI-written entry: the CLI stores only the search's record instance
+// keys; a display search in the other orientation than its edge takes the edge.
+test('a CLI-written visible cache entry stored against its edge orientation takes the edge at Load', async () => {
+  alerts.length = 0;
+  const sessionData = frozenV39Session();
+  const entries = sessionData.losatCache.entries;
+  const [edgeEntry] = entries.filter((entry) => entry.display !== false);
+  const reversed = entries.find((entry) => (
+    entry.queryRecordInstanceKey === edgeEntry.subjectRecordInstanceKey
+    && entry.subjectRecordInstanceKey === edgeEntry.queryRecordInstanceKey
+  ));
+  const edgeQueryUid = edgeEntry.queryRecordInstanceKey;
+  const edgeSubjectUid = edgeEntry.subjectRecordInstanceKey;
+  edgeEntry.display = false;
+  reversed.display = true;
+  for (const field of ['edgeKey', 'queryUid', 'subjectUid', 'queryIndex', 'subjectIndex', 'ordinal']) {
+    assert.equal(reversed[field], undefined, field);
+  }
+  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const result = await importSession(
+    { target: { files: [file], value: 'selected' } },
+    { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
+  );
+
+  assert.equal(result.status, 'ok');
+  const row = state.losatCacheInfo.value.find((entry) => entry.key === reversed.key);
+  assert.deepEqual(
+    [row?.edgeKey, row?.queryUid, row?.subjectUid, row?.queryIndex, row?.subjectIndex, row?.ordinal],
+    [`${edgeQueryUid}->${edgeSubjectUid}`, edgeQueryUid, edgeSubjectUid, 0, 1, 0]
+  );
+});
+
 test('a conflicting restored edge key is not exposed under the wrong endpoints', async () => {
   alerts.length = 0;
   const sessionData = frozenV39Session();
@@ -1282,5 +1354,26 @@ for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
     assert.deepEqual(state.errorLog.value, result.error);
     assert.deepEqual(alerts, []);
     assert.equal(event.target.value, '');
+  });
+}
+
+// OV-952: an unsafe own key anywhere in the file (here under `resources`) is
+// refused with the Session-schema diagnostic, not as an unknown failure.
+for (const key of ['__proto__', 'constructor', 'prototype']) {
+  test(`session import refuses the unsafe key ${key} under resources with a classified diagnostic`, async () => {
+    alerts.length = 0;
+    const text = JSON.stringify(syntheticConservationSession())
+      .replace('"resources":{', `"resources":{"${key}":{},`);
+    assert.ok(text.includes(`"${key}":{}`));
+    const event = { target: { files: [new Blob([text], { type: 'application/json' })], value: 'selected' } };
+    const result = await importSession(event);
+    assert.equal(result.status, 'error');
+    assert.deepEqual(
+      [result.error.code, result.error.operation, result.error.stage, result.error.context],
+      ['INPUT_INVALID', 'session-load', 'request-validation', { field: 'schema', reason: 'FIELDS' }]
+    );
+    assert.ok(!JSON.stringify(result.error).includes(key));
+    assert.deepEqual(state.errorLog.value, result.error);
+    assert.deepEqual(alerts, []);
   });
 }

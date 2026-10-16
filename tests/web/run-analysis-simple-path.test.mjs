@@ -553,29 +553,9 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
   assert.equal(outcome.annotationWarnings[0].resultName, 'HmmtDNA_basic_circular');
 });
 
-test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
-  const structuralMetrics = {};
-  const lifecycleEvents = [];
-  globalThis.__GBDRAW_TEST_HOOKS__ = {
-    onStructuralMetric(metric) {
-      structuralMetrics[metric.name] = (
-        Number(structuralMetrics[metric.name] || 0) + Number(metric.value || 0)
-      );
-    },
-    onSessionLifecycleEvent({ name }) {
-      lifecycleEvents.push(name);
-    }
-  };
-  const primary = new AuditFile(['LOCUS       audit\nORIGIN\n//\n'], 'active.gb', {
-    type: 'text/plain',
-    lastModified: 7
-  });
-  const fallbackPrimary = new AuditFile(['record parser fallback'], 'fallback.gb', {
-    type: 'application/octet-stream',
-    lastModified: 8
-  });
-  const inactive = new AuditInactiveFile(['unused'], 'inactive.dat');
-
+// One Circular GenBank input whose other slots hold files no run may read.
+/** @param {AuditFile} primary @param {AuditInactiveFile} inactive */
+const installSimpleCircularInput = (primary, inactive) => {
   state.mode.value = 'circular';
   state.cInputType.value = 'gb';
   state.files.c_gb = primary;
@@ -621,6 +601,32 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     region_end: null,
     region_reverse: false
   });
+};
+
+test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
+  const structuralMetrics = {};
+  const lifecycleEvents = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric(metric) {
+      structuralMetrics[metric.name] = (
+        Number(structuralMetrics[metric.name] || 0) + Number(metric.value || 0)
+      );
+    },
+    onSessionLifecycleEvent({ name }) {
+      lifecycleEvents.push(name);
+    }
+  };
+  const primary = new AuditFile(['LOCUS       audit\nORIGIN\n//\n'], 'active.gb', {
+    type: 'text/plain',
+    lastModified: 7
+  });
+  const fallbackPrimary = new AuditFile(['record parser fallback'], 'fallback.gb', {
+    type: 'application/octet-stream',
+    lastModified: 8
+  });
+  const inactive = new AuditInactiveFile(['unused'], 'inactive.dat');
+
+  installSimpleCircularInput(primary, inactive);
 
   let adoptedArtifacts = 0;
   let lastAdoptedCanonical = null;
@@ -2637,6 +2643,110 @@ test('a render that reuses the held catalog build keeps the catalog object the p
     await run({ heldFeatureCatalog: catalog });
     assert.deepEqual(lastHeld(), heldRevision);
   } finally {
+    globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+  }
+});
+
+// Step 3c B3 (D-53): after the first status a Generate yields one task, not two
+// frames, at "Preparing render inputs and session..." and "Preparing preview...".
+// The fake yield is a macrotask, so a Cancel queued as a task while a status
+// shows (a click during busy work) runs before the run continues: GE-09 keeps
+// the warm Worker before the post, and a Cancel during admission ends the run
+// before it commits or mounts the candidate.
+test('a Generate yields one frame wait and two task yields, and a Cancel queued at either later status ends the run there (3c B3)', async () => {
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  const events = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent({ name }) { events.push(name); } };
+  installSimpleCircularInput(
+    new AuditFile(['LOCUS       audit\nORIGIN\n//\n'], 'yield.gb', { type: 'text/plain', lastModified: 9 }),
+    new AuditInactiveFile(['unused'], 'inactive.dat')
+  );
+  const waits = { afterPaint: 0, task: 0 };
+  // The status a queued Cancel targets; the setter queues it as a task the
+  // moment the run writes that status.
+  let cancelAt = '';
+  const cancelReturns = [];
+  const statusRef = state.processingStatus;
+  let statusValue = statusRef.value;
+  Object.defineProperty(statusRef, 'value', {
+    configurable: true,
+    get: () => statusValue,
+    set: (value) => {
+      statusValue = value;
+      if (cancelAt && value === cancelAt) {
+        cancelAt = '';
+        setTimeout(() => cancelReturns.push(runner.cancelRunAnalysis()), 0);
+      }
+    }
+  });
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    previewRuntime: createImmediatePreviewRuntime({ onEvent: (name) => events.push(name) }),
+    waitForAfterPaint: async () => { waits.afterPaint += 1; },
+    yieldToTask: () => {
+      waits.task += 1;
+      return new Promise((resolve) => setTimeout(resolve, 0));
+    },
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  const runPosts = () => workerMessages.filter(({ type }) => type === 'run').length;
+  const statusOrder = (values) => values.filter((value) => [
+    'Preparing input files...', 'Preparing render inputs and session...', 'Preparing preview...'
+  ].includes(value)).filter((value, index, kept) => value !== kept[index - 1]);
+  try {
+    const committed = result('yield.svg', 'committed');
+    workerResponses.push(response(committed, validCatalog(committed.name)));
+    const statuses = [];
+    const recordStatuses = Object.getOwnPropertyDescriptor(statusRef, 'value').set;
+    Object.defineProperty(statusRef, 'value', {
+      configurable: true,
+      get: () => statusValue,
+      set: (value) => { statuses.push(value); recordStatuses(value); }
+    });
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(waits, { afterPaint: 1, task: 2 });
+    assert.deepEqual(statusOrder(statuses), [
+      'Preparing input files...', 'Preparing render inputs and session...', 'Preparing preview...'
+    ]);
+    assert.ok(events.includes('generate.paint-opportunity-completed'));
+    const committedResults = state.results.value;
+
+    // Cancel queued at "Preparing render inputs and session...": seen before
+    // the post, with no Worker request to end (GE-09).
+    const postsBefore = runPosts();
+    events.length = 0;
+    cancelAt = 'Preparing render inputs and session...';
+    await runner.runAnalysis();
+    assert.equal(runPosts(), postsBefore);
+    assert.deepEqual(cancelReturns.splice(0), [false]);
+    assert.equal(state.processingStatus.value, 'Canceled.');
+    assert.equal(state.results.value, committedResults);
+
+    // Cancel queued at "Preparing preview...": seen before the commit, so the
+    // candidate is neither committed nor mounted.
+    const candidate = result('yield.svg', 'candidate');
+    workerResponses.push(response(candidate, validCatalog(candidate.name)));
+    events.length = 0;
+    cancelAt = 'Preparing preview...';
+    await runner.runAnalysis();
+    assert.equal(runPosts(), postsBefore + 1);
+    assert.deepEqual(cancelReturns.splice(0), [false]);
+    assert.equal(state.processingStatus.value, 'Canceled.');
+    assert.equal(state.results.value, committedResults);
+    assert.equal(events.includes('test.preview-mounted'), false);
+    assert.deepEqual(waits, { afterPaint: 3, task: 5 });
+  } finally {
+    delete statusRef.value;
+    statusRef.value = statusValue;
     globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
   }
 });

@@ -11,7 +11,7 @@ import {
   orthogroupIdStatus
 } from '../services/feature-identity.js';
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
-import { isInternalProteinDisplayId } from '../services/feature-utils.js';
+import { isInternalProteinDisplayId, locationPartBound } from '../services/feature-utils.js';
 import { recordsNeedingChoice } from '../services/alignment-review-view.js';
 import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
@@ -317,8 +317,8 @@ const featureNameParts = (anchor, facts = {}, fallback = '') => {
     const ids = [locusTag, proteinId].filter((value) => value && value !== name);
     return { name, ids, label: [name, ...ids].join(' · ') };
   }
-  const start = Number(feature.start ?? facts.start);
-  const end = Number(feature.end ?? facts.end);
+  const start = locationPartBound(feature.start == null ? facts : feature, 'start');
+  const end = locationPartBound(feature.end == null ? facts : feature, 'end');
   const coordinates = Number.isSafeInteger(start) && Number.isSafeInteger(end)
     ? `${(start + 1).toLocaleString('en-US')}..${end.toLocaleString('en-US')} bp` : '';
   const typeName = [displayText(feature.type, facts.type) || 'Feature', coordinates].filter(Boolean).join(' ');
@@ -1111,8 +1111,8 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
   const displayedRecords = new Set(records.map(({ recordKey }) => recordKey));
   const normalizedMembers = members.map((member, index) => {
     const anchor = anchorFromSource(member, `Similarity Group member ${index + 1}`);
-    const start = Number(member?.start);
-    const end = Number(member?.end);
+    const start = locationPartBound(member, 'start');
+    const end = locationPartBound(member, 'end');
     if (
       !displayedRecords.has(anchor.recordKey)
       || !Number.isSafeInteger(start)
@@ -1764,13 +1764,15 @@ export const createSimilarityAlignmentActions = ({
       try {
         const anchor = anchorFromSource(member, 'Drawer reference');
         const record = shortRecordName(records.get(anchor.recordKey)) || 'Unavailable record';
+        const start = locationPartBound(member, 'start');
+        const end = locationPartBound(member, 'end');
         return {
           anchor,
           canonicalKey: `${anchor.recordKey}\0${anchor.biologicalFeatureId}`,
           key: anchorKey(anchor),
           label: `${record} · ${featureNameParts(anchor, factsOf(anchor) || member).name}`,
-          location: `${(Number(member?.start) + 1).toLocaleString('en-US')}..`
-            + `${Number(member?.end).toLocaleString('en-US')} `
+          location: `${Number.isSafeInteger(start) ? (start + 1).toLocaleString('en-US') : ''}..`
+            + `${Number.isSafeInteger(end) ? end.toLocaleString('en-US') : ''} `
             + `(${strandLabel(strandValue(member?.strand, 'Drawer reference strand'))})`
         };
       } catch (_error) {
