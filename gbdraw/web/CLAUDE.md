@@ -125,6 +125,7 @@ in the same change.
 | Rendered-ID feature edits of Sessions 44 and older, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows; `hash=` annotation targets of Sessions 40–44 (R-7); drawn-hash `hash` color rules of Sessions 44 and older, renamed to source hashes | `js/services/feature-edit-migration.js` (Python twins in `gbdraw/session_io.py`: `migrate_session_feature_edits`, `migrate_session_annotation_targets`, `migrate_session_hash_rules`; the CLI replay of a request also uses their mapper `source_hash_selector_value`) |
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
+| Load's reading of saved color and stroke edits (a Legend row's `colorOverrides` and `strokeOverrides`, a feature's stroke overrides) for Session Load and the Session 46 Legend reading | `js/services/style-overrides.js` (Python: `_legend_color_overrides`, `_stroke_override_map`, `_stroke_width` in `gbdraw/session_io.py`) |
 | History transactions and availability | `js/services/history.js`, `js/app/history-inputs.js`, `js/services/history-snapshot.js` |
 | Error producer contract and user-facing wording | `js/utils/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
 | Numeric draft projection | `js/utils/optional-positive-number.js` (`projectOptionalNumber`) |
@@ -707,18 +708,10 @@ authority-only change. A new module is checked from its first commit.
   `tests/web/types/web-globals.d.ts`.
 - `@ts-ignore`, `@ts-expect-error`, and `@ts-nocheck` are not used: fix the
   type, cast with JSDoc, or fix the code.
-- `noImplicitAny` is not yet on in the guard config.
-  `tests/web/types/tsconfig.no-implicit-any.json` is the guard config plus
-  `noImplicitAny`, and `NO_IMPLICIT_ANY_BASELINE` in
-  `tests/web/no-implicit-any-ratchet.test.mjs` records its diagnostics per
-  module. A module stays at or below its entry, and a module without an entry,
-  including a new module, has none: a new parameter or variable declares its
-  type, or the collection a callback iterates is typed. Lowering or removing
-  an entry is optional. Adding or raising an entry is an authority-only
-  change. When the map is empty, an authority-only pull request turns
-  `noImplicitAny` on in the guard config and deletes the ratchet.
-- Explicit `any` in JSDoc (`any`, `*`, `Object`, or a type that resolves to
-  `any`, such as an alias of it) is type debt. `EXPLICIT_ANY_BASELINE` in
+- `noImplicitAny` is on in the guard config: a parameter or variable
+  declares its type, or the collection a callback iterates is typed.
+- Explicit `any` in JSDoc (`any`, `*`, or a type that resolves to `any`, such
+  as an alias of it) is type debt. `EXPLICIT_ANY_BASELINE` in
   `tests/web/explicit-any-ratchet.test.mjs` records it per module: a module
   stays at or below its entry, and new code declares a type or uses
   `unknown`. A module without an entry, including a new module, has none.
@@ -729,9 +722,7 @@ authority-only change. A new module is checked from its first commit.
 
 Guards: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
 run, declared factory parameters, no suppression, type-import direction, no
-second declaration of a generated typedef or constant),
-`tests/web/no-implicit-any-ratchet.test.mjs` (`noImplicitAny` diagnostics per
-module), and
+second declaration of a generated typedef or constant) and
 `tests/web/explicit-any-ratchet.test.mjs` (explicit `any` per module). They
 run the `typescript` version pinned in `package.json` and fail until `npm ci`
 has installed it. `tests/test_web_contracts_generated.py` checks that the
