@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import shutil
 from time import perf_counter
-from typing import Any, Iterator, Mapping, MutableMapping, TypedDict, cast
+from typing import AbstractSet, Any, Iterator, Literal, Mapping, MutableMapping, TypedDict, cast
 
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
@@ -20,10 +20,11 @@ from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
     PreparedResourceIdentity,
 )
-from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.exceptions import ExportError, LabelsDoNotFitError, ValidationError
 from gbdraw.io.colors import rule_captions_as_written
 from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
 from gbdraw.legend.row_facts import collect_legend_row_facts
+from gbdraw.render.document import ContentPiece, DocumentParts, document_parts
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -44,6 +45,40 @@ from gbdraw.web_support.label_fit import LabelFitMode, LabelFitRowSearches, labe
 WEB_LABEL_FIT_WARN_SEARCH_SECONDS = 0.0
 
 
+class _WebContentPieceFields(TypedDict):
+    kind: Literal["content"]
+    start: str
+    revision: str
+    bytes: int
+
+
+class WebContentPiece(_WebContentPieceFields, total=False):
+    """A placed content group: ``children`` only when the page does not hold ``revision``."""
+
+    children: str
+
+
+class WebRawPiece(TypedDict):
+    kind: Literal["raw"]
+    text: str
+
+
+class WebDocument(TypedDict):
+    """The root start tag, the top-level pieces in order, and the root end tag."""
+
+    head: str
+    tail: str
+    pieces: list[WebContentPiece | WebRawPiece]
+
+
+class WebRenderResult(TypedDict):
+    """One SVG Result: the written file text, and the same text as pieces for the Worker."""
+
+    name: str
+    content: str
+    document: WebDocument
+
+
 class WebRenderReply(TypedDict):
     """One Web render: the SVG Results, the run metadata, and the feature catalog beside them.
 
@@ -53,7 +88,7 @@ class WebRenderReply(TypedDict):
     input cache has no revision and always returns the catalog.
     """
 
-    results: list[dict[str, str]]
+    results: list[WebRenderResult]
     metadata: dict[str, Any]
     featureCatalog: dict[str, object] | None
     featureCatalogRevision: str | None
@@ -117,6 +152,35 @@ def _base_svg_path(item: RequestRenderResult) -> Path:
     )
 
 
+def _web_document(
+    parts: DocumentParts,
+    file_text: str,
+    held_segments: AbstractSet[str],
+) -> WebDocument:
+    """The reply form of ``parts``: a held revision is named without its text."""
+
+    pieces: list[WebContentPiece | WebRawPiece] = []
+    length = len(parts.prolog) + len(parts.head) + len(parts.tail)
+    for piece in parts.pieces:
+        if isinstance(piece, ContentPiece):
+            content: WebContentPiece = {
+                "kind": "content",
+                "start": piece.start,
+                "revision": piece.revision,
+                "bytes": piece.byte_length,
+            }
+            if piece.revision not in held_segments:
+                content["children"] = piece.children
+            pieces.append(content)
+            length += len(piece.start) + len(piece.children) + len("</g>")
+        else:
+            pieces.append({"kind": "raw", "text": piece.text})
+            length += len(piece.text)
+    if length != len(file_text):
+        raise ExportError("The Web document pieces do not match the written SVG.")
+    return {"head": parts.head, "tail": parts.tail, "pieces": pieces}
+
+
 def render_canonical_web_request(
     payload: Mapping[str, Any],
     *,
@@ -136,6 +200,7 @@ def render_canonical_web_request(
         _resource_identities=None,
         _label_fit_searches=_label_fit_searches,
         _held_feature_catalog_revision=None,
+        _held_segments=frozenset(),
     )
 
 
@@ -149,6 +214,7 @@ def _render_canonical_web_request_with_prepared_inputs(
     _resource_identities: Mapping[str, PreparedResourceIdentity] | None,
     _label_fit_searches: LabelFitRowSearches | None,
     _held_feature_catalog_revision: str | None,
+    _held_segments: AbstractSet[str],
 ) -> WebRenderReply:
     def render() -> WebRenderReply:
         # The request's color table is the app's rule list, not a saved file.
@@ -160,6 +226,7 @@ def _render_canonical_web_request_with_prepared_inputs(
                 diagnostics=_diagnostics,
                 label_fit_searches=_label_fit_searches,
                 held_feature_catalog_revision=_held_feature_catalog_revision,
+                held_segments=_held_segments,
             )
 
     if _prepared_input_cache is None:
@@ -191,6 +258,7 @@ def _render_canonical_web_request(
     diagnostics: MutableMapping[str, Any] | None,
     label_fit_searches: LabelFitRowSearches | None,
     held_feature_catalog_revision: str | None,
+    held_segments: AbstractSet[str],
 ) -> WebRenderReply:
 
     if not isinstance(payload, Mapping):
@@ -229,7 +297,7 @@ def _render_canonical_web_request(
     else:
         items = (rendered,)
 
-    results: list[dict[str, str]] = []
+    results: list[WebRenderResult] = []
     geometry_records: list[dict[str, Any]] = []
     feature_catalog_items: list[dict[str, Any]] = []
     legend_rows: list[dict[str, Any]] = []
@@ -238,10 +306,12 @@ def _render_canonical_web_request(
         result_name = path.name
         with _web_render_diagnostic_phase(diagnostics, "svgReadback"):
             svg_content = path.read_text(encoding="utf-8")
+            document = _web_document(document_parts(item.drawing), svg_content, held_segments)
         results.append(
             {
                 "name": result_name,
                 "content": svg_content,
+                "document": document,
             }
         )
         with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
@@ -471,6 +541,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
     _resource_identities: Mapping[str, Mapping[str, Any]] | None = None,
     _label_fit_searches: LabelFitRowSearches | None = None,
     _held_feature_catalog_revision: str | None = None,
+    _held_segments: AbstractSet[str] = frozenset(),
 ) -> WebRenderReply:
     if not isinstance(resource_paths, Mapping):
         raise ValidationError("The staged Web render resource map must be an object.")
@@ -535,6 +606,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             _resource_identities=validated_identities,
             _label_fit_searches=_label_fit_searches,
             _held_feature_catalog_revision=_held_feature_catalog_revision,
+            _held_segments=_held_segments,
         )
     except BaseException as exc:
         render_error = exc
