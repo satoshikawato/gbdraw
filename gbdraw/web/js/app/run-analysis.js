@@ -249,7 +249,7 @@ export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } =
 // arrived during the work before it first, so a Cancel clicked then is seen
 // before the run goes on; the status set just before may not paint.
 /** @returns {Promise<void>} */
-const afterTask = () => new Promise((resolve) => { setTimeout(resolve, 0); });
+export const afterTask = () => new Promise((resolve) => { setTimeout(resolve, 0); });
 
 export const afterFrame = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
   if (typeof requestFrame !== 'function') return Promise.resolve();
