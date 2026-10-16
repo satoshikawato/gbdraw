@@ -974,9 +974,12 @@ export const validateFeatureCatalog = (catalog, results, options = {}) => (
   admitFeatureCatalog(catalog, results, options).catalog
 );
 
-/** @param {object | null | undefined} catalog */
+/**
+ * @param {unknown} catalog
+ * @returns {catalog is FeatureCatalog} Only `admitFeatureCatalog` adds to the set, and only a checked catalog.
+ */
 export const isAdoptedFeatureCatalog = (catalog) => (
-  Boolean(catalog) && adoptedFeatureCatalogs.has(/** @type {object} */ (catalog)) // `Boolean(catalog)` proves it
+  typeof catalog === 'object' && catalog !== null && adoptedFeatureCatalogs.has(catalog)
 );
 
 /**
