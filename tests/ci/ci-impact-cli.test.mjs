@@ -655,11 +655,17 @@ test('CLI rejects unknown arguments and invalid profile/event contracts', async 
   );
 });
 
+const readTestsWorkflow = () => readFileSync(
+  resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8'
+);
+// One job of a workflow's text, from its `  <id>:` line to the next job; '' when absent.
+const workflowJobOf = (workflow, jobId) => workflow.match(
+  new RegExp(`\\n  ${jobId}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
+)?.[0] || '';
+
 test('workflow keeps trusted PR routing and activates protected dev routing', () => {
-  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
-  const workflowJob = (jobId) => workflow.match(
-    new RegExp(`\\n  ${jobId}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
-  )?.[0];
+  const workflow = readTestsWorkflow();
+  const workflowJob = (jobId) => workflowJobOf(workflow, jobId);
 
   assert.match(workflow, /actions: read/);
   assert.doesNotMatch(workflow, /\n    paths(?:-ignore)?:/);
@@ -751,9 +757,48 @@ test('workflow keeps trusted PR routing and activates protected dev routing', ()
   assert.doesNotMatch(devGate, /test "\$\{\{ needs\./);
 });
 
+test('a failed fast job cancels the rest of its pull request run, never a dev run', () => {
+  const workflow = readTestsWorkflow();
+  // The job's last step, so its `if: always()` and `if: failure()` steps run first.
+  const cancelStep = new RegExp([
+    '\\n      - name: Cancel this run on failure\\n',
+    "        if: failure\\(\\) && github\\.event_name == 'pull_request'\\n",
+    '        env:\\n',
+    '          GH_TOKEN: \\$\\{\\{ github\\.token \\}\\}\\n',
+    '          # [^\\n]*\\n',
+    '          GH_REPO: \\$\\{\\{ github\\.repository \\}\\}\\n',
+    '        run: gh run cancel "\\$GITHUB_RUN_ID"\\n?$'
+  ].join(''));
+  // A job-level block replaces the workflow-level one, so it lists every permission the job uses.
+  const jobPermissions = '\n    permissions:\n      contents: read\n      actions: write\n';
+  const failFastJobs = [
+    'lint', 'web-change-budget', 'web-pr-smoke', 'core-pr', 'web-contracts-pr',
+    'recipes-standard', 'gallery'
+  ];
+  for (const jobId of failFastJobs) {
+    const job = workflowJobOf(workflow, jobId);
+    assert.ok(job, jobId);
+    assert.match(job, cancelStep, `${jobId} must end with the guarded cancel step`);
+    assert.ok(job.includes(jobPermissions), `${jobId} must grant contents: read and actions: write`);
+  }
+  // A started dev push run is never cancelled: it must leave exact-SHA evidence.
+  for (const jobId of [
+    'core', 'browser', 'playwright-functional', 'playwright-performance',
+    'acceptance-supported-main', 'slow-main', 'vibrio-generate-release',
+    'losat-cache-browser-acceptance'
+  ]) {
+    const job = workflowJobOf(workflow, jobId);
+    assert.ok(job, jobId);
+    assert.doesNotMatch(job, /gh run cancel|actions: write/, jobId);
+  }
+  assert.equal(workflow.match(/gh run cancel/g)?.length ?? 0, failFastJobs.length);
+  assert.equal(workflow.match(/actions: write/g)?.length ?? 0, failFastJobs.length);
+  assert.match(workflow.split('\njobs:\n')[0], /\npermissions:\n  contents: read\n  actions: read\n/);
+});
+
 test('every planned job is a gate dependency that can run for its profile', () => {
-  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
-  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const workflow = readTestsWorkflow();
+  const job = (id) => workflowJobOf(workflow, id);
   const needs = (id) => job(id).match(/\n    needs:\n((?:      - [a-z0-9-]+\n)+)/)?.[1]
     .trim().split('\n').map((line) => line.replace('- ', '').trim()) || [];
   for (const [profile, gate, event] of [
@@ -803,8 +848,8 @@ test('release dispatch is exhaustive and cannot be inferred from a routine push'
 });
 
 test('release workflow binds exhaustive matrices and package/browser contracts to its gate', () => {
-  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
-  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const workflow = readTestsWorkflow();
+  const job = (id) => workflowJobOf(workflow, id);
   const release = job('release-gate');
   assert.match(release, /CI_IMPACT_EXPECTED_PROFILE: release/);
   assert.match(release, /inputs\.tier == 'release'/);
@@ -824,8 +869,8 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
 });
 
 test('Gallery alone owns PR parity without expanding dev or release execution', () => {
-  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
-  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const workflow = readTestsWorkflow();
+  const job = (id) => workflowJobOf(workflow, id);
   const gallery = job('gallery');
   const smoke = job('web-pr-smoke');
   assert.equal((workflow.match(/run: npm run test:web:gallery-publication/g) || []).length, 1);
@@ -849,8 +894,8 @@ test('Gallery alone owns PR parity without expanding dev or release execution', 
 });
 
 test('browser jobs seed apt from one verified cache and bound their test steps', () => {
-  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
-  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const workflow = readTestsWorkflow();
+  const job = (id) => workflowJobOf(workflow, id);
   const step = (source, name) => source.match(
     new RegExp(`\\n      - name: ${name}\\n[\\s\\S]*?(?=\\n      - |$)`)
   )?.[0] || '';
@@ -966,9 +1011,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
 
 test('aggregate gates and the Gallery planner tolerate a slow checkout', () => {
   const read = (path) => readFileSync(resolve(REPOSITORY_ROOT, path), 'utf8');
-  const jobIn = (workflow, id) => workflow.match(
-    new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
-  )?.[0] || '';
+  const jobIn = workflowJobOf;
   const tests = read('.github/workflows/test.yml');
   const gallery = read('.github/workflows/gallery-publication.yml');
   // A checkout alone has taken 63 s, so a 1-minute gate can cancel a run whose jobs all passed.
@@ -1387,8 +1430,7 @@ test('classify reports carry-forward verdicts from local Git data only', async (
 });
 
 test('functional shards skip setup when no changed spec is assigned to them', () => {
-  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
-  const job = workflow.match(/\n  playwright-functional:\n[\s\S]*?(?=\n  [a-z0-9-]+:\n|$)/)?.[0] || '';
+  const job = workflowJobOf(readTestsWorkflow(), 'playwright-functional');
   const step = (name) => job.match(new RegExp(`\\n      - name: ${name}\\n[\\s\\S]*?(?=\\n      - |$)`))?.[0] || '';
   const select = step('Select the changed specs of this shard');
   assert.match(select, /id: shard/);
@@ -1530,7 +1572,7 @@ test('control-plane merges, Gallery pushes, and pull requests never read pull re
 });
 
 test('pull request runs record the tested tree and planned jobs under the planner prefix', () => {
-  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const workflow = readTestsWorkflow();
   const planner = workflow.slice(workflow.indexOf('  ci-impact:\n'), workflow.indexOf('  web-change-budget:\n'));
   assert.match(planner, /tree="\$\(git rev-parse "\$\{GITHUB_SHA\}\^\{tree\}"\)"/);
   assert.ok(planner.includes(`echo "name=${PR_PLAN_RECORD_PREFIX}\${tree}\${jobs}" >> "$GITHUB_OUTPUT"`));

@@ -142,6 +142,17 @@ replaced has no evidence of its own; the newer run tests a tree that contains
 it, and a light push on top of it inherits nothing. Pull request runs and manual
 dispatches still cancel the run they supersede.
 
+Fail-fast on pull requests: when `Lint`, `Web change budget`, `Core PR`,
+`Web contracts`, `Web PR smoke`, `Recipes standard`, or `Gallery` fails in a
+pull request run, its last step runs `gh run cancel` on that run, so the
+`Playwright functional` shards and other jobs still running stop. Those jobs
+alone get `actions: write`; the workflow default stays read-only. The step
+checks `github.event_name == 'pull_request'`, so a `dev` push or a manual
+dispatch is never cancelled and still leaves its exact-SHA evidence. A shard
+cancelled this way loses no evidence: the commit has already failed, and
+`PR / gate` still runs and fails. `tests/ci/ci-impact-cli.test.mjs` pins the
+step and the permissions.
+
 ### Light-change inheritance
 
 A `dev` push inherits evidence only from its direct parent

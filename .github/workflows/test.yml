@@ -127,6 +127,9 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
+    permissions:
+      contents: read
+      actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -180,6 +183,14 @@ jobs:
               --recurse-submodules=no --filter=blob:none --stdin
           node --test tests/web/owner-graph-replay.test.mjs
 
+      - name: Cancel this run on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Names the repository even when the checkout step is the one that failed.
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
+
   core:
     name: Core (Python ${{ matrix.python-version }})
     needs: ci-impact
@@ -227,6 +238,9 @@ jobs:
       github.event_name == 'pull_request' && github.base_ref == 'dev' &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core-pr')
+    permissions:
+      contents: read
+      actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -254,6 +268,14 @@ jobs:
         if: always()
         run: git diff --exit-code -- tests/reference_outputs/
 
+      - name: Cancel this run on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Names the repository even when the checkout step is the one that failed.
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
+
   recipes-standard:
     name: Recipes standard (Python 3.11)
     needs: ci-impact
@@ -264,6 +286,9 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
+    permissions:
+      contents: read
+      actions: write
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -286,6 +311,14 @@ jobs:
           -m "recipe and not slow"
           --durations=30
 
+      - name: Cancel this run on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Names the repository even when the checkout step is the one that failed.
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
+
   gallery:
     name: Gallery (Python 3.11)
     needs: ci-impact
@@ -296,6 +329,9 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
+    permissions:
+      contents: read
+      actions: write
     runs-on: ubuntu-latest
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 25
@@ -385,6 +421,14 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Cancel this run on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Names the repository even when the checkout step is the one that failed.
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
 
   browser:
     name: Browser (Python 3.11)
@@ -492,6 +536,9 @@ jobs:
       needs.ci-impact.result == 'success' &&
       (contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-contracts-pr') ||
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke'))
+    permissions:
+      contents: read
+      actions: write
     runs-on: ubuntu-latest
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 20
@@ -565,6 +612,14 @@ jobs:
           -m "browser and not slow"
           --durations=30
 
+      - name: Cancel this run on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Names the repository even when the checkout step is the one that failed.
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
+
   web-pr-smoke:
     name: Web PR smoke
     needs: ci-impact
@@ -572,6 +627,9 @@ jobs:
       github.event_name == 'pull_request' && github.base_ref == 'dev' &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke')
+    permissions:
+      contents: read
+      actions: write
     runs-on: ubuntu-latest
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 20
@@ -643,6 +701,14 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Cancel this run on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Names the repository even when the checkout step is the one that failed.
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
 
   playwright-functional:
     name: Playwright functional (shard ${{ matrix.shard }}/8)
@@ -1038,6 +1104,9 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
+    permissions:
+      contents: read
+      actions: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -1055,6 +1124,14 @@ jobs:
 
       - name: Check code formatting
         run: ruff check gbdraw/
+
+      - name: Cancel this run on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Names the repository even when the checkout step is the one that failed.
+          GH_REPO: ${{ github.repository }}
+        run: gh run cancel "$GITHUB_RUN_ID"
 
   losat-cache-browser-acceptance:
     name: LOSAT cache browser acceptance
