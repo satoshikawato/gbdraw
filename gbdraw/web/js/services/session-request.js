@@ -362,7 +362,8 @@ export { CANONICAL_REQUEST_SCHEMA };
 /**
  * @import {
  *   CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalCircularDiagramOptions,
- *   CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalRecord, CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan, CanonicalTableRef
+ *   CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalRecord, CanonicalRenderRequest,
+ *   CanonicalSimilarityAlignmentPlan, CanonicalTableRef
  * } from '../contracts/request.generated.js'
  */
 /**
@@ -436,7 +437,7 @@ const canonicalAlignmentAnchor = (value, path) => {
 
 /**
  * @param {unknown} value
- * @param {Iterable<string>} recordKeys
+ * @param {Iterable<unknown>} recordKeys The displayed record keys (a legacy promotion passes them unchecked).
  * @param {string} path
  * @returns {CanonicalSimilarityAlignmentPlan | null}
  */
@@ -492,6 +493,7 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
     throw new Error(`${path}.reference must match exactly one reference decision.`);
   }
   const expected = new Set(recordKeys);
+  /** @type {Set<unknown>} */
   const actual = new Set(decisionKeys);
   if (expected.size !== actual.size || [...expected].some((key) => !actual.has(key))) {
     throw new Error(`${path}.records does not cover the displayed record keys.`);
@@ -1011,6 +1013,10 @@ const normalizeOriginalResourceName = (name) => {
   return basename.slice(0, 1024);
 };
 
+/**
+ * The text or JSON value of each descriptor the request writer generated, keyed by that descriptor.
+ * @type {WeakMap<object, string | { bindings: unknown[] }>}
+ */
 const generatedResourceValues = new WeakMap();
 const canonicalTypedResourceBackings = new WeakMap();
 
@@ -2924,7 +2930,8 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     enabled: false, reference: 'auto', labels: '', series: []
   });
   if (!String(conservation.labels || '').trim() && conservation.series?.length)
-    conservation.labels = conservation.series.map(({ label }) => String(label || '').trim()).join(',');
+    // A row is unvalidated: one without a label, null included, gives an empty label (OV-963).
+    conservation.labels = conservation.series.map((/** @type {UnvalidatedFields<'label'>} */ row) => String(row?.label || '').trim()).join(',');
   const stateRefs = {
     mode: projection.mode, cInputType: session?.ui?.cInputType || projection.inputType,
     lInputType: session?.ui?.lInputType || projection.inputType,
@@ -3362,13 +3369,19 @@ const projectCanonicalRenderInput = ({
 
 // The request writer and the inexpensive comparison use the same projection.
 // The latter retains bindings and generated table text, never resource bytes.
+/**
+ * @param {unknown} resource A committed resource entry (unvalidated).
+ * @returns {{ text: string, bindings?: undefined } | { bindings: unknown[] | null } | null}
+ */
 const generationResourceIdentity = (resource) => {
   if (!resource) return null;
-  if (generatedResourceValues.has(resource)) {
-    const value = generatedResourceValues.get(resource);
-    return typeof value === 'string' ? { text: value } : value;
+  // Every key is a descriptor object the writer made, so a value that is not an object has no entry.
+  const generated = typeof resource === 'object' ? generatedResourceValues.get(resource) : undefined;
+  if (generated !== undefined) {
+    return typeof generated === 'string' ? { text: generated } : generated;
   }
-  const owner = getResourcePayloadOwner(resource);
+  // A view: the reads below test each member they use.
+  const owner = /** @type {UnvalidatedFields<'arrayBuffer' | 'data' | 'encoding'>} */ (getResourcePayloadOwner(resource));
   const backing = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(owner));
   if (backing?.descriptors) {
     return { bindings: backing.descriptors.map((entry) => entry.descriptor) };
@@ -3404,11 +3417,14 @@ const compositionSourceIdentity = (source, resources) => {
     if (!descriptor) return [key, null];
     const parts = generationResourceIdentity(descriptor)?.bindings;
     if (!Array.isArray(parts) || !parts.length) return [key, null];
-    return [key, parts.map(part => ({
-      payload: typeof part?.data === 'string' ? part.data : part,
-      size: part?.size,
-      encoding: part?.encoding || 'file'
-    }))];
+    return [key, parts.map((entry) => {
+      const part = /** @type {UnvalidatedFields<'data' | 'size' | 'encoding'>} */ (entry);
+      return {
+        payload: typeof part?.data === 'string' ? part.data : part,
+        size: part?.size,
+        encoding: part?.encoding || 'file'
+      };
+    })];
   });
   return identity;
 };
@@ -4067,14 +4083,17 @@ const projectCanonicalDepthTracks = ({
 };
 
 /**
- * @param {StoredResources} resources
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A Session's resources, or a committed
+ *   Session's: each entry is checked here.
  * @param {string} resourceId
  */
 export const decodeCanonicalResourceText = (resources, resourceId) => {
-  const entry = ownEntry(resources, resourceId);
-  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+  const ownValue = ownEntry(resources, resourceId);
+  if (!ownValue || typeof ownValue !== 'object' || Array.isArray(ownValue)) {
     throw new Error(`Missing canonical resource: ${resourceId}`);
   }
+  // An object other than an array (checked above), read through a view.
+  const entry = /** @type {UnvalidatedFields<'encoding' | 'data'> & object} */ (ownValue);
   if (entry.encoding && entry.encoding !== 'base64') {
     throw new Error(`Unsupported canonical resource encoding: ${entry.encoding}`);
   }
@@ -4090,20 +4109,23 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
   return bytesToText(bytes, { fatal: true });
 };
 
+/** @type {WeakMap<WeakKey, { genbank: number, fasta: number }>} */
 const sourceRecordCounts = new WeakMap();
 
 /**
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
  * @param {string} resourceId
  * @param {'genbank' | 'fasta'} kind
  */
 export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
   const descriptor = resources?.[resourceId];
   const owner = getResourcePayloadOwner(descriptor);
-  const hasFileOwner = owner && owner !== descriptor;
-  let counts = hasFileOwner && sourceRecordCounts.get(owner);
+  // A set owner other than the descriptor is a value `setResourcePayloadOwner` stored: a WeakKey.
+  const fileOwner = owner && owner !== descriptor ? /** @type {WeakKey} */ (owner) : null;
+  let counts = fileOwner ? sourceRecordCounts.get(fileOwner) : undefined;
   if (!counts) {
-    const text = hasFileOwner
-      ? await readFileText(owner)
+    const text = fileOwner
+      ? await readFileText(fileOwner)
       : decodeCanonicalResourceText(resources, resourceId);
     counts = {
       genbank: countGenBankRecords(text),
@@ -4111,13 +4133,13 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
     };
     // Immutable File/view identity outlives transferred bytes. Retain only counts;
     // a replacement source gets its own entry, and ownerless descriptors stay uncached.
-    if (hasFileOwner) sourceRecordCounts.set(owner, counts);
+    if (fileOwner) sourceRecordCounts.set(fileOwner, counts);
   }
   return counts[kind];
 };
 
 /**
- * @param {StoredResources} resources
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources
  * @param {{ resourceId?: unknown } | null | undefined} ref
  */
 const resourceTextFromRef = (resources, ref) => (
@@ -4153,6 +4175,7 @@ const featureVisibilityRowsKey = (rows) => JSON.stringify((Array.isArray(rows) ?
   .filter((row) => row?.featureVisibility)
   .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]));
 /**
+ * @param {CommittedCanonicalSession | null | undefined} committedSession
  * @param {unknown} activeRulesTsv
  * @param {unknown} [activeOverrideRows]
  */
@@ -4927,7 +4950,7 @@ export const projectCanonicalSessionRequest = ({
           file
         });
       });
-    (renderRequest.comparisons || []).forEach((comparison) => {
+    (renderRequest.comparisons || []).forEach((/** @type {CanonicalComparison} */ comparison) => {
       if (isResourceBackedCanonicalComparison(comparison)) {
         const sourceQueryRecordIndex = Number(comparison.queryRecordIndex);
         const sourceSubjectRecordIndex = Number(comparison.subjectRecordIndex);
@@ -5828,37 +5851,64 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
   return promoted;
 };
 
-/** @param {RequestPromotion} promotion */
+/**
+ * A stored request of schema 5, 6 or 7 as the promotion reads and edits it (a JSON clone).
+ * `readStoredRenderRequest` checked the root only: a plain object with an integer schema,
+ * a `records` array, and `comparisons` absent or an array. Nothing below the root is checked;
+ * the repair follows the promotion.
+ * @typedef {{
+ *   schema: number,
+ *   mode?: unknown,
+ *   records: unknown[],
+ *   comparisons?: unknown[],
+ *   layout?: unknown,
+ *   diagramOptions?: unknown
+ * }} StoredRequestBeforeSchema8
+ */
+/**
+ * @param {StoredRequestBeforeSchema8} promoted Edited in place.
+ * @param {RequestPromotion} promotion
+ */
 const promoteRenderRequestToSchema8 = (promoted, promotion) => {
   const { featureCatalog = null, legacyOrthogroupState = null, unreadAlignment } = promotion;
   const sourceSchema = promoted.schema;
+  const storedLayout = /** @type {UnvalidatedFields<'multiRecordPositions' | 'recordGapPx'>} */ (promoted.layout);
   const linearRows = promoted.mode === 'linear'
-    ? (Array.isArray(promoted.layout?.multiRecordPositions) ? promoted.layout.multiRecordPositions : []).map((/** @type {unknown} */ token) => {
+    ? (Array.isArray(storedLayout?.multiRecordPositions) ? storedLayout.multiRecordPositions : []).map((/** @type {unknown} */ token) => {
         const split = String(token).lastIndexOf('@');
         return Number(String(token).slice(split + 1)) || null;
       })
     : [];
   promoted.schema = 8;
   // A malformed record is left to the repair that follows the promotion.
-  (promoted.records || []).forEach((record, index) => {
-    if (!record || typeof record !== 'object') return;
+  (promoted.records || []).forEach((value, index) => {
+    if (!value || typeof value !== 'object') return;
+    // An object (checked above): its properties are read as unvalidated values and written.
+    const record = /** @type {{ display?: unknown, cardinality?: unknown, selector?: unknown, region?: unknown,
+      presentation?: unknown }} */ (value);
     if (sourceSchema < 7) record.display = { isCircular: null, startCoordinate: null };
     if (sourceSchema === 5) record.cardinality = promoted.mode === 'linear' &&
       !record.selector && !record.region
       ? 'all'
       : 'exactly_one';
     if (linearRows[index] && record.presentation && typeof record.presentation === 'object') {
-      record.presentation.gridRow = linearRows[index];
+      // An object (checked above).
+      /** @type {{ gridRow?: unknown }} */ (record.presentation).gridRow = linearRows[index];
     }
   });
   if (sourceSchema < 7) {
-    promoted.diagramOptions = { ...promoted.diagramOptions, featurePlacements: [] };
+    promoted.diagramOptions = {
+      .../** @type {UnvalidatedFields<string>} */ (promoted.diagramOptions), featurePlacements: []
+    };
   }
   if (promoted.mode === 'linear') {
     // A record that is not an object is the repair's, as above.
     const records = (promoted.records || []).filter((/** @type {unknown} */ record) => isPlainObject(record));
-    const generated = (promoted.comparisons || []).find(
-      (comparison) => comparison?.kind === 'generatedProteinComparison'
+    // A view, and the settings are edited below; a value that is no object has no own `alignOrthogroupFeature`.
+    const generated = /** @type {{ settings?: { alignOrthogroupFeature?: unknown } | null } | null | undefined} */ (
+      (promoted.comparisons || []).find(
+        (comparison) => /** @type {UnvalidatedFields<'kind'>} */ (comparison)?.kind === 'generatedProteinComparison'
+      )
     );
     const rawLegacy = generated?.settings?.alignOrthogroupFeature;
     const readAlignment = () => canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
@@ -5881,7 +5931,7 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
     if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
     const hadLayout = Object.keys(promoted.layout || {}).length > 0;
     if (hadLayout || similarityAlignment !== null) {
-      const recordGapPx = Number(promoted.layout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX);
+      const recordGapPx = Number(storedLayout?.recordGapPx ?? DEFAULT_LINEAR_RECORD_GAP_PX);
       promoted.layout = {
         recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : DEFAULT_LINEAR_RECORD_GAP_PX,
         multiRecordPositions: null,

@@ -25,10 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.mjs';
 
-const NO_IMPLICIT_ANY_BASELINE = {
-  'services/config.js': 2,
-  'services/session-request.js': 11
-};
+const NO_IMPLICIT_ANY_BASELINE = {};
 
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RATCHET_CONFIG = 'tests/web/types/tsconfig.no-implicit-any.json';

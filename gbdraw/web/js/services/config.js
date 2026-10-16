@@ -297,6 +297,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
 
@@ -2969,10 +2970,14 @@ const restorePaletteStateFromSession = (drawing, ui = {}) => {
   restorePendingPaletteFromSession(drawing, ui);
 };
 
+/**
+ * The descriptor each file was saved or loaded as, keyed by that file.
+ * @type {WeakMap<object, RawSessionResourceDescriptor>}
+ */
 const serializedFileDescriptors = new WeakMap();
 /**
- * @template D
- * @param {File} file
+ * @template {RawSessionResourceDescriptor} D
+ * @param {object} file A `File`, or another object whose bytes were read.
  * @param {D} descriptor
  * @returns {D}
  */
@@ -2982,40 +2987,52 @@ const cacheSerializedFileDescriptor = (file, descriptor) => {
   return descriptor;
 };
 
+/**
+ * @param {unknown} file A file slot's value: a `File` or a Session resource view. A value without bytes
+ *   (a list included) is rejected by `readFileBytes`.
+ * @returns {Promise<RawSessionResourceDescriptor | null>}
+ */
 const serializeFile = async (file) => {
   if (!file) return null;
+  // A view: each member is read as an unvalidated value.
+  const view = /** @type {UnvalidatedFields<'name' | 'type' | 'lastModified'>} */ (file);
   const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
   if (source?.descriptor) {
-    const visibleName = String(file.name || '').trim();
+    const visibleName = String(view?.name || '').trim();
     const descriptor = visibleName && visibleName !== source.descriptor.name
       ? { ...source.descriptor, name: visibleName }
       : source.descriptor;
     setResourcePayloadOwner(descriptor, file);
     return descriptor;
   }
-  const cached = serializedFileDescriptors.get(file);
+  // A key is an object (functions included): any other value has no entry.
+  const cached = typeof file === 'object' || typeof file === 'function'
+    ? serializedFileDescriptors.get(/** @type {object} */ (file))
+    : undefined;
   if (cached) return cached;
   const bytes = await readFileBytes(file);
-  const shared = serializedFileDescriptors.get(file);
+  // `readFileBytes` resolves only for an object (or a function) with `arrayBuffer()`.
+  const owner = /** @type {object} */ (file);
+  const shared = serializedFileDescriptors.get(owner);
   if (shared) return shared;
   recordStructuralMetric('resourceReencodeCount', 1, {
-    resourceName: String(file.name || 'file')
+    resourceName: String(view?.name || 'file')
   });
   recordStructuralMetric('base64EncodeCount', 1, {
-    resourceName: String(file.name || 'file')
+    resourceName: String(view?.name || 'file')
   });
   recordStructuralMetric('encodedByteCount', bytes.byteLength, {
-    resourceName: String(file.name || 'file')
+    resourceName: String(view?.name || 'file')
   });
   const descriptor = {
-    name: file.name || 'file',
-    type: file.type || '',
+    name: view?.name || 'file',
+    type: view?.type || '',
     size: bytes.byteLength,
-    lastModified: file.lastModified ?? Date.now(),
+    lastModified: view?.lastModified ?? Date.now(),
     encoding: 'base64',
     data: bytesToBase64(bytes)
   };
-  return cacheSerializedFileDescriptor(file, descriptor);
+  return cacheSerializedFileDescriptor(owner, descriptor);
 };
 
 /**
@@ -3037,26 +3054,35 @@ const serializeFileValue = async (value) => (
  * resource view) or `null`, or a list of them for a stored list.
  * @typedef {FileLike | null | DeserializedFile[]} DeserializedFile
  */
-// `entry` keeps its implicit type: a legacy `files` entry's `name`, `type` and `lastModified` go unconverted
-// into `new File(...)` below, which the true type (`unknown`) does not allow without a cast of those leaves.
-/** @returns {DeserializedFile} */
-const deserializeFile = (entry) => {
-  if (Array.isArray(entry)) {
-    return entry.map((item) => deserializeFile(item));
+// The `File` constructor converts its name and `type` with ToString and `lastModified` with ToNumber
+// (Web IDL), so `String` and `Number` below pass the values it used before; a stored value is JSON or a
+// descriptor `serializeFile` made, never a symbol or a BigInt, for which the two conversions differ.
+/**
+ * @param {unknown} value A stored file value: a descriptor, a Session resource view, or a list of them.
+ * @returns {DeserializedFile}
+ */
+const deserializeFile = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((/** @type {unknown} */ item) => deserializeFile(item));
   }
-  if (isSessionResourceFileView(entry)) return entry;
+  if (isSessionResourceFileView(value)) return value;
+  // A view: each member is tested or converted where it is read.
+  const entry = /** @type {UnvalidatedFields<'data' | 'name' | 'type' | 'lastModified'>} */ (value);
   if (
     !entry ||
     !Object.prototype.hasOwnProperty.call(entry, 'data') ||
     entry.data === null ||
     entry.data === undefined
   ) return null;
-  if (isEncodedDepthFileEntry(entry)) {
-    const text = decodeDepthText(entry.data);
+  // A value with an own `data` is an object: a descriptor as the Session stores it.
+  const descriptor = /** @type {RawSessionResourceDescriptor} */ (entry);
+  if (isEncodedDepthFileEntry(/** @type {{ encoding?: unknown, data?: { schema?: unknown } | null }} */ (entry))) {
+    // The test above read `data.schema`; `decodeDepthText` checks every field it reads.
+    const text = decodeDepthText(/** @type {DepthFilePayload} */ (entry.data));
     recordStructuralMetric('fileConstructionCount');
-    return new File([text], entry.name || 'depth.tsv', {
-      type: entry.type || 'text/tab-separated-values',
-      lastModified: entry.lastModified ?? Date.now()
+    return new File([text], String(entry.name || 'depth.tsv'), {
+      type: String(entry.type || 'text/tab-separated-values'),
+      lastModified: Number(entry.lastModified ?? Date.now())
     });
   }
   if (typeof entry.data !== 'string') return null;
@@ -3064,11 +3090,11 @@ const deserializeFile = (entry) => {
   recordStructuralMetric('base64DecodeCount');
   recordStructuralMetric('decodedByteCount', bytes.byteLength);
   recordStructuralMetric('fileConstructionCount');
-  const file = new File([bytes], entry.name || 'file', {
-    type: entry.type || 'application/octet-stream',
-    lastModified: entry.lastModified ?? Date.now()
+  const file = new File([bytes], String(entry.name || 'file'), {
+    type: String(entry.type || 'application/octet-stream'),
+    lastModified: Number(entry.lastModified ?? Date.now())
   });
-  cacheSerializedFileDescriptor(file, entry);
+  cacheSerializedFileDescriptor(file, descriptor);
   return file;
 };
 
