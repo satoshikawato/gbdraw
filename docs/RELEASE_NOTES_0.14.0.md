@@ -94,9 +94,8 @@ long file name in a file input now ends with an ellipsis instead of being cut
 at both ends.
 
 Each change of a setting's checkbox, radio button, or button is one **Undo**
-step. Controls that change only the view, such as **Rich Feature Popup** and the
-search's **Regular expression**, are not Undo steps, and Undo and Redo do not
-change them. Undo and Redo are unavailable while Generate runs, and
+step. **Rich Feature Popup** and the search's **Regular expression** are not
+Undo steps, and Undo and Redo do not change them. Undo and Redo are unavailable while Generate runs, and
 the header says why. Error
 messages name the field, track row, Depth series, table line, or setting
 involved. A value gbdraw cannot use, such as a GC window of 0, is reported

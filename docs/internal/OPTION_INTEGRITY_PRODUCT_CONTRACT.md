@@ -1154,18 +1154,28 @@ Status: active Product authority
   (`Q-R1`; A: it records no Undo step, B: keep recording a step) and `D-07`.
   - Reply 1, selecting option A:
     「D-03: Undoにすべきではない。」
-  - Reply (a), to "Should Undo/Redo of other steps, including Reset Settings,
-    stop changing the Rich Feature Popup value?", asked again with examples
-    1 (colour change then Popup OFF then Undo) and 2 (Popup OFF, Reset
-    Settings, Undo):
+  - Reply (a), to the question asked again with examples after the Owner's
+    「具体的にどういうシチュエーション？」:
+    「D-03 補足(a) の具体例です。
+    例1: Popup ON → 色を変更（Undo 1段）→ Popup を OFF（Undo にならない）→ Undo を押す。色は戻る。Popup は OFF のまま？それとも色を変える前の ON に戻る？
+    例2: Popup OFF → Reset Settings（Popup を含む全設定が既定に戻り Popup ON）→ Undo を押す。ほかの設定は Reset 前に戻る。Popup は ON のまま？OFF に戻る？」
+    the selected option and its description:
     「どちらも今の値のまま」
-  - Reply (b), to "Should a change to only Rich Feature Popup still raise
-    "Replace the current work?" before Load Session or Load example?":
+    「例1 は OFF のまま、例2 は ON のまま。Popup は Undo/Redo では一切変わらない」
+  - Reply (b), to the question
+    「D-03 補足(b): Popup だけを切り替えた後に Load Session / Load example を押したとき、「Replace the current work?」の確認を出しますか？（Popup の値は Session に保存されるので、出さないと黙って上書きされます。今の PR-C は出しません）」
+    the selected option and its description:
     「確認を出す」
-  - Reply (c), to "Should the other preferences (Auto Reflow, PNG DPI, Instant
-    Preview, LOSAT method/threads) leave History too?":
+    「Undo の段は作らず「未保存の変更あり」だけ記録して、確認ダイアログを出す」
+  - Reply (c), to the question
+    「D-03 補足(c): Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数は、今も切り替えるたびに Undo の段になります。どうしますか？」
+    the selected option and its description:
     「今回は対象外」
-  - Reply (d), the reason to record: none given; recorded as `not stated`.
+    「今回は Rich Feature Popup だけ。ほかは別途決める」
+  - Reply (d), to the question
+    「D-03 補足(d): Product Contract の記録に残す理由はありますか？（なければ「not stated」と記録します。理由を書く場合は「その他」に入力してください）」
+    the selected option:
+    「not stated で記録」
   - The receipt of `PD-OI-100` below takes effect with the Owner's approval
     on the pull request that adds this revision; that pull request does not
     merge without it.
