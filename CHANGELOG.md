@@ -2128,6 +2128,10 @@ Retired names and their replacements are listed under
   Python returns it beside the metadata, not inside it, and the Worker render protocol is
   now 3, so a cached older wheel is reported as a version mismatch. The figure, the
   catalog, and Saved Sessions are unchanged.
+- Performance (web app): after a Generate that keeps the feature catalog, the page no
+  longer derives three values again whose inputs did not change: the feature set the
+  color and visibility rules match against, the record and feature names of the
+  Similarity alignment drawer, and the Features list. Nothing visible changes.
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
