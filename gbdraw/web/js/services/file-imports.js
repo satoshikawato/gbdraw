@@ -5,7 +5,7 @@ import { normalizeTsvCell } from '../utils/tsv-cell.js';
 
 /**
  * A row of a pre-normalization table (Sessions 31-39) that was repaired or dropped.
- * @typedef {{ row: number, repair: string }} TableRepair
+ * @typedef {{ row: number, repair: 'joined' | 'dropped' | 'invalid' }} TableRepair
  */
 /** @typedef {{ feat: string, qual: string, val: string, color: string, cap: string, fromFile: true }} ParsedSpecificRule */
 /**
