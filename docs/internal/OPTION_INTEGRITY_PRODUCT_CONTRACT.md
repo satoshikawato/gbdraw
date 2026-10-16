@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `54`
+- Contract revision: `55`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -1182,6 +1182,44 @@ Status: active Product authority
   - Scope: only the **Rich Feature Popup** preference. Per Reply (c), the
     other preferences are outside this decision and this revision does not
     change them. No other record is amended or retired.
+- Revision 55 changes: `PD-OI-096` is replaced for scenario revision `2`
+  (concern `web.legend.position-of-mode`). It comes from the Product Decision
+  Owner `satoshikawato`'s replies of `2026-10-15` and `2026-10-16` on a
+  Session that release `0.13.0` saved after **Generate** and a switch to the
+  other diagram mode (OV-677): the Web app opened its Result in the shown
+  mode. Each quotation below is the part of a reply that carries the answer;
+  Replies 1 to 6 are those of the Revision 48 entry.
+  - Reply 7 (`2026-10-15`), to the question
+    「OV-677: 0.13.0 で Circular を描いた後に Linear に切り替えて保存した Session は、0.14.0 で開くと、描いたモード(Circular)ではなく表示中のモード(Linear)の結果として読まれます。0.13.0 自身も同じ読み方をしていたので、退行ではありません。どう扱いますか?」
+    with the options 「A. 0.14.0 後に回す (Recommended)」,
+    「B. 0.14.0 前に直す」, and 「C. 0.14.0 前に古い結果を捨てる」:
+    「B. 0.14.0 前に直す」
+    The Result of such a Session opens in the mode it was drawn in, which
+    `0.13.0` recorded only as the mode of the last **Generate**
+    (`cliInvocation.mode`).
+  - Reply 8 (`2026-10-16`), to the question
+    「OV-677 の修正で、PD-OI-096 の受領文(Product Contract)を scenario revision 2 に改めます。変わるのは「Accepted residual risk」だけで、他の欄はすべて今のままです。どちらの文で承認しますか？」
+    with the options 「案1 終わった暫定の文も消す (Recommended)」 and
+    「案2 OV-677 の文だけ直す」:
+    「案1 終わった暫定の文も消す (Recommended)」
+    The preview of each option showed the new and the old Accepted residual
+    risk in full and said that every other field stays, with Scenario
+    revision `2` and the approval date as the decision date. The other fields
+    were not shown again. The receipt recorded under `PD-OI-096` below is the
+    scenario revision `1` receipt with that Accepted residual risk, Scenario
+    revision `2`, and Decision date `2026-10-16` (SHA-256, UTF-8, excluding
+    the final newline:
+    `abb6fe7056b5b15c82a883c3b5e3d9f13892a472a499e9fbca3986cdda2f6a87`).
+  - Scope: only the Accepted residual risk changes. It drops the two
+    sentences on the interim before the Load confirmation dialog, which
+    Revision 52 brought (`PD-OI-099`; its entry says "`PD-OI-096` keeps its
+    text; the confirmation dialog its Accepted residual risk names is the
+    dialog of this record"). Its sentence on a Legend that `0.13.0` drew in a
+    Linear corner no longer applies only to Sessions saved while Linear was
+    shown, and it names the Sessions whose Result's mode is not recorded. The
+    scenario revision `1` receipt is not kept in the record; Git history
+    retains it. `PD-OI-090` keeps its text (its 〔以前の Session の移行〕
+    states the outcome of Reply 7). No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -5586,44 +5624,50 @@ Decision date: 2026-10-13
 ### PD-OI-096: Legend position of a diagram mode at Load
 
 - Concern key: `web.legend.position-of-mode`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-096`, scenario revision `1`. Scenario revision `2`
+  keeps every field of scenario revision `1` except its Accepted residual
+  risk, its scenario revision, and its decision date.
 - Status: `ACCEPTED`
 - Selected outcome: `B / MODE-DEFAULT-LISTED-AT-LOAD`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its JSON representation below.
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its JSON representation below.
 - Decision source: the Owner replies quoted verbatim in the Revision 48 entry
-  above. The Owner approved the receipt text below as written. The receipt
-  reproduces its fields without translation or additional terms. Dependent
-  runtime requires this authority merged into its base, or merged together
-  with it through the reviewed static Product Contract co-change route; this
-  record supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
-  `f64d28435244831cadbbad3e09d6a92849729ed495379d6955b7b6f13a3a9622`.
+  (scenario revision `1`) and the Revision 55 entry (scenario revision `2`)
+  above. The Owner approved the scenario revision `1` receipt as written, and
+  the Accepted residual risk of scenario revision `2` as written; the other
+  fields are those of scenario revision `1`. The receipt reproduces its
+  fields without translation or additional terms. Dependent runtime requires
+  this authority merged into its base, or merged together with it through the
+  reviewed static Product Contract co-change route; this record supplies no
+  runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `abb6fe7056b5b15c82a883c3b5e3d9f13892a472a499e9fbca3986cdda2f6a87`.
 
 ```text
 PRODUCT_DECISION
 Concern: web.legend.position-of-mode
-Scenario revision: 1
+Scenario revision: 2
 Choice: B / MODE-DEFAULT-LISTED-AT-LOAD
 Rationale: 0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。
 Must preserve: 〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置なら値がないときと同じ位置（ふつうはその mode の既定の位置。Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。
 May retire: 集合の外の凡例の位置をそのまま保持し、Generate が "Input validation failed" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。
-Accepted residual risk: 確認 dialog は、読み込みの修復の PR で入る。それまでの dev では、集合の外の値は知らせずに既定値になる（0.14.0 の tag の前にそろえる）。0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る（Linear を表示したまま保存した Session の場合）。
+Accepted residual risk: 0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る。0.13.0 までの版が mode を切り替えてから保存した Session のうち、最後の Generate の mode を記録していないものは、保存したときに表示していた mode の Result として読む。
 Owner: satoshikawato
-Decision date: 2026-10-13
+Decision date: 2026-10-16
 ```
 
 ```json
 {
   "concern": "web.legend.position-of-mode",
-  "scenarioRevision": 1,
+  "scenarioRevision": 2,
   "choice": "B / MODE-DEFAULT-LISTED-AT-LOAD",
   "rationale": "0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。",
   "mustPreserve": "〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置なら値がないときと同じ位置（ふつうはその mode の既定の位置。Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。",
   "mayRetire": "集合の外の凡例の位置をそのまま保持し、Generate が \"Input validation failed\" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。",
-  "acceptedResidualRisk": "確認 dialog は、読み込みの修復の PR で入る。それまでの dev では、集合の外の値は知らせずに既定値になる（0.14.0 の tag の前にそろえる）。0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る（Linear を表示したまま保存した Session の場合）。",
+  "acceptedResidualRisk": "0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る。0.13.0 までの版が mode を切り替えてから保存した Session のうち、最後の Generate の mode を記録していないものは、保存したときに表示していた mode の Result として読む。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-13"
+  "decisionDate": "2026-10-16"
 }
 ```
 
