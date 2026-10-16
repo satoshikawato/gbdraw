@@ -89,7 +89,6 @@ import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-i
 import {
   buildLosatJobSpecs,
   canonicalGridDisplayPairs,
-  losatEdgeOfPair,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import {
@@ -4186,14 +4185,25 @@ export const createRunAnalysis = ({
         };
 
         /**
-         * @param {LinearComparisonResolvedEdge | null} edge The comparison card of the search (`losatEdgeOfPair`).
+         * @param {LosatJobSpec} spec
          * @param {LosatSeqEntry} queryEntry
          * @param {LosatSeqEntry} subjectEntry
          */
-        const buildCacheFilename = (edge, queryEntry, subjectEntry) => normalizeLosatFilename(
-          edge?.losatFilenameActive ? edge.losatFilename : '',
-          losatPairDefaultName(drawing, edge?.edgeKey ?? '', queryEntry, subjectEntry)
-        );
+        const buildCacheFilename = (spec, queryEntry, subjectEntry) => {
+          const edge = comparisonResolution.edges.find(
+            (/** @type {LinearComparisonResolvedEdge} */ candidate) => candidate.edgeKey === spec.edgeKey
+          );
+          const fallback = losatPairDefaultName(
+            drawing,
+            spec.edgeKey,
+            queryEntry,
+            subjectEntry
+          );
+          return normalizeLosatFilename(
+            edge?.losatFilenameActive ? edge.losatFilename : '',
+            fallback
+          );
+        };
 
         /**
          * @param {string[]} arr
@@ -4463,11 +4473,16 @@ export const createRunAnalysis = ({
               losatTiming.totalPairs += 1;
               if (hasCachedText) losatTiming.cacheHits += 1;
               else losatTiming.cacheMisses += 1;
-              // The comparison card of this search: the LOSAT edge of its two records (OV-980).
-              const pairEdge = losatEdgeOfPair(comparisonResolution.edges, spec.queryIndex, spec.subjectIndex);
+              const resolvedEdge = comparisonResolution.edges.find(
+                (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === spec.edgeKey
+              );
               const isResolvedDisplayPair = canonicalGridPair
                 ? canonicalGridPair(spec.queryIndex, spec.subjectIndex)
-                : pairEdge?.queryIndex === spec.queryIndex && pairEdge?.subjectIndex === spec.subjectIndex;
+                : Boolean(
+                    resolvedEdge &&
+                    spec.queryIndex === resolvedEdge.queryIndex &&
+                    spec.subjectIndex === resolvedEdge.subjectIndex
+                  );
               const pair = {
                 pairIndex: spec.ordinal,
                 ordinal: spec.ordinal,
@@ -4477,24 +4492,24 @@ export const createRunAnalysis = ({
                 queryIndex: spec.queryIndex,
                 subjectIndex: spec.subjectIndex,
                 cacheKey,
-                filename: buildCacheFilename(pairEdge, queryEntry, subjectEntry),
+                filename: buildCacheFilename(spec, queryEntry, subjectEntry),
                 displayPair: isResolvedDisplayPair
               };
               losatPairs.push(pair);
               if (
-                isResolvedDisplayPair && pairEdge &&
-                !cacheInfo.some((entry) => entry.edgeKey === pairEdge.edgeKey)
+                isResolvedDisplayPair &&
+                !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
               ) {
                 cacheInfo.push({
                   key: cacheKey,
                   filename: pair.filename,
                   display: true,
-                  edgeKey: pairEdge.edgeKey,
-                  ordinal: pairEdge.ordinal,
-                  queryUid: pairEdge.queryUid,
-                  subjectUid: pairEdge.subjectUid,
-                  queryIndex: pairEdge.queryIndex,
-                  subjectIndex: pairEdge.subjectIndex
+                  edgeKey: spec.edgeKey,
+                  ordinal: spec.ordinal,
+                  queryUid: resolvedEdge.queryUid,
+                  subjectUid: resolvedEdge.subjectUid,
+                  queryIndex: resolvedEdge.queryIndex,
+                  subjectIndex: resolvedEdge.subjectIndex
                 });
               }
 

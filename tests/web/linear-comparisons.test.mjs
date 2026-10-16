@@ -22,7 +22,6 @@ const {
   createDefaultLinearComparisonPlan,
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
-  losatEdgeOfPair,
   materializeResolvedEdgesAsSelectedPlan,
   missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
@@ -741,11 +740,11 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
 }
 
 {
-  // OV-980: LOSATP Collinear, search scope All, a CLI Session grid whose rows
-  // put record a below c. The search a->c is the display pair of the edge
-  // c->a; its spec carries the fallback edge b->c (`buildLosatJobSpecs`).
-  // The raw LOSAT row of a display pair names the edge of its own two
-  // records, so each comparison card saves its own search.
+  // OV-980, OV-985: LOSATP Collinear, Search between All records, a CLI
+  // Session grid whose rows put record a below c. Each search names the
+  // edge of its own two records, in either orientation, so the search a->c
+  // is shown and numbered by the edge c->a; a pair no edge joins takes an
+  // edge by ordinal.
   const cell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
   const gridSequences = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
   const gridRows = [cell('b', 1), cell('c', 2), cell('a', 3)];
@@ -753,26 +752,20 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
     plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
     sequences: gridSequences, layout: gridRows, losatProgram: 'blastp', blastpMode: 'collinear'
   });
-  assert.deepEqual(resolution.edges.map((edge) => edge.edgeKey), ['b->c', 'c->a']);
-  const displayed = canonicalGridDisplayPairs(gridSequences, gridRows);
-  const displaySpecs = buildLosatJobSpecs({
+  assert.deepEqual(resolution.edges.map((edge) => [edge.edgeKey, edge.ordinal]), [['b->c', 0], ['c->a', 1]]);
+  const specs = buildLosatJobSpecs({
     resolution, recordCount: 3, recordUids: ['a', 'b', 'c'], program: 'blastp', blastpMode: 'collinear',
     collinearInferOrthogroups: false, collinearSearchScope: 'all'
-  }).filter((spec) => displayed(spec.queryIndex, spec.subjectIndex));
-  assert.deepEqual(displaySpecs.map((spec) => [spec.queryUid, spec.subjectUid, spec.edgeKey]), [
-    ['a', 'c', 'b->c'], ['b', 'c', 'b->c']
-  ], 'the a->c search carries the fallback edge of another pair');
-  assert.deepEqual(
-    displaySpecs.map((spec) => losatEdgeOfPair(resolution.edges, spec.queryIndex, spec.subjectIndex)?.edgeKey),
-    ['c->a', 'b->c']
-  );
-  // The edge in the pair's own orientation comes first; no LOSAT edge, none.
-  assert.equal(losatEdgeOfPair(resolution.edges, 1, 2)?.edgeKey, 'b->c');
-  assert.equal(losatEdgeOfPair(resolution.edges, 2, 1)?.edgeKey, 'b->c');
-  assert.equal(losatEdgeOfPair(resolution.edges, 0, 1), null);
-  const uploaded = resolveLinearComparisonPlan({
-    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'upload', edges: [] },
-    sequences: gridSequences, layout: gridRows
   });
-  assert.equal(losatEdgeOfPair(uploaded.edges, 1, 2), null, 'an Upload edge shows no raw LOSAT search');
+  assert.deepEqual(specs.map((spec) => [`${spec.queryUid}->${spec.subjectUid}`, spec.edgeKey, spec.ordinal]), [
+    ['a->b', 'b->c', 0], ['b->a', 'b->c', 0],
+    ['a->c', 'c->a', 1], ['c->a', 'c->a', 1],
+    ['b->c', 'b->c', 0], ['c->b', 'b->c', 0]
+  ]);
+  const displayed = canonicalGridDisplayPairs(gridSequences, gridRows);
+  assert.deepEqual(
+    specs.filter((spec) => displayed(spec.queryIndex, spec.subjectIndex)).map((spec) => [spec.edgeKey, spec.ordinal]),
+    [['c->a', 1], ['b->c', 0]],
+    'each displayed search has its own card and number'
+  );
 }

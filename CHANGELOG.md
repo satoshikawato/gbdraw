@@ -675,12 +675,14 @@ write-up of a release.
   Legend rows that redraw drew (or, after a Legend or title move, the moved
   position under the redrawn diagram) were recorded as an extra step under the
   same name, whose Undo changed nothing visible (OV-872, OV-873).
-- Fixed (web app): with LOSATP Collinear and search scope **All** on a CLI
-  Session's record grid that places a record above one listed before it,
-  **Save Raw LOSAT TSV** on one comparison card saved the search of another
-  pair, and the other pair's card had no **Save Raw LOSAT TSV** button. Each
-  card now saves the search of its own two records, under its own file name
-  (OV-980).
+- Fixed (web app): with LOSATP Collinear and **Search between** set to **All
+  records** on a CLI Session's record grid that places a record above one
+  listed before it, **Save Raw LOSAT TSV** on one comparison card saved the
+  search of another pair, and the other pair's card had no **Save Raw LOSAT
+  TSV** button. The reproducibility files of two such pairs were also numbered
+  alike, so one overwrote the other. Each card now saves the search of its own
+  two records under its own file name, and each pair has its own
+  reproducibility file (OV-980, OV-985).
 - Fixed (web app): a Session whose raw LOSAT cache entry has a file name that
   is not text (for example `{}`) loads with the entry's default name,
   `losat_pair_<n>.tsv`. Before, **Save Raw LOSAT TSV** named the file

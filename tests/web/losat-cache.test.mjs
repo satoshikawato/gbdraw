@@ -734,7 +734,7 @@ assert.throws(
 // asynchronous I/O is controlled so an exception/cancel occurs while the loan
 // is active, rather than after the loop has already released its index.
 const {
-  LINEAR_COMPARISON_MODES, buildLosatJobSpecs, canonicalGridDisplayPairs, losatEdgeOfPair, resolveLinearComparisonPlan
+  LINEAR_COMPARISON_MODES, buildLosatJobSpecs, canonicalGridDisplayPairs, resolveLinearComparisonPlan
 } = await import(pathToFileURL(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-comparisons.js')));
 const runSource = await readFile(join(repoRoot, 'gbdraw/web/js/app/run-analysis.js'), 'utf8');
 // Exercise the actual Generate merge boundary, including its user-facing error.
@@ -875,7 +875,7 @@ const exercisePairLoop = async ({failure = null, promote = false, mutateSource =
     },
     promoteRawLosatCacheEntry() {},
     losatTiming: {totalPairs: 0, cacheHits: 0, cacheMisses: 0},
-    comparisonResolution: {edges: []}, losatEdgeOfPair, losatPairs: [], cacheInfo: [],
+    comparisonResolution: {edges: []}, losatPairs: [], cacheInfo: [],
     buildCacheFilename() { return 'pair.tsv'; },
     pendingJobKeys: new Set(), losatJobs: [], losatProgram: {value: 'blastp'}, losat: {outfmt: '6'}
   };
@@ -905,10 +905,11 @@ await exercisePairLoop({failure: 'error'});
 await exercisePairLoop({failure: 'cancel'});
 await exercisePairLoop(); // Retry must acquire a new index.
 
-// OV-980: LOSATP Collinear, search scope All, on a CLI Session grid whose rows
-// put record a below c (rows b, c, a). The search a->c is displayed for the
-// edge c->a, but its spec carries the fallback edge b->c. The raw LOSAT rows
-// name the card of each displayed search, with that card's file name.
+// OV-980, OV-985: LOSATP Collinear, Search between All records, on a CLI
+// Session grid whose rows put record a below c (rows b, c, a). The pair loop
+// of run-analysis.js gives each displayed search the cache row of its own
+// card, and the Run Info registration gives each one its own generated file,
+// named for its card and holding its pair.
 {
   const gridCell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
   const linearSeqs = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
@@ -924,7 +925,7 @@ await exercisePairLoop(); // Retry must acquire a new index.
   const context = {
     useProteinBlastp: false, useCollinearBlastp: true,
     drawing: { linearRecordLayoutEnabled: { value: true }, linearRecordRows },
-    linearSeqs, canonicalGridDisplayPairs, losatEdgeOfPair, comparisonResolution,
+    linearSeqs, canonicalGridDisplayPairs, comparisonResolution,
     preparedJobs: specs.map((spec) => ({
       spec, losatArgs: [], cacheMetadata: { search: `${spec.queryUid}->${spec.subjectUid}` }, batch: {}
     })),
@@ -941,7 +942,8 @@ await exercisePairLoop(); // Retry must acquire a new index.
     promoteRawLosatCacheEntry() {},
     losatTiming: { totalPairs: 0, cacheHits: 0, cacheMisses: 0 },
     losatPairs: [], cacheInfo: [],
-    buildCacheFilename: (edge) => `${edge?.edgeKey}.tsv`,
+    // The card's file name (`buildCacheFilename` reads the edge the spec names).
+    buildCacheFilename: (spec) => `${spec.edgeKey}.tsv`,
     pendingJobKeys: new Set(), losatJobs: []
   };
   await new Function('context', `return (async () => {
@@ -954,6 +956,37 @@ await exercisePairLoop(); // Retry must acquire a new index.
     ['a->c', 'c->a', 'c', 'a', 2, 0, 1, 'c->a.tsv'],
     ['b->c', 'b->c', 'b', 'c', 1, 2, 0, 'b->c.tsv']
   ]);
+
+  // The LOSATP helper numbers each displayed pair by the `pairIndex` the Web
+  // sent (`display_pair_indices`, python-helpers.js) and returns one frame per
+  // displayed pair, in sorted pair order.
+  const displayPairIndices = new Map(context.losatPairs.filter((pair) => pair.displayPair).map((pair) => [
+    [pair.queryIndex, pair.subjectIndex].sort((left, right) => left - right).join(','), pair.pairIndex
+  ]));
+  const convertedPayload = {
+    pairs: [...displayPairIndices.keys()].sort().map((pair) => ({
+      pair_index: displayPairIndices.get(pair),
+      tsv: `${pair.split(',').map((index) => linearSeqs[Number(index)].uid).join('-')} rows\n`
+    }))
+  };
+  const registrationStart = runSource.indexOf('            const convertedPairs = Array.isArray(convertedPayload.pairs)');
+  const registrationEnd = runSource.indexOf("            setProcessingStatus('Preparing nucleotide comparison results...');", registrationStart);
+  assert.ok(registrationStart > 0 && registrationEnd > registrationStart);
+  const generatedFiles = new Map();
+  const registration = {
+    convertedPayload, losatPairs: context.losatPairs, useCollinearBlastp: true, resolvedComparisons: [],
+    getPayloadName: (path) => path,
+    registerRunInfoFile() {},
+    recordGeneratedCliFile: (path, text, { name }) => generatedFiles.set(path, { name, text })
+  };
+  new Function('context', `
+    const {${Object.keys(registration).join(',')}} = context;
+    ${runSource.slice(registrationStart, runSource.lastIndexOf('} else {', registrationEnd))}
+  `)(registration);
+  assert.deepEqual(Object.fromEntries(generatedFiles), {
+    '/blast_1.txt': { name: 'c->a.tsv', text: 'a-c rows\n' },
+    '/blast_0.txt': { name: 'b->c.tsv', text: 'b-c rows\n' }
+  });
 }
 
 // Alias validity and ordinal grouping must use the same NFC-trimmed value.
