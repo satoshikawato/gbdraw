@@ -3236,7 +3236,7 @@
 
                         <div class="flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs">
                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                <input type="checkbox" v-model="richFeaturePopup" aria-describedby="help-rich-feature-popup" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                <input type="checkbox" v-model="richFeaturePopup" @change="markRichFeaturePopupChanged" data-history-ignore aria-describedby="help-rich-feature-popup" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                 <span>Rich Feature Popup</span>
                             </label>
                             <help-tip id="help-rich-feature-popup" text="When enabled, feature clicks show Details, Qualifiers, and Sequence tabs. Disable for the compact edit-only popup."></help-tip>
@@ -8129,7 +8129,6 @@
                         <!-- Layout reposition mode toggle -->
                         <button v-if="svgContent" @click="layoutRepositionMode = !layoutRepositionMode" data-history-ignore
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
-                                :class="{ 'bg-amber-50 text-amber-700 border-amber-300': layoutRepositionMode }"
                                 :title="layoutRepositionMode ? 'Layout edit is on: drag a legend, title, or Linear scale to move it. Turn off to pan.' : 'Turn on to move a legend, title, or Linear scale. While off, dragging pans the view.'"
                                 :aria-pressed="layoutRepositionMode"
                                 aria-label="Toggle layout edit mode"
@@ -8140,7 +8139,7 @@
                         <!-- Canvas size toggle -->
                         <button v-if="svgContent" @click="showCanvasControls = !showCanvasControls"
                                 class="flex items-center gap-2 px-3 py-2 shadow rounded-lg border hover:bg-slate-100 text-slate-600 text-sm"
-                                :class="showCanvasControls ? 'bg-blue-50 text-blue-600 border-blue-300' : 'bg-white border-slate-200'"
+                                :class="showCanvasControls ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'"
                                 title="Canvas padding controls"
                                 aria-label="Toggle canvas padding controls">
                             <i class="ph ph-frame-corners" aria-hidden="true"></i>
@@ -8151,7 +8150,7 @@
                                 data-history-ignore
                                 data-preview-search-toggle
                                 class="flex items-center gap-2 px-3 py-2 shadow rounded-lg border hover:bg-slate-100 text-slate-600 text-sm"
-                                :class="previewFeatureSearchVisible ? 'bg-blue-50 text-blue-600 border-blue-300' : 'bg-white border-slate-200'"
+                                :class="previewFeatureSearchVisible ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'"
                                 title="Show or hide the feature search bar"
                                 :aria-pressed="previewFeatureSearchVisible"
                                 aria-label="Toggle feature search">

@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `53`
+- Contract revision: `54`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -39,7 +39,7 @@ Status: active Product authority
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
-  `PD-OI-097`, `PD-OI-098`, and `PD-OI-099`
+  `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, and `PD-OI-100`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -1142,6 +1142,46 @@ Status: active Product authority
   - Scope: the record's receipt for scenario revision `8` is recorded below;
     the scenario revision `7` receipt keeps its text and its SHA-256.
     `PD-OI-088` applies unchanged. No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 54 changes: `PD-OI-100` is added (`A / NO-UNDO-STEP`, concern
+  `web.history.rich-feature-popup`). It comes from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-16` on whether the **Rich Feature
+  Popup** checkbox records an Undo step (it did, one step per toggle, and Undo
+  or Redo of other steps changed it back). The questions and options are
+  recorded in campaign `band-hover-perf-20261015`, `DECISIONS.md` `D-03`
+  (`Q-R1`; A: it records no Undo step, B: keep recording a step) and `D-07`.
+  - Reply 1, selecting option A:
+    「D-03: Undoにすべきではない。」
+  - Reply (a), to the question asked again with examples after the Owner's
+    「具体的にどういうシチュエーション？」:
+    「D-03 補足(a) の具体例です。
+    例1: Popup ON → 色を変更（Undo 1段）→ Popup を OFF（Undo にならない）→ Undo を押す。色は戻る。Popup は OFF のまま？それとも色を変える前の ON に戻る？
+    例2: Popup OFF → Reset Settings（Popup を含む全設定が既定に戻り Popup ON）→ Undo を押す。ほかの設定は Reset 前に戻る。Popup は ON のまま？OFF に戻る？」
+    the selected option and its description:
+    「どちらも今の値のまま」
+    「例1 は OFF のまま、例2 は ON のまま。Popup は Undo/Redo では一切変わらない」
+  - Reply (b), to the question
+    「D-03 補足(b): Popup だけを切り替えた後に Load Session / Load example を押したとき、「Replace the current work?」の確認を出しますか？（Popup の値は Session に保存されるので、出さないと黙って上書きされます。今の PR-C は出しません）」
+    the selected option and its description:
+    「確認を出す」
+    「Undo の段は作らず「未保存の変更あり」だけ記録して、確認ダイアログを出す」
+  - Reply (c), to the question
+    「D-03 補足(c): Auto Reflow、PNG DPI、palette の Instant Preview、LOSAT の実行方法とスレッド数は、今も切り替えるたびに Undo の段になります。どうしますか？」
+    the selected option and its description:
+    「今回は対象外」
+    「今回は Rich Feature Popup だけ。ほかは別途決める」
+  - Reply (d), to the question
+    「D-03 補足(d): Product Contract の記録に残す理由はありますか？（なければ「not stated」と記録します。理由を書く場合は「その他」に入力してください）」
+    the selected option:
+    「not stated で記録」
+  - The receipt of `PD-OI-100` below takes effect with the Owner's approval
+    on the pull request that adds this revision; that pull request does not
+    merge without it.
+  - Scope: only the **Rich Feature Popup** preference. Per Reply (c), the
+    other preferences are outside this decision and this revision does not
+    change them. No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -5761,6 +5801,50 @@ Decision date: 2026-10-14
   "acceptedResidualRisk": "直した部分は保存された Result（図）と合わないことがあり、次の Generate で直した設定の図になる。dialog の一覧には、ファイルの中の場所（modes.circular.config.adv.depth_tracks[0].height など）をそのまま示す行がある。一覧が長いときは 12 行までを示し、残りの数を示す。Web では dialog を出して読めるが、CLI では拒否される Session がある（手で書き換えた Session の不正な値、request の形式が定めない値）。request を直せない Session は、設定だけの Session として読み、保存された Result、GenBank、GFF、FASTA の入力ファイル、feature の一覧、cache を捨てて一覧に示すことがある。この動作はいくつかの変更に分けて入る。最初の変更（この dialog）より後の変更が入るまでは、次のことが残る。古い版の Session や古い設定ファイルの一部の値や不正な値（track の並びの設定の値、受け付けない Legend の色の編集、設定ファイルの図の型に合わない Legend の位置や知らない key など）は、今までどおり dialog に示さずに直されるか、そのまま読み込まれる（知らない track の型など）。不正な値を含む Session や設定ファイルの一部（定義にない key や欄、知らない値、図の型にない値、範囲外の値、種類の違う値、足りない resource や欄、読めない track の並びや cache、確認を通らない保存された Result を含むもの）は、今までどおり拒否される。何も復元できないファイルを拒否する確認はまだなく、後の変更で入る。保存された request に形式が定めない値を含む Session のうち、今までの Web が読めたものは、その値を dialog に示さずに読み込まれ、Generate や、保存された request で描き直す操作（label の配置し直し、alignment、record の変換）で「An input value is invalid」と出る。それ以外（feature の編集の表や grouping が null のもの、layout に定義にない key があるものなど）は今までどおり拒否される。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-14"
+}
+```
+
+### PD-OI-100: Rich Feature Popup outside Undo
+
+- Concern key: `web.history.rich-feature-popup`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / NO-UNDO-STEP`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 54 entry
+  above (Reply 1 and Replies (a) to (d)); `(a)` and `(b)` in the receipt name
+  those replies. Fields for which the Owner gave nothing read `not stated`.
+  The runtime, tests, and documentation that implement it merge with it
+  (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `35f45f5ae5bfbf8ddef85d1649f4e518f90c4610a0ac04a8f0bde2a01a1f49d4`.
+
+```text
+PRODUCT_DECISION
+Concern: web.history.rich-feature-popup
+Scenario revision: 1
+Choice: A / NO-UNDO-STEP
+Rationale: not stated
+Must preserve: (a) 「どちらも今の値のまま」 (b) 「確認を出す」
+May retire: not stated
+Accepted residual risk: not stated
+Owner: satoshikawato
+Decision date: 2026-10-16
+```
+
+```json
+{
+  "concern": "web.history.rich-feature-popup",
+  "scenarioRevision": 1,
+  "choice": "A / NO-UNDO-STEP",
+  "rationale": "not stated",
+  "mustPreserve": "(a) 「どちらも今の値のまま」 (b) 「確認を出す」",
+  "mayRetire": "not stated",
+  "acceptedResidualRisk": "not stated",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-16"
 }
 ```
 

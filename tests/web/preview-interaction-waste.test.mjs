@@ -322,7 +322,7 @@ class FakeSvg {
   getElementById(id) { return this.elements.find((element) => element.id === id) || null; }
 }
 
-const { createFeatureSvgActions } = await import(pathToFileURL(join(tempDir, 'app', 'feature-editor', 'svg-actions.js')));
+const { createFeatureSvgActions, HOVER_HIGHLIGHT_DWELL_MS } = await import(pathToFileURL(join(tempDir, 'app', 'feature-editor', 'svg-actions.js')));
 const { createPanZoom } = await import(pathToFileURL(join(tempDir, 'app', 'ui.js')));
 
 const featureRow = (index, extra = {}) => ({
@@ -538,6 +538,110 @@ test('OV-936: the alignment overlay is not measured while the preview pans', () 
   flushFrames();
   assert.equal(local.viewport.rectCalls, settled + 1, 'the end of the pan places the overlay once');
   local.actions.dispose();
+});
+
+// OV-900 (D-01): the hover highlight waits until the pointer rests on a target
+// for HOVER_HIGHLIGHT_DWELL_MS, so a pointer passing over bands and features
+// writes no highlight; resting writes the same highlight as before.
+const dwellFeatures = [
+  featureRow(0, { orthogroupId: 'OG5' }), featureRow(1, { orthogroupId: 'OG5' }),
+  featureRow(2, { orthogroupId: 'OG6' }), featureRow(3)
+];
+const ribbonFive = band('og5', { 'data-match-kind': 'orthogroup', 'data-orthogroup-id': 'OG5' });
+const ribbonSix = band('og6', { 'data-match-kind': 'orthogroup', 'data-orthogroup-id': 'OG6' });
+const dwellPreview = createPreview({ features: dwellFeatures, bands: [ribbonFive, ribbonSix] });
+const [groupFiveA, groupFiveB, groupSix, ungrouped] = dwellPreview.featureElements;
+const dwellElements = [...dwellPreview.featureElements, ribbonFive, ribbonSix];
+const highlightWrites = { count: 0 };
+dwellElements.forEach((element) => {
+  element.style = new Proxy({}, {
+    set(target, key, value) {
+      if (key === 'opacity' || key === 'filter') highlightWrites.count += 1;
+      target[key] = value;
+      return true;
+    }
+  });
+});
+const pointerEvent = (target, relatedTarget) => ({ target, relatedTarget, clientX: 400, clientY: 300 });
+const enter = (target, from = null) => dwellPreview.svg.dispatch('mouseover', pointerEvent(target, from));
+const exit = (target, to = null) => dwellPreview.svg.dispatch('mouseout', pointerEvent(target, to));
+// The pointer crosses the targets in order and leaves the Result, all within one dwell.
+const sweep = (targets) => targets.forEach((target, index) => {
+  enter(target, targets[index - 1] || null);
+  exit(target, targets[index + 1] || null);
+});
+const lit = () => dwellElements.filter((element) => element.style.opacity === '0.7').map((element) => element.id);
+const pendingDwells = () => [...timers.values()].filter((timer) => timer.delay === HOVER_HIGHLIGHT_DWELL_MS).length;
+// The highlight as it was written before the dwell: inline opacity and filter, with the earlier values kept.
+const highlightOf = (element) => ({
+  opacity: element.style.opacity,
+  filter: element.style.filter,
+  savedOpacity: element.getAttribute('data-gbdraw-hover-opacity'),
+  savedFilter: element.getAttribute('data-gbdraw-hover-filter')
+});
+const HIGHLIGHT = { opacity: '0.7', filter: 'brightness(1.2)', savedOpacity: '', savedFilter: '' };
+const CLEARED = { opacity: '', filter: '', savedOpacity: null, savedFilter: null };
+
+test('OV-900: a pointer sweep faster than the dwell writes no highlight', () => {
+  const targets = [groupFiveA, ribbonSix, ungrouped, groupSix, ribbonFive, groupFiveB];
+  for (let round = 0; round < 3; round += 1) sweep(targets);
+  assert.equal(highlightWrites.count, 0, 'no opacity or filter is written');
+  assert.deepEqual(lit(), []);
+  assert.equal(pendingDwells(), 0, 'leaving the Result cancels the pending highlight');
+});
+
+test('OV-900: resting for the dwell writes the same highlight as before', () => {
+  assert.equal(typeof HOVER_HIGHLIGHT_DWELL_MS, 'number');
+  assert.ok(HOVER_HIGHLIGHT_DWELL_MS >= 60 && HOVER_HIGHLIGHT_DWELL_MS <= 80, `${HOVER_HIGHLIGHT_DWELL_MS} ms`);
+  assert.ok(HOVER_HIGHLIGHT_DWELL_MS < 180, 'the highlight comes before the summary');
+  enter(groupFiveA);
+  assert.deepEqual(lit(), [], 'nothing is written while the pointer has not rested');
+  runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
+  assert.deepEqual(lit(), ['f0', 'f1', 'og5'], 'the whole similarity group');
+  [groupFiveA, groupFiveB, ribbonFive].forEach((element) => assert.deepEqual(highlightOf(element), HIGHLIGHT));
+  exit(groupFiveA);
+  assert.deepEqual(lit(), [], 'leaving clears at once');
+  [groupFiveA, groupFiveB, ribbonFive].forEach((element) => assert.deepEqual(highlightOf(element), CLEARED));
+  enter(ribbonSix);
+  runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
+  assert.deepEqual(lit(), ['f2', 'og6']);
+  exit(ribbonSix);
+  enter(ungrouped);
+  runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
+  assert.deepEqual(lit(), ['f3'], 'a feature without a group lights alone');
+  exit(ungrouped);
+  assert.deepEqual(lit(), []);
+});
+
+test('OV-900: moving from a lit target straight to another swaps the highlight once, without a gap', () => {
+  enter(groupFiveA);
+  runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
+  // To the group's own band: the group stays lit throughout.
+  exit(groupFiveA, ribbonFive);
+  enter(ribbonFive, groupFiveA);
+  assert.deepEqual(lit(), ['f0', 'f1', 'og5']);
+  runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
+  assert.deepEqual(lit(), ['f0', 'f1', 'og5']);
+  // To another group's band: the first group stays lit until the second one replaces it.
+  exit(ribbonFive, ribbonSix);
+  enter(ribbonSix, ribbonFive);
+  assert.deepEqual(lit(), ['f0', 'f1', 'og5']);
+  runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
+  assert.deepEqual(lit(), ['f2', 'og6']);
+  exit(ribbonSix);
+  assert.deepEqual(lit(), []);
+});
+
+test('OV-900: the Review alignment preview cancels a pending highlight and restores the rested one', () => {
+  enter(groupFiveA);
+  assert.equal(dwellPreview.actions.previewAlignmentCandidate({ recordIndex: 0, featureIndex: 3 }), true);
+  runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
+  assert.deepEqual(lit(), ['f3'], 'only the candidate is lit');
+  dwellPreview.actions.clearAlignmentCandidatePreview();
+  assert.deepEqual(lit(), ['f0', 'f1', 'og5'], 'the hover under the pointer comes back at once');
+  exit(groupFiveA);
+  assert.deepEqual(lit(), []);
+  dwellPreview.actions.dispose();
 });
 
 test('OV-913: clearing an empty selection writes no new selection and restyles nothing', async () => {

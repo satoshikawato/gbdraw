@@ -312,7 +312,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  * A saved `ui` object as `applyUiStateData` reads it: every leaf is
  * unvalidated until the line that reads it converts or matches it.
  * @typedef {Omit<FallbackUiData, 'selectedResultIndex' | 'layoutPreferences'> & {
- *   losatExecution?: unknown, richFeaturePopup?: unknown, featurePanelTab?: unknown,
+ *   losatExecution?: unknown, featurePanelTab?: unknown,
  *   circularPlotTitlePosition?: unknown, zoom?: unknown, canvasPan?: OffsetData | null
  * }} SavedUiFields
  */
@@ -4441,6 +4441,7 @@ const captureSessionImportSnapshot = () => ({
     linear: captureDrawingImportSnapshot(state.drawings.linear)
   },
   ui: cloneJsonData(buildUiStateData(state.drawings[state.mode.value])),
+  richFeaturePopup: Boolean(state.richFeaturePopup.value),
   files: cloneLiveFileState(state.drawings.linear),
   results: state.results.value,
   collinearGroups: state.collinearGroups.value,
@@ -4482,6 +4483,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       applyUiStateData(drawing, saved.ui);
     });
     applyUiStateData(state.drawings[shownMode], snapshot.ui);
+    state.richFeaturePopup.value = snapshot.richFeaturePopup;
     restoreLiveFileState(state.drawings.linear, snapshot.files);
     state.losatCache.value = snapshot.losatCache;
     state.losatDerivedCache.value = snapshot.losatDerivedCache;
@@ -4641,8 +4643,9 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
     paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
     // App-level settings (History and the Load rollback restore them with the UI).
+    // The Rich Feature Popup is a UI preference outside History (D-03): the
+    // Session and the Load rollback save it on their own.
     losatExecution: buildLosatExecutionData(),
-    richFeaturePopup: Boolean(state.richFeaturePopup.value),
     appliedPaletteName: state.appliedPaletteName.value,
     appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
     pendingPaletteName: drawing.pendingPaletteName.value,
@@ -4683,7 +4686,6 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
   state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
   // The cast: a plain object, and every field of the type is an optional unknown.
   if (isPlainObject(ui.losatExecution)) applyLosatExecutionData(/** @type {SessionLosatExecution} */ (ui.losatExecution));
-  if (typeof ui.richFeaturePopup === 'boolean') state.richFeaturePopup.value = ui.richFeaturePopup;
   if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
     state.featurePanelTab.value = ui.featurePanelTab;
   }

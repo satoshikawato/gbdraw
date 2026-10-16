@@ -18,6 +18,9 @@ from tests.test_record_display_comparisons import hit_frame, record, request, sv
 
 pytestmark = pytest.mark.browser
 ROOT = Path(__file__).resolve().parents[1]
+HIGHLIGHTED_MATCH_COUNT = (
+    "count => document.querySelectorAll('[data-gbdraw-match-id][data-gbdraw-hover-opacity]').length === count"
+)
 
 
 @pytest.fixture
@@ -149,7 +152,8 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
         copied = []
         for index in range(expected_count):
             paths.nth(index).dispatch_event("mouseover")
-            assert page.locator('[data-gbdraw-match-id][data-gbdraw-hover-opacity]').count() == expected_count
+            # The highlight comes once the pointer has rested (HOVER_HIGHLIGHT_DWELL_MS).
+            page.wait_for_function(HIGHLIGHTED_MATCH_COUNT, arg=expected_count)
             paths.nth(index).dispatch_event("click")
             payload = page.evaluate("fixtureState.clickedPairwiseMatch.value")
             assert payload is not None
@@ -196,7 +200,7 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
             current_paths = page.locator('[data-gbdraw-match-id]')
             for index in range(current_paths.count()):
                 current_paths.nth(index).dispatch_event('mouseover')
-                assert page.locator('[data-gbdraw-match-id][data-gbdraw-hover-opacity]').count() == current_paths.count()
+                page.wait_for_function(HIGHLIGHTED_MATCH_COUNT, arg=current_paths.count())
                 current_paths.nth(index).dispatch_event('click')
                 assert page.evaluate('fixtureState.clickedPairwiseMatch.value.sequenceBundle.combinedFasta') == copied[0]
         assert page.locator('[data-gbdraw-match-id]').count() == expected_count

@@ -43,6 +43,12 @@ import {
   normalizeFeatureIdentity
 } from '../../services/feature-dom.js';
 
+// The hover highlight of a feature or band is written once the pointer has
+// rested on it this long (OV-900, D-01): a pointer passing over bands writes
+// none, so the browser re-rasters no band area. It comes before the hover
+// summary (180 ms).
+export const HOVER_HIGHLIGHT_DWELL_MS = 70;
+
 export {
   FEATURE_ID_ATTRIBUTE,
   FEATURE_SELECTOR,
@@ -209,6 +215,9 @@ export {
  * @property {string} activeMatchHoverKey
  * @property {Element | null} pendingMatchElement
  * @property {Set<Element>} activeHoverElements
+ * @property {string} hoverHighlightKey The hover whose highlight is written ('' for none).
+ * @property {string} pendingHoverHighlightKey The hover whose highlight waits for the dwell.
+ * @property {number | null} hoverHighlightTimer
  * @property {{ clientX: number, clientY: number } | null} transformPointer
  * @property {boolean} reconcileHoverAfterTransform
  * @property {number | null} hoverReconcileFrame
@@ -970,6 +979,9 @@ export const createFeatureSvgActions = ({
       activeMatchHoverKey: '',
       pendingMatchElement: null,
       activeHoverElements: new Set(),
+      hoverHighlightKey: '',
+      pendingHoverHighlightKey: '',
+      hoverHighlightTimer: null,
       transformPointer: null,
       reconcileHoverAfterTransform: false,
       hoverReconcileFrame: null,
@@ -1166,38 +1178,86 @@ export const createFeatureSvgActions = ({
         });
       };
 
-      const clearActiveFeatureHover = () => {
-        if (!handlerState.activeHoverSvgId) return;
+      // The hover highlight (OV-900): one hover's styles are written at a time,
+      // once the pointer has rested on it for HOVER_HIGHLIGHT_DWELL_MS. Until
+      // then the written highlight stays, so a move from one target straight
+      // to the next swaps the two in one step and never shows neither.
+      const cancelPendingHoverHighlight = () => {
+        if (handlerState.hoverHighlightTimer !== null) window.clearTimeout(handlerState.hoverHighlightTimer);
+        handlerState.hoverHighlightTimer = null;
+        handlerState.pendingHoverHighlightKey = '';
+      };
+
+      /** @param {string} key @param {() => void} write */
+      const showHoverHighlight = (key, write) => {
+        cancelPendingHoverHighlight();
+        if (handlerState.hoverHighlightKey) clearTrackedHoverStyles();
+        write();
+        handlerState.hoverHighlightKey = key;
+      };
+
+      /** @param {string} key @param {() => void} write */
+      const requestHoverHighlight = (key, write) => {
+        if (key === handlerState.pendingHoverHighlightKey) return;
+        cancelPendingHoverHighlight();
+        if (key === handlerState.hoverHighlightKey) return;
+        handlerState.pendingHoverHighlightKey = key;
+        handlerState.hoverHighlightTimer = window.setTimeout(() => {
+          handlerState.hoverHighlightTimer = null;
+          showHoverHighlight(key, write);
+        }, HOVER_HIGHLIGHT_DWELL_MS);
+      };
+
+      const clearHoverHighlight = () => {
+        cancelPendingHoverHighlight();
         clearTrackedHoverStyles();
+        handlerState.hoverHighlightKey = '';
+      };
+
+      // The hovered target, for the summary, the overlay, and the restore after
+      // a Review alignment preview; the highlight follows it after the dwell.
+      const forgetFeatureHover = () => {
         handlerState.activeHoverSvgId = null;
         handlerState.activeHoverKey = '';
       };
 
-      const clearActiveMatchHover = () => {
-        if (!handlerState.activeMatchHoverElement) return;
-        clearTrackedHoverStyles();
+      const forgetMatchHover = () => {
         handlerState.activeMatchHoverElement = null;
         handlerState.activeMatchHoverKey = '';
       };
 
+      const clearHover = () => {
+        clearHoverHighlight();
+        forgetFeatureHover();
+        forgetMatchHover();
+      };
+
+      /** @param {string} svgId */
+      const featureHighlightKey = (svgId) => `feature|${getFeatureHoverKey(svgId)}`;
+      /** @param {Element} matchElement */
+      const matchHighlightKey = (matchElement) => `match|${getMatchHoverKey(matchElement)}`;
+
       const clearAlignmentCandidatePreview = ({ restore = true } = {}) => {
         if (!handlerState.alignmentCandidateSvgId && !handlerState.alignmentCandidateRestore) return;
-        clearTrackedHoverStyles();
+        clearHoverHighlight();
         handlerState.alignmentCandidateSvgId = '';
         handlerState.alignmentOverlay?.setHover(null);
         const previous = handlerState.alignmentCandidateRestore;
         handlerState.alignmentCandidateRestore = null;
         if (!restore || !previous) return;
-        if (previous.featureSvgId && ensureFeatureLookup().has(previous.featureSvgId)) {
-          setHoverHighlight(previous.featureSvgId);
-          handlerState.activeHoverSvgId = previous.featureSvgId;
-          handlerState.activeHoverKey = getFeatureHoverKey(previous.featureSvgId);
+        // The hover under the pointer comes back at once: the pointer has rested there.
+        const featureSvgId = previous.featureSvgId;
+        if (featureSvgId && ensureFeatureLookup().has(featureSvgId)) {
+          showHoverHighlight(featureHighlightKey(featureSvgId), () => setHoverHighlight(featureSvgId));
+          handlerState.activeHoverSvgId = featureSvgId;
+          handlerState.activeHoverKey = getFeatureHoverKey(featureSvgId);
           return;
         }
-        if (previous.matchElement?.isConnected) {
-          setMatchHover(previous.matchElement);
-          handlerState.activeMatchHoverElement = previous.matchElement;
-          handlerState.activeMatchHoverKey = getMatchHoverKey(previous.matchElement);
+        const matchElement = previous.matchElement;
+        if (matchElement?.isConnected) {
+          showHoverHighlight(matchHighlightKey(matchElement), () => setMatchHover(matchElement));
+          handlerState.activeMatchHoverElement = matchElement;
+          handlerState.activeMatchHoverKey = getMatchHoverKey(matchElement);
         }
       };
 
@@ -1233,12 +1293,8 @@ export const createFeatureSvgActions = ({
           featureSvgId: handlerState.activeHoverSvgId,
           matchElement: handlerState.activeMatchHoverElement
         };
-        if (handlerState.alignmentCandidateSvgId) {
-          clearTrackedHoverStyles();
-          handlerState.alignmentCandidateSvgId = '';
-        }
-        clearActiveFeatureHover();
-        clearActiveMatchHover();
+        handlerState.alignmentCandidateSvgId = '';
+        clearHover();
         hideHoverSummary();
         handlerState.alignmentCandidateRestore = restore;
         setFeatureHover(svgId);
@@ -1595,16 +1651,14 @@ export const createFeatureSvgActions = ({
 
       /** @param {Element} featureEl @param {HoverPoint | null | undefined} eventLike */
       const activateFeatureHover = (featureEl, eventLike) => {
-        clearActiveMatchHover();
+        forgetMatchHover();
         const svgId = getFeatureIdentity(featureEl);
-        if (!svgId) return false;
+        if (!svgId) {
+          clearHover();
+          return false;
+        }
         const hoverKey = getFeatureHoverKey(svgId);
-        if (handlerState.activeHoverKey !== hoverKey && handlerState.activeHoverSvgId) {
-          clearActiveFeatureHover();
-        }
-        if (handlerState.activeHoverKey !== hoverKey) {
-          setHoverHighlight(svgId);
-        }
+        requestHoverHighlight(featureHighlightKey(svgId), () => setHoverHighlight(svgId));
         handlerState.activeHoverSvgId = svgId;
         handlerState.activeHoverKey = hoverKey;
         handlerState.alignmentOverlay?.setHover(handlerState.alignmentCandidatesBySvgId.get(svgId) ?? null);
@@ -1616,14 +1670,9 @@ export const createFeatureSvgActions = ({
       /** @param {Element} matchEl @param {HoverPoint | null | undefined} eventLike */
       const activateMatchHover = (matchEl, eventLike) => {
         handlerState.alignmentOverlay?.setHover(null);
-        clearActiveFeatureHover();
+        forgetFeatureHover();
         const matchKey = getMatchHoverKey(matchEl);
-        if (handlerState.activeMatchHoverKey !== matchKey && handlerState.activeMatchHoverElement) {
-          clearActiveMatchHover();
-        }
-        if (handlerState.activeMatchHoverKey !== matchKey) {
-          setMatchHover(matchEl);
-        }
+        requestHoverHighlight(matchHighlightKey(matchEl), () => setMatchHover(matchEl));
         handlerState.activeMatchHoverElement = matchEl;
         handlerState.activeMatchHoverKey = matchKey;
         scheduleHoverSummary(() => matchHoverContent(buildMatchHoverSummary(matchEl)), eventLike);
@@ -1641,8 +1690,7 @@ export const createFeatureSvgActions = ({
           handlerState.activeHoverSvgId || handlerState.activeMatchHoverElement
         );
         rememberTransformPointer(eventLike);
-        clearActiveFeatureHover();
-        clearActiveMatchHover();
+        clearHover();
         hideHoverSummary();
         recordStructuralMetric('previewTransformHoverCleanupCount', 1, { kind });
       };
@@ -1723,23 +1771,29 @@ export const createFeatureSvgActions = ({
           rememberTransformPointer(e);
           return;
         }
+        // A move straight onto another target leaves the highlight to that
+        // target's hover; a move off every target clears it at once.
+        const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
+        const relatedMatch = relatedFeature ? null : getPairwiseMatchTarget(e.relatedTarget, svg);
+        const leave = () => {
+          if (!relatedFeature && !relatedMatch) clearHoverHighlight();
+          hideHoverSummary();
+        };
         const featureEl = getFeatureTarget(e.target, svg);
         if (featureEl) {
           const svgId = getFeatureIdentity(featureEl);
           if (!svgId || handlerState.activeHoverSvgId !== svgId) return;
-          const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
           if (relatedFeature && getFeatureHoverKey(getFeatureIdentity(relatedFeature)) === handlerState.activeHoverKey) return;
-          clearActiveFeatureHover();
+          forgetFeatureHover();
           handlerState.alignmentOverlay?.setHover(null);
-          hideHoverSummary();
+          leave();
           return;
         }
         const matchEl = getPairwiseMatchTarget(e.target, svg);
         if (!matchEl || handlerState.activeMatchHoverElement !== matchEl) return;
-        const relatedMatch = getPairwiseMatchTarget(e.relatedTarget, svg);
         if (relatedMatch && getMatchHoverKey(relatedMatch) === handlerState.activeMatchHoverKey) return;
-        clearActiveMatchHover();
-        hideHoverSummary();
+        forgetMatchHover();
+        leave();
       };
 
       /** @param {MouseEvent} e */
@@ -1926,8 +1980,7 @@ export const createFeatureSvgActions = ({
         clearPendingMatch();
         clearAlignmentOverlay();
         clearAlignmentCandidatePreview({ restore: false });
-        clearActiveFeatureHover();
-        clearActiveMatchHover();
+        clearHover();
         hideHoverSummary();
       };
       delegatedFeatureHandlers = handlerState;
