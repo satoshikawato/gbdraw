@@ -1120,6 +1120,7 @@ const runGeneration = async ({
       transport: 'transferable-binary',
       featureCatalog: result?.featureCatalog != null ? 'sent' : result?.error ? 'none' : 'unchanged',
       heldFeatureCatalogRevision: Boolean(held),
+      heldSegmentCount: heldSegments.length,
       bytes: collectGenerationResultTransferList(result).reduce(
         (total, buffer) => total + buffer.byteLength,
         0

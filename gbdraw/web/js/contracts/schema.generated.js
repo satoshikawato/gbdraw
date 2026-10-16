@@ -138,7 +138,7 @@ export const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze(['biologica
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,
-  renderProtocol: 3,
+  renderProtocol: 4,
   request: Object.freeze({
     currentSchema: 9,
     supportedSchemas: Object.freeze([1, 2, 5, 6, 7, 8, 9]),
