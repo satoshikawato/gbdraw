@@ -443,6 +443,15 @@ const withoutSuffix = (text, suffix) => {
  * candidate holds keeps its sanitized text. Joined in order, the pieces are the
  * sanitization of the whole document for the pieces Python writes (gbdraw/web/CLAUDE.md,
  * Runtime data flow).
+ *
+ * The reuse (CW-06): scope, the committed Results of the shown drawing; input,
+ * the children text (its revision) and the sanitizer, and also the page:
+ * DOMPurify's SANITIZE_DOM drops an `id` or `name` value that names a property
+ * of `document`, and the page's `embed`, `form`, `iframe`, `img` and `object`
+ * elements add such names. A held text is the sanitization against the page of
+ * the Generate that first admitted it. The app page has none of those named
+ * elements, so the page part does not change while the page lives (pinned by
+ * the stage S browser case); lifetime, the Result that keeps the text.
  * @param {Readonly<DecodedSvgDocument>} document
  * @param {ReadonlyMap<string, Readonly<HeldSegment>>} held
  * @param {SvgSanitizer | undefined} sanitizer
