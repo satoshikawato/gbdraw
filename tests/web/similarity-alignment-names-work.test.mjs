@@ -155,3 +155,20 @@ test('a catalog admitted again in another mode is indexed again, once', () => {
   assert.deepEqual(readsOf(labels), { reads: 1, value: expected }, 'the new admission holds a new index');
   assert.deepEqual(readsOf(labels), { reads: 0, value: expected });
 });
+
+// A record whose File names its accession does not read the catalog for one:
+// its rows are not walked, also when none of them names a usable record ID.
+test('a record with its own accession does not walk its catalog rows for one', () => {
+  const recordIdReads = { count: 0 };
+  const catalog = newCatalog();
+  const rows = catalog.items[0].biologicalFeatures;
+  rows.filter(({ recordKey }) => recordKey === 'a').forEach((feature) => {
+    Object.defineProperty(feature, 'record_id', { enumerable: true, get: () => { recordIdReads.count += 1; return ''; } });
+  });
+  const { state, labels } = fixture(admitted(catalog));
+  state.linearSeqs[0].accession = 'SEQ-A';
+  recordIdReads.count = 0;
+  assert.deepEqual(labels(), ['SEQ-A · gene-x', 'ACC-b · gene-y']);
+  assert.deepEqual(labels(), ['SEQ-A · gene-x', 'ACC-b · gene-y']);
+  assert.equal(recordIdReads.count, 0, 'the rows of record a are not read for an accession');
+});

@@ -386,7 +386,8 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
       .find((entry) => String(entry?.uid || '') === recordKey);
     const definition = displayText(record?.presentation?.label, fileNames.get(recordKey)?.definition);
     const name = definition ? plainTextLinearRecordLabel(definition) : '';
-    const accession = displayText(sequence?.accession, catalogAccession(recordKey));
+    // The catalog is read only for a record whose File names no accession.
+    const accession = displayText(sequence?.accession) || catalogAccession(recordKey);
     const fileName = displayText(sequence?.gb?.name, sequence?.gff?.name);
     const label = [...new Set([name, accession].filter(Boolean))].join(' · ')
       || (fileName ? plainTextLinearRecordLabel(fileName) : '')
