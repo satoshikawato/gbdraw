@@ -1520,11 +1520,19 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
     resolvedRecordCacheHitCount: 0,
     resolvedRecordCacheMissCount: 1,
     resolvedRecordBuildCount: 1,
-    // The retry starts a new worker: no render stage hits, and the
-    // interactive context stage builds once.
-    renderStageHitCount: 0,
+    // The retry starts a new worker: every stage it reuses was built in this
+    // render, and the interactive context stage builds once.
     'renderStageBuild:interactive_context': 1
   });
+  const retryMetrics = retryPython?.metrics ?? {};
+  expect(retryMetrics.renderStageBuildCount).toBeGreaterThan(0);
+  for (const key of Object.keys(retryMetrics)) {
+    if (key.startsWith('renderStageHit:')) {
+      expect(
+        retryMetrics[`renderStageBuild:${key.slice('renderStageHit:'.length)}`]
+      ).toBeGreaterThanOrEqual(1);
+    }
+  }
   const afterRetryWorker = await getDiagramWorkerActivity(page);
   expect(afterRetryWorker.constructions).toBe(2);
   expect(afterRetryWorker.instances[1].terminated).toBe(false);
