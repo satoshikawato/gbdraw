@@ -3145,3 +3145,104 @@ for (const previousSuppressed of [false, true]) {
   assert.deepEqual(restores.at(-1), { drawn: false }, 'the after side follows the before side');
   console.log('history redrawn result tests passed');
 }
+
+// OV-872: what a shown rerender writes (the Legend rows Python drew) while an
+// action's step is open, waiting for that rerender, is no change of a step:
+// the action stays one step, its own writes stay in it, and its Undo keeps
+// the drawn rows.
+{
+  let rules = 0;
+  let legend = 'generated';
+  let setting = 0;
+  const history = createHistoryManager({
+    buildIntent: () => ({ rules, legend, setting }),
+    applyIntent: (intent) => { ({ rules, legend, setting } = intent); },
+    buildCheckpoint: () => ({ rules, legend, setting }),
+    applyCheckpoint: (checkpoint) => { ({ rules, legend, setting } = checkpoint); }
+  });
+  await history.captureBaseline('initial');
+  /** @param {(shown: Promise<void>) => Promise<unknown>} fn */
+  const whileDrawn = async (fn) => {
+    let show = () => {};
+    const shown = new Promise((resolve) => { show = resolve; });
+    // The rerender was requested before the action's step began.
+    const requestedAt = history.intentStepSerial();
+    const action = history.runUndoable('Change feature color', () => fn(shown));
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    history.adoptDrawnWrite(() => { legend = `drawn-${rules}`; }, { requestedAt });
+    show();
+    await action;
+  };
+  // An intent step: the action's write before and after the rerender.
+  await whileDrawn(async (shown) => { setting = 1; await shown; rules = 1; });
+  assert.equal(history.getUndoCount(), 1);
+  await history.undo();
+  assert.deepEqual({ rules, legend, setting }, { rules: 0, legend: 'drawn-0', setting: 0 });
+  await history.redo();
+  assert.deepEqual({ rules, legend, setting }, { rules: 1, legend: 'drawn-0', setting: 1 });
+  // A rule commit: a checkpoint the action opens after the rerender.
+  await whileDrawn(async (shown) => {
+    await shown;
+    await history.runUndoableCheckpoint('Change feature color', () => { rules = 2; });
+  });
+  assert.equal(history.getUndoCount(), 2, 'one step per action');
+  await history.undo();
+  assert.deepEqual({ rules, legend, setting }, { rules: 1, legend: 'drawn-1', setting: 1 });
+  // With no step open, the write is in no step, as before.
+  history.adoptDrawnWrite(() => { legend = 'drawn-again'; }, { requestedAt: history.intentStepSerial() });
+  assert.equal(history.getUndoCount(), 1);
+  console.log('history drawn write tests passed');
+}
+
+// D-40 (review S1 of #1091): the step that requested the rerender is still
+// open when it binds (the label On path waits for the "Keep without label"
+// choice). The drawn rows are its own: its Undo restores the rows from before
+// its edit, as D-24 (OV-731) keeps a redraw's figure in the step that asked
+// for it.
+{
+  let visible = false;
+  let legend = ['generated'];
+  const history = createHistoryManager({
+    buildIntent: () => ({ visible, legend }),
+    applyIntent: (intent) => { ({ visible, legend } = intent); },
+    buildCheckpoint: () => ({ visible, legend }),
+    applyCheckpoint: (checkpoint) => { ({ visible, legend } = checkpoint); }
+  });
+  await history.captureBaseline('initial');
+  let show = () => {};
+  const shown = new Promise((resolve) => { show = resolve; });
+  /** @type {number | null} */
+  let requestedAt = null;
+  const action = history.runUndoable('Change label text', async () => {
+    visible = true;
+    requestedAt = history.intentStepSerial();
+    await shown;
+  });
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+  assert.notEqual(requestedAt, null, 'the step requested the rerender');
+  history.adoptDrawnWrite(() => { legend = ['generated', 'shown feature']; }, { requestedAt: Number(requestedAt) });
+  show();
+  await action;
+  assert.equal(history.getUndoCount(), 1);
+  await history.undo();
+  assert.deepEqual({ visible, legend }, { visible: false, legend: ['generated'] }, 'Undo restores the rows before the edit');
+  await history.redo();
+  assert.deepEqual({ visible, legend }, { visible: true, legend: ['generated', 'shown feature'] });
+
+  // The limit (N1): arrays are adopted whole. A step that began after the
+  // request and wrote the same array before the rerender binds loses that
+  // write to the drawn array: its Undo does not revert it.
+  const lateRequest = history.intentStepSerial();
+  let release = () => {};
+  const bound = new Promise((resolve) => { release = resolve; });
+  const renaming = history.runUndoable('Rename Legend entry', async () => {
+    legend = ['renamed', 'shown feature'];
+    await bound;
+  });
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+  history.adoptDrawnWrite(() => { legend = ['renamed', 'shown feature', 'drawn row']; }, { requestedAt: lateRequest });
+  release();
+  await renaming;
+  assert.equal(history.getUndoCount(), 1, 'the rename is in no step: the drawn array replaced it');
+  console.log('history drawn write requester tests passed');
+}

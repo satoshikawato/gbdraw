@@ -1563,6 +1563,10 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
  *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
  *   services/config.js owns the active-mode input check shared with Save.
+ * @property {() => number} [readHistoryStepSerial] History's `intentStepSerial`, read as a label rerender
+ *   is requested: the Legend rows it draws join only the History steps begun after it (D-40).
+ * @property {(write: () => void, request: { requestedAt: number }) => void} [adoptDrawnWrite] History's
+ *   `adoptDrawnWrite`: a label rerender replaces the shown Results through it (OV-873).
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
@@ -1603,6 +1607,8 @@ export const createRunAnalysis = ({
   // services/config.js owns the active-mode input check shared with Save.
   assertActiveModeInputs = null,
   readDraftSignature = null,
+  readHistoryStepSerial = () => 0,
+  adoptDrawnWrite = (write) => write(),
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
@@ -1720,6 +1726,8 @@ export const createRunAnalysis = ({
   const committedDrawing = (committed) => state.drawings[committed?.renderRequest?.mode === 'linear' ? 'linear' : 'circular'];
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
+  // `readHistoryStepSerial()` at the latest request (D-40).
+  let pendingReflowRequestedAt = 0;
   // A rerender requested while Generate (or a committed-candidate run) is in
   // progress waits for it: the rerender would take the newer generation token
   // and silently supersede the run (OV-48). It runs once after the run settles.
@@ -6076,8 +6084,9 @@ export const createRunAnalysis = ({
    * @param {() => boolean} isCurrentReflow
    * @param {LabelDiagramOptions | null | undefined} diagramOptions The `diagramOptions` of the request the rerender drew.
    * @param {EditorPaintState} drawnPaint
+   * @param {number} historyRequestedAt The History step serial its request was made at.
    */
-  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint) => {
+  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint, historyRequestedAt) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
       features: [...(commit.featureState?.renderedFeaturesByResult?.[resultIndex]?.values()
@@ -6097,6 +6106,7 @@ export const createRunAnalysis = ({
       bindingOptions: {
         replaceGeneratedLegend: true,
         drawnPaint,
+        historyRequestedAt,
         ...(featureIds.length === 0 ? {} : {
           reportedLabelBinding: Object.freeze({
             featureIds,
@@ -6118,10 +6128,10 @@ export const createRunAnalysis = ({
   // tables (R1(c), N-16): it never reads the settings draft.
   /**
    * @param {DrawingState} drawing
-   * @param {{ requestId: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'] }} options
+   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'] }} options
    * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
    */
-  const runLabelReflowCandidate = async (drawing, { requestId, decorationContinuity }) => {
+  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity }) => {
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
     }
@@ -6203,21 +6213,27 @@ export const createRunAnalysis = ({
       // its popup, label binding, Features list row, and History projection
       // (R-5). It renders the committed request, so the records and the
       // similarity groups the Generate committed stay.
-      featureCatalog.value = execution.catalog;
-      extractedFeatures.value = execution.commit.featureState.extractedFeatures;
-      biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
-      results.value = execution.commit.results;
-      // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
-      labelFitReports.value = execution.labelFitReports;
-      // The preview owner selects the Result (R13). It registers readiness only
-      // when fewer Results leave the selection out of range; the reflow's own
-      // expectation, registered next, replaces it, so the binder reports a
-      // forced label the Result does not draw (OV-06).
-      if (execution.commit.results.length > 0) {
-        previewRuntime.selectResult(nextSelectedResultIndex);
-      }
+      // OV-873: the new Results have new identities, which key the Legend and
+      // title moves History records; the rerender draws the same moves, so a
+      // step begun after its request takes the change as drawn (D-40).
+      adoptDrawnWrite(() => {
+        featureCatalog.value = execution.catalog;
+        extractedFeatures.value = execution.commit.featureState.extractedFeatures;
+        biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
+        results.value = execution.commit.results;
+        // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
+        labelFitReports.value = execution.labelFitReports;
+        // The preview owner selects the Result (R13). It registers readiness only
+        // when fewer Results leave the selection out of range; the reflow's own
+        // expectation, registered next, replaces it, so the binder reports a
+        // forced label the Result does not draw (OV-06).
+        if (execution.commit.results.length > 0) {
+          previewRuntime.selectResult(nextSelectedResultIndex);
+        }
+      }, { requestedAt: historyRequestedAt });
       expectReflowBindings(
-        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions, drawnPaint
+        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions, drawnPaint,
+        historyRequestedAt
       );
       logPostGbdrawTimings(timingEntries);
       return { status: 'ok' };
@@ -6237,6 +6253,7 @@ export const createRunAnalysis = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     pendingReflowRequestId += 1;
+    pendingReflowRequestedAt = readHistoryStepSerial();
     if (activeReflowRequestId !== 0) return;
     if (processing.value) {
       reflowDeferredByProcessing = true;
@@ -6248,6 +6265,7 @@ export const createRunAnalysis = ({
       // Generate takes priority: an iteration never starts while it runs.
       while (!processing.value && activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
+        const historyRequestedAt = pendingReflowRequestedAt;
         let decorationContinuity;
         try {
           decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
@@ -6257,7 +6275,8 @@ export const createRunAnalysis = ({
         }
         const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
-          requestId: activeReflowRequestId
+          requestId: activeReflowRequestId,
+          historyRequestedAt
         });
         if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
       }
