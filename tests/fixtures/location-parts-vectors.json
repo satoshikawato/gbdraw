@@ -1,5 +1,5 @@
 {
-  "description": "Feature location parts that the two interactive SVG writers normalize: the Python CLI writer (interactive_svg._normalize_location_parts) and the Web export writer (standalone-interactivity.js normalizeLocationParts). A start or end is a number or ASCII number text (gbdraw.core.numeric.ascii_float) truncated toward zero; anything else, including a boolean and a truncation beyond the safe integers, is missing. A display or strand is text without surrounding ASCII whitespace, the first such text of a list, or a safe integer's digits; a missing display is built from the 1-based start and the end. Each case's input is the parts value and expected is the normalized list. Each featureCoordinateCases input is a feature without parts and expected its start and end in the written feature (interactive_svg._feature_coordinates, standalone-interactivity.js featureCoordinates): they are read like a part's start and end, because the viewer builds the feature's one part from them. The viewer script in the written file reads the parts with its own code and is not pinned here.",
+  "description": "Feature location parts that the two interactive SVG writers normalize: the Python CLI writer (interactive_svg._normalize_location_parts) and the Web export writer (standalone-interactivity.js normalizeLocationParts). A start or end is a number or ASCII number text (gbdraw.core.numeric.ascii_float) truncated toward zero; anything else, including a boolean and a truncation beyond the safe integers, is missing. A display or strand is text without surrounding ASCII whitespace, the first such text of a list, or a safe integer's digits; a missing display is built from the 1-based start and the end. Each case's input is the parts value and expected is the normalized list. Each featureCoordinateCases input is a feature without parts and expected its start and end in the written feature (interactive_svg._feature_coordinates, standalone-interactivity.js featureCoordinates): they are read like a part's start and end, because the viewer builds the feature's one part from them. The Web app's reader of a start or end (services/feature-utils.js locationPartNumber and locationPartBound) and the viewer script's copy (locationPartBound in standalone-interactivity-assets.js) read each featureCoordinateCases value with the same rule (tests/web/feature-search-scope.test.mjs).",
   "cases": [
     {
       "name": "whole-number start and end give a 1-based display",
@@ -682,6 +682,61 @@
       "input": {
         "start": 9007199254740993,
         "end": 1e+300
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "hex and underscore text are missing",
+      "input": {
+        "start": "0x10",
+        "end": "1_0"
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "non-ASCII digits and a non-ASCII space are missing",
+      "input": {
+        "start": "\u0661",
+        "end": "\u00a020"
+      },
+      "expected": {
+        "start": null,
+        "end": null
+      }
+    },
+    {
+      "name": "a fraction and exponent text truncate toward zero",
+      "input": {
+        "start": 1.5,
+        "end": " 2.5e1 "
+      },
+      "expected": {
+        "start": 1,
+        "end": 25
+      }
+    },
+    {
+      "name": "a whole number one beyond the safe integers is missing",
+      "input": {
+        "start": 0,
+        "end": 9007199254740993
+      },
+      "expected": {
+        "start": 0,
+        "end": null
+      }
+    },
+    {
+      "name": "no-value words are missing",
+      "input": {
+        "start": "none",
+        "end": "Infinity"
       },
       "expected": {
         "start": null,

@@ -4253,8 +4253,7 @@ def test_a_cli_resave_names_a_losat_entry_without_a_text_name_as_the_web_does(
     # such a name as the entry's default, `losat_pair_<n>.tsv` (`n` counts the
     # saved entries from 1), and saves that name: tests/web/session-losat-cache-
     # validation.test.mjs ("... file name that is no text loads as the default
-    # name") pins the same values for the same edit of this fixture. A hidden
-    # entry has no name in either writer.
+    # name") pins the same values for the same edit of this fixture.
     source = Path(__file__).parent / "fixtures" / "sessions" / "synthetic_conservation.gbdraw-session.json.gz"
     session = json.loads(gzip.decompress(source.read_bytes()))
     first, second, third = session["losatCache"]["entries"]
@@ -4277,4 +4276,21 @@ def test_a_cli_resave_names_a_losat_entry_without_a_text_name_as_the_web_does(
     session_io_module.normalize_current_session_artifacts(written)
     assert [(entry["filename"], entry["display"]) for entry in written["losatCache"]["entries"]] == [
         ("losat_pair_1.tsv", True), ("", False), (third["filename"], True)
+    ]
+
+
+def test_a_cli_resave_writes_a_hidden_losat_entry_without_a_name_as_the_web_does() -> None:
+    # OV-1013: a hidden (`display: false`) raw entry is cache only. The Web Load
+    # gives it no Raw LOSAT row (config.js applyLosatCache) and its Save writes
+    # an entry without a row with `filename: ""` (serializeLosatCache;
+    # tests/web/session-export-validation.test.mjs pins it). The CLI writer kept
+    # a hidden entry's text name.
+    source = Path(__file__).parent / "fixtures" / "sessions" / "synthetic_conservation.gbdraw-session.json.gz"
+    session = json.loads(gzip.decompress(source.read_bytes()))
+    first, second, third = session["losatCache"]["entries"]
+    assert isinstance(second["filename"], str) and second["filename"]
+    second["display"] = False
+    session_io_module.normalize_current_session_artifacts(session)
+    assert [(entry["filename"], entry["display"]) for entry in session["losatCache"]["entries"]] == [
+        (first["filename"], True), ("", False), (third["filename"], True)
     ]

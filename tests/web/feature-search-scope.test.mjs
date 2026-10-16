@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import * as featureUtils from '../../gbdraw/web/js/services/feature-utils.js';
 import {
@@ -92,7 +93,11 @@ const locationCases = [
   [{ strand: '+', location_parts: [{ start: null, end: 20, strand: '+' }] }, '', ''],
   [{ strand: '+', location_parts: [{ start: '  ', end: 20, strand: '+' }] }, '', ''],
   [{ strand: '+', location_parts: [{ start: 5, end: null, strand: '+' }] }, '', ''],
-  [{ start: null, end: 20, strand: '+' }, '', '']
+  [{ start: null, end: 20, strand: '+' }, '', ''],
+  // PT-OD23: hand-edited bounds read by the writers' rule (PT-OD14).
+  [{ strand: '+', location_parts: [{ start: '0x10', end: 20, strand: '+' }] }, '', ''],
+  [{ strand: '+', location_parts: [{ start: 1.5, end: 20, strand: '+' }] }, '2..20 (+)', '19 bp'],
+  [{ start: 0, end: 2 ** 53 + 1, strand: '+' }, '', '']
 ];
 
 const embeddedSlice = (startMarker, endMarker) => {
@@ -204,6 +209,27 @@ test('Interactive SVG search and location text match the app', () => {
       assert.equal(embedded.locationText(feature), location);
       assert.equal(embedded.featureLengthText(feature), length);
     }
+  }
+});
+
+// PT-OD23: the app, the Interactive SVG viewer, and both interactive-SVG writers
+// read a start or end by one rule (../fixtures/location-parts-vectors.json).
+test('the app and the Interactive SVG read a start or end by the writers\' rule', () => {
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/location-parts-vectors.json', import.meta.url), 'utf8'));
+  const embeddedBound = new Function(`${embeddedFunction('locationPartBound')} return locationPartBound;`)();
+  /** @type {[unknown, number | null][]} */
+  const values = [
+    [true, null], ['0x10', null], ['1_0', null], ['\u0661', null], [1.5, 1], [2 ** 53 + 1, null],
+    [' 20 ', 20], ['-0.5', 0], [undefined, null]
+  ];
+  for (const { input, expected } of vectors.featureCoordinateCases) {
+    for (const field of ['start', 'end']) values.push([input[field], expected[field]]);
+  }
+  for (const [value, expected] of values) {
+    const label = String(value);
+    assert.equal(featureUtils.locationPartNumber(value), expected, label);
+    assert.deepEqual(featureUtils.locationPartBound({ start: value }, 'start'), expected ?? NaN, label);
+    assert.deepEqual(embeddedBound({ start: value }, 'start'), expected ?? NaN, label);
   }
 });
 

@@ -49,6 +49,13 @@ await writeFile(
   await readFile('gbdraw/web/js/services/record-source-coordinates.js', 'utf8'),
   'utf8'
 );
+for (const name of ['optional-positive-number.js', 'error-normalization.js']) {
+  await writeFile(
+    join(tempDir, 'utils', name),
+    await readFile(`gbdraw/web/js/utils/${name}`, 'utf8'),
+    'utf8'
+  );
+}
 await writeFile(
   join(tempDir, 'services', 'file-content-cache.js'),
   'export const readFileText = (file) => file.text();\n',

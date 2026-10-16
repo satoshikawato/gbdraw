@@ -4559,12 +4559,20 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }, 0);
   }
 
-  // Mirrors services/feature-utils.js locationPartBound: the viewer's one reader
-  // of a start or end of a location part, a feature, or a group member; NaN
-  // when it is missing, null or blank, never 0 (OV-968, OV-1010).
+  // Mirrors services/feature-utils.js locationPartBound (locationPartNumber):
+  // the viewer's one reader of a start or end of a location part, a feature, or
+  // a group member. A number or ASCII number text (surrounding ASCII spaces
+  // allowed), truncated toward zero; anything else is NaN, never 0: missing,
+  // null or blank, a boolean, other digits, underscores, hex, any non-ASCII
+  // character, and a truncation beyond the safe integers (OV-968, OV-1010, PT-OD23).
   function locationPartBound(part, field) {
     var value = part && typeof part === 'object' ? part[field] : undefined;
-    return typeof value === 'number' || (typeof value === 'string' && value.trim()) ? Number(value) : NaN;
+    var number = typeof value === 'number' ? value
+      : typeof value === 'string'
+        && /^[\\t\\n\\v\\f\\r ]*[+-]?(?:[0-9]+(?:[.][0-9]*)?|[.][0-9]+)(?:[eE][+-]?[0-9]+)?[\\t\\n\\v\\f\\r ]*$/.test(value)
+        ? Number(value) : NaN;
+    var truncated = Math.trunc(number) || 0;
+    return Number.isFinite(number) && Number.isSafeInteger(truncated) ? truncated : NaN;
   }
 
   // Mirrors services/feature-utils.js formatFeatureRange/formatFeatureLocation/formatFeatureLength.

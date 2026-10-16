@@ -2,8 +2,7 @@
 /** @import { FeatureCatalog, FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
 /** @import { AliasSource } from './feature-identity.js' */
 /** @import { OrthogroupFeatureIndex, OrthogroupMetadataEntry } from './orthogroup-feature-metadata.js' */
-import { normalizeStringArray } from './feature-utils.js';
-import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
+import { locationPartNumber, normalizeStringArray } from './feature-utils.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
@@ -188,29 +187,11 @@ const normalizeQualifierMap = (qualifiers) => {
   return normalized;
 };
 
-// The location-part readers are the twins of `_location_part_number` and
-// `_location_part_text` in gbdraw/render/interactive_svg.py; both read
-// tests/fixtures/location-parts-vectors.json.
-const NON_ASCII = /[^\x00-\x7F]/;
-// The ASCII whitespace that Python's `float()` and `str.strip(string.whitespace)` remove.
+// A part's start or end is read by `locationPartNumber` (feature-utils.js), the
+// display and strand by `locationPartText`, the twin of `_location_part_text` in
+// gbdraw/render/interactive_svg.py; both read tests/fixtures/location-parts-vectors.json.
+// The ASCII whitespace that Python's `str.strip(string.whitespace)` removes.
 const ASCII_WHITESPACE_AT_ENDS = /^[\t\n\v\f\r ]+|[\t\n\v\f\r ]+$/g;
-
-/**
- * A part's start or end: a number or ASCII number text, truncated toward zero.
- * A boolean, other text (other digits, underscores, hex), a non-finite number,
- * and a truncation beyond the safe integers are missing.
- * @param {unknown} value
- * @returns {number | null}
- */
-const locationPartNumber = (value) => {
-  // Any non-ASCII text is missing, spaces included: Python and JavaScript strip different Unicode spaces.
-  if (typeof value === 'string' && NON_ASCII.test(value)) return null;
-  const number = classifyOptionalNumber(value).value ?? null;
-  if (number === null) return null;
-  // `|| 0` turns the -0 of a negative fraction into 0, as Python's int() does.
-  const truncated = Math.trunc(number) || 0;
-  return Number.isSafeInteger(truncated) ? truncated : null;
-};
 
 /**
  * A part's display or strand: text without surrounding ASCII whitespace. A

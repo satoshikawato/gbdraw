@@ -714,13 +714,26 @@ write-up of a release.
   that is not text (for example `7` or `["a.tsv"]`) is read as having no name,
   as the web app reads it, instead of writing that value as the name. A Session
   saved again names such a shown entry `losat_pair_<n>.tsv`, the name the web
-  app gives it (OV-986, OV-1007).
+  app gives it, and writes a hidden (`display: false`) entry without a name, as
+  the web app does; before, the CLI kept a hidden entry's name (OV-986,
+  OV-1007, OV-1013).
 - Fixed (web app, CLI, Python): in an interactive SVG, a feature or orthogroup
   member whose start is missing (`null`) no longer shows as starting at 1. The
   web app wrote such a start as 0, so the feature without location parts read
   `1..20`. Both writers now read a feature's or member's start and end as they
   read a location part's: a number or ASCII number text, truncated toward zero;
   blank text, a boolean, or a list is missing (OV-1009, OV-1011).
+- Changed (web app, interactive SVG): the web app and the interactive SVG
+  viewer read the start or end of a location part, a feature, or a Similarity
+  Group member by the same rule as the two writers. This concerns hand-edited
+  Session or SVG data only; gbdraw writes whole numbers. A fraction is
+  truncated toward zero: a part from `1.5` to `20` shows `2..20` (was
+  `2.5..20`), its sequence is extracted, and Align accepts such a member
+  (it refused it with "invalid display facts"). Hex or binary text (`0x10`),
+  text with any non-ASCII character (a no-break space included), and whole
+  numbers beyond 2^53 - 1 are missing: the location, length, FASTA header
+  coordinates, and sequence are left out for them and Align refuses such a
+  member, where `0x10` read as 16 before.
 - Fixed (web app): loading a Session older than version 46 that recolored a
   Legend row named like a built-in JavaScript member (`constructor`,
   `toString`) without a saved original color no longer records that member as

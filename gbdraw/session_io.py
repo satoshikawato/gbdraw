@@ -35,7 +35,6 @@ from .analysis.protein_colinearity import (
 )
 from .comparisons.losat_jobs import (
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
-    losat_entry_filename,
     losat_pair_filename,
 )
 from .core.numeric import (
@@ -4272,10 +4271,11 @@ def normalize_current_session_artifacts(
         classification = classify_raw_losat_cache_entry(entry)
         if classification in {"protein-current", "nucleotide-current"}:
             clone = _json_clone(entry)
-            # A name that is no text is none, as the Web reads it; a shown
-            # entry then gets the Web's default name (OV-1007).
+            # As the Web writes it: a shown entry keeps its text name or gets
+            # the default `losat_pair_<n>.tsv` (OV-1007); a hidden entry is
+            # cache only and has no name (OV-1013).
             clone["filename"] = (
-                losat_entry_filename(entry)
+                ""
                 if entry.get("display") is False
                 else losat_pair_filename(entry, index + 1)
             )
