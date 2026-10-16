@@ -272,7 +272,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { CommittedCanonicalSession } from './session-request.js' */
+/** @import { CommittedCanonicalSession, SessionRequestProjection, SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
@@ -283,6 +283,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LinearComparisonEdge, LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
+/** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
+/** @import { StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ConfirmLoadRepairs, LoadRepair, Repaired } from '../utils/load-repairs.js' */
@@ -295,6 +297,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
 
@@ -930,6 +933,10 @@ const defaultEditorStateData = () => ({
 // State, History, and Session rollback hold the Generate-owned catalog by
 // reference; only an admitted catalog may enter state. Vue proxies obscure the
 // identity that admission records.
+/**
+ * @param {unknown} catalog A catalog in state, or one a saved draft or snapshot holds.
+ * @returns {FeatureCatalog | null}
+ */
 const admittedFeatureCatalog = (catalog) => {
   const rawCatalog = rawReactiveValue(catalog);
   return isAdoptedFeatureCatalog(rawCatalog) ? rawCatalog : null;
@@ -2333,8 +2340,11 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
   // The settings-only decision of the request read is passed on explicitly (C-OD07).
   const settingsOnly = requestRead.settingsOnly || isSettingsOnlySessionDocument(data);
+  /** @type {SessionRequestProjection | null} */
   const canonicalProjection = settingsOnly
-    ? projectSettingsOnlySession(data, currentResourceTable)
+    // The cast: Load read the shown mode (`readSettingsOnlyMode`, K19) and Session authority the Web
+    // inventory; no step after replaces `ui.mode`.
+    ? projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (data), currentResourceTable)
     : sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
     ? projectCanonicalSessionRequest({
         renderRequest: projectionRenderRequest,
@@ -2699,7 +2709,11 @@ const buildLoadedArtifactSlot = (set, {
 // A saved layout owner (current or legacy ui fields) wins; without one, a
 // canonical Session takes the layout projected from its committed request
 // (`restoredLayoutPreferences`).
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {Record<string, unknown> | null} [ui] A saved `ui` object, unvalidated.
+ * @param {{ projected?: StoredLayoutPreferences | null }} [options] The layout projected from the committed request.
+ */
 const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) => {
   replaceLayoutPreferences(drawing.layoutPreferences, restoredLayoutPreferences(ui, {
     mode: state.mode.value,
@@ -2956,10 +2970,14 @@ const restorePaletteStateFromSession = (drawing, ui = {}) => {
   restorePendingPaletteFromSession(drawing, ui);
 };
 
+/**
+ * The descriptor each file was saved or loaded as, keyed by that file.
+ * @type {WeakMap<object, RawSessionResourceDescriptor>}
+ */
 const serializedFileDescriptors = new WeakMap();
 /**
- * @template D
- * @param {File} file
+ * @template {RawSessionResourceDescriptor} D
+ * @param {object} file A `File`, or another object whose bytes were read.
  * @param {D} descriptor
  * @returns {D}
  */
@@ -2969,40 +2987,52 @@ const cacheSerializedFileDescriptor = (file, descriptor) => {
   return descriptor;
 };
 
+/**
+ * @param {unknown} file A file slot's value: a `File` or a Session resource view. A value without bytes
+ *   (a list included) is rejected by `readFileBytes`.
+ * @returns {Promise<RawSessionResourceDescriptor | null>}
+ */
 const serializeFile = async (file) => {
   if (!file) return null;
+  // A view: each member is read as an unvalidated value.
+  const view = /** @type {UnvalidatedFields<'name' | 'type' | 'lastModified'>} */ (file);
   const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
   if (source?.descriptor) {
-    const visibleName = String(file.name || '').trim();
+    const visibleName = String(view?.name || '').trim();
     const descriptor = visibleName && visibleName !== source.descriptor.name
       ? { ...source.descriptor, name: visibleName }
       : source.descriptor;
     setResourcePayloadOwner(descriptor, file);
     return descriptor;
   }
-  const cached = serializedFileDescriptors.get(file);
+  // A key is an object (functions included): any other value has no entry.
+  const cached = typeof file === 'object' || typeof file === 'function'
+    ? serializedFileDescriptors.get(/** @type {object} */ (file))
+    : undefined;
   if (cached) return cached;
   const bytes = await readFileBytes(file);
-  const shared = serializedFileDescriptors.get(file);
+  // `readFileBytes` resolves only for an object (or a function) with `arrayBuffer()`.
+  const owner = /** @type {object} */ (file);
+  const shared = serializedFileDescriptors.get(owner);
   if (shared) return shared;
   recordStructuralMetric('resourceReencodeCount', 1, {
-    resourceName: String(file.name || 'file')
+    resourceName: String(view?.name || 'file')
   });
   recordStructuralMetric('base64EncodeCount', 1, {
-    resourceName: String(file.name || 'file')
+    resourceName: String(view?.name || 'file')
   });
   recordStructuralMetric('encodedByteCount', bytes.byteLength, {
-    resourceName: String(file.name || 'file')
+    resourceName: String(view?.name || 'file')
   });
   const descriptor = {
-    name: file.name || 'file',
-    type: file.type || '',
+    name: view?.name || 'file',
+    type: view?.type || '',
     size: bytes.byteLength,
-    lastModified: file.lastModified ?? Date.now(),
+    lastModified: view?.lastModified ?? Date.now(),
     encoding: 'base64',
     data: bytesToBase64(bytes)
   };
-  return cacheSerializedFileDescriptor(file, descriptor);
+  return cacheSerializedFileDescriptor(owner, descriptor);
 };
 
 /**
@@ -3024,26 +3054,35 @@ const serializeFileValue = async (value) => (
  * resource view) or `null`, or a list of them for a stored list.
  * @typedef {FileLike | null | DeserializedFile[]} DeserializedFile
  */
-// `entry` keeps its implicit type: a legacy `files` entry's `name`, `type` and `lastModified` go unconverted
-// into `new File(...)` below, which the true type (`unknown`) does not allow without a cast of those leaves.
-/** @returns {DeserializedFile} */
-const deserializeFile = (entry) => {
-  if (Array.isArray(entry)) {
-    return entry.map((item) => deserializeFile(item));
+// The `File` constructor converts its name and `type` with ToString and `lastModified` with ToNumber
+// (Web IDL), so `String` and `Number` below pass the values it used before; a stored value is JSON or a
+// descriptor `serializeFile` made, never a symbol or a BigInt, for which the two conversions differ.
+/**
+ * @param {unknown} value A stored file value: a descriptor, a Session resource view, or a list of them.
+ * @returns {DeserializedFile}
+ */
+const deserializeFile = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((/** @type {unknown} */ item) => deserializeFile(item));
   }
-  if (isSessionResourceFileView(entry)) return entry;
+  if (isSessionResourceFileView(value)) return value;
+  // A view: each member is tested or converted where it is read.
+  const entry = /** @type {UnvalidatedFields<'data' | 'name' | 'type' | 'lastModified'>} */ (value);
   if (
     !entry ||
     !Object.prototype.hasOwnProperty.call(entry, 'data') ||
     entry.data === null ||
     entry.data === undefined
   ) return null;
-  if (isEncodedDepthFileEntry(entry)) {
-    const text = decodeDepthText(entry.data);
+  // A value with an own `data` is an object: a descriptor as the Session stores it.
+  const descriptor = /** @type {RawSessionResourceDescriptor} */ (entry);
+  if (isEncodedDepthFileEntry(/** @type {{ encoding?: unknown, data?: { schema?: unknown } | null }} */ (entry))) {
+    // The test above read `data.schema`; `decodeDepthText` checks every field it reads.
+    const text = decodeDepthText(/** @type {DepthFilePayload} */ (entry.data));
     recordStructuralMetric('fileConstructionCount');
-    return new File([text], entry.name || 'depth.tsv', {
-      type: entry.type || 'text/tab-separated-values',
-      lastModified: entry.lastModified ?? Date.now()
+    return new File([text], String(entry.name || 'depth.tsv'), {
+      type: String(entry.type || 'text/tab-separated-values'),
+      lastModified: Number(entry.lastModified ?? Date.now())
     });
   }
   if (typeof entry.data !== 'string') return null;
@@ -3051,11 +3090,11 @@ const deserializeFile = (entry) => {
   recordStructuralMetric('base64DecodeCount');
   recordStructuralMetric('decodedByteCount', bytes.byteLength);
   recordStructuralMetric('fileConstructionCount');
-  const file = new File([bytes], entry.name || 'file', {
-    type: entry.type || 'application/octet-stream',
-    lastModified: entry.lastModified ?? Date.now()
+  const file = new File([bytes], String(entry.name || 'file'), {
+    type: String(entry.type || 'application/octet-stream'),
+    lastModified: Number(entry.lastModified ?? Date.now())
   });
-  cacheSerializedFileDescriptor(file, entry);
+  cacheSerializedFileDescriptor(file, descriptor);
   return file;
 };
 
@@ -3520,6 +3559,7 @@ const customDepthRequested = (mode, drawing) => {
 /**
  * The one check that the active mode has its biological inputs; Generate and
  * Save from the draft both use it, so both explain the same missing input.
+ * @param {string} [mode] The mode to check; the Generate port passes a drawing's mode as text.
  */
 export const assertActiveModeInputs = (mode = state.mode.value, sourceState = state) => {
   const files = sourceState.files || {};
@@ -3670,7 +3710,7 @@ export const serializeActiveRenderFiles = async (
     (Array.isArray(sourceFiles.linearCanonicalComparisons)
       ? sourceFiles.linearCanonicalComparisons
       : []
-    ).map(async (comparison) => (
+    ).map(async (/** @type {ResourceBackedComparison} */ comparison) => (
       isResourceBackedCanonicalComparison(comparison)
         ? {
             ...mapResourceBackedCanonicalComparison(comparison),
@@ -3793,7 +3833,7 @@ export const adoptCanonicalRenderArtifacts = (
   } else if (projection.files.c_conservation_blasts_source === 'losat-cache') {
     const projectedConservation = projection.config.circularConservation;
     const currentSeries = Array.isArray(drawing.circularConservation.series)
-      ? drawing.circularConservation.series.map((entry) => cloneJsonData(entry))
+      ? drawing.circularConservation.series.map((/** @type {unknown} */ entry) => cloneJsonData(entry))
       : [];
     const nextSeries = Array.isArray(projectedConservation?.series)
       ? projectedConservation.series.map((entry, index) => ({
@@ -3807,12 +3847,12 @@ export const adoptCanonicalRenderArtifacts = (
       : [];
     nextCircularState = {
       blasts: (projection.files.c_conservation_blasts || [])
-        .map((entry) => deserializeFile(entry))
+        .map((/** @type {unknown} */ entry) => deserializeFile(entry))
         .filter(Boolean),
       fastas: (projection.files.c_conservation_fastas || [])
-        .map((entry) => deserializeFile(entry)),
+        .map((/** @type {unknown} */ entry) => deserializeFile(entry)),
       sequenceSources: (projection.files.c_conservation_sequence_sources || [])
-        .map((entry) => deserializeFile(entry)),
+        .map((/** @type {unknown} */ entry) => deserializeFile(entry)),
       projectedConservation,
       series: nextSeries
     };
@@ -4269,7 +4309,7 @@ const cloneLiveFileState = (drawing) => ({
       Array.isArray(state.files.linearCanonicalComparisons)
         ? state.files.linearCanonicalComparisons
         : []
-    ).map((comparison) => (
+    ).map((/** @type {ResourceBackedComparison} */ comparison) => (
       isResourceBackedCanonicalComparison(comparison)
         ? mapResourceBackedCanonicalComparison(comparison)
         : cloneJsonData(comparison)
@@ -4289,7 +4329,13 @@ const cloneLiveFileState = (drawing) => ({
   }
 });
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {{
+ *   files: Record<string, unknown>, circularRecordList: unknown, circularRecordDiscovery: object,
+ *   linearSeqs: LinearSeq[], linearRecordRows: LinearRecordRow[], linearComparisonPlan: LinearComparisonPlan
+ * }} snapshot The project inputs `cloneLiveFileState` captured, or those a Load installs.
+ */
 const restoreLiveFileState = (drawing, snapshot) => {
   state.matchSequenceRegistry?.reset?.();
   Object.keys(state.files).forEach((key) => {
@@ -4442,7 +4488,9 @@ const captureSessionImportSnapshot = () => ({
     circular: captureDrawingImportSnapshot(state.drawings.circular),
     linear: captureDrawingImportSnapshot(state.drawings.linear)
   },
-  ui: cloneJsonData(buildUiStateData(state.drawings[state.mode.value])),
+  // The cast: outside a Load the shown mode is a drawing's ('circular' or 'linear'), and a Load replaces
+  // the saved mode it writes first before it returns (no `await` between).
+  ui: cloneJsonData(buildUiStateData(state.drawings[/** @type {DiagramMode} */ (state.mode.value)])),
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
   files: cloneLiveFileState(state.drawings.linear),
   results: state.results.value,
@@ -5670,6 +5718,8 @@ const importSessionDocument = async (e, options = {}) => {
     const otherModeCatalogAdmitted = currentSchemaSession ? otherModeCatalog : null;
     const otherModeResult = otherModeCatalogAdmitted ? data.otherModeResult : null;
     const otherSetMode = otherModeResult?.renderRequest?.mode === 'linear' ? 'linear' : 'circular';
+    // A projection's mode is checked (`projectCanonicalSessionRequest`) or read (K19).
+    /** @type {Set<DiagramMode>} */
     const resultModes = new Set([
       ...(committedImportedResults.length > 0 && committedMode ? [committedMode] : []),
       ...(otherModeResult ? [otherSetMode] : [])
@@ -6520,7 +6570,8 @@ export const exportSession = (titleOverride = null, options = {}) => {
     // payloads, resources, catalogs, caches and Results retain their existing owner.
     // Session 46 keeps each drawing as its mode's slice (PD-OI-086); the
     // Features-list record is the shown Result's. `drawing` is the shown mode's.
-    const drawing = state.drawings[state.mode.value];
+    // The cast: outside a Load the shown mode is a drawing's (see `captureSessionImportSnapshot`).
+    const drawing = state.drawings[/** @type {DiagramMode} */ (state.mode.value)];
     // Each drawing's drafts are written on the rows of their records (OV-278,
     // OV-325): a Session without a Web draft loads a draft selected by record ID on '#1'.
     const recordDisplayRows = /** @type {{ recordDisplayRows?: { value?: Parameters<typeof bindRecordDisplayDrafts>[1] } }} */ (options).recordDisplayRows?.value || [];

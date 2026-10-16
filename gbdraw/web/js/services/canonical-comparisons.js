@@ -21,8 +21,10 @@ const RESOURCE_BACKED_CANONICAL_COMPARISON_KINDS = new Set([
 ]);
 
 /**
- * @param {ResourceBackedComparison | null | undefined} comparison
- * @returns {comparison is ResourceBackedComparison}
+ * @template {ResourceBackedComparison | null | undefined} C
+ * @param {C} comparison
+ * @returns {comparison is C & ResourceBackedComparison & { kind: 'precomputedProteinComparison' | 'orthogroupResult' | 'collinearityResult' }}
+ *   The kind is one of the set's; the other members are as `C` and the view type them.
  */
 export const isResourceBackedCanonicalComparison = (comparison) => (
   RESOURCE_BACKED_CANONICAL_COMPARISON_KINDS.has(comparison?.kind)
