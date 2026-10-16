@@ -3134,7 +3134,8 @@ export const serializeResults = () => {
  * comparison carries `key`, `filename` and `display`, a linear comparison also its edge.
  * @typedef {object} LosatCacheInfoEntry
  * @property {unknown} key The raw cache key: a string from Generate; a Session load stores the saved key (truthy, unchecked).
- * @property {unknown} filename A string from Generate; a Session load stores the saved name (truthy, unchecked) or a default.
+ * @property {string} filename A file name: Generate's, or the saved one a Session load reads (a default when it is
+ *   no text or empty).
  * @property {boolean} display
  * @property {string} [edgeKey]
  * @property {number} [ordinal]
@@ -3366,7 +3367,8 @@ const applyLosatCache = (
       if (entry.display === false) return;
       info.push({
         key: entry.key,
-        filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
+        // A saved name that is no text is read as none (OV-981).
+        filename: typeof entry.filename === 'string' && entry.filename ? entry.filename : `losat_pair_${idx + 1}.tsv`,
         display: true,
         ...restoredLosatCacheInfoIdentity(drawing, entry)
       });

@@ -74,6 +74,7 @@ await copyModule(
 );
 await copyModule('gbdraw/web/js/services/session-feature-metadata.js', 'services/session-feature-metadata.js');
 await copyModule('gbdraw/web/js/services/svg-result-ingestion.js', 'services/svg-result-ingestion.js');
+await copyModule('gbdraw/web/js/utils/own-entry.js', 'utils/own-entry.js');
 await copyModule('gbdraw/web/js/services/svg-result-normalization.js', 'services/svg-result-normalization.js');
 await copyModule('gbdraw/web/js/services/svg-sanitization.js', 'services/svg-sanitization.js');
 await copyModule('gbdraw/web/js/services/svg-serialization.js', 'services/svg-serialization.js');

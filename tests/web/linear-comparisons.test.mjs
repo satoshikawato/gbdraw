@@ -16,6 +16,7 @@ const {
   LINEAR_COMPARISON_MODES,
   adjacentRowPairs,
   buildLinearComparisonTimeline,
+  buildLosatJobSpecs,
   buildPairwiseLosatJobSpecs,
   canonicalGridDisplayPairs,
   createDefaultLinearComparisonPlan,
@@ -736,4 +737,35 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
   // A record without a canonical grid cell leaves the decision to the plan's edges.
   assert.equal(canonicalGridDisplayPairs(drawn, [cell('a', 1), { uid: 'c', row: 3 }, cell('d', 4)]), null);
   assert.equal(canonicalGridDisplayPairs([{ uid: 'a' }], rows), null);
+}
+
+{
+  // OV-980, OV-985: LOSATP Collinear, Search between All records, a CLI
+  // Session grid whose rows put record a below c. Each search names the
+  // edge of its own two records, in either orientation, so the search a->c
+  // is shown and numbered by the edge c->a; a pair no edge joins takes an
+  // edge by ordinal.
+  const cell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
+  const gridSequences = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
+  const gridRows = [cell('b', 1), cell('c', 2), cell('a', 3)];
+  const resolution = resolveLinearComparisonPlan({
+    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
+    sequences: gridSequences, layout: gridRows, losatProgram: 'blastp', blastpMode: 'collinear'
+  });
+  assert.deepEqual(resolution.edges.map((edge) => [edge.edgeKey, edge.ordinal]), [['b->c', 0], ['c->a', 1]]);
+  const specs = buildLosatJobSpecs({
+    resolution, recordCount: 3, recordUids: ['a', 'b', 'c'], program: 'blastp', blastpMode: 'collinear',
+    collinearInferOrthogroups: false, collinearSearchScope: 'all'
+  });
+  assert.deepEqual(specs.map((spec) => [`${spec.queryUid}->${spec.subjectUid}`, spec.edgeKey, spec.ordinal]), [
+    ['a->b', 'b->c', 0], ['b->a', 'b->c', 0],
+    ['a->c', 'c->a', 1], ['c->a', 'c->a', 1],
+    ['b->c', 'b->c', 0], ['c->b', 'b->c', 0]
+  ]);
+  const displayed = canonicalGridDisplayPairs(gridSequences, gridRows);
+  assert.deepEqual(
+    specs.filter((spec) => displayed(spec.queryIndex, spec.subjectIndex)).map((spec) => [spec.edgeKey, spec.ordinal]),
+    [['c->a', 1], ['b->c', 0]],
+    'each displayed search has its own card and number'
+  );
 }

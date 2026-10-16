@@ -1446,6 +1446,28 @@ test('Load records Python\'s paint on a Session 44 Result saved without records'
   assert.equal(python.repeat_region, '#d3d3d3 gray 2.0');
 });
 
+// OV-982: a Legend row whose key is an Object.prototype member name
+// (`constructor`) has no Python color unless the Session saved one; Load
+// records none for its swatch, while a row with a saved color gets it.
+test('Load records no Python color for a Legend row named like an Object member', () => {
+  const content = '<svg><path id="f0001" fill="#aaaaaa"></path><g id="legend"><g id="feature_legend">'
+    + '<g data-legend-key="constructor"><path fill="#ff0000"></path><text>constructor</text></g>'
+    + '<g data-legend-key="CDS"><path fill="#00ff00"></path><text>CDS</text></g></g></g></svg>';
+  const results = [{ name: 'diagram.svg', content }];
+  const admission = admitFeatureCatalog(catalog(), results, { mode: 'linear' });
+  const plan = createSavedResultPlan(results, admission, {
+    featureColorOverrides: {}, featureStrokeOverrides: {}, legendEntries: [],
+    legendColorOverrides: { constructor: '#ff0000', CDS: '#00ff00' }, legendStrokeOverrides: {},
+    originalLegendColors: { CDS: '#123456' }, originalLegendOrder: [], rules: [], mode: 'linear', sessionVersion: 44
+  });
+  const svg = parseSvgText(content);
+  (plan.operationsByResult[0].callerTransforms || []).forEach((transform) => transform(svg));
+  const swatchBase = (key) => svg.querySelectorAll('g[data-legend-key]')
+    .find((row) => row.getAttribute('data-legend-key') === key).querySelector('path').getAttribute('data-gbdraw-base-fill');
+  assert.equal(swatchBase('CDS'), '#123456');
+  assert.equal(swatchBase('constructor'), null);
+});
+
 // Python's paint is recorded only for a Session older than 46: a Session 46
 // Result carries its own records, and its bytes are admitted as saved.
 test('Load records Python\'s paint only on the Result of a Session older than 46', () => {
