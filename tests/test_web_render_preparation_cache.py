@@ -1620,3 +1620,76 @@ def test_a_title_position_change_sends_no_children_text(tmp_path: Path) -> None:
     assert moved["results"][0]["content"] != cold["results"][0]["content"]
     assert _content_pieces(moved)
     assert not [piece for piece in _content_pieces(moved) if "children" in piece]
+
+
+def _gc_percent_calls(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    import gbdraw.render.groups.circular.definition as definition_module
+
+    calls: list[int] = []
+    real = definition_module.calculate_gc_percent
+
+    def counted(seq: object) -> float:
+        calls.append(1)
+        return real(seq)
+
+    monkeypatch.setattr(definition_module, "calculate_gc_percent", counted)
+    return calls
+
+
+def test_a_circular_title_change_reuses_the_gc_percent_of_every_record(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The GC percent reads only the record: a warm Generate keys it and does not recompute it."""
+
+    calls = _gc_percent_calls(monkeypatch)
+    source = tmp_path / "records.gbk"
+    records = (_record("gc-a"), _record("gc-b"), _record("gc-c"))
+    records[2].seq = Seq("ATGC" * 180)
+    _write_genbank(source, records)
+    cache = PreparedBiologicalInputCache()
+
+    cold, cold_diagnostics = _render(tmp_path, cache, _multi_record_document(source, title="Cold"), request_id=1)
+    cold_metrics = _metrics(cold_diagnostics)
+    assert cold_metrics["renderStageBuild:record_gc_percent"] == len(records)
+    assert len(calls) == len(records)
+
+    calls.clear()
+    retitled, retitled_diagnostics = _render(
+        tmp_path, cache, _multi_record_document(source, title="Warm"), request_id=2
+    )
+    warm_metrics = _metrics(retitled_diagnostics)
+    assert calls == []
+    assert warm_metrics["renderStageHit:record_gc_percent"] >= len(records)
+    assert "renderStageBuild:record_gc_percent" not in warm_metrics
+    assert warm_metrics.get("renderStageUncacheableCount", 0) == 0
+    assert retitled["featureCatalog"] == cold["featureCatalog"]
+
+    # Replaced records are other records: each GC percent is computed again.
+    replaced, replaced_diagnostics = _render(
+        tmp_path,
+        cache,
+        _multi_record_document(source, title="Warm"),
+        request_id=3,
+        token_generation=2,
+    )
+    assert _metrics(replaced_diagnostics)["renderStageBuild:record_gc_percent"] == len(records)
+    assert len(calls) == len(records)
+    assert replaced["results"] == retitled["results"]
+
+
+def test_a_single_record_title_change_reuses_the_gc_percent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _gc_percent_calls(monkeypatch)
+    source = tmp_path / "record.gbk"
+    _write_genbank(source, (_record("gc-single"),))
+    cache = PreparedBiologicalInputCache()
+    _render(tmp_path, cache, _document(source, title="Cold"), request_id=1)
+    assert len(calls) == 1
+
+    calls.clear()
+    _warm, diagnostics = _render(tmp_path, cache, _document(source, title="Warm"), request_id=2)
+    metrics = _metrics(diagnostics)
+    assert calls == []
+    assert metrics["renderStageHit:record_gc_percent"] >= 1
+    assert metrics.get("renderStageUncacheableCount", 0) == 0
