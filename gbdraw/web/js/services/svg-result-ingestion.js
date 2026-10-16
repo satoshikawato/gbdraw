@@ -38,6 +38,7 @@ import { ruleLegendCaptions } from './specific-color-rules.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
+import { ownEntry } from '../utils/own-entry.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
 import { normalizeSvgResultIds } from './svg-result-normalization.js';
 import {
@@ -1277,7 +1278,8 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
   // color the row's stroke reaches by (OV-288), so the records come first.
   // Both stores are keyed by the row's key.
   Object.entries(edits.legendColorOverrides).forEach(([key, color]) => {
-    const original = edits.originalLegendColors[key];
+    // A row key is data: only an own entry is a saved color (OV-982).
+    const original = ownEntry(edits.originalLegendColors, key);
     if (original === undefined) return;
     (rows.get(key) || []).forEach((row) => {
       const swatch = legendSwatch(row);

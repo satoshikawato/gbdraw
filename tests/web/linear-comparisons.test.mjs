@@ -16,11 +16,13 @@ const {
   LINEAR_COMPARISON_MODES,
   adjacentRowPairs,
   buildLinearComparisonTimeline,
+  buildLosatJobSpecs,
   buildPairwiseLosatJobSpecs,
   canonicalGridDisplayPairs,
   createDefaultLinearComparisonPlan,
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
+  losatEdgeOfPair,
   materializeResolvedEdgesAsSelectedPlan,
   missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
@@ -736,4 +738,41 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
   // A record without a canonical grid cell leaves the decision to the plan's edges.
   assert.equal(canonicalGridDisplayPairs(drawn, [cell('a', 1), { uid: 'c', row: 3 }, cell('d', 4)]), null);
   assert.equal(canonicalGridDisplayPairs([{ uid: 'a' }], rows), null);
+}
+
+{
+  // OV-980: LOSATP Collinear, search scope All, a CLI Session grid whose rows
+  // put record a below c. The search a->c is the display pair of the edge
+  // c->a; its spec carries the fallback edge b->c (`buildLosatJobSpecs`).
+  // The raw LOSAT row of a display pair names the edge of its own two
+  // records, so each comparison card saves its own search.
+  const cell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
+  const gridSequences = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
+  const gridRows = [cell('b', 1), cell('c', 2), cell('a', 3)];
+  const resolution = resolveLinearComparisonPlan({
+    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
+    sequences: gridSequences, layout: gridRows, losatProgram: 'blastp', blastpMode: 'collinear'
+  });
+  assert.deepEqual(resolution.edges.map((edge) => edge.edgeKey), ['b->c', 'c->a']);
+  const displayed = canonicalGridDisplayPairs(gridSequences, gridRows);
+  const displaySpecs = buildLosatJobSpecs({
+    resolution, recordCount: 3, recordUids: ['a', 'b', 'c'], program: 'blastp', blastpMode: 'collinear',
+    collinearInferOrthogroups: false, collinearSearchScope: 'all'
+  }).filter((spec) => displayed(spec.queryIndex, spec.subjectIndex));
+  assert.deepEqual(displaySpecs.map((spec) => [spec.queryUid, spec.subjectUid, spec.edgeKey]), [
+    ['a', 'c', 'b->c'], ['b', 'c', 'b->c']
+  ], 'the a->c search carries the fallback edge of another pair');
+  assert.deepEqual(
+    displaySpecs.map((spec) => losatEdgeOfPair(resolution.edges, spec.queryIndex, spec.subjectIndex)?.edgeKey),
+    ['c->a', 'b->c']
+  );
+  // The edge in the pair's own orientation comes first; no LOSAT edge, none.
+  assert.equal(losatEdgeOfPair(resolution.edges, 1, 2)?.edgeKey, 'b->c');
+  assert.equal(losatEdgeOfPair(resolution.edges, 2, 1)?.edgeKey, 'b->c');
+  assert.equal(losatEdgeOfPair(resolution.edges, 0, 1), null);
+  const uploaded = resolveLinearComparisonPlan({
+    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'upload', edges: [] },
+    sequences: gridSequences, layout: gridRows
+  });
+  assert.equal(losatEdgeOfPair(uploaded.edges, 1, 2), null, 'an Upload edge shows no raw LOSAT search');
 }

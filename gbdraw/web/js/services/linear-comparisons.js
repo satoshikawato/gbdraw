@@ -1024,6 +1024,24 @@ export const buildPairwiseLosatJobSpecs = ({
     })));
 };
 
+/**
+ * The LOSAT edge whose comparison card shows the search of two records: the
+ * edge in the search's orientation, else in the other one (OV-980). A search
+ * spec of Similarity groups or Collinear may carry the edge of another pair
+ * (`buildLosatJobSpecs` falls back to an edge by ordinal), so a card is found
+ * by its records, not by the spec's `edgeKey`.
+ * @param {LinearComparisonResolution['edges']} resolvedEdges The edges of the resolution the specs came from.
+ * @param {number} queryIndex
+ * @param {number} subjectIndex
+ * @returns {LinearComparisonResolvedEdge | null} null: no LOSAT edge joins the two records.
+ */
+export const losatEdgeOfPair = (resolvedEdges, queryIndex, subjectIndex) => {
+  const edges = resolvedEdges.filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
+  return edges.find((edge) => edge.queryIndex === queryIndex && edge.subjectIndex === subjectIndex)
+    || edges.find((edge) => edge.queryIndex === subjectIndex && edge.subjectIndex === queryIndex)
+    || null;
+};
+
 // The record-pair searches one Generate requests. Generate and the Settings
 // job-count estimate both expand them here (N-10). Similarity groups always
 // include within-record evidence; Collinear includes it only when inference is

@@ -675,6 +675,25 @@ write-up of a release.
   Legend rows that redraw drew (or, after a Legend or title move, the moved
   position under the redrawn diagram) were recorded as an extra step under the
   same name, whose Undo changed nothing visible (OV-872, OV-873).
+- Fixed (web app): with LOSATP Collinear and search scope **All** on a CLI
+  Session's record grid that places a record above one listed before it,
+  **Save Raw LOSAT TSV** on one comparison card saved the search of another
+  pair, and the other pair's card had no **Save Raw LOSAT TSV** button. Each
+  card now saves the search of its own two records, under its own file name
+  (OV-980).
+- Fixed (web app): a Session whose raw LOSAT cache entry has a file name that
+  is not text (for example `{}`) loads with the entry's default name,
+  `losat_pair_<n>.tsv`. Before, **Save Raw LOSAT TSV** named the file
+  `[object Object]` (OV-981).
+- Fixed (web app): loading a Session older than version 46 that recolored a
+  Legend row named like a built-in JavaScript member (`constructor`,
+  `toString`) without a saved original color no longer records that member as
+  the swatch's original color. Before, Reset set the swatch fill to
+  `function Object() { [native code] }` (OV-982).
+- Fixed (web app): Load drops a raw LOSAT cache entry whose `searchContext` is
+  not text (for example a list holding the 64-character hash), as it drops
+  other entries it cannot read. Before, the entry was kept, never reused, and
+  written again by Save Session (OV-983).
 - Web: when **Load Label TSV** is applied while the Label Not Shown dialog is
   open, the dialog is cancelled and the edited label text is not written.
   Before, the dialog disappeared without an answer, and Undo, Redo, Save and
