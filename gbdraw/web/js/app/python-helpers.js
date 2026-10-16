@@ -23,14 +23,24 @@ from gbdraw.web_support.feature_override_table import read_feature_override_tabl
 from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
 from gbdraw.web_support.export_fonts import pdf_fonts_json, svg_font_embedding_json
 
-_WEB_LOSATP_FILTERED_HIT_CACHE = {}
-_WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
-_WEB_LOSATP_CACHE_ORDER = []
 _WEB_LOSATP_CACHE_LIMIT = 64
-_WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
-# The last figure of each mode drawn with crossing label leaders, for the rows
-# the label fit dialog computes later (OD-F14).
-_WEB_LABEL_FIT_SEARCHES = LabelFitRowSearches()
+
+def _start_web_worker_state():
+    """Starts the state each Worker owns: its caches, the prepared-input cache
+    epoch and the random seed. The helpers call it when they load; a Worker
+    restored from a Pyodide snapshot calls it again, so no two Workers share
+    the state the snapshot froze (OV-1000)."""
+    global _WEB_LOSATP_FILTERED_HIT_CACHE, _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE, _WEB_LOSATP_CACHE_ORDER
+    global _WEB_PREPARED_INPUT_CACHE, _WEB_LABEL_FIT_SEARCHES
+    import random
+    random.seed()
+    _WEB_LOSATP_FILTERED_HIT_CACHE = {}
+    _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
+    _WEB_LOSATP_CACHE_ORDER = []
+    _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
+    # The last figure of each mode drawn with crossing label leaders, for the
+    # rows the label fit dialog computes later (OD-F14).
+    _WEB_LABEL_FIT_SEARCHES = LabelFitRowSearches()
 
 def _web_losatp_cache_by_name(name):
     if name == "filtered":
@@ -1830,4 +1840,7 @@ def call_web_json_helper(helper_name, *args):
         return helper(*args)
     except Exception as error:
         return json.dumps({"error": serialize_web_error(error, operation=operation, stage="helper")})
+
+
+_start_web_worker_state()
 `;
