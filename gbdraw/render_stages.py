@@ -209,6 +209,43 @@ class _Unkeyable(Exception):
     """An argument has no key; the call is not cached in this request."""
 
 
+_T = TypeVar("_T")
+
+
+class _PreKeyed(tuple[_T, ...]):
+    """A tuple keyed once, for an argument that several stages take unchanged.
+
+    Built by :func:`_pre_keyed`; ``key`` is the key of the equal plain tuple,
+    or ``None`` outside a cache transaction or when an item has no key.
+    """
+
+    key: Hashable | None
+
+    def __new__(cls, items: Iterable[_T]) -> _PreKeyed[_T]:
+        keyed = super().__new__(cls, items)
+        keyed.key = None
+        return keyed
+
+
+def _pre_keyed(items: Iterable[_T]) -> _PreKeyed[_T]:
+    """Key ``items`` once, so each stage that takes them reads the key.
+
+    The items must be values nobody else holds (copies), so they cannot change
+    after the key is computed. Outside a cache transaction nothing is keyed.
+    """
+
+    from gbdraw.api import prepared
+
+    keyed = _PreKeyed(items)
+    if prepared.active_render_stage_transaction() is not None:
+        try:
+            keyed.key = _key(tuple(keyed), config_path=None)
+        except _Unkeyable:
+            # The stage meets the same item and takes its uncacheable path.
+            pass
+    return keyed
+
+
 @dataclass(eq=False)
 class _StageFrame:
     """One stage build in progress: the inner stage keys and the read flag."""
@@ -482,6 +519,10 @@ def _key(
 
     if value is None:
         return None
+    if type(value) is _PreKeyed:
+        if value.key is not None:
+            return value.key
+        value = tuple(value)
     if isinstance(value, Enum):
         return ("enum", _type_name(value), value.value)
     if isinstance(value, float):

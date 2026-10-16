@@ -489,7 +489,8 @@ def add_labels_group_on_canvas(
 
     Two stages, so a leader stroke change keeps the text and a font change
     keeps the leaders. The labels are this request's copies after the legend
-    shift; they are keyed by value.
+    shift, keyed by value; the record assembler pre-keys them once for both
+    phases, and a tuple is passed on as it is so that key is kept.
     """
     content = render_stage(
         "label_leaders_content" if phase == "leaders" else "label_text_content",
@@ -498,7 +499,9 @@ def add_labels_group_on_canvas(
         len(gb_record.seq),
         canvas_config.geometry(),
         render_context,
-        precalculated_labels=tuple(precalculated_labels),
+        precalculated_labels=(
+            precalculated_labels if isinstance(precalculated_labels, tuple) else tuple(precalculated_labels)
+        ),
         phase=phase,
     )
     canvas.add(center_group_on_canvas(place_content(canvas, content, group_key), canvas_config))
