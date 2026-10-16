@@ -142,16 +142,20 @@ replaced has no evidence of its own; the newer run tests a tree that contains
 it, and a light push on top of it inherits nothing. Pull request runs and manual
 dispatches still cancel the run they supersede.
 
-Fail-fast on pull requests: when `Lint`, `Web change budget`, `Core PR`,
-`Web contracts`, `Web PR smoke`, `Recipes standard`, or `Gallery` fails in a
-pull request run, its last step runs `gh run cancel` on that run, so the
-`Playwright functional` shards and other jobs still running stop. Those jobs
-alone get `actions: write`; the workflow default stays read-only. The step
-checks `github.event_name == 'pull_request'`, so a `dev` push or a manual
-dispatch is never cancelled and still leaves its exact-SHA evidence. A shard
-cancelled this way loses no evidence: the commit has already failed, and
-`PR / gate` still runs and fails. `tests/ci/ci-impact-cli.test.mjs` pins the
-step and the permissions.
+Fail-fast on pull requests: when `Core PR`, `Web contracts`,
+`Web change budget`, or `Recipes standard` fails in a pull request run, a small
+dependent job, `Fail fast (<job>)`, runs `gh run cancel` on that run, so the
+`Playwright functional` shards and other jobs still running stop. Its condition
+is `if: failure() && github.event_name == 'pull_request'`. The failed job keeps its
+`failure` conclusion; on a green run the cancel jobs are skipped. Only the
+cancel jobs get `actions: write`; the test jobs, which run third-party
+packages, keep the read-only workflow token. A `dev` push or a manual dispatch
+is never cancelled and still leaves its exact-SHA evidence. A shard cancelled
+this way loses no evidence: the commit has already failed, and `PR / gate`,
+which does not depend on the cancel jobs, still runs and fails. The four jobs
+are the ones whose failures came first in the measured pull request runs; the
+weekly CI inventory shows when another job should join them.
+`tests/ci/ci-impact-cli.test.mjs` pins the cancel jobs and their permissions.
 
 ### Light-change inheritance
 

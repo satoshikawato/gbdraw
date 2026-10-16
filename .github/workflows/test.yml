@@ -127,9 +127,6 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    permissions:
-      contents: read
-      actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -183,11 +180,21 @@ jobs:
               --recurse-submodules=no --filter=blob:none --stdin
           node --test tests/web/owner-graph-replay.test.mjs
 
-      - name: Cancel this run on failure
-        if: failure() && github.event_name == 'pull_request'
+  fail-fast-web-change-budget:
+    # Cancels the rest of a pull request run once web-change-budget has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Web change budget)
+    needs: web-change-budget
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
         env:
           GH_TOKEN: ${{ github.token }}
-          # Names the repository even when the checkout step is the one that failed.
           GH_REPO: ${{ github.repository }}
         run: gh run cancel "$GITHUB_RUN_ID"
 
@@ -238,9 +245,6 @@ jobs:
       github.event_name == 'pull_request' && github.base_ref == 'dev' &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core-pr')
-    permissions:
-      contents: read
-      actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -268,11 +272,21 @@ jobs:
         if: always()
         run: git diff --exit-code -- tests/reference_outputs/
 
-      - name: Cancel this run on failure
-        if: failure() && github.event_name == 'pull_request'
+  fail-fast-core-pr:
+    # Cancels the rest of a pull request run once core-pr has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Core PR)
+    needs: core-pr
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
         env:
           GH_TOKEN: ${{ github.token }}
-          # Names the repository even when the checkout step is the one that failed.
           GH_REPO: ${{ github.repository }}
         run: gh run cancel "$GITHUB_RUN_ID"
 
@@ -286,9 +300,6 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    permissions:
-      contents: read
-      actions: write
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -311,11 +322,21 @@ jobs:
           -m "recipe and not slow"
           --durations=30
 
-      - name: Cancel this run on failure
-        if: failure() && github.event_name == 'pull_request'
+  fail-fast-recipes-standard:
+    # Cancels the rest of a pull request run once recipes-standard has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Recipes standard)
+    needs: recipes-standard
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
         env:
           GH_TOKEN: ${{ github.token }}
-          # Names the repository even when the checkout step is the one that failed.
           GH_REPO: ${{ github.repository }}
         run: gh run cancel "$GITHUB_RUN_ID"
 
@@ -329,9 +350,6 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    permissions:
-      contents: read
-      actions: write
     runs-on: ubuntu-latest
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 25
@@ -421,14 +439,6 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Cancel this run on failure
-        if: failure() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # Names the repository even when the checkout step is the one that failed.
-          GH_REPO: ${{ github.repository }}
-        run: gh run cancel "$GITHUB_RUN_ID"
 
   browser:
     name: Browser (Python 3.11)
@@ -536,9 +546,6 @@ jobs:
       needs.ci-impact.result == 'success' &&
       (contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-contracts-pr') ||
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke'))
-    permissions:
-      contents: read
-      actions: write
     runs-on: ubuntu-latest
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 20
@@ -612,11 +619,21 @@ jobs:
           -m "browser and not slow"
           --durations=30
 
-      - name: Cancel this run on failure
-        if: failure() && github.event_name == 'pull_request'
+  fail-fast-web-contracts-pr:
+    # Cancels the rest of a pull request run once web-contracts-pr has failed
+    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
+    name: Fail fast (Web contracts)
+    needs: web-contracts-pr
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Cancel this run
         env:
           GH_TOKEN: ${{ github.token }}
-          # Names the repository even when the checkout step is the one that failed.
           GH_REPO: ${{ github.repository }}
         run: gh run cancel "$GITHUB_RUN_ID"
 
@@ -627,9 +644,6 @@ jobs:
       github.event_name == 'pull_request' && github.base_ref == 'dev' &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke')
-    permissions:
-      contents: read
-      actions: write
     runs-on: ubuntu-latest
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 20
@@ -701,14 +715,6 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Cancel this run on failure
-        if: failure() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # Names the repository even when the checkout step is the one that failed.
-          GH_REPO: ${{ github.repository }}
-        run: gh run cancel "$GITHUB_RUN_ID"
 
   playwright-functional:
     name: Playwright functional (shard ${{ matrix.shard }}/8)
@@ -1104,9 +1110,6 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    permissions:
-      contents: read
-      actions: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -1124,14 +1127,6 @@ jobs:
 
       - name: Check code formatting
         run: ruff check gbdraw/
-
-      - name: Cancel this run on failure
-        if: failure() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # Names the repository even when the checkout step is the one that failed.
-          GH_REPO: ${{ github.repository }}
-        run: gh run cancel "$GITHUB_RUN_ID"
 
   losat-cache-browser-acceptance:
     name: LOSAT cache browser acceptance

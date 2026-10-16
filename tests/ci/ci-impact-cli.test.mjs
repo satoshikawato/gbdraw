@@ -759,41 +759,32 @@ test('workflow keeps trusted PR routing and activates protected dev routing', ()
 
 test('a failed fast job cancels the rest of its pull request run, never a dev run', () => {
   const workflow = readTestsWorkflow();
-  // The job's last step, so its `if: always()` and `if: failure()` steps run first.
-  const cancelStep = new RegExp([
-    '\\n      - name: Cancel this run on failure\\n',
-    "        if: failure\\(\\) && github\\.event_name == 'pull_request'\\n",
-    '        env:\\n',
-    '          GH_TOKEN: \\$\\{\\{ github\\.token \\}\\}\\n',
-    '          # [^\\n]*\\n',
-    '          GH_REPO: \\$\\{\\{ github\\.repository \\}\\}\\n',
-    '        run: gh run cancel "\\$GITHUB_RUN_ID"\\n?$'
-  ].join(''));
-  // A job-level block replaces the workflow-level one, so it lists every permission the job uses.
-  const jobPermissions = '\n    permissions:\n      contents: read\n      actions: write\n';
-  const failFastJobs = [
-    'lint', 'web-change-budget', 'web-pr-smoke', 'core-pr', 'web-contracts-pr',
-    'recipes-standard', 'gallery'
-  ];
-  for (const jobId of failFastJobs) {
-    const job = workflowJobOf(workflow, jobId);
-    assert.ok(job, jobId);
-    assert.match(job, cancelStep, `${jobId} must end with the guarded cancel step`);
-    assert.ok(job.includes(jobPermissions), `${jobId} must grant contents: read and actions: write`);
+  const jobIds = [...workflow.split('\njobs:\n')[1].matchAll(/^  ([a-z0-9-]+):\n/gm)]
+    .map((match) => match[1]);
+  const gateNeeds = () => workflowJobOf(workflow, 'pr-gate')
+    .match(/\n    needs:\n((?:      - [a-z0-9-]+\n)+)/)[1].match(/(?<=- )[a-z0-9-]+/g);
+  const failFastFor = ['core-pr', 'web-contracts-pr', 'web-change-budget', 'recipes-standard'];
+  for (const watched of failFastFor) {
+    const job = workflowJobOf(workflow, `fail-fast-${watched}`);
+    assert.ok(job, `fail-fast-${watched}`);
+    assert.match(job, new RegExp(`\\n    needs: ${watched}\\n`));
+    assert.match(job, /\n    if: failure\(\) && github\.event_name == 'pull_request'\n/);
+    assert.match(job, /\n    permissions:\n      contents: read\n      actions: write\n/);
+    assert.match(job, /\n {8}run: gh run cancel "\$GITHUB_RUN_ID"\n/);
+    // A cancel job is not gate evidence: the gate fails on the failed job it watches.
+    assert.ok(!gateNeeds().includes(`fail-fast-${watched}`));
   }
-  // A started dev push run is never cancelled: it must leave exact-SHA evidence.
-  for (const jobId of [
-    'core', 'browser', 'playwright-functional', 'playwright-performance',
-    'acceptance-supported-main', 'slow-main', 'vibrio-generate-release',
-    'losat-cache-browser-acceptance'
-  ]) {
-    const job = workflowJobOf(workflow, jobId);
-    assert.ok(job, jobId);
-    assert.doesNotMatch(job, /gh run cancel|actions: write/, jobId);
-  }
-  assert.equal(workflow.match(/gh run cancel/g)?.length ?? 0, failFastJobs.length);
-  assert.equal(workflow.match(/actions: write/g)?.length ?? 0, failFastJobs.length);
+  // The test jobs, which run third-party packages, keep the read-only workflow token.
+  const writers = jobIds.filter((id) => /actions: write/.test(workflowJobOf(workflow, id)));
+  assert.deepEqual(writers, jobIds.filter((id) => id.startsWith('fail-fast-')));
+  assert.deepEqual(writers.sort(), failFastFor.map((id) => `fail-fast-${id}`).sort());
+  assert.equal(workflow.match(/actions: write/g).length, failFastFor.length);
+  assert.equal(workflow.match(/gh run cancel/g).length, failFastFor.length);
   assert.match(workflow.split('\njobs:\n')[0], /\npermissions:\n  contents: read\n  actions: read\n/);
+  assert.deepEqual(gateNeeds(), [
+    'ci-impact', 'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
+    'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'
+  ]);
 });
 
 test('every planned job is a gate dependency that can run for its profile', () => {
