@@ -421,6 +421,12 @@ let worker = null;
 let workerInitialized = false;
 /** @type {ReturnType<typeof validateWebRuntimeCapabilities> | null} */
 let workerCapabilities = null;
+/**
+ * Why a Worker of this page could not restore the Pyodide snapshot; null
+ * while none failed. The Workers started after a failure boot cold.
+ * @type {string | null}
+ */
+let pyodideSnapshotError = null;
 /** @typedef {Readonly<{ step: number, total: number, label: string }>} RuntimePreparationStep */
 /**
  * The pending Worker initialization: its promise, the reject that settles it,
@@ -516,7 +522,8 @@ const buildInitPayload = (id) => {
     type: 'init',
     id,
     fonts: workerFontFiles(workerFontSource.readFonts()),
-    ...buildPyodideAssetManifest()
+    ...buildPyodideAssetManifest(),
+    ...(pyodideSnapshotError === null ? {} : { pyodideSnapshotUrl: null })
   };
 };
 
@@ -632,8 +639,18 @@ const ensureWorkerInitialized = (onStep = null) => {
       return;
     }
     if (data.type !== 'init' || data.id !== id) return;
+    const stepListeners = initState?.stepListeners;
     cleanup();
     initState = null;
+    if (!data.ok && typeof data.snapshotError === 'string') {
+      // The snapshot restore failed: this Worker is discarded and a new one
+      // boots cold, for this initialization and every later one.
+      pyodideSnapshotError = data.snapshotError || 'unknown';
+      if (worker === currentWorker) terminateWorker();
+      ensureWorkerInitialized((step) => stepListeners?.forEach((listener) => listener(step)))
+        .then(resolveInit, rejectInit);
+      return;
+    }
     if (data.ok) {
       try {
         workerCapabilities = validateWebRuntimeCapabilities(data.capabilities);
@@ -642,6 +659,9 @@ const ensureWorkerInitialized = (onStep = null) => {
         return;
       }
       workerInitialized = true;
+      recordStructuralMetric('workerBoot', 1, {
+        boot: pyodideSnapshotError === null ? String(data.boot) : `cold after snapshot error: ${pyodideSnapshotError}`
+      });
       const lost = lostWorkerFonts(data.lostFonts);
       if (lost.length > 0) workerFontSource.onFontsLost(lost);
       resolveInit(currentWorker);

@@ -422,6 +422,62 @@ reporter names the running case, and the JSON report records durations,
 retries and final results alongside traces on every completed job. A job killed
 at its limit may not reach upload; its last running case remains in the log.
 
+## Pyodide snapshot
+
+A Pyodide memory snapshot lets the diagram Worker skip its package installs in
+functional tests. `node tools/build_pyodide_snapshot.mjs <dir>` boots Pyodide
+in Node, loads the dependency wheels, the gbdraw wheel and the Worker helpers
+as the Worker's cold boot does, and writes `snapshot.bin` (the Wasm memory),
+`state.json` (the side-module linker state and the validity key) and `fs.bin`
+(the site-packages files), about 170 MB, in 5 to 10 seconds. With
+`GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR` set, `playwright.config.js` serves the
+repository with `tools/serve_pyodide_snapshot.py`, which serves that directory
+at `/__pyodide-snapshot__/`
+(`tests/web/helpers/pyodide-snapshot-test-server.cjs`) and `config.js` with
+`PYODIDE_SNAPSHOT_URL` pointing at it. The Worker then restores the snapshot
+(about 0.5 seconds) instead of installing its packages (about 5 seconds
+locally), and runs `_start_web_worker_state()` so each Worker has its own
+caches and cache epoch. On draft PR #1115, building it in each functional shard
+cut functional test time from 297.8 to 139.8 test-minutes. The repository's
+`config.js` keeps `PYODIDE_SNAPSHOT_URL = null`: users, smoke, browser and
+release acceptance jobs boot cold.
+
+The Worker boots cold whenever a restore fails: a missing file, another wheel
+or helper source (the key in `state.json`), another Pyodide build (its
+`BUILD_ID`, which Pyodide checks), or a relink or first-import error. The page
+then discards that Worker, starts one without the snapshot, and boots every
+later Worker cold. The page reports each boot as the `workerBoot` structural
+metric: `snapshot`, `cold`, or `cold after snapshot error: <reason>`.
+`tests/web/pyodide-snapshot-boot.playwright.spec.js` requires `snapshot` and a
+working fallback, so a snapshot that stops restoring fails CI instead of
+silently costing time. A case that asserts the cold boot (the wheel request)
+calls `forceColdPyodideBoot(page)`, which aborts the snapshot requests.
+
+To run specs locally with a snapshot, prepare the wheel, build the snapshot
+outside the repository, and set the variable:
+
+```bash
+python tools/prepare_browser_wheel.py
+node tools/build_pyodide_snapshot.mjs /tmp/pyodide-snapshot
+GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR=/tmp/pyodide-snapshot \
+  npx playwright test --config=tests/web/playwright/functional.config.js <spec>
+```
+
+Rebuild the snapshot after every wheel or helper change; a stale one only makes
+the Worker boot cold. Without the variable, the server and the Worker are
+unchanged.
+
+The restore depends on Pyodide and Emscripten internals
+(`gbdraw/web/js/workers/pyodide-snapshot.js`): `makeMemorySnapshot` saves only
+the Wasm memory, so the restore re-instantiates the side modules at the memory
+and table bases of their dlopen handles (`struct dso` offsets) and rebuilds the
+table slots, the GOT and the linker tables through the internals Pyodide
+exports on its module (`LDSO`, `GOT`, `GOTHandler`, `getDylinkMetadata`,
+`wasmTable`, `newDSO`, `mergeLibSymbols`, `setWasmTableEntry`,
+`updateTableMap`). A Pyodide or vendored-package upgrade must rebuild the
+snapshot and pass `pyodide-snapshot-boot.playwright.spec.js` before it merges,
+and a builder failure must fail the job that builds it.
+
 ## Weekly CI inventory
 
 The `CI inventory` workflow (`.github/workflows/ci-inventory.yml`) runs
