@@ -465,9 +465,11 @@ jobs:
 
       - name: Run Python browser tests
         timeout-minutes: 10
+        # Dev always has functional shard evidence (run or inherited), which includes the comparison contracts.
         run: >-
           python -m pytest tests/
           -m "browser and not slow"
+          --deselect tests/test_linear_comparison_browser_contracts.py
           --durations=30
 
       - name: Run package build integration
@@ -560,9 +562,13 @@ jobs:
 
       - name: Run non-slow Python browser tests
         timeout-minutes: 10
+        # The functional shards run the comparison contracts when the plan requires them.
+        env:
+          COMPARISON_CONTRACTS_DESELECT: ${{ contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'playwright-functional') && '--deselect tests/test_linear_comparison_browser_contracts.py' || '' }}
         run: >-
           python -m pytest tests/
           -m "browser and not slow"
+          $COMPARISON_CONTRACTS_DESELECT
           --durations=30
 
   web-pr-smoke:
