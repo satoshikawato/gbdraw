@@ -181,6 +181,8 @@ The following are hard failures when applicable:
   static Product Contract co-change route;
 - checker implementation combined with authority or an evidence producer in
   one ordinary pull request;
+- a persisted contract change without its history, reference, or fixtures
+  (see [Persisted contract co-change](#persisted-contract-co-change));
 - candidate execution in a trusted workflow;
 - promotion topology, source-coverage, exact-SHA evidence, result-tree, or
   security failures; and
@@ -202,8 +204,10 @@ Human review is required for at least these cases:
 - an architecture-bearing owner, path, or responsibility move;
 - a new module, public export, reactive owner, watcher, or resource signal;
 - a material performance-baseline change;
-- a scientific or reference-output change; or
-- a compatibility-path change.
+- a scientific or reference-output change;
+- a compatibility-path change; or
+- a persisted contract change, or a new generated contract export (see
+  [Persisted contract co-change](#persisted-contract-co-change)).
 
 `Review: REQUIRED` alone exits zero and is not permission to ignore a hard
 failure.
@@ -634,6 +638,70 @@ base; update it from `dev`. Any other mismatch reports the kind or the hash.
 An entry whose change has merged can only authorize the same bytes again.
 Remove it in the next authority-only pull request. Because a path appears once,
 the next update of that path replaces its entry.
+
+## Persisted contract co-change
+
+The generated modules in `gbdraw/web/js/contracts/` describe the persisted
+Session and request contracts; `python tools/generate_web_contracts.py --check`
+keeps them equal to their Python owners. The Gate compares them between the
+pull request base and head, without running Python:
+
+- `schema.generated.js`: each `export const` statement, ignoring owner
+  comments, JSDoc, and whitespace. A changed or removed export counts unless
+  `exemptGeneratedExports` names it. A removed export whose exact value
+  reappears under a new name is a rename and needs review only; renaming a
+  version export (`SESSION_VERSION`, `SUPPORTED_SESSION_VERSIONS`,
+  `CANONICAL_REQUEST_SCHEMA`, `SUPPORTED_CANONICAL_REQUEST_SCHEMAS`) fails,
+  because the checker reads them by name and needs a change first.
+- `request-shape.generated.js` and `session-shape.generated.js`: the
+  description as data, with type references inlined, so renaming or
+  reordering types does not count.
+- `request.generated.js` and `session.generated.js` (JSDoc only) never count.
+- A module or version value that cannot be read counts as changed and fails
+  closed. A version export that the base has and the head lacks or cannot
+  read fails as "a renamed or removed version export (<name>) needs a checker
+  change".
+- With `--head`, a branch behind its base is compared from the merge base of
+  base and head, so only its own changes count, and only its own diff supplies
+  the co-changes. When Git cannot find a merge base, the comparison falls back
+  to the base, and a failure may come from a newer `dev` change; the message
+  then says to update the branch from `dev`. Without `--head` (the working
+  tree), the comparison is always two-dot against the base.
+
+| Kind | Counts when | Also needs |
+| --- | --- | --- |
+| `session-version` | `SESSION_VERSION` or `SUPPORTED_SESSION_VERSIONS` changes | for a new version, a `## ` heading in the history naming `Session <n>`; while the old version stays supported, a `tests/fixtures/sessions/*.v<old>.*` fixture |
+| `request-schema` | `CANONICAL_REQUEST_SCHEMA` or `SUPPORTED_CANONICAL_REQUEST_SCHEMAS` changes | for a new schema, a `## ` heading naming `request schema <n>` |
+| `request-description` | the request description changes and the request schema does not | nothing more |
+| `session-admission` | the Session admission description changes | nothing more |
+| `schema-constant` | any other export changes | nothing more |
+
+Every kind needs `docs/internal/SESSION_FORMAT_HISTORY.md`,
+`docs/REFERENCE/session-and-request-compatibility.md`, and a changed path under
+`tests/fixtures/` in the diff. A missing item fails the Gate
+(`persisted-contract.co-change`), naming the kind, the exports or modules, and
+each missing item. When all are present, the Gate passes with
+`Review: REQUIRED`. A new export or a new description module is
+`Review: REQUIRED` only: confirm that it projects an existing value.
+
+The rule data is `persistedContractCoChange.exemptGeneratedExports` in
+`tools/web-change-policy.json`, read from the base. Without the key the rule is
+off. Malformed data fails closed in the base and in the candidate. Neither may
+exempt a version export, and a candidate may not exempt a name the head does
+not export. Adding an exemption, or turning the rule on or off, is
+`Review: REQUIRED`; adding an exemption or removing the key expands authority
+and waits for the Owner's approval. The two documents and `tests/fixtures/`
+are evidence, not guard or authority paths.
+
+In the pull request body, under "Risk and review notes", write
+"Persisted contract:" and either `N/A` or the kinds the Gate reported, the
+history heading, the compatibility reference section, the fixture paths, and,
+for an older Session version that stays readable, the first-parent `main`
+commit or release tag that wrote its fixture. The Gate does not check reader
+behaviour outside the descriptions or that `main`/tag evidence; the reviewer
+does. Before opening the pull request, commit, then run
+`python tools/generate_web_contracts.py --check` and
+`node tools/check-web-change-budget.mjs --base origin/dev --head HEAD`.
 
 ## Changing a privileged owner or importer
 

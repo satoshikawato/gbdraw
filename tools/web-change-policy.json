@@ -167,5 +167,10 @@
       "version": "Play CDN snapshot (unversioned cdn.tailwindcss.com)",
       "source": "https://cdn.tailwindcss.com"
     }
-  ]
+  ],
+  "persistedContractCoChange": {
+    "exemptGeneratedExports": [
+      "EXPECTED_WEB_RUNTIME_CAPABILITIES"
+    ]
+  }
 }
