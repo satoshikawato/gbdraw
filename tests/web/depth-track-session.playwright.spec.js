@@ -25,6 +25,12 @@ const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gb
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
 
+// A loading Session publishes its Result about 45 ms before it finishes; the
+// app refuses edits until then (OV-1023).
+const waitForLoadedSessionResult = (page) => page.waitForFunction(
+  () => window.__GBDRAW_APP__?.results?.length > 0 && !window.__GBDRAW_APP__.sessionImportPending
+);
+
 const storedZipEntryNames = (path) => {
   const bytes = readFileSync(path);
   const names = [];
@@ -1240,7 +1246,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
+  await waitForLoadedSessionResult(page);
   const svgExport = page.getByRole('button', { name: 'SVG', exact: true });
   await expect(svgExport).toBeEnabled();
 
@@ -1296,7 +1302,8 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
       }
     );
     app.adv.linear_track_slots_axis_index = 0;
-    app.setLinearTrackSlotsEnabled(true);
+    const refused = app.setLinearTrackSlotsEnabled(true);
+    if (refused) throw new Error(`Custom track slots stayed off: ${JSON.stringify(refused)}`);
     app.form.plot_title = 'Failed Generate attempt title';
     await window.Vue.nextTick();
     app.editableLabels = [{
@@ -1462,7 +1469,7 @@ test('preserved Result presentation ignores no-Result Generate failures and non-
   await expect(page.getByText('Current changes were not applied.', { exact: true })).toHaveCount(0);
 
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
+  await waitForLoadedSessionResult(page);
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.errorLog.value = {

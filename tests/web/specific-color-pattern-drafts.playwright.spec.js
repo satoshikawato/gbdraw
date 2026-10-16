@@ -175,6 +175,8 @@ test('native runtime initialization and transport preparation failures retain th
   await openApp(page); await load(page, fixture('circular'));
   // Current Session preview stays lazy. Add a persisted accepted row without
   // invoking Python so the first pattern change really exercises cold init.
+  // The failing init asks for a cold boot: a served Pyodide snapshot would
+  // take any init error as a restore error and retry cold (OV-1021).
   await page.evaluate(() => {
     const a = window.__GBDRAW_APP__;
     a.manualSpecificRules.push({ feat: 'CDS', qual: 'product', val: 'NADH', color: '#f01234', cap: '' });
@@ -182,7 +184,7 @@ test('native runtime initialization and transport preparation failures retain th
     Worker.prototype.postMessage = function (message, ...args) {
       if (message.type === 'init') {
         Worker.prototype.postMessage = send;
-        message = { ...message, pyodideModuleUrl: '' };
+        message = { ...message, pyodideModuleUrl: '', pyodideSnapshotUrl: null };
       }
       return send.call(this, message, ...args);
     };
