@@ -10,10 +10,9 @@
 // values Session 46 Load fills for the pointers the split leaves absent, and
 // this test checks them on the drawings Load installs.
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -51,13 +50,7 @@ const { normalizePaletteDefinitions } = await import('../../gbdraw/web/js/utils/
 
 const REPO = new URL('../../', import.meta.url);
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
-setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
-import json, sys
-from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
-p = json.load(sys.stdin)
-print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
-`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: fileURLToPath(REPO) })) }));
+setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const VECTORS = JSON.parse(readFileSync(new URL('tests/fixtures/sessions/mode-split-vectors.json', REPO), 'utf8'));
 const palettes = JSON.parse(readFileSync(new URL('gbdraw/web/gallery/palettes/palettes.json', REPO), 'utf8'));
 state.paletteDefinitions.value = normalizePaletteDefinitions(palettes.palettes || palettes);
