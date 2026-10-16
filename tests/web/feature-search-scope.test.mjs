@@ -249,6 +249,31 @@ test('Interactive SVG member coordinates read a missing bound as missing', () =>
   }
 });
 
+// OV-1015: the Similarity group member rows (feature popup table, Similarity
+// drawer) and the member popup show one location text, read with the shared
+// reader. The drawer groups digits (en-US); the table does not.
+test('Similarity group member rows read their location with the shared reader', () => {
+  const { locationRangeText } = featureUtils;
+  for (const [start, plain, grouped] of [
+    [10, '11..20', '11..20'],
+    [null, '20', '20'],
+    [1.5, '2..20', '2..20'],
+    ['0x10', '0x10..20', '0x10..20'],
+    [100, '101..20', '101..20'],
+    [1233, '1234..20', '1,234..20']
+  ]) {
+    assert.equal(locationRangeText({ start, end: 20 }), plain, JSON.stringify(start));
+    assert.equal(locationRangeText({ start, end: 20 }, 'en-US'), grouped, JSON.stringify(start));
+  }
+  assert.equal(locationRangeText({ start: 9999, end: 20000 }, 'en-US'), '10,000..20,000');
+  assert.equal(locationRangeText({ start: null, end: undefined }), '');
+  assert.equal(locationRangeText(null), '');
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(html, /Number\(member\.(start|end)\)/);
+  assert.equal(html.match(/\{\{ orthogroupMemberRangeText\(member\) \}\}/g)?.length, 1);
+  assert.equal(html.match(/\{\{ orthogroupMemberRangeText\(member, 'en-US'\) \}\}/g)?.length, 1);
+});
+
 // OV-211: the active match names its record, in the app and the Interactive SVG.
 test('the match line names the record of the active match', () => {
   const embeddedLine = new Function(`

@@ -98,6 +98,31 @@ export const locationPartBound = (part, field) => (
   ?? NaN
 );
 
+/**
+ * The 1-based `start..end` text of a Similarity group member (or any part),
+ * read with `locationPartNumber`. A bound that does not read shows its stored
+ * text, and when one side is empty the other shows alone, so a missing start
+ * never reads as position 1 (OV-1015). The member popup, the feature popup's
+ * member table and the Similarity drawer show this text.
+ * @param {unknown} part
+ * @param {string} [locale] Group the digits for this locale (`toLocaleString`);
+ *   plain digits when omitted.
+ * @returns {string}
+ */
+export const locationRangeText = (part, locale) => {
+  if (!part || typeof part !== 'object') return '';
+  const fields = /** @type {Record<string, unknown>} */ (part);
+  /** @param {unknown} value @param {number} shift */
+  const boundText = (value, shift) => {
+    const bound = locationPartNumber(value);
+    if (bound === null) return String(value === null || value === undefined ? '' : value).trim();
+    return locale ? (bound + shift).toLocaleString(locale) : String(bound + shift);
+  };
+  const startText = boundText(fields.start, 1);
+  const endText = boundText(fields.end, 0);
+  return startText && endText ? `${startText}..${endText}` : startText || endText;
+};
+
 // The 1-based coordinates of every part, without the strand. Also the location
 // of the fallback caption of an unnamed feature, here and in the rule editor.
 /** @param {FeatureLike | null | undefined} feature */

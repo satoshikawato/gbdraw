@@ -6325,7 +6325,7 @@
                                                     :key="`${member.featureSvgId}-${member.proteinId}`"
                                                     :aria-current="member === clickedOrthogroupDetail.currentMember ? 'true' : null">
                                                     <td>{{ member.recordId || recordGroup.recordLabel }}</td>
-                                                    <td class="match-mono whitespace-nowrap">{{ Number(member.start) + 1 }}..{{ member.end }}<span v-if="member.strand"> ({{ member.strand }})</span></td>
+                                                    <td class="match-mono whitespace-nowrap">{{ orthogroupMemberRangeText(member) }}<span v-if="member.strand"> ({{ member.strand }})</span></td>
                                                     <td>
                                                         <div class="text-slate-800">{{ member.product || member.note || '' }}</div>
                                                         <div class="match-cell-sub">{{ member.displayProteinId || '' }}</div>
@@ -8087,7 +8087,7 @@
                                             <div class="min-w-0 space-y-1">
                                                 <div class="font-semibold text-slate-700 break-words">{{ member.recordId || recordGroup.recordLabel }}</div>
                                                 <div class="break-words">
-                                                    <span class="font-mono">{{ (Number(member.start) + 1).toLocaleString('en-US') }}..{{ Number(member.end).toLocaleString('en-US') }}<template v-if="member.strand"> ({{ member.strand }})</template></span><template v-if="member.displayProteinId"> · <span class="font-mono">{{ member.displayProteinId }}</span></template><template v-if="member.product || member.note"> · {{ member.product || member.note }}</template>
+                                                    <span class="font-mono">{{ orthogroupMemberRangeText(member, 'en-US') }}<template v-if="member.strand"> ({{ member.strand }})</template></span><template v-if="member.displayProteinId"> · <span class="font-mono">{{ member.displayProteinId }}</span></template><template v-if="member.product || member.note"> · {{ member.product || member.note }}</template>
                                                 </div>
                                             </div>
                                             <action-menu class="shrink-0" label="FASTA" :title="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`"

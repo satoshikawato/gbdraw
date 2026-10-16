@@ -733,7 +733,13 @@ write-up of a release.
   text with any non-ASCII character (a no-break space included), and whole
   numbers beyond 2^53 - 1 are missing: the location, length, FASTA header
   coordinates, and sequence are left out for them and Align refuses such a
-  member, where `0x10` read as 16 before.
+  member, where `0x10` read as 16 before. The member rows of a Similarity
+  group in the feature popup and the Similarity drawer show the location as
+  the member popup does: a missing start no longer shows as `1..20`, and a
+  start of `1.5` shows `2..20` (was `2.5..20`) (OV-1015). Rotating a record to
+  a feature reads the feature's location parts by this rule too, so a part
+  bound stored as text (`"20"`) is no longer refused as outside the record
+  (OV-1016).
 - Fixed (web app): loading a Session older than version 46 that recolored a
   Legend row named like a built-in JavaScript member (`constructor`,
   `toString`) without a saved original color no longer records that member as
