@@ -537,3 +537,106 @@ def test_unknown_placements_fail_even_when_decorations_are_absent() -> None:
         _request(legend=None, legend_placement="outside")
     with pytest.raises(ValueError, match="unknown title"):
         _request(title=None, title_placement="above")
+
+
+def _overlay_fuzz_cases() -> list[tuple[CompositionItem, CompositionItem, tuple[Aabb, ...], CompositionSpacing]]:
+    import random
+
+    rnd = random.Random(20261016)
+    cases = []
+    for _trial in range(300):
+        width = rnd.uniform(300.0, 900.0)
+        height = rnd.uniform(200.0, 700.0)
+        primary = Aabb(rnd.uniform(-50.0, 50.0), rnd.uniform(-50.0, 50.0), 0.0, 0.0)
+        primary = Aabb(primary.min_x, primary.min_y, primary.min_x + width, primary.min_y + height)
+        legend_width = rnd.uniform(30.0, 0.6 * width)
+        legend_height = rnd.uniform(20.0, 0.6 * height)
+        legend_min_x = rnd.uniform(-20.0, 20.0)
+        legend_min_y = rnd.uniform(-20.0, 20.0)
+        legend = _item(
+            "legend",
+            Aabb(legend_min_x, legend_min_y, legend_min_x + legend_width, legend_min_y + legend_height),
+        )
+        obstacles = []
+        for _ in range(rnd.randint(1, 60)):
+            x = rnd.uniform(primary.min_x - 50.0, primary.max_x)
+            y = rnd.uniform(primary.min_y - 50.0, primary.max_y)
+            obstacles.append(Aabb(x, y, x + rnd.uniform(1.0, 0.25 * width), y + rnd.uniform(1.0, 0.15 * height)))
+        spacing = CompositionSpacing(overlay_clearance_px=rnd.choice((0.0, 3.5, 8.0, 12.25)))
+        cases.append((_item("primary", primary), legend, tuple(obstacles), spacing))
+    return cases
+
+
+_OVERLAY_PLACEMENTS = (
+    LegendPlacement.UPPER_LEFT,
+    LegendPlacement.UPPER_RIGHT,
+    LegendPlacement.LOWER_LEFT,
+    LegendPlacement.LOWER_RIGHT,
+)
+
+
+def test_overlay_search_keeps_the_recorded_placements() -> None:
+    """1,200 seeded cases, digest and counts recorded at the base (a86dd2d74)."""
+
+    import hashlib
+
+    from gbdraw.layout.composition import _place_overlay_legend
+
+    outcomes = []
+    for primary, legend, obstacles, spacing in _overlay_fuzz_cases():
+        for placement in _OVERLAY_PLACEMENTS:
+            working, conflicts, resolution = _place_overlay_legend(
+                primary.local_bounds, legend, placement, obstacles, spacing
+            )
+            bounds = working.bounds
+            outcomes.append(
+                (
+                    resolution.value,
+                    working.dx.hex(),
+                    working.dy.hex(),
+                    tuple(value.hex() for value in (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)),
+                    conflicts,
+                )
+            )
+    counts = {
+        resolution.value: sum(1 for outcome in outcomes if outcome[0] == resolution.value)
+        for resolution in OverlayResolution
+    }
+    digest = hashlib.sha256(repr(outcomes).encode()).hexdigest()
+    assert counts == _RECORDED_OVERLAY_COUNTS
+    assert digest == _RECORDED_OVERLAY_DIGEST
+
+
+_RECORDED_OVERLAY_COUNTS = {"anchored": 166, "shifted": 312, "canvas_growth": 722}
+_RECORDED_OVERLAY_DIGEST = "cd380979bdce475bc26eff992fd51e9fea8e92cfc133916fd54ccec5b767b672"
+
+
+def test_overlay_search_tests_each_obstacle_once_per_placement(monkeypatch: pytest.MonkeyPatch) -> None:
+    import gbdraw.layout.spatial as spatial_module
+    from gbdraw.layout.composition import _place_overlay_legend
+
+    # A grid of obstacles leaves no free position, so every candidate is tried.
+    primary = Aabb(0.0, 0.0, 400.0, 300.0)
+    obstacles = tuple(
+        Aabb(x, y, x + 6.0, y + 6.0)
+        for x in range(0, 400, 20)
+        for y in range(0, 300, 20)
+    )
+    legend = _item("legend", Aabb(0.0, 0.0, 60.0, 40.0))
+    calls = 0
+    real_intersects = spatial_module.Aabb.intersects
+
+    def count_intersects(self: Aabb, other: Aabb, clearance: float = 0.0) -> bool:
+        nonlocal calls
+        calls += 1
+        return real_intersects(self, other, clearance)
+
+    monkeypatch.setattr(spatial_module.Aabb, "intersects", count_intersects)
+    for placement in _OVERLAY_PLACEMENTS:
+        calls = 0
+        _working, conflicts, resolution = _place_overlay_legend(
+            primary, legend, placement, obstacles, DEFAULT_COMPOSITION_SPACING
+        )
+        assert resolution is OverlayResolution.CANVAS_GROWTH
+        assert conflicts
+        assert calls <= len(obstacles)

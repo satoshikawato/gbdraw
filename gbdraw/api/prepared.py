@@ -348,12 +348,6 @@ def _records_from_value(value: Any) -> tuple[SeqRecord, ...] | None:
     return None
 
 
-def _layer_stamp(layer: str, value: Any, *, walk_features: bool) -> Hashable:
-    if layer == _RENDER_STAGE_LAYER:
-        return _RENDER_STAGE_STAMP
-    return _owner_stamp(value, walk_features=walk_features)
-
-
 def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
     """Stamp a cached value; ``walk_features=False`` gives the structure stamp.
 
@@ -644,14 +638,16 @@ class PreparedBiologicalInputCache:
         if entry is None:
             return None
         # D-05: the structure here, every feature at commit; in full here too
-        # after a transaction that did not commit.
-        self._verify_owner(
-            layer,
-            key,
-            entry,
-            transaction,
-            walk_features=self._previous_transaction_failed,
-        )
+        # after a transaction that did not commit. A render-stage entry has no
+        # owner to check (one constant stamp).
+        if layer != _RENDER_STAGE_LAYER:
+            self._verify_owner(
+                layer,
+                key,
+                entry,
+                transaction,
+                walk_features=self._previous_transaction_failed,
+            )
         self._layers[layer].move_to_end(key)
         return entry
 
@@ -665,9 +661,9 @@ class PreparedBiologicalInputCache:
         walk_features: bool,
     ) -> None:
         expected = entry.owner_stamp if walk_features else entry.structure_stamp
-        if walk_features and layer != _RENDER_STAGE_LAYER and _records_from_value(entry.value) is not None:
+        if walk_features and _records_from_value(entry.value) is not None:
             _record_metric(transaction, "preparedInputCacheFullCheckCount")
-        current_stamp = _layer_stamp(layer, entry.value, walk_features=walk_features)
+        current_stamp = _owner_stamp(entry.value, walk_features=walk_features)
         if current_stamp == expected:
             return
         _record_metric(
@@ -782,31 +778,40 @@ class PreparedBiologicalInputCache:
         # O-2: without a record built or read by a stage, the structure check
         # (made when each entry was read) is repeated, not the feature walk.
         walk_features = transaction.record_touched
-        replacements: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = {}
+        replacements: dict[str, tuple[OrderedDict[Hashable, _PreparedCacheEntry], int]] = {}
         for layer in self._layers:
+            current = self._layers[layer]
+            pending = transaction.pending[layer]
+            # A render-stage entry has no owner to check (one constant stamp).
+            check_owner = layer != _RENDER_STAGE_LAYER
             retained: OrderedDict[Hashable, _PreparedCacheEntry] = OrderedDict()
+            kept = 0
             for key in transaction.used[layer]:
-                entry = transaction.pending[layer].get(key) or self._layers[layer].get(
-                    key
-                )
+                entry = pending.get(key)
                 if entry is None:
-                    continue
-                self._verify_owner(
-                    layer,
-                    key,
-                    entry,
-                    transaction,
-                    walk_features=walk_features,
-                )
+                    entry = current.get(key)
+                    if entry is None:
+                        continue
+                if check_owner:
+                    self._verify_owner(
+                        layer,
+                        key,
+                        entry,
+                        transaction,
+                        walk_features=walk_features,
+                    )
                 retained[key] = entry
-            replacements[layer] = retained
-        for layer, replacement in replacements.items():
-            evicted = set(self._layers[layer]) - set(replacement)
+                # A pending key is a new entry, not one kept from the layer.
+                if key in current:
+                    kept += 1
+            replacements[layer] = (retained, kept)
+        for layer, (replacement, kept) in replacements.items():
+            evicted = len(self._layers[layer]) - kept
             if evicted:
                 _record_metric(
                     transaction,
                     "preparedInputCacheEvictionCount",
-                    len(evicted),
+                    evicted,
                 )
             self._layers[layer] = replacement
         self._set_retained_metric(transaction)

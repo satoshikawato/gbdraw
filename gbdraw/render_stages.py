@@ -88,6 +88,7 @@ RenderStageName = Literal[
     "label_leaders_content",
     "label_text_content",
     "record_merge",
+    "record_gc_percent",
 ]
 
 # The sections of GbdrawConfig each stage reads (design 2.2). A section is a
@@ -173,6 +174,7 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "label_leaders_content": frozenset({"labels.stroke_color", "labels.stroke_width"}),
     "label_text_content": frozenset({"labels.font_size", "labels.length_threshold", "objects.text"}),
     "record_merge": frozenset(),
+    "record_gc_percent": frozenset(),
 }
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")
@@ -205,6 +207,43 @@ _PLAIN_TYPES = (bool, int, float, str, bytes)
 
 class _Unkeyable(Exception):
     """An argument has no key; the call is not cached in this request."""
+
+
+_T = TypeVar("_T")
+
+
+class _PreKeyed(tuple[_T, ...]):
+    """A tuple keyed once, for an argument that several stages take unchanged.
+
+    Built by :func:`_pre_keyed`; ``key`` is the key of the equal plain tuple,
+    or ``None`` outside a cache transaction or when an item has no key.
+    """
+
+    key: Hashable | None
+
+    def __new__(cls, items: Iterable[_T]) -> _PreKeyed[_T]:
+        keyed = super().__new__(cls, items)
+        keyed.key = None
+        return keyed
+
+
+def _pre_keyed(items: Iterable[_T]) -> _PreKeyed[_T]:
+    """Key ``items`` once, so each stage that takes them reads the key.
+
+    The items must be values nobody else holds (copies), so they cannot change
+    after the key is computed. Outside a cache transaction nothing is keyed.
+    """
+
+    from gbdraw.api import prepared
+
+    keyed = _PreKeyed(items)
+    if prepared.active_render_stage_transaction() is not None:
+        try:
+            keyed.key = _key(tuple(keyed), config_path=None)
+        except _Unkeyable:
+            # The stage meets the same item and takes its uncacheable path.
+            pass
+    return keyed
 
 
 @dataclass(eq=False)
@@ -480,6 +519,10 @@ def _key(
 
     if value is None:
         return None
+    if type(value) is _PreKeyed:
+        if value.key is not None:
+            return value.key
+        value = tuple(value)
     if isinstance(value, Enum):
         return ("enum", _type_name(value), value.value)
     if isinstance(value, float):

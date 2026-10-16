@@ -911,3 +911,161 @@ def test_a_cache_without_a_random_source_names_no_build(
         assert stages_module.render_stage_revision("catalog_item", [result]) is None
     with _transaction(cache):
         assert render_stage("catalog_item", catalog_part, 1, "r") is result
+
+
+def _bookkeeping_transaction(cache: PreparedBiologicalInputCache, stage_args: tuple[int, ...], decoded: tuple[str, ...]):
+    metrics: dict[str, object] = {}
+    with _transaction(cache, metrics):
+        for value in stage_args:
+            render_stage("gc_skew_data", double, value)
+        for key in decoded:
+            cache.get_or_build("decoded", ("decoded", key), frozenset(), lambda key=key: {"value": key})
+    return metrics
+
+
+def test_render_stage_entries_are_not_owner_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A render-stage entry has one constant stamp, so its owner check compared it with itself."""
+
+    checked: list[str] = []
+    real = PreparedBiologicalInputCache._verify_owner
+
+    def spy(self, layer, *args, **kwargs):
+        checked.append(layer)
+        return real(self, layer, *args, **kwargs)
+
+    monkeypatch.setattr(PreparedBiologicalInputCache, "_verify_owner", spy)
+    cache = PreparedBiologicalInputCache()
+    _bookkeeping_transaction(cache, (1, 2), ("x",))
+    _bookkeeping_transaction(cache, (1, 2), ("x",))
+
+    assert "render_stage" not in checked
+    assert "decoded" in checked
+
+
+def test_commit_counts_evictions_of_held_entries_only() -> None:
+    import gbdraw.api.prepared as prepared_module
+
+    cache = PreparedBiologicalInputCache()
+    _bookkeeping_transaction(cache, (1, 2, 3), ("x", "y"))
+    # One stage entry and one decoded entry are kept, one of each is new
+    # (pending, not an eviction), two stage entries and one decoded entry go.
+    metrics = _bookkeeping_transaction(cache, (1, 4), ("x", "z"))
+
+    assert _metrics(metrics)["preparedInputCacheEvictionCount"] == 3
+    assert not hasattr(prepared_module, "_layer_stamp")
+
+
+# Item C: the placed labels of a Circular record are keyed once for the two
+# label stages (leaders, text), through one pre-keyed tuple of private copies.
+def label_count(labels: tuple[dict[str, object], ...]) -> int:
+    CALLS.append("label_count")
+    return len(labels)
+
+
+def _labels(*names: str) -> list[dict[str, object]]:
+    return [{"feature_id": name, "start_x": float(index), "corners": ((0.0, 1.0),)} for index, name in enumerate(names)]
+
+
+def test_pre_keyed_labels_are_keyed_once_with_the_key_of_the_equal_tuple(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    labels = _labels("a", "b", "c")
+    plain_key = stages_module._key(tuple(labels), config_path=None)
+    cache = PreparedBiologicalInputCache()
+    metrics: dict[str, object] = {}
+    with _transaction(cache, metrics):
+        keyed = stages_module._pre_keyed(label.copy() for label in labels)
+        assert keyed.key == plain_key
+        assert keyed == tuple(labels)
+
+        calls: list[object] = []
+        real_key = stages_module._key
+
+        def counted(value: object, **kwargs: object) -> object:
+            calls.append(value)
+            return real_key(value, **kwargs)
+
+        monkeypatch.setattr(stages_module, "_key", counted)
+        assert render_stage("gc_skew_data", label_count, keyed) == 3
+        assert render_stage("feature_dom_index", label_count, keyed) == 3
+        monkeypatch.setattr(stages_module, "_key", real_key)
+        # The plain tuple shares the entry: same key.
+        assert render_stage("gc_skew_data", label_count, tuple(labels)) == 3
+    # One key per call, not one per label.
+    assert calls == [keyed, keyed]
+    assert CALLS == ["label_count", "label_count"]
+    assert _metrics(metrics)["renderStageHit:gc_skew_data"] == 1
+
+
+def test_a_label_changed_before_pre_keying_is_another_key() -> None:
+    cache = PreparedBiologicalInputCache()
+    with _transaction(cache):
+        render_stage("gc_skew_data", label_count, stages_module._pre_keyed(_labels("a", "b")))
+    changed = _labels("a", "b")
+    changed[1]["start_x"] = 9.0
+    metrics: dict[str, object] = {}
+    with _transaction(cache, metrics):
+        keyed = stages_module._pre_keyed(label.copy() for label in changed)
+        # A change after pre-keying reaches neither the key nor the stage.
+        changed[0]["start_x"] = 7.0
+        render_stage("gc_skew_data", label_count, keyed)
+        assert keyed[0]["start_x"] == 0.0
+    assert _metrics(metrics)["renderStageBuild:gc_skew_data"] == 1
+    assert CALLS == ["label_count", "label_count"]
+
+
+def test_pre_keyed_labels_are_not_keyed_outside_a_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("no key outside a cache transaction")
+
+    monkeypatch.setattr(stages_module, "_key", fail)
+    keyed = stages_module._pre_keyed(_labels("a"))
+    assert keyed.key is None
+    assert render_stage("gc_skew_data", label_count, keyed) == 1
+
+
+def test_unkeyable_pre_keyed_labels_take_the_uncacheable_path() -> None:
+    labels = _labels("a")
+    labels[0]["handle"] = object()
+    cache = PreparedBiologicalInputCache()
+    metrics: dict[str, object] = {}
+    with _transaction(cache, metrics):
+        keyed = stages_module._pre_keyed(labels)
+        assert keyed.key is None
+        assert render_stage("gc_skew_data", label_count, keyed) == 1
+    assert _metrics(metrics)["renderStageUncacheable:gc_skew_data"] == 1
+
+
+def test_circular_label_stages_share_one_pre_keyed_copy_of_the_placed_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from Bio import SeqIO
+
+    import gbdraw.diagrams.circular.builders as builders_module
+    from gbdraw.api.diagram import build_circular_diagram
+    from gbdraw.api.options import CircularDiagramOptions
+
+    record = SeqIO.read(str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"), "genbank")
+    config = _config(**{"labels.circular.scope": "outer"})
+    received: dict[str, object] = {}
+    real_stage = builders_module.render_stage
+
+    def spy(name, function, /, *args, **kwargs):
+        if name in {"label_leaders_content", "label_text_content"}:
+            received[name] = kwargs["precalculated_labels"]
+        return real_stage(name, function, *args, **kwargs)
+
+    monkeypatch.setattr(builders_module, "render_stage", spy)
+    with _transaction(PreparedBiologicalInputCache()):
+        build_circular_diagram(record, options=CircularDiagramOptions(config=config))
+
+    leaders = received["label_leaders_content"]
+    text = received["label_text_content"]
+    assert leaders is text
+    assert type(leaders) is stages_module._PreKeyed
+    assert leaders.key is not None
+    assert len(leaders) > 10
+    # The copies hold scalars and tuples only, so nothing the record keeps can change them.
+    for label in leaders:
+        for value in label.values():
+            assert isinstance(value, (str, int, float, bool, tuple, type(None))), value

@@ -11,9 +11,10 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 from itertools import product
+from operator import itemgetter
 from typing import cast
 
-from .spatial import Aabb, union_aabbs
+from .spatial import Aabb, _validate_padding, union_aabbs
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +61,18 @@ OVERLAY_CANVAS_GROWTH_SCORE_ORDER = (
     "candidateOrder",
 )
 OVERLAY_QUADRANT_BOUNDARY_RATIO = 0.5
+# The overlay candidate metrics in the order they are computed below; the
+# score of a candidate picks them in the order of OVERLAY_CANDIDATE_SCORE_ORDER.
+_OVERLAY_CANDIDATE_METRICS = (
+    "totalAnchorDistance",
+    "xAnchorDistance",
+    "yAnchorDistance",
+    "nearEdgeX",
+    "nearEdgeY",
+)
+_overlay_candidate_score = itemgetter(
+    *(_OVERLAY_CANDIDATE_METRICS.index(name) for name in OVERLAY_CANDIDATE_SCORE_ORDER)
+)
 
 
 class LegendPlacement(str, Enum):
@@ -507,23 +520,57 @@ def _place_overlay_legend(
         )
 
         def candidate_score(coordinate: tuple[float, float]) -> tuple[float, ...]:
-            metrics = {
-                "totalAnchorDistance": (
-                    abs(coordinate[0] - anchor_x)
-                    + abs(coordinate[1] - anchor_y)
+            x_distance = abs(coordinate[0] - anchor_x)
+            y_distance = abs(coordinate[1] - anchor_y)
+            return cast(
+                tuple[float, ...],
+                _overlay_candidate_score(
+                    (
+                        x_distance + y_distance,
+                        x_distance,
+                        y_distance,
+                        coordinate[0] if left else -coordinate[0],
+                        coordinate[1] if upper else -coordinate[1],
+                    )
                 ),
-                "xAnchorDistance": abs(coordinate[0] - anchor_x),
-                "yAnchorDistance": abs(coordinate[1] - anchor_y),
-                "nearEdgeX": coordinate[0] if left else -coordinate[0],
-                "nearEdgeY": coordinate[1] if upper else -coordinate[1],
-            }
-            return tuple(metrics[name] for name in OVERLAY_CANDIDATE_SCORE_ORDER)
+            )
 
         coordinates = sorted(product(x_values, y_values), key=candidate_score)
+        # Aabb.intersects with the clearance applied to each obstacle once, and
+        # the candidate's bounds computed as _align_min and Aabb.translated do,
+        # so every comparison is the one the boxes would make.
+        padding = _validate_padding(clearance)
+        padded = tuple(
+            (
+                obstacle.max_x + padding,
+                obstacle.min_x - padding,
+                obstacle.max_y + padding,
+                obstacle.min_y - padding,
+            )
+            for obstacle in obstacles
+        )
+        local = legend.local_bounds
         for min_x, min_y in coordinates:
-            candidate = _align_min(legend, min_x=min_x, min_y=min_y)
-            if not _conflict_indices(candidate.bounds, obstacles, clearance):
-                return candidate, initial_conflicts, OverlayResolution.SHIFTED
+            dx = float(min_x) - local.min_x
+            dy = float(min_y) - local.min_y
+            left_edge = local.min_x + dx
+            right_edge = local.max_x + dx
+            top_edge = local.min_y + dy
+            bottom_edge = local.max_y + dy
+            for right_limit, left_limit, bottom_limit, top_limit in padded:
+                if (
+                    left_edge < right_limit
+                    and right_edge > left_limit
+                    and top_edge < bottom_limit
+                    and bottom_edge > top_limit
+                ):
+                    break
+            else:
+                return (
+                    _align_min(legend, min_x=min_x, min_y=min_y),
+                    initial_conflicts,
+                    OverlayResolution.SHIFTED,
+                )
 
     horizontal, vertical = _fallback_overlay_candidates(
         primary,

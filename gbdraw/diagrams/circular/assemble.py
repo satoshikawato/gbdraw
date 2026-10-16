@@ -50,7 +50,7 @@ from ...configurators import (
 )
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
-from ...render_stages import render_stage
+from ...render_stages import _pre_keyed, render_stage
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
 from ...config.modify import with_config_overrides
 from ...config.toml import load_config_toml
@@ -2632,6 +2632,10 @@ def add_record_on_circular_canvas(
                 overlay_obstacles=overlay_obstacles,
             )
 
+    # The labels do not change after this: both label phases take one keyed copy.
+    placed_labels: Sequence[CircularLabel] = (
+        _pre_keyed(label.copy() for label in precalculated_labels or ()) if show_external_labels else ()
+    )
     render_context = CircularRecordRenderContext(
         profile=profile,
         track_preset=circular_preset,
@@ -2648,7 +2652,7 @@ def add_record_on_circular_canvas(
             canvas_config,
             group_key=GroupKey(record_key, GroupKind.LABEL_LEADERS),
             render_context=render_context,
-            precalculated_labels=precalculated_labels or (),
+            precalculated_labels=placed_labels,
             phase="leaders",
         )
 
@@ -2694,7 +2698,7 @@ def add_record_on_circular_canvas(
             canvas_config,
             group_key=GroupKey(record_key, GroupKind.LABEL_TEXT),
             render_context=render_context,
-            precalculated_labels=precalculated_labels or (),
+            precalculated_labels=placed_labels,
             phase="text",
         )
 

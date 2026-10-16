@@ -2206,6 +2206,13 @@ Retired names and their replacements are listed under
   two statuses may not be painted or announced on a fast Generate. The first status still
   paints before the work starts. A Cancel clicked during either step is still honored there
   in Chromium: no Worker restart, and the canceled Result is never shown (PD-OI-101).
+- Performance (web app, CLI, Python API): a Generate spends less time in Python. On
+  every surface the request contract check is compiled once per type and the overlay
+  Legend search stops at the first conflicting obstacle. In the web app, a linear
+  Generate no longer builds the derived LOSAT cache entries that no reply reads (their
+  input checks still run), the Circular definition's GC percent and the placed labels
+  are keyed once and reused, and the cache no longer checks render-stage entries against
+  a constant. Figures, SVG bytes, replies and Saved Sessions are unchanged.
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
