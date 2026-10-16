@@ -1,6 +1,7 @@
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { expect, test: baseTest } = require('@playwright/test');
+const { PYODIDE_SNAPSHOT_TEST_PATH } = require('./pyodide-snapshot-test-server.cjs');
 
 // The current canonical request schema, Session version and feature catalog
 // schema, from the constants generated from their Python owners.
@@ -904,6 +905,9 @@ const fetchRoute = async (route, options) => {
 // Serves the app cross-origin isolated (threaded LOSAT needs
 // SharedArrayBuffer): every 127.0.0.1 request gets COOP/COEP headers and other
 // hosts are aborted. `stubs` maps a path to the fulfill options served instead.
+// A served Pyodide snapshot passes through unchanged: the Worker fetches it
+// same-origin, which COEP allows without headers, and fulfilling its 100 MB
+// body from the test process closes the page (OV-1020).
 const CROSS_ORIGIN_ISOLATION_HEADERS = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp'
@@ -911,6 +915,7 @@ const CROSS_ORIGIN_ISOLATION_HEADERS = {
 const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', async (route) => {
   const url = new URL(route.request().url());
   if (url.hostname !== '127.0.0.1') return route.abort();
+  if (url.pathname.startsWith(PYODIDE_SNAPSHOT_TEST_PATH)) return route.fallback();
   const stub = stubs[url.pathname];
   if (stub) return route.fulfill({ ...stub, headers: CROSS_ORIGIN_ISOLATION_HEADERS });
   const response = await fetchRoute(route);

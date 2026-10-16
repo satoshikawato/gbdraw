@@ -790,11 +790,18 @@ jobs:
         if: steps.shard.outputs.files != ''
         run: python tools/prepare_browser_wheel.py
 
+      # The diagram Worker restores this snapshot instead of installing its packages;
+      # a build failure fails the job (docs/internal/SELECTIVE_CI.md "Pyodide snapshot").
+      - name: Build the Pyodide snapshot
+        if: steps.shard.outputs.files != ''
+        run: node tools/build_pyodide_snapshot.mjs "$RUNNER_TEMP/pyodide-snapshot"
+
       - name: Run Playwright functional tests
         if: steps.shard.outputs.files != ''
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/functional-report.json
           FUNCTIONAL_SPECS: ${{ steps.shard.outputs.files }}
+          GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR: ${{ runner.temp }}/pyodide-snapshot
         # Each shard runs the spec files that tests/ci/functional-shards.json assigns
         # to it by measured duration; docs/internal/SELECTIVE_CI.md explains rebalancing.
         run: |

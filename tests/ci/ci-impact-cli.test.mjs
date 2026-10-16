@@ -1434,12 +1434,18 @@ test('functional shards skip setup when no changed spec is assigned to them', ()
     'Restore Playwright system packages',
     'Install Playwright Chromium and system packages',
     'Prepare browser wheel',
+    'Build the Pyodide snapshot',
     'Run Playwright functional tests'
   ]) {
     assert.ok(job.indexOf(select) < job.indexOf(step(name)), name);
     assert.match(step(name), /\n        if: steps\.shard\.outputs\.files != ''\n/, name);
   }
+  // SELECTIVE_CI.md "Pyodide snapshot": built after the browser wheel, served to every functional spec.
+  const snapshot = step('Build the Pyodide snapshot');
+  assert.ok(job.indexOf(step('Prepare browser wheel')) < job.indexOf(snapshot));
+  assert.match(snapshot, /run: node tools\/build_pyodide_snapshot\.mjs "\$RUNNER_TEMP\/pyodide-snapshot"\n/);
   const run = step('Run Playwright functional tests');
+  assert.match(run, /GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR: \$\{\{ runner\.temp \}\}\/pyodide-snapshot\n/);
   assert.match(run, /FUNCTIONAL_SPECS: \$\{\{ steps\.shard\.outputs\.files \}\}/);
   assert.match(run, /files="\$FUNCTIONAL_SPECS"/);
   assert.doesNotMatch(run, /require\('\.\/tests\/ci\/functional-shards\.json'\)/);

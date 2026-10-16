@@ -425,7 +425,10 @@ at its limit may not reach upload; its last running case remains in the log.
 ## Pyodide snapshot
 
 A Pyodide memory snapshot lets the diagram Worker skip its package installs in
-functional tests. `node tools/build_pyodide_snapshot.mjs <dir>` boots Pyodide
+functional tests. Each `playwright-functional` shard builds one after `Prepare
+browser wheel` into `$RUNNER_TEMP/pyodide-snapshot` and passes that directory
+to the tests; a build failure fails the job. Other jobs build none.
+`node tools/build_pyodide_snapshot.mjs <dir>` boots Pyodide
 in Node, runs the Worker's package recipe (`installRuntimePackages`: micropip
 installs the dependency wheels with their requirements, then the gbdraw wheel),
 runs the Worker helpers, checks that every installed distribution's

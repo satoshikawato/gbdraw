@@ -134,6 +134,7 @@ in the same change.
 | Editor-intent projection onto a displayed Result | `js/app/app-setup.js` (`projectMountedEditorIntent`) |
 | Render-worker client and lifecycle | `js/services/diagram-generation.js` |
 | Pyodide typed rendering | `js/workers/diagram-generation-worker.js` |
+| The Worker's package recipe, and the Pyodide snapshot of that runtime (capture, checks, restore; served only by a test server) | `js/workers/pyodide-snapshot.js` (builder: `tools/build_pyodide_snapshot.mjs`) |
 | LOSAT dispatch and workers | `js/services/losat.js`, `js/workers/losat-*` |
 | SVG/PNG/PDF downloads | `js/services/export.js` |
 | SVG Result admission and sanitization | `js/services/svg-result-ingestion.js` |
@@ -668,8 +669,8 @@ that past merges introduced; it reads the revision history and runs in the
 
 ### R14: Typed boundaries
 
-Modules under `js/` except `workers/` are checked by `tsc --noEmit` with JSDoc
-types (`tests/web/types/tsconfig.json`); there is no build step and no
+Modules under `js/` except `workers/`, and `workers/pyodide-snapshot.js`, are
+checked by `tsc --noEmit` with JSDoc types (`tests/web/types/tsconfig.json`); there is no build step and no
 TypeScript source. A checked module starts with the line `// @ts-check`. The
 modules not yet checked are listed in `UNCHECKED_MODULES` in
 `tests/web/typed-boundaries.test.mjs`, which may only shrink: the pull request
