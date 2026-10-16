@@ -87,7 +87,12 @@ const locationCases = [
   [features.find((feature) => feature.svg_id === 'f-simple'), '301..600 (+)', '300 bp'],
   [{ start: 300, end: 600, strand: '+' }, '301..600 (+)', '300 bp'],
   [{ start: 10, end: 20, strand: '-', location_parts: [{ start: 10, end: 20, strand: '-' }] }, '11..20 (-)', '10 bp'],
-  [{ strand: '+' }, '', '']
+  [{ strand: '+' }, '', ''],
+  // OV-968: a null or blank start or end is missing, not 0.
+  [{ strand: '+', location_parts: [{ start: null, end: 20, strand: '+' }] }, '', ''],
+  [{ strand: '+', location_parts: [{ start: '  ', end: 20, strand: '+' }] }, '', ''],
+  [{ strand: '+', location_parts: [{ start: 5, end: null, strand: '+' }] }, '', ''],
+  [{ start: null, end: 20, strand: '+' }, '', '']
 ];
 
 const embeddedSlice = (startMarker, endMarker) => {
@@ -112,6 +117,7 @@ const createEmbeddedSearch = (popupMode) => new Function('features', 'popupMode'
   function consistentTextIdentity() { return { valid: false, value: '' }; }
   function biologicalFeatureForMember() { return null; }
   ${embeddedFunction('normalizeArray')}
+  ${embeddedFunction('locationPartBound')}
   ${embeddedFunction('featureLocationParts')}
   ${embeddedFunction('rangeText')}
   ${embeddedFunction('locationText')}
@@ -201,6 +207,22 @@ test('Interactive SVG search and location text match the app', () => {
   }
 });
 
+// OV-1010: the runtime reads a member's null or blank bound as missing, not 0,
+// as the app popup does (pairwise-payload-performance.test.mjs).
+test('Interactive SVG member coordinates read a missing bound as missing', () => {
+  const memberLocationText = new Function(`
+    ${embeddedFunction('locationPartBound')}
+    ${embeddedFunction('strandText')}
+    ${embeddedFunction('memberLocationText')}
+    return memberLocationText;
+  `)();
+  assert.equal(memberLocationText({ start: 9, end: 18, strand: '-1' }), '10..18 (-)');
+  for (const missing of [null, '', '  ']) {
+    assert.equal(memberLocationText({ start: missing, end: 38, strand: '-1' }), '..38 (-)', JSON.stringify(missing));
+    assert.equal(memberLocationText({ start: missing, end: missing, strand: '' }), '', JSON.stringify(missing));
+  }
+});
+
 // OV-211: the active match names its record, in the app and the Interactive SVG.
 test('the match line names the record of the active match', () => {
   const embeddedLine = new Function(`
@@ -279,6 +301,7 @@ test('Interactive SVG popup title and Protein ID match the app popup', () => {
     ${embeddedFunction('isInternalProteinDisplayId')}
     ${embeddedFunction('firstNonInternalDisplayText')}
     ${embeddedFunction('qualifierDisplayValue')}
+    ${embeddedFunction('locationPartBound')}
     ${embeddedFunction('featureLocationParts')}
     ${embeddedFunction('rangeText')}
     ${embeddedFunction('featureCaption')}

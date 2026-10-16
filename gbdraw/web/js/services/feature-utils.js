@@ -59,14 +59,30 @@ const featureLocationParts = (feature) => (
     : [feature]
 );
 
+/**
+ * The Web's reader of a start or end coordinate (OV-968, OV-1010): a number or
+ * numeric text; NaN when it is missing, null or blank, which a reader must not
+ * take as 0 (a writer emits null for a missing bound). The Interactive SVG
+ * runtime cannot import it and keeps one copy (`locationPartBound` in
+ * standalone-interactivity-assets.js).
+ * @param {unknown} part A location part, a feature read as its one part, or a
+ *   Similarity Group member row.
+ * @param {'start' | 'end'} field
+ * @returns {number}
+ */
+export const locationPartBound = (part, field) => {
+  const value = part && typeof part === 'object' ? /** @type {Record<string, unknown>} */ (part)[field] : undefined;
+  return typeof value === 'number' || (typeof value === 'string' && value.trim()) ? Number(value) : NaN;
+};
+
 // The 1-based coordinates of every part, without the strand. Also the location
 // of the fallback caption of an unnamed feature, here and in the rule editor.
 /** @param {FeatureLike | null | undefined} feature */
 export const formatFeatureRange = (feature) => featureLocationParts(feature).map((part) => {
   const display = String(part?.display || '').trim();
   if (display) return display;
-  const start = Number(part?.start);
-  const end = Number(part?.end);
+  const start = locationPartBound(part, 'start');
+  const end = locationPartBound(part, 'end');
   return Number.isFinite(start) && Number.isFinite(end) ? `${start + 1}..${end}` : '';
 }).filter(Boolean).join(', ');
 
@@ -81,8 +97,8 @@ export const formatFeatureLocation = (feature) => {
 export const formatFeatureLength = (feature) => {
   let length = 0;
   for (const part of featureLocationParts(feature)) {
-    const start = Number(part?.start);
-    const end = Number(part?.end);
+    const start = locationPartBound(part, 'start');
+    const end = locationPartBound(part, 'end');
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
     length += end - start;
   }

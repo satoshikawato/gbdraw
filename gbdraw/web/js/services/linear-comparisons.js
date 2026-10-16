@@ -1024,6 +1024,23 @@ export const buildPairwiseLosatJobSpecs = ({
     })));
 };
 
+/**
+ * The LOSAT edge that joins two drawn records: the one in the search's own
+ * orientation, else the one in the other orientation, else null. Generate
+ * (`buildLosatJobSpecs`) and Session Load (the cache-info rows) read a
+ * search's edge here (OV-980, OV-987).
+ * @param {readonly LinearComparisonResolvedEdge[]} edges The resolved edges.
+ * @param {number} queryIndex
+ * @param {number} subjectIndex
+ * @returns {LinearComparisonResolvedEdge | null}
+ */
+export const losatEdgeOfPair = (edges, queryIndex, subjectIndex) => {
+  const losatEdges = edges.filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
+  return losatEdges.find((edge) => edge.queryIndex === queryIndex && edge.subjectIndex === subjectIndex)
+    || losatEdges.find((edge) => edge.queryIndex === subjectIndex && edge.subjectIndex === queryIndex)
+    || null;
+};
+
 // The record-pair searches one Generate requests. Generate and the Settings
 // job-count estimate both expand them here (N-10). Similarity groups always
 // include within-record evidence; Collinear includes it only when inference is
@@ -1064,14 +1081,10 @@ export const buildLosatJobSpecs = ({
    * @param {number} ordinal
    */
   const push = (queryIndex, subjectIndex, ordinal) => {
-    // The search's own edge, in its orientation or the other one, is the card
-    // that shows it (OV-980) and numbers it (OV-985); a pair no edge joins
-    // takes an edge by ordinal.
-    const edge = edges.find((candidate) => (
-      candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
-    )) || edges.find((candidate) => (
-      candidate.queryIndex === subjectIndex && candidate.subjectIndex === queryIndex
-    )) || edges.find((candidate) => candidate.ordinal === ordinal) || edges[Math.max(0, Math.min(ordinal, lastOrdinal))];
+    // The search's own edge is the card that shows it (OV-980) and numbers it
+    // (OV-985); a pair no edge joins takes an edge by ordinal.
+    const edge = losatEdgeOfPair(edges, queryIndex, subjectIndex)
+      || edges.find((candidate) => candidate.ordinal === ordinal) || edges[Math.max(0, Math.min(ordinal, lastOrdinal))];
     specs.push(Object.freeze({
       edgeKey: edge?.edgeKey || '',
       ordinal: edge?.ordinal ?? ordinal,

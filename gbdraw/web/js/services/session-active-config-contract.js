@@ -318,7 +318,7 @@ export const readImportedTrackSlots = (mode, slots) => {
 export const requireActiveConfigContainers = ({ mode, storedConfig: config }) => {
   if (!(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
-  assertSafeObjectKeys(config, 'Current session active configuration');
+  assertSafeObjectKeys(config);
   if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
   // The cast: the two tests above.
   return /** @type {Record<string, unknown> & { form: Record<string, unknown>, adv: Record<string, unknown> }} */ (config);

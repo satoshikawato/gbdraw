@@ -11,6 +11,7 @@ import {
 } from '../services/losat-normalization.js';
 import {
   isInternalProteinDisplayId,
+  locationPartBound,
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -151,8 +152,8 @@ const getMemberSequence = (member, sequenceKind) => (
 
 /** @param {OrthogroupMember | null | undefined} member */
 const memberLocationText = (member) => {
-  const start = Number(member?.start);
-  const end = Number(member?.end);
+  const start = locationPartBound(member, 'start');
+  const end = locationPartBound(member, 'end');
   if (!Number.isFinite(start) || !Number.isFinite(end)) return '';
   const normalizedStrand = normalizeMemberStrand(member?.strand);
   const strand = normalizedStrand ? `(${normalizedStrand})` : '';

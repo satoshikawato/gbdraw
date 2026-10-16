@@ -1,6 +1,7 @@
 // @ts-check
 import {
   isInternalProteinDisplayId,
+  locationPartBound,
   normalizeStringArray
 } from './feature-utils.js';
 
@@ -158,13 +159,12 @@ const getFeatureDescription = (feature) => {
 const strandIsMinus = (strand) => String(strand || '').trim() === '-';
 
 /**
- * @param {unknown} startRaw
- * @param {unknown} endRaw
+ * @param {unknown} part A location part, or the feature read as its one part.
  * @param {unknown} strandRaw
  */
-const formatLocationToken = (startRaw, endRaw, strandRaw) => {
-  const start = Number(startRaw);
-  const end = Number(endRaw);
+const formatLocationToken = (part, strandRaw) => {
+  const start = locationPartBound(part, 'start');
+  const end = locationPartBound(part, 'end');
   if (!Number.isFinite(start) || !Number.isFinite(end)) return '';
   const startOneBased = Math.max(1, Math.trunc(start) + 1);
   const endOneBased = Math.max(startOneBased, Math.trunc(end));
@@ -177,12 +177,12 @@ const formatLocationToken = (startRaw, endRaw, strandRaw) => {
 const getFeatureLocationToken = (feature) => {
   const parts = Array.isArray(feature?.location_parts) ? feature.location_parts : [];
   const partTokens = parts
-    .map((part) => formatLocationToken(part?.start, part?.end, part?.strand || feature?.strand))
+    .map((part) => formatLocationToken(part, part?.strand || feature?.strand))
     .filter(Boolean);
   if (partTokens.length === 1) return partTokens[0];
   if (partTokens.length > 1) return `join(${partTokens.join(',')})`;
 
-  const directToken = formatLocationToken(feature?.start, feature?.end, feature?.strand);
+  const directToken = formatLocationToken(feature, feature?.strand);
   if (directToken) return directToken;
 
   const location = normalizeFastaId(feature?.location || '');

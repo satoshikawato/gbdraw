@@ -523,6 +523,16 @@ test('catalog rejects invalid sequence-source references', () => {
       /Reload the page and Generate again/
     );
   }
+  // OV-968: a null or blank start is missing, not 0.
+  for (const missing of [null, '', '  ']) {
+    const missingStart = structuredClone(catalog);
+    missingStart.items[0].biologicalFeatures[0].start = missing;
+    assert.throws(
+      () => validateFeatureCatalog(missingStart, results),
+      /Reload the page and Generate again/,
+      JSON.stringify(missing)
+    );
+  }
   const invalidCoordinates = structuredClone(catalog);
   invalidCoordinates.items[0].biologicalFeatures[0].end = 99;
   assert.throws(

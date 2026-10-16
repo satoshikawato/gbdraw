@@ -1009,8 +1009,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var sequences = [];
     for (var index = 0; index < parts.length; index += 1) {
       var part = parts[index];
-      var start = Number(part && part.start);
-      var end = Number(part && part.end);
+      var start = locationPartBound(part, 'start');
+      var end = locationPartBound(part, 'end');
       if (
         !Number.isInteger(start)
         || !Number.isInteger(end)
@@ -1111,8 +1111,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       if (note) expanded.note = Array.from(note).slice(0, 50).join('');
     }
     var locationParts = expanded.location_parts || expanded.locationParts;
-    var start = Number(expanded.start);
-    var end = Number(expanded.end);
+    var start = locationPartBound(expanded, 'start');
+    var end = locationPartBound(expanded, 'end');
     if (
       !Array.isArray(locationParts)
       && Number.isInteger(start)
@@ -4559,6 +4559,14 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }, 0);
   }
 
+  // Mirrors services/feature-utils.js locationPartBound: the viewer's one reader
+  // of a start or end of a location part, a feature, or a group member; NaN
+  // when it is missing, null or blank, never 0 (OV-968, OV-1010).
+  function locationPartBound(part, field) {
+    var value = part && typeof part === 'object' ? part[field] : undefined;
+    return typeof value === 'number' || (typeof value === 'string' && value.trim()) ? Number(value) : NaN;
+  }
+
   // Mirrors services/feature-utils.js formatFeatureRange/formatFeatureLocation/formatFeatureLength.
   function featureLocationParts(feature) {
     return feature && Array.isArray(feature.location_parts) && feature.location_parts.length
@@ -4570,8 +4578,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return featureLocationParts(feature).map(function (part) {
       var display = String(part && part.display || '').trim();
       if (display) return display;
-      var start = Number(part && part.start);
-      var end = Number(part && part.end);
+      var start = locationPartBound(part, 'start');
+      var end = locationPartBound(part, 'end');
       return Number.isFinite(start) && Number.isFinite(end) ? String(start + 1) + '..' + String(end) : '';
     }).filter(Boolean).join(', ');
   }
@@ -4591,8 +4599,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function memberLocationText(member) {
     if (!member || typeof member !== 'object') return '';
-    var start = Number(member.start);
-    var end = Number(member.end);
+    var start = locationPartBound(member, 'start');
+    var end = locationPartBound(member, 'end');
     var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
     var strand = strandText(member.strand);
     if (strand) text += ' (' + strand + ')';
@@ -5927,8 +5935,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var parts = featureLocationParts(feature);
     var length = 0;
     for (var index = 0; index < parts.length; index += 1) {
-      var start = Number(parts[index] && parts[index].start);
-      var end = Number(parts[index] && parts[index].end);
+      var start = locationPartBound(parts[index], 'start');
+      var end = locationPartBound(parts[index], 'end');
       if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
       length += end - start;
     }
