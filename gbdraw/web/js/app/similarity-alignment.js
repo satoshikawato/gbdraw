@@ -15,9 +15,10 @@ import { isInternalProteinDisplayId } from '../services/feature-utils.js';
 import { recordsNeedingChoice } from '../services/alignment-review-view.js';
 import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
+import { catalogNameIndex } from '../services/feature-catalog.js';
 
 /**
- * @import { FeatureCatalog, FeatureCatalogRow } from '../services/feature-catalog.js'
+ * @import { FeatureCatalog } from '../services/feature-catalog.js'
  * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './annotations/record-catalog.js'
  * @import { AliasSource, CommittedRecord } from '../services/feature-identity.js'
  */
@@ -335,23 +336,6 @@ const featureView = (anchor, displayFacts, fallback = '') => {
   return { label: parts.label, name: parts.name, ids: parts.ids.join(' · ') };
 };
 
-/** @param {Partial<FeatureCatalog> | null | undefined} catalog */
-const catalogBiologicalFeatures = (catalog) => (Array.isArray(catalog?.items) ? catalog.items : [])
-  .flatMap((item) => (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []));
-
-// The catalog facts of an anchor's feature, so names come from the drawn features.
-/** @param {Partial<FeatureCatalog> | null | undefined} catalog */
-const catalogFeatureFacts = (catalog) => {
-  /** @type {Map<string, FeatureCatalogRow>} */
-  const features = new Map();
-  catalogBiologicalFeatures(catalog).forEach((feature) => {
-    const key = `${feature?.recordKey}\0${feature?.biologicalFeatureId}`;
-    if (!features.has(key)) features.set(key, feature);
-  });
-  return (/** @type {{ recordKey?: string, biologicalFeatureId?: string }} */ anchor) => (
-    features.get(`${anchor.recordKey}\0${anchor.biologicalFeatureId}`)
-  );
-};
 
 // A record's name for one-line summaries: its accession, else its definition.
 /** @param {{ name?: string, detail?: string } | undefined} names */
@@ -361,7 +345,7 @@ const shortRecordName = (names) => names?.detail || names?.name || '';
  * The one catalog feature that a plan anchor names, or null when none or
  * several match. Generate validation and Reset share this lookup.
  * @template {{ recordKey?: unknown, biologicalFeatureId?: unknown, sourceFeatureIndex?: unknown }} T
- * @param {T[]} features
+ * @param {readonly T[]} features
  * @param {AnchorIdentity | null} anchor
  * @returns {T | null}
  */
@@ -384,13 +368,16 @@ const uniqueCatalogFeature = (features, anchor) => {
  * }} options
  */
 const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = null }) => {
-  /** @type {Map<string, string>} */
-  const accessions = new Map();
-  catalogBiologicalFeatures(catalog).forEach((feature) => {
-    const key = String(feature?.recordKey || '');
-    const id = displayText(feature?.record_id, feature?.recordId);
-    if (key && id && !accessions.has(key)) accessions.set(key, id);
-  });
+  const { rowsByRecord } = catalogNameIndex(catalog);
+  // A record's accession: the first of its catalog features that names one.
+  /** @param {string} recordKey */
+  const catalogAccession = (recordKey) => {
+    for (const feature of rowsByRecord.get(recordKey) || []) {
+      const id = displayText(feature?.record_id, feature?.recordId);
+      if (id) return id;
+    }
+    return '';
+  };
   // A record without its own Definition takes its File's (OV-436). The accession and
   // the label stay this panel's own: the accession is always added and is the short name.
   const fileNames = linearRecordNames(Array.isArray(linearSeqs) ? linearSeqs : []);
@@ -400,7 +387,7 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
       .find((entry) => String(entry?.uid || '') === recordKey);
     const definition = displayText(record?.presentation?.label, fileNames.get(recordKey)?.definition);
     const name = definition ? plainTextLinearRecordLabel(definition) : '';
-    const accession = displayText(sequence?.accession, accessions.get(recordKey));
+    const accession = displayText(sequence?.accession, catalogAccession(recordKey));
     const fileName = displayText(sequence?.gb?.name, sequence?.gff?.name);
     const label = [...new Set([name, accession].filter(Boolean))].join(' · ')
       || (fileName ? plainTextLinearRecordLabel(fileName) : '')
@@ -558,7 +545,7 @@ const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = nu
     (Array.isArray(linearSeqs) ? linearSeqs : [])
       .map((record) => [String(record?.uid || ''), Boolean(record.region_reverse)])
   );
-  const factsOf = catalogFeatureFacts(catalog);
+  const factsOf = catalogNameIndex(catalog).featureOf;
   const nameOf = (/** @type {{ recordKey?: string, biologicalFeatureId?: string }} */ anchor) => featureNameParts(anchor, factsOf(anchor) || {});
   const names = recordNames({ recordKeys: plan.records.map(({ recordKey }) => recordKey),
     request, linearSeqs, catalog });
@@ -1764,7 +1751,7 @@ export const createSimilarityAlignmentActions = ({
     return {
       records: recordNames({ recordKeys: (request?.records || []).map((/** @type {CommittedRecord} */ { recordKey }) => recordKey),
         request, linearSeqs: state.linearSeqs, catalog }),
-      factsOf: catalogFeatureFacts(catalog)
+      factsOf: catalogNameIndex(catalog).featureOf
     };
   });
 
@@ -1933,7 +1920,7 @@ export const createSimilarityAlignmentActions = ({
         !== baseReverseComplement(current.request.records[index]))) {
         /** @type {AlignmentPlan} */
         const plan = current.request.layout.similarityAlignment;
-        const catalogFeatures = catalogBiologicalFeatures(state.featureCatalog?.value);
+        const catalogFeatures = catalogNameIndex(state.featureCatalog?.value).rows;
         const members = plan.records.filter(record => record.anchor).map(({anchor}) => {
           const feature = uniqueCatalogFeature(catalogFeatures, anchor);
           if (!feature) throw new Error('Alignment Reset source anchor is unavailable or ambiguous.');
@@ -2075,7 +2062,7 @@ export const createSimilarityAlignmentActions = ({
     // it is stale only when an anchor feature no longer resolves in the shown
     // Result's feature catalog. A Result without a catalog (an older Session)
     // cannot be checked here; the typed render validates every anchor.
-    const catalogFeatures = catalogBiologicalFeatures(state.featureCatalog?.value);
+    const catalogFeatures = catalogNameIndex(state.featureCatalog?.value).rows;
     /** @type {{ recordKey: string, status: string, anchor: AnchorIdentity | null }[]} */
     const decisions = plan.records;
     const resolves = (/** @type {AnchorIdentity | null} */ anchor) => (
