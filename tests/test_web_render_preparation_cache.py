@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -129,6 +130,7 @@ def _render(
     token_generation: int = 1,
     token_numbers: dict[str, int] | None = None,
     held_revision: str | None = None,
+    held_segments: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, object], dict[str, object]]:
     resources = document["resources"]
     assert isinstance(resources, dict)
@@ -169,6 +171,7 @@ def _render(
         _prepared_input_cache=cache,
         _resource_identities=identities if cache is not None else None,
         _held_feature_catalog_revision=held_revision,
+        _held_segments=held_segments,
     )
     return dict(result), diagnostics
 
@@ -1537,3 +1540,83 @@ def test_cw04_each_generate_leaves_the_catalog_a_fresh_cache_gives(tmp_path: Pat
     )
     assert repeat["featureCatalog"] is None
     assert repeat["featureCatalogRevision"] == revisions[-1]
+
+
+# Document pieces (STEP3B stage S): the reply names every children text and
+# carries it only when the page does not hold its revision.
+
+
+def _content_pieces(reply: dict[str, object]) -> list[dict[str, object]]:
+    results = reply["results"]
+    assert isinstance(results, list)
+    return [
+        piece
+        for result in results
+        for piece in result["document"]["pieces"]
+        if piece["kind"] == "content"
+    ]
+
+
+def _joined_document(result: dict[str, object]) -> str:
+    document = result["document"]
+    assert isinstance(document, dict)
+    texts = [
+        piece["start"] + piece["children"] + "</g>" if piece["kind"] == "content" else piece["text"]
+        for piece in document["pieces"]
+    ]
+    return document["head"] + "".join(texts) + document["tail"]
+
+
+def test_the_reply_document_joins_to_the_written_svg(tmp_path: Path) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("pieces-record"),))
+    reply, _ = _render(tmp_path, PreparedBiologicalInputCache(), _document(source, title="Pieces"), request_id=1)
+
+    (result,) = reply["results"]
+    assert result["content"] == '<?xml version="1.0" encoding="utf-8" ?>\n' + _joined_document(result)
+    pieces = _content_pieces(reply)
+    assert pieces
+    for piece in pieces:
+        data = piece["children"].encode("utf-8")
+        assert piece["revision"] == hashlib.sha256(data).hexdigest()
+        assert piece["bytes"] == len(data)
+    assert {piece["kind"] for piece in result["document"]["pieces"]} == {"content", "raw"}
+
+
+def test_held_revisions_are_named_without_their_text(tmp_path: Path) -> None:
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("held-record"),))
+    cache = PreparedBiologicalInputCache()
+    cold, _ = _render(tmp_path, cache, _document(source, title="Held"), request_id=1)
+    empty_held, _ = _render(tmp_path, cache, _document(source, title="Held"), request_id=2)
+    assert empty_held["results"] == cold["results"]
+
+    revisions = [piece["revision"] for piece in _content_pieces(cold)]
+    held = frozenset(revisions[:1])
+    partial, _ = _render(tmp_path, cache, _document(source, title="Held"), request_id=3, held_segments=held)
+    for cold_piece, piece in zip(_content_pieces(cold), _content_pieces(partial)):
+        assert {key: value for key, value in piece.items() if key != "children"} == {
+            key: value for key, value in cold_piece.items() if key != "children"
+        }
+        assert ("children" in piece) == (piece["revision"] not in held)
+    assert partial["results"][0]["content"] == cold["results"][0]["content"]
+
+
+def test_a_title_position_change_sends_no_children_text(tmp_path: Path) -> None:
+    """Moving the title changes start tags only, so every children text is held."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("moved-title"),))
+    cache = PreparedBiologicalInputCache()
+    document = _document(source, title="Moved title")
+    cold, _ = _render(tmp_path, cache, document, request_id=1)
+    held = frozenset(piece["revision"] for piece in _content_pieces(cold))
+    moved_document = copy.deepcopy(document)
+    output = moved_document["renderRequest"]["diagramOptions"]["output"]
+    assert output["plotTitlePosition"] == "top"
+    output["plotTitlePosition"] = "bottom"
+    moved, _ = _render(tmp_path, cache, moved_document, request_id=2, held_segments=held)
+
+    assert moved["results"][0]["content"] != cold["results"][0]["content"]
+    assert _content_pieces(moved)
+    assert not [piece for piece in _content_pieces(moved) if "children" in piece]

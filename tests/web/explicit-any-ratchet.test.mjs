@@ -8,14 +8,15 @@
 //
 // What counts: each JSDoc type node whose type, as the TypeScript checker of
 // the R14 guard config (tests/web/types/tsconfig.json) resolves it, is
-// intrinsic `any`: `any`, `*`, `Object` (which JSDoc reads as `any` while
-// `noImplicitAny` is off), and each use of a type that resolves to `any`, such
-// as a typedef alias of `any`, so an alias does not hide it. A node inside a
-// counted node is not counted again; `Record<string, any>` counts once, for
-// its `any` argument. `unknown`, `object`, and `Function` do not count.
+// intrinsic `any`: `any`, `*`, and each use of a type that resolves to `any`,
+// such as a typedef alias of `any`, so an alias does not hide it (with
+// `noImplicitAny` on, JSDoc `Object` is the `Object` type, not `any`). A node
+// inside a counted node is not counted again; `Record<string, any>` counts
+// once, for its `any` argument. `unknown`, `object`, and `Function` do not
+// count.
 // Every `.js` module is counted, generated modules included. Workers are
 // outside the guard config; the checker resolves them in its inferred
-// project, whose `noImplicitAny` is off as well.
+// project, where JSDoc `Object` is also the `Object` type.
 //
 // EXPLICIT_ANY_BASELINE is a registered design-rule allowlist
 // (tools/web-design-rule-guards.json, R14, kind `count-map`): adding an entry

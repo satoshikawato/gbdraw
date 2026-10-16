@@ -1,5 +1,5 @@
 import { createRulePreparation } from '../../../gbdraw/web/js/app/rule-matching.js';
-import { evaluatePythonRules } from './python-rule-evaluator.mjs';
+import { evaluatePythonRules } from './python-evaluator.mjs';
 import { createSvgStyles } from '../../../gbdraw/web/js/app/svg-styles.js';
 import { createPreviewRuntime } from '../../../gbdraw/web/js/app/preview-runtime.js';
 import { serializeCleanSvg } from '../../../gbdraw/web/js/services/svg-serialization.js';

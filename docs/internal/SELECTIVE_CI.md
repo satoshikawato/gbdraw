@@ -99,6 +99,13 @@ directories, dependency installs, wheels, and browser state. The contracts job
 also runs when the trusted plan requires `web-pr-smoke`, so the pre-redesign base
 planner still requires all three original suites during rollout.
 
+The 16 `@comparison-contract` Playwright cases run once per CI run. Their pytest
+wrapper, `tests/test_linear_comparison_browser_contracts.py`, runs in
+`web-contracts-pr` only when the trusted plan does not require
+`playwright-functional`; otherwise the job deselects it and the functional shards
+run the same cases. The `dev` `browser` job always deselects the wrapper, because
+every `dev` push has functional shard evidence, run or inherited.
+
 Web unit/browser tests and their helpers route to the Web, session, Gallery, or
 LOSAT capability they exercise. Adding a normal Web regression therefore does not
 force a full PR route. Shared fixtures and unclassified tests remain conservative
@@ -141,6 +148,23 @@ push run therefore finishes with exact-SHA evidence. A SHA whose waiting run was
 replaced has no evidence of its own; the newer run tests a tree that contains
 it, and a light push on top of it inherits nothing. Pull request runs and manual
 dispatches still cancel the run they supersede.
+
+Fail-fast on pull requests: when `Core PR`, `Web contracts`,
+or `Recipes standard` fails in a pull request run, a small
+dependent job, `Fail fast (<job>)`, runs `gh run cancel` on that run, so the
+`Playwright functional` shards and other jobs still running stop. Its condition
+is `if: failure() && github.event_name == 'pull_request'`. The failed job keeps its
+`failure` conclusion; on a green run the cancel jobs are skipped. Only the
+cancel jobs get `actions: write`; the test jobs, which run third-party
+packages, keep the read-only workflow token. A `dev` push or a manual dispatch
+is never cancelled and still leaves its exact-SHA evidence. A shard cancelled
+this way loses no evidence: the commit has already failed, and `PR / gate`,
+which does not depend on the cancel jobs, still runs and fails. The three jobs
+are the ones whose failures came first in the measured pull request runs; the
+weekly CI inventory shows when another job should join them. `Web change budget`
+is excluded: the topology contract in `tests/web/architecture-contracts.test.mjs`
+keeps every job independent of it.
+`tests/ci/ci-impact-cli.test.mjs` pins the cancel jobs and their permissions.
 
 ### Light-change inheritance
 

@@ -4,13 +4,12 @@
 // and the Session still read `state.zoom` and `state.canvasPan`.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 import test from 'node:test';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-globalThis.window = { Vue: context.Vue, setTimeout, clearTimeout };
-const { nextTick } = context.Vue;
+const Vue = loadPageVue();
+globalThis.window = { Vue, setTimeout, clearTimeout };
+const { nextTick } = Vue;
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { previewTransform, PreviewZoomPercent } = await import('../../gbdraw/web/js/components.js');
 

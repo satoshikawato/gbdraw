@@ -1064,8 +1064,13 @@ export const buildLosatJobSpecs = ({
    * @param {number} ordinal
    */
   const push = (queryIndex, subjectIndex, ordinal) => {
+    // The search's own edge, in its orientation or the other one, is the card
+    // that shows it (OV-980) and numbers it (OV-985); a pair no edge joins
+    // takes an edge by ordinal.
     const edge = edges.find((candidate) => (
       candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
+    )) || edges.find((candidate) => (
+      candidate.queryIndex === subjectIndex && candidate.subjectIndex === queryIndex
     )) || edges.find((candidate) => candidate.ordinal === ordinal) || edges[Math.max(0, Math.min(ordinal, lastOrdinal))];
     specs.push(Object.freeze({
       edgeKey: edge?.edgeKey || '',

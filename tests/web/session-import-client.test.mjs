@@ -164,3 +164,49 @@ test('Session Load sends bounded messages by size, not one message and ACK per f
     assert.deepEqual(counts, { inbound: { part: 47, ok: 1 }, outbound: { file: 1, ack: 47 } });
   } finally { delete globalThis.Worker; }
 });
+
+// The Node test adapter keeps one started isolate per test file: an import
+// after a finished one reuses it, and an import still running is stopped.
+const recordingAdapter = async () => {
+  const { NodeSessionImportWorker } = await import('./helpers/session-import-node.mjs');
+  const threads = [];
+  globalThis.Worker = class extends NodeSessionImportWorker {
+    constructor(url, options) {
+      super(url, options);
+      threads.push(this.worker);
+    }
+  };
+  return threads;
+};
+
+test('the Node import adapter reuses its isolate for an import after a finished one', async () => {
+  const threads = await recordingAdapter();
+  try {
+    assert.deepEqual((await importSessionFile(new Blob(['{"first":1}']))).data, { first: 1 });
+    await assert.rejects(importSessionFile(new Blob(['{'])), { code: 'INPUT_INVALID' });
+    assert.deepEqual((await importSessionFile(new Blob(['{"third":3}']))).data, { third: 3 });
+    assert.equal(threads.length, 3);
+    assert.equal(new Set(threads).size, 1);
+  } finally { delete globalThis.Worker; }
+});
+
+test('the Node import adapter stops an import that is still running', async () => {
+  const threads = await recordingAdapter();
+  const large = { rows: Array.from({ length: 4000 }, (_, index) => `row-${String(index).padStart(64, '0')}`) };
+  try {
+    const controller = new AbortController();
+    globalThis.Worker = class extends globalThis.Worker {
+      constructor(url, options) {
+        super(url, options);
+        this.addEventListener('message', ({ data }) => { if (data.status === 'part') controller.abort(); });
+      }
+    };
+    const running = threads.length;
+    await assert.rejects(importSessionFile(new Blob([JSON.stringify(large)]), { signal: controller.signal }),
+      { code: 'SESSION_IMPORT_CANCELED' });
+    const stopped = threads[running];
+    await new Promise((resolve) => { if (stopped.threadId === -1) resolve(); else stopped.once('exit', resolve); });
+    assert.deepEqual((await importSessionFile(new Blob(['{"after":1}']))).data, { after: 1 });
+    assert.notEqual(threads.at(-1), stopped);
+  } finally { delete globalThis.Worker; }
+});

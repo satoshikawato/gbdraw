@@ -341,3 +341,20 @@ test('Label TSV retry retains its real reselect input and accepted History', asy
   await expect(alert).toHaveCount(0);
   expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.history+1);
 });
+
+// Vue's production build only logs an error raised in a render, watcher,
+// event handler or hook unless the app asks it to throw (app.js); the error
+// must still reach the page as an uncaught error, as with the development build.
+test('a Vue error in a component still throws with the production build', async ({ page }) => {
+  await openApp(page);
+  const outcome = await page.evaluate(() => {
+    const root = window.__GBDRAW_APP__.$;
+    try {
+      window.Vue.handleError(new Error('VUE_HANDLER_SENTINEL'), root, 5);
+      return 'logged';
+    } catch (error) {
+      return error.message;
+    }
+  });
+  expect(outcome).toBe('VUE_HANDLER_SENTINEL');
+});

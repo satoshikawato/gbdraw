@@ -4,11 +4,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
@@ -25,15 +24,8 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const REPO = new URL('../../', import.meta.url);
 const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
-setUnmanagedConfigOverrideValidator((payload) => ({ result: JSON.parse(execFileSync('python', ['-c', `
-import json, sys
-from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
-p = json.load(sys.stdin)
-print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
-`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: fileURLToPath(REPO) })) }));
+setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -55,9 +47,7 @@ const BASES = {
   so46: () => structuredClone(VECTORS.bases['settings-only-46'].document),
   g47L: () => gallery('lambda_basic_linear.gbdraw-session.json'),
   // tests/utils/two_mode_session.py: a Circular Session 46 with a Linear `otherModeResult`.
-  twoMode: () => JSON.parse(execFileSync('python', ['-c',
-    'import json; from tests.utils.two_mode_session import two_mode_session; print(json.dumps(two_mode_session()))'
-  ], { encoding: 'utf8', cwd: fileURLToPath(REPO), maxBuffer: 1 << 30 }))
+  twoMode: () => evaluatePython('from tests.utils.two_mode_session import two_mode_session\nresult = two_mode_session()')
 };
 const set = (value, path, leaf) => {
   const parts = path.split('.');
@@ -243,7 +233,7 @@ test('OV-655, TB23: a single file slot keeps the first file it reads and lists t
 });
 
 test('OV-633: the other Result set\'s ui and editor edits are read with rows', async () => {
-  const session = BASES.twoMode();
+  const session = await BASES.twoMode();
   session.otherModeResult.ui.appliedPaletteColors = { CDS: 5, gene: '#00ff00' };
   session.otherModeResult.ui.generatedMultiRecordCanvas = 'yes';
   assert.deepEqual(await load(session), [

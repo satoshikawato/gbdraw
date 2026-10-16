@@ -1,4 +1,5 @@
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -51,13 +52,7 @@ const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/w
 const { getResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const root = process.cwd();
 // Exercise the Worker's actual typed helper without starting a browser runtime.
-setUnmanagedConfigOverrideValidator(payload => ({ result: JSON.parse(execFileSync('python', ['-c', `
-import json, sys
-from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
-p = json.load(sys.stdin)
-print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
-    json.dumps(p['configOverrides']), json.dumps(p['managedPaths']), p['source']))
-`], { input: JSON.stringify(payload), encoding: 'utf8', cwd: root })) }));
+setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const mito = path.join(root, 'tests/fixtures/sessions/cli-web-mito.gb');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const lambda = path.join(root, 'tests/test_inputs/NC_001416.gb');

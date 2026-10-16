@@ -396,10 +396,9 @@ The checker reads the registry from the trusted base.
   Raising an entry or adding a key is an expansion. The two R6 site counts
   (`UNCLASSIFIED_THROW_BASELINE`, `UNPROVEN_BASELINE`) are one total each
   (`count`, `py-count`), so a site that moves to another module with its code
-  changes nothing. The four maps keyed by module path
-  (`NO_IMPLICIT_ANY_BASELINE`, `EXPLICIT_ANY_BASELINE`,
-  `OUTSIDE_OWNER_BASELINE`, `TYPE_DEBT_BASELINE`) stay per module, so a new or
-  moved module starts at 0.
+  changes nothing. The three maps keyed by module path
+  (`EXPLICIT_ANY_BASELINE`, `OUTSIDE_OWNER_BASELINE`, `TYPE_DEBT_BASELINE`)
+  stay per module, so a new or moved module starts at 0.
 
 Root-cause patterns (boundary audit of 2026-10-10):
 

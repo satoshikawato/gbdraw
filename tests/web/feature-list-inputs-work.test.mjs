@@ -4,14 +4,12 @@
 // Result names and committed metadata the list reads, so it does not list the
 // 12.6k-18.8k catalog features of a Gallery Session again; every input does.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import vm from 'node:vm';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-globalThis.window = { Vue: context.Vue };
-const { watch } = context.Vue;
+const Vue = loadPageVue();
+globalThis.window = { Vue };
+const { watch } = Vue;
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { createRulePreparation } = await import('../../gbdraw/web/js/app/rule-matching.js');
 const { setFeatureVisibilityOverride } = await import('../../gbdraw/web/js/services/feature-visibility.js');
@@ -125,7 +123,7 @@ test('each input of the list lists the features again', async () => {
 // new Results whose committed metadata is a new object with the inputs the
 // list reads unchanged: the same rendered identities and equal selected
 // feature types. The list compares those inputs, not the metadata object.
-const { toRaw } = context.Vue;
+const { toRaw } = Vue;
 const generate = ({ catalogObject = toRaw(state.featureCatalog.value), selectedFeatureTypes = null } = {}) => {
   const results = ['result-0.svg', 'result-1.svg'].map((name) => ({ name, content: '<svg />' }));
   // The same catalog object is an admission hit, as Generate's reuse is.
@@ -194,7 +192,7 @@ test('an active search keeps its matches and its index across a Generate that re
   globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: (metric) => metrics.push(metric) };
   globalThis.requestAnimationFrame ??= (callback) => { callback(); return 1; };
   try {
-    const { computed, nextTick } = context.Vue;
+    const { computed, nextTick } = Vue;
     const { createPreviewFeatureSearch } = await import('../../gbdraw/web/js/app/feature-search/preview-actions.js');
     const search = createPreviewFeatureSearch({
       state, watch, nextTick, computed, isActiveResultReady: () => true,

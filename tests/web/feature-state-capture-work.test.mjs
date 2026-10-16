@@ -4,14 +4,12 @@
 // raw arrays, so its reactive reads do not grow with the 10k-40k catalog rows,
 // and the copy holds the same values.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import vm from 'node:vm';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-globalThis.window = { Vue: context.Vue, setTimeout, clearTimeout };
-const { effect, toRaw } = context.Vue;
+const Vue = loadPageVue();
+globalThis.window = { Vue, setTimeout, clearTimeout };
+const { effect, toRaw } = Vue;
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { buildFeatureStateData, buildOrthogroupStateData } = await import('../../gbdraw/web/js/services/config.js');
 

@@ -357,6 +357,12 @@ assert.ok(getProteinEntry(
   { ...proteinEntry, searchContext: 'a'.repeat(64) }, manifest,
   { ...proteinEntry, searchContext: 'a'.repeat(64) }
 ));
+// OV-983: a search context is 64 hex characters as text; a list or an object
+// that `RegExp.test` would coerce to that text is no raw entry.
+for (const searchContext of [['a'.repeat(64)], { toString: () => 'a'.repeat(64) }]) {
+  assert.equal(cache.classifyRawLosatCacheEntry({ ...proteinEntry, searchContext }), 'invalid');
+  assert.equal(cache.classifyRawLosatCacheEntry({ ...nucleotideEntry, searchContext }), 'invalid');
+}
 const reverseEntry = {
   ...proteinEntry,
   text: proteinEntry.text.replace(`${runtimeA}\t${runtimeB}`, `${runtimeB}\t${runtimeA}`),
@@ -727,6 +733,9 @@ assert.throws(
 // Execute the production pair-loop body with real validators. The surrounding
 // asynchronous I/O is controlled so an exception/cancel occurs while the loan
 // is active, rather than after the loop has already released its index.
+const {
+  LINEAR_COMPARISON_MODES, buildLosatJobSpecs, canonicalGridDisplayPairs, resolveLinearComparisonPlan
+} = await import(pathToFileURL(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-comparisons.js')));
 const runSource = await readFile(join(repoRoot, 'gbdraw/web/js/app/run-analysis.js'), 'utf8');
 // Exercise the actual Generate merge boundary, including its user-facing error.
 const mergeStart = runSource.indexOf('          const manifests = proteinEntries.map(');
@@ -895,6 +904,90 @@ await exercisePairLoop({promote: true, mutateSource: true});
 await exercisePairLoop({failure: 'error'});
 await exercisePairLoop({failure: 'cancel'});
 await exercisePairLoop(); // Retry must acquire a new index.
+
+// OV-980, OV-985: LOSATP Collinear, Search between All records, on a CLI
+// Session grid whose rows put record a below c (rows b, c, a). The pair loop
+// of run-analysis.js gives each displayed search the cache row of its own
+// card, and the Run Info registration gives each one its own generated file,
+// named for its card and holding its pair.
+{
+  const gridCell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
+  const linearSeqs = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
+  const linearRecordRows = [gridCell('b', 1), gridCell('c', 2), gridCell('a', 3)];
+  const comparisonResolution = resolveLinearComparisonPlan({
+    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
+    sequences: linearSeqs, layout: linearRecordRows, losatProgram: 'blastp', blastpMode: 'collinear'
+  });
+  const specs = buildLosatJobSpecs({
+    resolution: comparisonResolution, recordCount: 3, recordUids: ['a', 'b', 'c'], program: 'blastp',
+    blastpMode: 'collinear', collinearInferOrthogroups: false, collinearSearchScope: 'all'
+  });
+  const context = {
+    useProteinBlastp: false, useCollinearBlastp: true,
+    drawing: { linearRecordLayoutEnabled: { value: true }, linearRecordRows },
+    linearSeqs, canonicalGridDisplayPairs, comparisonResolution,
+    preparedJobs: specs.map((spec) => ({
+      spec, losatArgs: [], cacheMetadata: { search: `${spec.queryUid}->${spec.subjectUid}` }, batch: {}
+    })),
+    workingProteinIdentityManifest: null, proteinCacheKeys: null,
+    buildValidatedProteinIdentityIndex() { return null; }, releaseValidatedProteinIdentityIndex() {},
+    throwIfGenerationCanceled() {},
+    async getSeqEntry(index) { return { sequenceKey: `sequence-${index}`, fasta: '' }; },
+    buildLosatCachePayload: (metadata) => metadata,
+    async hashText(text) { return JSON.parse(text).search; },
+    async getSeqHash() { return 'hash'; },
+    sequenceEntriesByKey: new Map(), cacheMap: new Map(),
+    getReusableLosatCacheEntry() { return { text: '' }; },
+    tryPromoteLegacyProteinEntry() { throw new Error('nucleotide-keyed run'); },
+    promoteRawLosatCacheEntry() {},
+    losatTiming: { totalPairs: 0, cacheHits: 0, cacheMisses: 0 },
+    losatPairs: [], cacheInfo: [],
+    // The card's file name (`buildCacheFilename` reads the edge the spec names).
+    buildCacheFilename: (spec) => `${spec.edgeKey}.tsv`,
+    pendingJobKeys: new Set(), losatJobs: []
+  };
+  await new Function('context', `return (async () => {
+    const {${Object.keys(context).join(',')}} = context;
+    ${loopSource}
+  })()`)(context);
+  assert.deepEqual(context.cacheInfo.map((row) => [
+    row.key, row.edgeKey, row.queryUid, row.subjectUid, row.queryIndex, row.subjectIndex, row.ordinal, row.filename
+  ]), [
+    ['a->c', 'c->a', 'c', 'a', 2, 0, 1, 'c->a.tsv'],
+    ['b->c', 'b->c', 'b', 'c', 1, 2, 0, 'b->c.tsv']
+  ]);
+
+  // The LOSATP helper numbers each displayed pair by the `pairIndex` the Web
+  // sent (`display_pair_indices`, python-helpers.js) and returns one frame per
+  // displayed pair, in sorted pair order.
+  const displayPairIndices = new Map(context.losatPairs.filter((pair) => pair.displayPair).map((pair) => [
+    [pair.queryIndex, pair.subjectIndex].sort((left, right) => left - right).join(','), pair.pairIndex
+  ]));
+  const convertedPayload = {
+    pairs: [...displayPairIndices.keys()].sort().map((pair) => ({
+      pair_index: displayPairIndices.get(pair),
+      tsv: `${pair.split(',').map((index) => linearSeqs[Number(index)].uid).join('-')} rows\n`
+    }))
+  };
+  const registrationStart = runSource.indexOf('            const convertedPairs = Array.isArray(convertedPayload.pairs)');
+  const registrationEnd = runSource.indexOf("            setProcessingStatus('Preparing nucleotide comparison results...');", registrationStart);
+  assert.ok(registrationStart > 0 && registrationEnd > registrationStart);
+  const generatedFiles = new Map();
+  const registration = {
+    convertedPayload, losatPairs: context.losatPairs, useCollinearBlastp: true, resolvedComparisons: [],
+    getPayloadName: (path) => path,
+    registerRunInfoFile() {},
+    recordGeneratedCliFile: (path, text, { name }) => generatedFiles.set(path, { name, text })
+  };
+  new Function('context', `
+    const {${Object.keys(registration).join(',')}} = context;
+    ${runSource.slice(registrationStart, runSource.lastIndexOf('} else {', registrationEnd))}
+  `)(registration);
+  assert.deepEqual(Object.fromEntries(generatedFiles), {
+    '/blast_1.txt': { name: 'c->a.tsv', text: 'a-c rows\n' },
+    '/blast_0.txt': { name: 'b->c.tsv', text: 'b-c rows\n' }
+  });
+}
 
 // Alias validity and ordinal grouping must use the same NFC-trimmed value.
 for (const [alias, valid] of [

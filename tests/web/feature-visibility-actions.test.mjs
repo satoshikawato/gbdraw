@@ -9,7 +9,7 @@ import { admitFeatureCatalog, resultCatalogFeatures } from '../../gbdraw/web/js/
 import { featureDrawnContext } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { displayedFeatureAddressing } from '../../gbdraw/web/js/services/feature-override-identity.js';
 import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
-import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
