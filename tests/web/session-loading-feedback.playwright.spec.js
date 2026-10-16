@@ -367,9 +367,6 @@ test('a 0.13.0 Gallery Session loads, and with its Custom Track Slots turned on 
   })).toEqual({ enabled: true, spacing: false });
 });
 
-// UJ-09 (Owner 2026-10-05): Load Session replaces the work and clears History,
-// so it asks first when History changed since the last Save or Load. Cancel
-// keeps the work and History; with nothing to lose the file picker opens at once.
 // OV-677 (BA-D31): release 0.13.0 kept a Result across a mode switch. A
 // Session it saved after Generate and a switch loads with no dialog (the
 // feature information is read from the inputs of the Result's mode), opens on
@@ -396,6 +393,9 @@ for (const [name, resultMode, shownMode] of [
   });
 }
 
+// UJ-09 (Owner 2026-10-05): Load Session replaces the work and clears History,
+// so it asks first when History changed since the last Save or Load. Cancel
+// keeps the work and History; with nothing to lose the file picker opens at once.
 test('Load Session asks before it replaces work changed since the last Save or Load', async ({
   page
 }) => {

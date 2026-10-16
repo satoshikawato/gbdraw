@@ -216,6 +216,29 @@ for (const [name, resultMode, shownMode, drawnSide, shownLegend] of MODE_SWITCH)
   });
 }
 
+// The accepted residual of PD-OI-096: 0.13.0 wrote no `cliInvocation` for a
+// Generate it could not replay (a Linear LOSAT run among them), so such a
+// Session's Result still opens as the shown mode.
+test('OV-677: a 0.13.0 Session saved after a mode switch without the last Generate\'s mode opens its Result as the shown mode', async () => {
+  const session = fixture(MODE_SWITCH[0][0]);
+  delete session.cliInvocation;
+  const { outcome, transformed } = await load(session);
+  assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+  assert.deepEqual(transformed.map(({ data }) => data.mode), ['linear']);
+  assert.equal(state.mode.value, 'linear');
+});
+
+// A blank drawn side is no stored side, read as `none` (PD-OI-096 〔値がないとき〕),
+// as the same-mode path reads `config.form.legend`.
+test('OV-677: a blank drawn side of a Result saved after a mode switch reads as none', async () => {
+  const session = fixture(MODE_SWITCH[0][0]);
+  session.ui.generatedLegendPosition = '  ';
+  const { outcome, transformed, dialogs } = await load(session);
+  assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+  assert.deepEqual(dialogs, []);
+  assert.deepEqual(transformed.map(({ side, data }) => [data.mode, side]), [['circular', 'none']]);
+});
+
 // OV-969 (BA-OD121): the title of such a Result was drawn with the Result's
 // mode's title side, which 0.13.0 saved in `ui` (Circular:
 // `generatedCircularPlotTitlePosition`, Linear: `linearPlotTitlePosition`);

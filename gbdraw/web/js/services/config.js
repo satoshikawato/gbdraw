@@ -48,6 +48,7 @@ import { drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.j
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
+  drawnLegendSideOfMode,
   legendPositionOrDefault,
   readDrawnLegendSideOfMode,
   readLegendPositionOfMode,
@@ -5453,7 +5454,9 @@ const importSessionDocument = async (e, options = {}) => {
     // The Result's mode: its request's. A Session 27-30 has no request; its
     // last Generate's invocation names it, else `ui.mode`, as the CLI reads it
     // (`session_io.session_mode`). 0.13.0 kept a Result across a mode switch,
-    // and its `ui.mode` is the shown mode (OV-677). The flat draft's settings
+    // and its `ui.mode` is the shown mode (OV-677). Sessions 29 (tag 0.12.0)
+    // and 30 (tag 0.13.0) write `cliInvocation` only for a Generate the CLI
+    // can replay; without it the Result reads as the shown mode (PD-OI-096). The flat draft's settings
     // stay with the shown mode (the split's profile mode); its Result edits
     // and the Result's set go with the Result's mode.
     const invocationMode = sourceSessionVersion < CANONICAL_SESSION_MIN_VERSION
@@ -5628,12 +5631,13 @@ const importSessionDocument = async (e, options = {}) => {
     // stored in its form, read through the Result's mode (OV-671); a side
     // outside it is listed when a Result is drawn with it (BA-D26). The form
     // of a Session 27-30 saved after a mode switch is the shown mode's: its
-    // Result was drawn with `ui.generatedLegendPosition` (OV-677) and its
-    // mode's title side, which 0.13.0 saved in `ui` (OV-969).
+    // Result was drawn with `ui.generatedLegendPosition` (OV-677), read as a
+    // drawn side (blank is none) and listed once, above, and its mode's title
+    // side, which 0.13.0 saved in `ui` (OV-969).
     const formIsResultMode = generatedMode === candidateMode || canonicalSession;
     const legacyDrawnSide = formIsResultMode
       ? readDrawnLegendSideOfMode(restoredConfig?.form?.legend, generatedMode, 'config.form.legend')
-      : { value: generatedLegend?.value ?? 'none', repairs: [] };
+      : { value: drawnLegendSideOfMode(ui.generatedLegendPosition, generatedMode), repairs: [] };
     /** @type {string} */
     const savedTitleSideOfResultMode = generatedMode === 'circular'
       ? readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value

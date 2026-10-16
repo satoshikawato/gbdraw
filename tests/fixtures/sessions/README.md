@@ -148,9 +148,13 @@ such `hash` rules by source hash. The steps, inputs, and hashes are in
 with `gzip -n -9`. Each was saved after Generate and a switch to the other
 mode, so its Result is of one mode while `ui.mode` names the other; the
 Result's mode is in `cliInvocation.mode` (0.13.0 writes no
-`ui.generatedMode`). They are the positive fixtures for the reader of a
-Session 27–30 Result's mode (OV-677). The steps, inputs, and hashes are in
-`mode-switch.provenance.json`.
+`ui.generatedMode`). Release tag `0.12.0` (Session 29) writes the same
+field (`gbdraw/web/js/services/config.js:1935` and
+`gbdraw/web/js/app/run-info.js:151` at that tag). Both releases write it only
+for a Generate whose file bindings the CLI can replay, so a Session saved
+after, for example, a Linear LOSAT run has none. They are the positive
+fixtures for the reader of a Session 27–30 Result's mode (OV-677). The steps,
+inputs, and hashes are in `mode-switch.provenance.json`.
 
 `lambda_basic_linear.v44-schema8.gbdraw-session.json.gz` and
 `HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz` preserve the released
