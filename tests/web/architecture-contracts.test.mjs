@@ -4611,35 +4611,104 @@ test('vendored runtime listing edge cases fail closed', () => {
   });
 });
 
-test('a branch behind a base that merged a listed vendored change is told to update', () => {
+// The listing merges first (fork), the listed change merges after it (base); the head either
+// forks from the listing commit (behind) or builds on the base (up to date).
+const runForkedVendorChangeCase = ({ entry, merged, branch, behind }) => withChangeBudgetRepository(
+  ({ commit, execute, git, root, write }) => {
+    const writeOrRemove = (path, content) => (
+      content === null ? rmSync(join(root, path)) : write(path, content)
+    );
+    writeVendorChangeListing(write, [entry]);
+    const fork = commit('authority-only vendored runtime listing');
+    let head = '';
+    if (behind) {
+      branch(writeOrRemove);
+      head = commit('branch forked before the vendored change merged');
+      assert.equal(git(['checkout', '--quiet', fork]).status, 0);
+    }
+    merged(writeOrRemove);
+    const base = commit('listed vendored change merged');
+    if (!behind) {
+      branch(writeOrRemove);
+      head = commit('branch on the current base');
+    }
+    return execute({ base, head });
+  }
+);
+const BEHIND_BASE = /the branch is behind its base: update it from dev/;
+
+test('only a branch that is really behind its base is told to update', () => {
   const prodPath = 'gbdraw/web/vendor/library.prod.js';
-  const cases = [
+  const unrelated = (write) => write(
+    'gbdraw/web/js/app/secondary.js',
+    'export const editSecondaryOwner = () => 2;\n'
+  );
+  [
     {
-      name: 'add shown as remove',
+      name: 'add',
       entry: vendorChangeEntry({ path: prodPath, change: 'add' }),
-      merged: (write) => write(prodPath, VENDOR_LIBRARY_UPDATE),
-      behind: (write) => write(prodPath, null)
+      merged: (write) => write(prodPath, VENDOR_LIBRARY_UPDATE)
     },
     {
-      name: 'replace shown in reverse',
+      name: 'replace',
       entry: vendorChangeEntry(),
-      merged: (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
-      behind: (write) => write(VENDOR_LIBRARY_PATH, BUDGET_FIXTURE[VENDOR_LIBRARY_PATH])
+      merged: (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE)
     },
     {
-      name: 'remove shown as add',
+      name: 'remove',
       entry: vendorChangeEntry({
         change: 'remove',
         sha256: sha256Hex(BUDGET_FIXTURE[VENDOR_LIBRARY_PATH])
       }),
-      merged: (write) => write(VENDOR_LIBRARY_PATH, null),
-      behind: (write) => write(VENDOR_LIBRARY_PATH, BUDGET_FIXTURE[VENDOR_LIBRARY_PATH])
+      merged: (write) => write(VENDOR_LIBRARY_PATH, null)
     }
-  ];
-  cases.forEach(({ name, entry, merged, behind }) => {
-    const result = runListedVendorChangeCase([entry], behind, merged);
-    assertVendorGateFailure(result, /the branch is behind its base: update it from dev/, name);
+  ].forEach(({ name, entry, merged }) => {
+    const result = runForkedVendorChangeCase({ entry, merged, branch: unrelated, behind: true });
+    assertVendorGateFailure(result, BEHIND_BASE, `behind ${name}`);
   });
+
+  // Up to date: the base merged the listed replace, and the head changes the file again.
+  const tampered = runForkedVendorChangeCase({
+    entry: vendorChangeEntry(),
+    merged: (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
+    branch: (write) => write(VENDOR_LIBRARY_PATH, 'EVIL\n'),
+    behind: false
+  });
+  assertVendorGateFailure(
+    tampered,
+    new RegExp(`library\\.js: sha256 ${sha256Hex('EVIL\n')} does not match the listed`),
+    'up-to-date tampering'
+  );
+  assert.doesNotMatch(tampered.output, BEHIND_BASE);
+
+  // Up to date: the head deletes a file that a spent add entry still lists.
+  const spentAdd = runForkedVendorChangeCase({
+    entry: vendorChangeEntry({ path: prodPath, change: 'add' }),
+    merged: (write) => write(prodPath, VENDOR_LIBRARY_UPDATE),
+    branch: (write) => write(prodPath, null),
+    behind: false
+  });
+  assertVendorGateFailure(
+    spentAdd,
+    /library\.prod\.js: listed as add, but the change is remove/,
+    'spent add deleted'
+  );
+  assert.doesNotMatch(spentAdd.output, BEHIND_BASE);
+});
+
+test('an add entry for a path that is a directory in the base fails', () => {
+  const result = withChangeBudgetRepository(({ commit, execute, write }) => {
+    write('gbdraw/web/vendor/bundle/index.js', 'globalThis.bundle = true;\n');
+    const base = commit('vendored directory');
+    writeVendorChangeListing(write, [vendorChangeEntry({ path: 'gbdraw/web/vendor/bundle', change: 'add' })]);
+    const head = commit('add entry for the directory path');
+    return execute({ base, head });
+  });
+  assertVendorGateFailure(
+    result,
+    /bundle: add for a path that is not a file in the base/,
+    'directory add'
+  );
 });
 
 test('malformed authority and unsupported accepted-violation authority fail canonically', () => {

@@ -1479,7 +1479,14 @@ const impossibleVendorEntries = addedVendorEntries.flatMap((entry) => {
   const label = `${entry.path}: ${entry.change}`;
   const baseBytes = readRevisionBytes(base, entry.path);
   if (entry.change === 'add') {
-    return baseBytes === null ? [] : [`${label} for a path the base already has`];
+    if (baseBytes !== null) return [`${label} for a path the base already has`];
+    // A tree (directory) at the path has no blob bytes but still occupies it.
+    const occupied = spawnSync(
+      'git',
+      ['-C', repositoryRoot, 'cat-file', '-e', `${base}:${entry.path}`],
+      { stdio: 'ignore' }
+    ).status === 0;
+    return occupied ? [`${label} for a path that is not a file in the base`] : [];
   }
   if (baseBytes === null) return [`${label} for a path the base lacks`];
   const baseSha256 = sha256OfBytes(baseBytes);
@@ -1491,9 +1498,24 @@ const impossibleVendorEntries = addedVendorEntries.flatMap((entry) => {
   }
   return [];
 });
-// An entry pins the bytes the change leaves (add, replace) or removes (remove). The diff is
-// two-dot, so a branch behind a base that already merged a listed change shows it reversed.
-const reversedVendorChange = Object.freeze({ add: 'remove', remove: 'add', replace: 'replace' });
+// An entry pins the bytes the change leaves (add, replace) or removes (remove).
+// The diff is two-dot. When the head does not contain the base and leaves a path as their
+// merge base had it, the path changed only in the base: the branch is behind, not wrong.
+const vendorMergeBase = (() => {
+  if (!head || !changedVendorPaths.length) return null;
+  const ancestry = spawnSync(
+    'git',
+    ['-C', repositoryRoot, 'merge-base', '--is-ancestor', base, head],
+    { stdio: 'ignore' }
+  );
+  if (ancestry.status !== 1) return null;
+  const mergeBase = spawnSync(
+    'git',
+    ['-C', repositoryRoot, 'merge-base', base, head],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+  );
+  return mergeBase.status === 0 ? mergeBase.stdout.trim() : null;
+})();
 const vendorChanges = changedVendorPaths.map((path) => {
   const status = changed.get(path);
   const change = vendorChangeKindByStatus[status] || `unsupported status ${status}`;
@@ -1503,14 +1525,14 @@ const vendorChanges = changedVendorPaths.map((path) => {
     change === 'remove' ? readRevisionBytes(base, path) : readHeadBytes(path)
   );
   if (entry.change === change && pinned === entry.sha256) return { path, change, entry, reason: '' };
-  const reversed = reversedVendorChange[entry.change] === change && sha256OfBytes(
-    entry.change === 'remove' ? readHeadBytes(path) : readRevisionBytes(base, path)
-  ) === entry.sha256;
-  if (reversed) {
+  if (
+    vendorMergeBase
+    && sha256OfBytes(readHeadBytes(path)) === sha256OfBytes(readRevisionBytes(vendorMergeBase, path))
+  ) {
     return {
       path,
       change,
-      reason: `reverses the listed ${entry.change}, which the base already contains; `
+      reason: 'changed only in the base since this branch forked; '
         + 'the branch is behind its base: update it from dev'
     };
   }
