@@ -21,7 +21,13 @@ module.exports = defineConfig({
     trace: 'on-first-retry'
   },
   webServer: {
-    command: `python3 -m http.server ${serverPort} --bind 127.0.0.1`,
+    // PROTOTYPE (proto/pyodide-snapshot, CI measurement only): with
+    // GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR set, the server also serves that
+    // snapshot and config.js points the Worker at it.
+    command: process.env.GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR
+      ? `python3 tools/proto-pyodide-snapshot/serve.py . "${process.env.GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR}" ${serverPort}`
+      : `python3 -m http.server ${serverPort} --bind 127.0.0.1`,
+    env: process.env.GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR ? { PROTO_SNAPSHOT_URL: '/__snapshot__/' } : {},
     cwd: __dirname,
     url: serverUrl,
     reuseExistingServer: !process.env.CI,

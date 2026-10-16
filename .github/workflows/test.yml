@@ -730,11 +730,22 @@ jobs:
         if: steps.shard.outputs.files != ''
         run: python tools/prepare_browser_wheel.py
 
+      # PROTOTYPE (proto/pyodide-snapshot, CI measurement only): build the
+      # diagram Worker's Pyodide snapshot in Node; the test server serves it.
+      - name: Build Pyodide snapshot (measurement)
+        if: steps.shard.outputs.files != ''
+        run: |
+          start=$(date +%s.%N)
+          node tools/proto-pyodide-snapshot/make_snapshot_node.mjs "$RUNNER_TEMP/pyodide-snapshot"
+          ls -l "$RUNNER_TEMP/pyodide-snapshot"
+          echo "Snapshot build step: $(python3 -c "import time; print(round(time.time() - $start, 1))") s"
+
       - name: Run Playwright functional tests
         if: steps.shard.outputs.files != ''
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/functional-report.json
           FUNCTIONAL_SPECS: ${{ steps.shard.outputs.files }}
+          GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR: ${{ runner.temp }}/pyodide-snapshot
         # Each shard runs the spec files that tests/ci/functional-shards.json assigns
         # to it by measured duration; docs/internal/SELECTIVE_CI.md explains rebalancing.
         run: |
