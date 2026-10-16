@@ -165,6 +165,9 @@ that policy.
   before merge and remove the superseded reader, migrator, fixture, test, and user
   documentation. Do not chain migrations through or advertise branch-only
   intermediate versions.
+- A change to the generated contracts in `gbdraw/web/js/contracts/` needs the
+  history, reference, and fixture co-changes that the Gate checks; see
+  [Persisted contract co-change](docs/internal/WEB_CHANGE_POLICY.md#persisted-contract-co-change).
 
 ### Working-tree overwrite policy
 
