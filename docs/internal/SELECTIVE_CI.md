@@ -143,7 +143,7 @@ it, and a light push on top of it inherits nothing. Pull request runs and manual
 dispatches still cancel the run they supersede.
 
 Fail-fast on pull requests: when `Core PR`, `Web contracts`,
-`Web change budget`, or `Recipes standard` fails in a pull request run, a small
+or `Recipes standard` fails in a pull request run, a small
 dependent job, `Fail fast (<job>)`, runs `gh run cancel` on that run, so the
 `Playwright functional` shards and other jobs still running stop. Its condition
 is `if: failure() && github.event_name == 'pull_request'`. The failed job keeps its
@@ -152,9 +152,11 @@ cancel jobs get `actions: write`; the test jobs, which run third-party
 packages, keep the read-only workflow token. A `dev` push or a manual dispatch
 is never cancelled and still leaves its exact-SHA evidence. A shard cancelled
 this way loses no evidence: the commit has already failed, and `PR / gate`,
-which does not depend on the cancel jobs, still runs and fails. The four jobs
+which does not depend on the cancel jobs, still runs and fails. The three jobs
 are the ones whose failures came first in the measured pull request runs; the
-weekly CI inventory shows when another job should join them.
+weekly CI inventory shows when another job should join them. `Web change budget`
+is excluded: the topology contract in `tests/web/architecture-contracts.test.mjs`
+keeps every job independent of it.
 `tests/ci/ci-impact-cli.test.mjs` pins the cancel jobs and their permissions.
 
 ### Light-change inheritance

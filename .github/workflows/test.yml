@@ -180,24 +180,6 @@ jobs:
               --recurse-submodules=no --filter=blob:none --stdin
           node --test tests/web/owner-graph-replay.test.mjs
 
-  fail-fast-web-change-budget:
-    # Cancels the rest of a pull request run once web-change-budget has failed
-    # (docs/internal/SELECTIVE_CI.md, "Fail-fast on pull requests").
-    name: Fail fast (Web change budget)
-    needs: web-change-budget
-    if: failure() && github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      contents: read
-      actions: write
-    steps:
-      - name: Cancel this run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: gh run cancel "$GITHUB_RUN_ID"
-
   core:
     name: Core (Python ${{ matrix.python-version }})
     needs: ci-impact

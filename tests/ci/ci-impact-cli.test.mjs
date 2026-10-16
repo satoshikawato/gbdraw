@@ -763,7 +763,7 @@ test('a failed fast job cancels the rest of its pull request run, never a dev ru
     .map((match) => match[1]);
   const gateNeeds = () => workflowJobOf(workflow, 'pr-gate')
     .match(/\n    needs:\n((?:      - [a-z0-9-]+\n)+)/)[1].match(/(?<=- )[a-z0-9-]+/g);
-  const failFastFor = ['core-pr', 'web-contracts-pr', 'web-change-budget', 'recipes-standard'];
+  const failFastFor = ['core-pr', 'web-contracts-pr', 'recipes-standard'];
   for (const watched of failFastFor) {
     const job = workflowJobOf(workflow, `fail-fast-${watched}`);
     assert.ok(job, `fail-fast-${watched}`);
