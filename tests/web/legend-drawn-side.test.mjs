@@ -215,3 +215,32 @@ for (const [name, resultMode, shownMode, drawnSide, shownLegend] of MODE_SWITCH)
     assert.equal(JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).legendSide, drawnSide);
   });
 }
+
+// OV-969 (BA-OD121): the title of such a Result was drawn with the Result's
+// mode's title side, which 0.13.0 saved in `ui` (Circular:
+// `generatedCircularPlotTitlePosition`, Linear: `linearPlotTitlePosition`);
+// the stored form's side is the shown mode's. The fixtures draw no title, so
+// each case adds one where 0.13.0 drew it, and the Circular case names `top`.
+const TITLED_MODE_SWITCH = [
+  // [fixture, Result mode, drawn title side, the shown mode's form title side, the title group]
+  ['mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'circular', 'top', 'bottom',
+    '<g id="plot_title" transform="translate(608,60)"><text x="0" y="0" font-size="32" text-anchor="middle">REGEX</text></g>'],
+  ['mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz', 'linear', 'bottom', 'none',
+    '<g id="plot_title" transform="translate(1168,370)"><text x="0" y="0" font-size="32" text-anchor="middle">REGEX</text></g>']
+];
+for (const [name, resultMode, drawnTitle, shownTitle, titleGroup] of TITLED_MODE_SWITCH) {
+  test(`OV-969: a 0.13.0 ${resultMode} Result saved after a mode switch is laid out with the title side ${drawnTitle} it was drawn with`, async () => {
+    const session = fixture(name);
+    session.results[0].content = session.results[0].content.replace(/<\/svg>\s*$/, `${titleGroup}</svg>`);
+    if (resultMode === 'circular') session.ui.generatedCircularPlotTitlePosition = drawnTitle;
+    assert.equal(resultMode === 'circular' ? session.ui.generatedCircularPlotTitlePosition : session.ui.linearPlotTitlePosition, drawnTitle);
+    assert.equal(session.config.adv.plot_title_position, shownTitle);
+    const { outcome, transformed } = await load(session);
+    assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+    assert.deepEqual(transformed.map(({ data }) => [data.mode, data.composition?.titleSide]), [[resultMode, drawnTitle]]);
+    const { svg } = transformed[0];
+    applyCompositionEdit(svg, { legendSide: storedSide(svg), legendLocalBox: null });
+    assert.equal(JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).titleSide, drawnTitle);
+  });
+}
+

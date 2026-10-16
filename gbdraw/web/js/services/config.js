@@ -54,6 +54,7 @@ import {
   storedLegendPositionRepairs,
   normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
+  normalizeLinearPlotTitlePosition,
   replaceLayoutPreferences,
   resolveActiveLayoutPreference,
   restoredLayoutPreferences
@@ -5627,16 +5628,22 @@ const importSessionDocument = async (e, options = {}) => {
     // stored in its form, read through the Result's mode (OV-671); a side
     // outside it is listed when a Result is drawn with it (BA-D26). The form
     // of a Session 27-30 saved after a mode switch is the shown mode's: its
-    // Result was drawn with `ui.generatedLegendPosition` (OV-677).
-    const legacyDrawnSide = generatedMode === candidateMode || canonicalSession
+    // Result was drawn with `ui.generatedLegendPosition` (OV-677) and its
+    // mode's title side, which 0.13.0 saved in `ui` (OV-969).
+    const formIsResultMode = generatedMode === candidateMode || canonicalSession;
+    const legacyDrawnSide = formIsResultMode
       ? readDrawnLegendSideOfMode(restoredConfig?.form?.legend, generatedMode, 'config.form.legend')
       : { value: generatedLegend?.value ?? 'none', repairs: [] };
+    /** @type {string} */
+    const savedTitleSideOfResultMode = generatedMode === 'circular'
+      ? readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value
+      : ui.linearPlotTitlePosition ? normalizeLinearPlotTitlePosition(ui.linearPlotTitlePosition) : 'none';
     if (!committedLayout && logicalImportedResults.length > 0) repairs.push(...legacyDrawnSide.repairs);
     /** @type {LegacyResultSvgData['composition']} */
     const committedLegacyComposition = {
       legendSide: committedLayout?.legend ?? legacyDrawnSide.value,
       titleSide: committedLayout?.plotTitlePosition
-        || restoredConfig?.adv?.plot_title_position || 'none',
+        || (formIsResultMode ? restoredConfig?.adv?.plot_title_position : savedTitleSideOfResultMode) || 'none',
       userDeltas: {
         primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
         legend: ui.legendCurrentOffset
