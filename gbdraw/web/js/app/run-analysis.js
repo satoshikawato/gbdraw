@@ -245,6 +245,12 @@ export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } =
   });
 };
 
+// One task boundary, no frame (PD-OI-101). Chromium dispatches input that
+// arrived during the work before it first, so a Cancel clicked then is seen
+// before the run goes on; the status set just before may not paint.
+/** @returns {Promise<void>} */
+const afterTask = () => new Promise((resolve) => { setTimeout(resolve, 0); });
+
 export const afterFrame = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
   if (typeof requestFrame !== 'function') return Promise.resolve();
   return new Promise((resolve) => requestFrame(resolve));
@@ -1551,6 +1557,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {RunAnalysisPreviewRuntime | null} [previewRuntime]
  * @property {() => Promise<void>} [nextTick] Vue `nextTick`.
  * @property {() => Promise<void>} [waitForAfterPaint]
+ * @property {() => Promise<void>} [yieldToTask] The task yield after the later Generate statuses.
  * @property {() => Promise<void>} [waitForPostBindFrame]
  * @property {((capture: { phase?: string, diagnostics?: any }) => void) | null} [onGeneratedArtifactCheckpointCapture]
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
@@ -1596,6 +1603,7 @@ export const createRunAnalysis = ({
   previewRuntime = null,
   nextTick = () => Promise.resolve(),
   waitForAfterPaint = afterPaint,
+  yieldToTask = afterTask,
   waitForPostBindFrame = afterFrame,
   onGeneratedArtifactCheckpointCapture = null,
   resetPreviewViewport,
@@ -5072,7 +5080,7 @@ export const createRunAnalysis = ({
       throwIfGenerationCanceled();
       setProcessingStatus('Preparing render inputs and session...');
       await nextTick();
-      await waitForAfterPaint();
+      await yieldToTask();
       throwIfGenerationCanceled();
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
@@ -5229,7 +5237,7 @@ export const createRunAnalysis = ({
       console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(canonicalExecution.elapsedMs)}.`);
       setProcessingStatus('Preparing preview...');
       await nextTick();
-      await waitForAfterPaint();
+      await yieldToTask();
       throwIfGenerationCanceled();
       if (canonicalExecution.status === 'superseded'
         || generationToken !== latestGenerationToken) {

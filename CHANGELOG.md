@@ -2172,6 +2172,11 @@ Retired names and their replacements are listed under
   longer derives three values again whose inputs did not change: the feature set the
   color and visibility rules match against, the record and feature names of the
   Similarity alignment drawer, and the Features list. Nothing visible changes.
+- Performance (web app): after "Preparing render inputs and session..." and "Preparing
+  preview..." a Generate no longer waits two animation frames; it yields one task, so these
+  two statuses may not be painted or announced on a fast Generate. The first status still
+  paints before the work starts. A Cancel clicked during either step is still honored there
+  in Chromium: no Worker restart, and the canceled Result is never shown (PD-OI-101).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
