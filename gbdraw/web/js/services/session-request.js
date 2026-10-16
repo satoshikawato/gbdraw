@@ -202,6 +202,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { ModeProfileName } from '../mode-profiles.js' */
 /** @import { ExportRef } from './svg-serialization.js' */
 /** @import { JsonValue } from './json-clone.js' */
+/** @import { UnvalidatedFields } from './session-authority.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -576,10 +577,12 @@ export const canonicalLinearRecordLayout = (renderRequest) => {
   };
 };
 
+/** @param {UnvalidatedFields<'isCircular' | 'startCoordinate'>} raw A record's `display`, checked here. */
 const canonicalRecordDisplay = (raw) => {
   if (!raw || Object.keys(raw).sort().join(',') !== 'isCircular,startCoordinate'
     || (raw.isCircular !== null && typeof raw.isCircular !== 'boolean')
-    || (raw.startCoordinate !== null && (!Number.isSafeInteger(raw.startCoordinate) || raw.startCoordinate < 1))
+    // A safe integer is a number.
+    || (raw.startCoordinate !== null && (!Number.isSafeInteger(raw.startCoordinate) || /** @type {number} */ (raw.startCoordinate) < 1))
     || (raw.isCircular === false && raw.startCoordinate !== null)) {
     throw new Error('Record display requires nullable isCircular and a positive integer or null startCoordinate.');
   }
@@ -2839,7 +2842,7 @@ const buildLayout = (state, drawing, records = [], circularSourceIndexes = null)
 // (OV-216, OV-220).
 const PROJECTED_FEATURE_EDIT_FIELDS = ['featureOverrides', 'featureVisibilityManualRules', 'labelOverrideRows'];
 /**
- * @param {Record<string, any> | null | undefined} draft
+ * @param {unknown} draft A stored feature-edit draft, unvalidated; a draft of no object is read as none.
  * @param {{ semanticFeatureState?: Record<string, any> } | null | undefined} projection
  * @returns {Record<string, any>}
  */
@@ -2868,15 +2871,37 @@ const canonicalRecordSelector = (record) => {
   if (selector?.kind === 'recordIndex') return `#${Number(selector.index) + 1}`;
   return null;
 };
+/**
+ * The flat draft a Gallery Session's request is rebuilt from, as
+ * `buildCanonicalRequestState` reads it: unvalidated, each leaf passed on or
+ * converted where it is read.
+ * @typedef {{
+ *   colors?: unknown, colorsAreOverrides?: unknown, palette?: unknown,
+ *   linearRecordLayout?: UnvalidatedFields<'enabled' | 'recordGap' | 'rows'>,
+ *   circularConservation?: unknown, losat?: UnvalidatedFields<string>, filterMode?: unknown,
+ *   blacklistText?: unknown, losatProgram?: unknown, form?: unknown, adv?: unknown, rules?: unknown,
+ *   whitelist?: unknown, qualifierPriorityRules?: unknown, linearComparisonPlan?: unknown,
+ *   annotationSets?: unknown, recordDisplayDrafts?: unknown, featurePlacementOverrides?: unknown
+ * }} RequestStateDraftView
+ */
 // A Gallery Session's request inputs: the project inputs, mode and artifacts
 // as `state`, the settings and edits as the drawing the request reads, and the
 // per-feature edits of that drawing as the draft stores them (`features`).
-/** @returns {{ state: Record<string, any>, drawing: RequestDrawing, features: Record<string, unknown> }} */
+/**
+ * @param {{
+ *   session: { features?: unknown, renderRequest?: { records?: RequestRecordView[] } | null,
+ *     ui?: UnvalidatedFields<'cInputType' | 'lInputType'> } | null | undefined,
+ *   projection: ReturnType<typeof projectCanonicalSessionRequest>,
+ *   config: RequestStateDraftView
+ * }} input The Session (version 31-33 or 39, its request read), the projection of that request, and the draft
+ *   its migration rebuilt.
+ * @returns {{ state: Record<string, any>, drawing: RequestDrawing, features: Record<string, unknown> }}
+ */
 export const buildCanonicalRequestState = ({ session, projection, config }) => {
   // The request keeps the tables it was written with, not the files bound as
   // their inputs (OV-367).
   const canonicalPublicationFiles = { ...projection.requestTableFiles };
-  /** @param {Readonly<Record<string, unknown>> | null | undefined} colors */
+  /** @param {unknown} colors */
   const pythonColors = (colors) => Object.fromEntries(Object.entries(colors || {}).filter(
     ([key]) => !key.startsWith('collinear_block_')).sort(([left], [right]) => left.localeCompare(right)));
   const activeColors = pythonColors(config?.colors);
@@ -2884,6 +2909,7 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     && JSON.stringify(activeColors) !== JSON.stringify(pythonColors(projection.config?.colors));
   if (colorOverridesChanged) delete canonicalPublicationFiles.d_color;
   const features = featureEditsOverProjection(session?.features, projection), layout = config?.linearRecordLayout || {};
+  /** @type {{ similarityAlignment?: unknown, recordTranslations?: unknown }} */
   const canonicalLayout = projection.config?.linearRecordLayout || {};
   const palette = String(config?.palette || 'default');
   const records = session?.renderRequest?.records || [];
@@ -3552,9 +3578,13 @@ const resourcesWithOriginalNames = (resources, originalNameHints) => {
  */
 // A resource id is Session text, so only an own key of the table names a
 // resource (OV-613).
-/** @param {StoredResources} resources */
+/**
+ * @param {StoredResources} resources
+ * @param {unknown} resourceId A request's resource id, or one a stored Web inventory names (unvalidated).
+ */
 const resourceAsLegacyFile = (resources, resourceId) => {
-  const entry = ownEntry(resources, resourceId);
+  // `String` is the property key the lookup used before: an id is text or a JSON value.
+  const entry = ownEntry(resources, String(resourceId));
   if (!entry || typeof entry !== 'object') throw new Error(`Missing canonical resource: ${resourceId}`);
   const { kind: _kind, ...file } = entry;
   return file;
@@ -3568,6 +3598,7 @@ const resourceAsLegacyFile = (resources, resourceId) => {
 
 /**
  * @param {StoredResources} resources
+ * @param {UnvalidatedFields<'resourceId' | 'name' | 'type' | 'lastModified'>} binding
  * @param {ResourceFileResolver | null} [resolveResourceFile]
  */
 const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null, schema = 1) => {
@@ -3594,7 +3625,10 @@ const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null, 
 const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = null, schema = 1) => (
   Array.isArray(value)
     ? /** @type {unknown[]} */ (value).map((item) => webBindingValueAsLegacyFile(resources, item, resolveResourceFile, schema))
-    : webBindingAsLegacyFile(resources, value, resolveResourceFile, schema)
+    : webBindingAsLegacyFile(
+      resources, /** @type {UnvalidatedFields<'resourceId' | 'name' | 'type' | 'lastModified'>} */ (value),
+      resolveResourceFile, schema
+    )
 );
 
 /**
@@ -3686,7 +3720,19 @@ const applyWebFileBindings = (
 // document. No canonical request or committed owner is created by this projection.
 // A settings-only Session's draft: the shown mode's slice (Session 46), or
 // the flat draft of an older Session.
-/** @param {SessionResourceTable | null} [sessionResourceTable] */
+/**
+ * What `projectSettingsOnlySession` reads of the admitted document: the shown
+ * mode Load read (K19), the drafts as stored, and the checked Web inventory.
+ * @typedef {{
+ *   ui: { mode: 'circular' | 'linear', lInputType?: unknown, cInputType?: unknown },
+ *   modes?: UnvalidatedFields<'circular' | 'linear', UnvalidatedFields<'config'>>, config?: unknown,
+ *   webFiles?: { readonly bindings?: WebFileBindings } | null, resources?: Readonly<Record<string, unknown>> | null
+ * }} SettingsOnlyProjectionInput
+ */
+/**
+ * @param {SettingsOnlyProjectionInput} data
+ * @param {SessionResourceTable | null} [sessionResourceTable]
+ */
 export const projectSettingsOnlySession = (data, sessionResourceTable) => ({
   mode: data.ui.mode,
   inputType: data.ui.mode === 'linear' ? data.ui.lInputType : data.ui.cInputType,
@@ -3699,14 +3745,39 @@ export const projectSettingsOnlySession = (data, sessionResourceTable) => ({
   semanticFeatureState: {}
 });
 
+/**
+ * A request projection as Load reads it: a settings-only Session's has no
+ * request, so it has none of the request's tables, layout preferences, legacy
+ * table rows, or protein pipeline.
+ * @typedef {ReturnType<typeof projectCanonicalSessionRequest>
+ *   | (ReturnType<typeof projectSettingsOnlySession> & { requestTableFiles?: undefined, layoutPreferences?: undefined,
+ *     legacyTableRepairs?: undefined, pipelineState?: undefined })} SessionRequestProjection
+ */
+
 /** @param {unknown} value */
 const cloneCanonicalJsonValue = (value) => (
   value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 );
 
+/**
+ * A record of the request `projectCanonicalSessionRequest` projects. Its
+ * reader (`readStoredRenderRequest`) or the writer made the request, so a
+ * record is an object; the projection reads each field as unvalidated and
+ * checks or converts it where it reads it.
+ * @typedef {RequestRecordView & {
+ *   recordKey?: unknown, cardinality?: unknown,
+ *   source?: UnvalidatedFields<'kind' | 'resourceId' | 'gffResourceId' | 'fastaResourceId'>,
+ *   display?: UnvalidatedFields<'isCircular' | 'startCoordinate'>,
+ *   presentation?: UnvalidatedFields<'reverseComplement' | 'label' | 'subtitle' | 'gridRow' | 'gridColumn'>
+ * }} ProjectionRecordView
+ */
 // Web controls own row membership and record order, not a distinct numeric
 // column value. Preserve the engine's row/column render order in the projected
 // record sequence, then retire the unsupported numeric column in the draft.
+/**
+ * @template {{ presentation?: UnvalidatedFields<'gridRow' | 'gridColumn'> }} R
+ * @param {readonly R[]} [records]
+ */
 export const normalizeWebGridColumnOrdering = (records = []) => {
   const source = Array.isArray(records) ? records : [];
   const entries = source.map((record, sourceIndex) => {
@@ -4500,6 +4571,7 @@ export const projectCanonicalSessionRequest = ({
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
     throw new Error('Unsupported canonical renderRequest mode.');
   }
+  /** @type {ProjectionRecordView[]} */
   const sourceRecords = Array.isArray(renderRequest.records) ? renderRequest.records : [];
   sourceRecords.forEach((record) => canonicalRecordDisplay(record.display));
   if (!Array.isArray(renderRequest.diagramOptions?.featurePlacements)) {
@@ -5399,8 +5471,9 @@ export const projectCanonicalSessionRequest = ({
           ...(initializeCliInputs && storedConfig == null
             && sourceRecords[normalizedRecordOrdering.sourceIndexByProjectedIndex[index]]?.cardinality === 'exactly_one'
             ? { canonicalCardinality: 'exactly_one' } : {}),
+          // An integer is a number.
           ...(initializeCliInputs && storedConfig == null
-            && Number.isInteger(sourceColumn) && sourceColumn > 0
+            && Number.isInteger(sourceColumn) && /** @type {number} */ (sourceColumn) > 0
             ? { canonicalRow: row, canonicalColumn: sourceColumn }
             : {})
         };

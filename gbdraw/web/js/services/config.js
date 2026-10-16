@@ -272,7 +272,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { CommittedCanonicalSession } from './session-request.js' */
+/** @import { CommittedCanonicalSession, SessionRequestProjection, SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
@@ -283,6 +283,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LinearComparisonEdge, LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
+/** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
+/** @import { StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { DiagnosticContext, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ConfirmLoadRepairs, LoadRepair, Repaired } from '../utils/load-repairs.js' */
@@ -930,6 +932,10 @@ const defaultEditorStateData = () => ({
 // State, History, and Session rollback hold the Generate-owned catalog by
 // reference; only an admitted catalog may enter state. Vue proxies obscure the
 // identity that admission records.
+/**
+ * @param {unknown} catalog A catalog in state, or one a saved draft or snapshot holds.
+ * @returns {FeatureCatalog | null}
+ */
 const admittedFeatureCatalog = (catalog) => {
   const rawCatalog = rawReactiveValue(catalog);
   return isAdoptedFeatureCatalog(rawCatalog) ? rawCatalog : null;
@@ -2333,8 +2339,11 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
   // The settings-only decision of the request read is passed on explicitly (C-OD07).
   const settingsOnly = requestRead.settingsOnly || isSettingsOnlySessionDocument(data);
+  /** @type {SessionRequestProjection | null} */
   const canonicalProjection = settingsOnly
-    ? projectSettingsOnlySession(data, currentResourceTable)
+    // The cast: Load read the shown mode (`readSettingsOnlyMode`, K19) and Session authority the Web
+    // inventory; no step after replaces `ui.mode`.
+    ? projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (data), currentResourceTable)
     : sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
     ? projectCanonicalSessionRequest({
         renderRequest: projectionRenderRequest,
@@ -2699,7 +2708,11 @@ const buildLoadedArtifactSlot = (set, {
 // A saved layout owner (current or legacy ui fields) wins; without one, a
 // canonical Session takes the layout projected from its committed request
 // (`restoredLayoutPreferences`).
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {Record<string, unknown> | null} [ui] A saved `ui` object, unvalidated.
+ * @param {{ projected?: StoredLayoutPreferences | null }} [options] The layout projected from the committed request.
+ */
 const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) => {
   replaceLayoutPreferences(drawing.layoutPreferences, restoredLayoutPreferences(ui, {
     mode: state.mode.value,
@@ -3518,6 +3531,7 @@ const customDepthRequested = (mode, drawing) => {
 /**
  * The one check that the active mode has its biological inputs; Generate and
  * Save from the draft both use it, so both explain the same missing input.
+ * @param {string} [mode] The mode to check; the Generate port passes a drawing's mode as text.
  */
 export const assertActiveModeInputs = (mode = state.mode.value, sourceState = state) => {
   const files = sourceState.files || {};
@@ -3668,7 +3682,7 @@ export const serializeActiveRenderFiles = async (
     (Array.isArray(sourceFiles.linearCanonicalComparisons)
       ? sourceFiles.linearCanonicalComparisons
       : []
-    ).map(async (comparison) => (
+    ).map(async (/** @type {ResourceBackedComparison} */ comparison) => (
       isResourceBackedCanonicalComparison(comparison)
         ? {
             ...mapResourceBackedCanonicalComparison(comparison),
@@ -3791,7 +3805,7 @@ export const adoptCanonicalRenderArtifacts = (
   } else if (projection.files.c_conservation_blasts_source === 'losat-cache') {
     const projectedConservation = projection.config.circularConservation;
     const currentSeries = Array.isArray(drawing.circularConservation.series)
-      ? drawing.circularConservation.series.map((entry) => cloneJsonData(entry))
+      ? drawing.circularConservation.series.map((/** @type {unknown} */ entry) => cloneJsonData(entry))
       : [];
     const nextSeries = Array.isArray(projectedConservation?.series)
       ? projectedConservation.series.map((entry, index) => ({
@@ -3805,12 +3819,12 @@ export const adoptCanonicalRenderArtifacts = (
       : [];
     nextCircularState = {
       blasts: (projection.files.c_conservation_blasts || [])
-        .map((entry) => deserializeFile(entry))
+        .map((/** @type {unknown} */ entry) => deserializeFile(entry))
         .filter(Boolean),
       fastas: (projection.files.c_conservation_fastas || [])
-        .map((entry) => deserializeFile(entry)),
+        .map((/** @type {unknown} */ entry) => deserializeFile(entry)),
       sequenceSources: (projection.files.c_conservation_sequence_sources || [])
-        .map((entry) => deserializeFile(entry)),
+        .map((/** @type {unknown} */ entry) => deserializeFile(entry)),
       projectedConservation,
       series: nextSeries
     };
@@ -4267,7 +4281,7 @@ const cloneLiveFileState = (drawing) => ({
       Array.isArray(state.files.linearCanonicalComparisons)
         ? state.files.linearCanonicalComparisons
         : []
-    ).map((comparison) => (
+    ).map((/** @type {ResourceBackedComparison} */ comparison) => (
       isResourceBackedCanonicalComparison(comparison)
         ? mapResourceBackedCanonicalComparison(comparison)
         : cloneJsonData(comparison)
@@ -4287,7 +4301,13 @@ const cloneLiveFileState = (drawing) => ({
   }
 });
 
-/** @param {DrawingState} drawing */
+/**
+ * @param {DrawingState} drawing
+ * @param {{
+ *   files: Record<string, unknown>, circularRecordList: unknown, circularRecordDiscovery: object,
+ *   linearSeqs: LinearSeq[], linearRecordRows: LinearRecordRow[], linearComparisonPlan: LinearComparisonPlan
+ * }} snapshot The project inputs `cloneLiveFileState` captured, or those a Load installs.
+ */
 const restoreLiveFileState = (drawing, snapshot) => {
   state.matchSequenceRegistry?.reset?.();
   Object.keys(state.files).forEach((key) => {
@@ -4440,7 +4460,9 @@ const captureSessionImportSnapshot = () => ({
     circular: captureDrawingImportSnapshot(state.drawings.circular),
     linear: captureDrawingImportSnapshot(state.drawings.linear)
   },
-  ui: cloneJsonData(buildUiStateData(state.drawings[state.mode.value])),
+  // The cast: outside a Load the shown mode is a drawing's ('circular' or 'linear'), and a Load replaces
+  // the saved mode it writes first before it returns (no `await` between).
+  ui: cloneJsonData(buildUiStateData(state.drawings[/** @type {DiagramMode} */ (state.mode.value)])),
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
   files: cloneLiveFileState(state.drawings.linear),
   results: state.results.value,
@@ -5668,6 +5690,8 @@ const importSessionDocument = async (e, options = {}) => {
     const otherModeCatalogAdmitted = currentSchemaSession ? otherModeCatalog : null;
     const otherModeResult = otherModeCatalogAdmitted ? data.otherModeResult : null;
     const otherSetMode = otherModeResult?.renderRequest?.mode === 'linear' ? 'linear' : 'circular';
+    // A projection's mode is checked (`projectCanonicalSessionRequest`) or read (K19).
+    /** @type {Set<DiagramMode>} */
     const resultModes = new Set([
       ...(committedImportedResults.length > 0 && committedMode ? [committedMode] : []),
       ...(otherModeResult ? [otherSetMode] : [])
@@ -6518,7 +6542,8 @@ export const exportSession = (titleOverride = null, options = {}) => {
     // payloads, resources, catalogs, caches and Results retain their existing owner.
     // Session 46 keeps each drawing as its mode's slice (PD-OI-086); the
     // Features-list record is the shown Result's. `drawing` is the shown mode's.
-    const drawing = state.drawings[state.mode.value];
+    // The cast: outside a Load the shown mode is a drawing's (see `captureSessionImportSnapshot`).
+    const drawing = state.drawings[/** @type {DiagramMode} */ (state.mode.value)];
     // Each drawing's drafts are written on the rows of their records (OV-278,
     // OV-325): a Session without a Web draft loads a draft selected by record ID on '#1'.
     const recordDisplayRows = /** @type {{ recordDisplayRows?: { value?: Parameters<typeof bindRecordDisplayDrafts>[1] } }} */ (options).recordDisplayRows?.value || [];
