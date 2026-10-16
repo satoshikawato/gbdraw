@@ -3,6 +3,7 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { join, posix, resolve } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   detectPrivilegedWebCapabilities,
   detectReportOnlySourceFacts,
@@ -1272,6 +1273,33 @@ const cycleDelta = summarizeArchitectureInventory(
   headCycleResult.cycles.map(({ subject }) => subject)
 );
 
+// JSON.parse keeps the last copy of a repeated key, so authority could hide an entry.
+// Call only on source that JSON.parse accepted: every string token is then terminated.
+const repeatedJsonKeys = (source) => {
+  const repeated = new Set();
+  const scopes = [];
+  const colon = /\s*:/y;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '{') scopes.push(new Set());
+    else if (character === '[') scopes.push(null);
+    else if (character === '}' || character === ']') scopes.pop();
+    else if (character === '"') {
+      let end = index + 1;
+      while (source[end] !== '"') end += source[end] === '\\' ? 2 : 1;
+      const keys = scopes.at(-1);
+      colon.lastIndex = end + 1;
+      if (keys && colon.test(source)) {
+        const key = JSON.parse(source.slice(index, end + 1));
+        if (keys.has(key)) repeated.add(key);
+        keys.add(key);
+      }
+      index = end;
+    }
+  }
+  return [...repeated].sort();
+};
+
 const parsePolicy = (source, revision) => {
   if (source === null) throw new Error(`Missing ${policyPath} at ${revision}`);
   let policy;
@@ -1279,6 +1307,10 @@ const parsePolicy = (source, revision) => {
     policy = JSON.parse(source);
   } catch (error) {
     throw new Error(`Cannot parse ${policyPath} at ${revision}: ${error.message}`);
+  }
+  const repeatedKeys = repeatedJsonKeys(source);
+  if (repeatedKeys.length) {
+    throw new Error(`${policyPath} at ${revision} repeats the key(s) ${repeatedKeys.join(', ')}`);
   }
   for (const section of ['allowedPrivilegedImporters', 'allowedPrivilegedOwners']) {
     if (!policy[section] || typeof policy[section] !== 'object' || Array.isArray(policy[section])) {
@@ -1309,11 +1341,16 @@ const isRetiredPolicyKey = (section, name) => (
   section === 'allowedPrivilegedOwners' && !detectedCapabilityKeys.has(name)
 );
 let policyTopLevelKeysMatch = true;
+// Every policy value outside the two privileged sections stays unchanged in a safe contraction.
+let policyOtherSectionsMatch = true;
 if (basePolicySource !== null && changed.has(policyPath)) {
   proposedPolicy = parsePolicy(readHeadFile(policyPath), head || 'working tree');
   const baseTopLevelKeys = Object.keys(policy).sort();
   const proposedTopLevelKeys = Object.keys(proposedPolicy).sort();
   policyTopLevelKeysMatch = JSON.stringify(baseTopLevelKeys) === JSON.stringify(proposedTopLevelKeys);
+  policyOtherSectionsMatch = baseTopLevelKeys
+    .filter((key) => !['allowedPrivilegedImporters', 'allowedPrivilegedOwners'].includes(key))
+    .every((key) => JSON.stringify(policy[key]) === JSON.stringify(proposedPolicy[key]));
   for (const section of ['allowedPrivilegedImporters', 'allowedPrivilegedOwners']) {
     Object.keys(proposedPolicy[section]).forEach((name) => {
       if (!Object.hasOwn(policy[section], name)) addedPolicyKeys.push(`${section}.${name}`);
@@ -1345,6 +1382,168 @@ const privilegedImporterPermissionDelta = summarizeArchitectureInventory(
   permissionEntries(policy, 'allowedPrivilegedImporters'),
   permissionEntries(proposedOrBasePolicy, 'allowedPrivilegedImporters')
 );
+
+// Vendored runtime changes (WEB_CHANGE_POLICY.md, Gate FAIL). Only the trusted base listing
+// authorizes a change; a candidate listing is validated as inert data and authorizes nothing.
+const vendorRoot = 'gbdraw/web/vendor/';
+const vendorChangeKindByStatus = Object.freeze({ A: 'add', M: 'replace', D: 'remove' });
+const vendorChangeKinds = Object.values(vendorChangeKindByStatus);
+const vendorListingKeys = Object.freeze(['change', 'package', 'path', 'sha256', 'source', 'version']);
+const validateVendorListing = (candidatePolicy) => {
+  const listing = candidatePolicy.allowedVendorChanges;
+  if (listing === undefined) return { entries: [], errors: [] };
+  if (!Array.isArray(listing)) {
+    return { entries: [], errors: ['allowedVendorChanges must be an array'] };
+  }
+  const errors = [];
+  const listedPaths = new Set();
+  const nonEmpty = (value) => typeof value === 'string' && value.trim() !== '';
+  listing.forEach((entry, index) => {
+    const label = `allowedVendorChanges[${index}]`;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      errors.push(`${label} must be an object`);
+      return;
+    }
+    if (Object.keys(entry).sort().join() !== vendorListingKeys.join()) {
+      errors.push(`${label} must have exactly the keys ${vendorListingKeys.join(', ')}`);
+    }
+    const { path } = entry;
+    if (
+      typeof path !== 'string'
+      || !path.startsWith(vendorRoot)
+      || path.endsWith('/')
+      || path.includes('\\')
+      || posix.normalize(path) !== path
+    ) {
+      errors.push(`${label}.path must be a normalized path under ${vendorRoot}`);
+    } else if (listedPaths.has(path)) {
+      errors.push(`${label} lists ${path} twice`);
+    } else {
+      listedPaths.add(path);
+    }
+    if (!vendorChangeKinds.includes(entry.change)) {
+      errors.push(`${label}.change must be one of ${vendorChangeKinds.join(', ')}`);
+    }
+    if (typeof entry.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(entry.sha256)) {
+      errors.push(`${label}.sha256 must be 64 lowercase hexadecimal digits`);
+    }
+    ['package', 'version'].forEach((field) => {
+      if (!nonEmpty(entry[field])) errors.push(`${label}.${field} must be a non-empty string`);
+    });
+    if (typeof entry.source !== 'string' || !/^https:\/\/\S+$/.test(entry.source)) {
+      errors.push(`${label}.source must be an https URL`);
+    }
+  });
+  return { entries: errors.length ? [] : listing, errors };
+};
+const readRevisionBytes = (revision, path) => {
+  try {
+    return execFileSync(
+      'git',
+      ['-C', repositoryRoot, 'cat-file', 'blob', `${revision}:${path}`],
+      { maxBuffer: 512 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+  } catch (_error) {
+    return null;
+  }
+};
+const readHeadBytes = (path) => {
+  if (head) return readRevisionBytes(head, path);
+  const absolutePath = join(repositoryRoot, path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath) : null;
+};
+const sha256OfBytes = (bytes) => (
+  bytes === null ? 'unreadable' : createHash('sha256').update(bytes).digest('hex')
+);
+// The bootstrap fallback above reads the head policy; the listing never comes from the head.
+const trustedVendorListing = basePolicySource === null
+  ? { entries: [], errors: [] }
+  : validateVendorListing(policy);
+const candidateVendorListing = changed.has(policyPath)
+  ? validateVendorListing(proposedPolicy || policy)
+  : null;
+const vendorEntryKey = (entry) => JSON.stringify(entry);
+const trustedVendorEntryKeys = new Set(trustedVendorListing.entries.map(vendorEntryKey));
+const candidateVendorEntryKeys = new Set((candidateVendorListing?.entries || []).map(vendorEntryKey));
+const addedVendorEntries = (candidateVendorListing?.entries || [])
+  .filter((entry) => !trustedVendorEntryKeys.has(vendorEntryKey(entry)));
+const removedVendorEntries = candidateVendorListing && !candidateVendorListing.errors.length
+  ? trustedVendorListing.entries.filter((entry) => !candidateVendorEntryKeys.has(vendorEntryKey(entry)))
+  : [];
+const describeVendorEntry = (entry) => (
+  `${entry.path}: ${entry.change} sha256=${entry.sha256} package=${entry.package} `
+  + `version=${entry.version} source=${entry.source}`
+);
+// A new entry that cannot apply to the base tree fails in the pull request that adds it.
+const impossibleVendorEntries = addedVendorEntries.flatMap((entry) => {
+  const label = `${entry.path}: ${entry.change}`;
+  const baseBytes = readRevisionBytes(base, entry.path);
+  if (entry.change === 'add') {
+    if (baseBytes !== null) return [`${label} for a path the base already has`];
+    // A tree (directory) at the path has no blob bytes but still occupies it.
+    const occupied = spawnSync(
+      'git',
+      ['-C', repositoryRoot, 'cat-file', '-e', `${base}:${entry.path}`],
+      { stdio: 'ignore' }
+    ).status === 0;
+    return occupied ? [`${label} for a path that is not a file in the base`] : [];
+  }
+  if (baseBytes === null) return [`${label} for a path the base lacks`];
+  const baseSha256 = sha256OfBytes(baseBytes);
+  if (entry.change === 'remove' && baseSha256 !== entry.sha256) {
+    return [`${label} lists sha256 ${entry.sha256}, but the base bytes hash to ${baseSha256}`];
+  }
+  if (entry.change === 'replace' && baseSha256 === entry.sha256) {
+    return [`${label} lists the bytes the base already has`];
+  }
+  return [];
+});
+// An entry pins the bytes the change leaves (add, replace) or removes (remove).
+// The diff is two-dot. When the head does not contain the base and leaves a path as their
+// merge base had it, the path changed only in the base: the branch is behind, not wrong.
+const vendorMergeBase = (() => {
+  if (!head || !changedVendorPaths.length) return null;
+  const ancestry = spawnSync(
+    'git',
+    ['-C', repositoryRoot, 'merge-base', '--is-ancestor', base, head],
+    { stdio: 'ignore' }
+  );
+  if (ancestry.status !== 1) return null;
+  const mergeBase = spawnSync(
+    'git',
+    ['-C', repositoryRoot, 'merge-base', base, head],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+  );
+  return mergeBase.status === 0 ? mergeBase.stdout.trim() : null;
+})();
+const vendorChanges = changedVendorPaths.map((path) => {
+  const status = changed.get(path);
+  const change = vendorChangeKindByStatus[status] || `unsupported status ${status}`;
+  const entry = trustedVendorListing.entries.find((candidate) => candidate.path === path);
+  if (!entry) return { path, change, reason: 'not listed' };
+  const pinned = sha256OfBytes(
+    change === 'remove' ? readRevisionBytes(base, path) : readHeadBytes(path)
+  );
+  if (entry.change === change && pinned === entry.sha256) return { path, change, entry, reason: '' };
+  if (
+    vendorMergeBase
+    && sha256OfBytes(readHeadBytes(path)) === sha256OfBytes(readRevisionBytes(vendorMergeBase, path))
+  ) {
+    return {
+      path,
+      change,
+      reason: 'changed only in the base since this branch forked; '
+        + 'the branch is behind its base: update it from dev'
+    };
+  }
+  if (entry.change !== change) {
+    return { path, change, reason: `listed as ${entry.change}, but the change is ${change}` };
+  }
+  return { path, change, reason: `sha256 ${pinned} does not match the listed ${entry.sha256}` };
+});
+const unlistedVendorChanges = vendorChanges.filter(({ reason }) => reason);
+const listedVendorChanges = vendorChanges.filter(({ reason }) => !reason);
+
 const emptyRuleRegistry = () => ({ schemaVersion: 1, rules: [] });
 const candidateArchitectureErrors = [];
 const candidateArchitectureObservations = [];
@@ -1919,6 +2118,7 @@ const pureSafePolicyContraction = Boolean(
   && !retiredPolicyKeys.length
   && !addedPolicyKeys.length
   && policyTopLevelKeysMatch
+  && policyOtherSectionsMatch
   && !unapprovedCapabilities.length
   && !proposedPolicyExclusions.length
 );
@@ -1971,7 +2171,10 @@ newProductionDependencies.push(
   ...newBareImports.map((entry) => `bare production import ${entry}`)
 );
 dependencyChanges.push(...newBareImports.map((entry) => `bare production import: ${entry}`));
-dependencyChanges.push(...changedVendorPaths.map((path) => `vendored runtime file changed: ${path}`));
+dependencyChanges.push(...vendorChanges.map(({ path, change, entry }) => (
+  `vendored runtime file changed: ${path}`
+  + (entry ? ` (listed ${change}: ${entry.package} ${entry.version})` : '')
+)));
 
 const sizeReviewReasons = [];
 if (productionPaths.length > selectedProfile.productionFiles) {
@@ -2053,6 +2256,18 @@ if (architectureAuthorityDelta.changes.length) {
     + `(${architectureAuthorityDelta.changes.length} change(s))`
   );
 }
+if (addedVendorEntries.length || removedVendorEntries.length) {
+  reviewReasons.push(
+    'Governance and authority: vendored runtime listing changed '
+    + `(added=${addedVendorEntries.length}, removed=${removedVendorEntries.length}; `
+    + 'see the vendored runtime listing sections)'
+  );
+}
+listedVendorChanges.forEach(({ path, change, entry }) => {
+  reviewReasons.push(
+    `Vendored runtime: listed ${change} of ${path} (${entry.package} ${entry.version})`
+  );
+});
 if (designRuleAllowlistExpansions.length) {
   reviewReasons.push(
     'Governance and authority: registered design-rule allowlists expanded '
@@ -2136,9 +2351,20 @@ if (newProductionDependencies.length) {
 if (addedBinaryRuntimePaths.length) {
   blockingViolations.push('added binary runtime files are not allowed');
 }
-if (changedVendorPaths.length) {
-  blockingViolations.push('changes under gbdraw/web/vendor/ are not allowed');
+if (unlistedVendorChanges.length) {
+  blockingViolations.push(
+    'changes under gbdraw/web/vendor/ are not allowed unless the trusted base lists them '
+    + `in ${policyPath} allowedVendorChanges (`
+    + `${unlistedVendorChanges.map(({ path, reason }) => `${path}: ${reason}`).join('; ')})`
+  );
 }
+blockingViolations.push(...trustedVendorListing.errors.map((error) => (
+  `trusted vendored runtime listing: ${error}`
+)));
+blockingViolations.push(...[
+  ...(candidateVendorListing?.errors || []),
+  ...impossibleVendorEntries
+].map((error) => `candidate vendored runtime listing: ${error}`));
 if (
   productionPaths.length
   && changedGuards.length
@@ -2791,6 +3017,14 @@ const report = [
   '## Changed vendored runtime files',
   '',
   ...list(changedVendorPaths),
+  '',
+  '## Added vendored runtime listing entries',
+  '',
+  ...list(addedVendorEntries.map(describeVendorEntry)),
+  '',
+  '## Removed vendored runtime listing entries',
+  '',
+  ...list(removedVendorEntries.map(describeVendorEntry)),
   '',
   '## Dependency changes',
   '',
