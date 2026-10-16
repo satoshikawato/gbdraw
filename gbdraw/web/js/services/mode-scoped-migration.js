@@ -330,7 +330,7 @@ const withoutStrokeDisclosure = (draft) => {
  *   depthSources?: Partial<Record<SliceMode, number>> | null,
  *   paletteColors?: Record<string, any> | null
  * }} context `committedMode` is the saved Result's mode (`renderRequest.mode`,
- *   else `ui.mode`); `modeProfiles` defaults to `config.modeProfiles`;
+ *   else `cliInvocation.mode`, else `ui.mode`); `modeProfiles` defaults to `config.modeProfiles`;
  *   `depthSources` (each mode's Depth series count) to the counts of
  *   `webFiles.bindings`; `paletteColors` are the colors of the draft's
  *   palette, which override colors merge into.

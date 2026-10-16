@@ -40,6 +40,7 @@ const {
   applyCompositionEdit,
   COMPOSITION_METADATA_ATTRIBUTE
 } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
+const { state } = await import('../../gbdraw/web/js/state.js');
 
 const REPO = new URL('../../', import.meta.url);
 const fixture = (name) => {
@@ -185,3 +186,84 @@ test('OV-672: the other mode\'s Result set reads a stored side outside its mode 
   assert.deepEqual(transformed.map(({ side, data }) => [data.mode, data.composition, side]), [['linear', null, 'bottom']]);
   assert.deepEqual(dialogs, sideRows('upper_left', 'bottom', 'otherModeResult.results'));
 });
+
+// OV-677 (BA-D31, BA-OD118): release 0.13.0 kept its Result across a mode
+// switch and saved the shown mode in `ui.mode`; the Result's mode is the last
+// Generate's (`cliInvocation.mode`). Load reads the Result as that mode, with
+// the side it was drawn with (`ui.generatedLegendPosition`), and opens on it;
+// the flat draft's settings stay with the shown mode.
+const MODE_SWITCH = [
+  // [fixture, Result mode, shown mode, drawn side, the shown mode's form legend]
+  ['mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'circular', 'linear', 'left', 'bottom'],
+  ['mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz', 'linear', 'circular', 'top', 'left']
+];
+for (const [name, resultMode, shownMode, drawnSide, shownLegend] of MODE_SWITCH) {
+  test(`OV-677: a 0.13.0 Session saved with ${shownMode} shown opens its ${resultMode} Result as ${resultMode}, laid out with ${drawnSide}`, async () => {
+    const session = fixture(name);
+    assert.deepEqual([session.version, session.ui.mode, session.cliInvocation.mode], [30, shownMode, resultMode]);
+    const { outcome, transformed, dialogs } = await load(session);
+    assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+    assert.deepEqual(dialogs, []);
+    assert.deepEqual(transformed.map(({ side, data }) => [data.mode, side]), [[resultMode, drawnSide]]);
+    assert.deepEqual([state.mode.value, state.generatedMode.value, state.generatedLegendPosition.value], [resultMode, resultMode, drawnSide]);
+    assert.equal(state.results.value.length, 1);
+    // The flat draft's legend position is the shown mode's.
+    assert.equal(state.drawings[shownMode].form.legend, shownLegend);
+    // The first Legend edit keeps the Legend on the side 0.13.0 drew it.
+    const { svg } = transformed[0];
+    applyCompositionEdit(svg, { legendSide: storedSide(svg), legendLocalBox: null });
+    assert.equal(JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).legendSide, drawnSide);
+  });
+}
+
+// The accepted residual of PD-OI-096: 0.13.0 wrote no `cliInvocation` for a
+// Generate it could not replay (a Linear LOSAT run among them), so such a
+// Session's Result still opens as the shown mode.
+test('OV-677: a 0.13.0 Session saved after a mode switch without the last Generate\'s mode opens its Result as the shown mode', async () => {
+  const session = fixture(MODE_SWITCH[0][0]);
+  delete session.cliInvocation;
+  const { outcome, transformed } = await load(session);
+  assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+  assert.deepEqual(transformed.map(({ data }) => data.mode), ['linear']);
+  assert.equal(state.mode.value, 'linear');
+});
+
+// A blank drawn side is no stored side, read as `none` (PD-OI-096 〔値がないとき〕),
+// as the same-mode path reads `config.form.legend`.
+test('OV-677: a blank drawn side of a Result saved after a mode switch reads as none', async () => {
+  const session = fixture(MODE_SWITCH[0][0]);
+  session.ui.generatedLegendPosition = '  ';
+  const { outcome, transformed, dialogs } = await load(session);
+  assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+  assert.deepEqual(dialogs, []);
+  assert.deepEqual(transformed.map(({ side, data }) => [data.mode, side]), [['circular', 'none']]);
+});
+
+// OV-969 (BA-OD121): the title of such a Result was drawn with the Result's
+// mode's title side, which 0.13.0 saved in `ui` (Circular:
+// `generatedCircularPlotTitlePosition`, Linear: `linearPlotTitlePosition`);
+// the stored form's side is the shown mode's. The fixtures draw no title, so
+// each case adds one where 0.13.0 drew it, and the Circular case names `top`.
+const TITLED_MODE_SWITCH = [
+  // [fixture, Result mode, drawn title side, the shown mode's form title side, the title group]
+  ['mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'circular', 'top', 'bottom',
+    '<g id="plot_title" transform="translate(608,60)"><text x="0" y="0" font-size="32" text-anchor="middle">REGEX</text></g>'],
+  ['mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz', 'linear', 'bottom', 'none',
+    '<g id="plot_title" transform="translate(1168,370)"><text x="0" y="0" font-size="32" text-anchor="middle">REGEX</text></g>']
+];
+for (const [name, resultMode, drawnTitle, shownTitle, titleGroup] of TITLED_MODE_SWITCH) {
+  test(`OV-969: a 0.13.0 ${resultMode} Result saved after a mode switch is laid out with the title side ${drawnTitle} it was drawn with`, async () => {
+    const session = fixture(name);
+    session.results[0].content = session.results[0].content.replace(/<\/svg>\s*$/, `${titleGroup}</svg>`);
+    if (resultMode === 'circular') session.ui.generatedCircularPlotTitlePosition = drawnTitle;
+    assert.equal(resultMode === 'circular' ? session.ui.generatedCircularPlotTitlePosition : session.ui.linearPlotTitlePosition, drawnTitle);
+    assert.equal(session.config.adv.plot_title_position, shownTitle);
+    const { outcome, transformed } = await load(session);
+    assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+    assert.deepEqual(transformed.map(({ data }) => [data.mode, data.composition?.titleSide]), [[resultMode, drawnTitle]]);
+    const { svg } = transformed[0];
+    applyCompositionEdit(svg, { legendSide: storedSide(svg), legendLocalBox: null });
+    assert.equal(JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).titleSide, drawnTitle);
+  });
+}
+

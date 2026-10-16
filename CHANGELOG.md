@@ -269,6 +269,14 @@ write-up of a release.
   default: a Linear Result saved by 0.13.0 with a corner position keeps its
   figure, and its first Legend edit places the Legend below the diagram; such
   a side with capitals or spaces no longer stops the load (OV-671, OV-672).
+- Fixed (web app): a Session that 0.13.0 saved after **Generate** and a switch
+  to the other diagram mode opened its Result in the shown mode, listed its
+  feature information as not restored, and moved the Legend and the title at
+  its first edit. When the Session records the mode of its last Generate, it
+  now opens in that mode, with the Legend side and title side the Result was
+  drawn with; the shown mode keeps its settings, without a Result. A Session
+  0.13.0 saved without that mode (for example after a Linear LOSAT comparison
+  run) still opens in the shown mode (OV-677, OV-969).
 - Changed (CLI `--session`, Python API): the canonical request reader refuses
   values the request format does not define: a comparison table path at any
   request schema; `null` or another kind of value where a field holds text, a

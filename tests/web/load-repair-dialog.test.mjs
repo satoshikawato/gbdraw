@@ -1578,11 +1578,12 @@ test('a flat override name in a draft is not read: Load drops it with a row and 
 // G3: every Gallery Session and every Session fixture loads without a repair;
 // a repair there is a producer bug. Two fixtures are lossy on purpose. Node
 // supplies no diagram Worker: a Session older than 40 reads its features again
-// through it, so eight fixtures list that recovery here (and only because the
-// Worker is missing: each asks for it). The browser specs load them (OV-751):
+// through it, so the fixtures below list that recovery here (and only because
+// the Worker is missing: each asks for it). The browser specs load them (OV-751):
 // gui-audit-20260930-inputs and live-generate-parity assert no dialog for
 // seven; session-loading-feedback answers the one table row of
-// whitelist-tab-keyword.v39. Five fixtures need a Worker service to load at
+// whitelist-tab-keyword.v39 and loads the two mode-switch v30 fixtures without
+// a dialog: their recovery reads the inputs of the Result's mode (OV-677). Five fixtures need a Worker service to load at
 // all; feature-identity-overrides and gui-audit-20260930-comparisons load them.
 const LOSSY_FIXTURES = {
   'feature-edits-circular-copies.v44.gbdraw-session.json.gz': ['feature-visibility-narrowed'],
@@ -1592,7 +1593,8 @@ const FEATURES_NEED_DIAGRAM_WORKER = new Set([
   'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.v29.gbdraw-session.json.gz',
   'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz', 'cli-linear-protein.v30.gbdraw-session.json.gz', 'conservation-fasta.v39.gbdraw-session.json.gz',
   'lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz', 'scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz',
-  'scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
+  'scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz',
+  'mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz'
 ]);
 const NEEDS_DIAGRAM_WORKER = new Set([
   'feature-edits-circular.v33.gbdraw-session.json.gz', 'feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz',
