@@ -1768,11 +1768,13 @@ const persistedContractCoChangeGaps = ({ kinds, versions, paths }) => {
   if (![...paths].some((path) => path.startsWith(contractFixtureRoot))) {
     gaps.push(`a changed path under ${contractFixtureRoot}`);
   }
-  // The checker reads the version exports by name: one the base has must stay readable.
-  const versionValue = (value) => Number.isInteger(value)
-    || (Array.isArray(value) && value.every((item) => Number.isInteger(item)));
+  // The checker reads the version exports by name and shape (an integer, or a list of integers
+  // for SUPPORTED_*): one the base has must keep both.
+  const versionValue = (name, value) => (name.startsWith('SUPPORTED_')
+    ? Array.isArray(value) && value.every((item) => Number.isInteger(item))
+    : Number.isInteger(value));
   Object.entries(versions).forEach(([name, { before, after }]) => {
-    if (versionValue(before) && !versionValue(after)) {
+    if (versionValue(name, before) && !versionValue(name, after)) {
       gaps.push(`a renamed or removed version export (${name}) needs a checker change`);
     }
   });
@@ -1780,8 +1782,8 @@ const persistedContractCoChangeGaps = ({ kinds, versions, paths }) => {
     .filter((line) => line.startsWith('## '));
   const versionHeading = (name, label, pattern) => {
     const { before, after } = versions[name] || {};
-    if (!Number.isInteger(before) || !Number.isInteger(after)) {
-      if (!versionValue(before)) gaps.push(`${name} readable at base`);
+    if (!versionValue(name, before) || !versionValue(name, after)) {
+      if (!versionValue(name, before)) gaps.push(`${name} readable at base`);
       return null;
     }
     if (before !== after && !headings.some((line) => pattern(after).test(line))) {

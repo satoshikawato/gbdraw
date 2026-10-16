@@ -4844,6 +4844,15 @@ test('persisted contract: a renamed export with the same value needs review only
     'SUPPORTED_CANONICAL_REQUEST_SCHEMAS',
     rename('SUPPORTED_CANONICAL_REQUEST_SCHEMAS', 'SUPPORTED_REQUEST_SCHEMAS')
   );
+  // A version export that keeps its name but changes shape is unreadable to the checker too.
+  assertVersionRenameFails(
+    'SESSION_VERSION',
+    withContractExport(CONTRACT_SCHEMA_SOURCE, 'SESSION_VERSION', `Object.freeze([${NEXT_SESSION_VERSION}])`)
+  );
+  assertVersionRenameFails(
+    'SUPPORTED_SESSION_VERSIONS',
+    withContractExport(CONTRACT_SCHEMA_SOURCE, 'SUPPORTED_SESSION_VERSIONS', String(NEXT_SESSION_VERSION))
+  );
   // A new Session version whose supported list is renamed cannot skip the old-version fixture.
   assertVersionRenameFails(
     'SUPPORTED_SESSION_VERSIONS',
