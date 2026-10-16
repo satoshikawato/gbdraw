@@ -387,7 +387,8 @@ export const createHistoryManager = ({
   // within the generation of its step.
   let intentGeneration = 0;
   // D-40: the number of the last intent step begun; a redraw requested at
-  // serial n is drawn for the steps up to n (`adoptDrawnWrite`).
+  // serial n is drawn for the steps up to n (`adoptDrawnWrite`). A step
+  // reserves its number when `openStep` starts (some numbers stay unused).
   let intentStepSerial = 0;
   let totalEntryBytes = 0;
   // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
@@ -721,6 +722,10 @@ export const createHistoryManager = ({
   const openStep = async (label, options, ownedByAction) => {
     if (mutationAvailability()) return null;
     if (restoring.value || capturing.value) return null;
+    // D-40 (N-A of #1091): numbered as it begins, before any wait below, so a
+    // rerender its own edit requests in this task counts it as the requester.
+    // A step that joins the open one or opens none leaves an unused number.
+    const serial = ++intentStepSerial;
     const open = openTransaction();
     if (open) {
       if (
@@ -750,7 +755,7 @@ export const createHistoryManager = ({
       source: options.source || '',
       owner: options.owner,
       deferAdapterCommit: ownedByAction,
-      serial: ++intentStepSerial
+      serial
     };
     activeTransaction = tx;
     touchTransaction();
@@ -1144,7 +1149,13 @@ export const createHistoryManager = ({
   // into the state it began from, so no step records it, as when no step is
   // open. Its own changes stay in it. The step that requested the rerender
   // (begun at `requestedAt` or earlier) keeps the write as its own, so its
-  // Undo restores the rows from before its edit (D-24 (OV-731), D-40). The
+  // Undo restores the rows from before its edit (D-24 (OV-731), D-40). Both
+  // ways rest on the serial a step takes as it begins (`openStep`): a step
+  // begun after the request is numbered above it, and a step whose own edit
+  // made the request is numbered at or below it, also when it first waits for
+  // another owner's step to settle. A request no step made, read while a step
+  // is open, counts that step as the requester, so the write stays in it (as
+  // before D-40; no such request source exists now). The
   // intent is read on both sides of the write in the same task, so the
   // binder's timing does not change; a snapshot service that builds the
   // intent asynchronously keeps the write in the step.
