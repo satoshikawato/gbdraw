@@ -6,6 +6,7 @@ const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
 const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
+const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -88,6 +89,8 @@ const loadDefinitionSession = async (page, path) => {
 
 test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
   test.setTimeout(120000);
+  // The case counts the wheel requests of the cold boot.
+  await forceColdPyodideBoot(page);
   const wheelResponses = [];
   await page.context().route(/\/gbdraw-[^/]+\.whl(?:\?|$)/, async route => {
     const response = await fetchRoute(route);

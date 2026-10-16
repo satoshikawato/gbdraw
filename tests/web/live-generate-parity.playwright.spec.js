@@ -1559,4 +1559,25 @@ test.describe('the warm app page', () => {
     await openFresh(page);
     expect((await freshBootView(page)).leftByCase).toBe(null);
   });
+
+  // OV-1001: the app asks before it downloads a Session file of a name it
+  // downloaded before. The answer is the downloaded name, or the question.
+  const saveSession = async (page) => {
+    const downloaded = page.waitForEvent('download').then((file) => file.suggestedFilename());
+    const question = page.locator('#choice-prompt-title');
+    const asked = question.waitFor().then(() => question.textContent());
+    await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+    return Promise.race([downloaded, asked]);
+  };
+
+  test('a case saves a Session', async ({ page }) => {
+    await openFresh(page);
+    expect(await saveSession(page)).toBe('gbdraw_session.json.gz');
+  });
+
+  test('the next case saves a Session of that name without the question', async ({ page }) => {
+    await openFresh(page);
+    expect(await saveSession(page)).toBe('gbdraw_session.json.gz');
+    expect(warmPage()).toBe('fresh: savedSessions: [] -> ["gbdraw_session.json.gz"]');
+  });
 });
