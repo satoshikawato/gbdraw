@@ -1501,21 +1501,31 @@ const impossibleVendorEntries = addedVendorEntries.flatMap((entry) => {
 // An entry pins the bytes the change leaves (add, replace) or removes (remove).
 // The diff is two-dot. When the head does not contain the base and leaves a path as their
 // merge base had it, the path changed only in the base: the branch is behind, not wrong.
-const vendorMergeBase = (() => {
-  if (!head || !changedVendorPaths.length) return null;
+let baseAncestryResult = null;
+const baseAncestry = () => {
+  if (baseAncestryResult) return baseAncestryResult;
+  baseAncestryResult = { contained: true, mergeBase: null };
+  if (!head) return baseAncestryResult;
   const ancestry = spawnSync(
     'git',
     ['-C', repositoryRoot, 'merge-base', '--is-ancestor', base, head],
     { stdio: 'ignore' }
   );
-  if (ancestry.status !== 1) return null;
-  const mergeBase = spawnSync(
-    'git',
-    ['-C', repositoryRoot, 'merge-base', base, head],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-  );
-  return mergeBase.status === 0 ? mergeBase.stdout.trim() : null;
-})();
+  if (ancestry.status === 0) return baseAncestryResult;
+  const mergeBase = ancestry.status === 1
+    ? spawnSync(
+      'git',
+      ['-C', repositoryRoot, 'merge-base', base, head],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    )
+    : null;
+  baseAncestryResult = {
+    contained: false,
+    mergeBase: mergeBase?.status === 0 ? mergeBase.stdout.trim() : null
+  };
+  return baseAncestryResult;
+};
+const vendorMergeBase = changedVendorPaths.length ? baseAncestry().mergeBase : null;
 const vendorChanges = changedVendorPaths.map((path) => {
   const status = changed.get(path);
   const change = vendorChangeKindByStatus[status] || `unsupported status ${status}`;
@@ -1675,18 +1685,24 @@ const removedPersistedContractExemptions = candidatePersistedContractPolicy
   ? trustedPersistedContractPolicy.exempt
     .filter((name) => !candidatePersistedContractPolicy.exempt.includes(name))
   : [];
-// Kinds (with the exports or modules behind each) and review-only additions. The JSDoc modules
-// (request.generated.js, session.generated.js) hold no values and never count.
+// Kinds (with the exports or modules behind each) and review-only additions and renames. The
+// JSDoc modules (request.generated.js, session.generated.js) hold no values and never count.
+// A branch behind its base is measured from the merge base: what the pull request itself changes.
 const classifyPersistedContractChange = () => {
   const kinds = new Map();
   const note = (kind, subject) => kinds.set(kind, [...(kinds.get(kind) || []), subject]);
   const addedExports = [];
   const addedModules = [];
+  const renamedExports = [];
   const versions = {};
-  const baseSchema = readRevisionFile(base, contractSchemaModulePath);
-  if (changed.has(contractSchemaModulePath) && baseSchema === null) {
+  const from = baseAncestry().mergeBase || base;
+  const paths = new Set(from === base ? changedPaths : runGit(repositoryRoot, [
+    'diff', '--no-renames', '--name-only', from, head, '--'
+  ]).split('\n').filter(Boolean));
+  const baseSchema = readRevisionFile(from, contractSchemaModulePath);
+  if (paths.has(contractSchemaModulePath) && baseSchema === null) {
     addedModules.push(contractSchemaModulePath);
-  } else if (changed.has(contractSchemaModulePath)) {
+  } else if (paths.has(contractSchemaModulePath)) {
     const before = generatedContractExports(baseSchema);
     const headSchema = readHeadFile(contractSchemaModulePath);
     const after = headSchema === null ? new Map() : generatedContractExports(headSchema);
@@ -1696,13 +1712,27 @@ const classifyPersistedContractChange = () => {
         note(kind, `${contractSchemaModulePath} (unreadable)`)
       ));
     } else {
+      // A removed export whose value reappears under a new name is a rename. Version exports
+      // are excepted: this checker reads them by name.
+      const value = (statement) => statement.replace(/^exportconst[A-Z][A-Z0-9_]*=/, '');
+      const added = [...after.keys()].filter((name) => !before.has(name));
       before.forEach((statement, name) => {
-        if (after.get(name) === statement || trustedPersistedContractPolicy.exempt.includes(name)) return;
+        if (after.has(name) || Object.hasOwn(CONTRACT_VERSION_EXPORTS, name)) return;
+        const index = added.findIndex((candidate) => value(after.get(candidate)) === value(statement));
+        if (index !== -1) renamedExports.push(`${name} -> ${added.splice(index, 1)[0]}`);
+      });
+      const renamed = new Set(renamedExports.map((rename) => rename.split(' -> ')[0]));
+      before.forEach((statement, name) => {
+        if (
+          after.get(name) === statement
+          || renamed.has(name)
+          || trustedPersistedContractPolicy.exempt.includes(name)
+        ) {
+          return;
+        }
         note(CONTRACT_VERSION_EXPORTS[name] || 'schema-constant', name);
       });
-      after.forEach((_statement, name) => {
-        if (!before.has(name)) addedExports.push(name);
-      });
+      addedExports.push(...added);
     }
     ['SESSION_VERSION', 'SUPPORTED_SESSION_VERSIONS', 'CANONICAL_REQUEST_SCHEMA'].forEach((name) => {
       versions[name] = {
@@ -1712,8 +1742,8 @@ const classifyPersistedContractChange = () => {
     });
   }
   Object.entries(contractDescriptionModules).forEach(([path, kind]) => {
-    if (!changed.has(path)) return;
-    const before = readRevisionFile(base, path);
+    if (!paths.has(path)) return;
+    const before = readRevisionFile(from, path);
     if (before === null) {
       addedModules.push(path);
       return;
@@ -1724,18 +1754,18 @@ const classifyPersistedContractChange = () => {
       if (kind !== 'request-description' || !kinds.has('request-schema')) note(kind, path);
     }
   });
-  return { kinds, addedExports, addedModules, versions };
+  return { kinds, addedExports, addedModules, renamedExports, versions, paths };
 };
 const persistedContractChange = trustedPersistedContractPolicy.active
   && changedPaths.some((path) => path.startsWith(contractModuleRoot))
   ? classifyPersistedContractChange()
-  : { kinds: new Map(), addedExports: [], addedModules: [], versions: {} };
-const persistedContractCoChangeGaps = ({ kinds, versions }) => {
+  : { kinds: new Map(), addedExports: [], addedModules: [], renamedExports: [], versions: {}, paths: new Set() };
+const persistedContractCoChangeGaps = ({ kinds, versions, paths }) => {
   if (!kinds.size) return [];
   const gaps = [sessionFormatHistoryPath, compatibilityReferencePath]
-    .filter((path) => !changed.has(path))
+    .filter((path) => !paths.has(path))
     .map((path) => `${path} in the diff`);
-  if (!changedPaths.some((path) => path.startsWith(contractFixtureRoot))) {
+  if (![...paths].some((path) => path.startsWith(contractFixtureRoot))) {
     gaps.push(`a changed path under ${contractFixtureRoot}`);
   }
   const headings = (readHeadFile(sessionFormatHistoryPath) || '').split('\n')
@@ -1743,7 +1773,7 @@ const persistedContractCoChangeGaps = ({ kinds, versions }) => {
   const versionHeading = (name, label, pattern) => {
     const { before, after } = versions[name] || {};
     if (!Number.isInteger(before) || !Number.isInteger(after)) {
-      gaps.push(`${name} readable as an integer at base and head`);
+      gaps.push(`${name} readable as an integer at base and head (a renamed version export needs a checker change)`);
       return null;
     }
     if (before !== after && !headings.some((line) => pattern(after).test(line))) {
@@ -2516,8 +2546,22 @@ if (addedPersistedContractExemptions.length || removedPersistedContractExemption
     + `(added=${addedPersistedContractExemptions.length}, removed=${removedPersistedContractExemptions.length})`
   );
 }
+if (
+  candidatePersistedContractPolicy
+  && candidatePersistedContractPolicy.active !== trustedPersistedContractPolicy.active
+) {
+  reviewReasons.push(
+    `Governance and authority: persisted-contract rule turned ${candidatePersistedContractPolicy.active ? 'on' : 'off'}`
+  );
+}
 if (persistedContractKinds) {
   reviewReasons.push(`Material behavior/output risk: persisted contract changed (${persistedContractKinds})`);
+}
+if (persistedContractChange.renamedExports.length) {
+  reviewReasons.push(
+    'Material behavior/output risk: generated contract export(s) renamed '
+    + `(${persistedContractChange.renamedExports.join(', ')}); confirm each keeps its meaning`
+  );
 }
 if (persistedContractAdditions.length) {
   reviewReasons.push(
@@ -2637,6 +2681,9 @@ if (persistedContractGaps.length) {
   blockingViolations.push(
     `persisted-contract.co-change: the persisted contract changed (${persistedContractKinds}) `
     + `without: ${persistedContractGaps.join('; ')}`
+    + (baseAncestry().contained || baseAncestry().mergeBase
+      ? ''
+      : '; if this branch is behind dev, update it from dev first')
   );
 }
 if (
@@ -3310,6 +3357,7 @@ const report = [
     : []),
   `- Changed: ${persistedContractKinds || 'none'}`,
   `- New exports or modules: ${persistedContractAdditions.join(', ') || 'none'}`,
+  `- Renamed exports: ${persistedContractChange.renamedExports.join(', ') || 'none'}`,
   '',
   '## Dependency changes',
   '',
