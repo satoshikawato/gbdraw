@@ -40,6 +40,7 @@ const {
   applyCompositionEdit,
   COMPOSITION_METADATA_ATTRIBUTE
 } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
+const { state } = await import('../../gbdraw/web/js/state.js');
 
 const REPO = new URL('../../', import.meta.url);
 const fixture = (name) => {
@@ -185,3 +186,32 @@ test('OV-672: the other mode\'s Result set reads a stored side outside its mode 
   assert.deepEqual(transformed.map(({ side, data }) => [data.mode, data.composition, side]), [['linear', null, 'bottom']]);
   assert.deepEqual(dialogs, sideRows('upper_left', 'bottom', 'otherModeResult.results'));
 });
+
+// OV-677 (BA-D31, BA-OD118): release 0.13.0 kept its Result across a mode
+// switch and saved the shown mode in `ui.mode`; the Result's mode is the last
+// Generate's (`cliInvocation.mode`). Load reads the Result as that mode, with
+// the side it was drawn with (`ui.generatedLegendPosition`), and opens on it;
+// the flat draft's settings stay with the shown mode.
+const MODE_SWITCH = [
+  // [fixture, Result mode, shown mode, drawn side, the shown mode's form legend]
+  ['mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'circular', 'linear', 'left', 'bottom'],
+  ['mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz', 'linear', 'circular', 'top', 'left']
+];
+for (const [name, resultMode, shownMode, drawnSide, shownLegend] of MODE_SWITCH) {
+  test(`OV-677: a 0.13.0 Session saved with ${shownMode} shown opens its ${resultMode} Result as ${resultMode}, laid out with ${drawnSide}`, async () => {
+    const session = fixture(name);
+    assert.deepEqual([session.version, session.ui.mode, session.cliInvocation.mode], [30, shownMode, resultMode]);
+    const { outcome, transformed, dialogs } = await load(session);
+    assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+    assert.deepEqual(dialogs, []);
+    assert.deepEqual(transformed.map(({ side, data }) => [data.mode, side]), [[resultMode, drawnSide]]);
+    assert.deepEqual([state.mode.value, state.generatedMode.value, state.generatedLegendPosition.value], [resultMode, resultMode, drawnSide]);
+    assert.equal(state.results.value.length, 1);
+    // The flat draft's legend position is the shown mode's.
+    assert.equal(state.drawings[shownMode].form.legend, shownLegend);
+    // The first Legend edit keeps the Legend on the side 0.13.0 drew it.
+    const { svg } = transformed[0];
+    applyCompositionEdit(svg, { legendSide: storedSide(svg), legendLocalBox: null });
+    assert.equal(JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).legendSide, drawnSide);
+  });
+}

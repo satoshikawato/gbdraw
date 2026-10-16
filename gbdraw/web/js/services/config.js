@@ -5447,8 +5447,19 @@ const importSessionDocument = async (e, options = {}) => {
             : committedMode
         }
       : (data.ui || {});
-    const candidateMode = readSessionUiMode(ui.mode).value;
-    const generatedMode = (committedMode || ui.mode) === 'linear' ? 'linear' : 'circular';
+    /** @type {'circular' | 'linear'} */
+    const candidateMode = readSessionUiMode(ui.mode).value === 'linear' ? 'linear' : 'circular';
+    // The Result's mode: its request's. A Session 27-30 has no request; its
+    // last Generate's invocation names it, else `ui.mode`, as the CLI reads it
+    // (`session_io.session_mode`). 0.13.0 kept a Result across a mode switch,
+    // and its `ui.mode` is the shown mode (OV-677). The flat draft's settings
+    // stay with the shown mode (the split's profile mode); its Result edits
+    // and the Result's set go with the Result's mode.
+    const invocationMode = sourceSessionVersion < CANONICAL_SESSION_MIN_VERSION
+      ? /** @type {UnvalidatedFields<'mode'>} */ (data.cliInvocation)?.mode : null;
+    /** @type {'circular' | 'linear'} */
+    const generatedMode = (committedMode || (invocationMode === 'linear' || invocationMode === 'circular' ? invocationMode : null)
+      || ui.mode) === 'linear' ? 'linear' : 'circular';
     // The legend position the shown Result was drawn with (OV-652, BA-D11).
     const generatedLegend = ui.generatedLegendPosition
       ? readLegendPositionOfMode(ui.generatedLegendPosition, generatedMode, 'ui.generatedLegendPosition') : null;
@@ -5458,17 +5469,15 @@ const importSessionDocument = async (e, options = {}) => {
     // projection (`restoredConfig`, plan 4.1). A Session 27-44 has one flat
     // draft, split below once its edits are migrated.
     const modeScopedSession = sourceSessionVersion >= MODE_SCOPED_SESSION_VERSION;
-    const committedDraftMode = committedMode === 'linear' || (!committedMode && candidateMode === 'linear')
-      ? 'linear' : 'circular';
     // A Session 46 committed mode with a Result: its slice over its request's
     // projection (`restoredConfig`); any other slice over its mode's defaults.
     const committedSliceProjected = modeScopedSession && canonicalSession && !settingsOnly && Boolean(restoredConfig);
     // Any other Session 46 slice is stored settings: its track stacks install as saved (R11).
     /** @param {'circular' | 'linear'} mode */
-    const isStoredSlice = (mode) => modeScopedSession && !(mode === committedDraftMode && committedSliceProjected);
+    const isStoredSlice = (mode) => modeScopedSession && !(mode === generatedMode && committedSliceProjected);
     /** @param {'circular' | 'linear'} mode @returns {Record<string, any> | null} */
     const draftConfigOf = (mode) => (modeScopedSession
-      ? (mode === committedDraftMode && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, data.modes?.[mode]?.config))
+      ? (mode === generatedMode && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, data.modes?.[mode]?.config))
       : restoredConfig);
     const linearDraftConfig = draftConfigOf('linear');
     const circularDraftConfig = draftConfigOf('circular');
@@ -5561,7 +5570,7 @@ const importSessionDocument = async (e, options = {}) => {
     };
     const { restored: restoredFileSequenceSources, error: currentRecoveryError } = await restoreLoadedSetSequenceSources({
       ...setSequenceSourceOptions,
-      mode: committedMode === 'linear' || (!committedMode && candidateMode === 'linear') ? 'linear' : 'circular',
+      mode: generatedMode,
       catalog: currentSchemaSession ? validatedSessionCatalog : null,
       renderRequest: data.renderRequest
     });
@@ -5600,7 +5609,7 @@ const importSessionDocument = async (e, options = {}) => {
     /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition */
     const loadedResultTransform = (mode, composition) => (/** @type {SVGSVGElement} */ svg) => {
       /** @type {ResultSetPath} */
-      const at = mode === committedDraftMode ? '' : 'otherModeResult.';
+      const at = mode === generatedMode ? '' : 'otherModeResult.';
       return admittedOrUncomposed(at, () => {
         const legendGroupsChanged = composition ? normalizeLegacyLegendEntryGroups(svg) : false;
         const legacyResultChanged = transformLegacyResultSvg(svg, { composition, mode, repairs, path: `${at}results` });
@@ -5616,8 +5625,12 @@ const importSessionDocument = async (e, options = {}) => {
       : null);
     // The side a Session 31+ stored for the mode, or that a Session 27-30
     // stored in its form, read through the Result's mode (OV-671); a side
-    // outside it is listed when a Result is drawn with it (BA-D26).
-    const legacyDrawnSide = readDrawnLegendSideOfMode(restoredConfig?.form?.legend, committedDraftMode, 'config.form.legend');
+    // outside it is listed when a Result is drawn with it (BA-D26). The form
+    // of a Session 27-30 saved after a mode switch is the shown mode's: its
+    // Result was drawn with `ui.generatedLegendPosition` (OV-677).
+    const legacyDrawnSide = generatedMode === candidateMode || canonicalSession
+      ? readDrawnLegendSideOfMode(restoredConfig?.form?.legend, generatedMode, 'config.form.legend')
+      : { value: generatedLegend?.value ?? 'none', repairs: [] };
     if (!committedLayout && logicalImportedResults.length > 0) repairs.push(...legacyDrawnSide.repairs);
     /** @type {LegacyResultSvgData['composition']} */
     const committedLegacyComposition = {
@@ -5637,7 +5650,7 @@ const importSessionDocument = async (e, options = {}) => {
           : null
       }
     };
-    const transformRestoredSessionSvg = loadedResultTransform(committedDraftMode, committedLegacyComposition);
+    const transformRestoredSessionSvg = loadedResultTransform(generatedMode, committedLegacyComposition);
 
     recordSessionLifecycleEvent('svg-admission-start');
     // The loaded Results carry the feature types of the request that becomes
@@ -5647,14 +5660,13 @@ const importSessionDocument = async (e, options = {}) => {
       ? adoptedCanonicalSession?.renderRequest?.diagramOptions?.selectedFeaturesSet
       : null;
     const committedSavedEdits = savedResultEdits(
-      data, committedMode === 'linear' ? 'linear' : 'circular', data.editorState, sourceSessionVersion,
-      draftConfigOf(committedDraftMode)?.rules
+      data, generatedMode, data.editorState, sourceSessionVersion, draftConfigOf(generatedMode)?.rules
     );
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
           featureCatalog: validatedSessionCatalog, mode: committedMode, selectedFeatureTypes,
           savedEdits: committedSavedEdits,
-          legacy: loadedResultNormalization(committedDraftMode, committedLegacyComposition)
+          legacy: loadedResultNormalization(generatedMode, committedLegacyComposition)
         })
       : admittedOrUncomposed('', () => admitLegacyImportedResults(
           createLegacyImportResultSource(logicalImportedResults),
@@ -5667,9 +5679,10 @@ const importSessionDocument = async (e, options = {}) => {
     // last, before the preview mounts, and the other slot waits in its mode.
     const otherModeCatalogAdmitted = currentSchemaSession ? otherModeCatalog : null;
     const otherModeResult = otherModeCatalogAdmitted ? data.otherModeResult : null;
+    /** @type {'circular' | 'linear'} */
     const otherSetMode = otherModeResult?.renderRequest?.mode === 'linear' ? 'linear' : 'circular';
     const resultModes = new Set([
-      ...(committedImportedResults.length > 0 && committedMode ? [committedMode] : []),
+      ...(committedImportedResults.length > 0 ? [generatedMode] : []),
       ...(otherModeResult ? [otherSetMode] : [])
     ]);
     const displayMode = resultModes.size === 0 || resultModes.has(candidateMode)
@@ -5694,7 +5707,7 @@ const importSessionDocument = async (e, options = {}) => {
     // The rule rows of each drawing whose keys the reading of its saved
     // captions changes (F2): its Result set's, else over no generated rows.
     /** @param {'circular' | 'linear'} mode @returns {ReadonlyMap<PythonLegendKey, PythonLegendKey>} */
-    const legendRekeysOf = (mode) => ((mode === committedDraftMode ? committedSavedEdits : mode === otherSetMode ? otherSavedEdits : null)
+    const legendRekeysOf = (mode) => ((mode === generatedMode ? committedSavedEdits : mode === otherSetMode ? otherSavedEdits : null)
       ?.legendRekeys ?? savedLegendRekeys(draftConfigOf(mode)?.rules, { originalOrder: [], originalColors: {} }));
     const otherSequenceSources = otherModeResult && otherModeCatalogAdmitted
       ? await restoreLoadedSetSequenceSources({
@@ -5728,7 +5741,7 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {Record<string, any> | null} */
     let legacyFeatureRecoveryPlan = null;
     const legacyFeatureSnapshot = {
-      mode: candidateMode, cInputType: candidateFiles.cInputType.value,
+      mode: generatedMode, cInputType: candidateFiles.cInputType.value,
       lInputType: inputTypes.lInputType, files: candidateFiles.files,
       linearSeqs: candidateFiles.linearSeqs, results: committedImportedResults,
       selectedResultIndex: ui.selectedResultIndex || 0,
@@ -5759,7 +5772,7 @@ const importSessionDocument = async (e, options = {}) => {
     let migratedAnnotationTargetCount = 0;
     if (sourceSessionVersion < MODE_SCOPED_SESSION_VERSION) {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
-      const sessionMode = data.renderRequest?.mode || candidateMode;
+      const sessionMode = data.renderRequest?.mode || generatedMode;
       const hashColorRules = sourceSessionVersion <= DRAWN_HASH_RULE_SESSION_MAX_VERSION
         && hasHashColorRules(restoredConfig?.rules);
       const sourceFeatures = !validatedSessionCatalog && (hasRenderedIdFeatureEdits(features) || hashColorRules)
@@ -5791,7 +5804,7 @@ const importSessionDocument = async (e, options = {}) => {
       // request: its Linear cards give the records.
       if (hashColorRules && restoredConfig) {
         const ruleRecords = data.renderRequest?.records
-          ?? (candidateMode === 'linear' ? legacyLinearRequestRecords(candidateFiles.linearSeqs) : undefined);
+          ?? (generatedMode === 'linear' ? legacyLinearRequestRecords(candidateFiles.linearSeqs) : undefined);
         const hashRules = migrateSessionHashRules({
           rules: restoredConfig.rules,
           mode: sessionMode,
@@ -5823,7 +5836,7 @@ const importSessionDocument = async (e, options = {}) => {
         // Its edit rows are the committed mode's drawing's (R1-3).
         /** @type {Record<string, any>} */ (legacyFeatureRecoveryPlan).recoveredFeatureState = {
           ...recoveredWithoutRenderedIdEdits,
-          featureOverrides: unscopedDraftRows(features.featureOverrides, committedDraftMode),
+          featureOverrides: unscopedDraftRows(features.featureOverrides, generatedMode),
           labelOverrideRows: features.labelOverrideRows
         };
       }
@@ -5891,7 +5904,7 @@ const importSessionDocument = async (e, options = {}) => {
         ui,
         renderRequest: data.renderRequest
       }, {
-        committedMode: committedDraftMode,
+        committedMode: generatedMode,
         depthSources: sessionDepthSourceWidths({
           c_depth: candidateFiles.files.c_depth, linearSeqs: candidateFiles.linearSeqs
         }),
@@ -5923,7 +5936,7 @@ const importSessionDocument = async (e, options = {}) => {
     // its mode's slot; a Session 27-44 keeps one set in `ui` (OV-652).
     if (modeScopedSession) {
       SLICE_MODES.forEach((mode) => repairs.push(...storedLegendPositionRepairs(modeSlices[mode].ui, `modes.${mode}.ui`, {
-        slotOf: mode, projected: mode === committedDraftMode && Boolean(projectedLayout)
+        slotOf: mode, projected: mode === generatedMode && Boolean(projectedLayout)
       })));
     } else {
       repairs.push(...storedLegendPositionRepairs(ui, 'ui'));
@@ -5945,7 +5958,7 @@ const importSessionDocument = async (e, options = {}) => {
       droppedLegendRecords.forEach(({ collection, from, to }) => repairs.push(loadRepair({
         code: 'legend-edit-rekey-dropped', path: `${editorPath}.legend.${collection}`, effect: 'dropped', label: from, used: to
       })));
-      const committed = mode === committedDraftMode;
+      const committed = mode === generatedMode;
       modeConfigs[mode] = modeScopedSession
         ? (committed && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, modeSlices[mode].config))
         : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, modeSlices[mode].config);
@@ -6180,7 +6193,7 @@ const importSessionDocument = async (e, options = {}) => {
     for (const mode of SLICE_MODES) {
       // The committed mode's slice takes its request's per-feature edits where
       // it has none (OV-220).
-      const features = mode === committedDraftMode && canonicalSession && !settingsOnly
+      const features = mode === generatedMode && canonicalSession && !settingsOnly
         ? { features: featureEditsOverProjection(modeSlices[mode].features, projectionResult.renderState) } : {};
       applyModeSliceData(state.drawings[mode], mode, {
         ...modeSlices[mode], ...features, config: modeConfigs[mode], editorState: modeEditorStates[mode]
@@ -6212,11 +6225,11 @@ const importSessionDocument = async (e, options = {}) => {
     // committed mode's request sets it when the slice has none); a Session
     // 27-44 keeps one set, read once, which both drawings take.
     if (modeScopedSession) {
-      if (projectedLayout && !isPlainObject(modeSlices[committedDraftMode].ui?.layoutPreferences)) {
-        const drawingOfCommit = state.drawings[committedDraftMode];
+      if (projectedLayout && !isPlainObject(modeSlices[generatedMode].ui?.layoutPreferences)) {
+        const drawingOfCommit = state.drawings[generatedMode];
         replaceLayoutPreferences(drawingOfCommit.layoutPreferences, {
           ...cloneJsonData(drawingOfCommit.layoutPreferences),
-          [committedDraftMode]: normalizeLayoutPreferences(projectedLayout)[committedDraftMode]
+          [generatedMode]: normalizeLayoutPreferences(projectedLayout)[generatedMode]
         });
       }
     } else {
@@ -6304,9 +6317,9 @@ const importSessionDocument = async (e, options = {}) => {
         catalogFeatureState: currentCatalogFeatureState
       }
     );
-    applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedDraftMode)) });
+    applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(generatedMode)) });
     if (legacyFeatureRecoveryPlan) {
-      applySessionFeatureRecoveryPlan(state.drawings[committedDraftMode], legacyFeatureRecoveryPlan, { generationId: 'session-load' });
+      applySessionFeatureRecoveryPlan(state.drawings[generatedMode], legacyFeatureRecoveryPlan, { generationId: 'session-load' });
     }
 
     let desiredResultIndex = (

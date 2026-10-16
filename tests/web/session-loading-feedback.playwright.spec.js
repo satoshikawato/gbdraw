@@ -370,6 +370,32 @@ test('a 0.13.0 Gallery Session loads, and with its Custom Track Slots turned on 
 // UJ-09 (Owner 2026-10-05): Load Session replaces the work and clears History,
 // so it asks first when History changed since the last Save or Load. Cancel
 // keeps the work and History; with nothing to lose the file picker opens at once.
+// OV-677 (BA-D31): release 0.13.0 kept a Result across a mode switch. A
+// Session it saved after Generate and a switch loads with no dialog (the
+// feature information is read from the inputs of the Result's mode), opens on
+// the mode the Result was drawn in, and keeps the shown mode without a Result.
+for (const [name, resultMode, shownMode] of [
+  ['mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'circular', 'linear'],
+  ['mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz', 'linear', 'circular']
+]) {
+  test(`a 0.13.0 Session saved with ${shownMode} shown opens its ${resultMode} Result in ${resultMode} (OV-677)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await openApp(page);
+    await page.locator(sessionInputSelector).setInputFiles(join(repoRoot, 'tests', 'fixtures', 'sessions', name));
+    await expectNoLoadRepairDialog(page);
+    await expectSessionLoadedWithoutWarnings(page);
+    const shown = () => page.evaluate(() => ({
+      mode: window.__GBDRAW_APP__.mode, results: (window.__GBDRAW_APP__.results || []).length
+    }));
+    expect(await shown()).toEqual({ mode: resultMode, results: 1 });
+    expect(await page.evaluate((mode) => window.__GBDRAW_APP__.setDiagramMode(mode), shownMode)).toEqual({ status: 'ok' });
+    await expect.poll(shown).toEqual({ mode: shownMode, results: 0 });
+    expect(await page.evaluate((mode) => window.__GBDRAW_APP__.setDiagramMode(mode), resultMode)).toEqual({ status: 'ok' });
+    await expect.poll(shown).toEqual({ mode: resultMode, results: 1 });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  });
+}
+
 test('Load Session asks before it replaces work changed since the last Save or Load', async ({
   page
 }) => {

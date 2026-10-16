@@ -142,6 +142,16 @@ feature with `_record_2`. It is the positive fixture for the reader that names
 such `hash` rules by source hash. The steps, inputs, and hashes are in
 `hash-color-rule-linear-rc.provenance.json`.
 
+`mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz` and
+`mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz` are Web
+**Save Session** downloads from release tag `0.13.0` (Session 30), compressed
+with `gzip -n -9`. Each was saved after Generate and a switch to the other
+mode, so its Result is of one mode while `ui.mode` names the other; the
+Result's mode is in `cliInvocation.mode` (0.13.0 writes no
+`ui.generatedMode`). They are the positive fixtures for the reader of a
+Session 27–30 Result's mode (OV-677). The steps, inputs, and hashes are in
+`mode-switch.provenance.json`.
+
 `lambda_basic_linear.v44-schema8.gbdraw-session.json.gz` and
 `HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz` preserve the released
 version 44, request schema 8, feature catalog schema 4 Gallery Sessions from
