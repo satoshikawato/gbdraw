@@ -4,15 +4,13 @@
 // feature color overrides are stringified once per change, not once per check;
 // and every kind of write to an input makes an earlier snapshot stale.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import vm from 'node:vm';
 import { withModeDrawings } from './helpers/drawing-state.mjs';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-globalThis.window = { Vue: context.Vue };
-const { ref, reactive, toRaw } = context.Vue;
+const Vue = loadPageVue();
+globalThis.window = { Vue };
+const { ref, reactive, toRaw } = Vue;
 const { createRulePreparation } = await import('../../gbdraw/web/js/app/rule-matching.js');
 
 const COUNT = 500;

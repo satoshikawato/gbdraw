@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import vm from 'node:vm';
 
 import { createRightDrawerController } from '../../gbdraw/web/js/app/right-drawer.js';
 import {
   captureRightDrawerState,
   restoreRightDrawerState
 } from '../../gbdraw/web/js/services/right-drawer-state.js';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
 const ref = (value) => ({ value });
 
@@ -173,9 +173,7 @@ test('closing the drawer returns focus from inside it to the Editor toggle', () 
 // times per render. The group list is scanned once per change of the groups,
 // not per question.
 test('the tab availability scans the groups once per change, not per read (OV-921)', () => {
-  const context = vm.createContext({ console });
-  vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
-  const { ref: vueRef, computed, watch } = context.Vue;
+  const { ref: vueRef, computed, watch } = loadPageVue();
   let idReads = 0;
   const counted = (id) => new Proxy({ id, members: [] }, {
     get(target, key, receiver) {

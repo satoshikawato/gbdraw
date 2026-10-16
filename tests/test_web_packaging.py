@@ -331,6 +331,35 @@ def test_index_links_to_open_source_notices() -> None:
     assert "Open Source Notices" in index_html
 
 
+def test_index_loads_the_vue_production_build_its_notice_names() -> None:
+    from gbdraw._web_assets import WEB_ASSET_NOTICES
+
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    loaded = re.findall(r'<script src="\./(vendor/vue/[^"]+)"', index_html)
+    (vue_notice,) = [notice for notice in WEB_ASSET_NOTICES if notice.display_name == "Vue.js"]
+    assert loaded == [vue_notice.bundled_path] == ["vendor/vue/vue.global.prod.js"]
+    assert sorted(path.name for path in (WEB_ROOT / "vendor" / "vue").iterdir()) == [
+        "vue.global.prod.js"
+    ]
+
+
+def test_web_asset_notices_name_only_files_the_package_ships() -> None:
+    from gbdraw._web_assets import WEB_ASSET_NOTICES
+
+    for notice in WEB_ASSET_NOTICES:
+        assert (WEB_ROOT / notice.bundled_path).exists(), notice.bundled_path
+    # The Tailwind compiler is a maintenance input of the stylesheet generator
+    # (tools/vendor/tailwindcss/); the package ships only the generated CSS.
+    assert not list(WEB_ROOT.rglob("tailwindcss-play.js"))
+    # The Tailwind notice names the version the generated stylesheet reports.
+    (tailwind_notice,) = [n for n in WEB_ASSET_NOTICES if n.bundled_path == "css/tailwind.css"]
+    banner = re.search(
+        r"tailwindcss v(\S+) \| MIT License",
+        (WEB_ROOT / tailwind_notice.bundled_path).read_text(encoding="utf-8"),
+    )
+    assert banner is not None and banner.group(1) == tailwind_notice.version
+
+
 @pytest.mark.gallery
 def test_index_links_to_hosted_interactive_gallery() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
@@ -1397,13 +1426,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title.png",
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title-outlined.svg",
         build_root / "gbdraw" / "web" / verify_module._parse_wheel_name(),
-        build_root / "gbdraw" / "web" / "vendor" / "vue" / "vue.global.js",
-        build_root
-        / "gbdraw"
-        / "web"
-        / "vendor"
-        / "tailwindcss"
-        / "tailwindcss-play.js",
+        build_root / "gbdraw" / "web" / "vendor" / "vue" / "vue.global.prod.js",
         build_root
         / "gbdraw"
         / "web"

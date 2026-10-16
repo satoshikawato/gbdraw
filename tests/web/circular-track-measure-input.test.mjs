@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 import test from 'node:test';
 import { CircularMeasureInput } from '../../gbdraw/web/js/app/circular-track-slots/measure-input.js';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-const context = vm.createContext({ console });
-vm.runInContext(readFileSync('gbdraw/web/vendor/vue/vue.global.js', 'utf8'), context);
-globalThis.window = { Vue: context.Vue };
-const { reactive } = context.Vue;
+const Vue = loadPageVue();
+globalThis.window = { Vue };
+const { reactive } = Vue;
 
 const setup = (scalar = null) => {
   const props = reactive({ modelValue: scalar, slotId: 'gc_content', field: 'width', controlId: 'slot-width', autoText: '18 px (auto)' });
