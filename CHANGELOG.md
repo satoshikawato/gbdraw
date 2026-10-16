@@ -2172,6 +2172,13 @@ Retired names and their replacements are listed under
   longer derives three values again whose inputs did not change: the feature set the
   color and visibility rules match against, the record and feature names of the
   Similarity alignment drawer, and the Features list. Nothing visible changes.
+- Performance (web app, CLI, Python API): a Generate spends less time in Python. The
+  request contract check is compiled once per type, a linear Web Generate no longer
+  builds the derived LOSAT cache entries that no reply reads (their input checks still
+  run), the overlay Legend search stops at the first conflicting obstacle, the Circular
+  definition's GC percent and the placed labels are keyed once and reused, and the
+  cache no longer checks render-stage entries against a constant. Figures, SVG bytes,
+  replies and Saved Sessions are unchanged.
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
