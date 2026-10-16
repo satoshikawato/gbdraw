@@ -4,6 +4,7 @@ import { DIAGRAM_HELPER_OPERATIONS, readFeatureCatalogRevision } from '../servic
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
+import { captureSnapshotState, makeSnapshotWithPackages, restoreSnapshotState, snapshotDeserializer } from './pyodide-snapshot-proto.js';
 
 let runtimePromise = null;
 let runtime = null;
@@ -256,12 +257,102 @@ const RUNTIME_PREPARATION_STEPS = Object.freeze([
   'loading Python', 'loading the package installer', 'checking packages', 'installing packages', 'starting gbdraw'
 ]);
 
+// PROTOTYPE (proto/pyodide-snapshot): the snapshot boot and the snapshot upload.
+const snapshotFile = (folder, name) => new URL(name, folder.endsWith('/') ? folder : `${folder}/`).toString();
+const fetchBytes = async (url) => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Missing Pyodide snapshot file (${response.status}) at ${url}`);
+  return new Uint8Array(await response.arrayBuffer());
+};
+const snapshotTimings = {};
+// Inside loadPyodide only globalThis is reachable; the public API and its
+// functions are forwarded through a proxy that resolves once loadPyodide returns.
+const lateDescriptor = (late, descriptor) => {
+  if (!descriptor?.holder) return null;
+  if (descriptor.holder === 'global') return descriptor.name ? globalThis[descriptor.name] : globalThis;
+  (late.pending ||= []).push(descriptor);
+  const target = () => late.fn(descriptor);
+  return new Proxy(function lateBound() {}, {
+    get: (_t, key) => Reflect.get(target(), key),
+    has: (_t, key) => Reflect.has(target(), key),
+    apply: (_t, thisArg, args) => Reflect.apply(target(), thisArg, args)
+  });
+};
+const restoreRuntimeFromSnapshot = async ({ pyodideIndexUrl, pyodideModuleUrl, pyodideSnapshotUrl, reportStep }) => {
+  const t0 = performance.now();
+  reportStep(0);
+  const snapshotPromise = fetchBytes(snapshotFile(pyodideSnapshotUrl, 'snapshot.bin'));
+  const statePromise = fetchBytes(snapshotFile(pyodideSnapshotUrl, 'state.json'))
+    .then((bytes) => JSON.parse(new TextDecoder().decode(bytes)));
+  const fsPromise = fetchBytes(snapshotFile(pyodideSnapshotUrl, 'fs.bin'));
+  const { loadPyodide } = await import(pyodideModuleUrl);
+  const snapshot = await snapshotPromise;
+  snapshotTimings.fetchSnapshot = performance.now() - t0;
+  // The deserializer runs inside loadPyodide, before the public API object is
+  // returned; it resolves names lazily through this holder.
+  const late = {};
+  const deserialize = (descriptor) => (late.fn ? late.fn(descriptor) : lateDescriptor(late, descriptor));
+  const pyodide = await loadPyodide({
+    indexURL: pyodideIndexUrl,
+    packageBaseUrl: pyodideIndexUrl,
+    _loadSnapshot: snapshot,
+    _snapshotDeserializer: deserialize
+  });
+  late.fn = snapshotDeserializer(pyodide);
+  snapshotTimings.deferredHiwire = late.pending?.length || 0;
+  snapshotTimings.loadPyodide = performance.now() - t0;
+  reportStep(4);
+  const [state, fsBundle] = await Promise.all([statePromise, fsPromise]);
+  Object.assign(snapshotTimings, await restoreSnapshotState(pyodide, state, fsBundle, snapshot));
+  snapshotTimings.total = performance.now() - t0;
+  const capabilities = readRuntimeCapabilities(pyodide);
+  runtime = { pyodide, capabilities };
+  return runtime;
+};
+const uploadSnapshot = async (pyodide, folder) => {
+  let state; let fsBundle; let snapshot;
+  try {
+    ({ state, fsBundle } = captureSnapshotState(pyodide));
+    const made = makeSnapshotWithPackages(pyodide);
+    snapshot = made.bytes;
+    state.unknownHiwire = made.unknown;
+  } catch (error) {
+    console.error('[proto-snapshot] make failed:', error?.stack || error);
+    const M = pyodide._module;
+    for (let i = 7; i < 200; i += 1) {
+      let v;
+      try { v = M.__hiwire_get(i); } catch { break; }
+      if (v === null || v === undefined) continue;
+      let accessor; try { accessor = v[Object.getOwnPropertySymbols(v).find(() => false)]; } catch {}
+      console.error('[proto-snapshot] hiwire', i, typeof v, v?.constructor?.name, String(Object.keys(v).slice(0, 6)), String(v).slice(0, 120));
+    }
+    throw error;
+  }
+  // Chunked: a test driver that records request bodies cannot hold 100 MB.
+  const put = async (name, body) => {
+    const bytes = typeof body === 'string' ? new TextEncoder().encode(body) : body;
+    const chunk = 4 << 20;
+    for (let offset = 0; offset < bytes.length || offset === 0; offset += chunk) {
+      const end = Math.min(bytes.length, offset + chunk);
+      const url = `${snapshotFile(folder, name)}?offset=${offset}${end >= bytes.length ? '&done=1' : ''}`;
+      const response = await fetch(url, { method: 'PUT', body: bytes.slice(offset, end) });
+      if (!response.ok) throw new Error(`Snapshot upload failed (${response.status}) for ${name}`);
+      if (end >= bytes.length) break;
+    }
+  };
+  await put('snapshot.bin', snapshot);
+  await put('state.json', JSON.stringify(state));
+  await put('fs.bin', fsBundle);
+};
+
 const initializeRuntime = async ({
   id = null,
   pyodideIndexUrl,
   pyodideModuleUrl,
   localWheelUrls = [],
-  gbdrawWheelUrl
+  gbdrawWheelUrl,
+  pyodideSnapshotUrl = null,
+  pyodideSnapshotMakeUrl = null
 } = {}) => {
   if (runtime) return runtime;
   if (runtimePromise) return runtimePromise;
@@ -276,12 +367,15 @@ const initializeRuntime = async ({
   const reportStep = (index) => self.postMessage({
     id, type: 'init-progress', step: index + 1, total: RUNTIME_PREPARATION_STEPS.length, label: RUNTIME_PREPARATION_STEPS[index]
   });
-  runtimePromise = (async () => {
+  if (pyodideSnapshotUrl) {
+    runtimePromise = restoreRuntimeFromSnapshot({ pyodideIndexUrl, pyodideModuleUrl, pyodideSnapshotUrl, reportStep });
+  } else runtimePromise = (async () => {
     reportStep(0);
     const { loadPyodide } = await import(pyodideModuleUrl);
     const pyodide = await loadPyodide({
       indexURL: pyodideIndexUrl,
-      packageBaseUrl: pyodideIndexUrl
+      packageBaseUrl: pyodideIndexUrl,
+      ...(pyodideSnapshotMakeUrl ? { _makeSnapshot: true } : {})
     });
     reportStep(1);
     await pyodide.loadPackage('micropip');
@@ -299,6 +393,7 @@ const initializeRuntime = async ({
     await micropip.install(gbdrawWheelUrl);
     reportStep(4);
     await pyodide.runPythonAsync(PYTHON_HELPERS);
+    if (pyodideSnapshotMakeUrl) await uploadSnapshot(pyodide, pyodideSnapshotMakeUrl);
 
     const capabilities = readRuntimeCapabilities(pyodide);
     runtime = { pyodide, capabilities };
@@ -1248,6 +1343,10 @@ const handleWorkerMessage = async (data) => {
         capabilities: initialized.capabilities,
         lostFonts
       });
+      return;
+    }
+    if (type === 'proto-snapshot-timings') {
+      self.postMessage({ id, type: 'proto-snapshot-timings', ok: true, timings: snapshotTimings, heap: runtime?.pyodide?._module?.HEAP8?.length ?? null });
       return;
     }
     if (type === 'ping') {

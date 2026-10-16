@@ -3,6 +3,7 @@ import {
   GBDRAW_WHEEL_CACHE_BUST,
   GBDRAW_WHEEL_NAME,
   PYODIDE_INDEX_URL,
+  PYODIDE_SNAPSHOT_URL,
   PYODIDE_LOCAL_WHEELS
 } from '../config.js';
 
@@ -44,7 +45,26 @@ export const resolveGbdrawWheelUrl = (baseUrl = getDefaultBaseUrl()) => {
   return wheelUrl.toString();
 };
 
+// PROTOTYPE (proto/pyodide-snapshot): `?pyodideSnapshot=<folder>` restores a
+// memory snapshot from that folder; `?pyodideSnapshotMake=<folder>` boots cold
+// and uploads one (PUT) there. Without either, PYODIDE_SNAPSHOT_URL decides.
+const resolvePyodideSnapshotOptions = (baseUrl) => {
+  let params;
+  try {
+    params = new URL(baseUrl).searchParams;
+  } catch {
+    params = new URLSearchParams();
+  }
+  const restore = params.get('pyodideSnapshot') || PYODIDE_SNAPSHOT_URL;
+  const make = params.get('pyodideSnapshotMake');
+  return {
+    pyodideSnapshotUrl: restore && !make ? resolveAssetUrl(restore, baseUrl) : null,
+    pyodideSnapshotMakeUrl: make ? resolveAssetUrl(make, baseUrl) : null
+  };
+};
+
 export const buildPyodideAssetManifest = (baseUrl = getDefaultBaseUrl()) => ({
+  ...resolvePyodideSnapshotOptions(baseUrl),
   pyodideIndexUrl: resolvePyodideIndexUrl(baseUrl),
   pyodideModuleUrl: resolvePyodideModuleUrl(baseUrl),
   gbdrawWheelUrl: resolveGbdrawWheelUrl(baseUrl),
