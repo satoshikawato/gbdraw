@@ -80,7 +80,7 @@
     "tests/web/preview-fit.playwright.spec.js": 0.5,
     "tests/web/preview-item-popup.playwright.spec.js": 0.95,
     "tests/web/preview-navigation.playwright.spec.js": 1.69,
-    "tests/web/pyodide-snapshot-boot.playwright.spec.js": 0.6,
+    "tests/web/pyodide-snapshot-boot.playwright.spec.js": 1.2,
     "tests/web/python-rule-parity.playwright.spec.js": 2.82,
     "tests/web/record-display-discovery.playwright.spec.js": 1.09,
     "tests/web/record-draw-selection.playwright.spec.js": 1.62,

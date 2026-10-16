@@ -9,7 +9,7 @@ import {
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
-import { fetchPyodideSnapshot } from './pyodide-snapshot.js';
+import { fetchPyodideSnapshot, installRuntimePackages } from './pyodide-snapshot.js';
 
 let runtimePromise = null;
 let runtime = null;
@@ -293,11 +293,19 @@ const ensureLocalAsset = async (url, label) => {
 };
 
 // The booted runtime with its capabilities. A runtime restored from a Pyodide
-// snapshot first starts this Worker's own state: the snapshot holds the
-// state of the process that made it (OV-1000).
+// snapshot first starts this Worker's own state, since the snapshot holds the
+// state of the process that made it (OV-1000), and calls numpy and pandas, so
+// a side module the restore linked wrongly fails here and the page boots cold.
+const SNAPSHOT_BOOT_CHECK = `
+_start_web_worker_state()
+import numpy as _numpy, pandas as _pandas
+if int(_numpy.arange(3).sum()) != 3 or _pandas.DataFrame({'a': [1]}).shape != (1, 1):
+    raise RuntimeError('numpy or pandas returned a wrong result after the snapshot restore')
+del _numpy, _pandas
+`;
 const bootedRuntime = (pyodide, boot) => {
   const raw = pyodide.runPython(`
-${boot === 'snapshot' ? '_start_web_worker_state()' : ''}
+${boot === 'snapshot' ? SNAPSHOT_BOOT_CHECK : ''}
 import json as _json
 from gbdraw.api import get_web_runtime_capabilities as _get_web_runtime_capabilities
 _json.dumps(_get_web_runtime_capabilities(), sort_keys=True)
@@ -352,19 +360,20 @@ const initializeRuntime = async ({
       return runtime;
     }
     reportStep(1);
-    await pyodide.loadPackage('micropip');
-    const micropip = pyodide.pyimport('micropip');
-
-    reportStep(2);
-    await Promise.all(
-      localWheelUrls.map((url, index) =>
-        ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
-      )
-    );
-    await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
-    reportStep(3);
-    await micropip.install(localWheelUrls);
-    await micropip.install(gbdrawWheelUrl);
+    await installRuntimePackages(pyodide, {
+      localWheels: localWheelUrls,
+      gbdrawWheel: gbdrawWheelUrl,
+      beforeInstall: async () => {
+        reportStep(2);
+        await Promise.all(
+          localWheelUrls.map((url, index) =>
+            ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
+          )
+        );
+        await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
+        reportStep(3);
+      }
+    });
     reportStep(4);
     await pyodide.runPythonAsync(PYTHON_HELPERS);
     runtime = bootedRuntime(pyodide, 'cold');

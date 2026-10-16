@@ -1,10 +1,12 @@
 // @ts-check
-// The diagram Worker's Pyodide memory snapshot: the Wasm memory of a runtime
-// that already holds the packages, the gbdraw wheel and the imported Worker
-// helpers, so a Worker restores it instead of installing them (about 0.5 s
-// instead of 5 s). Only a test server serves one (docs/internal/SELECTIVE_CI.md,
-// "Pyodide snapshot"); config.js PYODIDE_SNAPSHOT_URL is null in the
-// repository, and the Worker boots cold whenever a restore fails.
+// The diagram Worker's package recipe (installRuntimePackages), which its cold
+// boot and tools/build_pyodide_snapshot.mjs both run, and the Pyodide memory
+// snapshot of that runtime: the Wasm memory of a runtime that already holds the
+// packages, the gbdraw wheel and the imported Worker helpers, so a Worker
+// restores it instead of installing them (about 0.5 s instead of 5 s). Only a
+// test server serves one (docs/internal/SELECTIVE_CI.md, "Pyodide snapshot");
+// config.js PYODIDE_SNAPSHOT_URL is null in the repository, and the Worker
+// boots cold whenever a restore fails.
 //
 // Pyodide 0.29's makeMemorySnapshot() keeps only the Wasm memory. Two things
 // live outside it and this module carries them in state.json and fs.bin:
@@ -24,6 +26,16 @@
 // tools/build_pyodide_snapshot.mjs do that and pass the runtime in.
 
 import { diagnosticError } from '../utils/error-normalization.js';
+
+/**
+ * The version of the recipe and of the snapshot files. Change it with
+ * installRuntimePackages, capturePyodideSnapshot or the restore: it is part of
+ * the validity key, so an older snapshot cannot restore.
+ */
+const PYODIDE_SNAPSHOT_FORMAT = 2;
+
+/** How long one snapshot input may take to download before the Worker boots cold. */
+const SNAPSHOT_FETCH_TIMEOUT_MS = 60_000;
 
 /** The Worker helper source, which runs before the snapshot is made. */
 export const PYTHON_HELPER_FILE = new URL('../app/python-helpers.js', import.meta.url);
@@ -82,6 +94,12 @@ const HANDLE_OFFSETS = Object.freeze({ allocated: 8, memAddr: 12, memSize: 16, t
  * @property {(options: { serializer: (value: unknown) => HolderDescriptor }) => Uint8Array} makeMemorySnapshot
  */
 /**
+ * The part of a Pyodide runtime the package recipe uses.
+ * @typedef {object} PyodideInstaller
+ * @property {(names: string) => Promise<unknown>} loadPackage
+ * @property {(name: 'micropip') => { install: (requirements: string | string[]) => Promise<unknown> }} pyimport
+ */
+/**
  * Where a JS object that Python still references lives: a named property of
  * globalThis, of the public Pyodide API or of its internal API, or the holder
  * itself. A null holder restores as null.
@@ -108,7 +126,8 @@ const HANDLE_OFFSETS = Object.freeze({ allocated: 8, memAddr: 12, memSize: 16, t
  * @property {number} tableLength
  * @property {number} firstLibTable
  * @property {Record<string, string>} loadedPackages
- * @property {string[]} unknownHiwire JS references that restore as null.
+ * @property {string[]} unknownHiwire JS references no holder names; a
+ *   snapshot that has one, or an entry in unknownSlots, does not restore.
  */
 
 /**
@@ -127,21 +146,46 @@ const textDecoder = new TextDecoder();
 const fileName = (urlOrPath) => urlOrPath.split(/[?#]/, 1)[0].split('/').pop() || '';
 
 /**
+ * Installs the diagram Worker's packages: micropip, the dependency wheels
+ * (micropip resolves their requirements, such as pandas' tzdata, from the
+ * Pyodide distribution), then the gbdraw wheel. micropip raises on any
+ * failure. A Worker's cold boot and the snapshot builder both run it, so a
+ * snapshot holds what a cold boot installs.
+ * @param {PyodideInstaller} pyodide
+ * @param {{ localWheels: readonly string[], gbdrawWheel: string, beforeInstall?: () => Promise<void> }} inputs
+ *   localWheels and gbdrawWheel: wheel URLs (`emfs:` paths in Node).
+ *   beforeInstall runs once micropip is loaded.
+ */
+export const installRuntimePackages = async (pyodide, { localWheels, gbdrawWheel, beforeInstall }) => {
+  await pyodide.loadPackage('micropip');
+  const micropip = pyodide.pyimport('micropip');
+  await beforeInstall?.();
+  await micropip.install([...localWheels]);
+  await micropip.install(gbdrawWheel);
+};
+
+/**
  * What a snapshot depends on besides the Pyodide build (whose BUILD_ID
  * makeMemorySnapshot writes into snapshot.bin and Pyodide checks on restore):
- * the dependency wheel files, the gbdraw wheel bytes and the bytes of
- * PYTHON_HELPER_FILE.
- * @param {{ localWheels: readonly string[], gbdrawWheel: Uint8Array, helperFile: Uint8Array }} inputs
- *   localWheels: the dependency wheel URLs or paths (their file names count).
+ * PYODIDE_SNAPSHOT_FORMAT, the dependency wheels, the gbdraw wheel and
+ * PYTHON_HELPER_FILE, each by name and bytes.
+ * @param {{ localWheels: ReadonlyArray<readonly [string, Uint8Array]>, gbdrawWheel: Uint8Array, helperFile: Uint8Array }} inputs
+ *   localWheels: [URL or path, bytes] of each dependency wheel, in recipe order.
  * @returns {Promise<string>} Hex SHA-256.
  */
 export const pyodideSnapshotKey = async ({ localWheels, gbdrawWheel, helperFile }) => {
-  const header = textEncoder.encode(`${JSON.stringify({ format: 1, localWheels: localWheels.map(fileName) })}\n`);
-  const bytes = new Uint8Array(header.length + 4 + gbdrawWheel.length + helperFile.length);
+  /** @type {Array<readonly [string, Uint8Array]>} */
+  const parts = [
+    ...localWheels.map(([path, wheel]) => /** @type {const} */ ([fileName(path), wheel])),
+    ['gbdraw', gbdrawWheel],
+    ['helpers', helperFile]
+  ];
+  const header = textEncoder.encode(`${JSON.stringify({
+    format: PYODIDE_SNAPSHOT_FORMAT, parts: parts.map(([name, part]) => [name, part.length])
+  })}\n`);
+  const bytes = new Uint8Array(parts.reduce((sum, [, part]) => sum + part.length, header.length));
   bytes.set(header);
-  new DataView(bytes.buffer).setUint32(header.length, gbdrawWheel.length, true);
-  bytes.set(gbdrawWheel, header.length + 4);
-  bytes.set(helperFile, header.length + 4 + gbdrawWheel.length);
+  parts.reduce((offset, [, part]) => { bytes.set(part, offset); return offset + part.length; }, header.length);
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
   return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
 };
@@ -196,6 +240,18 @@ const unpackFiles = (FS, bundle) => {
     files.set(path, data);
   });
   return files;
+};
+
+/**
+ * A snapshot restores only when every table slot and every JS reference it
+ * holds has a recorded owner.
+ * @param {PyodideSnapshotState} state
+ */
+const assertRestorable = (state) => {
+  if (state.unknownSlots.length || state.unknownHiwire.length) {
+    throw snapshotFailure(`Pyodide snapshot holds ${state.unknownSlots.length} table slots and `
+      + `${state.unknownHiwire.length} JS references it cannot restore: ${state.unknownHiwire.slice(0, 3).join('; ')}`);
+  }
 };
 
 /** @param {PyodideRuntime} pyodide @returns {Array<[Exclude<HolderDescriptor['holder'], null>, unknown]>} */
@@ -298,14 +354,13 @@ export const capturePyodideSnapshot = (pyodide, key) => {
   } finally {
     Object.assign(loaded, loadedPackages);
   }
-  return {
-    memory,
-    state: {
-      key, libs, extraSlots, unknownSlots, got, tableLength: M.wasmTable.length, firstLibTable,
-      loadedPackages, unknownHiwire
-    },
-    files
+  /** @type {PyodideSnapshotState} */
+  const state = {
+    key, libs, extraSlots, unknownSlots, got, tableLength: M.wasmTable.length, firstLibTable,
+    loadedPackages, unknownHiwire
   };
+  assertRestorable(state);
+  return { memory, state, files };
 };
 
 /**
@@ -391,9 +446,16 @@ const instantiateSideModule = async (M, binary, lib) => {
  * @returns {Promise<Uint8Array>}
  */
 const fetchBytes = async (url) => {
-  const response = await fetch(url);
-  if (!response.ok) throw snapshotFailure(`Pyodide snapshot input missing (${response.status}) at ${url}`);
-  return new Uint8Array(await response.arrayBuffer());
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(SNAPSHOT_FETCH_TIMEOUT_MS) });
+    if (!response.ok) throw snapshotFailure(`Pyodide snapshot input missing (${response.status}) at ${url}`);
+    return new Uint8Array(await response.arrayBuffer());
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw snapshotFailure(`Pyodide snapshot input took longer than ${SNAPSHOT_FETCH_TIMEOUT_MS / 1000} s at ${url}`);
+    }
+    throw error;
+  }
 };
 
 /**
@@ -407,9 +469,10 @@ const fetchBytes = async (url) => {
  */
 
 /**
- * Fetches the snapshot in `folderUrl` and checks it against the wheels and the
- * helper source this Worker would install. state.json is fetched first, so a
- * missing or blocked snapshot fails before any other request.
+ * Fetches the snapshot in `folderUrl` and checks it against the recipe format,
+ * the wheels and the helper source this Worker would install. state.json is
+ * fetched first, so a missing or blocked snapshot fails before any other
+ * request.
  * @param {{ folderUrl: string, gbdrawWheelUrl: string, localWheelUrls: readonly string[] }} inputs
  * @returns {Promise<PendingPyodideSnapshot>}
  */
@@ -424,9 +487,14 @@ export const fetchPyodideSnapshot = async ({ folderUrl, gbdrawWheelUrl, localWhe
   // key check below throws first.
   memoryPromise.catch(() => {});
   filesPromise.catch(() => {});
-  const [gbdrawWheel, helperFile] = await Promise.all([fetchBytes(gbdrawWheelUrl), fetchBytes(PYTHON_HELPER_FILE.href)]);
-  const key = await pyodideSnapshotKey({ localWheels: localWheelUrls, gbdrawWheel, helperFile });
-  if (state.key !== key) throw snapshotFailure('Pyodide snapshot was built from another wheel or helper source');
+  const [gbdrawWheel, helperFile, ...localWheels] = await Promise.all(
+    [gbdrawWheelUrl, PYTHON_HELPER_FILE.href, ...localWheelUrls].map(fetchBytes)
+  );
+  const key = await pyodideSnapshotKey({
+    localWheels: localWheelUrls.map((url, index) => /** @type {const} */ ([url, localWheels[index]])), gbdrawWheel, helperFile
+  });
+  if (state.key !== key) throw snapshotFailure('Pyodide snapshot was built from another recipe, wheel or helper source');
+  assertRestorable(state);
   // Released by complete(): about 170 MB.
   /** @type {{ memory: Uint8Array, files: Uint8Array, state: PyodideSnapshotState } | null} */
   let downloads = { memory: await memoryPromise, files: await filesPromise, state };

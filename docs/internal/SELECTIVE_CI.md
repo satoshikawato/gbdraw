@@ -426,25 +426,37 @@ at its limit may not reach upload; its last running case remains in the log.
 
 A Pyodide memory snapshot lets the diagram Worker skip its package installs in
 functional tests. `node tools/build_pyodide_snapshot.mjs <dir>` boots Pyodide
-in Node, loads the dependency wheels, the gbdraw wheel and the Worker helpers
-as the Worker's cold boot does, and writes `snapshot.bin` (the Wasm memory),
+in Node, runs the Worker's package recipe (`installRuntimePackages`: micropip
+installs the dependency wheels with their requirements, then the gbdraw wheel),
+runs the Worker helpers, checks that every installed distribution's
+requirements are installed, and writes `snapshot.bin` (the Wasm memory),
 `state.json` (the side-module linker state and the validity key) and `fs.bin`
-(the site-packages files), about 170 MB, in 5 to 10 seconds. With
+(the site-packages files), about 170 MB, in 5 to 10 seconds. It needs a Node
+with WebAssembly JSPI (`WebAssembly.Suspending`), as Chromium has, such as the
+version in `.node-version`: without JSPI Pyodide's function table starts one
+entry shorter, Chromium cannot restore the snapshot, and the builder refuses
+to run. With
 `GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR` set, `playwright.config.js` serves the
 repository with `tools/serve_pyodide_snapshot.py`, which serves that directory
 at `/__pyodide-snapshot__/`
 (`tests/web/helpers/pyodide-snapshot-test-server.cjs`) and `config.js` with
 `PYODIDE_SNAPSHOT_URL` pointing at it. The Worker then restores the snapshot
 (about 0.5 seconds) instead of installing its packages (about 5 seconds
-locally), and runs `_start_web_worker_state()` so each Worker has its own
-caches and cache epoch. On draft PR #1115, building it in each functional shard
+locally), runs `_start_web_worker_state()` so each Worker has its own caches
+and cache epoch, and calls numpy and pandas once. Every restored Worker
+shares the string-hash secret of the build, so functional CI is less likely
+to expose a bug that depends on set or dict order of strings. On draft PR #1115, building it in each functional shard
 cut functional test time from 297.8 to 139.8 test-minutes. The repository's
 `config.js` keeps `PYODIDE_SNAPSHOT_URL = null`: users, smoke, browser and
 release acceptance jobs boot cold.
 
-The Worker boots cold whenever a restore fails: a missing file, another wheel
-or helper source (the key in `state.json`), another Pyodide build (its
-`BUILD_ID`, which Pyodide checks), or a relink or first-import error. The page
+The Worker boots cold whenever a restore fails: a missing file or one that
+takes longer than 60 seconds to download, another recipe format, wheel or
+helper source (the key in `state.json` covers the format version and the bytes
+of every wheel and of the helper source), another Pyodide build (its
+`BUILD_ID`, which Pyodide checks), a table slot or JS reference the builder
+could not name, or an error while relinking, starting the Worker state or
+calling numpy and pandas. The page
 then discards that Worker, starts one without the snapshot, and boots every
 later Worker cold. The page reports each boot as the `workerBoot` structural
 metric: `snapshot`, `cold`, or `cold after snapshot error: <reason>`.
@@ -454,12 +466,14 @@ silently costing time. A case that asserts the cold boot (the wheel request)
 calls `forceColdPyodideBoot(page)`, which aborts the snapshot requests.
 
 To run specs locally with a snapshot, prepare the wheel, build the snapshot
-outside the repository, and set the variable:
+outside the repository, and set the variable with a free port: Playwright
+reuses a server already listening on the port locally, and a plain server
+serves no snapshot.
 
 ```bash
 python tools/prepare_browser_wheel.py
 node tools/build_pyodide_snapshot.mjs /tmp/pyodide-snapshot
-GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR=/tmp/pyodide-snapshot \
+GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR=/tmp/pyodide-snapshot GBDRAW_WEB_TEST_PORT=<free port> \
   npx playwright test --config=tests/web/playwright/functional.config.js <spec>
 ```
 
