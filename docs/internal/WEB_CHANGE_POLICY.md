@@ -170,7 +170,9 @@ already emits the final fields.
 The following are hard failures when applicable:
 
 - new production dependencies or bare production imports;
-- binary runtime additions or vendored runtime changes;
+- binary runtime additions, and vendored runtime changes that the trusted base
+  does not list (see
+  [Updating a vendored runtime file](#updating-a-vendored-runtime-file));
 - incomplete or cyclic first-party imports;
 - unauthorized privileged owners or importers;
 - malformed authority or rules;
@@ -580,6 +582,59 @@ applies only when `tools/web-change-policy.json` is the sole changed guard file
 and the change is a pure policy contraction. The
 checker implementation and source parser cannot change with that policy or its
 policy workflows.
+
+## Updating a vendored runtime file
+
+A change under `gbdraw/web/vendor/` passes the Gate only when the
+`allowedVendorChanges` list in `tools/web-change-policy.json` on the pull
+request base names it exactly. The checker reads the list from the base. A
+list in the pull request head is checked as data and authorizes nothing.
+
+Each entry names one file:
+
+| Field | Value |
+| --- | --- |
+| `path` | the exact path under `gbdraw/web/vendor/` |
+| `change` | `add`, `replace`, or `remove` (Git status `A`, `M`, or `D`) |
+| `sha256` | SHA-256 of the bytes Git stores for the file after the change (`add`, `replace`) or before it (`remove`) |
+| `package` | the upstream package name |
+| `version` | the upstream version |
+| `source` | the `https` URL the bytes come from |
+
+A path appears at most once. A change whose path, kind, or bytes differ from
+its entry fails as an unlisted change. A malformed list fails closed, in the
+base and in the candidate, and so does a policy file that repeats a key. A new
+entry that cannot apply to the base tree fails in the pull request that adds
+it: `add` for a path the base has as a file or directory, `replace` or `remove`
+for a path it lacks,
+`remove` whose hash differs from the base bytes, and `replace` with the bytes
+the base already has. The report lists every added and removed entry. A listed
+change passes with `Review: REQUIRED`. An added binary file under
+`gbdraw/web/vendor/` still fails ("added binary runtime files are not
+allowed").
+
+An update takes two pull requests in this order:
+
+1. Authority only: add the entry to `tools/web-change-policy.json`. Take the
+   bytes from the upstream release, check them against the registry's
+   published integrity value, and hash them as Git stores them
+   (`git cat-file blob <commit>:<path> | sha256sum`; with `eol=lf` this equals
+   the upstream file when it has LF line endings). The pull request names the
+   reason, such as a security fix. It expands authority, so it waits for the
+   Owner's approval.
+2. After it merges: the runtime pull request changes the file and the code,
+   tests, notices, and packaging that use it, and leaves the list unchanged.
+   Changing the list beside a runtime path fails the Gate.
+
+The check compares the pull request base with its head, so an open pull
+request that is behind `dev` after step 2 merged shows the listed change in
+reverse. When the head does not contain its base and leaves a listed path as
+their merge base had it, the checker reports that the branch is behind its
+base; update it from `dev`. Any other mismatch reports the kind or the hash.
+
+An entry whose change has merged can only authorize the same bytes again.
+Remove it in the next authority-only pull request. Because a path appears once,
+the next update of that path replaces its entry.
 
 ## Changing a privileged owner or importer
 
