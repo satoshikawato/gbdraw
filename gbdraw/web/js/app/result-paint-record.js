@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../state.js' */
 import { isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
+import { toRaw } from '../utils/vue-raw.js';
 
 // Which editor state each Result's bytes show (design §5.4). A Result
 // displayed again receives a domain only when that state changed since it
@@ -18,8 +19,6 @@ import { isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
  *   legendOrder: string
  * }} EditorPaintState
  */
-
-const toRaw = globalThis.window?.Vue?.toRaw ?? (/** @type {<T>(value: T) => T} */ (value) => value);
 
 /**
  * What the paint state reads of the application state besides the drawing.
@@ -58,10 +57,13 @@ export const editorPaintState = (state, drawing) => ({
     : ''
 });
 
+// Whether two paint states show the same palette and color edits.
+/** @param {EditorPaintState['colors']} left @param {EditorPaintState['colors']} right */
+export const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
+
 // Whether two paint states show the same fills: palette and color edits, and visibility.
 /** @param {Pick<EditorPaintState, 'colors' | 'visibility'>} left @param {Pick<EditorPaintState, 'colors' | 'visibility'>} right */
-const sameFills = (left, right) => left.colors[0] === right.colors[0] && left.colors[1] === right.colors[1]
-  && left.visibility === right.visibility;
+const sameFills = (left, right) => sameColors(left.colors, right.colors) && left.visibility === right.visibility;
 
 // A paint state no editor state equals: a Result recorded with it shows
 // every paint domain and the labels on its next display. The Legend order is

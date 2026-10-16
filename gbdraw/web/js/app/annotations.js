@@ -14,6 +14,7 @@ import {
 import { getFeatureCaption, getFeatureColorRuleHash } from '../services/feature-utils.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
+import { toRaw } from '../utils/vue-raw.js';
 
 // The editor keeps every id valid: an empty id takes the default and a used
 // one a numbered suffix. The panel notice names the id it stored (FL-14).
@@ -74,10 +75,8 @@ export const createAnnotationEditor = ({
    * @param {{ drawnOnly?: boolean }} [options]
    */
   const catalogFeature = (target, { drawnOnly = false } = {}) => {
-    /** @param {unknown} value */
-    const raw = (value) => (globalThis.window?.Vue?.toRaw ? window.Vue.toRaw(value) : value);
     const lists = [state.extractedFeatures?.value, drawnOnly ? null : state.biologicalFeatures?.value];
-    for (const list of lists.map(raw)) {
+    for (const list of lists.map(toRaw)) {
       const feature = (Array.isArray(list) ? list : []).find((item) => item?.record_key === target?.recordKey && item?.biological_feature_id === target?.biologicalFeatureId);
       if (feature) return feature;
     }

@@ -7,6 +7,7 @@ import {
   createOrthogroupFeatureProjection
 } from './orthogroup-feature-metadata.js';
 import { locationPartBound } from './feature-utils.js';
+import { toRaw } from '../utils/vue-raw.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -1297,12 +1298,6 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
   return admission.featureState;
 };
 
-/**
- * @template T
- * @param {T} value
- * @returns {T}
- */
-const rawValue = (value) => globalThis.window?.Vue?.toRaw ? globalThis.window.Vue.toRaw(value) : value;
 
 /**
  * @param {object} catalog A raw catalog object.
@@ -1349,7 +1344,7 @@ const EMPTY_CATALOG_NAME_INDEX = Object.freeze({
  * @returns {CatalogNameIndex}
  */
 export const catalogNameIndex = (catalog) => {
-  const source = rawValue(catalog);
+  const source = toRaw(catalog);
   if (!source || typeof source !== 'object') return EMPTY_CATALOG_NAME_INDEX;
   /** @type {FeatureCatalogAdmission | undefined} */
   const admission = featureCatalogAdmissions.get(source);
@@ -1386,12 +1381,12 @@ export const catalogNameIndex = (catalog) => {
  * @param {unknown} [results]
  */
 export const resultCatalogFeatures = (state, resultIndex = state?.selectedResultIndex?.value, results = state?.results?.value) => {
-  const catalog = rawValue(state?.featureCatalog?.value);
+  const catalog = toRaw(state?.featureCatalog?.value);
   if (!catalog) return null;
   const index = Number(resultIndex) || 0;
   try {
     // `catalog` is set, so `state` is not null. A `results` that is not an array makes the admission throw, caught below.
-    const admission = admitFeatureCatalog(catalog, /** @type {FeatureCatalogResult[]} */ (rawValue(results) || []), {
+    const admission = admitFeatureCatalog(catalog, /** @type {FeatureCatalogResult[]} */ (toRaw(results) || []), {
       mode: /** @type {CatalogStateView} */ (state).generatedMode?.value || ''
     });
     const rendered = admission.renderedFeaturesByResult[index];

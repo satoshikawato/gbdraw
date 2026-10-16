@@ -24,7 +24,7 @@
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
-import { createResultPaintRecord, editorPaintState } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState, sameColors } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -110,6 +110,7 @@ import {
 } from '../services/linear-sources.js';
 import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
+import { toRaw } from '../utils/vue-raw.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
@@ -304,7 +305,6 @@ import {
 /** @import { UnvalidatedFields } from '../services/session-authority.js' */
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, shallowRef, reactive, isRef } = window.Vue;
-const toRaw = window.Vue.toRaw || ((/** @type {unknown} */ value) => value);
 
 /** @type {Promise<typeof import('../services/export.js')> | null} */
 let exportServicePromise = null;
@@ -3848,8 +3848,6 @@ export const createAppSetup = () => {
   let labelProjectionResultIdentity = '';
   /** @param {DrawingState} drawing @returns {EditorPaintState} */
   const currentEditorProjectionState = (drawing) => editorPaintState(state, drawing);
-  /** @param {readonly unknown[]} left @param {readonly unknown[]} right */
-  const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
   /** @param {DrawingState} drawing @param {MountedResultContext} context */
   const rememberCommittedEditorState = (drawing, context) => {
     const identities = liveResultIdentities();
