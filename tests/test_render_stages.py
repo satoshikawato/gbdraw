@@ -911,3 +911,45 @@ def test_a_cache_without_a_random_source_names_no_build(
         assert stages_module.render_stage_revision("catalog_item", [result]) is None
     with _transaction(cache):
         assert render_stage("catalog_item", catalog_part, 1, "r") is result
+
+
+def _bookkeeping_transaction(cache: PreparedBiologicalInputCache, stage_args: tuple[int, ...], decoded: tuple[str, ...]):
+    metrics: dict[str, object] = {}
+    with _transaction(cache, metrics):
+        for value in stage_args:
+            render_stage("gc_skew_data", double, value)
+        for key in decoded:
+            cache.get_or_build("decoded", ("decoded", key), frozenset(), lambda key=key: {"value": key})
+    return metrics
+
+
+def test_render_stage_entries_are_not_owner_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A render-stage entry has one constant stamp, so its owner check compared it with itself."""
+
+    checked: list[str] = []
+    real = PreparedBiologicalInputCache._verify_owner
+
+    def spy(self, layer, *args, **kwargs):
+        checked.append(layer)
+        return real(self, layer, *args, **kwargs)
+
+    monkeypatch.setattr(PreparedBiologicalInputCache, "_verify_owner", spy)
+    cache = PreparedBiologicalInputCache()
+    _bookkeeping_transaction(cache, (1, 2), ("x",))
+    _bookkeeping_transaction(cache, (1, 2), ("x",))
+
+    assert "render_stage" not in checked
+    assert "decoded" in checked
+
+
+def test_commit_counts_evictions_of_held_entries_only() -> None:
+    import gbdraw.api.prepared as prepared_module
+
+    cache = PreparedBiologicalInputCache()
+    _bookkeeping_transaction(cache, (1, 2, 3), ("x", "y"))
+    # One stage entry and one decoded entry are kept, one of each is new
+    # (pending, not an eviction), two stage entries and one decoded entry go.
+    metrics = _bookkeeping_transaction(cache, (1, 4), ("x", "z"))
+
+    assert _metrics(metrics)["preparedInputCacheEvictionCount"] == 3
+    assert not hasattr(prepared_module, "_layer_stamp")
