@@ -7,7 +7,7 @@ module does not own session envelopes, base64 encoding, or temporary files.
 
 from __future__ import annotations
 
-from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
+from collections.abc import Callable, Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
 from dataclasses import MISSING, Field, asdict, dataclass, fields, is_dataclass, replace
 from functools import lru_cache
@@ -4803,45 +4803,95 @@ def _validate_dataclass_contract(value: object, *, path: str, error: str) -> Non
 
 
 def _matches_type(value: object, hint: object) -> bool:
+    return _type_checker(hint)(value)
+
+
+def _accept_any(value: object) -> bool:
+    return True
+
+
+def _reject(value: object) -> bool:
+    return False
+
+
+def _is_finite_float(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_bool(value: object) -> bool:
+    return isinstance(value, bool)
+
+
+def _is_str(value: object) -> bool:
+    return isinstance(value, str)
+
+
+def _is_none(value: object) -> bool:
+    return value is None
+
+
+def _is_sequence(value: object) -> bool:
+    return isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray))
+
+
+def _is_mapping(value: object) -> bool:
+    return isinstance(value, MappingABC)
+
+
+_SCALAR_CHECKERS: dict[object, Callable[[object], bool]] = {
+    float: _is_finite_float,
+    int: _is_int,
+    bool: _is_bool,
+    str: _is_str,
+    type(None): _is_none,
+}
+
+
+@lru_cache(maxsize=1024)
+def _type_checker(hint: object) -> Callable[[object], bool]:
+    """Build once per type hint the check that a value matches its typed contract."""
     if hint is Any or hint is object:
-        return True
+        return _accept_any
     origin = get_origin(hint)
     args = get_args(hint)
     if origin in {types.UnionType, Union}:
-        return any(_matches_type(value, branch) for branch in args)
+        branches = tuple(_type_checker(branch) for branch in args)
+        return lambda value: any(branch(value) for branch in branches)
     if origin is Literal:
-        return value in args and any(type(value) is type(item) for item in args if item == value)
+        return lambda value: value in args and any(
+            type(value) is type(item) for item in args if item == value
+        )
     if origin in {tuple, list, Sequence, SequenceABC}:
-        if not isinstance(value, SequenceABC) or isinstance(value, (str, bytes, bytearray)):
-            return False
         if not args:
-            return True
-        item_hint = args[0]
-        return all(_matches_type(item, item_hint) for item in value)
+            return _is_sequence
+        item_check = _type_checker(args[0])
+        return lambda value: _is_sequence(value) and all(
+            item_check(item) for item in cast(SequenceABC[object], value)
+        )
     if origin in {dict, Mapping, MappingABC}:
-        if not isinstance(value, MappingABC):
-            return False
         if len(args) != 2:
-            return True
-        return all(
-            _matches_type(key, args[0]) and _matches_type(item, args[1])
-            for key, item in value.items()
+            return _is_mapping
+        key_check = _type_checker(args[0])
+        item_check = _type_checker(args[1])
+        return lambda value: _is_mapping(value) and all(
+            key_check(key) and item_check(item)
+            for key, item in cast(MappingABC[object, object], value).items()
         )
-    if hint is float:
-        return (
-            isinstance(value, (int, float))
-            and not isinstance(value, bool)
-            and math.isfinite(float(value))
-        )
-    if hint is int:
-        return isinstance(value, int) and not isinstance(value, bool)
-    if hint is bool:
-        return isinstance(value, bool)
-    if hint is str:
-        return isinstance(value, str)
-    if hint is type(None):
-        return value is None
-    return isinstance(hint, type) and isinstance(value, hint)
+    scalar = _SCALAR_CHECKERS.get(hint) if isinstance(hint, type) else None
+    if scalar is not None:
+        return scalar
+    if isinstance(hint, type):
+        cls = hint
+        return lambda value: isinstance(value, cls)
+    return _reject
 
 
 def _raise_contract_error(kind: str, message: str) -> NoReturn:

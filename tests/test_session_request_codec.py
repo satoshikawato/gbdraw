@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 import copy
 import json
-from dataclasses import replace
+import math
+import typing
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, Union
 
 import pandas as pd
 import pytest
@@ -3259,3 +3262,227 @@ def test_typed_tree_codec_resolves_type_hints_once_per_class(
 
     assert decoded == members
     assert hint_calls <= 1  # One class, however many nodes.
+
+
+# The contract check is compiled once per type hint. The expected values below were
+# recorded from the interpreting checker it replaced (base a86dd2d74), so they pin
+# its semantics: bool is not int, floats are finite, Literal compares the exact
+# type, str and bytes are not sequences, and every item of a tuple is checked
+# against its first argument, also for tuple[X, Y].
+_CONTRACT_HINT_GOLDENS: tuple[tuple[str, object, tuple[object, ...], tuple[bool, ...]], ...] = (
+    ("any", Any, (None, 1, "x", pd.DataFrame()), (True, True, True, True)),
+    ("object", object, (None, 1, "x"), (True, True, True)),
+    ("bool", bool, (True, False, 1, 0, None), (True, True, False, False, False)),
+    ("int", int, (1, 0, -3, True, 1.0, "1", None), (True, True, True, False, False, False, False)),
+    (
+        "float",
+        float,
+        (1, 1.5, -0.0, True, math.nan, math.inf, -math.inf, "1.5", None),
+        (True, True, True, False, False, False, False, False, False),
+    ),
+    ("str", str, ("", "x", b"x", 1, None), (True, True, False, False, False)),
+    ("none", type(None), (None, 0, "", False), (True, False, False, False)),
+    (
+        "literal-int-str",
+        Literal[1, "a"],
+        (1, True, 1.0, "a", "b", 2),
+        (True, False, False, True, False, False),
+    ),
+    ("literal-true", Literal[True], (True, 1, 1.0, False), (True, False, False, False)),
+    ("literal-float", Literal[0.5], (0.5, 1, "0.5"), (True, False, False)),
+    ("optional-int-pipe", int | None, (None, 1, True, 1.5, "1"), (True, True, False, False, False)),
+    (
+        "optional-float-typing",
+        Optional[float],
+        (None, 1, 1.5, math.nan, True),
+        (True, True, True, False, False),
+    ),
+    ("union-int-str", Union[int, str], (1, "x", True, 1.5, None), (True, True, False, False, False)),
+    (
+        "union-literal-float",
+        Literal["auto"] | float,
+        ("auto", "Auto", 2.0, 2, math.inf, True),
+        (True, False, True, True, False, False),
+    ),
+    (
+        "tuple-ellipsis-str",
+        tuple[str, ...],
+        ((), ("a", "b"), ["a"], ("a", 1), "ab", b"ab", {"a": 1}, None),
+        (True, True, True, False, False, False, False, False),
+    ),
+    ("tuple-int-str", tuple[int, str], ((1, 2), (1, "x"), (1,), ()), (True, False, True, True)),
+    ("tuple-bare-typing", Tuple, ((), (1, "x"), [1], "x"), (True, True, True, False)),
+    (
+        "list-int",
+        list[int],
+        ([], [1, 2], (1, 2), [1, True], [1.0], "12"),
+        (True, True, True, False, False, False),
+    ),
+    (
+        "sequence-float",
+        Sequence[float],
+        ([1, 2.5], (math.nan,), [True], range(3), bytearray(b"ab")),
+        (True, False, False, True, False),
+    ),
+    ("sequence-abc-int", SequenceABC[int], ([1], [1.0], (True,)), (True, False, False)),
+    ("sequence-bare", Sequence, ([], (1,), "x"), (True, True, False)),
+    (
+        "dict-str-int",
+        dict[str, int],
+        ({}, {"a": 1}, {"a": True}, {1: 1}, [("a", 1)], None),
+        (True, True, False, False, False, False),
+    ),
+    ("mapping-bare", Mapping, ({}, {"a": object()}, []), (True, True, False)),
+    (
+        "mapping-abc-str-float",
+        MappingABC[str, float],
+        ({"a": 1}, {"a": math.nan}, {"a": "1"}),
+        (True, False, False),
+    ),
+    (
+        "nested-dict",
+        dict[str, dict[str, tuple[float, ...]]],
+        (
+            {},
+            {"a": {}},
+            {"a": {"b": (1.0, 2)}},
+            {"a": {"b": (1.0, True)}},
+            {"a": {"b": [math.inf]}},
+            {"a": []},
+        ),
+        (True, True, True, False, False, False),
+    ),
+    (
+        "tuple-of-optional-literal",
+        tuple[Literal["x", "y"] | None, ...],
+        ((), ("x", None), ("x", "z"), (None,)),
+        (True, True, False, True),
+    ),
+    ("path", Path, (Path("a"), "a", None), (True, False, False)),
+    ("string-hint", "int", (1, "int"), (False, False)),
+)
+
+
+@pytest.mark.parametrize(
+    ("hint", "values", "expected"),
+    [pytest.param(hint, values, expected, id=name) for name, hint, values, expected in _CONTRACT_HINT_GOLDENS],
+)
+def test_contract_type_check_keeps_the_recorded_answers(
+    hint: object, values: tuple[object, ...], expected: tuple[bool, ...]
+) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    assert tuple(codec_module._matches_type(value, hint) for value in values) == expected
+    # A second call answers from the compiled checker and must not differ.
+    assert tuple(codec_module._matches_type(value, hint) for value in values) == expected
+
+
+@pytest.mark.parametrize(
+    ("hint", "value", "error"),
+    [
+        pytest.param(Literal["a"], pd.DataFrame({"a": [1]}), ValueError, id="dataframe-literal"),
+        pytest.param(float, 10**400, OverflowError, id="huge-int-float"),
+    ],
+)
+def test_contract_type_check_raises_where_it_raised(
+    hint: object, value: object, error: type[BaseException]
+) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    with pytest.raises(error):
+        codec_module._matches_type(value, hint)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ({"a": [1, 2]}, {"a": (1, 2)}),
+        ({"a": "b"}, {"a": "b"}),
+        ({"a": [1, "b"]}, None),
+    ],
+)
+def test_typed_tree_union_selects_the_recorded_branch(
+    value: object, expected: object
+) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    hint = dict[str, tuple[int, ...]] | dict[str, str]
+    if expected is None:
+        with pytest.raises(CanonicalRequestDecodingError, match="union contract"):
+            codec_module._decode_typed_tree(value, hint, path="p", resource_schema=3)
+        return
+    decoded = codec_module._decode_typed_tree(value, hint, path="p", resource_schema=3)
+    assert decoded == expected
+    assert type(decoded["a"]) is type(expected["a"])
+
+
+@dataclass(frozen=True)
+class _ContractLongTuple:
+    values: tuple[int, ...]
+
+
+def test_contract_validation_does_not_interpret_hints_per_item(monkeypatch) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    calls = 0
+    real_get_origin = typing.get_origin
+
+    def count_get_origin(hint: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real_get_origin(hint)
+
+    monkeypatch.setattr(codec_module, "get_origin", count_get_origin)
+
+    def count_for(size: int) -> int:
+        nonlocal calls
+        calls = 0
+        codec_module._validate_dataclass_contract(
+            _ContractLongTuple(tuple(range(size))), path="value", error="decode"
+        )
+        return calls
+
+    count_for(3)
+    assert count_for(1_000) == count_for(10)
+    assert count_for(1_000) < 10
+
+
+def _reachable_contract_hints() -> list[tuple[str, object]]:
+    import dataclasses
+
+    import gbdraw.session_request_codec as codec_module
+
+    roots: list[object] = [
+        CircularDiagramRequest,
+        LinearDiagramRequest,
+        CircularBatchRequest,
+        *codec_module._TYPED_TREE_CLASSES.values(),
+    ]
+    seen: set[int] = set()
+    found: list[tuple[str, object]] = []
+    stack: list[tuple[str, object]] = [(getattr(root, "__name__", repr(root)), root) for root in roots]
+    while stack:
+        where, hint = stack.pop()
+        if id(hint) in seen:
+            continue
+        seen.add(id(hint))
+        found.append((where, hint))
+        if isinstance(hint, type) and dataclasses.is_dataclass(hint):
+            for name, field_hint in codec_module._class_type_hints(hint).items():
+                stack.append((f"{hint.__name__}.{name}", field_hint))
+        for arg in typing.get_args(hint):
+            if not isinstance(arg, (str, int, float, bool, type(None), type(Ellipsis))):
+                stack.append((where, arg))
+    return found
+
+
+def test_every_reachable_contract_hint_is_hashable() -> None:
+    hints = _reachable_contract_hints()
+    assert len(hints) > 50
+    unhashable = []
+    for where, hint in hints:
+        try:
+            hash(hint)
+        except TypeError:
+            unhashable.append(where)
+    assert unhashable == []
