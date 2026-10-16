@@ -770,18 +770,34 @@ const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(result
 // record, so the record picker appears only when the displayed Result shows
 // several records (FE-03).
 // The list reads of the Results only their names (the catalog admission matches
-// them) and the displayed Result's committed metadata. A write of a Result's
-// content (an editor edit, R1) keeps both, so it does not list the features
-// again. The rule matches the drawn state reads are recorded while
-// `ruleMatchingPending` holds, so the list follows its fall.
+// them) and, of the displayed Result's committed metadata, its rendered
+// identities and selected feature types. A write of a Result's content (an
+// editor edit, R1) keeps them, and so does a Generate that reuses the catalog
+// (its new metadata holds the same identities), so neither lists the features
+// again (CW-06 row M3). The rule matches the drawn state reads are recorded
+// while `ruleMatchingPending` holds, so the list follows its fall.
 /** @import { CommittedSvgResultMetadata, SvgResultEntry } from './services/svg-result-ingestion.js' */
 /** @typedef {{ list: readonly SvgResultEntry[], names: unknown[], metadata: CommittedSvgResultMetadata | null }} ListedResults */
+/**
+ * Whether two committed metadata give the list the same inputs: the same
+ * rendered identities and the same selected feature types (none only equals none).
+ * @param {CommittedSvgResultMetadata | null} previous
+ * @param {CommittedSvgResultMetadata | null} metadata
+ */
+const sameListedMetadata = (previous, metadata) => {
+  if (previous === metadata) return true;
+  if (!previous || !metadata || previous.renderedFeatureIdentities !== metadata.renderedFeatureIdentities) return false;
+  const before = previous.selectedFeatureTypes ?? null;
+  const after = metadata.selectedFeatureTypes ?? null;
+  return before === after || (before !== null && after !== null && before.length === after.length
+    && before.every((type, index) => type === after[index]));
+};
 const listedResults = computed((/** @type {ListedResults | undefined} */ previous) => {
   /** @type {readonly SvgResultEntry[]} */
   const list = results.value;
   const names = list.map((result) => result?.name);
   const metadata = displayedResultMetadata();
-  return previous !== undefined && previous.metadata === metadata && previous.names.length === names.length
+  return previous !== undefined && sameListedMetadata(previous.metadata, metadata) && previous.names.length === names.length
     && previous.names.every((name, index) => name === names[index])
     ? previous : { list, names, metadata };
 });

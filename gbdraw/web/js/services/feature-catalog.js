@@ -110,8 +110,22 @@ export { FEATURE_CATALOG_SCHEMA };
  *   catalog: FeatureCatalog,
  *   mode: string,
  *   resultNames: readonly string[],
- *   featureState: FeatureCatalogFeatureState
+ *   featureState: FeatureCatalogFeatureState,
+ *   nameIndex: { value: CatalogNameIndex | null }
  * }} FeatureCatalogAdmission
+ */
+
+/**
+ * The catalog rows the record and feature names read
+ * (`app/similarity-alignment.js`), from the raw rows of one catalog object.
+ * `catalogNameIndex` builds it on the first read after an admission and keeps
+ * it in that admission's `nameIndex` cell (CW-06 row M2).
+ * @typedef {object} CatalogNameIndex
+ * @property {object} catalog The raw catalog object the rows are from.
+ * @property {readonly FeatureCatalogRow[]} rows Every item's biological features, in item order.
+ * @property {(anchor: { recordKey?: unknown, biologicalFeatureId?: unknown }) => FeatureCatalogRow | undefined} featureOf
+ *   The first row of the anchor's record key and biological feature ID.
+ * @property {ReadonlyMap<string, readonly FeatureCatalogRow[]>} rowsByRecord Each record key's rows, in item order.
  */
 
 /**
@@ -899,7 +913,9 @@ function* catalogAdmissionSteps(
     mode: normalizedMode,
     resultNames: Object.freeze(logicalResults.map((result) => text(result?.name))),
     ...featureState,
-    featureState
+    featureState,
+    // Filled by `catalogNameIndex` on its first read (the freeze is shallow).
+    nameIndex: { value: null }
   });
   featureCatalogAdmissions.set(validated, admission);
   featureCatalogAdmissions.set(catalog, admission);
@@ -1286,6 +1302,68 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
  * @returns {T}
  */
 const rawValue = (value) => globalThis.window?.Vue?.toRaw ? globalThis.window.Vue.toRaw(value) : value;
+
+/**
+ * @param {object} catalog A raw catalog object.
+ * @returns {CatalogNameIndex}
+ */
+const buildCatalogNameIndex = (catalog) => {
+  const items = /** @type {Partial<FeatureCatalog>} */ (catalog).items;
+  /** @type {FeatureCatalogRow[]} */
+  const rows = (Array.isArray(items) ? items : [])
+    .flatMap((item) => {
+      const features = item?.biologicalFeatures;
+      return Array.isArray(features) ? features : [];
+    });
+  /** @param {{ recordKey?: unknown, biologicalFeatureId?: unknown } | null | undefined} row */
+  const keyOf = (row) => `${row?.recordKey}\0${row?.biologicalFeatureId}`;
+  /** @type {Map<string, FeatureCatalogRow>} */
+  const byKey = new Map();
+  /** @type {Map<string, FeatureCatalogRow[]>} */
+  const rowsByRecord = new Map();
+  rows.forEach((row) => {
+    const key = keyOf(row);
+    if (!byKey.has(key)) byKey.set(key, row);
+    const recordKey = String(row?.recordKey || '');
+    if (!recordKey) return;
+    const recordRows = rowsByRecord.get(recordKey);
+    if (recordRows) recordRows.push(row);
+    else rowsByRecord.set(recordKey, [row]);
+  });
+  return { catalog, rows, featureOf: (anchor) => byKey.get(keyOf(anchor)), rowsByRecord };
+};
+
+/** @type {CatalogNameIndex} */
+const EMPTY_CATALOG_NAME_INDEX = Object.freeze({
+  catalog: Object.freeze({}), rows: Object.freeze([]), featureOf: () => undefined, rowsByRecord: new Map()
+});
+
+/**
+ * The rows the record and feature names read from `catalog` (a raw object or
+ * its Vue proxy). The index of an admitted catalog is built once and kept in
+ * its admission, so a Generate that reuses the catalog walks no row again
+ * (CW-02). A catalog without an admission is indexed for this call only, and
+ * the miss is counted (`featureCatalogNameIndexMissCount`).
+ * @param {unknown} catalog
+ * @returns {CatalogNameIndex}
+ */
+export const catalogNameIndex = (catalog) => {
+  const source = rawValue(catalog);
+  if (!source || typeof source !== 'object') return EMPTY_CATALOG_NAME_INDEX;
+  /** @type {FeatureCatalogAdmission | undefined} */
+  const admission = featureCatalogAdmissions.get(source);
+  if (!admission) {
+    recordStructuralMetric('featureCatalogNameIndexMissCount', 1);
+    return buildCatalogNameIndex(source);
+  }
+  // The admission is keyed by the catalog it validated and by its source: the
+  // rows come from the catalog read.
+  const cached = admission.nameIndex.value;
+  if (cached?.catalog === source) return cached;
+  const index = buildCatalogNameIndex(source);
+  admission.nameIndex.value = index;
+  return index;
+};
 
 // The catalog features of one committed Result (the displayed Result by
 // default) from the admitted catalog, or null without a catalog: `biological`

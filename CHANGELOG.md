@@ -2168,6 +2168,10 @@ Retired names and their replacements are listed under
   `ExportError` for an SVG group that holds a comment, CDATA or a processing instruction;
   gbdraw writes none. The Worker render protocol is now 4. The figure, SVG, PNG and PDF
   bytes, and Saved Sessions are unchanged.
+- Performance (web app): after a Generate that keeps the feature catalog, the page no
+  longer derives three values again whose inputs did not change: the feature set the
+  color and visibility rules match against, the record and feature names of the
+  Similarity alignment drawer, and the Features list. Nothing visible changes.
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
