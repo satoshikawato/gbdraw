@@ -19,6 +19,7 @@ from typing import (
     Literal,
     Mapping,
     MutableMapping,
+    NamedTuple,
     Sequence,
     TypeAlias,
     TypedDict,
@@ -215,6 +216,30 @@ def _capture_request_render_diagnostics(
         yield
     finally:
         _REQUEST_RENDER_DIAGNOSTICS.reset(token)
+
+
+_DERIVED_LOSAT_ENTRIES_WANTED: ContextVar[bool] = ContextVar(
+    "gbdraw_derived_losat_entries_wanted", default=True
+)
+
+
+@contextmanager
+def _without_derived_losat_entries() -> Iterator[None]:
+    """Leave the derived LOSAT cache entries of a linear build unbuilt.
+
+    Only the Web wrapper enters this: no Generate reply, Result or catalog
+    reads the entries, and the Web Session builds its own. It changes one
+    field of the result: ``losat_derived_cache_entries`` is ``()``. The checks
+    on their inputs (identity manifest, canonical comparison columns, the
+    canonical encoding of the computed result) still run, so a request fails
+    where it failed before. The CLI and the Python API never enter it.
+    """
+
+    token = _DERIVED_LOSAT_ENTRIES_WANTED.set(False)
+    try:
+        yield
+    finally:
+        _DERIVED_LOSAT_ENTRIES_WANTED.reset(token)
 
 
 @contextmanager
@@ -2351,19 +2376,24 @@ def _prepare_linear_artifacts(
     )
 
 
-def _comparison_frame_payload(
-    frame: DataFrame,
-    *,
-    pair_index: int,
-    query_index: int,
-    subject_index: int,
-) -> dict[str, Any]:
+class _ProteinPairFrame(NamedTuple):
+    frame: DataFrame
+    pair_index: int
+    query_index: int
+    subject_index: int
+
+
+def _require_comparison_columns(frame: DataFrame) -> None:
     missing = [column for column in COMPARISON_COLUMNS if column not in frame.columns]
     if missing:
         raise ValidationError(
             "Protein comparison is missing canonical column(s): "
             + ", ".join(missing)
         )
+
+
+def _comparison_frame_payload(pair: _ProteinPairFrame) -> dict[str, Any]:
+    frame = pair.frame
     tsv = frame.loc[:, list(COMPARISON_COLUMNS)].to_csv(
         sep="\t",
         header=False,
@@ -2372,19 +2402,21 @@ def _comparison_frame_payload(
     )
     rows = json.loads(frame.to_json(orient="records"))
     return {
-        "pair_index": int(pair_index),
-        "query_index": int(query_index),
-        "subject_index": int(subject_index),
+        "pair_index": pair.pair_index,
+        "query_index": pair.query_index,
+        "subject_index": pair.subject_index,
         "tsv": tsv,
         "rows": rows,
         "hit_count": len(frame),
     }
 
 
-def _resolved_protein_pair_payloads(
+def _resolved_protein_pair_frames(
     metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
-) -> list[dict[str, Any]]:
+) -> list[_ProteinPairFrame]:
+    """The comparison frames of the derived pair payloads, columns checked."""
+
     direct: Sequence[Any] | None = (
         metadata.protein_comparisons if metadata is not None else None
     )
@@ -2394,18 +2426,12 @@ def _resolved_protein_pair_payloads(
         metadata.linear_comparisons if metadata is not None else None
     )
 
-    result: list[dict[str, Any]] = []
+    result: list[_ProteinPairFrame] = []
     for pair_index, frame in enumerate(direct or ()):
         if not isinstance(frame, DataFrame):
             continue
-        result.append(
-            _comparison_frame_payload(
-                frame,
-                pair_index=pair_index,
-                query_index=pair_index,
-                subject_index=pair_index + 1,
-            )
-        )
+        _require_comparison_columns(frame)
+        result.append(_ProteinPairFrame(frame, pair_index, pair_index, pair_index + 1))
     if result:
         return result
 
@@ -2417,12 +2443,13 @@ def _resolved_protein_pair_payloads(
             "subject_protein_id",
         }.issubset(frame.columns):
             continue
+        _require_comparison_columns(frame)
         result.append(
-            _comparison_frame_payload(
+            _ProteinPairFrame(
                 frame,
-                pair_index=len(result),
-                query_index=int(comparison.query_record_index),
-                subject_index=int(comparison.subject_record_index),
+                len(result),
+                int(comparison.query_record_index),
+                int(comparison.subject_record_index),
             )
         )
     return result
@@ -2475,6 +2502,31 @@ def _effective_collinearity_unit_kinds(
     )
 
 
+def _derived_compact_resource(
+    mode: str,
+    collinearity: object,
+    orthogroups: object,
+) -> dict[str, bytes]:
+    """The canonical bytes of the computed result a derived entry embeds."""
+
+    from gbdraw.session_request_codec import encode_canonical_typed_resource
+
+    # The canonical bytes are the stage result, so no reader can change them.
+    if mode == "collinear" and isinstance(collinearity, CollinearityResult):
+        return {
+            "collinearityResult": render_stage(
+                "derived_losat_entries", encode_canonical_typed_resource, "result", collinearity
+            )
+        }
+    if orthogroups is not None:
+        return {
+            "orthogroupResult": render_stage(
+                "derived_losat_entries", encode_canonical_typed_resource, "orthogroupResult", orthogroups
+            )
+        }
+    return {}
+
+
 def _build_current_derived_entries(
     metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
@@ -2482,20 +2534,28 @@ def _build_current_derived_entries(
     artifacts: _PreparedLinearArtifacts,
     raw_entries: Sequence[Mapping[str, Any]],
 ) -> tuple[Mapping[str, Any], ...]:
+    wanted = _DERIVED_LOSAT_ENTRIES_WANTED.get()
     if artifacts.extraction is None:
-        return artifacts.passthrough_derived_entries
+        return artifacts.passthrough_derived_entries if wanted else ()
     mode = artifacts.source_mode
     if mode not in {"orthogroup", "collinear"}:
         return ()
     manifest = artifacts.extraction.identity_manifest
     if manifest is None:
         raise ValidationError("Derived protein payload requires an identity manifest.")
-    pair_payloads = _resolved_protein_pair_payloads(metadata, request)
+    pair_frames = _resolved_protein_pair_frames(metadata, request)
     orthogroups = (
         metadata.orthogroups
         if metadata is not None
         else request.options.orthogroups
     )
+    collinearity = metadata.collinearity_result if metadata is not None else request.options.collinearity_blocks
+    if not wanted:
+        # serialize_orthogroups_payload gives one row per orthogroup.
+        if pair_frames or (orthogroups is not None and getattr(orthogroups, "orthogroups", None)):
+            _derived_compact_resource(mode, collinearity, orthogroups)
+        return ()
+    pair_payloads = [_comparison_frame_payload(pair) for pair in pair_frames]
     orthogroup_payload = serialize_orthogroups_payload(
         orthogroups,
         records=records,
@@ -2608,19 +2668,10 @@ def _build_current_derived_entries(
             ),
             "parameterIdentity": parameter_identity,
         }
-    from gbdraw.session_request_codec import encode_canonical_typed_resource
-
-    # The canonical bytes are the stage result, so no reader can change them.
-    compact_resource = {}
-    collinearity = metadata.collinearity_result if metadata is not None else request.options.collinearity_blocks
-    if mode == "collinear" and isinstance(collinearity, CollinearityResult):
-        compact_resource["collinearityResult"] = json.loads(
-            render_stage("derived_losat_entries", encode_canonical_typed_resource, "result", collinearity)
-        )
-    elif orthogroups is not None:
-        compact_resource["orthogroupResult"] = json.loads(
-            render_stage("derived_losat_entries", encode_canonical_typed_resource, "orthogroupResult", orthogroups)
-        )
+    compact_resource = {
+        name: json.loads(encoded)
+        for name, encoded in _derived_compact_resource(mode, collinearity, orthogroups).items()
+    }
     key = hashlib.sha256(
         json.dumps(
             identity,

@@ -69,6 +69,7 @@ from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session_io import validate_current_session_artifacts
+from gbdraw.session_request_codec import CanonicalRequestEncodingError
 
 
 def _seqrecord(record_id: str, sequence: str = "AACCGG") -> SeqRecord:
@@ -2219,3 +2220,177 @@ def test_cli_reports_each_successful_annotation_warning_once(mode, tmp_path, cap
     assert "1 feature selector(s) unmatched" in warnings[0]
     assert "PRIVATE-MISSING" not in caplog.text
     assert (tmp_path / f"{mode}.svg").is_file()
+
+
+# Item B: the Web wrapper enters a private switch under which a linear build
+# keeps the derived-entry checks (identity manifest, canonical columns, the
+# canonical encoding of the computed result) but does not build the payloads.
+# The CLI and the Python API never enter it.
+_RECORDED_DERIVED_ENTRIES = {
+    # Recorded at the base (a86dd2d74) from the three-record protein fixture.
+    "similarity_groups": (
+        "f5aa5b79803bd4ca67e87922533997ce7e9321a366e8bd364a75035fd46dbb81",
+        "2584c259d8608363d7f84df00bd909bc8ed7dcd0bdef90dd70c54c160d353c21",
+    ),
+    "collinear": (
+        "d131cef9967e00ad7e5969c9fa640c63a7d36c64a2b9f8545ec6a6b9e044d844",
+        "33d839ad2e075109ca1cd5252dff8f5703e8b59297034e167126f018ad5d8f19",
+    ),
+}
+
+
+def _derived_entries_digest(entries: object) -> str:
+    import hashlib
+    import json
+
+    return hashlib.sha256(
+        json.dumps([dict(entry) for entry in entries], sort_keys=True).encode()
+    ).hexdigest()
+
+
+def _build_derived_entries(context: SimpleNamespace) -> tuple[object, ...]:
+    return request_render_module._build_current_derived_entries(
+        context.metadata,
+        context.request,
+        context.records,
+        context.artifacts,
+        context.raw_entries,
+    )
+
+
+@pytest.mark.parametrize("mode", sorted(_RECORDED_DERIVED_ENTRIES))
+def test_derived_entries_are_built_outside_the_web_switch_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str
+) -> None:
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    request, _identities = _request(mode, tmp_path)
+
+    built = build_request_diagram(request)
+    key, digest = _RECORDED_DERIVED_ENTRIES[mode]
+    assert [entry["key"] for entry in built.losat_derived_cache_entries] == [key]
+    assert _derived_entries_digest(built.losat_derived_cache_entries) == digest
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("the Web build must not build derived payloads")
+
+    with request_render_module._without_derived_losat_entries():
+        with monkeypatch.context() as patch:
+            patch.setattr(request_render_module, "serialize_orthogroups_payload", fail)
+            patch.setattr(request_render_module, "_comparison_frame_payload", fail)
+            skipped = build_request_diagram(request)
+
+    assert skipped.losat_derived_cache_entries == ()
+    assert skipped.drawing.tostring() == built.drawing.tostring()
+    assert skipped.losat_cache_entries == built.losat_cache_entries
+    assert skipped.protein_identity_manifest == built.protein_identity_manifest
+    assert request_render_module._DERIVED_LOSAT_ENTRIES_WANTED.get() is True
+
+
+def _missing_manifest(context: SimpleNamespace) -> None:
+    from dataclasses import replace
+
+    context.artifacts = replace(
+        context.artifacts, extraction=SimpleNamespace(identity_manifest=None)
+    )
+
+
+def _missing_direct_column(context: SimpleNamespace) -> None:
+    context.metadata = diagram_module.LinearDiagramMetadata(
+        protein_comparisons=(
+            DataFrame(columns=request_render_module.COMPARISON_COLUMNS[:-1]),
+        ),
+    )
+
+
+def _missing_explicit_column(context: SimpleNamespace) -> None:
+    context.metadata = diagram_module.LinearDiagramMetadata(
+        protein_comparisons=(),
+        linear_comparisons=(
+            SimpleNamespace(
+                matches=DataFrame(columns=["query_protein_id", "subject_protein_id"]),
+                query_record_index=0,
+                subject_record_index=1,
+            ),
+        ),
+    )
+
+
+def _unencodable_result(context: SimpleNamespace) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    def refuse(*_args, **_kwargs):
+        raise codec_module.CanonicalRequestEncodingError("not encodable")
+
+    context.monkeypatch.setattr(codec_module, "encode_canonical_typed_resource", refuse)
+    context.metadata = diagram_module.LinearDiagramMetadata(
+        protein_comparisons=context.metadata.protein_comparisons,
+        orthogroups=SimpleNamespace(orthogroups={}),
+    )
+
+
+@pytest.mark.parametrize("inside_switch", [False, True], ids=["outside", "inside"])
+@pytest.mark.parametrize(
+    ("break_input", "error", "message"),
+    [
+        pytest.param(_missing_manifest, ValidationError, "identity manifest", id="manifest"),
+        pytest.param(_missing_direct_column, ValidationError, "canonical column", id="direct-column"),
+        pytest.param(_missing_explicit_column, ValidationError, "canonical column", id="explicit-column"),
+        pytest.param(
+            _unencodable_result, CanonicalRequestEncodingError, "not encodable", id="encode"
+        ),
+    ],
+)
+def test_derived_entry_checks_raise_inside_and_outside_the_web_switch(
+    monkeypatch: pytest.MonkeyPatch,
+    break_input,
+    error: type[Exception],
+    message: str,
+    inside_switch: bool,
+) -> None:
+    context = _derived_identity_test_context(source_mode="orthogroup")
+    context.monkeypatch = monkeypatch
+    break_input(context)
+
+    with pytest.raises(error, match=message):
+        if inside_switch:
+            with request_render_module._without_derived_losat_entries():
+                _build_derived_entries(context)
+        else:
+            _build_derived_entries(context)
+    assert request_render_module._DERIVED_LOSAT_ENTRIES_WANTED.get() is True
+
+
+def test_derived_entry_switch_returns_nothing_when_there_is_nothing_to_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("an empty derivation encodes nothing")
+
+    monkeypatch.setattr(codec_module, "encode_canonical_typed_resource", refuse)
+    context = _derived_identity_test_context(source_mode="orthogroup")
+    context.metadata = diagram_module.LinearDiagramMetadata(
+        protein_comparisons=(),
+        orthogroups=SimpleNamespace(orthogroups={}),
+    )
+
+    assert _build_derived_entries(context) == ()
+    with request_render_module._without_derived_losat_entries():
+        assert _build_derived_entries(context) == ()
+
+
+def test_derived_entry_switch_is_reset_after_an_exception() -> None:
+    context = _derived_identity_test_context(source_mode="orthogroup")
+    (expected,) = _build_derived_entries(context)
+
+    with pytest.raises(KeyboardInterrupt):
+        with request_render_module._without_derived_losat_entries():
+            assert request_render_module._DERIVED_LOSAT_ENTRIES_WANTED.get() is False
+            raise KeyboardInterrupt
+
+    assert request_render_module._DERIVED_LOSAT_ENTRIES_WANTED.get() is True
+    assert _build_derived_entries(context) == (expected,)

@@ -695,3 +695,85 @@ def test_web_warning_metadata_reuses_one_resolution_and_one_load_per_source(
     assert all(
         "data-gbdraw-annotation-id" not in item["content"] for item in result["results"]
     )
+
+
+_RECORDED_PROTEIN_REPLY_DIGESTS = {
+    # Recorded at the base (a86dd2d74), where the Web build still built the
+    # derived LOSAT entries: the reply does not change when it stops.
+    "similarity_groups": "792d9df04ff550752e8dba45dc4736d6a3f734ac1ec3cdf9536cdd5023ed6314",
+    "collinear": "7352e92ec139027815db50e00d2866cea8fc582f99e25095e67cb67b297b6244",
+}
+
+
+def _reply_digest(reply: object) -> str:
+    import hashlib
+    import json
+
+    body = {key: value for key, value in dict(reply).items() if key != "_diagnostics"}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
+
+
+@pytest.mark.parametrize("mode", sorted(_RECORDED_PROTEIN_REPLY_DIGESTS))
+def test_web_request_does_not_build_derived_losat_entries(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, mode: str
+) -> None:
+    from contextlib import nullcontext
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    import gbdraw.api.request_render as api_request_render
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    request, _identities = _request(mode, tmp_path)
+    document = build_session_document(request).to_dict()
+
+    def render(workspace: str) -> object:
+        return render_embedded_canonical_web_request(
+            document["renderRequest"],
+            resources=document["resources"],
+            workspace=tmp_path / workspace,
+        )
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("a Web Generate must not build derived payloads")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(api_request_render, "serialize_orthogroups_payload", fail)
+        patch.setattr(api_request_render, "_comparison_frame_payload", fail)
+        reply = render("web")
+    assert _reply_digest(reply) == _RECORDED_PROTEIN_REPLY_DIGESTS[mode]
+
+    # The same request with the entries built gives the same reply.
+    with monkeypatch.context() as patch:
+        patch.setattr(web_request_render, "_without_derived_losat_entries", nullcontext)
+        assert _reply_digest(render("built")) == _reply_digest(reply)
+
+
+def test_web_wrapper_resets_the_derived_entry_switch_after_a_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    import gbdraw.api.request_render as api_request_render
+    from gbdraw.api.request_render import build_request_diagram
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    request, _identities = _request("collinear", tmp_path)
+    expected = build_request_diagram(request).losat_derived_cache_entries
+    assert len(expected) == 1
+
+    seen: list[bool] = []
+
+    def fail_inside(*_args, **_kwargs):
+        seen.append(api_request_render._DERIVED_LOSAT_ENTRIES_WANTED.get())
+        raise ValidationError("render failed")
+
+    monkeypatch.setattr(web_request_render, "_render_canonical_web_request", fail_inside)
+    with pytest.raises(ValidationError, match="render failed"):
+        web_request_render.render_canonical_web_request(
+            {}, resource_paths={}, output_directory=tmp_path / "out"
+        )
+
+    assert seen == [False]
+    assert api_request_render._DERIVED_LOSAT_ENTRIES_WANTED.get() is True
+    assert build_request_diagram(request).losat_derived_cache_entries == expected

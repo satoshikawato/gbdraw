@@ -13,6 +13,7 @@ from gbdraw.api.request_render import (
     CircularBatchRenderResult,
     RequestRenderResult,
     _capture_request_render_diagnostics,
+    _without_derived_losat_entries,
     render_request,
 )
 from gbdraw.api.requests import DiagramRequest, LinearDiagramRequest
@@ -218,7 +219,12 @@ def _render_canonical_web_request_with_prepared_inputs(
 ) -> WebRenderReply:
     def render() -> WebRenderReply:
         # The request's color table is the app's rule list, not a saved file.
-        with _capture_request_render_diagnostics(_diagnostics), rule_captions_as_written():
+        # No reply field reads the derived LOSAT entries; the page builds its own.
+        with (
+            _capture_request_render_diagnostics(_diagnostics),
+            rule_captions_as_written(),
+            _without_derived_losat_entries(),
+        ):
             return _render_canonical_web_request(
                 payload,
                 resource_paths=resource_paths,
