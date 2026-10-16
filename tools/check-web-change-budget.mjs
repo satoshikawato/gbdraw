@@ -1273,6 +1273,33 @@ const cycleDelta = summarizeArchitectureInventory(
   headCycleResult.cycles.map(({ subject }) => subject)
 );
 
+// JSON.parse keeps the last copy of a repeated key, so authority could hide an entry.
+// Call only on source that JSON.parse accepted: every string token is then terminated.
+const repeatedJsonKeys = (source) => {
+  const repeated = new Set();
+  const scopes = [];
+  const colon = /\s*:/y;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '{') scopes.push(new Set());
+    else if (character === '[') scopes.push(null);
+    else if (character === '}' || character === ']') scopes.pop();
+    else if (character === '"') {
+      let end = index + 1;
+      while (source[end] !== '"') end += source[end] === '\\' ? 2 : 1;
+      const keys = scopes.at(-1);
+      colon.lastIndex = end + 1;
+      if (keys && colon.test(source)) {
+        const key = JSON.parse(source.slice(index, end + 1));
+        if (keys.has(key)) repeated.add(key);
+        keys.add(key);
+      }
+      index = end;
+    }
+  }
+  return [...repeated].sort();
+};
+
 const parsePolicy = (source, revision) => {
   if (source === null) throw new Error(`Missing ${policyPath} at ${revision}`);
   let policy;
@@ -1280,6 +1307,10 @@ const parsePolicy = (source, revision) => {
     policy = JSON.parse(source);
   } catch (error) {
     throw new Error(`Cannot parse ${policyPath} at ${revision}: ${error.message}`);
+  }
+  const repeatedKeys = repeatedJsonKeys(source);
+  if (repeatedKeys.length) {
+    throw new Error(`${policyPath} at ${revision} repeats the key(s) ${repeatedKeys.join(', ')}`);
   }
   for (const section of ['allowedPrivilegedImporters', 'allowedPrivilegedOwners']) {
     if (!policy[section] || typeof policy[section] !== 'object' || Array.isArray(policy[section])) {
@@ -1405,19 +1436,6 @@ const validateVendorListing = (candidatePolicy) => {
   });
   return { entries: errors.length ? [] : listing, errors };
 };
-// The bootstrap fallback above reads the head policy; the listing never comes from the head.
-const trustedVendorListing = basePolicySource === null
-  ? { entries: [], errors: [] }
-  : validateVendorListing(policy);
-const candidateVendorListing = changed.has(policyPath)
-  ? validateVendorListing(proposedPolicy || policy)
-  : null;
-const vendorListingDelta = candidateVendorListing
-  ? summarizeArchitectureInventory(
-    trustedVendorListing.entries.map((entry) => JSON.stringify(entry)),
-    candidateVendorListing.entries.map((entry) => JSON.stringify(entry))
-  )
-  : summarizeArchitectureInventory([], []);
 const readRevisionBytes = (revision, path) => {
   try {
     return execFileSync(
@@ -1434,23 +1452,72 @@ const readHeadBytes = (path) => {
   const absolutePath = join(repositoryRoot, path);
   return existsSync(absolutePath) ? readFileSync(absolutePath) : null;
 };
-// An entry pins the bytes the change leaves (add, replace) or removes (remove).
+const sha256OfBytes = (bytes) => (
+  bytes === null ? 'unreadable' : createHash('sha256').update(bytes).digest('hex')
+);
+// The bootstrap fallback above reads the head policy; the listing never comes from the head.
+const trustedVendorListing = basePolicySource === null
+  ? { entries: [], errors: [] }
+  : validateVendorListing(policy);
+const candidateVendorListing = changed.has(policyPath)
+  ? validateVendorListing(proposedPolicy || policy)
+  : null;
+const vendorEntryKey = (entry) => JSON.stringify(entry);
+const trustedVendorEntryKeys = new Set(trustedVendorListing.entries.map(vendorEntryKey));
+const candidateVendorEntryKeys = new Set((candidateVendorListing?.entries || []).map(vendorEntryKey));
+const addedVendorEntries = (candidateVendorListing?.entries || [])
+  .filter((entry) => !trustedVendorEntryKeys.has(vendorEntryKey(entry)));
+const removedVendorEntries = candidateVendorListing && !candidateVendorListing.errors.length
+  ? trustedVendorListing.entries.filter((entry) => !candidateVendorEntryKeys.has(vendorEntryKey(entry)))
+  : [];
+const describeVendorEntry = (entry) => (
+  `${entry.path}: ${entry.change} sha256=${entry.sha256} package=${entry.package} `
+  + `version=${entry.version} source=${entry.source}`
+);
+// A new entry that cannot apply to the base tree fails in the pull request that adds it.
+const impossibleVendorEntries = addedVendorEntries.flatMap((entry) => {
+  const label = `${entry.path}: ${entry.change}`;
+  const baseBytes = readRevisionBytes(base, entry.path);
+  if (entry.change === 'add') {
+    return baseBytes === null ? [] : [`${label} for a path the base already has`];
+  }
+  if (baseBytes === null) return [`${label} for a path the base lacks`];
+  const baseSha256 = sha256OfBytes(baseBytes);
+  if (entry.change === 'remove' && baseSha256 !== entry.sha256) {
+    return [`${label} lists sha256 ${entry.sha256}, but the base bytes hash to ${baseSha256}`];
+  }
+  if (entry.change === 'replace' && baseSha256 === entry.sha256) {
+    return [`${label} lists the bytes the base already has`];
+  }
+  return [];
+});
+// An entry pins the bytes the change leaves (add, replace) or removes (remove). The diff is
+// two-dot, so a branch behind a base that already merged a listed change shows it reversed.
+const reversedVendorChange = Object.freeze({ add: 'remove', remove: 'add', replace: 'replace' });
 const vendorChanges = changedVendorPaths.map((path) => {
   const status = changed.get(path);
   const change = vendorChangeKindByStatus[status] || `unsupported status ${status}`;
   const entry = trustedVendorListing.entries.find((candidate) => candidate.path === path);
   if (!entry) return { path, change, reason: 'not listed' };
+  const pinned = sha256OfBytes(
+    change === 'remove' ? readRevisionBytes(base, path) : readHeadBytes(path)
+  );
+  if (entry.change === change && pinned === entry.sha256) return { path, change, entry, reason: '' };
+  const reversed = reversedVendorChange[entry.change] === change && sha256OfBytes(
+    entry.change === 'remove' ? readHeadBytes(path) : readRevisionBytes(base, path)
+  ) === entry.sha256;
+  if (reversed) {
+    return {
+      path,
+      change,
+      reason: `reverses the listed ${entry.change}, which the base already contains; `
+        + 'the branch is behind its base: update it from dev'
+    };
+  }
   if (entry.change !== change) {
     return { path, change, reason: `listed as ${entry.change}, but the change is ${change}` };
   }
-  const bytes = change === 'remove' ? readRevisionBytes(base, path) : readHeadBytes(path);
-  const actual = bytes === null
-    ? 'unreadable'
-    : createHash('sha256').update(bytes).digest('hex');
-  if (actual !== entry.sha256) {
-    return { path, change, reason: `sha256 ${actual} does not match the listed ${entry.sha256}` };
-  }
-  return { path, change, entry, reason: '' };
+  return { path, change, reason: `sha256 ${pinned} does not match the listed ${entry.sha256}` };
 });
 const unlistedVendorChanges = vendorChanges.filter(({ reason }) => reason);
 const listedVendorChanges = vendorChanges.filter(({ reason }) => !reason);
@@ -2167,10 +2234,11 @@ if (architectureAuthorityDelta.changes.length) {
     + `(${architectureAuthorityDelta.changes.length} change(s))`
   );
 }
-if (deltaChanged(vendorListingDelta)) {
+if (addedVendorEntries.length || removedVendorEntries.length) {
   reviewReasons.push(
     'Governance and authority: vendored runtime listing changed '
-    + `(added=${vendorListingDelta.added.length}, removed=${vendorListingDelta.removed.length})`
+    + `(added=${addedVendorEntries.length}, removed=${removedVendorEntries.length}; `
+    + 'see the vendored runtime listing sections)'
   );
 }
 listedVendorChanges.forEach(({ path, change, entry }) => {
@@ -2271,9 +2339,10 @@ if (unlistedVendorChanges.length) {
 blockingViolations.push(...trustedVendorListing.errors.map((error) => (
   `trusted vendored runtime listing: ${error}`
 )));
-blockingViolations.push(...(candidateVendorListing?.errors || []).map((error) => (
-  `candidate vendored runtime listing: ${error}`
-)));
+blockingViolations.push(...[
+  ...(candidateVendorListing?.errors || []),
+  ...impossibleVendorEntries
+].map((error) => `candidate vendored runtime listing: ${error}`));
 if (
   productionPaths.length
   && changedGuards.length
@@ -2926,6 +2995,14 @@ const report = [
   '## Changed vendored runtime files',
   '',
   ...list(changedVendorPaths),
+  '',
+  '## Added vendored runtime listing entries',
+  '',
+  ...list(addedVendorEntries.map(describeVendorEntry)),
+  '',
+  '## Removed vendored runtime listing entries',
+  '',
+  ...list(removedVendorEntries.map(describeVendorEntry)),
   '',
   '## Dependency changes',
   '',

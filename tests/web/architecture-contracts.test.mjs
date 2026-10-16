@@ -8,6 +8,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -4332,17 +4333,19 @@ const vendorChangeEntry = (overrides = {}) => ({
 const writeVendorChangeListing = (write, entries) => {
   writeBudgetPolicy(write, { ...cloneBudgetPolicy(), allowedVendorChanges: entries });
 };
-// Merges the listing as an earlier authority-only pull request, then evaluates the vendored
-// change as the next pull request against that trusted base.
-const runListedVendorChangeCase = (entries, mutate) => withChangeBudgetRepository(
+// Merges the listing as an earlier authority-only pull request (and, when given, a later
+// merged change), then evaluates the next pull request against that trusted base.
+const runListedVendorChangeCase = (entries, mutate, merged = null) => withChangeBudgetRepository(
   ({ commit, execute, git, root, write }) => {
+    const writeOrRemove = (path, content) => (
+      content === null ? rmSync(join(root, path)) : write(path, content)
+    );
     if (entries) writeVendorChangeListing(write, entries);
+    if (merged) merged(writeOrRemove);
     const base = entries
       ? commit('authority-only vendored runtime listing')
       : git(['rev-parse', 'HEAD']).stdout.trim();
-    mutate((path, content) => (
-      content === null ? rmSync(join(root, path)) : write(path, content)
-    ));
+    mutate(writeOrRemove);
     const head = commit('vendored runtime change');
     return execute({ base, head });
   }
@@ -4486,11 +4489,157 @@ test('a malformed vendored runtime listing fails closed in the base and the cand
   assertVendorGateFailure(trusted, /trusted vendored runtime listing: /, 'trusted base');
 });
 
-test('an authority-only vendored runtime listing passes with review', () => {
-  const result = runChangeBudgetCase((write) => writeVendorChangeListing(write, [vendorChangeEntry()]));
-  assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
-  assert.match(result.output, /vendored runtime listing changed \(added=1, removed=0\)/);
+const describedVendorEntry = (entry) => (
+  `- ${entry.path}: ${entry.change} sha256=${entry.sha256} package=${entry.package} `
+  + `version=${entry.version} source=${entry.source}`
+);
+
+test('an authority-only vendored runtime listing passes with review and reports each entry', () => {
+  const entry = vendorChangeEntry();
+  const added = runChangeBudgetCase((write) => writeVendorChangeListing(write, [entry]));
+  assert.equal(added.status, 0, added.output);
+  assert.match(added.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(added.output, /vendored runtime listing changed \(added=1, removed=0;/);
+  assert.ok(
+    reportSection(added.output, 'Added vendored runtime listing entries').includes(describedVendorEntry(entry)),
+    added.output
+  );
+
+  const removed = runListedVendorChangeCase([entry], (write) => writeVendorChangeListing(write, []));
+  assert.equal(removed.status, 0, removed.output);
+  assert.match(removed.output, /vendored runtime listing changed \(added=0, removed=1;/);
+  assert.ok(
+    reportSection(removed.output, 'Removed vendored runtime listing entries').includes(describedVendorEntry(entry)),
+    removed.output
+  );
+});
+
+test('a repeated key in the change policy fails closed', () => {
+  const policyBody = JSON.stringify(cloneBudgetPolicy(), null, 2).slice(0, -2);
+  const entry = JSON.stringify(vendorChangeEntry());
+  [
+    `${policyBody},\n  "allowedVendorChanges": [],\n  "allowedVendorChanges": [${entry}]\n}\n`,
+    `${policyBody},\n  "allowedVendorChanges": [],\n  "allowedVendor\\u0043hanges": [${entry}]\n}\n`
+  ].forEach((source, index) => {
+    const result = runChangeBudgetCase((write) => write('tools/web-change-policy.json', source));
+    assertVendorGateFailure(result, /repeats the key\(s\) allowedVendorChanges/, `variant ${index}`);
+  });
+});
+
+test('a vendored runtime listing entry that cannot apply to the base fails where it is added', () => {
+  const cases = [
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/missing.js' }), /missing\.js: replace for a path the base lacks/],
+    [
+      vendorChangeEntry({ path: 'gbdraw/web/vendor/missing.js', change: 'remove' }),
+      /missing\.js: remove for a path the base lacks/
+    ],
+    [vendorChangeEntry({ change: 'add' }), /library\.js: add for a path the base already has/],
+    [vendorChangeEntry({ change: 'remove' }), /library\.js: remove lists sha256 [0-9a-f]{64}, but the base bytes hash to/],
+    [
+      vendorChangeEntry({ sha256: sha256Hex(BUDGET_FIXTURE[VENDOR_LIBRARY_PATH]) }),
+      /library\.js: replace lists the bytes the base already has/
+    ]
+  ];
+  cases.forEach(([entry, pattern]) => {
+    const result = runChangeBudgetCase((write) => writeVendorChangeListing(write, [entry]));
+    assertVendorGateFailure(result, /candidate vendored runtime listing: /, String(pattern));
+    assert.match(result.output, pattern);
+  });
+});
+
+test('vendored runtime listing edge cases fail closed', () => {
+  // Bootstrap: the base has no policy file, so the head policy supplies no vendored entries.
+  const bootstrap = withChangeBudgetRepository(({ commit, execute, root, write }) => {
+    rmSync(join(root, 'tools/web-change-policy.json'));
+    const base = commit('base without a change policy');
+    writeVendorChangeListing(write, [vendorChangeEntry()]);
+    write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE);
+    const head = commit('policy and vendored change');
+    return execute({ base, head });
+  });
+  assertVendorGateFailure(bootstrap, /gbdraw\/web\/vendor\/library\.js: not listed/, 'bootstrap');
+
+  // A rename is a remove and an add; each side needs its own entry.
+  const renamedPath = 'gbdraw/web/vendor/library-renamed.js';
+  const original = BUDGET_FIXTURE[VENDOR_LIBRARY_PATH];
+  const addRenamed = vendorChangeEntry({ path: renamedPath, change: 'add', sha256: sha256Hex(original) });
+  const rename = (write) => {
+    write(VENDOR_LIBRARY_PATH, null);
+    write(renamedPath, original);
+  };
+  const renameHalf = runListedVendorChangeCase([addRenamed], rename);
+  assertVendorGateFailure(renameHalf, /library\.js: not listed/, 'rename with one entry');
+  const renameBoth = runListedVendorChangeCase(
+    [vendorChangeEntry({ change: 'remove', sha256: sha256Hex(original) }), addRenamed],
+    rename
+  );
+  assert.equal(renameBoth.status, 0, renameBoth.output);
+
+  const replaceForAdd = runListedVendorChangeCase(
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/new.js' })],
+    (write) => write('gbdraw/web/vendor/new.js', VENDOR_LIBRARY_UPDATE)
+  );
+  assertVendorGateFailure(replaceForAdd, /new\.js: listed as replace, but the change is add/, 'replace for add');
+
+  const typeChange = withChangeBudgetRepository(({ commit, execute, root, write }) => {
+    writeVendorChangeListing(write, [vendorChangeEntry()]);
+    const base = commit('listing');
+    rmSync(join(root, VENDOR_LIBRARY_PATH));
+    symlinkSync('library-target.js', join(root, VENDOR_LIBRARY_PATH));
+    const head = commit('vendored file becomes a symlink');
+    return execute({ base, head });
+  });
+  assertVendorGateFailure(
+    typeChange,
+    /library\.js: listed as replace, but the change is unsupported status T/,
+    'type change'
+  );
+
+  const malformedTrusted = runListedVendorChangeCase(
+    [vendorChangeEntry({ sha256: 'ABC' })],
+    (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE)
+  );
+  assertVendorGateFailure(malformedTrusted, /trusted vendored runtime listing: /, 'malformed trusted');
+  assert.match(malformedTrusted.output, /library\.js: not listed/);
+
+  [
+    [{}, /allowedVendorChanges must be an array/],
+    [[1], /allowedVendorChanges\[0\] must be an object/]
+  ].forEach(([listing, pattern]) => {
+    const result = runChangeBudgetCase((write) => writeVendorChangeListing(write, listing));
+    assertVendorGateFailure(result, pattern, String(pattern));
+  });
+});
+
+test('a branch behind a base that merged a listed vendored change is told to update', () => {
+  const prodPath = 'gbdraw/web/vendor/library.prod.js';
+  const cases = [
+    {
+      name: 'add shown as remove',
+      entry: vendorChangeEntry({ path: prodPath, change: 'add' }),
+      merged: (write) => write(prodPath, VENDOR_LIBRARY_UPDATE),
+      behind: (write) => write(prodPath, null)
+    },
+    {
+      name: 'replace shown in reverse',
+      entry: vendorChangeEntry(),
+      merged: (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
+      behind: (write) => write(VENDOR_LIBRARY_PATH, BUDGET_FIXTURE[VENDOR_LIBRARY_PATH])
+    },
+    {
+      name: 'remove shown as add',
+      entry: vendorChangeEntry({
+        change: 'remove',
+        sha256: sha256Hex(BUDGET_FIXTURE[VENDOR_LIBRARY_PATH])
+      }),
+      merged: (write) => write(VENDOR_LIBRARY_PATH, null),
+      behind: (write) => write(VENDOR_LIBRARY_PATH, BUDGET_FIXTURE[VENDOR_LIBRARY_PATH])
+    }
+  ];
+  cases.forEach(({ name, entry, merged, behind }) => {
+    const result = runListedVendorChangeCase([entry], behind, merged);
+    assertVendorGateFailure(result, /the branch is behind its base: update it from dev/, name);
+  });
 });
 
 test('malformed authority and unsupported accepted-violation authority fail canonically', () => {
