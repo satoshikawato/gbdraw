@@ -858,4 +858,24 @@ for (const [name, promoted] of [
   );
 }
 
+// OV-963: a saved conservation series row that is null reads as a row without a label, as
+// a row of another kind does; it no longer stops the promotion (and so the Load of a
+// Session 31-33 whose schema-2 request Load rebuilds) with a TypeError.
+{
+  const conservationSession = async (series) => {
+    const session = JSON.parse(gunzipSync(await readFile(join(
+      repoRoot, 'tests/fixtures/sessions/feature-edits-circular.v33.gbdraw-session.json.gz'
+    ))).toString('utf8'));
+    session.config.circularConservation = { ...session.config.circularConservation, labels: '', series };
+    return session;
+  };
+  const promotedSeries = async (series) => {
+    const promoted = promoteGallerySessionToCurrent(await conservationSession(series), { repairs: [] });
+    return promoted.config.circularConservation;
+  };
+  const labelless = await promotedSeries([{}]);
+  assert.deepEqual(await promotedSeries([null]), { ...labelless, series: [null] });
+  assert.equal(labelless.labels, '');
+}
+
 console.log('gallery session migration assertions passed');

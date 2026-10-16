@@ -141,5 +141,31 @@
       "services/gallery-session-migration.js",
       "services/session-file.js"
     ]
-  }
+  },
+  "allowedVendorChanges": [
+    {
+      "path": "gbdraw/web/vendor/vue/vue.global.prod.js",
+      "change": "add",
+      "sha256": "78133fb37d7da6ab9fb0ede6c8ed446f38773595d1faf52a3c1b77d539b06b61",
+      "package": "vue",
+      "version": "3.5.25",
+      "source": "https://registry.npmjs.org/vue/-/vue-3.5.25.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/vue/vue.global.js",
+      "change": "remove",
+      "sha256": "6f9eae7631fa9c48f474adf6cd232bd1c95322ec8c5a978acd5e0f87cfb61e7c",
+      "package": "vue",
+      "version": "3.5.25",
+      "source": "https://unpkg.com/vue@3.5.25/dist/vue.global.js"
+    },
+    {
+      "path": "gbdraw/web/vendor/tailwindcss/tailwindcss-play.js",
+      "change": "remove",
+      "sha256": "176e894661aa9cdc9a5cba6c720044cbbf7b8bd80d1c9a142a7c24b1b6c50d15",
+      "package": "tailwindcss",
+      "version": "Play CDN snapshot (unversioned cdn.tailwindcss.com)",
+      "source": "https://cdn.tailwindcss.com"
+    }
+  ]
 }
