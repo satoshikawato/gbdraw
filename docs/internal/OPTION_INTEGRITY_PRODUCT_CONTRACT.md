@@ -39,7 +39,7 @@ Status: active Product authority
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
-  `PD-OI-097`, `PD-OI-098`, and `PD-OI-099`
+  `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, and `PD-OI-100`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -1145,28 +1145,33 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
-- Revision 54 changes (〔PENDING: the Owner's approval of the receipt〕):
-  `PD-OI-100` is added (`A / NO-UNDO-STEP`, concern
+- Revision 54 changes: `PD-OI-100` is added (`A / NO-UNDO-STEP`, concern
   `web.history.rich-feature-popup`). It comes from the Product Decision Owner
-  `satoshikawato`'s reply of `2026-10-16` on whether the **Rich Feature
+  `satoshikawato`'s replies of `2026-10-16` on whether the **Rich Feature
   Popup** checkbox records an Undo step (it did, one step per toggle, and Undo
-  or Redo of other steps changed it back). The question and its options, A: it
-  records no Undo step, and B: keep recording a step, are recorded in campaign
-  `band-hover-perf-20261015`, `DECISIONS.md` `D-03` (`Q-R1`).
+  or Redo of other steps changed it back). The questions and options are
+  recorded in campaign `band-hover-perf-20261015`, `DECISIONS.md` `D-03`
+  (`Q-R1`; A: it records no Undo step, B: keep recording a step) and `D-07`.
   - Reply 1, selecting option A:
     「D-03: Undoにすべきではない。」
-  - Replies to the follow-up questions asked on `2026-10-16`:
-    - (a) whether Undo and Redo of other steps, including **Reset Settings**,
-      stop changing the value: 〔PENDING (a)〕
-    - (b) whether a change of only this value still raises **Replace the
-      current work?** before a Session or example replaces the work:
-      〔PENDING (b)〕
-    - (c) whether other display preferences are included: 〔PENDING (c)〕
-    - (d) the reason, if the Owner gives one: 〔PENDING (d)〕
-  - Reply approving the receipt text below: 〔PENDING〕. This change does not
-    merge before that approval.
-  - Scope: the **Rich Feature Popup** preference 〔PENDING (c)〕. No other
-    record is amended or retired.
+  - Reply (a), to "Should Undo/Redo of other steps, including Reset Settings,
+    stop changing the Rich Feature Popup value?", asked again with examples
+    1 (colour change then Popup OFF then Undo) and 2 (Popup OFF, Reset
+    Settings, Undo):
+    「どちらも今の値のまま」
+  - Reply (b), to "Should a change to only Rich Feature Popup still raise
+    "Replace the current work?" before Load Session or Load example?":
+    「確認を出す」
+  - Reply (c), to "Should the other preferences (Auto Reflow, PNG DPI, Instant
+    Preview, LOSAT method/threads) leave History too?":
+    「今回は対象外」
+  - Reply (d), the reason to record: none given; recorded as `not stated`.
+  - The receipt of `PD-OI-100` below takes effect with the Owner's approval
+    on the pull request that adds this revision; that pull request does not
+    merge without it.
+  - Scope: only the **Rich Feature Popup** preference. Per Reply (c), the
+    other preferences are outside this decision and this revision does not
+    change them. No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -5793,32 +5798,45 @@ Decision date: 2026-10-14
 
 - Concern key: `web.history.rich-feature-popup`
 - Scenario revision: `1`
-- Status: 〔PENDING: `ACCEPTED` after the Owner approves the receipt〕
+- Status: `ACCEPTED`
 - Selected outcome: `A / NO-UNDO-STEP`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
-- Decision source: Reply 1 in the Revision 54 entry above. Only the Choice
-  comes from it; the other fields are placeholders for the Owner's answers or
-  drafts for the Owner to approve or correct. The runtime, tests, and
-  documentation that implement it merge with it (static Product Contract
-  co-change); this record supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline): 〔PENDING: computed
-  from the approved receipt〕
+- Decision source: the Owner replies quoted verbatim in the Revision 54 entry
+  above (Reply 1 and Replies (a) to (d)); `(a)` and `(b)` in the receipt name
+  those replies. Fields for which the Owner gave nothing read `not stated`.
+  The runtime, tests, and documentation that implement it merge with it
+  (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `35f45f5ae5bfbf8ddef85d1649f4e518f90c4610a0ac04a8f0bde2a01a1f49d4`.
 
 ```text
 PRODUCT_DECISION
 Concern: web.history.rich-feature-popup
 Scenario revision: 1
 Choice: A / NO-UNDO-STEP
-Rationale: 〔PENDING (d): the Owner's reason, or "not stated"〕
-Must preserve: 〔DRAFT〕Rich Feature Popup の値の Session への保存と読み込み（ui.richFeaturePopup）、Interactive SVG の popup の形、Session の読み込みに失敗したときに読み込む前の値へ戻ること、ほかの操作の Undo と Redo の step。〔PENDING (b)〕
-May retire: 〔DRAFT〕Rich Feature Popup の切り替えが Undo の step になる動作。〔PENDING (a)〕
-Accepted residual risk: 〔PENDING (a)〕〔PENDING (b)〕〔PENDING (c)〕
+Rationale: not stated
+Must preserve: (a) 「どちらも今の値のまま」 (b) 「確認を出す」
+May retire: not stated
+Accepted residual risk: not stated
 Owner: satoshikawato
 Decision date: 2026-10-16
 ```
 
-JSON representation: 〔PENDING: generated from the approved receipt〕
+```json
+{
+  "concern": "web.history.rich-feature-popup",
+  "scenarioRevision": 1,
+  "choice": "A / NO-UNDO-STEP",
+  "rationale": "not stated",
+  "mustPreserve": "(a) 「どちらも今の値のまま」 (b) 「確認を出す」",
+  "mayRetire": "not stated",
+  "acceptedResidualRisk": "not stated",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-16"
+}
+```
 
 ## Acceptance contract catalog
 

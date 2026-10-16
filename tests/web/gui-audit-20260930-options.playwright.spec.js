@@ -347,6 +347,35 @@ test('the Rich Feature Popup toggle records no Undo step and Undo of other steps
   expect(await read()).toEqual({ rich: before.rich, prefix: 'audit', undo: before.undo + 1, redo: 0 });
 });
 
+// D-07 (b) (Owner 2026-10-16 「確認を出す」): a Rich Feature Popup change alone
+// records no Undo step but is unsaved work, so Load Session asks first; a Load
+// is the new save point.
+test('a Rich Feature Popup change alone makes Load Session ask before it replaces the work', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSessionFile(page, HMMT_SESSION);
+  const checkbox = page.locator('label.option-label', { hasText: 'Rich Feature Popup' }).first().locator('input[type=checkbox]');
+  await reveal(checkbox);
+  const loadButton = page.getByRole('button', { name: 'Load Session', exact: true });
+  const confirm = page.getByRole('dialog', { name: 'Replace the current work?', exact: true });
+  let pickers = 0;
+  page.on('filechooser', () => { pickers += 1; });
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const undo = await undoCount();
+  await checkbox.click();
+  await settle(page);
+  expect(await undoCount()).toBe(undo);
+  await loadButton.click();
+  await expect(confirm).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(confirm).toHaveCount(0);
+  expect(pickers).toBe(0);
+  await loadSessionFile(page, HMMT_SESSION);
+  await loadButton.click();
+  await expect.poll(() => pickers).toBe(1);
+  await expect(confirm).toHaveCount(0);
+});
+
 test('a checkbox click while a text field has focus records its own Undo step', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);

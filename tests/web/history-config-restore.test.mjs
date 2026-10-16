@@ -333,7 +333,7 @@ console.log('History restores nullable config values and preserves key guards.')
   const { readFile } = await import('node:fs/promises');
   const { buildUiStateData, applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
   const preferenceSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData, buildUiStateData, applyUiStateData
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData
   });
   const preferenceHistory = createHistoryManager({
     buildIntent: preferenceSnapshots.buildHistoryIntent,
