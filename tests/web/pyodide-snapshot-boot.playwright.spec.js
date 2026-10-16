@@ -8,7 +8,7 @@
 // every other spec boot cold.
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { fetchRoute, openApp } = require('./helpers/app-lifecycle.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
 const { PYODIDE_SNAPSHOT_TEST_PATH, forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
@@ -18,7 +18,7 @@ const SESSION = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_c
 const changeSnapshotState = (page, change) => page.route(
   (url) => url.pathname === `${PYODIDE_SNAPSHOT_TEST_PATH}state.json`,
   async (route) => {
-    const response = await route.fetch();
+    const response = await fetchRoute(route);
     const state = await response.json();
     change(state);
     await route.fulfill({ response, json: state });
