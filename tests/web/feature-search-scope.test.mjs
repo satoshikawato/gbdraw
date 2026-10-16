@@ -233,19 +233,39 @@ test('the app and the Interactive SVG read a start or end by the writers\' rule'
   }
 });
 
-// OV-1010: the runtime reads a member's null or blank bound as missing, not 0,
-// as the app popup does (pairwise-payload-performance.test.mjs).
-test('Interactive SVG member coordinates read a missing bound as missing', () => {
-  const memberLocationText = new Function(`
+// OV-1010 / OV-1017: the runtime shows a member's location as the app popup
+// does: a null or blank bound is missing (not 0), a bound that does not read
+// shows its stored text, and one side shows alone when the other is empty.
+// The app text is `locationRangeText` plus the popup's strand rule
+// (pairwise-match-popup.js memberLocationText).
+test('Interactive SVG member location text equals the app member text', () => {
+  const viewerText = new Function(`
     ${embeddedFunction('locationPartBound')}
+    ${embeddedFunction('rawBoundText')}
     ${embeddedFunction('strandText')}
     ${embeddedFunction('memberLocationText')}
     return memberLocationText;
   `)();
-  assert.equal(memberLocationText({ start: 9, end: 18, strand: '-1' }), '10..18 (-)');
-  for (const missing of [null, '', '  ']) {
-    assert.equal(memberLocationText({ start: missing, end: 38, strand: '-1' }), '..38 (-)', JSON.stringify(missing));
-    assert.equal(memberLocationText({ start: missing, end: missing, strand: '' }), '', JSON.stringify(missing));
+  const appStrand = (strand) => {
+    const text = String(strand).trim();
+    if (text === '-1') return '-';
+    if (text === '1') return '+';
+    return text;
+  };
+  const appText = (member) => {
+    const range = featureUtils.locationRangeText(member);
+    const strand = appStrand(member.strand);
+    return range && strand ? `${range} (${strand})` : range;
+  };
+  assert.equal(viewerText({ start: 9, end: 18, strand: '-1' }), '10..18 (-)');
+  const bounds = [9, 1.5, null, '', '  ', '0x10', '20', 1e400, 2 ** 53];
+  for (const start of bounds) {
+    for (const end of [38, undefined]) {
+      for (const strand of ['-1', '1', '+', '-', '']) {
+        const member = end === undefined ? { start, strand } : { start, end, strand };
+        assert.equal(viewerText(member), appText(member), JSON.stringify([String(start), end, strand]));
+      }
+    }
   }
 });
 

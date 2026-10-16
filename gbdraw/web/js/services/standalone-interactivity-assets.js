@@ -4605,14 +4605,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return text;
   }
 
+  function rawBoundText(value) {
+    return String(value === null || value === undefined ? '' : value).trim();
+  }
+
   function memberLocationText(member) {
     if (!member || typeof member !== 'object') return '';
     var start = locationPartBound(member, 'start');
     var end = locationPartBound(member, 'end');
-    var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
+    var startText = Number.isFinite(start) ? String(start + 1) : rawBoundText(member.start);
+    var endText = Number.isFinite(end) ? String(end) : rawBoundText(member.end);
+    var text = startText && endText ? startText + '..' + endText : startText || endText;
     var strand = strandText(member.strand);
-    if (strand) text += ' (' + strand + ')';
-    return text === '..' ? '' : text;
+    return text && strand ? text + ' (' + strand + ')' : text;
   }
 
   function getFeatureSearchDetail(feature) {
