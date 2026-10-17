@@ -522,7 +522,7 @@ def save_session_sidecar_if_requested(
         generated_at=datetime.now(timezone.utc),
         feature_catalog=feature_catalog,
         losat_cache_entries=run_result.losat_cache_entries,
-        losat_derived_cache_entries=run_result.losat_derived_cache_entries or (),
+        losat_derived_cache_entries=(),
         protein_identity_manifest=run_result.protein_identity_manifest,
         legacy_protein_raw_candidates=run_result.legacy_protein_raw_candidates,
         legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
@@ -661,7 +661,8 @@ def _rendered_drawing_build(
     state = with_current_artifacts(
         state,
         losat_cache_entries=getattr(rendered, "losat_cache_entries", ()),
-        losat_derived_cache_entries=getattr(rendered, "losat_derived_cache_entries", ()),
+        # A replay builds none; the Session keeps the entries it was saved with.
+        losat_derived_cache_entries=state.get("losatDerivedCache", {}).get("entries", ()),
         protein_identity_manifest=getattr(rendered, "protein_identity_manifest", None),
         legacy_protein_raw_candidates=getattr(rendered, "legacy_protein_raw_candidates", ()),
         legacy_protein_derived_evidence=getattr(rendered, "legacy_protein_derived_evidence", ()),

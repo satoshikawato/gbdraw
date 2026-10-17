@@ -227,12 +227,12 @@ _DERIVED_LOSAT_ENTRIES_WANTED: ContextVar[bool] = ContextVar(
 def _without_derived_losat_entries() -> Iterator[None]:
     """Leave the derived LOSAT cache entries of a linear build unbuilt.
 
-    Only the Web wrapper enters this: no Generate reply, Result or catalog
-    reads the entries, and the Web Session builds its own. It changes one
-    field of the result: ``losat_derived_cache_entries`` is ``()``. The checks
-    on their inputs (identity manifest, canonical comparison columns, the
-    canonical encoding of the computed result) still run, so a request fails
-    where it failed before. The CLI and the Python API never enter it.
+    The Web wrapper and the CLI enter this: no Generate reply, Result or
+    catalog reads the entries, and the Web Session builds its own. It changes
+    one field of the result: ``losat_derived_cache_entries`` is ``()``. The
+    checks on their inputs (identity manifest, canonical comparison columns,
+    the canonical encoding of the computed result) still run, so a request
+    fails where it failed before. The Python API never enters it.
     """
 
     token = _DERIVED_LOSAT_ENTRIES_WANTED.set(False)

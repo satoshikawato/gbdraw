@@ -566,8 +566,8 @@ def with_current_artifacts(
     """``fields`` with the LOSAT artifacts of a fresh render or migration.
 
     The legacy protein IDs that the migration resolved are rewritten first.
-    The derived cache holds the entries of the new render and is empty for a
-    migration, which renders nothing.
+    The derived cache holds ``losat_derived_cache_entries``: a replay passes
+    its Session's own, and a fresh render or migration passes none.
     """
 
     updated = dict(fields)
