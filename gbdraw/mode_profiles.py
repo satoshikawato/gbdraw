@@ -229,9 +229,12 @@ def mode_profiles_payload() -> dict[str, object]:
     # gbdraw.auto_sizes takes DiagramMode from this module.
     from gbdraw.auto_sizes import linear_label_size_records
 
-    length_threshold = load_config_toml("gbdraw.data", "config.toml")["labels"]["length_threshold"]
+    packaged = load_config_toml("gbdraw.data", "config.toml")
+    length_threshold = packaged["labels"]["length_threshold"]
     return {
         "version": MODE_PROFILE_VERSION,
+        # The packaged text font list: a resolved config that holds it names no font.
+        "defaultFontFamily": str(packaged["objects"]["text"]["font_family"]),
         # The packaged short/long boundary of each mode, and the records that set
         # the Auto Linear label font for each label display scope (rules:
         # gbdraw/auto_sizes.py).

@@ -117,6 +117,7 @@ import {
   linearAxisRulerApplies,
   MODE_DEFAULT_FEATURE_TYPES,
   modeProfile,
+  PACKAGED_FONT_FAMILY,
   resolveComparisonThresholds,
   trackDefaultsForMode
 } from '../mode-profiles.js';
@@ -4215,6 +4216,11 @@ const projectFullConfigOverrides = (config, mode) => {
       projected[path] = null;
     }
   });
+  // A resolved config always names a font list; the packaged one is the Font
+  // default (null), not a font the drawing chose (OV-1014).
+  if (projected[CONFIG_OVERRIDE_PATHS.fontFamily] === PACKAGED_FONT_FAMILY) {
+    projected[CONFIG_OVERRIDE_PATHS.fontFamily] = null;
+  }
   if (!Object.prototype.hasOwnProperty.call(projected, labelScopePath)) {
     const modeShowLabels = nestedConfigValue(config, `canvas.${mode}.show_labels`);
     const sharedShowLabels = nestedConfigValue(config, 'canvas.show_labels');
