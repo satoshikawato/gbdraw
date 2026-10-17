@@ -6037,7 +6037,7 @@
                          @pointercancel="endPan"
                          @lostpointercapture="endPan"
                          @mouseleave="endPan">
-                        <div v-if="svgContent" v-html="svgContent" ref="svgContainer"
+                        <div v-if="svgContent" v-preview-markup="svgContent" ref="svgContainer"
                             :key="`svg-${mode}-${selectedResultIndex}-${svgResultIdentity}`"
                             v-preview-transform
                             class="gbdraw-preview-surface shadow-xl bg-white m-auto origin-top">
