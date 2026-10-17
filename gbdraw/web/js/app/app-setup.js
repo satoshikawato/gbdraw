@@ -1867,10 +1867,12 @@ export const createAppSetup = () => {
   // What the Review alignment panel took over while it is shown, given back when it ends: the
   // Editor drawer reopens on its tab, the popups (hidden meanwhile) show again, and the view
   // from before the fit returns. While it is set, no gesture on the figure and no click
-  // outside opens, retargets or closes a popup.
-  /** @type {{ drawerOpen: boolean, popup: unknown } | null} */
-  let similarityAlignmentTakeover = null;
-  const previewPopupsHeld = () => similarityAlignmentTakeover !== null;
+  // outside opens, retargets or closes a popup. The one predicate of that hold: the figure's
+  // gestures read it, and the preview's `preview-reviewing` class (the hint and the hand cursor
+  // of a drawn element) is bound to the same computed.
+  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, popup: unknown } | null} */ (null));
+  const previewPopupsHeldNow = computed(() => similarityAlignmentTakeover.value !== null);
+  const previewPopupsHeld = () => previewPopupsHeldNow.value;
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
   // The palette owner comes before the feature editor, whose popup sets a
   // type's default color through it (D-15).
@@ -4857,8 +4859,8 @@ export const createAppSetup = () => {
   // switch, a new Generate): the view and the drawer are that change's, and the review gives
   // neither back.
   const dropSimilarityAlignmentView = () => {
-    if (!similarityAlignmentTakeover || similarityAlignmentApplying) return;
-    similarityAlignmentTakeover.drawerOpen = false;
+    if (!similarityAlignmentTakeover.value || similarityAlignmentApplying) return;
+    similarityAlignmentTakeover.value.drawerOpen = false;
     releasePreviewViewport({ restore: false });
   };
   similarityAlignmentPorts.refreshCanvas = () => {
@@ -4920,9 +4922,9 @@ export const createAppSetup = () => {
   };
   watch(similarityAlignmentActions.dialogOpen, fitPreviewForSimilarityAlignment, { flush: 'post' });
   const endSimilarityAlignmentTakeover = () => {
-    const takeover = similarityAlignmentTakeover;
+    const takeover = similarityAlignmentTakeover.value;
     if (!takeover || similarityAlignmentApplying) return;
-    similarityAlignmentTakeover = null;
+    similarityAlignmentTakeover.value = null;
     if (takeover.drawerOpen) rightDrawerActions.openRightDrawerTab(rightDrawerTab.value);
     // The drawer narrows the visible frame, so the view returns after it.
     releasePreviewViewport({ restore: true });
@@ -4935,7 +4937,7 @@ export const createAppSetup = () => {
       return;
     }
     // A review shown again while an Apply is pending keeps what the first one took.
-    similarityAlignmentTakeover ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value };
+    similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value };
     holdPreviewViewport();
     rightDrawerActions.closeRightDrawer();
     settingsPaneActions.closeSettingsPopup();
@@ -4983,7 +4985,7 @@ export const createAppSetup = () => {
       return;
     }
     // After Apply the focus returns once the outcome has given the drawer back.
-    if (open || similarityAlignmentTakeover) return;
+    if (open || similarityAlignmentTakeover.value) return;
     void restoreSimilarityAlignmentFocus();
   });
   onMounted(() => {
@@ -7056,6 +7058,7 @@ export const createAppSetup = () => {
     similarityAlignmentNotice: similarityAlignmentActions.notice,
     similarityAlignmentRepair: similarityAlignmentActions.repair,
     similarityAlignmentDialogOpen: similarityAlignmentActions.dialogOpen,
+    previewPopupsHeld: previewPopupsHeldNow,
     similarityAlignmentApplyDisabledReason: similarityAlignmentActions.applyDisabledReason,
     similarityAlignmentDrawerReferenceKey: similarityAlignmentActions.drawerReferenceKey,
     featureDetailsPending,

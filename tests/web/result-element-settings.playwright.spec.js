@@ -366,6 +366,9 @@ test('Circular with custom track slots: a tick label or a dinucleotide track sho
   await page.mouse.down();
   await page.mouse.move(opened.x + opened.width / 2 + 2000, opened.y + 2000, { steps: 4 });
   await page.mouse.up();
+  // The drag moved it and left it open.
+  await expect(featurePopup(page)).toBeVisible();
+  expect((await featurePopup(page).boundingBox()).x).toBeGreaterThan(opened.x);
 
   // One popup of the Result at a time, as a click on a Legend row does it: the clicked item's
   // popup takes the place of the open one in the same click.

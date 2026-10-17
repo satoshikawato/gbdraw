@@ -5929,7 +5929,7 @@
 
                 <div class="preview-workspace">
                 <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30"
-                     :class="{ 'preview-layout-off': !layoutRepositionMode, 'preview-panning': isPanning, 'preview-reviewing': similarityAlignmentDialogOpen }">
+                     :class="{ 'preview-layout-off': !layoutRepositionMode, 'preview-panning': isPanning, 'preview-reviewing': previewPopupsHeld }">
 
                     <div v-if="featureSelectionStatus"
                          class="feature-selection-status"
