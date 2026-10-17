@@ -302,7 +302,8 @@ const createPane = async (mode, display = 'stacked') => {
   };
   const state = {
     mode: { value: mode }, settingsPaneDisplay: { value: display }, settingsPaneDocked: { value: display === 'rail' ? 'layout' : null },
-    settingsPopup: { value: null }, svgContent: { value: '<svg/>' }, resultPanelTab: { value: 'preview' }
+    settingsPopup: { value: null }, svgContent: { value: '<svg/>' }, resultPanelTab: { value: 'preview' },
+    layoutRepositionMode: { value: false }
   };
   const { createSettingsPaneController } = await import('../../gbdraw/web/js/app/settings-pane.js');
   const pane = createSettingsPaneController({ state });
@@ -364,8 +365,9 @@ test('the popup stands below or above a wide, flat item, and beside the point wh
 });
 
 // S-1: the popup belongs to the Result that is shown.
-test('the popup closes when the Result panel shows another tab, and when no Result is shown', async () => {
-  for (const hide of [(state) => { state.resultPanelTab.value = 'run-info'; }, (state) => { state.svgContent.value = null; }]) {
+test('the popup closes when the Result panel shows another tab, when no Result is shown, and when Layout edit turns on', async () => {
+  for (const hide of [(state) => { state.resultPanelTab.value = 'run-info'; }, (state) => { state.svgContent.value = null; },
+    (state) => { state.layoutRepositionMode.value = true; }]) {
     const pane = await createPane('circular');
     const shown = pane.watchers.find(({ source }) => source() === true);
     pane.pane.showSettingsBesideResult('titles', CLICK, RESULT);
@@ -373,6 +375,9 @@ test('the popup closes when the Result panel shows another tab, and when no Resu
     assert.equal(pane.state.settingsPopup.value.section, 'titles', 'a Result that stays shown keeps it');
     hide(pane.state);
     shown.run(shown.source());
+    assert.equal(pane.state.settingsPopup.value, null);
+    // The same predicate refuses to show a section until the popup is available again.
+    assert.equal(pane.pane.showSettingsBesideResult('titles', CLICK, RESULT), false);
     assert.equal(pane.state.settingsPopup.value, null);
   }
 });

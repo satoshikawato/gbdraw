@@ -9,7 +9,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
-const { generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 
 test.use({ actionTimeout: 20_000 });
 
@@ -464,7 +464,7 @@ test('Circular, the default layout with a plot title: an edit in the popup is on
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
   await loadSession(page, DEFAULT_CIRCULAR_SESSION);
-  const generated = await page.evaluate(async () => {
+  const generated = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     app.form.plot_title = 'Human mitochondrial genome';
     app.adv.plot_title_position = 'top';
@@ -602,7 +602,7 @@ test('Linear with several records: a GC content or GC skew track shows Dinucleot
   await openApp(page);
   await loadSession(page, LINEAR_SESSION);
   // No stored Linear Session draws these tracks: turn them on and generate.
-  expect(await page.evaluate(async () => {
+  expect(await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     app.form.show_gc = true;
     app.form.show_skew = true;
