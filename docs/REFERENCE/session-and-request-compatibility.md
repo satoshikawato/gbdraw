@@ -613,8 +613,9 @@ then replaces each rendered drawing's Result set where it is, at the top level
 or in `otherModeResult`, keeps the other mode's set and the saved `ui.mode`,
 and preserves the editable draft's component bytes, order and File metadata.
 The re-save also replaces what both sets share: `losatCache` holds the entries
-the new render returns, `losatDerivedCache` is emptied, and
-`proteinIdentityManifest` and `legacyArtifacts` come from the new render. If
+the new render returns, `losatDerivedCache` holds the derived protein-comparison
+entries it built, and `proteinIdentityManifest` and `legacyArtifacts` come from
+the new render. If
 the render migrates older protein IDs (only Sessions 44 and older have them),
 gbdraw rewrites the protein references throughout the Session. A resource
 whose bytes are unchanged

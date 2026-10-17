@@ -142,7 +142,7 @@ splits it. It keeps `ui.mode`, so the Web app still opens on the saved mode. It
 also changes these parts that both sets share:
 
 - `losatCache` holds the entries that the render returns, and
-  `losatDerivedCache` is emptied.
+  `losatDerivedCache` holds the derived entries that it built.
 - `proteinIdentityManifest` and `legacyArtifacts` are replaced by the render's.
 - When the render migrates legacy protein IDs (only Sessions 44 and older have
   them), the protein references are rewritten throughout the Session.

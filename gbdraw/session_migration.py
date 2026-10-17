@@ -558,6 +558,7 @@ def with_current_artifacts(
     *,
     losat_cache_entries: Sequence[Mapping[str, Any]],
     protein_identity_manifest: Mapping[str, Any] | None,
+    losat_derived_cache_entries: Sequence[Mapping[str, Any]] = (),
     legacy_protein_raw_candidates: Sequence[Mapping[str, Any]] = (),
     legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] = (),
     protein_id_map: Mapping[str, str] | None = None,
@@ -565,7 +566,8 @@ def with_current_artifacts(
     """``fields`` with the LOSAT artifacts of a fresh render or migration.
 
     The legacy protein IDs that the migration resolved are rewritten first.
-    The derived cache is written empty, as every current writer writes it.
+    The derived cache holds the entries of the new render and is empty for a
+    migration, which renders nothing.
     """
 
     updated = dict(fields)
@@ -581,7 +583,9 @@ def with_current_artifacts(
     ):
         updated.pop(artifact_key, None)
     updated["losatCache"] = {"entries": [dict(entry) for entry in losat_cache_entries]}
-    updated["losatDerivedCache"] = {"entries": []}
+    updated["losatDerivedCache"] = {
+        "entries": [dict(entry) for entry in losat_derived_cache_entries]
+    }
     updated["proteinIdentityManifest"] = dict(
         protein_identity_manifest or empty_protein_identity_manifest()
     )

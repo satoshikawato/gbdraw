@@ -427,3 +427,41 @@ def test_a_schema_2_linear_record_without_selector_draws_every_record(tmp_path: 
     card = session["renderRequest"]["records"][1]["recordKey"]
     keys = re.findall(r'data-record-key="([^"]+)"', (tmp_path / "two.svg").read_text(encoding="utf-8"))
     assert sorted(keys) == sorted([session["renderRequest"]["records"][0]["recordKey"], f"{card}:1", f"{card}:2"])
+
+
+def test_a_cli_session_keeps_the_derived_protein_entries_the_render_built(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1050 (D-81): `--session_output` stores the entries the render built.
+
+    Each pair carries `canonicalTsv`, the Web save shape, and a replayed
+    re-save keeps the same entries.
+    """
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    request, _identities = _request("similarity_groups", tmp_path)
+    paths = [str(record.source.path) for record in request.records]
+    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    linear_main(
+        ["--gbk", *paths, "--losat", "losatp", "--losatp_mode", "similarity_groups",
+         "-o", str(tmp_path / "fresh"), "-f", "svg", "--session_output", str(sidecar)]
+    )
+
+    def derived(session: Path) -> list[dict[str, Any]]:
+        return load_session_document(session).to_dict()["losatDerivedCache"]["entries"]
+
+    entries = derived(sidecar)
+    assert entries
+    pairs = [pair for entry in entries for pair in entry["payload"]["pairs"]]
+    assert pairs and all(isinstance(pair["canonicalTsv"], str) for pair in pairs)
+    assert all("rows" not in pair for pair in pairs)
+
+    replayed = tmp_path / "replayed.gbdraw-session.json"
+    linear_main(
+        ["--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg",
+         "--session_output", str(replayed)]
+    )
+    assert derived(replayed) == entries

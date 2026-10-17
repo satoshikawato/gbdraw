@@ -485,7 +485,6 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
                 ],
             },
         ),
-        losat_derived_cache_entries=({"schema": LOSAT_DERIVED_CACHE_SCHEMA},),
         canonical_request=_canonical_request("linear"),
     )
 

@@ -761,7 +761,6 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
                 drawing=object(),
                 output_paths=(),
                 interactive_context=None,
-                losat_derived_cache_entries=({"schema": 3},),
                 feature_identity_notices=(),
             )
         }
