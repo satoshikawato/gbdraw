@@ -32,7 +32,7 @@ import {
 } from '../services/feature-visibility.js';
 import { drawnBlockStroke, drawsPythonLegendRow, legendEntryKey, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
-import { selectedResultOfMode } from '../services/artifact-slot.js';
+import { readArtifactOfMode } from '../services/artifact-slot.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -4245,11 +4245,9 @@ export const createAppSetup = () => {
   };
   historySnapshots.registerModeTransition(transitionDiagramMode);
   // The committed Session of a mode's artifact, shown or kept in its slot.
-  historySnapshots.registerModeCommittedSession((targetMode) => (
-    targetMode === mode.value
-      ? getCommittedCanonicalSession()
-      : artifactSlots[targetMode]?.runtimeState?.canonical?.committedCanonicalSession ?? null
-  ));
+  historySnapshots.registerModeCommittedSession((targetMode) => readArtifactOfMode(targetMode, mode.value,
+    artifactSlots, getCommittedCanonicalSession,
+    (slot) => slot.runtimeState?.canonical?.committedCanonicalSession) ?? null);
   // A switch waits for Generate, a label rerender, Save and Load, so each
   // Result lands in its own mode's slot (OIPC-C07): the mode buttons and an
   // Undo or Redo of a switch read this one predicate. The buttons also wait
@@ -4860,9 +4858,9 @@ export const createAppSetup = () => {
   let similarityAlignmentApplying = false;
   // The identity of the selected Result of the review's mode, shown or kept in its slot.
   /** @param {'circular' | 'linear'} reviewMode */
-  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(selectedResultOfMode(reviewMode, {
-    mode: mode.value, results: results.value, selectedResultIndex: Number(selectedResultIndex.value) || 0
-  }, artifactSlots));
+  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(readArtifactOfMode(reviewMode,
+    mode.value, artifactSlots, () => results.value[Number(selectedResultIndex.value) || 0],
+    (slot) => slot.values.results[slot.values.selectedResultIndex]));
   // The draft no longer matches the figure. Another Result of the review's mode replaced it (a
   // Session load, History, a new Generate), whichever mode is shown: the view and the drawer are
   // that change's, and the review gives neither back. A mode switch brings no view: the review's

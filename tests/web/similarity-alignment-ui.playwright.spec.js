@@ -2960,6 +2960,9 @@ const recolorCds = async (page, color) => {
     .some(({ content }) => String(content).toLowerCase().includes(value)), color), { timeout: 60000 }).toBe(true);
   await roomSettled(page);
 };
+// Whether each Linear record is drawn reversed.
+const recordOrientations = (page) => page.evaluate(async () => (await import('./js/state.js')).state.linearSeqs
+  .map(({ uid, region_reverse: reverse }) => [uid, Boolean(reverse)]));
 // The Result and the figure draw the color the setting shows (PD-OI-102).
 const expectCdsColorDrawn = async (page, color) => {
   await expect(cdsColor(page)).toHaveValue(color);
@@ -3004,12 +3007,18 @@ test('a live setting change under an open review keeps its rings, its fit and th
   await recolor('#2a9d8f');
   await expect(rings).toHaveCount(ringCount);
   const undoBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const preApply = await recordOrientations(page);
   await chooseUnresolved(page, again);
   await again.getByRole('radio', { name: 'All left', exact: true }).check();
   await applyReview(page, again);
   await expect.poll(() => previewView(page)).toEqual(before);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
   expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+  await expectCdsColorDrawn(page, '#2a9d8f');
+  expect(await recordOrientations(page)).not.toEqual(preApply);
+  // Undo puts back the orientation from before Apply, and the live color stays.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(() => recordOrientations(page)).toEqual(preApply);
   await expectCdsColorDrawn(page, '#2a9d8f');
   expect(pageErrors).toEqual([]);
 });
@@ -3027,6 +3036,25 @@ test('Apply of a review draws a live color changed before the review', async ({ 
   await dialog.getByRole('radio', { name: 'All left', exact: true }).check();
   await applyReview(page, dialog);
   await expectCdsColorDrawn(page, '#264653');
+});
+
+// A Session loaded while the other mode is shown replaces the review's figure: the review gives
+// back neither the view nor the Editor (OV-622). This pins the outcome; the load shows the
+// review's mode again, so it does not tell which mode the replacement test reads.
+test('a Session loaded while the other mode is shown under a review keeps its own view', async ({ page }) => {
+  test.setTimeout(600000);
+  const { dialog } = await openReviewOverOwnView(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.mode.value)).toBe('circular');
+  const session = JSON.parse(readFileSync(galleryAlignmentSession, 'utf8'));
+  session.ui = { ...session.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
+  await importSession(page, Buffer.from(JSON.stringify(session)), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+  const loaded = await previewView(page);
+  expect(loaded).toEqual({ zoom: 0.37, pan: { x: -21, y: 13 } });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  expect(await previewView(page)).toEqual(loaded);
+  expect((await editorDrawer(page)).open).toBe(false);
 });
 
 // OV-622: a mode switch brings no view of its own. After Circular and back, the review still
