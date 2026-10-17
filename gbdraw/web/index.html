@@ -5901,7 +5901,7 @@
                                 <i class="ph ph-selection" aria-hidden="true"></i>
                                 {{ selectedFeatureCount }} selected
                             </span>
-                            <span data-setting="feature-placement" class="inline-flex items-center gap-1">
+                            <span data-setting="feature-placement" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1">
                                     <select data-history-managed aria-label="Selected feature placements" :disabled="!semanticMutationAvailable" value="" @change="featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''" class="rounded border p-1 text-xs">
                                     <option value="" disabled>Placement…</option>
                                     <option v-for="choice in featurePlacementActions.choices(selectedFeatures)" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
