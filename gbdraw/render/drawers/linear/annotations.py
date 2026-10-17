@@ -15,6 +15,7 @@ from gbdraw.annotations import (
     apply_feature_underlay_dom_attributes,
     effective_annotation_style,
     is_auto_feature_underlay,
+    linear_annotation_labels_above,
 )
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
@@ -72,11 +73,7 @@ def linear_annotation_track_content(
     usable_height = max(1.0, float(height_px) - 2.0 * params.padding_px)
     lane_height = 14.0 if track.clipped else usable_height / max(1, lane_count)
     scale = float(bar_length_px) / max(1, int(record_length))
-    label_direction = (
-        -1.0
-        if side == "above" or (side == "overlay" and params.layer == "underlay")
-        else 1.0
-    )
+    label_direction = -1.0 if linear_annotation_labels_above(side, params) else 1.0
 
     for placement in placements:
         annotation = placement.annotation

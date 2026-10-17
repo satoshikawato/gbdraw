@@ -361,6 +361,16 @@ class AnnotationTrackParams:
             object.__setattr__(self, name, slot_id)
 
 
+def linear_annotation_labels_above(side: str, params: AnnotationTrackParams) -> bool:
+    """Whether a Linear annotation slot puts its labels above its marks.
+
+    Labels go above a slot on the ``above`` side and above an underlay
+    overlay; every other slot puts them below.
+    """
+
+    return side == "above" or (side == "overlay" and params.layer == "underlay")
+
+
 def annotation_track_params_from_mapping(params: Mapping[str, object]) -> AnnotationTrackParams:
     """Normalize raw TrackSlot params into the typed annotation contract."""
 
@@ -498,5 +508,6 @@ __all__ = [
     "ResolutionWarning",
     "annotation_track_params_from_mapping",
     "effective_annotation_style",
+    "linear_annotation_labels_above",
     "parse_feature_selector",
 ]

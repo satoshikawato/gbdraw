@@ -151,6 +151,17 @@ write-up of a release.
   their nominal lanes too. Fixed: a feature-bound ribbon of a feature moved to
   another lane stopped at the outermost lane of a `to_slot` span instead of
   at its own lane.
+- Linear span labels (a `highlight` annotation row without custom slots, an
+  overlay slot with `to_slot`, or one with `cover_anchor=true` on the feature
+  track) no longer lie on the next slot or on the axis line. The room for the
+  labels (9 px with the default label style) is now kept between slots too,
+  not only at the edge of the record: the next GC, skew, or feature-lane slot,
+  or the axis line, moves out by up to that much on the side with label text.
+  With the default `--track_layout below`, a labelled `highlight` row no
+  longer puts its label on the axis line; the lanes move away from the axis
+  only by the part of the room the gap did not already give (2 px for the
+  tobacco chloroplast and AP027078). Figures without a labelled span are
+  unchanged (OV-843).
 - Web app feature popup: the header shows the gene name, the product on up to
   two lines, and the record and location with thousands separators. **Edit**
   groups **Appearance** (fill, stroke, the label text with its visibility and
