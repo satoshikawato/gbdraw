@@ -66,17 +66,39 @@ test('a Generate parses the preview Result outside the page document (OV-1030)',
     await generate(page);
     await page.evaluate(() => {
       for (const control of document.querySelectorAll('input, select, textarea, button')) void control.labels?.length;
-      const property = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML'));
       window.__PAGE_DOCUMENT_SVG_PARSES__ = 0;
-      Object.defineProperty(Element.prototype, 'innerHTML', {
-        ...property,
-        set(markup) {
-          if (this.ownerDocument === document && !(this instanceof HTMLTemplateElement) && String(markup).startsWith('<svg')) {
-            window.__PAGE_DOCUMENT_SVG_PARSES__ += 1;
+      // Count every way to parse SVG markup into the page document.
+      const count = () => { window.__PAGE_DOCUMENT_SVG_PARSES__ += 1; };
+      const hasSvg = markup => String(markup).includes('<svg');
+      const inPage = element => element.ownerDocument === document && !(element instanceof HTMLTemplateElement);
+      const wrapSetter = name => {
+        const property = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(Element.prototype, name));
+        Object.defineProperty(Element.prototype, name, {
+          ...property,
+          set(markup) {
+            if (inPage(this) && hasSvg(markup)) count();
+            property.set.call(this, markup);
           }
-          property.set.call(this, markup);
-        }
-      });
+        });
+      };
+      wrapSetter('innerHTML');
+      wrapSetter('outerHTML');
+      const wrapMethod = (owner, name, counts) => {
+        const original = owner[name];
+        if (typeof original !== 'function') return;
+        owner[name] = function (...args) {
+          const result = original.apply(this, args);
+          if (counts(this, args, result)) count();
+          return result;
+        };
+      };
+      wrapMethod(Element.prototype, 'insertAdjacentHTML', (el, [, markup]) => inPage(el) && hasSvg(markup));
+      wrapMethod(Element.prototype, 'setHTMLUnsafe', (el, [markup]) => inPage(el) && hasSvg(markup));
+      wrapMethod(Range.prototype, 'createContextualFragment', (range, [markup], fragment) =>
+        fragment.ownerDocument === document && hasSvg(markup));
+      wrapMethod(Document.prototype, 'importNode', (doc, [node], result) =>
+        doc === document && node.ownerDocument !== document && result.ownerDocument === document
+        && (node.localName === 'svg' || Boolean(node.querySelector?.('svg'))));
     });
     await generate(page);
     const facts = await page.evaluate(() => {
