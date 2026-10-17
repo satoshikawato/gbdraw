@@ -477,6 +477,11 @@ never embeds a font; only exported SVG does (see
 notes this under **Font** and in the **Save Session** notice, and
 `--save_session` logs it.
 
+A Session that stores only the full resolved configuration, as the command
+line writes it, names the packaged font list in `objects.text.font_family`.
+The web app loads that list as the default **Font** (`null`), so **Save
+Session** then writes no font override.
+
 When the first family of a Session's font list is not available, the command
 line and Python log a warning and draw the nearest font: the first available
 family of the list, else the Liberation face of its generic kind (serif,

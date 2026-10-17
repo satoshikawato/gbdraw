@@ -255,7 +255,8 @@ write-up of a release.
     **Scale interval** follow each Circular record's own length, as Generate
     does; where the drawn records take different values they read **Auto (by
     genome size)** and `by record length (auto)` (OV-512). The track preview
-    estimates the diagram that draws the record of the shown Result.
+    estimates the diagram that draws the record of the shown Result, or the
+    first diagram while no Result is shown.
 - Web app: the Feature Visibility rule action **Exclude from matching** is now
   **Leave out of protein search**, also in the selected-feature bar's
   visibility list, where it read **Suppress**. The color rule field **Legend
@@ -265,10 +266,20 @@ write-up of a release.
   and rule files are unchanged. A Feature Visibility rule shows **Action** on
   its own line under **Value regex**, so the closed list shows the whole
   action.
-- Web app: **Display start** of a Circular record is no longer unavailable as
-  for a cropped record when the region fields were emptied, or when separate
-  diagrams or a Multi-Record Canvas draw the record whole; a record is
-  cropped only where Generate crops it.
+- Web app: a Circular record counts as cropped only where Generate crops it:
+  one record offered alone, with a region Generate can draw (OV-1093). Its
+  **Display start** was unavailable, as for a cropped record, when the region
+  fields were emptied, or when separate diagrams or a Multi-Record Canvas draw
+  the record whole. With a region left in the fields while separate diagrams
+  or a Multi-Record Canvas are drawn, the record's reverse-complement override
+  and **Display start** now count in the record list, as they already did in
+  the drawing.
+- Fixed (web app): loading a Session that stores a full resolved
+  configuration, such as one written by the CLI `--session_output`, no longer
+  turns the packaged font list into an explicit **Font**. **Font** stays at the
+  default, Run info lists no `--font_family`, and **Save Session** writes no
+  font override; the drawing is unchanged. The Gallery Sessions are saved again
+  with the current writer (OV-1014).
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row
