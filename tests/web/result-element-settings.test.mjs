@@ -432,6 +432,18 @@ test('the docked section takes the focus where it is, and a pane action takes a 
 
 // One section, one place: the popup shows the section's own element, moved
 // there. A copy would give two controls one id and one History target.
+test('the hint and the hand cursor follow the hold that blocks the click: one computed for both', () => {
+  // While Review alignment holds the popups (also while an Apply is pending after its panel closed),
+  // a click on a drawn element opens nothing, so the preview shows no hint and no hand cursor.
+  const setup = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
+  assert.match(setup, /const previewPopupsHeldNow = computed\(\(\) => similarityAlignmentTakeover\.value !== null\);/);
+  assert.match(setup, /const previewPopupsHeld = \(\) => previewPopupsHeldNow\.value;/);
+  assert.match(setup, /\n    previewPopupsHeld: previewPopupsHeldNow,\n/);
+  const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
+  assert.match(html, /'preview-reviewing': previewPopupsHeld \}/);
+  assert.doesNotMatch(html, /'preview-reviewing': similarityAlignmentDialogOpen/);
+});
+
 test('each section a drawn element opens moves into the popup host of the app root', () => {
   const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
   const moved = Array.from(html.matchAll(
