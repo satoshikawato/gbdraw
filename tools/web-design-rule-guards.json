@@ -44,6 +44,12 @@
           "retireWhen": "never"
         },
         {
+          "path": "tests/web/feature-visibility-rule-writers.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "DRAWINGS typed slices give each slice one writer module, checked by tsc and the import graph (multi-drawing M3)"
+        },
+        {
           "path": "tests/web/mode-scoped-feature-edits.playwright.spec.js",
           "rootCause": "P2",
           "job": "playwright-functional",
@@ -68,7 +74,13 @@
           "retireWhen": "never"
         }
       ],
-      "allowlists": []
+      "allowlists": [
+        {
+          "path": "tests/web/feature-visibility-rule-writers.test.mjs",
+          "symbol": "PAINT_INTENT_WRITERS",
+          "kind": "writer-map"
+        }
+      ]
     },
     {
       "id": "R3",

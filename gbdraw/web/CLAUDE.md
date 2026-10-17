@@ -132,7 +132,7 @@ in the same change.
 | Numeric draft projection | `js/utils/optional-positive-number.js` (`projectOptionalNumber`) |
 | GenBank header reading | `js/services/genbank-header.js` |
 | Managed Depth slot reconciliation | `js/services/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |
-| Editor-intent projection onto a displayed Result | `js/app/app-setup.js` (`projectMountedEditorIntent`) |
+| Editor intent shown on the displayed Result: the edit transition, the port, and the preparation of a History step or a Result display (R3) | `js/app/app-setup.js` (`editEditorIntent`, `showEditorIntent`, `projectMountedEditorIntent`); it compiles with `compilePlanBundle` in `js/app/candidate-render.js` and reconciles with `reconcileMountedResult` in `js/services/svg-result-ingestion.js` |
 | Render-worker client and lifecycle | `js/services/diagram-generation.js` |
 | Pyodide typed rendering | `js/workers/diagram-generation-worker.js` |
 | The Worker's package recipe, and the Pyodide snapshot of that runtime (capture, checks, restore; served only by a test server) | `js/workers/pyodide-snapshot.js` (builder: `tools/build_pyodide_snapshot.mjs`) |
@@ -191,10 +191,17 @@ The right-side editor is a live-edit boundary. A single Feature, Label, Legend,
 or visibility edit must commit its canonical override state before returning;
 Generate, session save, and drawer close are never live-edit triggers. Route the
 mutation through the owning editor action so History records the same operation.
-If a mounted target exists, update it and the current Result synchronously before
-optional geometry reflow. If canonical output requires creating or removing
-geometry and no mounted target exists, queue the owning automatic rerender in
-the same action and replace the Result when it completes. That rerender renders
+If a mounted target exists, update it and the current Result synchronously
+before optional geometry reflow: a paint edit (R2) through the port
+`showEditorIntent` (R3), a label edit through the label owner
+(`app/feature-editor/label-actions.js`). A stroke action, a Legend row color,
+and a Legend row deletion are each one transition, `editEditorIntent` in
+`app/app-setup.js`: the action writes the active drawing's intent, the port
+shows it when it changed, and both are one History step. The other paint edits
+are History steps of their own that show through the same port (R2). If
+canonical output requires creating or removing geometry and no mounted target exists,
+queue the owning automatic rerender in the same action and replace the Result
+when it completes. That rerender renders
 the committed Session plus the current editor-intent tables
 (`projectCommittedEditorIntent` in `services/session-request.js`). Of the draft
 settings it reads only the values an action changed in the live rows of
@@ -216,9 +223,15 @@ authority-only change.
 
 The current Result changes only through:
 
-- (a) the Generate compiler (`compilePlanBundle` in `app/candidate-render.js`,
-  then `services/svg-result-ingestion.js`) re-applying editor intent with the
-  same executor;
+- (a) the editor intent, compiled by the Generate compiler
+  (`compilePlanBundle` in `app/candidate-render.js`) and applied by the
+  executor in `services/svg-result-ingestion.js`: at Generate admission onto
+  the new Result, and for a live paint edit, a History step, or a Result
+  display onto the displayed Result through the port `showEditorIntent` and
+  `reconcileMountedResult` (R3). The label elements belong to the preview
+  binder, which applies the label operations in its label step, and a live
+  label edit updates them through the label owner
+  (`app/feature-editor/label-actions.js`);
 - (b) a composition edit that keeps parity with the Python renderer;
 - (c) an automatic rerender from the committed Session and declared projection
   fields, plus the draft values an action changed in the live rows of
@@ -279,7 +292,37 @@ drawing the same way, and `annotationOptionsPayload` in
 A row or target of a Session 41–44 that names its mode (`scope`) keeps that
 field only until the Session 46 split moves it into that mode's drawing.
 
-Guards: `tests/web/non-edit-state-preservation.playwright.spec.js` with
+The paint intent of a drawing is its Legend rows (`legendEntries`, with the
+`deletedLegendEntries`, `dormantLegendEntries`, and `addedLegendCaptions`
+lists) and its color and stroke edits (`legendColorOverrides`,
+`legendStrokeOverrides`, `featureColorOverrides`, `featureStrokeOverrides`).
+The edits that write it are History steps that show what they change through
+`showEditorIntent` (R3):
+
+- a stroke action, a Legend row color, and a Legend row deletion, each
+  wrapped by `editEditorIntent`;
+- the rule commit (`commitOnce` in `app/feature-editor/rule-actions.js`): a
+  feature fill, a Legend row fill that rules draw, and the Legend rows, names,
+  and colors the rules draw;
+- a Change Scope choice;
+- a Legend rename, the Restore of deleted Legend rows, and the Sort and Move
+  of Legend rows;
+- an edit of another owner that retires the paint edits of what it removed,
+  in that edit's step: track data that no longer names a Legend row, and
+  **Delete settings** of a record whose drawing is turned off.
+
+Undo and Redo, a Session load or replacement, Reset Settings, Generate, and the
+binding of a Result install or rebuild it outside these steps (Python's Legend
+rows and colors, and the edits a source-replacing Generate prunes). The Legend
+name input also writes an unchanged copy of the list outside a step, so that it
+shows the row's name again after a refused or cancelled rename. No other code
+writes the paint intent; a new writer, or a writer that moves to another route,
+is an authority-only change.
+
+Guards: `tests/web/feature-visibility-rule-writers.test.mjs`
+(`PAINT_INTENT_WRITERS`: each function that writes the paint intent by its
+name, by module, with its route; a write through an alias, such as a row read
+from the list, is not seen); `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
 and after non-edit operations); the disjoint-Result binding test in
 `tests/web/feature-label-visual-unit.test.mjs`;
@@ -291,22 +334,34 @@ key) and `tests/web/mode-scoped-feature-edits.playwright.spec.js`;
 
 ### R3: One projection per domain
 
-A live action, a History apply, and a Result display call the same projection:
-`projectMountedEditorIntent` (palette, rules, visibility, labels), which calls
-the domain projections `projectPaletteAndRules` in `app/app-setup.js` (palette
-and specific rules) and `projectFeatureVisibility` in
-`app/feature-editor/visibility-actions.js` (feature visibility and the labels of
-the features it hides or shows),
-`orderLegendEntries` in `services/legend-svg.js` (legend order), and
+A live paint edit, a History apply, and a Result display show the paint and
+visibility domains of the editor intent through one port,
+`showEditorIntent({ domains })` in `app/app-setup.js`. It
+compiles the operations of the shown domains from the active drawing with the
+Generate compiler (`compilePlanBundle` in `app/candidate-render.js`, running
+only the stages those domains need) and reconciles the displayed Result with
+`reconcileMountedResult` in `services/svg-result-ingestion.js`, the executor of
+Generate admission: an attribute of a shown domain that no operation sets
+returns to the value Python drew, so Undo, Redo, and a Result display apply no
+inverse. A live edit reaches the port through its action (R2). A History apply and a Result display first prepare the
+domains whose intent changed with `projectMountedEditorIntent`, which calls the
+domain preparations `projectPaletteAndRules` in `app/app-setup.js` (the
+palette's track colors and the specific rules' matches) and
+`projectFeatureVisibility` in `app/feature-editor/visibility-actions.js`
+(feature visibility and the labels of the features it hides or shows), and then
+shows them in one call; the labels follow in the preview binder's label step.
+The other domain functions are
+`orderLegendEntries` in `services/legend-svg.js` (legend order) and
 `resolveFeatureDrawn` in `services/feature-visibility.js` (whether a feature is
 drawn, as Python's `should_render_feature` answers; the Features list and
 Search features read it through `listFeatureRows`). A displayed batch Result whose shared legend entries already follow
 the legend order keeps its order (`orderLegendEntries` with `keepFollowed`),
 so the entries only that Result draws keep their places; a Result last shown
 with another order also receives the default order. A History legend step made
-on another batch Result projects only its shared legend intent onto the
-displayed Result (`reconcileLegendEntries` with the step's other side, B19), so
-no Result gains or loses an entry that only one Result draws. The displayed
+on another batch Result writes the displayed Result's Legend list from the rows
+it shows and the step's shared Legend intent (`adoptRestoredLegend` in
+`app/legend/entry-actions.js`, with the step's other side, B19), so no Result
+gains or loses an entry that only one Result draws. The displayed
 population comes from the mounted Result's committed metadata
 (`renderedFeatureIdentities`), not from a second selection ref. Per-feature
 edits reach a Result through its catalog features' identities
@@ -321,9 +376,16 @@ baseline (R13): lowering an entry is optional, and adding or raising one is an
 authority-only change.
 
 A live edit shows on the Result what the next Generate draws (PD-OI-066). A
-change to a live-edit path is done when the case for its edit kind in
-`tests/web/live-generate-parity.playwright.spec.js` passes with Auto Reflow on
-and off and with the popup opened and not. A difference the Result may show
+parity case compares a live path with Python's Generate from the same draft; a
+case that compares one Web path with another through the same executor is not
+kept. A change to a live-edit path is done when the case for its edit kind in
+`tests/web/live-generate-parity.playwright.spec.js` passes with the popup
+opened and not, and with Auto Reflow on and off when the path reads it
+(`queueLabelReflow` without `force`). Each path that shows the editor intent
+(a live edit, Undo, Redo, a Result display, a mode switch, Reset Settings,
+Session Load, and the automatic rerender) has rows in the spec's work
+allowlist (`WORK_ALLOWLIST`), each pinning the compile stages a case runs, the
+Worker requests it sends, and its compile count. A difference the Result may show
 until Generate is listed with its decision in
 `tests/web/contracts/live-generate-parity-allowed.json`; adding or changing an
 entry is an authority-only change. A mismatch the matrix
@@ -647,6 +709,12 @@ is a leaf: like every leaf its modules import only leaves.
   receives it.
 - Each projection domain has one projection function and one call shape
   outside its owner (R3).
+- The identity and membership of a Legend row or a drawn feature come from its
+  identity (Python's Legend row key, the feature ids, `recordKey`), never from
+  a fill or stroke that another owner writes or from a value read off the
+  Result (its fill, stroke, Legend key attribute, transform, or text). The
+  detector counts these joins (`paint-join`, `shown-join`); a join on a
+  caption is a report-only inventory.
 
 The baseline of the current violations is recorded in
 `tests/web/owner-graph-baseline.test.mjs`: the count of a subject stays at or
@@ -657,7 +725,9 @@ WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 `tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
 closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
 projection call shapes, heavy derived trigger sites
-`heavy-derived.trigger-site.v2`, and import direction
+`heavy-derived.trigger-site.v2`, identity read from a display value
+`owner-graph.identity-from-display.v1` (a join on a fill or stroke, and a join
+on the values a Result shows), and import direction
 `layer.import-direction.v1`, which ranks modules with `webLayerOf`; no upward
 import is allowed, and none is recorded);
 `node tools/report-web-owner-graph.mjs --at worktree` prints the current
