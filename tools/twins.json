@@ -905,8 +905,7 @@
         "tools/refresh_gallery_sessions.py"
       ],
       "jsOwner": [
-        "gbdraw/web/js/services/gallery-session-publication.js",
-        "gbdraw/web/js/services/session-request.js:normalizedPublicationBytes"
+        "gbdraw/web/js/services/gallery-session-publication.js"
       ],
       "vector": null,
       "reason": "The Web and the refresh tool each build a publishable Session; tests compare their bytes.",

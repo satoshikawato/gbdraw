@@ -107,7 +107,10 @@ TEST_INPUT_SESSION_FILES = (
 def _is_test_input_session(session_path: Path) -> bool:
     """A test input keeps the unresolved pipelines its specs run on Generate."""
 
-    return session_path.name in TEST_INPUT_SESSION_FILES
+    return (
+        session_path.parent == TEST_INPUT_SESSION_ROOT
+        and session_path.name in TEST_INPUT_SESSION_FILES
+    )
 
 
 def _public_gallery_session_files() -> tuple[str, ...]:

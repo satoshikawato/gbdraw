@@ -2129,7 +2129,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
         'import base64, json, sys', 'from dataclasses import replace',
         'from gbdraw.analysis.protein_colinearity import OrthogroupGraphResult, OrthogroupResult',
         'from gbdraw.session_request_codec import decode_canonical_typed_resource, encode_canonical_typed_resource',
-        'session = json.load(open(sys.argv[1]))', "entry = session['resources']['comparison-canonical-orthogroups-1']",
+        'session = json.load(open(sys.argv[1]))', "entry = session['resources']['comparison-orthogroups']",
         "result = decode_canonical_typed_resource(base64.b64decode(entry['data']), value_kind='orthogroupResult', expected=OrthogroupResult | OrthogroupGraphResult)",
         "drop = lambda values: {key: value for key, value in values.items() if key != 'og_1'}",
         "data = encode_canonical_typed_resource('orthogroupResult', replace(result, ortholog_edges_by_orthogroup_id=drop(result.ortholog_edges_by_orthogroup_id), path_indexes_by_orthogroup_id=drop(result.path_indexes_by_orthogroup_id)))",
