@@ -146,7 +146,11 @@ write-up of a release.
   9.5 to 18.5 px nearer the axis than the lanes, and their own height pushed
   the lanes away from the axis and left empty space. The tint now adds no
   space, its labels keep room beyond the lanes as for `to_slot`, and a region
-  without a label keeps none (OV-474, OV-476, OV-842).
+  without a label keeps none (OV-474, OV-476, OV-842). On a record whose only
+  features are underlays, a `to_slot` span from the feature track now covers
+  their nominal lanes too. Fixed: a feature-bound ribbon of a feature moved to
+  another lane stopped at the outermost lane of a `to_slot` span instead of
+  at its own lane.
 - Web app feature popup: the header shows the gene name, the product on up to
   two lines, and the record and location with thousands separators. **Edit**
   groups **Appearance** (fill, stroke, the label text with its visibility and

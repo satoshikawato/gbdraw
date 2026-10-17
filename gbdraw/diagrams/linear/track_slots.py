@@ -22,7 +22,7 @@ class LinearSlotFootprint:
     paint_band: VerticalBand | None
     reserve_band: VerticalBand
     data_available: bool = True
-    # The band an overlay spans to (to_slot); None means the slot's nominal extents.
+    # The band a span covers on this slot; None means its nominal extents if it has data.
     body_band: VerticalBand | None = None
 
 
@@ -42,6 +42,9 @@ class LinearResolvedSlot:
     data_available: bool
     z: int
     params: Mapping[str, object]
+    # An overlay over several slots (to_slot, or cover_anchor on a features slot with
+    # lanes) takes its band from them, not from its own height.
+    spans_slots: bool = False
 
 @dataclass(frozen=True)
 class LinearRecordVerticalPlan:
@@ -389,21 +392,30 @@ def _resolved_slot(
     )
 
 
+def _span_body(track: LinearResolvedTrack, footprint: LinearSlotFootprint) -> VerticalBand | None:
+    if footprint.body_band is not None:
+        return footprint.body_band
+    if footprint.data_available:
+        return VerticalBand(-track.top_extent, track.bottom_extent)
+    return None
+
+
 def _span_resolved_slot(
     overlay: LinearResolvedSlot,
     referenced: Sequence[tuple[LinearResolvedTrack, LinearSlotFootprint, float]],
 ) -> LinearResolvedSlot:
     """Stretch a spanning overlay over the hull of the bodies its slots have.
 
-    A slot without data for the record has no body; with none at all, the
+    A slot without a body for the record adds none; with none at all, the
     overlay keeps its place on the anchor. Label overhangs keep their size.
     """
 
     bodies = [
-        (footprint.body_band or VerticalBand(-track.top_extent, track.bottom_extent)).translate(origin_y)
+        body.translate(origin_y)
         for track, footprint, origin_y in referenced
-        if footprint.data_available
+        if (body := _span_body(track, footprint)) is not None
     ]
+    overlay = replace(overlay, spans_slots=True)
     if not bodies:
         return overlay
     span = union_vertical_bands(bodies)
@@ -547,10 +559,14 @@ def resolve_linear_record_vertical_plan(
             )
             continue
         relative_origin = float(overlay.y_offset) - float(anchor.y_offset)
-        # cover_anchor on a features slot spans that slot's lanes.
-        span_to = annotation.to_slot or (
-            anchor.id if annotation.cover_anchor and anchor.renderer == "features" else None
+        # cover_anchor on a features slot spans that slot's lanes; on a record
+        # without lanes the overlay keeps its own band on the slot.
+        covers_lanes = (
+            annotation.cover_anchor
+            and anchor.renderer == "features"
+            and _span_body(anchor, footprint_map.get(anchor.id, _default_slot_footprint(anchor))) is not None
         )
+        span_to = annotation.to_slot or (anchor.id if covers_lanes else None)
         # A span pushes no slot: its extent comes from the packed slots. Its label
         # overhang still joins the record body through its reserve band.
         if span_to is None:

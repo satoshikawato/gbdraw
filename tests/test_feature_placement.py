@@ -1602,6 +1602,110 @@ def test_final_placement_ribbons_follow_paint_with_four_unit_clearance(start, fe
     assert source.seq == before.seq and source.features == before.features
 
 
+def _moved_feature_ribbons(slots):
+    """Feature-bound ribbon endpoints (query y, gap, subject y, gap) and tint bands by record."""
+
+    import re
+    from xml.etree import ElementTree as ET
+    from gbdraw.annotations.models import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation
+    from gbdraw.api.options import LinearRequestTrackOptions
+    from gbdraw.features.ids import compute_feature_hash
+    from gbdraw.io.record_select import parse_record_selector
+    from tests.test_linear_multi_record_comparisons import _comparison
+    source = _record()
+    comparison = _comparison(0, 1)
+    rows = []
+    for query_index, subject_index in ((3, 1), (2, 3)):
+        row = comparison.matches.iloc[0].to_dict()
+        for role, index, prefix in (("query", query_index, "q"), ("subject", subject_index, "s")):
+            feature = source.features[index]
+            row.update({f"{role}_feature_index": index,
+                        f"{role}_view_feature_svg_id": compute_feature_hash(feature, record_id=source.id),
+                        f"{prefix}start": int(feature.location.start) + 1,
+                        f"{prefix}end": int(feature.location.end)})
+        rows.append(row)
+    tints = tuple(RegionAnnotation(f"t{index}", CoordinateSpan(parse_record_selector(f"#{index}"), 10, 50),
+                                   label="Reg", mark="highlight") for index in (1, 2))
+    request = _request(mode="linear", linear_comparisons=[replace(comparison, matches=DataFrame(rows))],
+        records=tuple(RecordInput(InMemoryRecordSource(source), record_key=key) for key in ("left", "right")),
+        pairwise_match_style="ribbon",
+        tracks=LinearRequestTrackOptions(linear_track_slots=list(slots),
+                                         linear_track_axis_index=sum("@side=above" in s for s in slots)),
+        annotations=AnnotationOptions(sets=(AnnotationSet("regions", tints),)),
+        config_overrides={"canvas.strandedness": False, "canvas.resolve_overlaps": False,
+            "canvas.linear.track_layout": "middle", "canvas.show_skew": False, "labels.linear.scope": "none"})
+    request = replace(request, options=replace(request.options, feature_placements=(
+        _exact(source, 3, "left", FeaturePlacementTarget("lane", "below", 1)),
+        _exact(source, 1, "right", FeaturePlacementTarget("lane", "above", 1)),
+    )))
+    root = ET.fromstring(plan_request(request).build().drawing.tostring())
+    parents = {child: parent for parent in root.iter() for child in parent}
+    number = r"[-+0-9.eE]+"
+    def absolute_y(element, y):
+        while element is not None:
+            y += sum(float(dy) for _, dy in re.findall(rf"translate\(\s*({number})[,\s]+({number})\)",
+                                                       element.get("transform", "")))
+            element = parents.get(element)
+        return y
+    feature_bands = {}
+    for feature in root.iter():
+        if feature.get("data-gbdraw-feature-id") is None or feature.get("d") is None:
+            continue
+        y_values = [absolute_y(feature, float(y))
+                    for _, y in re.findall(rf"[ML]\s*({number})[,\s]+({number})", feature.get("d"))]
+        half_stroke = float(feature.get("stroke-width", "0")) / 2
+        top, bottom = min(y_values) - half_stroke, max(y_values) + half_stroke
+        element = feature
+        while element is not None:
+            for key in {element.get("id"), element.get("data-gbdraw-feature-id")} - {None}:
+                prior = feature_bands.get(key, (top, bottom))
+                feature_bands[key] = (min(top, prior[0]), max(bottom, prior[1]))
+            element = parents.get(element)
+    endpoints = []
+    for path in root.iter():
+        if not path.get("data-pairwise-match-style"):
+            continue
+        points = re.findall(rf"[ML]\s*({number})[,\s]+({number})", path.get("d"))
+        query_y, subject_y = (absolute_y(path, float(points[i][1])) for i in (0, 2))
+        endpoints.append((query_y, query_y - feature_bands[path.get("data-query-feature-svg-id")][1],
+                          subject_y, feature_bands[path.get("data-subject-feature-svg-id")][0] - subject_y))
+    tint_bands = {}
+    for mark in root.iter():
+        if mark.get("data-gbdraw-annotation-id") in {"t1", "t2"}:
+            rect = next(element for element in mark.iter() if element.tag.endswith("rect"))
+            top = absolute_y(rect, float(rect.get("y")))
+            tint_bands[mark.get("data-gbdraw-annotation-id")] = (top, top + float(rect.get("height")))
+    return endpoints, tint_bands
+
+
+_RIBBON_FEATURES_AND_GC = ("features:features@side=overlay", "gc:dinucleotide_content@side=below")
+
+
+@pytest.mark.parametrize("layer", ["layer=foreground,z=5", "layer=underlay,z=-1"])
+def test_moved_feature_ribbons_stop_outside_a_plain_overlay_taller_than_the_lanes(layer):
+    # A plain overlay keeps its own band on the features slot; only a span takes the lanes.
+    endpoints, tints = _moved_feature_ribbons((*_RIBBON_FEATURES_AND_GC,
+        f"regions:annotations@side=overlay,set_id=regions,show_labels=false,h=200px,anchor_slot=features,{layer}"))
+    assert len(endpoints) == 2
+    for query_y, _, subject_y, _ in endpoints:
+        assert query_y >= tints["t1"][1]
+        assert subject_y <= tints["t2"][0]
+
+
+@pytest.mark.parametrize("stack", [
+    pytest.param(_RIBBON_FEATURES_AND_GC, id="gc-below"),
+    pytest.param(("gc:dinucleotide_content@side=above", "features:features@side=overlay"), id="gc-above"),
+])
+def test_moved_feature_ribbons_ignore_a_to_slot_span(stack):
+    span = ("regions:annotations@side=overlay,set_id=regions,show_labels=false,"
+            "anchor_slot=features,to_slot=gc,layer=underlay,z=-1")
+    plain, _ = _moved_feature_ribbons(stack)
+    spanned, _ = _moved_feature_ribbons((*stack, span))
+    # A span adds no space, so each ribbon keeps its gap to its own feature's lane.
+    assert [(gap_q, gap_s) for _, gap_q, _, gap_s in spanned] == pytest.approx(
+        [(gap_q, gap_s) for _, gap_q, _, gap_s in plain])
+
+
 def test_circular_existing_cli_keeps_separate_strand_resolver(tmp_path, monkeypatch):
     import re
     from xml.etree import ElementTree as ET

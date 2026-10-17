@@ -377,6 +377,87 @@ def test_linear_cover_anchor_labels_keep_room_beyond_the_lanes(
     assert geometry["body"][0] == pytest.approx(geometry["lanes"][0] - room)
 
 
+@pytest.mark.parametrize("track_layout", ["below", "above"])
+@pytest.mark.parametrize("tint", ["repeat_region", "highlight"])
+def test_linear_cover_anchor_on_a_record_without_lane_features_stays_off_the_axis(
+    track_layout: str, tint: str
+) -> None:
+    records = []
+    for index, features in enumerate(([("CDS", 100, 900)], [])):
+        record = SeqRecord(Seq("ACGT" * 600), id=f"r{index + 1}", name=f"r{index + 1}")
+        record.annotations["molecule_type"] = "DNA"
+        if tint == "repeat_region":
+            features = [*features, ("repeat_region", 1000, 1400)]
+        record.features = [SeqFeature(FeatureLocation(a, b, strand=1), type=kind) for kind, a, b in features]
+        records.append(record)
+    regions = tuple(
+        RegionAnnotation(f"t{index}", CoordinateSpan(parse_record_selector(f"#{index}"), 50, 1200),
+                         label="Reg", mark="highlight")
+        for index in (1, 2)
+    )
+    drawing = assemble_linear_diagram_from_records(
+        records,
+        cfg=apply_config_overrides(
+            None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+        ),
+        legend="none",
+        selected_features_set=["CDS", "repeat_region"],
+        annotation_options=(
+            AnnotationOptions(sets=(AnnotationSet("regions", regions),)) if tint == "highlight" else None
+        ),
+    )
+    bands = [
+        {slot["renderer"]: slot["paintBand"] for slot in record["slots"] if slot["paintBand"] is not None}
+        for record in drawing._gbdraw_track_slot_geometry["records"]
+    ]
+    tints = [(band["annotations"]["topPx"], band["annotations"]["bottomPx"]) for band in bands]
+    if tint == "repeat_region":
+        # An underlay feature keeps the nominal lanes, so its tint covers them as on the first record.
+        assert tints[1] == pytest.approx(tints[0])
+    # Without lanes the tint keeps its own band on its side of the axis, clear of GC.
+    if track_layout == "below":
+        assert 0.0 < tints[1][0] and tints[1][1] <= bands[1]["dinucleotide_content"]["topPx"]
+    else:
+        assert tints[1][1] < 0.0
+
+
+def test_linear_to_slot_span_covers_the_nominal_lanes_of_an_underlay_only_record() -> None:
+    records = []
+    for index, features in enumerate((("CDS", "repeat_region"), ("repeat_region",), ())):
+        record = SeqRecord(Seq("ACGT" * 600), id=f"r{index + 1}", name=f"r{index + 1}")
+        record.annotations["molecule_type"] = "DNA"
+        record.features = [
+            SeqFeature(FeatureLocation(100 + 900 * offset, 900 + 500 * offset, strand=1), type=kind)
+            for offset, kind in enumerate(features)
+        ]
+        records.append(record)
+    regions = tuple(
+        RegionAnnotation(f"span{index}", CoordinateSpan(parse_record_selector(f"#{index}"), 50, 1200), mark="highlight")
+        for index in (1, 2, 3)
+    )
+    drawing = assemble_linear_diagram_from_records(
+        records,
+        cfg=apply_config_overrides(None, {"labels.linear.scope": "none"}),
+        legend="none",
+        selected_features_set=["CDS", "repeat_region"],
+        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+        linear_track_slots=["features:features@side=below", "gc:dinucleotide_content@side=below", _span_slot()],
+        linear_track_axis_index=0,
+    )
+    spans = [
+        next((slot["paintBand"]["topPx"], slot["paintBand"]["bottomPx"]) for slot in record["slots"] if slot["slotId"] == "regions")
+        for record in drawing._gbdraw_track_slot_geometry["records"]
+    ]
+    gc_top = next(
+        slot["paintBand"]["topPx"]
+        for slot in drawing._gbdraw_track_slot_geometry["records"][2]["slots"]
+        if slot["slotId"] == "gc"
+    )
+    assert spans[1] == pytest.approx(spans[0])
+    # A record without any lanes: the span keeps to the GC slot.
+    assert spans[2][0] > gc_top
+
+
 def _span_slot(
     spec: str = "anchor_slot=features,to_slot=gc,layer=underlay,z=-1", *, labels: bool = False
 ) -> str:

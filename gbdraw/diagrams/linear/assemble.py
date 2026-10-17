@@ -873,11 +873,13 @@ def _linear_slot_footprints_for_record(
                 side=slot.side,
                 minimum_height=float(slot.height),
             )
+            lanes = feature_geometry.occupied_band
             footprints[slot.id] = LinearSlotFootprint(
                 paint_band=paint_band if feature_dict or labels else None,
                 reserve_band=reserve_band,
                 data_available=bool(feature_dict or labels),
-                body_band=feature_geometry.occupied_band,
+                # Nominal lanes under underlay features are a body without lane features.
+                body_band=lanes if lanes.height > 0.0 else None,
             )
             continue
 
@@ -2688,8 +2690,8 @@ def assemble_linear_diagram(
                 band = record_feature_lane_geometries[
                     record_index
                 ].occupied_band.translate(plan_slot.origin_y)
-            elif plan_slot.side != "overlay":
-                # An overlay lies on slots counted here or on the feature lanes themselves.
+            elif not plan_slot.spans_slots:
+                # A span's band comes from the slots it covers, counted here or as lanes.
                 non_feature_band = band if non_feature_band is None else non_feature_band.union(band)
             attachment_band = attachment_band.union(band)
         record_placements[record_index] = replace(
