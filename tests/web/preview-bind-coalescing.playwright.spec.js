@@ -53,3 +53,68 @@ for (const mode of ['circular', 'linear']) {
     } finally { await page.context().close(); }
   });
 }
+
+// OV-1030: once a script has read `labels` of the page's controls (Playwright's
+// `getByLabel` does), Chromium updates every such live list for each node the
+// HTML parser inserts into the page document: a large Result took seconds to
+// mount instead of tens of milliseconds. The preview parses a Result outside
+// the page document and inserts the parsed tree once.
+test('a Generate parses the preview Result outside the page document (OV-1030)', async ({ browser }) => {
+  test.setTimeout(240000);
+  const page = await load(browser, seeds.linear);
+  try {
+    await generate(page);
+    await page.evaluate(() => {
+      for (const control of document.querySelectorAll('input, select, textarea, button')) void control.labels?.length;
+      window.__PAGE_DOCUMENT_SVG_PARSES__ = 0;
+      // Count every way to parse SVG markup into the page document.
+      const count = () => { window.__PAGE_DOCUMENT_SVG_PARSES__ += 1; };
+      const hasSvg = markup => String(markup).includes('<svg');
+      const inPage = element => element.ownerDocument === document && !(element instanceof HTMLTemplateElement);
+      const wrapSetter = name => {
+        const property = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(Element.prototype, name));
+        Object.defineProperty(Element.prototype, name, {
+          ...property,
+          set(markup) {
+            if (inPage(this) && hasSvg(markup)) count();
+            property.set.call(this, markup);
+          }
+        });
+      };
+      wrapSetter('innerHTML');
+      wrapSetter('outerHTML');
+      const wrapMethod = (owner, name, counts) => {
+        const original = owner[name];
+        if (typeof original !== 'function') return;
+        owner[name] = function (...args) {
+          const result = original.apply(this, args);
+          if (counts(this, args, result)) count();
+          return result;
+        };
+      };
+      wrapMethod(Element.prototype, 'insertAdjacentHTML', (el, [, markup]) => inPage(el) && hasSvg(markup));
+      wrapMethod(Element.prototype, 'setHTMLUnsafe', (el, [markup]) => inPage(el) && hasSvg(markup));
+      wrapMethod(Range.prototype, 'createContextualFragment', (range, [markup], fragment) =>
+        fragment.ownerDocument === document && hasSvg(markup));
+      wrapMethod(Document.prototype, 'importNode', (doc, [node], result) =>
+        doc === document && node.ownerDocument !== document && result.ownerDocument === document
+        && (node.localName === 'svg' || Boolean(node.querySelector?.('svg'))));
+    });
+    await generate(page);
+    const facts = await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const parses = window.__PAGE_DOCUMENT_SVG_PARSES__;
+      // What `innerHTML` makes of the Result, parsed in another document.
+      const reference = document.implementation.createHTMLDocument('').createElement('div');
+      reference.innerHTML = app.results[0].content;
+      const mounted = app.svgContainer;
+      return {
+        parses,
+        elements: mounted.getElementsByTagName('*').length === reference.getElementsByTagName('*').length,
+        rootInPage: mounted.firstElementChild?.ownerDocument === document && mounted.isConnected
+      };
+    });
+    expect(facts).toEqual({ parses: 0, elements: true, rootInPage: true });
+    expect(page.externalRequests).toEqual([]);
+  } finally { await page.context().close(); }
+});

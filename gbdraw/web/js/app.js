@@ -14,6 +14,7 @@ import {
   LinearRecordNames,
   MarkupPreview,
   PreviewZoomPercent,
+  previewMarkup,
   previewTransform,
   RecordName,
   SettingsSectionIndex,
@@ -35,6 +36,7 @@ const app = createApp({
 app.directive('dialog-focus', dialogFocus);
 app.directive('settings-section', settingsSection);
 app.directive('preview-transform', previewTransform);
+app.directive('preview-markup', previewMarkup);
 // Vue's production build only logs an error raised in a render, watcher,
 // event handler or hook; throw it, as the development build did, so it stays
 // an uncaught page error.
