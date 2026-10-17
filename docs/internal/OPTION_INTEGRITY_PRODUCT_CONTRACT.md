@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `56`
+- Contract revision: `57`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -39,7 +39,8 @@ Status: active Product authority
   `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`,
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
-  `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, and `PD-OI-101`
+  `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
+  `PD-OI-102`, `PD-OI-103`, and `PD-OI-104`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -1249,6 +1250,63 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime and tests
     that implement it are in the same pull request, and the Review is
     `REQUIRED`.
+- Revision 57 changes: `PD-OI-102`, `PD-OI-103`, and `PD-OI-104` are added,
+  and `PD-OI-066` and `PD-OI-059` are replaced for scenario revision `2`. They
+  come from the Product Decision Owner `satoshikawato`'s replies of
+  `2026-10-17` to the questions of the decision packet in campaign
+  `incremental-render-20261013`, `design/STEP4-DECISION-PACKET.md` revision
+  2.2 (design `design/STEP4-DESIGN.md` revision 2.2; `DECISIONS.md` `D-67`,
+  `D-68`, and `D-70`). The questions were asked after the Owner invited questions.
+  - Reply 1, one selection per question; each question and the selected label:
+    - `S4-Q1` 「いつ反映しますか？」: 「A 確定時に裏で再描画 (Recommended)」
+    - `S4-Q2` 「どのセクションを即時にしますか？」: 「A G1 だけ (Recommended)」
+    - `S4-Q3` 「GC・skew・depth の表示切替をどうしますか？（OV-1041 と OV-1043 もこの選択に従う）」:
+      「B すぐ隠す＋正確な注記 (Recommended)」
+    - `S4-Q5` 「既存の即時編集が設定反映の終わりを待つことを認めますか？」:
+      「A G1 なら約 0.9 s まで (Recommended)」
+    - the `PD-OI-059` revision `2` question 「定義のどの設定を即時にしますか？」:
+      「A 題名だけ即時 (Recommended)」
+  - Reply 2, to the question
+    「receipt 下書き 7 件（Stage D DL、S4-Q1 A、S4-Q2 A、S4-Q3 B、S4-Q4 A、S4-Q5 A、PD-OI-059 rev 2 A、Owner: Satoshi Kawato、2026-10-17）をこのまま receipt として確定してよいですか？」:
+    「このまま確定 (Recommended)」
+    The drafts filled Rationale, Must preserve, May retire, and Accepted
+    residual risk from the packet text of each selected option; Reply 2
+    confirmed them as written.
+  - Reply 3, two corrections of the confirmed text after a review found that
+    it repeated errors of the packet; each question and the selected label:
+    - 「S4-Q3 B の receipt（PD-OI-104）に事実の誤りがありました。「表示に戻すのは Generate で」と書きましたが、今の dev では描画済みのトラックは隠すのも戻すのも即時で、注記もそう書いてあります（packet の記述が原因）。receipt をどうしますか？」:
+      「今の動作どおりに直す (Recommended)」
+      It corrects the Rationale and Must preserve of the `S4-Q3` receipt: a
+      drawn track is hidden or shown at once, and a track the Result lacks
+      and the layout apply on Generate, with the two notes the Web app shows
+      today.
+    - 「S4-Q4 の効果文に、選ばなかった S4-Q1 C の仕組み「a section's Apply now」が入っています。文を直しますか？」:
+      「選んだ仕組みだけにする (Recommended)」
+      It corrects the `S4-Q4` receipt, which is not recorded here.
+  - The receipts below hold the confirmed text with the Reply 3 correction.
+    Wrapped lines of the confirmed text are joined; no other character
+    differs.
+  - Receipt mapping: `S4-Q1` → `PD-OI-102`; `S4-Q2` → `PD-OI-103`; `S4-Q3` →
+    `PD-OI-104`; `S4-Q5` → `PD-OI-066` scenario revision `2`; the `PD-OI-059`
+    question → `PD-OI-059` scenario revision `2`. The receipts name the
+    questions by these IDs and the setting groups by the packet's names
+    (G1, G2, G3, GT), which `PD-OI-103` quotes. `S4-Q4` (concern
+    `product.saved-session-regeneration-continuity`) belongs to the Product
+    Impact map, and the stage D receipt of the same
+    reply (concern `architecture.r1.generate-preview-mount`) keeps today's
+    behaviour; neither is recorded here. `PD-OI-060` was not asked and keeps
+    scenario revision `1`.
+  - Scope: the `PD-OI-066` scenario revision `1` receipt is kept as it was
+    approved; scenario revision `2` changes only what its receipt states. The
+    `PD-OI-059` scenario revision `1` receipt is not kept in the record; Git
+    history retains it. The `PD-OI-059` record title changes to state
+    scenario revision `2` (no link targets its anchor); its concern key keeps
+    its wording. `OIC-027` is reworded to the parity of `PD-OI-066`
+    scenario revision `2`. `PD-OI-037`, `PD-OI-052`, `PD-OI-060`,
+    `PD-OI-084`, `PD-OI-085`, and every other record keep their text; no
+    other record is amended or retired.
+  - This authority-only amendment contains no runtime; dependent runtime
+    requires it merged into its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -3692,23 +3750,27 @@ Decision date: 2026-09-30
 }
 ```
 
-### PD-OI-059: Circular definition settings apply on Generate
+### PD-OI-059: When the definition settings apply
 
 - Concern key: `web.circular.definition-application`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-059`, scenario revision `1`
+  (`A / CIRCULAR-DEFINITION-APPLIES-ON-GENERATE`), in both diagram modes:
+  Plot title, Title position, and Title font apply live (`PD-OI-102`,
+  `PD-OI-103`), and Species, Strain, Default font size, and Keep Full
+  Definition stay on Generate with an Applies on Generate note, as the
+  receipt below states.
 - Status: `ACCEPTED`
-- Selected outcome: `A / CIRCULAR-DEFINITION-APPLIES-ON-GENERATE`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the complete `D-04` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
-  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
-  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
-  JSON below reproduce all nine supplied fields without translation or
-  additional terms. This record does not supersede another decision.
-  Dependent runtime requires this authority merged into its base; this
-  amendment supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
-  `6380086684b70c8be665093da9549d884082413cbec22de6c26bd1238dc0ce8c`.
+- Selected outcome: `A / TITLES-LIVE-BOTH-MODES`
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 57 entry
+  above. The receipt and JSON below reproduce all nine confirmed fields
+  without translation or additional terms. Dependent runtime requires this
+  authority merged into its base; this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `eaf258733eaaa93868f28d06b55f8fa7bf8d4ff7cd6afda8f38ac5b0c96c83a3`.
 - Acceptance contracts: `OIC-009`, `OIC-010`, `OIC-024`, `OIC-027`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -3716,27 +3778,27 @@ Decision date: 2026-09-30
 ```text
 PRODUCT_DECISION
 Concern: web.circular.definition-application
-Scenario revision: 1
-Choice: A / CIRCULAR-DEFINITION-APPLIES-ON-GENERATE
-Rationale: Result の定義行に、crop の長さ・GC%・record label と食い違う値が書き込まれないようにする。Linear と同じ「Applies on Generate」に揃える。
-Must preserve: Species、Strain、Plot title、Title position、Title font、Default font size、Keep Full Definition の編集・保存・History、Generate 後の正しい定義（region の長さと GC%、record label と subtitle、逆相補、grid の順序）、Linear の現在の挙動、他の即時編集（色、ラベル、凡例など）。各設定には Applies on Generate の表示を付ける。
-May retire: 上の Circular の設定の即時反映と、そのための helper（regenerate_definition_svgs）。
-Accepted residual risk: これらを変えたとき、Generate するまで preview が変わらない。
-Owner: satoshikawato
-Decision date: 2026-09-30
+Scenario revision: 2
+Choice: A / TITLES-LIVE-BOTH-MODES
+Rationale: Plot Title is in both modes and in G1; a full rerender keeps every definition line consistent with crop length, GC% and record label without the retired regenerate_definition_svgs helper.
+Must preserve: editing, saving and History of Species, Strain, Plot title, Title position, Title font, Default font size, Keep Full Definition; the correct definition after Generate (region length and GC%, record label and subtitle, reverse complement, grid order); the other live edits; Species, Strain, Default font size and Keep Full Definition stay on Generate with an Applies on Generate note.
+May retire: the Generate-only timing of Plot Title, Title position and Title font in both modes, and revision 1's reason "align with Linear's on-Generate timing".
+Accepted residual risk: as S4-Q2 A for Plot Title (+54-85 ms over 250 ms on large Sessions).
+Owner: Satoshi Kawato
+Decision date: 2026-10-17
 ```
 
 ```json
 {
   "concern": "web.circular.definition-application",
-  "scenarioRevision": 1,
-  "choice": "A / CIRCULAR-DEFINITION-APPLIES-ON-GENERATE",
-  "rationale": "Result の定義行に、crop の長さ・GC%・record label と食い違う値が書き込まれないようにする。Linear と同じ「Applies on Generate」に揃える。",
-  "mustPreserve": "Species、Strain、Plot title、Title position、Title font、Default font size、Keep Full Definition の編集・保存・History、Generate 後の正しい定義（region の長さと GC%、record label と subtitle、逆相補、grid の順序）、Linear の現在の挙動、他の即時編集（色、ラベル、凡例など）。各設定には Applies on Generate の表示を付ける。",
-  "mayRetire": "上の Circular の設定の即時反映と、そのための helper（regenerate_definition_svgs）。",
-  "acceptedResidualRisk": "これらを変えたとき、Generate するまで preview が変わらない。",
-  "owner": "satoshikawato",
-  "decisionDate": "2026-09-30"
+  "scenarioRevision": 2,
+  "choice": "A / TITLES-LIVE-BOTH-MODES",
+  "rationale": "Plot Title is in both modes and in G1; a full rerender keeps every definition line consistent with crop length, GC% and record label without the retired regenerate_definition_svgs helper.",
+  "mustPreserve": "editing, saving and History of Species, Strain, Plot title, Title position, Title font, Default font size, Keep Full Definition; the correct definition after Generate (region length and GC%, record label and subtitle, reverse complement, grid order); the other live edits; Species, Strain, Default font size and Keep Full Definition stay on Generate with an Applies on Generate note.",
+  "mayRetire": "the Generate-only timing of Plot Title, Title position and Title font in both modes, and revision 1's reason \"align with Linear's on-Generate timing\".",
+  "acceptedResidualRisk": "as S4-Q2 A for Plot Title (+54-85 ms over 250 ms on large Sessions).",
+  "owner": "Satoshi Kawato",
+  "decisionDate": "2026-10-17"
 }
 ```
 
@@ -4163,23 +4225,38 @@ Decision date: 2026-09-30
 ### PD-OI-066: Live-edit and regeneration parity
 
 - Concern key: `web.live-edit.regeneration-parity`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-066`, scenario revision `1`
+  (`A / LIVE-EDIT-EQUALS-REGENERATION`). Scenario revision `2` keeps every
+  effect of scenario revision `1` except what its receipt states: "the
+  response speed of each live edit" is no longer an unconditional rule, only
+  for the wait for G1 applies (`PD-OI-103`), and the parity is stated with its
+  condition on pending Applies on Generate values.
 - Status: `ACCEPTED`
-- Selected outcome: `A / LIVE-EDIT-EQUALS-REGENERATION`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the complete `D-11` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+- Selected outcome: `A / WAIT-FOR-G1-APPLIES`
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below,
+  with the effects of the scenario revision `1` receipt that it does not
+  change. The scenario revision `1` receipt is kept as it was approved.
+- Decision source (scenario revision `1`): the complete `D-11` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
   `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
   Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
   JSON below reproduce all nine supplied fields without translation or
-  additional terms. This record does not supersede another decision.
-  Dependent runtime requires this authority merged into its base; this
-  amendment supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+  additional terms.
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `9298e2bb07d617f9f2562e8168d412a867082f4130b60ec709ef2d7ff005e9e8`.
+- Decision source (scenario revision `2`): the Owner replies quoted verbatim
+  in the Revision 57 entry above. The second receipt and JSON below reproduce
+  all nine confirmed fields without translation or additional terms.
+  Dependent runtime requires this authority merged into its base; this record
+  supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `8027018ef3be9188c563c3c8a122a9c01b6512a04cb71347a45542bd93e915c0`.
 - Acceptance contracts: `OIC-024`, `OIC-027`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
+
+Scenario revision `1` receipt, approved by `satoshikawato` on `2026-09-30`:
 
 ```text
 PRODUCT_DECISION
@@ -4205,6 +4282,35 @@ Decision date: 2026-09-30
   "acceptedResidualRisk": "即時に反映される設定が減ることがある（D-04 と D-05 と同じ方向）。parity を取れない即時編集は退役しうる（D-30）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-30"
+}
+```
+
+Scenario revision `2` receipt, confirmed on `2026-10-17`:
+
+```text
+PRODUCT_DECISION
+Concern: web.live-edit.regeneration-parity
+Scenario revision: 2
+Choice: A / WAIT-FOR-G1-APPLIES
+Rationale: an apply is not cancelled mid-flight, so an existing live edit made during a G1 apply waits for it; the wait is short (about two G1 applies) with S4-Q2 A and S4-Q3 B.
+Must preserve: accurate Live edit and Applies on Generate notes (OIC-024); the PD-OI-052 decoration delta; Applies on Generate settings unchanged before Generate; parity stated as: a live Result equals a fresh Generate from the same draft in the target elements' meaning when no pending Applies on Generate value changes those elements; otherwise it equals a Generate of the committed Session plus the applied live values.
+May retire: "the response speed of each live edit" as an unconditional rule, only for the G1 wait.
+Accepted residual risk: a wait of up to about 0.9 s after a committed G1 value (about 0.5-0.6 s on tobacco), longer while values keep being committed.
+Owner: Satoshi Kawato
+Decision date: 2026-10-17
+```
+
+```json
+{
+  "concern": "web.live-edit.regeneration-parity",
+  "scenarioRevision": 2,
+  "choice": "A / WAIT-FOR-G1-APPLIES",
+  "rationale": "an apply is not cancelled mid-flight, so an existing live edit made during a G1 apply waits for it; the wait is short (about two G1 applies) with S4-Q2 A and S4-Q3 B.",
+  "mustPreserve": "accurate Live edit and Applies on Generate notes (OIC-024); the PD-OI-052 decoration delta; Applies on Generate settings unchanged before Generate; parity stated as: a live Result equals a fresh Generate from the same draft in the target elements' meaning when no pending Applies on Generate value changes those elements; otherwise it equals a Generate of the committed Session plus the applied live values.",
+  "mayRetire": "\"the response speed of each live edit\" as an unconditional rule, only for the G1 wait.",
+  "acceptedResidualRisk": "a wait of up to about 0.9 s after a committed G1 value (about 0.5-0.6 s on tobacco), longer while values keep being committed.",
+  "owner": "Satoshi Kawato",
+  "decisionDate": "2026-10-17"
 }
 ```
 
@@ -5960,6 +6066,151 @@ Decision date: 2026-10-16
 }
 ```
 
+### PD-OI-102: Live settings redraw the Result when a value is committed
+
+- Concern key: `web.settings.live-application`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / LIVE-ON-COMMIT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 57 entry
+  above. The receipt and JSON below reproduce all nine confirmed fields
+  without translation or additional terms. This record does not supersede
+  another decision. Dependent runtime requires this authority merged into its
+  base; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `3593074885d0092e44834791a2cfaa3de11d88001352203542149c594e81a599`.
+
+```text
+PRODUCT_DECISION
+Concern: web.settings.live-application
+Scenario revision: 1
+Choice: A / LIVE-ON-COMMIT
+Rationale: the campaign goal (every setting the Result shows applies in real time) with one mechanism: committing a value redraws the current Result in the background through the same renderer and stages as Generate.
+Must preserve: Generate (atomic, applies every other setting, resets zoom); Processing / Canceling only in the Generate button; the live edit notices; the previous Result on failure; Undo / Redo (one step per change); the Session Result / draft separation for settings that apply on Generate; export of the current Result; every existing live edit; a live Result identical to a Generate.
+May retire: the Generate-only timing of the sections chosen in S4-Q2 (G1); the "Applies on Generate" note on those controls; staging several of those changes to see them only at Generate.
+Accepted residual risk: Save, Load, a mode switch and the Undo/Redo of a mode switch are refused during an apply; editor edits wait until the apply loop is idle (about two applies, longer if values keep being committed); Reset Settings or Import settings show a half-applied state until Generate; a valid value coalesced with an invalid one is not applied; an Undo whose re-apply fails leaves the control and the figure on different values.
+Owner: Satoshi Kawato
+Decision date: 2026-10-17
+```
+
+```json
+{
+  "concern": "web.settings.live-application",
+  "scenarioRevision": 1,
+  "choice": "A / LIVE-ON-COMMIT",
+  "rationale": "the campaign goal (every setting the Result shows applies in real time) with one mechanism: committing a value redraws the current Result in the background through the same renderer and stages as Generate.",
+  "mustPreserve": "Generate (atomic, applies every other setting, resets zoom); Processing / Canceling only in the Generate button; the live edit notices; the previous Result on failure; Undo / Redo (one step per change); the Session Result / draft separation for settings that apply on Generate; export of the current Result; every existing live edit; a live Result identical to a Generate.",
+  "mayRetire": "the Generate-only timing of the sections chosen in S4-Q2 (G1); the \"Applies on Generate\" note on those controls; staging several of those changes to see them only at Generate.",
+  "acceptedResidualRisk": "Save, Load, a mode switch and the Undo/Redo of a mode switch are refused during an apply; editor edits wait until the apply loop is idle (about two applies, longer if values keep being committed); Reset Settings or Import settings show a half-applied state until Generate; a valid value coalesced with an invalid one is not applied; an Undo whose re-apply fails leaves the control and the figure on different values.",
+  "owner": "Satoshi Kawato",
+  "decisionDate": "2026-10-17"
+}
+```
+
+### PD-OI-103: Settings sections that apply live
+
+- Concern key: `web.settings.live-sections`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / G1-LIVE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 57 entry
+  above. The receipt and JSON below reproduce all nine confirmed fields
+  without translation or additional terms. This record does not supersede
+  another decision. Dependent runtime requires this authority merged into its
+  base; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `d30daa401717a284efa14fd6e9ba211617c3e51af15499371127b2bc71e87fe2`.
+- Setting groups the receipts name (G1, G2, G3, GT): the membership quoted
+  from the packet's "Groups used below". It names the groups; it adds no
+  outcome.
+  - G1: Legend (position, swatch size, font size); Plot Title, its Position
+    and Font Size (both modes); Circular multi-record Record Size Mode, Min
+    Radius, Column and Row Gap Ratio, Row for record; Linear Lock Definition
+    Column.
+  - G2: Species, Strain, Default font size, definition rows, Keep Full
+    Definition, record names; Axis; Dinucleotide; Region Annotations;
+    comparison match height and style; Linear record gap and rows; feature
+    block and line stroke; custom track stacks.
+  - GT: Show / Hide GC Content, GC Skew, Depth.
+  - G3 (stays on Generate in every choice): searches, record set, comparison
+    filters, Labels, Font, feature types, rendering, geometry and placement,
+    layout presets, reverse, region, display start, depth and Circular
+    conservation display settings.
+
+```text
+PRODUCT_DECISION
+Concern: web.settings.live-sections
+Scenario revision: 1
+Choice: A / G1-LIVE
+Rationale: G1 applies in 0.25-0.45 s on every measured Session; G2 costs 0.8-6.3 s on large Sessions, so each G2 section is asked later on its own evidence (the packet's later-question rule).
+Must preserve: every G2 setting's Generate-only timing and the Session separation for it; G3 unchanged; GT per S4-Q3.
+May retire: the Generate-only timing and the note of Legend, Plot Title and its Position and Font Size, the Circular multi-record layout and the Linear Lock Definition Column, in both modes.
+Accepted residual risk: Plot Title +55 / +85 / +54 ms over 250 ms on Vnig / hepa / vibrio, Lock Definition Column about +30 ms, tobacco +138 / +157 ms over 100 ms; the S4-Q1 risks for G1.
+Owner: Satoshi Kawato
+Decision date: 2026-10-17
+```
+
+```json
+{
+  "concern": "web.settings.live-sections",
+  "scenarioRevision": 1,
+  "choice": "A / G1-LIVE",
+  "rationale": "G1 applies in 0.25-0.45 s on every measured Session; G2 costs 0.8-6.3 s on large Sessions, so each G2 section is asked later on its own evidence (the packet's later-question rule).",
+  "mustPreserve": "every G2 setting's Generate-only timing and the Session separation for it; G3 unchanged; GT per S4-Q3.",
+  "mayRetire": "the Generate-only timing and the note of Legend, Plot Title and its Position and Font Size, the Circular multi-record layout and the Linear Lock Definition Column, in both modes.",
+  "acceptedResidualRisk": "Plot Title +55 / +85 / +54 ms over 250 ms on Vnig / hepa / vibrio, Lock Definition Column about +30 ms, tobacco +138 / +157 ms over 100 ms; the S4-Q1 risks for G1.",
+  "owner": "Satoshi Kawato",
+  "decisionDate": "2026-10-17"
+}
+```
+
+### PD-OI-104: GC, skew and depth toggles of a drawn track apply at once
+
+- Concern key: `web.layout.track-toggle-application`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / TOGGLE-HIDE-AT-ONCE-NOTED`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 57 entry
+  above. The receipt and JSON below reproduce all nine confirmed fields
+  without translation or additional terms. This record does not supersede
+  another decision. Dependent runtime requires this authority merged into its
+  base; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `23aa2302bfdbf219d08593e7e37f484ab039efb7b030bc53a98d916228883aec`.
+
+```text
+PRODUCT_DECISION
+Concern: web.layout.track-toggle-application
+Scenario revision: 1
+Choice: B / TOGGLE-HIDE-AT-ONCE-NOTED
+Rationale: hiding or showing a drawn GC, skew or depth track is instant today; redrawing on every toggle costs seconds on large Sessions. Keep the behaviour and state it truthfully.
+Must preserve: all of today's behaviour (hiding or showing a drawn track applies at once in the shown Result; a track the Result lacks, and the layout, apply on Generate), with today's notes: "Hiding or showing a drawn track applies at once; a new track and the layout apply on Generate" (track visibility) and "Adding a Depth file shows and removing the last one hides the drawn Depth track at once; the rest applies on Generate" (Depth files). OV-1041 and OV-1043 are fixed to match this outcome (truthful notes or behaviour).
+May retire: none.
+Accepted residual risk: a gap where a hidden track was, until Generate.
+Owner: Satoshi Kawato
+Decision date: 2026-10-17
+```
+
+```json
+{
+  "concern": "web.layout.track-toggle-application",
+  "scenarioRevision": 1,
+  "choice": "B / TOGGLE-HIDE-AT-ONCE-NOTED",
+  "rationale": "hiding or showing a drawn GC, skew or depth track is instant today; redrawing on every toggle costs seconds on large Sessions. Keep the behaviour and state it truthfully.",
+  "mustPreserve": "all of today's behaviour (hiding or showing a drawn track applies at once in the shown Result; a track the Result lacks, and the layout, apply on Generate), with today's notes: \"Hiding or showing a drawn track applies at once; a new track and the layout apply on Generate\" (track visibility) and \"Adding a Depth file shows and removing the last one hides the drawn Depth track at once; the rest applies on Generate\" (Depth files). OV-1041 and OV-1043 are fixed to match this outcome (truthful notes or behaviour).",
+  "mayRetire": "none.",
+  "acceptedResidualRisk": "a gap where a hidden track was, until Generate.",
+  "owner": "Satoshi Kawato",
+  "decisionDate": "2026-10-17"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -5990,7 +6241,7 @@ Decision date: 2026-10-16
 | `OIC-024` | `PD-OI-037` revision 2: operation-level Live edit, Applies on Generate, and Apply required remain truthful, including Palette Instant Preview and Alignment review. No always-on derived Pending/Applied status or its computation remains. Live applying/error, Processing/Canceling, real errors, and recovery are shown when they occur, with no status-only Worker, genome-byte read/hash, canonical request projection, generated-table build, or SVG/checkpoint clone. |
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. At every width the review is docked in the Result, closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then reopens an Editor that was open on the same tab; the review cannot be dragged. During the review the feature popup is hidden, a click on the figure neither opens, switches nor closes it, search Open switches its target, and it returns when the review ends. The figure is fitted when the review opens and the earlier zoom and pan return when it ends; a Session saved during the review and the History of its Apply keep the earlier zoom and pan. Browser verification must show presentation changes leave draft and Result unchanged. |
-| `OIC-027` | `PD-OI-066`: a live-edited Result agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element, including after Session load and export. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
+| `OIC-027` | `PD-OI-066` scenario revision `2`: a live-edited Result, including after Session load and export, agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element when no pending Applies on Generate value changes those elements; otherwise it agrees with a Generate of the committed Session plus the applied live values. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
 | `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (`Merge into "<name>"` or `Keep both: name it "<name 2>"`), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
 | `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
 | `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; a drawing switch writes no setting and is not an Undo step; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown; each Session 27-44 fixture and each Session 46 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a Session 46 or 47 preview-only Load starts no Python Worker; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
