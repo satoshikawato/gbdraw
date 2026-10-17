@@ -8,6 +8,7 @@ import {
 
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
+import { parseMarkupInertly } from './utils/inert-markup.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsView } from './services/settings-sections.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
@@ -234,17 +235,10 @@ export const previewTransform = {
 
 // `v-preview-markup="svgContent"` on the preview surface: its children are the
 // Result's markup, as `v-html` would set them, at the same points of the
-// patch. The markup is parsed into a <template>'s content, which an inert
-// document owns, and the parsed tree is inserted at once. Parsing into an
-// element of the page document costs, for each parsed node, an update of every
-// live `labels` list of the page (Chromium keeps them once a script, such as
-// Playwright's `getByLabel`, has read them): seconds for a large Result
-// instead of tens of milliseconds (OV-1030).
+// patch. The markup is parsed outside the page document (OV-1030).
 /** @param {HTMLElement} element @param {string | null | undefined} markup */
 const setPreviewMarkup = (element, markup) => {
-  const template = document.createElement('template');
-  template.innerHTML = String(markup ?? '');
-  element.replaceChildren(template.content);
+  element.replaceChildren(parseMarkupInertly(markup));
 };
 export const previewMarkup = {
   /** @param {HTMLElement} element @param {{ value: string | null | undefined }} binding */
