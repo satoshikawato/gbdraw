@@ -4908,7 +4908,8 @@ export const createAppSetup = () => {
     similarityAlignmentActions.dialogOpen.value ? 'Finish or cancel alignment review before opening Editor.' : ''
   ));
   similarityAlignmentPorts.editorDisabledReason = () => similarityAlignmentEditorDisabledReason.value;
-  // The figure is fitted to the room the docked panel leaves, once the panel is in the page.
+  // The figure is fitted to the room the docked panel leaves, once the panel is in the page. The
+  // pan/zoom owner fits it again when that room changes, for as long as it holds the view.
   const fitPreviewForSimilarityAlignment = () => {
     if (similarityAlignmentActions.dialogOpen.value) fitPreviewToViewport();
   };

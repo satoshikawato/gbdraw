@@ -276,6 +276,12 @@ export const createPanZoom = (state) => {
     resetZoom ? 1.0 : zoom.value
   );
 
+  // The room of the figure is the canvas box, which a zoomed figure's scrollbars do not change.
+  /** @param {HTMLElement} container The preview canvas. */
+  const previewRoom = (container) => `${container.offsetWidth}x${container.offsetHeight}`;
+  // The room the last Fit measured.
+  let fittedRoom = '';
+
   // Fit (UI-11): the largest whole-percent zoom that shows the whole diagram in
   // the visible preview frame (the canvas left of an open Editor drawer), and
   // the pan that centres it under the top-center origin.
@@ -293,6 +299,7 @@ export const createPanZoom = (state) => {
     const width = svgBox.width / zoom.value;
     const height = svgBox.height / zoom.value;
     if (!(width > 0 && height > 0)) return;
+    fittedRoom = previewRoom(container);
     const largest = Math.min(
       (frameWidth - 2 * FIT_MARGIN_PX) / width,
       (container.clientHeight - 2 * FIT_MARGIN_PX) / height
@@ -399,9 +406,24 @@ export const createPanZoom = (state) => {
   // writer and the UI capture read it through `heldPreviewViewport`.
   /** @type {PersistedPreviewViewport | null} */
   let held = null;
-  const holdPreviewViewport = () => { held ??= { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } }; };
+  // While a view is held, the figure shown in its place follows its room: it is fitted again each
+  // time the canvas changes size, whatever changed it (the window, the settings pane, the docked
+  // panel changing sides). A zoom or a pan made in between lasts until the next such change. A
+  // hidden canvas (the Run info tab) has no room, and the room of the last Fit is no change.
+  const heldRoomObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+    const container = canvasContainerRef.value;
+    if (!container?.offsetWidth || !container.offsetHeight || previewRoom(container) === fittedRoom) return;
+    fitPreviewToViewport();
+  }) : null;
+  const holdPreviewViewport = () => {
+    if (held) return;
+    held = { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } };
+    fittedRoom = '';
+    if (canvasContainerRef.value) heldRoomObserver?.observe(canvasContainerRef.value);
+  };
   /** @param {{ restore: boolean }} options `restore` shows the held view again; without it the hold is dropped. */
   const releasePreviewViewport = ({ restore }) => {
+    heldRoomObserver?.disconnect();
     const view = held;
     held = null;
     if (view && restore) setPreviewViewport(view.canvasPan, view.zoom);
@@ -409,6 +431,7 @@ export const createPanZoom = (state) => {
   const heldPreviewViewport = () => held;
 
   const disposePanZoom = () => {
+    heldRoomObserver?.disconnect();
     cancelPreviewTransformInteraction({ reconcile: false });
     previewTransformInteractionListeners.clear();
   };
@@ -432,12 +455,14 @@ export const createPanZoom = (state) => {
 /** @param {Record<string, any>} state Shape owned by state.js. */
 export const createSidebarResize = (state) => {
   const { sidebarWidth, isResizing } = state;
+  // Where the pointer pressed the handle, as its distance from the pane's width: the pane
+  // follows the pointer from the first move (OV-620).
+  let grabOffset = 0;
 
   /** @param {MouseEvent} event */
   const doResize = (event) => {
     if (!isResizing.value) return;
-    const newWidth = event.clientX - 16;
-    sidebarWidth.value = Math.max(240, Math.min(500, newWidth));
+    sidebarWidth.value = Math.max(240, Math.min(500, event.clientX - grabOffset));
   };
 
   const stopResizing = () => {
@@ -446,9 +471,11 @@ export const createSidebarResize = (state) => {
     document.removeEventListener('mouseup', stopResizing);
   };
 
-  const startResizing = () => {
+  /** @param {MouseEvent} event The press on the handle. */
+  const startResizing = (event) => {
     // The press is default-prevented, so the field is blurred here.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    grabOffset = event.clientX - sidebarWidth.value;
     isResizing.value = true;
     document.addEventListener('mousemove', doResize);
     document.addEventListener('mouseup', stopResizing);

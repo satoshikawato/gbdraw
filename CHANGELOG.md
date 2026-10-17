@@ -572,6 +572,18 @@ write-up of a release.
   **Recommended** chip stays on the recommended candidate after you choose
   another. Behaviour is unchanged: choices stay local until **Apply**, which
   validates, regenerates, and commits in one step.
+- Similarity alignment (web app): while **Review alignment** is open, the
+  figure is fitted again whenever its room changes: the window is resized, the
+  settings panel is dragged wider or narrower or switched between the full
+  panel and the icons, a section beside the icons opens or closes, the review
+  panel moves between the side of the figure and below it, or a notice above
+  the Result appears or goes. Before, the figure kept the fit of the moment the
+  panel opened, so it was cut or left room unused. A zoom or position you set
+  by hand during the review stays while the room stays and is replaced by the
+  fit at the next such change; **Fit** works as before, and the view from
+  before the review still returns when the panel closes (OV-536). The settings
+  panel now follows the pointer from the first move of a width drag; it jumped
+  10 px wider first (OV-620).
 - Similarity alignment (web app): the **Reset alignment** dialog says "Undo
   the latest Align." and offers **Positions only** and **Positions and
   directions (N records)**. The reason a scope is unavailable sits under it.
