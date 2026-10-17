@@ -4377,7 +4377,8 @@
                                     </div>
                                 </div>
 
-                                <div v-if="form.multi_record_canvas" data-capture="multi-record-canvas-controls" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
+                                <div v-if="form.multi_record_canvas" data-capture="multi-record-canvas-controls" data-setting="multi-record-layout" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
+                                    <setting-note setting="multi-record-layout" class="col-span-2"></setting-note>
                                     <div>
                                         <span class="input-label text-[10px] mb-1">Record Size Mode <help-tip id="help-circular-record-size-mode" text="Scale circles by record length on multi-record canvas."></help-tip></span>
                                         <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs" aria-label="Record Size Mode" aria-describedby="help-circular-record-size-mode" :disabled="!semanticMutationAvailable">
@@ -4488,6 +4489,8 @@
                         <div class="mt-2 space-y-4 pt-2 border-t border-slate-200">
                             <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
                                 <h4 id="plot-title-settings-heading" class="group-heading">Plot Title</h4>
+                                <div data-setting="plot-title" class="space-y-2">
+                                <setting-note setting="plot-title"></setting-note>
                                 <div>
                                     <span class="input-label text-[10px] mb-1">
                                         Text
@@ -4514,6 +4517,7 @@
                                         <span class="input-label text-[10px] mb-0">Font size <help-tip id="help-title-font-size" :text="mode === 'circular' ? 'Font size for the circular shared plot title. Only used when the title position is Top or Bottom.' : 'Font size for the linear plot title.'"></help-tip></span>
                                         <input type="number" :value="optionalNumberInputValue(adv.plot_title_font_size)" @input="setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)" class="form-input form-input-compact" placeholder="Auto (32)" aria-label="Plot Title Font Size" aria-describedby="help-title-font-size" :disabled="!semanticMutationAvailable">
                                     </div>
+                                </div>
                                 </div>
                                 <div v-if="mode === 'circular' && adv.plot_title_position !== 'none'" class="flex items-center text-xs">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -6142,8 +6146,8 @@
                         </div>
                         <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
                         <div v-if="!richFeaturePopup || clickedFeature.activeTab === 'edit'" class="space-y-3">
-                        <section aria-labelledby="feature-popup-appearance-heading" data-feature-popup-group="appearance">
-                            <h3 id="feature-popup-appearance-heading" class="feature-popup-heading">Appearance <span class="ui-hint font-normal normal-case tracking-normal" data-feature-popup-live-marker>Updates the current Result</span></h3>
+                        <section aria-labelledby="feature-popup-appearance-heading" data-feature-popup-group="appearance" data-setting="feature-appearance">
+                            <h3 id="feature-popup-appearance-heading" class="feature-popup-heading">Appearance <span class="ui-hint font-normal normal-case tracking-normal" data-feature-popup-live-marker>{{ settingApplicationNote('feature-appearance').text }}</span></h3>
                             <div class="feature-popup-grid">
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
@@ -7717,8 +7721,8 @@
                     </div>
 
                     <div v-show="rightDrawerTab === 'legend'" id="right-drawer-panel-legend" class="flex-1 min-h-0 flex flex-col">
-                        <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0 flex items-center gap-1" data-legend-tab-toolbar>
-                            <help-tip id="legend-tab-help" label="About the Legend tab" text="Live edit: legend text, order, stroke, and removal update the current Result. To reorder, drag a row by its grip, or focus the grip and press the Up or Down arrow."></help-tip>
+                        <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0 flex items-center gap-1" data-legend-tab-toolbar data-setting="legend-editor">
+                            <help-tip id="legend-tab-help" label="About the Legend tab" :text="settingApplicationNote('legend-editor').text + ' To reorder, drag a row by its grip, or focus the grip and press the Up or Down arrow.'"></help-tip>
                             <button aria-label="Sort A-Z" @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort A-Z" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-sort-ascending" aria-hidden="true"></i>
                             </button>
@@ -7801,7 +7805,7 @@
                     <div v-if="isFeatureDrawerMounted" id="right-drawer-panel-features" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
-                                <p class="text-xs font-semibold text-slate-600 flex items-center gap-1"><span>Features ({{ filteredFeatures.length }})</span><help-tip id="features-tab-help" label="About the Features tab" text="Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically. Select a row to edit its label or open its details."></help-tip></p>
+                                <p class="text-xs font-semibold text-slate-600 flex items-center gap-1" data-setting="features-editor"><span>Features ({{ filteredFeatures.length }})</span><help-tip id="features-tab-help" label="About the Features tab" :text="settingApplicationNote('features-editor').text + ' Select a row to edit its label or open its details.'"></help-tip></p>
                                 <span class="text-[10px] text-slate-500 truncate" :title="featureEditorStatus.error || featureEditorStatusText">{{ featureEditorStatusText }}</span>
                             </div>
                         </div>
@@ -8299,6 +8303,9 @@
                 <h2 id="linear-source-removal-title" class="break-all text-base font-bold text-slate-800">Remove {{ linearSourceRemovalTargetName }}?</h2>
                 <p id="linear-source-removal-description" class="mt-2 text-sm leading-relaxed text-slate-600">
                     It contains {{ linearSourceRemovalTarget?.records?.length || 0 }} record{{ (linearSourceRemovalTarget?.records?.length || 0) === 1 ? '' : 's' }}.
+                </p>
+                <p v-if="linearSourceRemovalTarget?.records?.some((record) => hasLinearDepthFiles(record.sequence))" data-setting="depth-sources" class="mt-2">
+                    <setting-note setting="depth-sources"></setting-note>
                 </p>
                 <p v-if="!linearSourceRemovalTarget" class="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                     This File is no longer available. Cancel and try again.

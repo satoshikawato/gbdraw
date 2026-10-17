@@ -391,6 +391,8 @@ export const createHistoryManager = ({
   // reserves its number when `openStep` starts (some numbers stay unused).
   let intentStepSerial = 0;
   let totalEntryBytes = 0;
+  /** @type {(changes: readonly HistoryIntentChange[] | null) => void} */
+  let settingsStepListener = () => {};
   // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
   // is entry k+1's `before`), so its bytes count once while any live entry
   // names it. Keyed by `artifactRetentionKey`.
@@ -847,6 +849,7 @@ export const createHistoryManager = ({
     clearRedo();
     enforceLimits();
     touch();
+    settingsStepListener(entry.changes);
     return true;
   };
 
@@ -1606,6 +1609,9 @@ export const createHistoryManager = ({
     } finally {
       restoring.value = false;
     }
+    // A checkpoint's figure can predate the apply of its live values (the
+    // Redo of Reset Settings); one already equal applies nothing.
+    settingsStepListener(null);
     setCurrentCheckpoint(record);
     await refreshCurrentIntent();
   };
@@ -1725,7 +1731,16 @@ export const createHistoryManager = ({
   const undoLabel = () => (canUndo() ? undoStack[undoStack.length - 1].label : '');
   const redoLabel = () => (canRedo() ? redoStack[redoStack.length - 1].label : '');
 
+  /**
+   * The one listener of the settings a History step records or a checkpoint
+   * restore installs (`null`: any setting). The composition root registers it
+   * once both History and the automatic rerender exist (R1 (c), PD-OI-102).
+   * @param {(changes: readonly HistoryIntentChange[] | null) => void} listener
+   */
+  const setSettingsStepListener = (listener) => { settingsStepListener = listener; };
+
   return {
+    setSettingsStepListener,
     mutationPending: () => {
       void transactionRevision.value;
       return Boolean(restoring.value || capturing.value || intentCommitOwnedByAction());

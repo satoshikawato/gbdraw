@@ -365,7 +365,7 @@ export { CANONICAL_REQUEST_SCHEMA };
 /**
  * @import {
  *   CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalCircularDiagramOptions,
- *   CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalRecord, CanonicalRenderRequest,
+ *   CanonicalCircularLayout, CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalRecord, CanonicalRenderRequest,
  *   CanonicalSimilarityAlignmentPlan, CanonicalTableRef
  * } from '../contracts/request.generated.js'
  */
@@ -1464,6 +1464,167 @@ const effectiveLabelRendering = (form, adv, circular, linearLabelPlacement) => {
   return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
 };
 
+// R7: a config leaf is projected literally; Python validates its domain.
+/** @param {string} configPath @param {unknown} value */
+const configLeaf = (configPath, value) => projectOptionalNumber(value, { configPath });
+// A shared length leaf is sent as its `.short` and `.long` overrides, and
+// blank sends neither.
+/** @param {string} path @param {unknown} value @returns {Record<string, number>} */
+const sharedLengthOverrides = (path, value) => {
+  const projected = configLeaf(`${path}.short`, value);
+  return typeof projected === 'number' ? { [`${path}.short`]: projected, [`${path}.long`]: projected } : {};
+};
+
+// G1 request fields (PD-OI-103), each projected by one function that Generate
+// and the live apply of its `SETTING_APPLICATION` row both call (R3, no twin).
+/** @param {Record<string, unknown>} form @param {string} mode */
+const requestLegendPosition = (form, mode) => legendPositionOfMode(form.legend, mode)
+  ?? WEB_UX_PROFILE[mode === 'linear' ? 'linear' : 'circular'].legend;
+/** @param {Record<string, unknown>} adv @param {string} mode */
+const requestPlotTitlePosition = (adv, mode) => String(adv.plot_title_position || (mode === 'linear' ? 'bottom' : 'none'));
+/** @param {Record<string, unknown>} form */
+const requestPlotTitle = (form) => String(form.plot_title || '').trim() || null;
+/** @param {Record<string, unknown>} adv */
+const requestPlotTitleFontSize = (adv) => projectOptionalNumber(adv.plot_title_font_size, { field: 'plot_title_font_size' });
+/**
+ * The Circular multi-record canvas layout, field by field. The draft keys each
+ * record's row by its file selector `#N`; the request names the drawn records
+ * by their position among them (`circularSourceIndexes`: the source index of
+ * each drawn record), so an OFF record has no token and returns to its row
+ * when it is ON again. Blank is the documented default (Python's); any number
+ * is sent literally.
+ * @type {Readonly<{ [K in keyof CanonicalCircularLayout]:
+ *   (adv: Record<string, unknown>, circularSourceIndexes: readonly number[] | null) => CanonicalCircularLayout[K] }>}
+ */
+const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
+  multiRecordSizeMode: (adv) => requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode),
+  multiRecordMinRadiusRatio: (adv) => projectOptionalNumber(adv.multi_record_min_radius_ratio, { field: 'multi_record_min_radius_ratio' }) ?? 0.55,
+  multiRecordColumnGapRatio: (adv) => projectOptionalNumber(adv.multi_record_column_gap_ratio, { field: 'multi_record_column_gap_ratio' }) ?? 0.10,
+  multiRecordRowGapRatio: (adv) => projectOptionalNumber(adv.multi_record_row_gap_ratio, { field: 'multi_record_row_gap_ratio' }) ?? 0.05,
+  multiRecordPositions: (adv, circularSourceIndexes) => {
+    /** @param {string} selector */
+    const drawnPosition = (selector) => {
+      const match = /^#([1-9][0-9]*)$/.exec(selector);
+      if (!match || !Array.isArray(circularSourceIndexes)) return selector;
+      const position = circularSourceIndexes.indexOf(Number(match[1]) - 1);
+      return position < 0 ? '' : `#${position + 1}`;
+    };
+    const positions = Array.isArray(adv.multi_record_positions)
+      ? adv.multi_record_positions
+          .flatMap((/** @type {{ selector?: unknown, row?: unknown } | null} */ entry) => {
+            const selector = drawnPosition(String(entry?.selector || '').trim());
+            const row = Number(entry?.row);
+            return selector && Number.isInteger(row) && row > 0 ? [`${selector}@${row}`] : [];
+          })
+      : [];
+    return positions.length > 0 ? positions : null;
+  }
+});
+// The source index of each record a committed Circular grid draws, as
+// `buildRecords` numbered them: records of one shared source carry their
+// source index in their key (`circularRecordRequestKey`), or in their
+// `#N` selector when drawn alone; records with a source each are in order.
+/** @param {CanonicalRenderRequest} request @returns {number[]} */
+const committedCircularSourceIndexes = (request) => {
+  const sources = new Set(request.records.map((record) => JSON.stringify(record.source)));
+  return request.records.map((record, index) => {
+    if (sources.size > 1) return index;
+    const keyed = /^record-([1-9][0-9]*)$/.exec(String(record.recordKey));
+    if (keyed && request.records.length > 1) return Number(keyed[1]) - 1;
+    const selector = /** @type {{ kind?: string, index?: unknown } | null} */ (record.selector);
+    return selector?.kind === 'recordIndex' && Number.isInteger(selector.index) ? Number(selector.index) : index;
+  });
+};
+
+/**
+ * One request write of a live setting: the path in the render request and its
+ * value; `undefined` leaves the key out, as Generate leaves out a blank
+ * config override.
+ * @typedef {[readonly string[], unknown]} LiveSettingWrite
+ */
+/** @param {string} path @param {unknown} value @returns {LiveSettingWrite[]} */
+const configWrites = (path, value) => {
+  const overrides = sharedLengthOverrides(path, value);
+  return [`${path}.short`, `${path}.long`].map((key) => [['diagramOptions', 'configOverrides', key], overrides[key]]);
+};
+/**
+ * The projector of each request path a live `SETTING_APPLICATION` row names
+ * (services/setting-application.js). Context a value depends on (the mode,
+ * the grouping, the drawn records) is the committed request's, never the
+ * draft's: a Circular layout field applies only to a committed grid.
+ * @type {Readonly<Record<string, (drawing: RequestDrawing, request: CanonicalRenderRequest) => LiveSettingWrite[]>>}
+ */
+const LIVE_SETTING_PROJECTORS = Object.freeze({
+  'diagramOptions.output.legend': (drawing, request) => [
+    [['diagramOptions', 'output', 'legend'], requestLegendPosition(drawing.form, request.mode)]
+  ],
+  'diagramOptions.output.plotTitlePosition': (drawing, request) => [
+    [['diagramOptions', 'output', 'plotTitlePosition'], requestPlotTitlePosition(drawing.adv, request.mode)]
+  ],
+  'diagramOptions.plotTitle': (drawing) => [[['diagramOptions', 'plotTitle'], requestPlotTitle(drawing.form)]],
+  'diagramOptions.plotTitleFontSize': (drawing, request) => [
+    [['diagramOptions', 'plotTitleFontSize'], requestPlotTitleFontSize(drawing.adv)],
+    ...(request.mode === 'circular'
+      ? /** @type {LiveSettingWrite[]} */ ([[['diagramOptions', 'configOverrides', CONFIG_OVERRIDE_PATHS.plotTitleFontSize],
+          configLeaf(CONFIG_OVERRIDE_PATHS.plotTitleFontSize, drawing.adv.plot_title_font_size) ?? undefined]])
+      : [])
+  ],
+  [`diagramOptions.configOverrides.${SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize}`]: (drawing) => (
+    configWrites(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize, drawing.adv.legend_box_size)
+  ),
+  [`diagramOptions.configOverrides.${SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize}`]: (drawing) => (
+    configWrites(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize, drawing.adv.legend_font_size)
+  ),
+  ...Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT).map(([field, project]) => [
+    `layout.${field}`,
+    (/** @type {RequestDrawing} */ drawing, /** @type {CanonicalRenderRequest} */ request) => (request.grouping === 'grid'
+      ? /** @type {LiveSettingWrite[]} */ ([[['layout', field], project(drawing.adv, committedCircularSourceIndexes(request))]])
+      : [])
+  ]))
+});
+/** The request paths that live setting rows may name. */
+export const LIVE_SETTING_REQUEST_PATHS = Object.freeze(Object.keys(LIVE_SETTING_PROJECTORS));
+
+/** @param {unknown} root @param {readonly string[]} path */
+const valueAtPath = (root, path) => path.reduce(
+  (/** @type {unknown} */ node, key) => (isPlainObject(node) && Object.hasOwn(node, key) ? node[key] : undefined), root
+);
+/**
+ * The writes that apply the draft values of `requestPaths` to the committed
+ * request, without those already equal to it. Throws `INPUT_INVALID` for a
+ * value Generate would refuse.
+ * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string> }} input
+ * @returns {LiveSettingWrite[]}
+ */
+export const projectLiveSettingWrites = ({ committed, drawing, requestPaths }) => {
+  const request = requireCurrentCommittedRequest(committed);
+  return [...new Set(requestPaths)].flatMap((requestPath) => {
+    const project = LIVE_SETTING_PROJECTORS[requestPath];
+    if (!project) throw new Error(`No live setting projector for ${requestPath}.`);
+    return project(drawing, request).filter(([path, value]) => (
+      JSON.stringify(valueAtPath(request, path)) !== JSON.stringify(value)
+    ));
+  });
+};
+/**
+ * Writes live setting values into a render request in place; Generate's
+ * builders made the objects they enter.
+ * @param {object} request
+ * @param {readonly LiveSettingWrite[]} writes
+ */
+export const applyLiveSettingWrites = (request, writes) => {
+  /** @typedef {Record<string, unknown>} RequestNode */
+  writes.forEach(([path, value]) => {
+    const parent = path.slice(0, -1).reduce(
+      (/** @type {RequestNode} */ node, key) => /** @type {RequestNode} */ (node[key]),
+      /** @type {RequestNode} */ (request)
+    );
+    const key = /** @type {string} */ (path[path.length - 1]);
+    if (value === undefined) delete parent[key];
+    else parent[key] = cloneCanonicalJsonValue(value);
+  });
+};
+
 /**
  * @param {RequestState} state
  * @param {RequestDrawing} drawing
@@ -1480,11 +1641,7 @@ const buildConfigOverrides = (
 ) => {
   const { form, adv } = drawing;
   const circular = state.mode.value === 'circular';
-  // R7: a config leaf is projected literally; Python validates its domain.
-  /** @param {string} configPath @param {unknown} value */
-  const leaf = (configPath, value) => projectOptionalNumber(value, { configPath });
-  /** @param {string} path @param {unknown} value */
-  const sharedLeaf = (path, value) => leaf(`${path}.short`, value);
+  const leaf = configLeaf;
   const linearLabelPlacement = circular
     ? null
     : requireCurrentLinearLabelPlacement(adv.label_placement);
@@ -1559,7 +1716,7 @@ const buildConfigOverrides = (
             leaf(CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize, adv.def_font_size),
           [CONFIG_OVERRIDE_PATHS.circularDefinitionInterval]: leaf(CONFIG_OVERRIDE_PATHS.circularDefinitionInterval, adv.circular_definition_interval),
           [CONFIG_OVERRIDE_PATHS.plotTitleFontSize]:
-            leaf(CONFIG_OVERRIDE_PATHS.plotTitleFontSize, adv.plot_title_font_size),
+            configLeaf(CONFIG_OVERRIDE_PATHS.plotTitleFontSize, adv.plot_title_font_size),
           [CONFIG_OVERRIDE_PATHS.circularLabelSpacing]:
             leaf(CONFIG_OVERRIDE_PATHS.circularLabelSpacing, adv.circular_label_spacing),
           [CONFIG_OVERRIDE_PATHS.circularLabelPlacement]:
@@ -1619,38 +1776,26 @@ const buildConfigOverrides = (
         })
   };
   const sharedLengthValues = {
-    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth]:
-      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth, adv.block_stroke_width),
-    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth]:
-      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth, adv.line_stroke_width),
-    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize]:
-      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize, adv.legend_box_size),
-    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize]:
-      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize, adv.legend_font_size),
+    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth]: adv.block_stroke_width,
+    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth]: adv.line_stroke_width,
+    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize]: adv.legend_box_size,
+    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize]: adv.legend_font_size,
     ...(circular
       ? {
-          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth]:
-            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth, adv.axis_stroke_width),
-          'labels.font_size': sharedLeaf('labels.font_size', adv.label_font_size)
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth]: adv.axis_stroke_width,
+          'labels.font_size': adv.label_font_size
         }
       : {
-          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth]:
-            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth, adv.axis_stroke_width),
-          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize]:
-            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize, adv.def_font_size),
-          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight]:
-            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight, adv.feature_height),
-          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize]:
-            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize, adv.scale_font_size),
-          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize]:
-            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize, adv.ruler_label_font_size),
-          'labels.font_size.linear': sharedLeaf('labels.font_size.linear', adv.label_font_size)
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth]: adv.axis_stroke_width,
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize]: adv.def_font_size,
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight]: adv.feature_height,
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize]: adv.scale_font_size,
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize]: adv.ruler_label_font_size,
+          'labels.font_size.linear': adv.label_font_size
         })
   };
   for (const [path, value] of Object.entries(sharedLengthValues)) {
-    if (value === null || value === undefined) continue;
-    overrides[`${path}.short`] = value;
-    overrides[`${path}.long`] = value;
+    Object.assign(overrides, sharedLengthOverrides(path, value));
   }
   if (!circular) {
     for (const [kind, prefix] of Object.entries(LINEAR_DEFINITION_STYLE_PATHS)) {
@@ -2743,35 +2888,8 @@ const buildLayout = (state, drawing, records = [], circularSourceIndexes = null)
     };
   }
   if (!drawing.form.multi_record_canvas) return {};
-  // The draft keys each record's row by its file selector `#N`; the request
-  // names the drawn records by their position among them, so an OFF record
-  // has no token and returns to its row when it is ON again.
-  /** @param {string} selector */
-  const drawnPosition = (selector) => {
-    const match = /^#([1-9][0-9]*)$/.exec(selector);
-    if (!match || !Array.isArray(circularSourceIndexes)) return selector;
-    const position = circularSourceIndexes.indexOf(Number(match[1]) - 1);
-    return position < 0 ? '' : `#${position + 1}`;
-  };
-  const positions = Array.isArray(drawing.adv.multi_record_positions)
-    ? drawing.adv.multi_record_positions
-        .map((/** @type {{ selector?: unknown, row?: unknown } | null} */ entry) => {
-          const selector = drawnPosition(String(entry?.selector || '').trim());
-          const row = Number(entry?.row);
-          return selector && Number.isInteger(row) && row > 0 ? `${selector}@${row}` : null;
-        })
-        .filter(Boolean)
-    : [];
-  return {
-    multiRecordSizeMode: requireCurrentCircularMultiRecordSizeMode(
-      drawing.adv.multi_record_size_mode
-    ),
-    // Blank is the documented default (Python's); any number is sent literally.
-    multiRecordMinRadiusRatio: projectOptionalNumber(drawing.adv.multi_record_min_radius_ratio, { field: 'multi_record_min_radius_ratio' }) ?? 0.55,
-    multiRecordColumnGapRatio: projectOptionalNumber(drawing.adv.multi_record_column_gap_ratio, { field: 'multi_record_column_gap_ratio' }) ?? 0.10,
-    multiRecordRowGapRatio: projectOptionalNumber(drawing.adv.multi_record_row_gap_ratio, { field: 'multi_record_row_gap_ratio' }) ?? 0.05,
-    multiRecordPositions: positions.length > 0 ? positions : null
-  };
+  return /** @type {CanonicalCircularLayout} */ (Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT)
+    .map(([field, project]) => [field, project(drawing.adv, circularSourceIndexes)])));
 };
 
 // A draft without a per-feature edit field (a Session written by the CLI, the
@@ -3088,9 +3206,8 @@ const projectCanonicalRenderInput = ({
     }),
     tracks: trackPlan.tracks,
     output: {
-      legend: legendPositionOfMode(drawing.form.legend, state.mode.value)
-        ?? WEB_UX_PROFILE[state.mode.value === 'linear' ? 'linear' : 'circular'].legend,
-      plotTitlePosition: String(drawing.adv.plot_title_position || (state.mode.value === 'linear' ? 'bottom' : 'none'))
+      legend: requestLegendPosition(drawing.form, state.mode.value),
+      plotTitlePosition: requestPlotTitlePosition(drawing.adv, state.mode.value)
     },
     selectedFeaturesSet: Array.from(drawing.adv.features || []).map((value) => String(value)),
     featureShapes: {
@@ -3102,8 +3219,8 @@ const projectCanonicalRenderInput = ({
     step: projectOptionalNumber(drawing.adv.step_size, { field: 'step' }),
     depthWindow: projectOptionalNumber(drawing.adv.depth_window_size, { field: 'depth_window' }),
     depthStep: projectOptionalNumber(drawing.adv.depth_step_size, { field: 'depth_step' }),
-    plotTitle: String(drawing.form.plot_title || '').trim() || null,
-    plotTitleFontSize: projectOptionalNumber(drawing.adv.plot_title_font_size, { field: 'plot_title_font_size' }),
+    plotTitle: requestPlotTitle(drawing.form),
+    plotTitleFontSize: requestPlotTitleFontSize(drawing.adv),
     ...(comparisonOptionsRequested
       ? projectComparisonThresholds(resolveComparisonThresholds(drawing.adv, state.mode.value))
       : {})
@@ -6525,14 +6642,17 @@ const referencedResourceIds = (value, ids = new Set()) => {
 /**
  * Clone the last committed canonical Session and replace only the tables of
  * live editor intent: feature colors (rules and the applied palette), feature
- * visibility, and label overrides. A label reflow renders this request, so no
- * other draft setting reaches the Result before Generate (R1(c), N-16).
- * @param {{ committed: any, state: Record<string, any>, drawing: RequestDrawing }} input
+ * visibility, and label overrides, plus the writes of the live setting values
+ * an action changed (`projectLiveSettingWrites`; none by default). An
+ * automatic rerender renders this request, so no other draft setting reaches
+ * the Result before Generate (R1(c), N-16).
+ * @param {{ committed: any, state: Record<string, any>, drawing: RequestDrawing, liveSettingWrites?: readonly LiveSettingWrite[] }} input
  */
 export const projectCommittedEditorIntent = ({
   committed,
   state,
-  drawing
+  drawing,
+  liveSettingWrites = []
 }) => {
   const request = committed?.renderRequest;
   requireCurrentCommittedRequest(committed);
@@ -6541,6 +6661,7 @@ export const projectCommittedEditorIntent = ({
     renderRequest: cloneCanonicalJsonValue(request),
     resources: { ...committed.resources }
   };
+  applyLiveSettingWrites(candidate.renderRequest, liveSettingWrites);
   const options = candidate.renderRequest.diagramOptions || {};
   candidate.renderRequest.diagramOptions = options;
   /** @type {Readonly<Record<string, boolean>>} */

@@ -67,6 +67,8 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  commitLiveSettingValues,
+  readCommittedCanonicalRevision,
   getLoadedTrackSettings,
   getCommittedLinearDefinitionVisibility,
   readCommittedResourceRecordCount,
@@ -114,6 +116,7 @@ import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
+import { allLiveSettingRequestPaths, liveSettingRequestPaths } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
@@ -3266,6 +3269,7 @@ export const createAppSetup = () => {
     projectCommittedSimilarityAlignment,
     cancelRunAnalysis,
     runLabelReflow,
+    requestLiveSettingApply,
     refreshCircularRecordOrder,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
@@ -3300,6 +3304,8 @@ export const createAppSetup = () => {
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalSession,
+    readCommittedCanonicalRevision,
+    commitLiveSettingValues,
     captureDecorationContinuity: legendLayout.captureDecorationContinuity,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet: historySnapshots.captureGeneratedArtifactOwnerSet,
@@ -3327,6 +3333,13 @@ export const createAppSetup = () => {
     },
     omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog().omittedRecordKeys || [],
     onCircularRecordsDiscovered: handleCircularRecordsDiscovered
+  });
+  // R1 (c), PD-OI-102: a History step and a checkpoint restore that change
+  // live setting rows of the shown drawing ask the automatic rerender to apply
+  // them; an Undo or Redo of a step (afterApplyHistoryIntent) and Reset
+  // Settings ask it themselves.
+  history.setSettingsStepListener((changes) => {
+    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes, mode.value) : allLiveSettingRequestPaths(), mode.value);
   });
   /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
@@ -3838,6 +3851,8 @@ export const createAppSetup = () => {
       labels: changedDomains.has('features') || editorState,
       domains: editorPaintDomains(changes)
     });
+    // The restored live setting values return to the Result once applied (6.4).
+    requestLiveSettingApply(liveSettingRequestPaths(/** @type {readonly { path?: readonly (string | number)[] }[] | undefined} */ (changes), mode.value), mode.value);
     if (!projected) return;
     await nextTick();
     // The restored form decides which track groups the mounted Result shows.
@@ -5172,6 +5187,8 @@ export const createAppSetup = () => {
       depthTrackUiCounts.circular = 1;
       ensureDepthTrackConfigCount(state.drawings.circular, activeDepthTrackCount('circular'));
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
+      // The reset values of the live setting rows apply at once; the rest waits for Generate (7.3).
+      if (shown) requestLiveSettingApply(allLiveSettingRequestPaths(), mode.value);
       if (shown) {
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({

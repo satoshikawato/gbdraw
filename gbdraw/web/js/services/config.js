@@ -89,6 +89,7 @@ import {
 } from './match-sequences.js';
 import {
   adoptPromotedPreservedOverrides,
+  applyLiveSettingWrites,
   buildCanonicalRenderRequest,
   canonicalLinearRecordLayout,
   draftFieldsForConfigValues,
@@ -276,7 +277,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { CommittedCanonicalSession, SessionRequestProjection, SettingsOnlyProjectionInput } from './session-request.js' */
+/** @import { CommittedCanonicalSession, LiveSettingWrite, SessionRequestProjection, SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
@@ -3893,6 +3894,25 @@ export const getCommittedCanonicalRenderRequest = () => {
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.
 /** @returns {CommittedCanonicalSession | null} */
 export const getCommittedCanonicalSession = () => /** @type {CommittedCanonicalSession | null} */ (committedCanonicalSession);
+
+// The replacement count of the committed Session: an automatic rerender
+// commits what it drew only while it is the one it started from (R1 (c)).
+export const readCommittedCanonicalRevision = () => committedCanonicalRevision.value;
+
+// R1 (c): an automatic rerender that applied live setting values commits them
+// to the committed Session, which then names what the shown Result draws
+// (Save writes them as committed, PD-OI-102). Only those request paths
+// change; the resources, the Web file record and the draft stay. The Session
+// is replaced, not edited, so a History artifact that holds the previous one
+// keeps it.
+/** @param {readonly LiveSettingWrite[]} writes */
+export const commitLiveSettingValues = (writes) => {
+  if (!committedCanonicalSession || writes.length === 0) return;
+  const renderRequest = cloneJsonData(committedCanonicalSession.renderRequest);
+  applyLiveSettingWrites(renderRequest, writes);
+  const next = { ...committedCanonicalSession, renderRequest };
+  setCommittedCanonicalSession(isAdoptedCanonicalSession(committedCanonicalSession) ? adoptRuntimeCanonicalSession(next) : next);
+};
 
 // The recorded track settings of the shown mode's loaded Result; the other mode has none.
 export const getLoadedTrackSettings = () => {

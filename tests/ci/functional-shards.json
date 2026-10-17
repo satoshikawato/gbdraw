@@ -117,6 +117,7 @@
       "tests/web/generation-feedback.playwright.spec.js",
       "tests/web/linear-typography.playwright.spec.js",
       "tests/web/live-generate-parity-legend.playwright.spec.js",
+      "tests/web/live-setting-application.playwright.spec.js",
       "tests/web/multipart-label-regeneration.playwright.spec.js",
       "tests/web/python-rule-parity.playwright.spec.js",
       "tests/web/settings-only-session.playwright.spec.js",

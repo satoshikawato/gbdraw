@@ -42,6 +42,7 @@ import {
   committedFeatureVisibilityMatches,
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
+  projectLiveSettingWrites,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
@@ -411,6 +412,7 @@ export const buildLosatCachePayload = ({
 };
 
 /** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
+/** @import { LiveSettingWrite } from '../services/session-request.js' */
 
 /**
  * A LOSAT search Generate queues: the fields the pool reads (`LosatJob`) and what Generate keeps on it to
@@ -1552,6 +1554,9 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
+ * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
+ * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
+ *   The Session owner's commit of the live setting values an automatic rerender drew (R1 (c)).
  * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
  * @property {() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
@@ -1600,6 +1605,8 @@ export const createRunAnalysis = ({
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
   getCommittedCanonicalSession = null,
+  readCommittedCanonicalRevision = () => 0,
+  commitLiveSettingValues = () => {},
   captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet,
@@ -1755,6 +1762,21 @@ export const createRunAnalysis = ({
   // progress waits for it: the rerender would take the newer generation token
   // and silently supersede the run (OV-48). It runs once after the run settles.
   let reflowDeferredByProcessing = false;
+  // R1 (c), PD-OI-102: the request paths of live setting values each drawing's
+  // actions committed and its Result does not show yet (R15: per drawing).
+  // An automatic rerender applies them; it runs for a request of these alone
+  // only while one of them still differs from the committed request.
+  /** @type {WeakMap<DrawingState, Set<string>>} */
+  const pendingLiveSettings = new WeakMap();
+  /** @param {DrawingState} drawing */
+  const pendingLiveSettingsOf = (drawing) => {
+    const pending = pendingLiveSettings.get(drawing) || new Set();
+    pendingLiveSettings.set(drawing, pending);
+    return pending;
+  };
+  // Whether a request since the last iteration began asked for more than the
+  // live setting values (an editor edit's rerender).
+  let editorRerenderRequested = false;
   // The label rerender loop while it runs. A run that sets `processing` waits
   // for it before it renders: its iteration may already be in the diagram
   // Worker, which takes one request at a time (OV-349), and no further
@@ -6150,14 +6172,16 @@ export const createRunAnalysis = ({
     });
   };
 
-  // A label reflow re-renders the committed Session with the current editor
-  // tables (R1(c), N-16): it never reads the settings draft.
+  // The automatic rerender re-renders the committed Session with the current
+  // editor tables and the draft values of the live setting rows its requests
+  // named (R1(c), N-16); no other draft setting reaches the Result.
   /**
    * @param {DrawingState} drawing
-   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'] }} options
+   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean }} options
+   *   `settings`: the live setting request paths it applies; `editor`: an editor edit asked for it too.
    * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
    */
-  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity }) => {
+  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor }) => {
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
     }
@@ -6166,6 +6190,21 @@ export const createRunAnalysis = ({
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
       return { status: 'skipped' };
     }
+    // It commits only onto the committed Session it drew from (an Undo of a
+    // Generate step may replace it meanwhile): otherwise it is stale and runs
+    // again from the current one.
+    const committedRevision = readCommittedCanonicalRevision();
+    /** @type {LiveSettingWrite[]} */
+    let liveSettingWrites;
+    try {
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings });
+    } catch (e) {
+      const error = formatError(e, 'generate', 'render');
+      labelReflowLastError.value = liveEditFailure(error);
+      return { status: 'error', error };
+    }
+    // Values equal to the committed ones (a Generate applied them) draw nothing.
+    if (!editor && liveSettingWrites.length === 0) return { status: 'skipped' };
     // The reflow draws the committed Session's Results again, so they keep their names (OV-136).
     const committedResultNames = results.value.map((/** @type {{ name: string }} */ result) => result.name);
     const generationToken = ++latestGenerationToken;
@@ -6173,14 +6212,15 @@ export const createRunAnalysis = ({
     let colorCandidate = null;
     clearLabelBuildNotices({ rerender: true });
     skipCaptureBaseConfig.value = true;
-    const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
+    const isRequested = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
+    const isCurrent = () => isRequested() && readCommittedCanonicalRevision() === committedRevision;
     // The editor state the rerender draws from; an edit made from here on is
     // shown on its Results after they commit (OV-346).
     const drawnPaint = editorPaintState(/** @type {import('./result-paint-record.js').PaintStateSource} */ (state), drawing);
     // A candidate whose rule inputs changed while it was prepared or drawn (an
     // edit the Result shows live) is not admitted. No newer request replaces
     // it, so the rerender it was asked for (a Legend relabel) runs again (OV-351).
-    const notAdmitted = () => ({ status: 'stale', rerun: isCurrent() });
+    const notAdmitted = () => ({ status: 'stale', rerun: isRequested() });
     try {
       colorCandidate = await prepareAndAdmitCandidate(drawing, isCurrent);
       if (!colorCandidate) return notAdmitted();
@@ -6193,7 +6233,8 @@ export const createRunAnalysis = ({
           selectedPalette: appliedPaletteName,
           currentColors: appliedPaletteColors,
           manualSpecificRules: candidateRules
-        }
+        },
+        liveSettingWrites
       });
       /** @type {TimingEntry[]} */
       const timingEntries = [];
@@ -6257,6 +6298,13 @@ export const createRunAnalysis = ({
           previewRuntime.selectResult(nextSelectedResultIndex);
         }
       }, { requestedAt: historyRequestedAt });
+      // The committed Session names what the new Results draw (PD-OI-102).
+      commitLiveSettingValues(liveSettingWrites);
+      if (canonical.renderRequest.mode === 'circular') {
+        state.generatedCircularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(
+          canonical.renderRequest.diagramOptions.output.plotTitlePosition
+        );
+      }
       expectReflowBindings(
         execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions, drawnPaint,
         historyRequestedAt
@@ -6274,10 +6322,12 @@ export const createRunAnalysis = ({
     }
   };
 
-  const runLabelReflow = async () => {
+  /** @param {{ settingsOnly?: boolean }} [options] `settingsOnly`: a request to apply live setting values alone. */
+  const runLabelReflow = async ({ settingsOnly = false } = {}) => {
     const drawing = committedDrawing(getCommittedCanonicalSession?.());
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    if (!settingsOnly) editorRerenderRequested = true;
     pendingReflowRequestId += 1;
     pendingReflowRequestedAt = readHistoryStepSerial();
     if (activeReflowRequestId !== 0) return;
@@ -6299,11 +6349,22 @@ export const createRunAnalysis = ({
           labelReflowLastError.value = liveEditFailure(formatError(error));
           return;
         }
+        const editor = editorRerenderRequested;
+        editorRerenderRequested = false;
+        const pending = pendingLiveSettingsOf(drawing);
+        const settings = [...pending];
         const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
           requestId: activeReflowRequestId,
-          historyRequestedAt
+          historyRequestedAt,
+          settings,
+          editor
         });
+        // A stale iteration leaves its values and its editor request to the
+        // next one; an applied, failed or empty one is done with them (a
+        // failed value waits for its next change or Generate, PD-OI-102).
+        if (outcome.status === 'stale' || outcome.status === 'canceled') editorRerenderRequested ||= editor;
+        else settings.forEach((path) => pending.delete(path));
         if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
       }
       if (processing.value && activeReflowRequestId < pendingReflowRequestId) {
@@ -6317,11 +6378,28 @@ export const createRunAnalysis = ({
     await activeReflowRun;
   };
 
+  // R1 (c), PD-OI-102: an action committed the values of these live setting
+  // request paths in the drawing of `mode` (the shown one). Its Result shows
+  // them after the automatic rerender applies them; a mode without a Result
+  // applies nothing until its Generate (R15).
+  /** @param {readonly string[]} requestPaths @param {'circular' | 'linear'} mode */
+  const requestLiveSettingApply = (requestPaths, mode) => {
+    const committed = getCommittedCanonicalSession?.();
+    if (requestPaths.length === 0 || !committed || committed.renderRequest?.mode !== mode) return false;
+    const pending = pendingLiveSettingsOf(committedDrawing(committed));
+    requestPaths.forEach((path) => pending.add(path));
+    labelReflowLastError.value = null;
+    void runLabelReflow({ settingsOnly: true });
+    return true;
+  };
+
   // Called where a run clears `processing`: the requests it held back run once.
+  // An editor request held back kept its flag; live values the Generate
+  // committed are equal now, so a replay with nothing left is skipped.
   const replayDeferredLabelReflow = () => {
     if (!reflowDeferredByProcessing || processing.value) return;
     reflowDeferredByProcessing = false;
-    void runLabelReflow();
+    void runLabelReflow({ settingsOnly: true });
   };
 
   const downloadLosatCache = async () => {
@@ -6379,6 +6457,7 @@ export const createRunAnalysis = ({
     captureGeneratedArtifactRuntimeState,
     restoreGeneratedArtifactRuntimeState,
     runLabelReflow,
+    requestLiveSettingApply,
     refreshCircularRecordOrder,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
