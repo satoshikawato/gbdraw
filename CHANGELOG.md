@@ -163,6 +163,13 @@ write-up of a release.
   complement, display start, and region, in Linear also the organism line and the
   alignment, and edits the definition text and Reverse complement, which apply
   on Generate.
+- Web app: with **Layout edit** on, a Legend row shows the grab cursor, and the
+  grabbing cursor while you drag it (it showed the pointing hand). With
+  **Layout edit** off a row keeps the pointing hand and opens its popup. In a
+  Circular Multi-Record Canvas with **Layout edit** on, a record definition
+  shows the grab cursor where it showed the pointing hand (OV-604). On a
+  Linear figure with **Layout edit** on, a record definition no longer shows a
+  grab cursor where nothing can be dragged (OV-625).
 - Web app: the Editor's Features list uses one compact row per feature that
   expands to its label text field; the label and feature-edit TSV actions move
   into one **Import / export** menu. The Legend tab reorders rows by a drag

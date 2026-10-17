@@ -395,6 +395,13 @@
         .preview-item-popup {
             width: min(400px, calc(100vw - 24px));
         }
+        /* A Legend row or record definition keeps role=button in both states. With
+           Layout edit on only its cursor and its popup change (the popup does not
+           open): it shows the cursor of the drag target around it (grab,
+           grabbing), not the pointer Tailwind gives every [role=button]. */
+        .gbdraw-preview-surface [data-gbdraw-preview-item] {
+            cursor: inherit;
+        }
         .preview-layout-off .gbdraw-preview-surface [data-gbdraw-preview-item] {
             cursor: pointer;
         }
