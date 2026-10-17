@@ -220,8 +220,9 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   await page.evaluate(() => window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?i)NADH'));
   const field = await reject(page, '[PRIVATE_DRAFT_SENTINEL');
   const before = await snapshot(page);
-  // An unrelated checkpoint replaces the rules while restoring its own setting.
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoableCheckpoint('Unrelated font', () => { window.__GBDRAW_APP__.adv.legend_font_size = 17; }));
+  // An unrelated checkpoint replaces the rules while restoring its own setting
+  // (`def_font_size` applies on Generate, so no live apply runs).
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoableCheckpoint('Unrelated font', () => { window.__GBDRAW_APP__.adv.def_font_size = 17; }));
   await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
   await expect(field).toHaveValue('[PRIVATE_DRAFT_SENTINEL');
   await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());

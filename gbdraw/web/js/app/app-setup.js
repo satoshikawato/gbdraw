@@ -67,6 +67,9 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  committedLiveSettingApplies,
+  commitLiveSettingValues,
+  readCommittedCanonicalRevision,
   getLoadedTrackSettings,
   getCommittedLinearDefinitionVisibility,
   readCommittedResourceRecordCount,
@@ -114,6 +117,7 @@ import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
+import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
@@ -306,7 +310,7 @@ import {
 /** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
 /** @import { UnvalidatedFields } from '../services/session-authority.js' */
 
-const { onMounted, onUnmounted, watch, nextTick, computed, ref, shallowRef, reactive, isRef } = window.Vue;
+const { onMounted, onUnmounted, watch, nextTick, computed, provide, ref, shallowRef, reactive, isRef } = window.Vue;
 
 /** @type {Promise<typeof import('../services/export.js')> | null} */
 let exportServicePromise = null;
@@ -423,6 +427,7 @@ const historyStepSwitchesMode = (changes) => (Array.isArray(changes) ? changes :
   .some((/** @type {{ path?: unknown[] }} */ { path } = {}) => path?.[0] === 'ui' && path[1] === 'mode');
 
 export const createAppSetup = () => {
+  provide(SETTING_NOTE_APPLIES, committedLiveSettingApplies);
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
     payload
@@ -3266,6 +3271,9 @@ export const createAppSetup = () => {
     projectCommittedSimilarityAlignment,
     cancelRunAnalysis,
     runLabelReflow,
+    holdAutomaticRerender,
+    requestLiveSettingApply,
+    discardLiveSettingRequests,
     refreshCircularRecordOrder,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
@@ -3300,6 +3308,8 @@ export const createAppSetup = () => {
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalSession,
+    readCommittedCanonicalRevision,
+    commitLiveSettingValues,
     captureDecorationContinuity: legendLayout.captureDecorationContinuity,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet: historySnapshots.captureGeneratedArtifactOwnerSet,
@@ -3327,6 +3337,12 @@ export const createAppSetup = () => {
     },
     omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog().omittedRecordKeys || [],
     onCircularRecordsDiscovered: handleCircularRecordsDiscovered
+  });
+  // R1 (c), PD-OI-102: a History step, a checkpoint (Reset Settings, a rule
+  // preset), and their Undo and Redo that change live setting rows of the
+  // shown drawing ask the automatic rerender to apply them.
+  history.setSettingsStepListener((changes) => {
+    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes, mode.value) : allLiveSettingRequestPaths(), mode.value);
   });
   /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
@@ -3582,6 +3598,8 @@ export const createAppSetup = () => {
     }),
     afterImport: async (/** @type {{ status: string, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
+        // The loaded draft's live values wait for their next change or Generate (6.7).
+        discardLiveSettingRequests();
         historySnapshots.clearGeneratedArtifactIdentity({
           retainedBytes: result?.status === 'ok'
             ? Number(result.decompressedCharacters || 0) * 2
@@ -5143,8 +5161,10 @@ export const createAppSetup = () => {
     // gone); the rule owner follows the removed rules (a
     // changed Legend source asks for the rerender, as their Undo does), and
     // the Legend list follows the Result. The reset itself runs at once, so a
-    // caller reads the reset settings right after resetSettings().
-    return history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
+    // caller reads the reset settings right after resetSettings(). One
+    // rerender follows the step: the rerender requests wait until it ends
+    // (OV-1076).
+    return holdAutomaticRerender(() => history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
       const palette = { ...appliedPaletteColors.value };
@@ -5185,7 +5205,7 @@ export const createAppSetup = () => {
         legendActions.extractLegendEntries();
       }
       return true;
-    }));
+    })));
   };
 
   const resetLayout = () => {

@@ -4,7 +4,8 @@ const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const {
-  openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs
+  openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs,
+  settleLive
 } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -339,12 +340,14 @@ test('Auto preference is transient across input, Clear, History, panel remount, 
   await openPanel(page);
   await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
   await selectUnit(page, 'px', 'features');
+  expect((await workerCounts(page)).runs, 'no Worker run before Reset').toBe(workers.runs);
+  // Reset changes live settings of the loaded Session and removes its color
+  // rules: its rerender applies them (PD-OI-102, PD-OI-103; OV-43).
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
   await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
+  await settleLive(page);
   await openPanel(page);
   await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
-  const finalActivity = await workerCounts(page);
-  expect(finalActivity.runs).toBe(workers.runs);
 });
 
 test('DOM edits Save and fresh Load retain draft apart from committed Result; failed admission is atomic', async ({ page, browser }, testInfo) => {

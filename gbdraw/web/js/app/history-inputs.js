@@ -226,7 +226,10 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target)) return;
     const type = String(target.type || '').toLowerCase();
-    if (type === 'checkbox' || type === 'radio' || type === 'file') void beginForElement(target);
+    // A select changed without a pointer or focus first (assistive or
+    // scripted input) still records its step (OV-1071).
+    const tag = String(target.tagName || '').toLowerCase();
+    if (type === 'checkbox' || type === 'radio' || type === 'file' || tag === 'select') void beginForElement(target);
   };
 
   /** @param {Event} event */

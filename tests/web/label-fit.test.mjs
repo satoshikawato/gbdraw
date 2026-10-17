@@ -239,8 +239,13 @@ test('only a Generate that drew nothing or the notice bar opens the dialog; a re
   assert.match(setup, /const openLabelFitNotice = \(\) => \{[^}]*return openLabelFitDialog\(entry\.report/s);
   // A label reflow (the rerender of an edit) that fails reports a live-edit failure, not a label fit.
   const run = await readFile(new URL('app/run-analysis.js', root), 'utf8');
-  const reflow = run.slice(run.indexOf('const runLabelReflowCandidate = async'), run.indexOf('} catch (e) {', run.indexOf('const runLabelReflowCandidate = async')));
-  assert.match(reflow, /labelReflowLastError\.value = liveEditFailure\(error\);\n\s*return \{ status: 'error', error \};/);
+  const reflowStart = run.indexOf('const runLabelReflowCandidate = async');
+  const reflow = run.slice(reflowStart, run.indexOf('\n  };\n', reflowStart));
+  // Both failures of a rerender report it: the engine's error and a live
+  // setting value Generate would refuse (its projection).
+  const reported = /\{\n\s*(?:logPostGbdrawTimings\(timingEntries\);\n\s*)?const error = formatError\([^;]*\);\n\s*labelReflowLastError\.value = liveEditFailure\(error\);\n\s*return \{ status: 'error', error \};/;
+  assert.match(reflow, new RegExp(`if \\(execution\\.status === 'engine-error'\\) ${reported.source}`));
+  assert.match(reflow, new RegExp(`projectLiveSettingWrites\\([^;]*;\\n\\s*\\} catch \\(e\\) ${reported.source}`));
   assert.doesNotMatch(reflow, /labelFit:/);
 });
 

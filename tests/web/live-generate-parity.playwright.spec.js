@@ -1,5 +1,8 @@
-// PD-OI-066 (LIVE-EDIT-EQUALS-REGENERATION; R1, R3): each live edit shows on
-// the displayed Result what the next Generate from the same draft draws. The
+// PD-OI-066 scenario revision 2 (WAIT-FOR-G1-APPLIES; R1, R3): each live edit
+// shows on the displayed Result what the next Generate from the same draft
+// draws when no pending Applies on Generate value changes those elements;
+// otherwise what a Generate of the committed Session plus the applied live
+// values draws. These cases change no Applies on Generate value. The
 // matrix pairs every edit kind with states of the editor; the check is
 // expectLiveEqualsGenerate (tests/web/helpers/live-generate-parity.cjs), minus
 // the differences tests/web/contracts/live-generate-parity-allowed.json allows.
@@ -1442,8 +1445,11 @@ const WORK_ALLOWLIST = [
     // Legend rows and colors (OV-287) and the feature visibility (OV-290) it
     // clears in one compile; the palette watcher shows the default palette's
     // fills in a compile of its own, so a Reset that changes the palette
-    // compiles twice. With nothing to reflow it sends no request.
-    kind: 'Reset Settings', stages: ['fills', 'legend', 'legendFills', 'strokes', 'visibility'], compiles: 2, requests: [],
+    // compiles twice. Removing the color rules changes a Legend source, which
+    // Python draws again in one rerender (OV-43, Owner 2026-10-06), and that
+    // rerender applies the live setting values Reset changes (PD-OI-102,
+    // PD-OI-103). One action asks for one rerender (OV-1076).
+    kind: 'Reset Settings', stages: ['fills', 'legend', 'legendFills', 'strokes', 'visibility'], compiles: 2, requests: ['render'],
     run: resetSettings
   }
 ];
