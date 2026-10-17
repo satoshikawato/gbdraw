@@ -3003,6 +3003,25 @@ assert.equal(
   ).toString('utf8'),
   resolvedProteinTsv
 );
+// OV-1049: the table keeps one resource identity from the analysis to the next request, so the Worker keeps its
+// cache token and the Python render stages keyed by it are reused.
+assert.equal(roundTripPrecomputed.resourceId, resolvedProtein.resourceId);
+{
+  const { createDiagramResourceTransport } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'diagram-resource-staging.js'))
+  );
+  const transport = createDiagramResourceTransport();
+  const fresh = await transport.prepare(resolvedProteinCanonical);
+  fresh.commit();
+  const next = await transport.prepare(resolvedProteinRoundTripCanonical);
+  const tokenOf = (prepared) => prepared.resourceManifest
+    .find(({ resourceId }) => resourceId === roundTripPrecomputed.resourceId)?.cacheToken;
+  assert.equal(tokenOf(next), tokenOf(fresh));
+  assert.equal(
+    next.stagedResources.some(({ resourceId }) => resourceId === roundTripPrecomputed.resourceId),
+    false
+  );
+}
 assert.deepEqual(roundTripGenerated, resolvedProteinSettings);
 assert.deepEqual(
   resolvedProteinRoundTripCanonical.renderRequest.layout,
@@ -5406,7 +5425,7 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 
 assert.equal(characterizedRequests.length, 83);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  'b654f731b14f0317193a9cdb21cfba7e2431011189b41d897a7003ffc6dcdeb8',
+  'e83da5f596b5dd31d20cd363ac246f7e980cafa8b4fe3ce25cfe2e5664945590',
   'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');

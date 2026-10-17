@@ -2429,6 +2429,18 @@ const comparisonEndpointKey = (queryRecordIndex, subjectRecordIndex) => (
 );
 
 /**
+ * The resource id of an edge's protein comparison table. The analysis that writes the table and every later
+ * request that reads it back from the committed Session use this id, so the Worker keeps the table's cache token
+ * and the render stages keyed by it are reused (OV-1049).
+ * @param {LinearComparisonResolvedEdge} edge
+ */
+const proteinComparisonResourceId = (edge) => `comparison-canonical-protein-${edge.ordinal + 1}`;
+// The resource ids of the typed analysis results, for the same reason: the analysis and the committed file name
+// each result alike.
+const ORTHOGROUP_RESULT_RESOURCE_ID = 'comparison-canonical-orthogroups-1';
+const COLLINEARITY_RESULT_RESOURCE_ID = 'comparison-canonical-collinearity-1';
+
+/**
  * @param {{
  *   comparison: { kind?: unknown, rows?: unknown, columns?: unknown, text?: unknown },
  *   edge: LinearComparisonResolvedEdge, resources: ResourceBuilder
@@ -2439,12 +2451,11 @@ const addResolvedComparisonResource = ({
   edge,
   resources
 }) => {
-  const resourceId = `comparison-resolved-${edge.ordinal + 1}`;
   if (comparison.kind === 'precomputedProteinComparison') {
     return {
       kind: 'precomputedProteinComparison',
       resourceId: resources.addCanonicalTable(
-        resourceId,
+        proteinComparisonResourceId(edge),
         comparison.rows,
         comparison.columns
       ),
@@ -2456,6 +2467,7 @@ const addResolvedComparisonResource = ({
   if (comparison.kind !== 'nucleotideBlast') {
     throw new Error(`Unsupported resolved comparison kind for '${edge.edgeKey}'.`);
   }
+  const resourceId = `comparison-resolved-${edge.ordinal + 1}`;
   return {
     kind: 'nucleotideBlast',
     resourceId: resources.addText(
@@ -2477,7 +2489,7 @@ const addPersistedProteinComparisonResource = ({
 }) => ({
   kind: 'precomputedProteinComparison',
   resourceId: resources.addFile(
-    `comparison-canonical-protein-${edge.ordinal + 1}`,
+    proteinComparisonResourceId(edge),
     canonicalComparisonResourceKind(comparison),
     comparison.file
   ),
@@ -2595,7 +2607,7 @@ const buildComparisons = ({
       metadataComparisons.push({
         kind: 'orthogroupResult',
         resourceId: resources.addFile(
-          'comparison-canonical-orthogroups-1',
+          ORTHOGROUP_RESULT_RESOURCE_ID,
           canonicalComparisonResourceKind(comparison),
           comparison.file
         ),
@@ -2608,7 +2620,7 @@ const buildComparisons = ({
       metadataComparisons.push({
         kind: 'collinearityResult',
         resourceId: resources.addFile(
-          'comparison-canonical-collinearity-1',
+          COLLINEARITY_RESULT_RESOURCE_ID,
           canonicalComparisonResourceKind(comparison),
           comparison.file
         ),
@@ -2636,8 +2648,8 @@ const buildComparisons = ({
   resolvedAnalysisArtifacts.forEach((typedResource, kind) => {
     const collinearity = kind === 'collinearityResult';
     const resourceId = collinearity
-      ? 'comparison-canonical-collinearity-1'
-      : 'comparison-canonical-orthogroups-1';
+      ? COLLINEARITY_RESULT_RESOURCE_ID
+      : ORTHOGROUP_RESULT_RESOURCE_ID;
     metadataComparisons.push({
       kind,
       resourceId: resources.addJson(
