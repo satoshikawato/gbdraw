@@ -34,7 +34,8 @@ const DIRECT_LABEL_TEXT = 'Loaded preview direct label';
 const DIRECT_LEGEND_COLOR = '#f43f5e';
 const DIRECT_LEGEND_STROKE = '#1d4ed8';
 const DIRECT_LEGEND_STROKE_WIDTH = 3;
-const DIRECT_REGENERATED_TITLE = 'Loaded preview direct edit regeneration';
+const DIRECT_REGENERATED_SPECIES = 'Loaded preview direct edit regeneration';
+const DIRECT_REGENERATED_STRAIN = 'direct edit strain';
 
 const ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'form',
@@ -1723,11 +1724,10 @@ test('loaded current preview supports direct edits before the first Generate', a
   });
   await capturePreviewWorkerStage(page, 'after legend color', previewWorkerStages, true);
 
-  const titleSummary = page.locator('summary[aria-label="Titles and Record Labels"]');
-  const titleDetails = titleSummary.locator('..');
-  if ((await titleDetails.getAttribute('open')) === null) await titleSummary.press('Enter');
-  await page.getByRole('textbox', { name: 'Plot Title', exact: true }).fill(DIRECT_REGENERATED_TITLE);
-  await page.getByLabel('Plot Title Position').selectOption('top');
+  // A draft config that applies on Generate (Species and Strain; the Plot
+  // Title and its position are live edits since PD-OI-103).
+  await page.locator('#circular-species').fill(DIRECT_REGENERATED_SPECIES);
+  await page.locator('input[aria-label="Strain"]').fill(DIRECT_REGENERATED_STRAIN);
   await settleMountedDom(page);
   const afterDraftConfig = await captureLoadedPreviewDirectEditState(page);
   expect(afterDraftConfig.result.sha256).toBe(afterLegend.result.sha256);
@@ -1747,10 +1747,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   )));
   const savedDraft = sessionDraft(saved.session);
   expect(savedDraft.config).toMatchObject({
-    form: { plot_title: DIRECT_REGENERATED_TITLE }
-  });
-  expect(savedDraft.ui).toMatchObject({
-    layoutPreferences: { single: { plotTitlePosition: 'top' } }
+    form: { species: DIRECT_REGENERATED_SPECIES, strain: DIRECT_REGENERATED_STRAIN }
   });
   expect(savedDraft.features.featureColorOverrides?.[target.featureOverrideKey]).toBeUndefined();
   const fillType = await page.evaluate(() => window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__.feature.type);

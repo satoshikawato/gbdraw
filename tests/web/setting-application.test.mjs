@@ -235,7 +235,12 @@ test('every row renders its note or its class text', () => {
   const component = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'components.js'), 'utf8')
     .match(/export const SettingNote = \{([\s\S]*?)\n\};/);
   assert.ok(component, 'components.js defines SettingNote');
-  assert.match(component[1], /setup: \(props\) => \(\{ note: settingApplicationNote\(props\.setting\) \}\)/);
+  // A live setting row says Applies on Generate while the committed request
+  // cannot draw one of its request paths (review F2 of #1145).
+  assert.match(component[1], /const applies = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => true\)\);\n\s*return \{ note: computed\(\(\) => settingApplicationNote\(props\.setting, applies\)\) \};/);
+  // The app setup provides the predicate of the committed request.
+  const setup = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
+  assert.match(setup, /provide\(SETTING_NOTE_APPLIES, committedLiveSettingApplies\);/);
   assert.match(component[1], /:data-applies-on-generate="note\.application === 'generate' \? setting : null"/);
   assert.match(component[1], /\{\{ note\.text \}\}/);
 });
@@ -248,14 +253,19 @@ test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () 
   assert.match(settingApplicationNote('track-visibility').text, /at once.*Generate/);
 });
 
-test('adding a Depth file shows and removing the last one hides the drawn Depth track at once, and the Depth blocks say so', () => {
+test('adding a Depth file or series shows and removing the last Depth file or its File hides the drawn Depth track at once, and the Depth blocks and the removal dialog say so (OV-1041, OV-1043)', () => {
   const depthSourceControls = settingsControls.filter((element) => /(?:remove(?:Circular|Linear)DepthTrack|clearLinearSourceDepthFile|set(?:Circular|LinearSource|Linear)DepthFile)\(/
     .test(`${element.attributes.get('@click') || ''} ${element.attributes.get('@update:model-value') || ''}`));
   assert.equal(depthSourceControls.length, 7, depthSourceControls.map(describe).join('\n'));
   for (const control of depthSourceControls) assert.equal(scopeOf(control).attributes.get('data-setting'), 'depth-sources', describe(control));
   const note = settingApplicationNote('depth-sources');
   assert.equal(note.application, 'generate');
-  assert.match(note.text, /Adding a Depth file shows.*removing the last one hides.*at once.*Generate/);
+  assert.match(note.text, /Adding a Depth file, or a series.*turns Show Depth on.*removing the last Depth file or the File that holds it.*at once\..*Legend title.*at once\..*Generate/);
+  const dialog = allElements.find((element) => element.attributes.has('data-linear-source-removal-dialog'));
+  const removal = [...descendants(dialog)].filter((element) => element.tag === 'setting-note'
+    && element.attributes.get('setting') === 'depth-sources');
+  assert.equal(removal.length, 1, 'the Linear File removal dialog shows the Depth note');
+  assert.match(scopeOf(removal[0]).attributes.get('v-if') || '', /hasLinearDepthFiles/, 'only when the File holds a Depth file');
 });
 
 test('Feature Visibility notes that leaving a feature out of protein search applies on Generate', () => {
