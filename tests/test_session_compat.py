@@ -754,6 +754,15 @@ def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
     tmp_path: Path,
 ) -> None:
     base_request = _linear_request(tmp_path)
+    # Two records, so the ordered protein table has its pair (OV-977).
+    second = SeqRecord(Seq("ATGCGCAT"), id="second", annotations={"molecule_type": "DNA"})
+    base_request = replace(
+        base_request,
+        records=(
+            *base_request.records,
+            RecordInput(source=InMemoryRecordSource(second), record_key="record-2"),
+        ),
+    )
     session = build_session_document(base_request).to_dict()
     session["version"] = 33
     feature_analysis_id = f"f_{'a' * 64}"

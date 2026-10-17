@@ -724,10 +724,10 @@ def linear_comparison_rows(
                 "Ordered BLAST/protein comparison inputs are ambiguous when a Linear row "
                 "contains multiple records; provide explicit LinearComparison endpoints."
             )
+        # A table past the last record fails the topology check below.
         normalized.extend(
             LinearComparison(index, index + 1, frame)
             for index, frame in enumerate(ordered_frames)
-            if index + 1 < len(records)
         )
     normalized = list(merge_linear_comparisons(normalized))
     validate_linear_comparison_topology(normalized, rows_by_record)

@@ -1409,6 +1409,15 @@ def resolve_linear_options(
             f"belongs to one adjacent pair of the {len(records)} loaded record(s).",
             diagnostic={"code": "COMPARISON_INPUT"},
         )
+    protein_tables = options.protein_comparisons or ()
+    if not multi_record_rows and len(protein_tables) > adjacent_pairs:
+        # Ordered table n joins records n and n + 1 in every protein mode
+        # (OV-976, OV-977); a multi-record row refuses ordered tables later.
+        raise ValidationError(
+            f"Protein comparison table {adjacent_pairs + 1} has no adjacent record pair: "
+            f"the request has {len(records)} records.",
+            diagnostic={"code": "COMPARISON_INPUT"},
+        )
     if options.comparison_table_file is None:
         return options
     table = read_comparisons_table(options.comparison_table_file)

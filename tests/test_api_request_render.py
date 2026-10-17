@@ -2331,29 +2331,10 @@ def _unencodable_result(context: SimpleNamespace) -> None:
     )
 
 
-def _extra_ordered_table(context: SimpleNamespace) -> None:
-    # OV-976: two records give one adjacent pair, so the second ordered table
-    # has no pair; with a protein raw entry the pair lookup used to raise
-    # IndexError outside the switch and return nothing inside it.
-    context.monkeypatch.setattr(
-        request_render_module, "is_protein_losat_cache_entry", lambda _entry: True
-    )
-    frame = DataFrame(columns=request_render_module.COMPARISON_COLUMNS)
-    context.metadata = diagram_module.LinearDiagramMetadata(
-        protein_comparisons=(frame, frame.copy()),
-    )
-
-
 @pytest.mark.parametrize("inside_switch", [False, True], ids=["outside", "inside"])
 @pytest.mark.parametrize(
     ("break_input", "error", "message"),
     [
-        pytest.param(
-            _extra_ordered_table,
-            ValidationError,
-            "Protein comparison table 2 has no adjacent record pair: the request has 2 records",
-            id="extra-ordered-table",
-        ),
         pytest.param(_missing_manifest, ValidationError, "identity manifest", id="manifest"),
         pytest.param(_missing_direct_column, ValidationError, "canonical column", id="direct-column"),
         pytest.param(_missing_explicit_column, ValidationError, "canonical column", id="explicit-column"),
@@ -2380,6 +2361,37 @@ def test_derived_entry_checks_raise_inside_and_outside_the_web_switch(
         else:
             _build_derived_entries(context)
     assert request_render_module._DERIVED_LOSAT_ENTRIES_WANTED.get() is True
+
+
+@pytest.mark.parametrize("inside_switch", [False, True], ids=["outside", "inside"])
+@pytest.mark.parametrize("mode", ["pairwise", "orthogroup", "collinear"])
+def test_ordered_protein_table_past_the_last_record_is_refused_in_every_mode(
+    mode: str,
+    inside_switch: bool,
+) -> None:
+    # OV-977 (D-67 A): table n joins records n and n + 1, so two records take
+    # one table. Pairwise used to render and drop the second table; with no
+    # raw LOSAT entry this also pins the OV-976 refusal (#1129 review F-1).
+    frame = DataFrame(columns=request_render_module.COMPARISON_COLUMNS)
+    request = LinearDiagramRequest(
+        records=(_memory_input("a"), _memory_input("b")),
+        options=LinearDiagramOptions(
+            protein_comparisons=(frame, frame.copy()),
+            orthogroups=OrthogroupResult({}, {}) if mode == "orthogroup" else None,
+        ),
+    )
+    artifacts = CurrentRequestArtifacts(protein_source_mode=mode)
+
+    with pytest.raises(
+        ValidationError,
+        match="Protein comparison table 2 has no adjacent record pair: the request has 2 records",
+    ) as raised:
+        if inside_switch:
+            with request_render_module._without_derived_losat_entries():
+                build_request_diagram(request, artifacts=artifacts)
+        else:
+            build_request_diagram(request, artifacts=artifacts)
+    assert raised.value.diagnostic == {"code": "COMPARISON_INPUT"}
 
 
 def test_derived_entry_switch_returns_nothing_when_there_is_nothing_to_build(

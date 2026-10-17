@@ -2427,17 +2427,10 @@ def _resolved_protein_pair_frames(
     )
 
     result: list[_ProteinPairFrame] = []
-    record_count = len(request.records)
+    # resolve_linear_options refused a table past the last record pair.
     for pair_index, frame in enumerate(direct or ()):
         if not isinstance(frame, DataFrame):
             continue
-        # Ordered table n joins records n and n + 1; the drawing drops a
-        # table past the last record, so refuse it before any pair lookup.
-        if pair_index + 1 >= record_count:
-            raise ValidationError(
-                f"Protein comparison table {pair_index + 1} has no adjacent record pair: "
-                f"the request has {record_count} records."
-            )
         _require_comparison_columns(frame)
         result.append(_ProteinPairFrame(frame, pair_index, pair_index, pair_index + 1))
     if result:

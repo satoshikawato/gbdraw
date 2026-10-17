@@ -127,6 +127,9 @@ alignment](#typed-linear-similarity-group-alignment).
 
 `LinearComparisonOptions(blast_files=...)` reads prepared comparison TSV
 files. Supplying those files does not start a nucleotide or protein search.
+`blast_files` and `protein_comparisons` are ordered: table *n* joins records
+*n* and *n + 1*. A table past the last record pair stops the render with a
+`ValidationError`; it is not dropped.
 
 ## Label override paths
 
