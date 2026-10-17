@@ -1611,7 +1611,7 @@ export const projectLiveSettingWrites = ({ committed, drawing, requestPaths }) =
   const request = requireCurrentCommittedRequest(committed);
   return [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];
-    if (!project) throw new Error(`No live setting projector for ${requestPath}.`);
+    if (!project) throw diagnosticError('INPUT_INVALID', { field: requestPath, reason: 'UNKNOWN_CONFIG_PATH' });
     if (!liveSettingApplies(request, requestPath)) return [];
     return project(drawing, request).filter(([path, value]) => (
       JSON.stringify(valueAtPath(request, path)) !== JSON.stringify(value)
