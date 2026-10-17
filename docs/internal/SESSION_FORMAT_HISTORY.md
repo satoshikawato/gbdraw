@@ -7,7 +7,10 @@ path and its line numbers. The public
 [session and request compatibility reference](../REFERENCE/session-and-request-compatibility.md)
 documents current support and what a user does with an older file, including
 the [retired inputs](../REFERENCE/session-and-request-compatibility.md#retired-inputs).
-Release notes record when a format changed.
+Release notes record when a format changed. A Session version changes when a
+breaking change enters `main`; a later breaking change made before that version
+reaches `main` goes into its entry
+([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
 ## Unreleased: Session 47 keys the Legend edits by the row key
 
