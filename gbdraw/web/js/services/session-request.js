@@ -1490,11 +1490,11 @@ const requestPlotTitleFontSize = (adv) => projectOptionalNumber(adv.plot_title_f
  * The Circular multi-record canvas layout, field by field. The draft keys each
  * record's row by its file selector `#N`; the request names the drawn records
  * by their position among them (`circularSourceIndexes`: the source index of
- * each drawn record), so an OFF record has no token and returns to its row
- * when it is ON again. Blank is the documented default (Python's); any number
- * is sent literally.
+ * each drawn record, `circularRecordSourceIndexes`), so an OFF record has no
+ * token and returns to its row when it is ON again. Blank is the documented
+ * default (Python's); any number is sent literally.
  * @type {Readonly<{ [K in keyof CanonicalCircularLayout]:
- *   (adv: Record<string, unknown>, circularSourceIndexes: readonly number[] | null) => CanonicalCircularLayout[K] }>}
+ *   (adv: Record<string, unknown>, circularSourceIndexes: readonly number[]) => CanonicalCircularLayout[K] }>}
  */
 const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
   multiRecordSizeMode: (adv) => requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode),
@@ -1505,7 +1505,7 @@ const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
     /** @param {string} selector */
     const drawnPosition = (selector) => {
       const match = /^#([1-9][0-9]*)$/.exec(selector);
-      if (!match || !Array.isArray(circularSourceIndexes)) return selector;
+      if (!match) return selector;
       const position = circularSourceIndexes.indexOf(Number(match[1]) - 1);
       return position < 0 ? '' : `#${position + 1}`;
     };
@@ -1520,21 +1520,16 @@ const CIRCULAR_MULTI_RECORD_LAYOUT = Object.freeze({
     return positions.length > 0 ? positions : null;
   }
 });
-// The source index of each record a committed Circular grid draws, as
-// `buildRecords` numbered them: records of one shared source carry their
-// source index in their key (`circularRecordRequestKey`), or in their
-// `#N` selector when drawn alone; records with a source each are in order.
-/** @param {CanonicalRenderRequest} request @returns {number[]} */
-const committedCircularSourceIndexes = (request) => {
-  const sources = new Set(request.records.map((record) => JSON.stringify(record.source)));
-  return request.records.map((record, index) => {
-    if (sources.size > 1) return index;
-    const keyed = /^record-([1-9][0-9]*)$/.exec(String(record.recordKey));
-    if (keyed && request.records.length > 1) return Number(keyed[1]) - 1;
-    const selector = /** @type {{ kind?: string, index?: unknown } | null} */ (record.selector);
-    return selector?.kind === 'recordIndex' && Number.isInteger(selector.index) ? Number(selector.index) : index;
-  });
-};
+// OV-1072: the source index of each record a Circular grid draws, read from
+// the request records, for Generate (`buildLayout`) and the live layout
+// projector alike. A record drawn with others keeps its file position in its
+// key (`circularRecordRequestKey`), also when it is the only ON record; any
+// other key keeps its place in the request.
+/** @param {readonly { recordKey: string }[]} records @returns {number[]} */
+const circularRecordSourceIndexes = (records) => records.map((record, index) => {
+  const keyed = /^record-([1-9][0-9]*)$/.exec(String(record.recordKey));
+  return keyed ? Number(keyed[1]) - 1 : index;
+});
 
 /**
  * One request write of a live setting: the path in the render request and its
@@ -1569,6 +1564,15 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
           configLeaf(CONFIG_OVERRIDE_PATHS.plotTitleFontSize, drawing.adv.plot_title_font_size) ?? undefined]])
       : [])
   ],
+  // A request without the key draws OFF (config.toml), as a Session written
+  // by the CLI or before the Web default sends it; OFF writes nothing there.
+  [`diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned}`]: (drawing, request) => {
+    const locked = Boolean(drawing.form.keep_definition_left_aligned);
+    const committed = request.diagramOptions.configOverrides?.[CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned];
+    return locked || committed !== undefined
+      ? [[['diagramOptions', 'configOverrides', CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned], locked]]
+      : [];
+  },
   [`diagramOptions.configOverrides.${SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize}`]: (drawing) => (
     configWrites(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize, drawing.adv.legend_box_size)
   ),
@@ -1578,7 +1582,7 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
   ...Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT).map(([field, project]) => [
     `layout.${field}`,
     (/** @type {RequestDrawing} */ drawing, /** @type {CanonicalRenderRequest} */ request) => (
-      /** @type {LiveSettingWrite[]} */ ([[['layout', field], project(drawing.adv, committedCircularSourceIndexes(request))]])
+      /** @type {LiveSettingWrite[]} */ ([[['layout', field], project(drawing.adv, circularRecordSourceIndexes(request.records))]])
     )
   ]))
 });
@@ -1586,19 +1590,22 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
 export const LIVE_SETTING_REQUEST_PATHS = Object.freeze(Object.keys(LIVE_SETTING_PROJECTORS));
 const CIRCULAR_GRID_REQUEST_PATHS = new Set(Object.keys(CIRCULAR_MULTI_RECORD_LAYOUT).map((field) => `layout.${field}`));
 const CANVAS_POSITION_REQUEST_PATHS = new Set(['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition']);
+const LINEAR_REQUEST_PATHS = new Set([`diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned}`]);
 /**
  * Whether the committed request can show the drawing's live value of
  * `requestPath`: a Circular multi-record layout field only a committed grid
  * draws; a Circular Legend or Plot Title position only while the draft draws
  * the committed canvas, since each canvas keeps its own positions and a
  * pending Multi-Record Canvas change selects the other canvas's at Generate
- * (OV-1074, OV-1077). Otherwise the value applies on Generate (PD-OI-103),
- * and the setting note says so (`SettingNote`).
+ * (OV-1074, OV-1077); Lock Definition Column only a Linear request draws.
+ * Otherwise the value applies on Generate (PD-OI-103), and the setting note
+ * says so (`SettingNote`).
  * @param {CanonicalRenderRequest} request @param {string} requestPath @param {RequestDrawing} drawing
  */
 export const liveSettingApplies = (request, requestPath, drawing) => {
   const grid = request.grouping === 'grid';
   if (CIRCULAR_GRID_REQUEST_PATHS.has(requestPath)) return grid;
+  if (LINEAR_REQUEST_PATHS.has(requestPath)) return request.mode === 'linear';
   return !CANVAS_POSITION_REQUEST_PATHS.has(requestPath) || request.mode !== 'circular'
     || Boolean(drawing.form.multi_record_canvas) === grid;
 };
@@ -2881,10 +2888,9 @@ const buildComparisons = ({
  * @param {RequestState & { similarityAlignmentPlan?: ExportRef<unknown>, linearRecordTranslations?: ExportRef<unknown> }} state
  * @param {RequestDrawing} drawing
  * @param {{ recordKey: string, presentation: { gridRow?: number | null } }[]} [records]
- * @param {number[] | null} [circularSourceIndexes] The file position of each drawn Circular record.
  * @returns {CanonicalRenderRequest['layout']}
  */
-const buildLayout = (state, drawing, records = [], circularSourceIndexes = null) => {
+const buildLayout = (state, drawing, records = []) => {
   if (state.mode.value === 'linear') {
     const recordKeys = records.map((record) => requireCanonicalText(
       record.recordKey,
@@ -2913,7 +2919,7 @@ const buildLayout = (state, drawing, records = [], circularSourceIndexes = null)
   }
   if (!drawing.form.multi_record_canvas) return {};
   return /** @type {CanonicalCircularLayout} */ (Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT)
-    .map(([field, project]) => [field, project(drawing.adv, circularSourceIndexes)])));
+    .map(([field, project]) => [field, project(drawing.adv, circularRecordSourceIndexes(records))])));
 };
 
 // A draft without a per-feature edit field (a Session written by the CLI, the
@@ -3420,7 +3426,7 @@ const projectCanonicalRenderInput = ({
       grouping,
       records,
       diagramOptions,
-      layout: buildLayout(state, drawing, records, recordPlan.circularSourceIndexes),
+      layout: buildLayout(state, drawing, records),
       comparisons: buildComparisons({
       state,
       drawing,

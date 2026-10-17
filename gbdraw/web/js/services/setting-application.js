@@ -15,9 +15,11 @@
  * A live row's draft fields and the request path each one applies to: a
  * dotted path of the drawing's History intent (`config.adv.legend_font_size`;
  * `*` matches one key) -> a request path that `services/session-request.js`
- * projects. Only the rows with these paths are the live setting rows the
- * automatic rerender applies from the draft (R1 (c), PD-OI-102/103); the
- * other live rows are editor intent.
+ * projects. A field that decides whether a request path applies to the shown
+ * Result (`liveSettingApplies`) names it too, so a change of that field
+ * requests it again (OV-1078). Only the rows with these paths are the live
+ * setting rows the automatic rerender applies from the draft (R1 (c),
+ * PD-OI-102/103); the other live rows are editor intent.
  * @typedef {Readonly<Record<string, string>>} SettingRequestPaths
  */
 /**
@@ -44,10 +46,12 @@ export const SETTING_APPLICATION = Object.freeze([
   // automatic rerender (PD-OI-102). Legend position and Plot Title position
   // are the drawing's layout preferences (`ui.layoutPreferences`, per mode and
   // for Circular per single or multi-record canvas): a pending Multi-Record
-  // Canvas change draws the other canvas's position on Generate (OV-1077).
+  // Canvas change draws the other canvas's position on Generate (OV-1077), and
+  // the position applies when the draft draws the shown canvas again (OV-1078).
   { id: 'legend', application: /** @type {const} */ ('live'), partialNote: CANVAS_CHANGE_NOTE, requestPaths: {
     'ui.layoutPreferences.linear.legend': 'diagramOptions.output.legend',
     'ui.layoutPreferences.circular.*.legend': 'diagramOptions.output.legend',
+    'config.form.multi_record_canvas': 'diagramOptions.output.legend',
     'config.adv.legend_box_size': 'diagramOptions.configOverrides.objects.legends.color_rect_size',
     'config.adv.legend_font_size': 'diagramOptions.configOverrides.objects.legends.font_size'
   } },
@@ -55,6 +59,7 @@ export const SETTING_APPLICATION = Object.freeze([
     'config.form.plot_title': 'diagramOptions.plotTitle',
     'ui.layoutPreferences.linear.plotTitlePosition': 'diagramOptions.output.plotTitlePosition',
     'ui.layoutPreferences.circular.*.plotTitlePosition': 'diagramOptions.output.plotTitlePosition',
+    'config.form.multi_record_canvas': 'diagramOptions.output.plotTitlePosition',
     'config.adv.plot_title_font_size': 'diagramOptions.plotTitleFontSize'
   } },
   // Circular multi-record canvas layout; Multi-Record Canvas itself and
@@ -65,6 +70,10 @@ export const SETTING_APPLICATION = Object.freeze([
     'config.adv.multi_record_column_gap_ratio': 'layout.multiRecordColumnGapRatio',
     'config.adv.multi_record_row_gap_ratio': 'layout.multiRecordRowGapRatio',
     'config.adv.multi_record_positions': 'layout.multiRecordPositions'
+  } },
+  // Linear Lock Definition Column (PD-OI-103 G1).
+  { id: 'definition-column', application: /** @type {const} */ ('live'), requestPaths: {
+    'config.form.keep_definition_left_aligned': 'diagramOptions.configOverrides.canvas.linear.keep_definition_left_aligned'
   } },
   // OV-1036: `applyTrackVisibility` (app/svg-styles.js) hides or shows a drawn
   // group at once; a track the Result lacks and the layout wait for Generate.
@@ -123,7 +132,7 @@ export const SETTING_NOTE_APPLIES = Symbol('setting-note-applies');
  */
 export const settingApplicationNote = (id, applies = () => true) => {
   const row = rowOf(id);
-  const paths = Object.values(row.requestPaths || {});
+  const paths = [...new Set(Object.values(row.requestPaths || {}))];
   const drawn = paths.filter((path) => applies(path)).length;
   if (drawn === paths.length) {
     return { application: row.application, text: row.note || TEXT[row.application], qualified: Boolean(row.note) };

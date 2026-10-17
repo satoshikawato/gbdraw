@@ -763,3 +763,70 @@ test('a live change in a mode without a Result applies nothing until that mode h
     await page.context().close();
   }
 });
+
+// Opens the collapsed cards that hold a control, then clicks it.
+const clickControl = async (page, selector) => {
+  const control = page.locator(selector);
+  for (const details of await control.locator('xpath=ancestor::details').all()) {
+    if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+  }
+  await control.click();
+};
+
+// PD-OI-103 G1: the Linear Lock Definition Column redraws the shown Result.
+test('lambda: Lock Definition Column redraws the Linear Result without Generate and equals a Generate from the same draft', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, LAMBDA);
+  const lockKey = 'canvas.linear.keep_definition_left_aligned';
+  try {
+    await generateNow(page);
+    const before = await facts(page);
+    const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    await clickControl(page, 'input[type="checkbox"][aria-describedby="linear-definition-lock-help"]');
+    await expect.poll(async () => (await facts(page)).overrides?.[lockKey], { timeout: APPLY_TIMEOUT })
+      .toBe(!before.overrides[lockKey]);
+    await settleLive(page);
+    const after = await facts(page);
+    expect(after.generationKey, 'no Generate ran').toBe(before.generationKey);
+    expect(after.reflowError).toBeNull();
+    expect(after.content).not.toBe(before.content);
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(steps + 1);
+    await expect(page.locator('[data-setting="definition-column"] > span.apply-note')).toHaveText(/Live edit/);
+    await expectLiveEqualsGenerate(page, { label: 'Linear Lock Definition Column' });
+  } finally {
+    await page.context().close();
+  }
+});
+
+// OV-1078 (D-80): Reset Settings turns Multi-Record Canvas on, so the reset
+// single-canvas positions wait; turning it off again draws the shown canvas,
+// and they apply without Generate.
+test('tobacco: Reset Settings, then Multi-Record Canvas off, applies the reset positions without Generate', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, TOBACCO);
+  const output = async () => JSON.parse((await facts(page)).diagramOptions).output;
+  try {
+    await generateNow(page);
+    const before = await facts(page);
+    const shown = await output();
+    await page.locator('button[aria-label="Reset Settings"]').click();
+    await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
+    await settleLive(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.multi_record_canvas)).toBe(true);
+    expect(await output(), 'the positions wait while the draft draws the multi-record canvas').toEqual(shown);
+    const reset = await facts(page);
+    await clickControl(page, 'input[type="checkbox"][data-circular-canvas-setting]');
+    const draft = await page.evaluate(() => ({
+      legend: window.__GBDRAW_APP__.form.legend, plotTitlePosition: window.__GBDRAW_APP__.adv.plot_title_position
+    }));
+    expect(draft, 'Reset changed the single-canvas positions').not.toEqual(shown);
+    await expect.poll(output, { timeout: APPLY_TIMEOUT }).toEqual(draft);
+    await settleLive(page);
+    const after = await facts(page);
+    expect(after.generationKey, 'no Generate ran').toBe(before.generationKey);
+    expect(after.reflowError).toBeNull();
+    expect(after.content, 'the Result draws them').not.toBe(reset.content);
+  } finally {
+    await page.context().close();
+  }
+});
