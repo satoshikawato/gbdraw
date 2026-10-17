@@ -92,6 +92,7 @@
     "tests/web/session-loading-feedback.playwright.spec.js": 0.85,
     "tests/web/session-operation-consistency.playwright.spec.js": 0.33,
     "tests/web/session-save-lifecycle.playwright.spec.js": 0.04,
+    "tests/web/setting-application-notes.playwright.spec.js": 0.2,
     "tests/web/settings-only-session.playwright.spec.js": 0.42,
     "tests/web/settings-pane-rail.playwright.spec.js": 0.71,
     "tests/web/settings-section-index.playwright.spec.js": 0.15,
@@ -133,6 +134,7 @@
       "tests/web/palette-history-preservation.playwright.spec.js",
       "tests/web/preview-bind-coalescing.playwright.spec.js",
       "tests/web/preview-navigation.playwright.spec.js",
+      "tests/web/setting-application-notes.playwright.spec.js",
       "tests/web/source-recipe-cli-parity.playwright.spec.js",
       "tests/web/source-visibility-reconciliation.playwright.spec.js"
     ],
