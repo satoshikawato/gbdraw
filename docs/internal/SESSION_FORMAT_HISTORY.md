@@ -146,6 +146,8 @@ also changes these parts that both sets share:
   no derived entries, so a Session saved by a fresh CLI render has an empty
   derived cache.
 - `proteinIdentityManifest` and `legacyArtifacts` are replaced by the render's.
+  A Circular render, one diagram or a batch, returns the Session's own manifest,
+  so the protein entries it keeps still resolve.
 - When the render migrates legacy protein IDs (only Sessions 44 and older have
   them), the protein references are rewritten throughout the Session.
 - Resources that neither set's request nor the Web files name are dropped.

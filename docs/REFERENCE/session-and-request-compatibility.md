@@ -616,7 +616,9 @@ The re-save also replaces what both sets share: `losatCache` holds the entries
 the new render returns, `losatDerivedCache` keeps the Session's own entries
 unchanged (a CLI render builds none, and a Session saved by a fresh CLI render
 has an empty derived cache), and `proteinIdentityManifest` and `legacyArtifacts`
-come from the new render. If
+come from the new render. A Circular render, one diagram or a batch, returns
+the Session's own `proteinIdentityManifest`, so the protein entries that the
+re-save keeps still resolve. If
 the render migrates older protein IDs (only Sessions 44 and older have them),
 gbdraw rewrites the protein references throughout the Session. A resource
 whose bytes are unchanged

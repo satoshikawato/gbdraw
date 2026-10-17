@@ -699,6 +699,7 @@ class PreparedCircularBatchRequest:
     items: tuple[PreparedDiagramRequest, ...]
     inputs: PreparedDiagramInputs | None = None
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
+    protein_identity_manifest: Mapping[str, Any] | None = None
 
     @property
     def mode(self) -> Literal["circular"]:
@@ -713,6 +714,7 @@ class CircularBatchRenderResult:
     records: tuple[SeqRecord, ...]
     items: tuple[RequestRenderResult, ...]
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
+    protein_identity_manifest: Mapping[str, Any] | None = None
 
     @property
     def mode(self) -> Literal["circular"]:
@@ -2833,6 +2835,7 @@ def _build_request_plan_diagram(
             losat_cache_entries=_merged_losat_entries(
                 current_artifacts.losat_cache_entries, plan.losat_cache_entries
             ),
+            protein_identity_manifest=current_artifacts.protein_identity_manifest,
         )
     request = plan.request
     records = plan.records
@@ -3101,6 +3104,7 @@ def _render_request_diagram(
                 for item in prepared.items
             ),
             losat_cache_entries=prepared.losat_cache_entries,
+            protein_identity_manifest=prepared.protein_identity_manifest,
         )
     return _render_prepared_request(
         prepared,
