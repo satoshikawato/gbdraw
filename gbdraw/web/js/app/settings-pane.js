@@ -71,6 +71,7 @@ const POPUP_EXPECTED_HEIGHT = 360;
  * @property {{ value: DiagramMode }} mode
  * @property {{ readonly value: unknown }} svgContent The shown Result; none before the first Generate.
  * @property {{ value: string }} resultPanelTab The tab of the Result panel; `preview` shows the Result.
+ * @property {{ readonly value: boolean }} layoutRepositionMode Layout edit: a press on the figure drags its items.
  */
 
 /** @param {{ state: SettingsPaneRefs & SettingsPaneState }} options */
@@ -93,6 +94,9 @@ export const createSettingsPaneController = ({ state }) => {
   if (readSettingsPaneDisplay() === 'rail') showSettingsRail(state, state.mode.value);
 
   /** @type {{ readonly value: SettingsPaneView }} */
+  // Where a settings section can float beside the Result: a Result shown in Preview, Layout edit off.
+  const settingsPopupAvailable = computed(() => Boolean(state.svgContent.value)
+    && state.resultPanelTab.value === 'preview' && !state.layoutRepositionMode.value);
   const settingsPane = computed(() => {
     const rail = state.settingsPaneDisplay.value === 'rail' && !phoneLayout.value;
     return {
@@ -181,7 +185,7 @@ export const createSettingsPaneController = ({ state }) => {
   /** @type {ShowSettingsBesideResult} */
   const showSettingsBesideResult = (key, anchor, bounds) => {
     const entry = settingsEntryIn(state.mode.value, key);
-    if (!entry) return false;
+    if (!entry || !settingsPopupAvailable.value) return false;
     if (settingsPane.value.docked === entry) {
       closeSettingsPopup();
       void revealSettingsSection(entry);
@@ -214,10 +218,11 @@ export const createSettingsPaneController = ({ state }) => {
 
   // R10: a mode written by anything (the mode buttons, Undo, a loaded Session) reconciles the docked entry and closes the popup.
   watch(() => state.mode.value, (/** @type {DiagramMode} */ mode) => reconcileSettingsPaneState(state, mode), { flush: 'sync' });
-  // R10: the popup belongs to the shown Result. Whatever takes the Result away (another tab of the
-  // Result panel, an Undo to before the first Generate, a load) closes it.
-  watch(() => Boolean(state.svgContent.value) && state.resultPanelTab.value === 'preview', (/** @type {boolean} */ shown) => {
-    if (!shown) closeSettingsPopup();
+  // The popup belongs to the shown Result while Layout edit is off: whatever ends that (another tab
+  // of the Result panel, an Undo to before the first Generate, a load, Layout edit turned on) closes
+  // it, and nothing opens it meanwhile. The same predicate decides both.
+  watch(() => settingsPopupAvailable.value, (/** @type {boolean} */ available) => {
+    if (!available) closeSettingsPopup();
   }, { flush: 'sync' });
   onMounted(() => {
     readLayout();

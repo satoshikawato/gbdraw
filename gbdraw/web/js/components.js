@@ -235,6 +235,29 @@ export const previewTransform = {
   }
 };
 
+/** @type {WeakMap<HTMLElement, () => void>} */
+const previewPanningStops = new WeakMap();
+// `v-preview-panning` on the preview viewport: its attribute
+// `data-preview-panning` follows the panning flag, which the stylesheet reads
+// (an item shows the canvas's cursor and no hint while the figure is panned),
+// so the app template does not read the flag (OV-912). An attribute, not a
+// class: the viewport's class binding rewrites its classes.
+export const previewPanning = {
+  /** @param {HTMLElement} element */
+  beforeMount: (element) => {
+    previewPanningStops.set(element, watch(
+      () => state.isPanning.value,
+      (/** @type {boolean} */ panning) => { element.toggleAttribute('data-preview-panning', panning); },
+      { immediate: true }
+    ));
+  },
+  /** @param {HTMLElement} element */
+  unmounted: (element) => {
+    previewPanningStops.get(element)?.();
+    previewPanningStops.delete(element);
+  }
+};
+
 // `v-preview-markup="svgContent"` on the preview surface: its children are the
 // Result's markup, as `v-html` would set them, at the same points of the
 // patch. The markup is parsed outside the page document (OV-1030).
