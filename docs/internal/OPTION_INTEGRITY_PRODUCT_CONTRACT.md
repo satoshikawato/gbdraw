@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `58`
+- Contract revision: `59`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -1343,6 +1343,50 @@ Status: active Product authority
     described the Web app until this change, as its
     Revision 44 entry announced; from this revision the figure is fitted
     again in those cases and that risk no longer exists.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime and tests
+    that implement it are in the same pull request, and the Review is
+    `REQUIRED`.
+- Revision 59 change: `PD-OI-053` is replaced for scenario revision `2`
+  (`A / EXPLICIT-MODE-WITH-DISCOVERABLE-TARGETS`, the same outcome) from the
+  Product Decision Owner `satoshikawato`'s replies of `2026-10-13` on the
+  pointer cursor of a Legend row in the Web app. Each quotation below is the
+  part of a reply that carries the answer; what it leaves out is stated.
+  - The finding: a Legend row (its colour swatch and its name) showed the
+    pointing-hand cursor in every state, where scenario revision `1` names
+    the help cursor with Layout edit off and grab / grabbing with it on; and
+    with Layout edit off a drag that starts on a row did not move the canvas.
+    A row is a button that opens its popup.
+  - Reply 1 (`2026-10-13`), to two outcomes: `(a)`, recommended, correct only
+    the state with Layout edit on (grab, and grabbing during the drag) and
+    record that with Layout edit off a row stays a button; or `(b)`, make the
+    product follow scenario revision `1` in both states.
+    「OV-603：a)（推奨）：ON のときだけ直して「つかめる手／つかんだ手」にします。」
+    The reply's other line approved the receipt text of `PD-OI-094`
+    (Revision 46).
+  - Reply 2 (`2026-10-13`), to the request to approve the receipt recorded
+    below as written or to name what to change. The request showed the
+    receipt in full and named the parts added to scenario revision `1`.
+    「OV-603（前のメッセージの文面）: そのまま承認」
+    The reply's two other lines approved the receipts of the other two
+    records of the same campaign, a click on a drawn element that opens its
+    settings section and the refit during Review alignment, which are
+    recorded in their own revisions.
+    The shown text had a placeholder for the decision date; the date recorded
+    is the day of this reply. The receipt is recorded byte for byte.
+  - The same request offered one more sentence, which would have recorded
+    that a record definition of a Linear figure is, with Layout edit off, a
+    button like a Legend row. The reply does not take it up, so the receipt
+    does not contain it and this record says nothing about record
+    definitions.
+  - Scope: scenario revision `1` (same outcome, receipt SHA-256
+    `0365e0057b61e6b606c6714dc17f0e5c89d755ce651c1a8eec66d0139e0c65ec`) is retained in Git history. Every sentence of its receipt is
+    kept; the receipt below adds one sentence to the Rationale, the two
+    `〔凡例の項目…〕` passages to Must preserve, and one sentence each to May
+    retire and Accepted residual risk. For a Legend row with Layout edit off,
+    the help cursor and the canvas pan from a drag that starts on the row are
+    retired; for every other supported target scenario revision `1` holds
+    unchanged.
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime and tests
     that implement it are in the same pull request, and the Review is
@@ -3502,10 +3546,18 @@ Decision date: 2026-09-26
 ### PD-OI-053: Explicit Layout edit with discoverable targets
 
 - Concern key: `web.layout-edit-affordance`
-- Scenario revision: `1`
+- Scenario revision: `2`
 - Status: `ACCEPTED`
 - Selected outcome: `A / EXPLICIT-MODE-WITH-DISCOVERABLE-TARGETS`
-- Normative outcome: OFF の drag は従来の canvas pan。supported target は help cursor/hover枠と「Turn on Layout edit to move this item」を表示。toolbar の常設説明、keyboard focus、touch でも同じ情報へ到達。ON は grab、drag 中は grabbing。target 上で mode を自動ONにしない
+- Supersedes: `PD-OI-053`, scenario revision `1`
+  (`A / EXPLICIT-MODE-WITH-DISCOVERABLE-TARGETS`, the same outcome),
+  keeping every sentence of its receipt and adding the pointer cursors of
+  a Legend row: with Layout edit off the pointing hand, a button that opens
+  its popup and is not a canvas pan start; with Layout edit on grab and
+  grabbing. For every other supported target scenario revision `1` holds
+  unchanged.
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
 - Discoverability/accessibility / feedback: 常設説明、toggle aria-pressed/説明、focus/touch。大量の SVG tab stop は追加しない
 - Canonical state update: 既存mode ref。hintは派生表示でSVG/History/canonicalを変更しない
 - Undo/Redo: hover/hint は履歴なし。実 drag のみ既存1操作
@@ -3517,18 +3569,17 @@ Decision date: 2026-09-26
 - Cache/provenance: hintをrequest/cache keyに含めず、Preview transientをclean serializationで除去
 - Performance: 既存bindで対象限定、hoverで全走査/Worker/History cloneなし
 - Compatibility: Session/modeの意味、writer/readerを維持
-- Decision source: the complete Choice A outcome and nine-field receipt in
-  [DECISION_02_LAYOUT_AFFORDANCE.md](https://github.com/satoshikawato/gbdraw/blob/bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08/docs/internal/issue-599-preview-layout-20260926/DECISION_02_LAYOUT_AFFORDANCE.md)
-  at published planning commit `bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08`.
-  `satoshikawato` explicitly approved all three independent recommended A
-  outcomes with 「すべて推奨案で承認します。」 on `2026-09-26`.
-  The receipt and JSON below reproduce this concern's supplied fields without
-  translation or additional rationale, retirement, or risk terms. This record
-  does not supersede another decision. Dependent runtime requires this
-  authority merged into its base; this amendment contains no runtime or
-  runtime acceptance evidence.
+- Decision source: the Owner replies of `2026-10-13` quoted verbatim in the
+  Revision 59 entry above. The Owner approved the receipt text below as
+  written. The receipt reproduces its fields without translation or
+  additional terms. Dependent runtime requires this authority merged into its
+  base, or merged together with it through the reviewed static Product
+  Contract co-change route; this record supplies no runtime acceptance
+  evidence. Scenario revision `1` (receipt SHA-256
+  `0365e0057b61e6b606c6714dc17f0e5c89d755ce651c1a8eec66d0139e0c65ec`) is retained in
+  Git history.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `0365e0057b61e6b606c6714dc17f0e5c89d755ce651c1a8eec66d0139e0c65ec`.
+  `8cf2674991d1054424e478f7e5b1d5c31c1eb19467bbe68eab88d6827e2b23a7`.
 - Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`. These existing obligations and the
   complete selected outcome are jointly required; their citation does not
   claim completed dependent-runtime checks.
@@ -3536,27 +3587,29 @@ Decision date: 2026-09-26
 ```text
 PRODUCT_DECISION
 Concern: web.layout-edit-affordance
-Scenario revision: 1
+Scenario revision: 2
+Supersedes: PD-OI-053, scenario revision 1 (web.layout-edit-affordance)
 Choice: A / EXPLICIT-MODE-WITH-DISCOVERABLE-TARGETS
-Rationale: canvas panと配置編集の区別を保ちながら、対象と有効化方法を初めての利用者にも示す。
-Must preserve: OFFの従来panと明示toggle、ONのtarget drag、supported targetへのhelp/hover説明とtoolbarの常設説明、keyboard focus/touchで同じ説明へ到達すること、feature/label/legend個別編集とShift/Ctrlの優先順位、record/alignmentの既存動作、実dragの1 History操作、Session/Exportを維持する。hintだけでcanonical値を変えず、成果物へhintを保存しない。modeを自動ONにしない。
-May retire: OFF/ONの意味を区別できないcursorと説明不足だけ。gesture/編集機能/保存意味は退役しない。
-Accepted residual risk: 移動前に有効化の1手順が残る。常設説明とkeyboard/touch検証で発見可能性を補う。
+Rationale: canvas panと配置編集の区別を保ちながら、対象と有効化方法を初めての利用者にも示す。凡例の項目（色の四角と名前）は、Layout edit が OFF のとき押すと popup が開くので指差しの手のポインターが合い、ON のときは押しても popup は開かずドラッグで凡例が動くので「つかめる手／つかんだ手」のポインターが合う。
+Must preserve: OFFの従来panと明示toggle、ONのtarget drag、supported targetへのhelp/hover説明とtoolbarの常設説明、keyboard focus/touchで同じ説明へ到達すること、feature/label/legend個別編集とShift/Ctrlの優先順位、record/alignmentの既存動作、実dragの1 History操作、Session/Exportを維持する。hintだけでcanonical値を変えず、成果物へhintを保存しない。modeを自動ONにしない。〔凡例の項目、Layout edit が OFF〕項目はボタンである。載せると指差しの手のポインターになり、点線の枠と「Turn on Layout edit to move this item」は今までどおり出る。クリック、または Enter か Space で項目の popup が開く。項目から始めたドラッグでは図全体は動かず、popup も開かない。〔凡例の項目、Layout edit が ON〕載せると「つかめる手」（grab）、押している間とドラッグ中は「つかんだ手」（grabbing）、離すと「つかめる手」に戻る。ドラッグで凡例が動く。クリック、Enter、Space では popup は開かない。
+May retire: OFF/ONの意味を区別できないcursorと説明不足だけ。gesture/編集機能/保存意味は退役しない。ただし凡例の項目の上に限り、Layout edit が OFF のときの「?」のポインターと、そこから始めたドラッグで図全体が動くことは退役する。
+Accepted residual risk: 移動前に有効化の1手順が残る。常設説明とkeyboard/touch検証で発見可能性を補う。Layout edit が OFF のとき、凡例の項目の上から始めたドラッグでは図全体を動かせない（項目のない場所からは動かせる）。
 Owner: satoshikawato
-Decision date: 2026-09-26
+Decision date: 2026-10-13
 ```
 
 ```json
 {
   "concern": "web.layout-edit-affordance",
-  "scenarioRevision": 1,
+  "scenarioRevision": 2,
+  "supersedes": "PD-OI-053, scenario revision 1 (web.layout-edit-affordance)",
   "choice": "A / EXPLICIT-MODE-WITH-DISCOVERABLE-TARGETS",
-  "rationale": "canvas panと配置編集の区別を保ちながら、対象と有効化方法を初めての利用者にも示す。",
-  "mustPreserve": "OFFの従来panと明示toggle、ONのtarget drag、supported targetへのhelp/hover説明とtoolbarの常設説明、keyboard focus/touchで同じ説明へ到達すること、feature/label/legend個別編集とShift/Ctrlの優先順位、record/alignmentの既存動作、実dragの1 History操作、Session/Exportを維持する。hintだけでcanonical値を変えず、成果物へhintを保存しない。modeを自動ONにしない。",
-  "mayRetire": "OFF/ONの意味を区別できないcursorと説明不足だけ。gesture/編集機能/保存意味は退役しない。",
-  "acceptedResidualRisk": "移動前に有効化の1手順が残る。常設説明とkeyboard/touch検証で発見可能性を補う。",
+  "rationale": "canvas panと配置編集の区別を保ちながら、対象と有効化方法を初めての利用者にも示す。凡例の項目（色の四角と名前）は、Layout edit が OFF のとき押すと popup が開くので指差しの手のポインターが合い、ON のときは押しても popup は開かずドラッグで凡例が動くので「つかめる手／つかんだ手」のポインターが合う。",
+  "mustPreserve": "OFFの従来panと明示toggle、ONのtarget drag、supported targetへのhelp/hover説明とtoolbarの常設説明、keyboard focus/touchで同じ説明へ到達すること、feature/label/legend個別編集とShift/Ctrlの優先順位、record/alignmentの既存動作、実dragの1 History操作、Session/Exportを維持する。hintだけでcanonical値を変えず、成果物へhintを保存しない。modeを自動ONにしない。〔凡例の項目、Layout edit が OFF〕項目はボタンである。載せると指差しの手のポインターになり、点線の枠と「Turn on Layout edit to move this item」は今までどおり出る。クリック、または Enter か Space で項目の popup が開く。項目から始めたドラッグでは図全体は動かず、popup も開かない。〔凡例の項目、Layout edit が ON〕載せると「つかめる手」（grab）、押している間とドラッグ中は「つかんだ手」（grabbing）、離すと「つかめる手」に戻る。ドラッグで凡例が動く。クリック、Enter、Space では popup は開かない。",
+  "mayRetire": "OFF/ONの意味を区別できないcursorと説明不足だけ。gesture/編集機能/保存意味は退役しない。ただし凡例の項目の上に限り、Layout edit が OFF のときの「?」のポインターと、そこから始めたドラッグで図全体が動くことは退役する。",
+  "acceptedResidualRisk": "移動前に有効化の1手順が残る。常設説明とkeyboard/touch検証で発見可能性を補う。Layout edit が OFF のとき、凡例の項目の上から始めたドラッグでは図全体を動かせない（項目のない場所からは動かせる）。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-26"
+  "decisionDate": "2026-10-13"
 }
 ```
 
