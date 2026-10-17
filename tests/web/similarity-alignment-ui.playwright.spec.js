@@ -2948,9 +2948,30 @@ const openReviewOverOwnView = async (page) => {
   return { before, dialog };
 };
 
+// One live setting change: the CDS color in Colors, drawn on the shown Result.
+const cdsColor = (page) => page.locator('input[type="color"][aria-label="CDS feature color"]').first();
+const recolorCds = async (page, color) => {
+  await cdsColor(page).evaluate((input, value) => {
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, color);
+  await expect.poll(() => page.evaluate((value) => window.__GBDRAW_APP__.results
+    .some(({ content }) => String(content).toLowerCase().includes(value)), color), { timeout: 60000 }).toBe(true);
+  await roomSettled(page);
+};
+// The Result and the figure draw the color the setting shows (PD-OI-102).
+const expectCdsColorDrawn = async (page, color) => {
+  await expect(cdsColor(page)).toHaveValue(color);
+  expect(await page.evaluate((value) => ({
+    results: window.__GBDRAW_APP__.results.every(({ content }) => String(content).toLowerCase().includes(value)),
+    figure: document.querySelector('.gbdraw-preview-surface svg').outerHTML.toLowerCase().includes(value)
+  }), color)).toEqual({ results: true, figure: true });
+};
+
 // OV-1082: a live setting change redraws the Result of the same records (PD-OI-102). The review
 // still shows its draft on it: the rings are drawn again, the figure follows the room, and the
-// end (Cancel, Apply) gives back the view and the Editor.
+// end (Cancel, Apply) gives back the view and the Editor. Apply draws the change (OV-1083).
 test('a live setting change under an open review keeps its rings, its fit and the view it gives back', async ({ page }) => {
   test.setTimeout(600000);
   const pageErrors = [];
@@ -2960,16 +2981,7 @@ test('a live setting change under an open review keeps its rings, its fit and th
   const ringCount = await rings.count();
   expect(ringCount).toBeGreaterThan(0);
   const fitted = await previewView(page);
-  const recolor = async (color) => {
-    await page.locator('input[type="color"][aria-label="CDS feature color"]').first().evaluate((input, value) => {
-      input.value = value;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    }, color);
-    await expect.poll(() => page.evaluate((value) => window.__GBDRAW_APP__.results
-      .some(({ content }) => String(content).toLowerCase().includes(value)), color)).toBe(true);
-    await roomSettled(page);
-  };
+  const recolor = (color) => recolorCds(page, color);
   await recolor('#e76f51');
   await expect(dialog).toBeVisible();
   await expect(rings).toHaveCount(ringCount);
@@ -2998,7 +3010,23 @@ test('a live setting change under an open review keeps its rings, its fit and th
   await expect.poll(() => previewView(page)).toEqual(before);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
   expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+  await expectCdsColorDrawn(page, '#2a9d8f');
   expect(pageErrors).toEqual([]);
+});
+
+// OV-1083: a live color changed before the review is drawn by Apply too.
+test('Apply of a review draws a live color changed before the review', async ({ page }) => {
+  test.setTimeout(600000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await recolorCds(page, '#264653');
+  const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  await chooseUnresolved(page, dialog);
+  await dialog.getByRole('radio', { name: 'All left', exact: true }).check();
+  await applyReview(page, dialog);
+  await expectCdsColorDrawn(page, '#264653');
 });
 
 // OV-622: a mode switch brings no view of its own. After Circular and back, the review still

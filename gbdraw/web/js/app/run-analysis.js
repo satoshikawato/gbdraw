@@ -4,7 +4,7 @@
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
-/** @import { AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
+/** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
@@ -2485,6 +2485,36 @@ export const createRunAnalysis = ({
     const candidate = await rulePreparation.prepareCandidate(drawing.manualSpecificRules, options);
     if (!candidate || !isCurrent()) return null;
     return { rules: candidate.rules, shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent() };
+  };
+
+  // A render of the committed Session draws the drawing's live editor paint (PD-OI-102): the
+  // label rerender and a committed candidate (a record rotation, an alignment Apply, OV-1083)
+  // render the committed Session with the editor intent and the rules prepared for it, so their
+  // Result shows the live edits as a Generate of the same settings would. `drawnPaint` is the
+  // editor state it draws from; an edit made later is shown once its Result is bound (OV-346).
+  // Null when the run went stale during the rule preparation.
+  /**
+   * @param {DrawingState} drawing
+   * @param {CommittedCanonicalSession & { config?: Record<string, unknown> | null }} committed The committed Session.
+   * @param {() => boolean} isCurrent
+   * @param {LiveSettingWrite[]} [liveSettingWrites] Draft values of live setting rows the render applies.
+   */
+  const prepareCommittedPaintCandidate = async (drawing, committed, isCurrent, liveSettingWrites = []) => {
+    const drawnPaint = editorPaintState(/** @type {import('./result-paint-record.js').PaintStateSource} */ (state), drawing);
+    const colorCandidate = await prepareAndAdmitCandidate(drawing, isCurrent);
+    if (!colorCandidate) return null;
+    const canonical = projectCommittedEditorIntent({
+      committed,
+      state,
+      drawing: {
+        ...drawing,
+        selectedPalette: appliedPaletteName,
+        currentColors: appliedPaletteColors,
+        manualSpecificRules: colorCandidate.rules
+      },
+      liveSettingWrites
+    });
+    return { canonical, drawnPaint, rules: colorCandidate.rules, shouldAdmit: colorCandidate.shouldAdmit };
   };
 
   /**
@@ -5682,7 +5712,7 @@ export const createRunAnalysis = ({
    *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} options
    */
   const runCommittedCanonicalCandidateInternal = async (drawing, {
-    canonical,
+    canonical: committedCandidate,
     decorationContinuity = null,
     generatedArtifactHandle = null,
     commitIntent = null,
@@ -5737,6 +5767,11 @@ export const createRunAnalysis = ({
       return { status: 'canceled' };
     };
     try {
+      // The candidate draws the live editor paint, as the label rerender does (OV-1083).
+      const paint = await prepareCommittedPaintCandidate(drawing, /** @type {CommittedCanonicalSession} */ (committedCandidate),
+        () => generationToken === latestGenerationToken && !generationCancelRequested.value);
+      if (!paint) return generationCancelRequested.value ? finishCanceled() : { status: 'stale' };
+      const { canonical, drawnPaint } = paint;
       /** @type {TimingEntry[]} */
       const timingEntries = [];
       const execution = await executeShownDrawingCandidate({
@@ -5744,8 +5779,7 @@ export const createRunAnalysis = ({
         decorationContinuity,
         mode: canonical.renderRequest.mode,
         kind: 'target-record-transform',
-        shouldAdmit: () => generationToken === latestGenerationToken
-          && !generationCancelRequested.value,
+        shouldAdmit: () => paint.shouldAdmit() && !generationCancelRequested.value,
         onProgress: (progress) => {
           const message = diagramProgressMessage(progress);
           if (message && generationToken === latestGenerationToken) {
@@ -5766,7 +5800,7 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: drawing.manualSpecificRules
+          manualSpecificRules: paint.rules
         },
         timingEntries
       });
@@ -5795,7 +5829,7 @@ export const createRunAnalysis = ({
         ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:/** @type {AlignmentResetPlannedCanonical} */ (canonical)})
         : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value
           : alignmentResetReceipt;
-      await validateSimilarityAlignmentResetReceipt(receipt, canonical);
+      await validateSimilarityAlignmentResetReceipt(receipt, /** @type {AlignmentResetCanonical} */ (canonical));
       const currentOwnerSet = captureGeneratedArtifactOwnerSet();
       const candidateOwnerSet = {
         ...currentOwnerSet,
@@ -5850,7 +5884,7 @@ export const createRunAnalysis = ({
         generationToken: String(generationToken),
         catalogState: candidateCatalogAdmission,
         phase: 'target-record-transform',
-        bindingOptions: { isIncrementalEdit: false },
+        bindingOptions: { isIncrementalEdit: false, drawnPaint },
         isCurrent: () => generationToken === latestGenerationToken
           && !generationCancelRequested.value
           && Number(selectedResultIndex.value) === nextSelectedResultIndex
@@ -6112,34 +6146,18 @@ export const createRunAnalysis = ({
     // The reflow draws the committed Session's Results again, so they keep their names (OV-136).
     const committedResultNames = results.value.map((/** @type {{ name: string }} */ result) => result.name);
     const generationToken = ++latestGenerationToken;
-    /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
-    let colorCandidate = null;
     clearLabelBuildNotices({ rerender: true });
     skipCaptureBaseConfig.value = true;
     const isRequested = () => generationToken === latestGenerationToken && requestId >= reflowSupersededAt;
     const isCurrent = () => isRequested() && readCommittedCanonicalRevision() === committedRevision;
-    // The editor state the rerender draws from; an edit made from here on is
-    // shown on its Results after they commit (OV-346).
-    const drawnPaint = editorPaintState(/** @type {import('./result-paint-record.js').PaintStateSource} */ (state), drawing);
     // A candidate whose rule inputs changed while it was prepared or drawn (an
     // edit the Result shows live) is not admitted. No newer request replaces
     // it, so the rerender it was asked for (a Legend relabel) runs again (OV-351).
     const notAdmitted = () => ({ status: 'stale', rerun: isRequested() });
     try {
-      colorCandidate = await prepareAndAdmitCandidate(drawing, isCurrent);
-      if (!colorCandidate) return notAdmitted();
-      const candidateRules = colorCandidate.rules;
-      const canonical = projectCommittedEditorIntent({
-        committed,
-        state,
-        drawing: {
-          ...drawing,
-          selectedPalette: appliedPaletteName,
-          currentColors: appliedPaletteColors,
-          manualSpecificRules: candidateRules
-        },
-        liveSettingWrites
-      });
+      const paint = await prepareCommittedPaintCandidate(drawing, committed, isCurrent, liveSettingWrites);
+      if (!paint) return notAdmitted();
+      const { canonical, drawnPaint, rules: candidateRules } = paint;
       /** @type {TimingEntry[]} */
       const timingEntries = [];
       const execution = await executeShownDrawingCandidate({
@@ -6147,7 +6165,7 @@ export const createRunAnalysis = ({
         decorationContinuity,
         mode: canonical.renderRequest.mode,
         kind: 'reflow',
-        shouldAdmit: colorCandidate.shouldAdmit,
+        shouldAdmit: paint.shouldAdmit,
         prepareCommit: prepareReflowResultCommit,
         prepareCommitInput: {
           featureColorOverrides: drawing.featureColorOverrides,
