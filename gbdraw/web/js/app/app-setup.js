@@ -31,6 +31,7 @@ import {
 } from '../services/feature-visibility.js';
 import { drawnBlockStroke, drawsPythonLegendRow, legendEntryKey, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { selectedResultOfMode } from '../services/artifact-slot.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -1865,9 +1866,9 @@ export const createAppSetup = () => {
   // What the Review alignment panel took over while it is shown, given back when it ends: the
   // Editor drawer reopens on its tab, the popups (hidden meanwhile) show again, and the view
   // from before the fit returns. While it is set, no gesture on the figure and no click
-  // outside opens, retargets or closes a popup. `figure` names the Result the review last
-  // showed its draft on, in the review's mode.
-  /** @type {{ drawerOpen: boolean, popup: unknown, figure: { mode: string, result: string } } | null} */
+  // outside opens, retargets or closes a popup. `figure` is the identity of the Result of the
+  // review's mode (`mode`) that the review last showed its draft on.
+  /** @type {{ drawerOpen: boolean, popup: unknown, mode: 'circular' | 'linear', figure: string } | null} */
   let similarityAlignmentTakeover = null;
   const previewPopupsHeld = () => similarityAlignmentTakeover !== null;
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
@@ -4822,17 +4823,18 @@ export const createAppSetup = () => {
   // meanwhile keeps that view. While Apply runs, the ending waits for its outcome, and its new
   // Result is the review's own.
   let similarityAlignmentApplying = false;
-  const shownFigure = () => ({ mode: mode.value,
-    result: previewRuntime.getResultIdentity(results.value[selectedResultIndex.value]) });
+  // The identity of the selected Result of the review's mode, shown or kept in its slot.
+  /** @param {'circular' | 'linear'} reviewMode */
+  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(selectedResultOfMode(reviewMode, {
+    mode: mode.value, results: results.value, selectedResultIndex: Number(selectedResultIndex.value) || 0
+  }, artifactSlots));
   // The draft no longer matches the figure. Another Result of the review's mode replaced it (a
-  // Session load, History, a new Generate): the view and the drawer are that change's, and the
-  // review gives neither back. A mode switch brings no view: the figure of the other mode, or the
-  // review's own Result shown again, leaves the hold, so the end still gives the view back.
+  // Session load, History, a new Generate), whichever mode is shown: the view and the drawer are
+  // that change's, and the review gives neither back. A mode switch brings no view: the review's
+  // own Result, kept in its slot or shown again, leaves the hold, so the end gives the view back.
   const dropSimilarityAlignmentView = () => {
     const takeover = similarityAlignmentTakeover;
-    if (!takeover || similarityAlignmentApplying) return;
-    const shown = shownFigure();
-    if (shown.mode !== takeover.figure.mode || shown.result === takeover.figure.result) return;
+    if (!takeover || similarityAlignmentApplying || reviewModeFigure(takeover.mode) === takeover.figure) return;
     takeover.drawerOpen = false;
     releasePreviewViewport({ restore: false });
   };
@@ -4856,7 +4858,7 @@ export const createAppSetup = () => {
       return;
     }
     // A live rerender of the draft's records draws a new Result of the same figure (PD-OI-102).
-    if (similarityAlignmentTakeover) similarityAlignmentTakeover.figure = shownFigure();
+    if (similarityAlignmentTakeover) similarityAlignmentTakeover.figure = reviewModeFigure(similarityAlignmentTakeover.mode);
     // Without a mounted preview (the Run info tab) nothing is measured: the strips keep the
     // geometry of the same Result.
     similarityAlignmentGeometry.value = featureActions.showAlignmentOverlay({
@@ -4912,7 +4914,9 @@ export const createAppSetup = () => {
       return;
     }
     // A review shown again while an Apply is pending keeps what the first one took.
-    similarityAlignmentTakeover ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value, figure: shownFigure() };
+    const reviewMode = mode.value === 'circular' ? 'circular' : 'linear';
+    similarityAlignmentTakeover ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value,
+      mode: reviewMode, figure: reviewModeFigure(reviewMode) };
     // The figure is fitted again only while it shows the draft.
     holdPreviewViewport(similarityAlignmentActions.isDraftArtifactCurrent);
     rightDrawerActions.closeRightDrawer();
