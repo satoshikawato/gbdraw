@@ -171,6 +171,7 @@
   "persistedContractCoChange": {
     "exemptGeneratedExports": [
       "EXPECTED_WEB_RUNTIME_CAPABILITIES"
-    ]
+    ],
+    "sessionVersionUnit": "main"
   }
 }

@@ -181,8 +181,10 @@ The following are hard failures when applicable:
   static Product Contract co-change route;
 - checker implementation combined with authority or an evidence producer in
   one ordinary pull request;
-- a persisted contract change without its history, reference, or fixtures
-  (see [Persisted contract co-change](#persisted-contract-co-change));
+- a persisted contract change without its history, reference, or fixtures,
+  or with a new Session version other than `main`'s or `main`'s plus one, or
+  one that cannot be read (see
+  [Persisted contract co-change](#persisted-contract-co-change));
 - candidate execution in a trusted workflow;
 - promotion topology, source-coverage, exact-SHA evidence, result-tree, or
   security failures; and
@@ -692,6 +694,32 @@ not export. Adding an exemption, or turning the rule on or off, is
 `Review: REQUIRED`; adding an exemption or removing the key expands authority
 and waits for the Owner's approval. The two documents and `tests/fixtures/`
 are evidence, not guard or authority paths.
+
+A breaking Session change raises `SESSION_VERSION` when it enters `main`; the
+unit is `main`, not a release tag. A change is breaking when the `main` build
+would refuse a Session that the new writer writes, or would read it
+differently. While the head writes a version that `main` does not, a further
+breaking change keeps that version: rewrite its history entry and fixtures, and
+remove any reader or migrator of a version that never reached `main`. With
+`persistedContractCoChange.sessionVersionUnit` set to `"main"` in the base
+policy (another value fails closed in the base and the candidate), the Gate
+reads `main`'s `SESSION_VERSION` from `refs/remotes/origin/main` for every pull
+request with one of the kinds above:
+
+- a pull request that changes `SESSION_VERSION` to anything other than
+  `main`'s or `main`'s plus one fails the Gate (`persisted-contract.fold`);
+- when the head writes `main`'s version, `Review: REQUIRED` asks to confirm
+  that `main` reads what the head writes the same way, or to raise
+  `SESSION_VERSION` by one;
+- when either version cannot be read, the Gate fails closed
+  (`persisted-contract.fold`); fetch `main` and rerun.
+
+Whether a change breaks `main` is the reviewer's judgment.
+`CANONICAL_REQUEST_SCHEMA` has no rule tied to `main`; it keeps the rules in
+the table. Setting or removing `sessionVersionUnit` is
+`Review: REQUIRED`; removing it expands authority and waits for the Owner's
+approval. `Promotion / gate` does not repeat the check: every change reaches
+`main` through a `dev` pull request.
 
 In the pull request body, under "Risk and review notes", write
 "Persisted contract:" and either `N/A` or the kinds the Gate reported, the
