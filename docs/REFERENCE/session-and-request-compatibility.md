@@ -741,6 +741,9 @@ also record the effective `cds` or `locus` unit kinds produced by `auto` and
 whether orthogroup inference was enabled. Sessions preserve each LOSATP mode's
 hit-limit drafts. A saved Collinear pipeline without `collinearInferOrthogroups`
 uses its historical inference behavior (ON); new Web state defaults to OFF.
+A derived result saved before its comparison tables were stored as canonical
+TSV text loads unchanged and is recomputed from the raw search rows when the
+analysis runs again.
 
 **Save Raw LOSAT TSV** resolves generated protein handles to stable readable
 aliases. Uploaded comparison TSV is never rewritten. Export raw results to keep

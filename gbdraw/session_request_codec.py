@@ -4286,24 +4286,34 @@ def _decode_batch_outputs(
     )
 
 
+def encode_canonical_table(frame: object, *, name: str = "table") -> str:
+    """Encode one DataFrame as the canonical request's TSV table text.
+
+    This is the only encoder of canonical TSV tables: request resources and the
+    Web protein comparison payload both use it, so equal frames give equal bytes.
+    """
+
+    if not isinstance(frame, DataFrame):
+        raise CanonicalRequestEncodingError(f"{name} must be a pandas DataFrame.")
+    if len(frame.columns) == 0:
+        raise CanonicalRequestEncodingError(
+            f"DataFrame resource {name!r} must have at least one column."
+        )
+    try:
+        return frame.to_csv(sep="\t", index=False, lineterminator="\n")
+    except Exception as exc:
+        raise CanonicalRequestEncodingError(
+            f"Could not encode DataFrame resource {name!r} as canonical TSV."
+        ) from exc
+
+
 def _table_ref(
     name: str,
     value: object,
     *,
     resources: RequestResources,
 ) -> dict[str, str]:
-    if not isinstance(value, DataFrame):
-        raise CanonicalRequestEncodingError(f"{name} must be a pandas DataFrame.")
-    if len(value.columns) == 0:
-        raise CanonicalRequestEncodingError(
-            f"DataFrame resource {name!r} must have at least one column."
-        )
-    try:
-        text = value.to_csv(sep="\t", index=False, lineterminator="\n")
-    except Exception as exc:
-        raise CanonicalRequestEncodingError(
-            f"Could not encode DataFrame resource {name!r} as canonical TSV."
-        ) from exc
+    text = encode_canonical_table(value, name=name)
     preferred_id = _resource_id(name)
     resource_id = resources.add_bytes(
         preferred_id,
@@ -5492,6 +5502,7 @@ __all__ = [
     "decode_canonical_request",
     "describe_canonical_request",
     "describe_legacy_request_tables",
+    "encode_canonical_table",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
     "migrate_flat_config_overrides",

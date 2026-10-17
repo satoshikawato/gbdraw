@@ -298,18 +298,24 @@ def _zero_hit_derived_payload(
     mode: str,
     *,
     include_identity: bool = True,
+    table_form: str = "rows",
 ) -> dict:
+    # `rows: []` is the zero-hit form derived entries carried from #312 (17e2c9dee,
+    # first-parent main) until D-66; the current writer emits a header-only
+    # `canonicalTsv`. Admission accepts exactly one of the two (D-69).
+    pair: dict = {
+        "pair_index": 0,
+        "query_index": 0,
+        "subject_index": 1,
+        "tsv": "",
+        "hit_count": 0,
+    }
+    if table_form == "rows":
+        pair["rows"] = []
+    else:
+        pair["canonicalTsv"] = "query\tsubject\tidentity\n"
     payload = {
-        "pairs": [
-            {
-                "pair_index": 0,
-                "query_index": 0,
-                "subject_index": 1,
-                "tsv": "",
-                "rows": [],
-                "hit_count": 0,
-            }
-        ],
+        "pairs": [pair],
         "orthogroups": [],
     }
     if include_identity:
@@ -1212,6 +1218,7 @@ def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> N
         validate_session(payload)
 
 
+@pytest.mark.parametrize("table_form", ("rows", "canonicalTsv"))
 @pytest.mark.parametrize(
     ("mode", "include_identity"),
     (
@@ -1223,6 +1230,7 @@ def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> N
 def test_current_session_accepts_strict_zero_hit_derived_results(
     mode: str,
     include_identity: bool,
+    table_form: str,
 ) -> None:
     manifest = _protein_identity_manifest()
 
@@ -1231,6 +1239,7 @@ def test_current_session_accepts_strict_zero_hit_derived_results(
         _zero_hit_derived_payload(
             mode,
             include_identity=include_identity,
+            table_form=table_form,
         ),
         mode=mode,
     )
@@ -1238,11 +1247,20 @@ def test_current_session_accepts_strict_zero_hit_derived_results(
     validate_session(payload)
 
 
+def _replace_rows_with_table(payload: dict, table: object) -> None:
+    pair = payload["pairs"][0]
+    del pair["rows"]
+    pair["canonicalTsv"] = table
+
+
 @pytest.mark.parametrize(
     "mutate",
     (
         lambda payload: payload.update({"note": "arbitrary"}),
         lambda payload: payload["pairs"][0].update({"rows": [{}]}),
+        lambda payload: payload["pairs"][0].update({"canonicalTsv": "query\n"}),
+        lambda payload: _replace_rows_with_table(payload, "query\nq1\n"),
+        lambda payload: _replace_rows_with_table(payload, ["query"]),
         lambda payload: payload["pairs"][0].update({"tsv": "unexpected"}),
         lambda payload: payload["pairs"][0].update({"hit_count": 1}),
         lambda payload: payload["pairs"][0].update({"pair_index": "0"}),
@@ -1259,6 +1277,9 @@ def test_current_session_accepts_strict_zero_hit_derived_results(
     ids=(
         "arbitrary-field",
         "nonempty-rows",
+        "both-table-forms",
+        "nonempty-canonical-table",
+        "nonstring-canonical-table",
         "nonempty-tsv",
         "nonzero-hit-count",
         "noninteger-pair-index",

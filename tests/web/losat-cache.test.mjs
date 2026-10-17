@@ -467,14 +467,16 @@ assert.equal(cache.isLosatDerivedCacheEntry({
   }
 }, { allowLegacy: false }), true);
 
-const zeroHitDerivedEntry = (mode, { includeIdentity = true } = {}) => {
+// `rows: []` is the zero-hit form derived entries carried from #312 (17e2c9dee, first-parent main) until D-66;
+// the current writer emits a header-only `canonicalTsv`. Admission accepts exactly one of the two (D-69).
+const zeroHitDerivedEntry = (mode, { includeIdentity = true, tableForm = 'rows' } = {}) => {
   const payload = {
     pairs: [{
       pair_index: 0,
       query_index: 0,
       subject_index: 1,
       tsv: '',
-      rows: [],
+      ...(tableForm === 'rows' ? { rows: [] } : { canonicalTsv: 'query\tsubject\tidentity\n' }),
       hit_count: 0
     }],
     orthogroups: []
@@ -505,11 +507,11 @@ const zeroHitDerivedEntry = (mode, { includeIdentity = true } = {}) => {
   };
 };
 
-for (const entry of [
-  zeroHitDerivedEntry('orthogroup'),
-  zeroHitDerivedEntry('collinear'),
-  zeroHitDerivedEntry('collinear', { includeIdentity: false })
-]) {
+for (const entry of ['rows', 'canonicalTsv'].flatMap((tableForm) => [
+  zeroHitDerivedEntry('orthogroup', { tableForm }),
+  zeroHitDerivedEntry('collinear', { tableForm }),
+  zeroHitDerivedEntry('collinear', { includeIdentity: false, tableForm })
+])) {
   assert.equal(
     cache.validateDerivedProteinReferences(entry, manifest),
     true,
@@ -520,6 +522,15 @@ for (const entry of [
 const zeroHitNearMisses = [
   ['arbitrary field', (payload) => { payload.note = 'arbitrary'; }],
   ['nonempty rows', (payload) => { payload.pairs[0].rows = [{}]; }],
+  ['both table forms', (payload) => { payload.pairs[0].canonicalTsv = 'query\n'; }],
+  ['nonempty canonical table', (payload) => {
+    delete payload.pairs[0].rows;
+    payload.pairs[0].canonicalTsv = 'query\nq1\n';
+  }],
+  ['nonstring canonical table', (payload) => {
+    delete payload.pairs[0].rows;
+    payload.pairs[0].canonicalTsv = ['query'];
+  }],
   ['nonempty TSV', (payload) => { payload.pairs[0].tsv = 'unexpected'; }],
   ['nonzero hit count', (payload) => { payload.pairs[0].hit_count = 1; }],
   ['noninteger pair index', (payload) => { payload.pairs[0].pair_index = '0'; }],

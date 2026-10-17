@@ -38,6 +38,7 @@ import {
   projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
   bindCanonicalTypedResource,
+  isCanonicalTypedResourceBound,
   committedFeatureVisibilityMatches,
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
@@ -660,6 +661,9 @@ const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
 };
 
 /**
+ * Whether a converted protein payload holds what a request needs from it: the typed result bound to its Python
+ * bytes and each displayed pair's canonical comparison table. A payload read from a Session or written before
+ * the table was canonical lacks one of them, so it is a cache miss and the analysis runs again.
  * @param {unknown} mode
  * @param {Record<string, unknown> | null | undefined} payload
  */
@@ -685,6 +689,9 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
     && resource.value.fields
     && typeof resource.value.fields === 'object'
     && !Array.isArray(resource.value.fields)
+    && isCanonicalTypedResourceBound(resource)
+    && Array.isArray(payload?.pairs)
+    && payload.pairs.every((pair) => typeof pair?.canonicalTsv === 'string')
   );
 };
 
@@ -4872,13 +4879,16 @@ export const createRunAnalysis = ({
                 slot: blastSlot
               });
               if (!useCollinearBlastp) {
+                if (typeof converted.canonicalTsv !== 'string') {
+                  throw new Error('Protein comparison analysis did not return its canonical comparison table.');
+                }
                 resolvedComparisons.push({
                   kind: 'precomputedProteinComparison',
                   edgeKey: sourcePair?.edgeKey || '',
                   ordinal: Number(sourcePair?.ordinal),
                   queryRecordIndex: Number(sourcePair?.queryIndex),
                   subjectRecordIndex: Number(sourcePair?.subjectIndex),
-                  rows: Array.isArray(converted.rows) ? converted.rows : []
+                  canonicalTsv: converted.canonicalTsv
                 });
               }
             }

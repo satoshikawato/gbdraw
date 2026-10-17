@@ -91,6 +91,7 @@ import { isPlainObject } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
+import { toRaw } from '../utils/vue-raw.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import {
@@ -353,7 +354,6 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @property {(resourceId: string, kind: string | null, entry: ResourceEntry | null | undefined) => string} addFile
  * @property {(resourceId: string, kind: string, name: string, text: unknown) => string} addText
  * @property {(resourceId: string, kind: string | null, name: string, value: WeakKey) => string} addJson
- * @property {(resourceId: string, rows: unknown, columns?: unknown) => string} addCanonicalTable
  */
 
 export { CANONICAL_REQUEST_SCHEMA };
@@ -1019,6 +1019,18 @@ const normalizeOriginalResourceName = (name) => {
  */
 const generatedResourceValues = new WeakMap();
 const canonicalTypedResourceBackings = new WeakMap();
+// The one lookup of a typed result's Python bytes. A derived-cache hit hands the result back through the
+// reactive cache as a Vue proxy, so the binding is keyed and read by the object behind it (OV-1040).
+/** @param {unknown} value */
+const canonicalTypedResourceBacking = (value) => (
+  value && typeof value === 'object' ? canonicalTypedResourceBackings.get(toRaw(value)) : undefined
+);
+/**
+ * Whether the analysis helper bound this typed result to its Python bytes. A result read from a Session or
+ * cloned is not bound, so the analysis computes it again instead of encoding it in JS.
+ * @param {unknown} value
+ */
+export const isCanonicalTypedResourceBound = (value) => canonicalTypedResourceBacking(value) !== undefined;
 
 // The analysis helper supplies the bytes already emitted by the Python typed codec.
 /**
@@ -1034,7 +1046,7 @@ export const bindCanonicalTypedResource = (value, descriptor) => {
     || !Number.isSafeInteger(descriptor.size) || /** @type {number} */ (descriptor.size) < 0) {
     throw new Error("Analysis canonical resource backing is invalid.");
   }
-  canonicalTypedResourceBackings.set(value, descriptor);
+  canonicalTypedResourceBackings.set(toRaw(value), descriptor);
 };
 /**
  * @param {{ encode?: boolean }} [options]
@@ -1122,83 +1134,12 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       generatedResourceValues.set(resources[resourceId], { bindings: [value] });
       return resourceId;
     }
-    const backing = canonicalTypedResourceBackings.get(value);
-    if (backing) {
-      if (backing.kind !== kind) throw new Error("Analysis canonical resource kind does not match.");
-      resources[resourceId] = { ...backing, name: normalizeResourceName(resourceId, name) };
-      generatedResourceValues.set(resources[resourceId], { bindings: [value] });
-      return resourceId;
-    }
-    const normalized = JSON.stringify(value);
-    const bytes = textToBytes(normalized);
-    resources[resourceId] = {
-      kind,
-      name: normalizeResourceName(resourceId, name),
-      type: 'application/json',
-      size: bytes.byteLength,
-      lastModified: 0,
-      encoding: 'base64',
-      data: bytesToBase64(bytes)
-    };
+    const backing = canonicalTypedResourceBacking(value);
+    if (!backing) throw new Error("Analysis canonical resource is not bound to its canonical bytes.");
+    if (backing.kind !== kind) throw new Error("Analysis canonical resource kind does not match.");
+    resources[resourceId] = { ...backing, name: normalizeResourceName(resourceId, name) };
     generatedResourceValues.set(resources[resourceId], { bindings: [value] });
     return resourceId;
-  };
-
-  /** @type {ResourceBuilder['addCanonicalTable']} */
-  const addCanonicalTable = (resourceId, rows, columns = null) => {
-    if (Object.hasOwn(resources, resourceId)) return resourceId;
-    const normalizedRows = Array.isArray(rows)
-      ? rows.filter((row) => row && typeof row === 'object' && !Array.isArray(row))
-      : [];
-    const preferredColumns = [
-      'query',
-      'subject',
-      'identity',
-      'alignment_length',
-      'mismatches',
-      'gap_opens',
-      'qstart',
-      'qend',
-      'sstart',
-      'send',
-      'evalue',
-      'bitscore'
-    ];
-    const requestedColumns = Array.isArray(columns)
-      ? columns.map((column) => String(column || '').trim()).filter(Boolean)
-      : [];
-    const discoveredColumns = new Set(
-      normalizedRows.flatMap((row) => Object.keys(row))
-    );
-    const orderedColumns = [
-      ...requestedColumns,
-      ...preferredColumns.filter((column) => discoveredColumns.has(column)),
-      ...Array.from(discoveredColumns)
-        .filter((column) => !requestedColumns.includes(column) && !preferredColumns.includes(column))
-        .sort()
-    ];
-    const uniqueColumns = Array.from(new Set(orderedColumns));
-    if (uniqueColumns.length === 0) {
-      uniqueColumns.push(...preferredColumns);
-    }
-    /** @param {unknown} value */
-    const escapeCell = (value) => {
-      if (value === null || value === undefined) return '';
-      const text = String(value);
-      return /[\t\n\r"]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-    };
-    const lines = [
-      uniqueColumns.map(escapeCell).join('\t'),
-      ...normalizedRows.map((row) => (
-        uniqueColumns.map((column) => escapeCell(row[column])).join('\t')
-      ))
-    ];
-    return addText(
-      resourceId,
-      'canonical-tsv',
-      `${resourceId}.tsv`,
-      `${lines.join('\n')}\n`
-    );
   };
 
   return {
@@ -1206,8 +1147,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     resourceOriginalNames,
     addFile,
     addText,
-    addJson,
-    addCanonicalTable
+    addJson
   };
 };
 
@@ -2442,7 +2382,7 @@ const COLLINEARITY_RESULT_RESOURCE_ID = 'comparison-canonical-collinearity-1';
 
 /**
  * @param {{
- *   comparison: { kind?: unknown, rows?: unknown, columns?: unknown, text?: unknown },
+ *   comparison: { kind?: unknown, canonicalTsv?: unknown, text?: unknown },
  *   edge: LinearComparisonResolvedEdge, resources: ResourceBuilder
  * }} input
  */
@@ -2452,13 +2392,11 @@ const addResolvedComparisonResource = ({
   resources
 }) => {
   if (comparison.kind === 'precomputedProteinComparison') {
+    // The table is the Python canonical TSV text of the analysis helper, written unchanged.
+    const resourceId = proteinComparisonResourceId(edge);
     return {
       kind: 'precomputedProteinComparison',
-      resourceId: resources.addCanonicalTable(
-        proteinComparisonResourceId(edge),
-        comparison.rows,
-        comparison.columns
-      ),
+      resourceId: resources.addText(resourceId, 'canonical-tsv', `${resourceId}.tsv`, comparison.canonicalTsv),
       encoding: 'canonicalTsv',
       queryRecordIndex: edge.queryIndex,
       subjectRecordIndex: edge.subjectIndex
@@ -2565,7 +2503,7 @@ const buildComparisons = ({
       !typedResource
       || typeof typedResource !== 'object'
       || Array.isArray(typedResource)
-      || ![1, 2, 3].includes(typedResource.schema)
+      || typedResource.schema !== 3
       || typedResource.kind !== expectedValueKind
       || !Object.prototype.hasOwnProperty.call(typedResource, 'value')
     ) {

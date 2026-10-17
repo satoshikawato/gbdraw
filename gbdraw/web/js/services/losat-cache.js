@@ -587,6 +587,19 @@ const COMPOUND_PATH_EDGE_RE = /^[^:\s]+:\d+:(h_[a-z2-7]{26})->\d+:(h_[a-z2-7]{26
 const isNonnegativeInteger = (value) => Number.isInteger(value) && /** @type {number} */ (value) >= 0;
 
 /**
+ * A zero-hit pair holds exactly one empty table: the header-only `canonicalTsv` the current writer emits, or the
+ * `rows: []` that derived entries carried from #312 until the canonical table replaced it. The Python twin is
+ * `_has_one_empty_table_form` in `gbdraw/analysis/protein_artifacts.py`.
+ * @param {Record<string, unknown>} pair
+ */
+const hasOneEmptyTableForm = (pair) => {
+  const hasTable = Object.prototype.hasOwnProperty.call(pair, 'canonicalTsv');
+  if (hasTable === Object.prototype.hasOwnProperty.call(pair, 'rows')) return false;
+  if (!hasTable) return Array.isArray(pair.rows) && pair.rows.length === 0;
+  return typeof pair.canonicalTsv === 'string' && /^[^\n]*\n$/.test(pair.canonicalTsv);
+};
+
+/**
  * @param {LosatDerivedCacheEntry} entry A derived entry that `isLosatDerivedCacheEntry` accepted.
  * @returns {boolean}
  */
@@ -631,6 +644,7 @@ const isStrictEmptyDerivedResult = (entry) => {
     'query_index',
     'subject_index',
     'tsv',
+    'canonicalTsv',
     'rows',
     'hit_count'
   ]);
@@ -642,8 +656,7 @@ const isStrictEmptyDerivedResult = (entry) => {
       !isNonnegativeInteger(pair.pair_index) ||
       pairIndices.has(pair.pair_index) ||
       pair.tsv !== '' ||
-      !Array.isArray(pair.rows) ||
-      pair.rows.length !== 0 ||
+      !hasOneEmptyTableForm(pair) ||
       pair.hit_count !== 0
     ) return false;
     pairIndices.add(pair.pair_index);

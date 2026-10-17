@@ -10,6 +10,7 @@ import {
   hasRequiredCanonicalAnalysisResource,
   resolveProteinBlastpCandidateLimit
 } from '../../gbdraw/web/js/app/run-analysis.js';
+import { bindCanonicalTypedResource } from '../../gbdraw/web/js/services/session-request.js';
 
 assert.equal(resolveProteinBlastpCandidateLimit(5), 5);
 assert.equal(resolveProteinBlastpCandidateLimit('7'), 7);
@@ -132,23 +133,34 @@ assert.equal(
   false,
   'derived cache payloads from before typed CollinearityResult propagation must miss'
 );
+// The typed result as the analysis helper returns it: parsed from its Python bytes and bound to them.
+const boundTypedResult = (typed, kind) => {
+  const text = JSON.stringify(typed);
+  bindCanonicalTypedResource(typed, {
+    kind, type: 'application/json', size: Buffer.byteLength(text), lastModified: 0,
+    encoding: 'base64', data: Buffer.from(text).toString('base64')
+  });
+  return typed;
+};
 assert.equal(
   hasRequiredCanonicalAnalysisResource('collinear', {
-    collinearityResult: {
+    pairs: [],
+    collinearityResult: boundTypedResult({
       schema: 3,
       kind: 'result',
       value: { type: 'CollinearityResult', fields: {} }
-    }
+    }, 'collinearity-result')
   }),
   true
 );
 assert.equal(
   hasRequiredCanonicalAnalysisResource('orthogroup', {
-    orthogroupResult: {
+    pairs: [],
+    orthogroupResult: boundTypedResult({
       schema: 3,
       kind: 'orthogroupResult',
       value: { type: 'OrthogroupGraphResult', fields: {} }
-    }
+    }, 'orthogroup-result')
   }),
   true
 );
@@ -234,13 +246,39 @@ for (const schema of [1, 2]) {
     orthogroupResult: {schema, kind: 'orthogroupResult', value: {type: 'OrthogroupResult', fields: {}}}
   }), false);
 }
+// OV-1040 / D-66: a derived payload is a hit only when its typed result is bound to the Python bytes and every
+// pair holds its canonical table. A result read from a Session is not bound, and a pair with only `rows` predates
+// the canonical table: both are misses, so the analysis runs again instead of encoding in JS.
+{
+  const typedText = '{"kind":"orthogroupResult","schema":3,"value":{"fields":{"score":1.0},"type":"OrthogroupGraphResult"}}';
+  const orthogroupResult = JSON.parse(typedText);
+  const payload = { pairs: [{ pair_index: 0, tsv: '', canonicalTsv: 'query\n', hit_count: 0 }], orthogroupResult };
+  assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', payload), false, 'an unbound typed result');
+  bindCanonicalTypedResource(orthogroupResult, {
+    kind: 'orthogroup-result', type: 'application/json', size: Buffer.byteLength(typedText), lastModified: 0,
+    encoding: 'base64', data: Buffer.from(typedText).toString('base64')
+  });
+  assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', payload), true, 'a bound typed result');
+  assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', {
+    ...payload, pairs: [{ pair_index: 0, tsv: '', rows: [], hit_count: 0 }]
+  }), false, 'a pair with only rows');
+  // A hit reads the payload back through Vue's reactive cache Map, as a proxy of the bound object.
+  const proxied = new Proxy(orthogroupResult, {});
+  const previousWindow = globalThis.window;
+  globalThis.window = { Vue: { toRaw: (value) => (value === proxied ? orthogroupResult : value) } };
+  try {
+    assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', { ...payload, orthogroupResult: proxied }), true);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+}
 assert.equal(baselineIdentity.pathRepresentation, 'lossless-graph-v1');
 const oldIdentity = {...baselineIdentity};
 delete oldIdentity.pathRepresentation;
 assert.notEqual(cacheKey(oldIdentity), cacheKey(baselineIdentity));
 
 // Current comparison data has one owner; stats can differ without duplicating it.
-const immutablePairs = Object.freeze([Object.freeze({ tsv: 'α\tβ\n', rows: Object.freeze([]) })]);
+const immutablePairs = Object.freeze([Object.freeze({ tsv: 'α\tβ\n', canonicalTsv: 'query\tsubject\n' })]);
 const immutableResource = Object.freeze({ schema: 3, kind: 'result', value: Object.freeze({
   type: 'CollinearityResult', fields: Object.freeze({ blocks: Object.freeze([]) })
 }) });

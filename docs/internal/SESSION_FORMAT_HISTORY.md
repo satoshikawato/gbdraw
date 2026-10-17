@@ -605,6 +605,13 @@ unchanged; derived identity includes `pathRepresentation` to prevent
 reusing an old analysis payload as a current helper result. Older releases that
 only support typed schemas 1 and 2 cannot read the new typed resources.
 
+Derived envelope 3 stores each displayed pair's comparison table as
+`canonicalTsv`, the text of the Python canonical table encoder (D-66). Entries
+written from #312 (17e2c9dee) until then carry `rows` instead: they still load,
+and the Web treats them as a cache miss and recomputes them from the raw cache.
+A zero-hit pair is accepted in either form, a header-only `canonicalTsv` or
+`rows: []`, but not both. Session version and the envelope schema are unchanged.
+
 Generated protein FASTA, raw QUERY/SUBJECT fields, protein maps, and derived
 references use deterministic session-internal handles of the form
 `h_[a-z2-7]{26}`. Those handles bind a record instance to a complete CDS

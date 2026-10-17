@@ -11,7 +11,7 @@ from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs as
     render_staged_canonical_web_request,
 )
-from gbdraw.session_request_codec import encode_canonical_typed_resource
+from gbdraw.session_request_codec import encode_canonical_table, encode_canonical_typed_resource
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
@@ -1028,25 +1028,25 @@ def _build_web_protein_extraction(protein_maps, identity_manifest=None):
         identity_manifest=identity_manifest,
     )
 
-def _clean_json_scalar(value):
-    try:
-        import pandas as pd
-        if pd.isna(value):
-            return ""
-    except Exception:
-        pass
-    if hasattr(value, "item"):
-        try:
-            return value.item()
-        except Exception:
-            pass
-    return value
-
-def _dataframe_json_rows(df):
-    rows = []
-    for row in df.to_dict(orient="records"):
-        rows.append({str(key): _clean_json_scalar(value) for key, value in row.items()})
-    return rows
+def _converted_pair_payload(pair_index, converted):
+    """One displayed pair of the converter reply: the headerless BLAST-style
+    rows for Run info and the canonical comparison table the request uses."""
+    from io import StringIO
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+    handle = StringIO()
+    converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
+        handle,
+        sep=chr(9),
+        header=False,
+        index=False,
+        lineterminator=chr(10),
+    )
+    return {
+        "pair_index": pair_index,
+        "tsv": handle.getvalue(),
+        "canonicalTsv": encode_canonical_table(converted, name=f"comparison pair {pair_index}"),
+        "hit_count": int(converted.shape[0]),
+    }
 
 def convert_losatp_blastp_pairs_to_genomic_payload(
     pairs_path,
@@ -1075,7 +1075,6 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
 ):
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
     try:
-        from io import StringIO
         import math
         import pandas as pd
         from gbdraw.analysis.collinearity import (
@@ -1096,7 +1095,6 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             select_rbh_orthogroup_edges_from_directional_hits,
             select_top_hits_per_query,
         )
-        from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
         with open(str(pairs_path), "r", encoding="utf-8") as pairs_handle:
             raw_payload = json.load(pairs_handle)
@@ -1535,22 +1533,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 ))
             converted_pairs = []
             for pair_index, converted in converted_frames:
-                handle = StringIO()
-                converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
-                    handle,
-                    sep=chr(9),
-                    header=False,
-                    index=False,
-                    lineterminator=chr(10),
-                )
-                converted_pairs.append(
-                    {
-                        "pair_index": pair_index,
-                        "tsv": handle.getvalue(),
-                        "rows": _dataframe_json_rows(converted),
-                        "hit_count": int(converted.shape[0]),
-                    }
-                )
+                converted_pairs.append(_converted_pair_payload(pair_index, converted))
             canonical_content = encode_canonical_typed_resource("result", collinearity_result)
             return _finalize_losatp_payload({"pairs": converted_pairs},
                collinearity_result=collinearity_result,
@@ -1569,22 +1552,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     item["subject_map"],
                     orthogroups=None,
                 )
-                handle = StringIO()
-                converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
-                    handle,
-                    sep=chr(9),
-                    header=False,
-                    index=False,
-                    lineterminator=chr(10),
-                )
-                converted_pairs.append(
-                    {
-                        "pair_index": item["pair_index"],
-                        "tsv": handle.getvalue(),
-                        "rows": _dataframe_json_rows(converted),
-                        "hit_count": int(converted.shape[0]),
-                    }
-                )
+                converted_pairs.append(_converted_pair_payload(item["pair_index"], converted))
             return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": []})
 
         hits_by_direction = {
@@ -1621,21 +1589,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 forward["subject_map"],
                 orthogroups=orthogroups,
             )
-            handle = StringIO()
-            converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
-                handle,
-                sep=chr(9),
-                header=False,
-                index=False,
-                lineterminator=chr(10),
-            )
             converted_pairs.append(
-                {
-                    "pair_index": display_pair_indices[(query_index, subject_index)],
-                    "tsv": handle.getvalue(),
-                    "rows": _dataframe_json_rows(converted),
-                    "hit_count": int(converted.shape[0]),
-                }
+                _converted_pair_payload(display_pair_indices[(query_index, subject_index)], converted)
             )
         canonical_content = encode_canonical_typed_resource("orthogroupResult", orthogroups)
         return _finalize_losatp_payload({"pairs": converted_pairs},
