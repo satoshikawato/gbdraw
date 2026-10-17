@@ -599,18 +599,30 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
 });
 
 // A Circular record is cropped only where Generate crops it: one record offered
-// alone, with a region in the form. Emptied region fields name no region, and
-// separate diagrams or a Multi-Record Canvas draw whole records.
-test('a Circular row is cropped where Generate crops its record', () => {
+// alone, with a region Generate can draw. Emptied region fields name no region,
+// a region Generate refuses crops nothing, and separate diagrams or a
+// Multi-Record Canvas draw whole records. Display start is unavailable exactly
+// for a cropped record (OV-1093).
+test('a Circular row is cropped, and loses Display start, where Generate crops its record', () => {
   const model = compositeControls();
-  const cropped = () => model.controls.rows.value.filter((row) => row.sourceUid === 'circular').map((row) => row.cropped);
+  const circularRows = () => model.controls.rows.value.filter((row) => row.sourceUid === 'circular');
+  const cropped = () => circularRows().map((row) => row.cropped);
+  const startEnabled = () => circularRows().map((row) => model.controls.surfaceFor(row).startEnabled);
   const { form } = model.state.activeDrawing();
   form.multi_record_canvas = false;
   form.circular_region_start = 1;
   form.circular_region_end = 50;
   assert.deepEqual(cropped(), [false, false], 'two records offered: separate diagrams draw whole records');
+  assert.deepEqual(startEnabled(), [true, true], 'Display start counts on the whole records');
   form.circular_record_selector = 'first';
   assert.deepEqual(cropped(), [true], 'the record chosen alone is cropped');
+  assert.deepEqual(startEnabled(), [false], 'Display start is unavailable for the cropped record');
+  form.circular_region_end = '';
+  assert.deepEqual(cropped(), [false], 'Start without End crops nothing: Generate refuses the region');
+  form.circular_region_end = 200;
+  assert.deepEqual(cropped(), [false], 'an End beyond the 100 bp record crops nothing: Generate refuses the region');
+  assert.deepEqual(startEnabled(), [true]);
+  form.circular_region_end = 50;
   form.multi_record_canvas = true;
   assert.deepEqual(cropped(), [false], 'a Multi-Record Canvas draws whole records');
   form.multi_record_canvas = false;

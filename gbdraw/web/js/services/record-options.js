@@ -202,14 +202,29 @@ export const circularFormRegion = (form, record = null) => {
 };
 
 /**
- * Whether the next Generate of a Circular drawing crops its record: the
- * drawing offers one record alone and its form states a region.
+ * The region Generate crops a record to: the form's region when the drawing
+ * offers that record alone and Generate can draw the region; null otherwise
+ * (a region Generate refuses crops nothing).
+ * @param {boolean} single whether the drawing offers one record alone (`isSingleCircularJourney`)
+ * @param {CircularRegionForm} form
+ * @param {{ recordLength?: unknown, record_length?: unknown } | null} record the record it crops, when known
+ * @returns {{ start: number, end: number } | null}
+ */
+const circularCropRegion = (single, form, record) => {
+  const region = single ? circularFormRegion(form, record) : null;
+  return region !== null && !('error' in region) ? region : null;
+};
+
+/**
+ * Whether the next Generate of a Circular drawing crops its record
+ * (`circularCropRegion`).
  * @param {CircularRequestRecordSetOptions['records']} records the records discovered in the input
  * @param {CircularRecordDrawing} drawing
  */
-export const circularDrawingCropped = (records, drawing) => (
-  circularFormRegion(drawing.form) !== null && isSingleCircularJourney(circularDrawingRecordSet(records, drawing))
-);
+export const circularDrawingCropped = (records, drawing) => {
+  const recordSet = circularDrawingRecordSet(records, drawing);
+  return circularCropRegion(isSingleCircularJourney(recordSet), drawing.form, recordSet.records[0] ?? null) !== null;
+};
 
 /**
  * One diagram of the next Circular Generate.
@@ -237,8 +252,8 @@ export const circularRequestDiagrams = (records, drawing) => {
   // A discovered record keeps its fields through the record set.
   /** @param {{ record_length?: unknown, sourceIndex: number, recordKey?: unknown, recordId?: unknown, selector?: unknown }} record */
   const drawnLength = (record) => {
-    const region = single ? circularFormRegion(drawing.form, record) : null;
-    return region !== null && !('error' in region) ? region.end - region.start + 1 : Number(record.record_length);
+    const region = circularCropRegion(single, drawing.form, record);
+    return region !== null ? region.end - region.start + 1 : Number(record.record_length);
   };
   return (drawing.form.multi_record_canvas ? [drawn] : drawn.map((record) => [record]))
     .map((diagram) => ({
