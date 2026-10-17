@@ -3,7 +3,9 @@
    tool. A rule that refines a component sits after the component it refines. Utilities on an element
    still win over these rules. */
 @layer components {
-    .card { @apply mb-2 rounded-xl border p-3 shadow-sm transition-all; background-color: var(--ui-surface); border-color: var(--ui-line); }
+    /* A card animates its paint (colors, shadow) but not its box: a margin or size change, such as a notice
+       appearing above the Result card, applies at once, so a list inside it keeps what it scrolled to (OV-1022). */
+    .card { @apply mb-2 rounded-xl border p-3 shadow-sm transition; background-color: var(--ui-surface); border-color: var(--ui-line); }
 
     /* Section index: in the stacked display, a row of icon buttons pinned above the settings scroll area
        with the surface of a card, and the switch to the rail at its right end. The index sets its right
