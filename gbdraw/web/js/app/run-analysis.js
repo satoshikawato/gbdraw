@@ -4880,7 +4880,7 @@ export const createRunAnalysis = ({
               });
               if (!useCollinearBlastp) {
                 if (typeof converted.canonicalTsv !== 'string') {
-                  throw new Error('Protein comparison analysis did not return its canonical comparison table.');
+                  throw diagnosticError('RESULT_INVALID', { reason: 'MISSING_COMPARISON_TABLE' }, { stage: 'result-admission' });
                 }
                 resolvedComparisons.push({
                   kind: 'precomputedProteinComparison',

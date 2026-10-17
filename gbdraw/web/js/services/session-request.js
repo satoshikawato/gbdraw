@@ -1135,8 +1135,8 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       return resourceId;
     }
     const backing = canonicalTypedResourceBacking(value);
-    if (!backing) throw new Error("Analysis canonical resource is not bound to its canonical bytes.");
-    if (backing.kind !== kind) throw new Error("Analysis canonical resource kind does not match.");
+    if (!backing) throw diagnosticError('RESOURCE_INVALID', { field: resourceId, reason: 'UNBOUND_CANONICAL_BYTES' }, { stage: 'resource-staging' });
+    if (backing.kind !== kind) throw diagnosticError('RESOURCE_INVALID', { field: resourceId, reason: 'KIND_MISMATCH' }, { stage: 'resource-staging' });
     resources[resourceId] = { ...backing, name: normalizeResourceName(resourceId, name) };
     generatedResourceValues.set(resources[resourceId], { bindings: [value] });
     return resourceId;

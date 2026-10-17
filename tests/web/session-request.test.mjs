@@ -3216,7 +3216,7 @@ try {
   );
   assert.throws(
     () => buildCollinear(JSON.parse(typedCollinearityText)),
-    /not bound to its canonical bytes/
+    /UNBOUND_CANONICAL_BYTES/
   );
   for (const schema of [1, 2]) {
     assert.throws(
