@@ -2617,6 +2617,63 @@ test('the docked review takes the popup, the Editor and the view, and gives them
   expect(pageErrors).toEqual([]);
 });
 
+// A review opened with the keyboard from a feature popup, whose Apply fails: the review
+// stays with the error and its draft while the popup stays hidden, and Cancel gives the
+// popup back with focus on Review alignment options…, beside the figure and below it.
+for (const [width, height] of [[1280, 800], [390, 844]]) {
+  test(`a failed Apply in a review opened by keyboard from a feature popup, then Cancel (${width}x${height})`, async ({ page }) => {
+    test.setTimeout(600000);
+    await page.setViewportSize({ width, height });
+    await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.__GBDRAW_APP__);
+    await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+    const featureId = await page.evaluate(featureByProteinId, 'CAG38712.1');
+    await page.locator(`[data-gbdraw-feature-id="${featureId}"]`).first()
+      .dispatchEvent('click', { clientX: -100, clientY: -100 });
+    const popup = page.locator('.feature-popup[role="dialog"]');
+    const popupReview = popup.locator('[data-similarity-alignment-popup-review]');
+    await popupReview.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.locator('[data-similarity-alignment-dialog]');
+    await expect(dialog).toBeVisible({ timeout: 180000 });
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
+    await expect(dialog.locator('#similarity-alignment-dialog-title')).toBeFocused();
+    await expect(popup).toBeHidden();
+    await chooseUnresolved(page, dialog);
+    const draft = () => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.rows
+      .map((row) => [row.recordKey, row.choice?.kind ?? null, row.choice?.candidateKey ?? null]));
+    const chosen = await draft();
+    const before = await artifactSnapshot(page);
+    await page.evaluate(() => {
+      const sanitize = window.DOMPurify.sanitize;
+      window.DOMPurify.sanitize = (...args) => {
+        if (!String(args[0]).includes('<svg')) return sanitize(...args);
+        window.DOMPurify.sanitize = sanitize;
+        throw Object.assign(new Error('The candidate Result was not admitted.'), {
+          code: 'COMPARISON_IDENTITY', stage: 'result-admission', context: { reason: 'SOURCE_VIEW_CONFLICT' }
+        });
+      };
+    });
+    const apply = dialog.locator('footer button[aria-describedby="similarity-alignment-apply-reason"]');
+    await exposeReviewControl(page, apply);
+    await apply.click();
+    const error = dialog.locator('[data-similarity-alignment-error]');
+    await expect(error).toBeVisible({ timeout: 180000 });
+    await expect(error).toBeFocused();
+    await expect(apply).toBeEnabled();
+    await expect(popup).toBeHidden();
+    expect(await draft()).toEqual(chosen);
+    expect((await artifactSnapshot(page)).results).toEqual(before.results);
+
+    const cancel = dialog.locator('footer button.btn-secondary');
+    await exposeReviewControl(page, cancel);
+    await cancel.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(popup).toBeVisible();
+    await expect(popupReview).toBeFocused();
+  });
+}
+
 // The search row's Open is a command, not a gesture on the figure: it moves the view and
 // retargets the hidden popup, which is shown at its feature when the review ends.
 test('Open in the feature search row retargets the hidden popup, shown at its feature when the review ends', async ({ page }) => {
