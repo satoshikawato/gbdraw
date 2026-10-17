@@ -512,7 +512,11 @@ def test_empty_api_derived_result_passes_current_session_validation(
         (),
     )
 
-    assert entry["payload"]["pairs"][0]["rows"] == []
+    # D-66: the pair holds the canonical table text, header only for zero hits.
+    assert "rows" not in entry["payload"]["pairs"][0]
+    assert entry["payload"]["pairs"][0]["canonicalTsv"] == (
+        "\t".join(request_render_module.COMPARISON_COLUMNS) + "\n"
+    )
     assert entry["payload"]["pairs"][0]["tsv"] == ""
     assert entry["payload"]["pairs"][0]["hit_count"] == 0
     assert entry["payload"]["orthogroups"] == []
@@ -2227,14 +2231,16 @@ def test_cli_reports_each_successful_annotation_warning_once(mode, tmp_path, cap
 # canonical encoding of the computed result) but does not build the payloads.
 # The CLI and the Python API never enter it.
 _RECORDED_DERIVED_ENTRIES = {
-    # Recorded at the base (a86dd2d74) from the three-record protein fixture.
+    # Recorded at the base (a86dd2d74) from the three-record protein fixture;
+    # re-recorded when each pair's `rows` became `canonicalTsv` (D-66). With that
+    # one field removed, the entries hash the same before and after.
     "similarity_groups": (
         "f5aa5b79803bd4ca67e87922533997ce7e9321a366e8bd364a75035fd46dbb81",
-        "2584c259d8608363d7f84df00bd909bc8ed7dcd0bdef90dd70c54c160d353c21",
+        "86e606aff4366006595716a696d28b2c7b9b69694d1dcd1bd0e0400b15acfbd1",
     ),
     "collinear": (
         "d131cef9967e00ad7e5969c9fa640c63a7d36c64a2b9f8545ec6a6b9e044d844",
-        "33d839ad2e075109ca1cd5252dff8f5703e8b59297034e167126f018ad5d8f19",
+        "b27d9221aa7da7b6499f301446a9ed3d48d818251a6f75a242e6aabae0e15f79",
     ),
 }
 

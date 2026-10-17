@@ -19,6 +19,7 @@ import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.legend.sources import ComparisonLegendSource
+from tests.utils.comparison_tables import converted_pair_rows
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -2417,13 +2418,13 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     typed_fields = result["collinearityResult"]["value"]["fields"]
     assert typed_fields["blocks"][0]["fields"]["blockId"] == "block_0001"
     assert len(typed_fields["orthogroups"]["fields"]["orthogroups"]) == 8
-    rows = result["pairs"][0]["rows"]
+    rows = converted_pair_rows(result["pairs"][0])
     assert len(rows) == 1
     assert rows[0]["collinearity_block_id"] == "block_0001"
     assert rows[0]["collinearity_block_kind"] == "cluster"
     assert rows[0]["collinearity_anchor_count"] == 8
     assert rows[0]["collinearity_color_mode"] == "orientation"
-    assert rows[0]["collinearity_block_evalue"] == ""
+    assert pd.isna(rows[0]["collinearity_block_evalue"])
     assert rows[0]["group_kind"] == "collinear_gene_group"
     assert rows[0]["group_scope"] == "adjacent_local"
     assert rows[0]["collinear_group_scope"] == "adjacent_local"
@@ -2562,7 +2563,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    rows = result["pairs"][0]["rows"]
+    rows = converted_pair_rows(result["pairs"][0])
     assert len(rows) == 1
     assert rows[0]["collinearity_anchor_count"] == expected_anchor_count
     assert result["provenance"]["collinear"]["anchorMode"] == anchor_mode
@@ -2593,7 +2594,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
         min_two = json.loads(str(raw_min_two))
 
         assert "error" not in min_two
-        assert min_two["pairs"][0]["rows"] == []
+        assert converted_pair_rows(min_two["pairs"][0]) == []
 
 
 @pytest.mark.linear

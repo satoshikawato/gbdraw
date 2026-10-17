@@ -23,6 +23,7 @@ from gbdraw.io.regions import apply_region_specs, parse_region_specs
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import enrich_svg
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
+from tests.utils.comparison_tables import converted_pair_rows
 
 
 INPUTS = Path(__file__).parent / "test_inputs"
@@ -274,7 +275,7 @@ def test_web_losatp_typed_result_separates_stable_view_and_dom_ids(
     assert target_member["sourceProteinId"] == "PUBLIC_ID_MUST_NOT_JOIN"
     target_row = next(
         row
-        for row in result["pairs"][0]["rows"]
+        for row in converted_pair_rows(result["pairs"][0])
         if row["subject_protein_id"] == target_runtime_handle
     )
     assert target_row["subject_feature_svg_id"] == BIOLOGICAL_FEATURE_ID

@@ -64,6 +64,7 @@ from gbdraw.api.options import (
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.genome import load_gff_fasta
+from tests.utils.comparison_tables import converted_pair_rows
 from gbdraw.io.record_select import reverse_records
 from gbdraw.linear_comparison import ProteinComparisonFrames
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
@@ -3658,6 +3659,17 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(
     stage_web_losatp_transport,
 ) -> None:
     namespace = _load_web_helper_namespace()
+    # D-66: each pair's table is the text of the one canonical encoder.
+    from gbdraw.session_request_codec import encode_canonical_table
+
+    assert namespace["encode_canonical_table"] is encode_canonical_table
+    encoded_tables: list[str] = []
+
+    def recording_encoder(frame: object, *, name: str = "table") -> str:
+        encoded_tables.append(encode_canonical_table(frame, name=name))
+        return encoded_tables[-1]
+
+    namespace["encode_canonical_table"] = recording_encoder
     hits = pd.DataFrame.from_records(
         [_hit_row("qa", "sb")],
         columns=COMPARISON_COLUMNS,
@@ -3722,7 +3734,9 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    row = result["pairs"][0]["rows"][0]
+    assert [pair["canonicalTsv"] for pair in result["pairs"]] == encoded_tables
+    assert len(encoded_tables) == 1
+    row = converted_pair_rows(result["pairs"][0])[0]
     assert row["query_protein_id"] == "qa"
     assert row["qstart"] == 300
     assert row["qend"] == 271
@@ -3877,7 +3891,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     )
     assert subject_member["featureSvgId"] == "feature_b"
     assert "orthogroups" not in result
-    rows = result["pairs"][0]["rows"]
+    rows = converted_pair_rows(result["pairs"][0])
     assert rows[0]["subject_feature_svg_id"] == "feature_b"
     assert rows[0]["subject_view_feature_svg_id"] == display_feature_svg_id
     assert rows[0]["orthogroup_id"] == "og_1"
@@ -4061,7 +4075,7 @@ def test_web_losatp_payload_helper_output_follows_the_displayed_pair_direction(
         return [
             (row["query_protein_id"], row["subject_protein_id"])
             for pair in result["pairs"]
-            for row in pair["rows"]
+            for row in converted_pair_rows(pair)
         ]
 
     assert displayed_rows(forward) == [("p0", "p1")]
@@ -4202,6 +4216,72 @@ def test_assemble_linear_diagram_accepts_precomputed_protein_comparisons(
     assert frames.pairs == ()
     assert frames.ordered is not None and len(frames.ordered) == 1
     assert frames.ordered[0].equals(comparison)
+
+
+@pytest.mark.linear
+def test_protein_table_renders_alike_from_the_js_and_the_python_encoding(
+    tmp_path: Path,
+) -> None:
+    # D-66: the Web wrote protein comparison tables with a JS encoder until the
+    # Python one replaced it; Sessions keep the old bytes. Both decode to values
+    # that render the same diagram.
+    from gbdraw.session_request_codec import _read_canonical_table, encode_canonical_table
+
+    frame = pd.DataFrame.from_records(
+        [
+            {
+                **_hit_row("record_a", "record_b", identity=90.0, evalue=1e-30, bitscore=283.0),
+                "query_protein_id": "qa",
+                "subject_protein_id": "sb",
+                "query_record_index": 0,
+                "subject_record_index": 1,
+                "orthogroup_id": "og_1",
+                "edge_kind": "rbh",
+                "query_orthogroup_representative": True,
+            },
+            {
+                **_hit_row(
+                    "record_a", "record_b", identity=87.5, qstart=120, qend=170,
+                    sstart=170, send=120, evalue=1e-05, bitscore=61.5,
+                ),
+                "query_protein_id": "qb",
+                "subject_protein_id": "sc",
+                "query_record_index": 0,
+                "subject_record_index": 1,
+                "orthogroup_id": None,
+                "edge_kind": "coortholog",
+                "query_orthogroup_representative": False,
+            },
+        ]
+    )
+    python_text = encode_canonical_table(frame)
+    assert python_text.splitlines()[1].split("\t")[2] == "90.0"
+    # The removed JS encoder: the 12 BLAST columns, then the others sorted;
+    # numbers and booleans as JavaScript prints them.
+    js_text = (
+        "query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\t"
+        "sstart\tsend\tevalue\tbitscore\tedge_kind\torthogroup_id\t"
+        "query_orthogroup_representative\tquery_protein_id\tquery_record_index\t"
+        "subject_protein_id\tsubject_record_index\n"
+        "record_a\trecord_b\t90\t100\t0\t0\t1\t100\t1\t100\t1e-30\t283\trbh\tog_1\ttrue\tqa\t0\tsb\t1\n"
+        "record_a\trecord_b\t87.5\t100\t0\t0\t120\t170\t170\t120\t0.00001\t61.5\tcoortholog\t\t"
+        "false\tqb\t0\tsc\t1\n"
+    )
+
+    def render(text: str, name: str) -> str:
+        path = tmp_path / f"{name}.tsv"
+        path.write_text(text, encoding="utf-8")
+        decoded = _read_canonical_table(path, context=name)
+        canvas = assemble_linear_diagram_from_records(
+            [_record("record_a"), _record("record_b")],
+            cfg=apply_config_overrides(None, None),
+            protein_comparisons=[decoded],
+        )
+        return canvas.tostring()
+
+    python_svg = render(python_text, "python")
+    assert "data-bitscore" in python_svg
+    assert render(js_text, "js") == python_svg
 
 
 @pytest.mark.linear

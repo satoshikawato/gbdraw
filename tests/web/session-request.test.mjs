@@ -2895,6 +2895,13 @@ state.linearRecordTranslations.value = ['first', 'second', 'third'].map(
 );
 const resolvedProteinPlotTitlePosition = state.adv.plot_title_position;
 state.adv.plot_title_position = 'bottom';
+// The analysis helper's canonical table text (Python `encode_canonical_table`): the request writes it unchanged.
+const resolvedProteinTableText = [
+  'query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\tsstart\tsend\tevalue'
+    + '\tbitscore\tgroup_kind\tgroup_scope\tquery_orthogroup_representative',
+  'protein-a\tprotein-b\t95.0\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120.0\torthogroup\tcross_record\tTrue',
+  ''
+].join('\n');
 const resolvedProteinCanonical = buildCanonicalRenderRequest({
   state,
   filesData: linearFilesData,
@@ -2903,22 +2910,7 @@ const resolvedProteinCanonical = buildCanonicalRenderRequest({
     edgeKey: 'first->third',
     queryRecordIndex: 0,
     subjectRecordIndex: 2,
-    rows: [{
-      query: 'protein-a',
-      subject: 'protein-b',
-      identity: 95,
-      alignment_length: 20,
-      mismatches: 1,
-      gap_opens: 0,
-      qstart: 10,
-      qend: 30,
-      sstart: 50,
-      send: 70,
-      evalue: 1e-20,
-      bitscore: 120,
-      group_kind: 'orthogroup',
-      group_scope: 'cross_record'
-    }]
+    canonicalTsv: resolvedProteinTableText
   }]
 });
 const resolvedProtein = resolvedProteinCanonical.renderRequest.comparisons.find(
@@ -2941,8 +2933,7 @@ const resolvedProteinTsv = Buffer.from(
   resolvedProteinCanonical.resources[resolvedProtein.resourceId].data,
   'base64'
 ).toString('utf8');
-assert.match(resolvedProteinTsv, /group_kind/);
-assert.match(resolvedProteinTsv, /cross_record/);
+assert.equal(resolvedProteinTsv, resolvedProteinTableText, 'the Python table bytes reach the request unchanged');
 const resolvedProteinProjection = projectCanonicalSessionRequest(
   resolvedProteinCanonical
 );
@@ -3193,35 +3184,49 @@ state.linearComparisonPlan = {
   mode: 'adjacent'
 };
 state.losat.blastp.mode = 'collinear';
-for (const schema of [1, 2, 3]) {
-const typedCollinearityResource = {
-  schema,
-  kind: 'result',
-  value: { type: 'CollinearityResult', fields: {} }
+{
+// OV-1040: the typed result is written with the Python bytes it is bound to, also when a derived-cache hit hands
+// it back as a Vue proxy (here `1.0`, which `JSON.stringify` would print as `1`). An unbound result throws, and
+// only schema 3 can be bound.
+const typedCollinearityText = '{"kind":"result","schema":3,"value":{"fields":{"score":1.0},"type":"CollinearityResult"}}';
+const typedCollinearityResource = JSON.parse(typedCollinearityText);
+const typedCollinearityBacking = {
+  kind: 'collinearity-result', type: 'application/json', size: Buffer.byteLength(typedCollinearityText),
+  lastModified: 0, encoding: 'base64', data: Buffer.from(typedCollinearityText).toString('base64')
 };
-const originalTextEncoder = globalThis.TextEncoder;
-const typedResourceText = JSON.stringify(typedCollinearityResource);
-let typedResourceEncodes = 0;
-globalThis.TextEncoder = class extends originalTextEncoder {
-  encode(value) {
-    if (value === typedResourceText) typedResourceEncodes += 1;
-    return super.encode(value);
-  }
-};
+bindCanonicalTypedResource(typedCollinearityResource, typedCollinearityBacking);
+const proxiedCollinearityResource = new Proxy(typedCollinearityResource, {});
+const previousWindow = globalThis.window;
+globalThis.window = { Vue: { toRaw: (value) => (value === proxiedCollinearityResource ? typedCollinearityResource : value) } };
+const buildCollinear = (typedResource) => buildCanonicalRenderRequest({
+  state,
+  filesData: linearFilesData,
+  resolvedComparisons: [{ kind: 'collinearityResult', typedResource }]
+});
 let resolvedCollinearCanonical;
 try {
-  resolvedCollinearCanonical = buildCanonicalRenderRequest({
-    state,
-    filesData: linearFilesData,
-    resolvedComparisons: [{
-      kind: 'collinearityResult',
-      typedResource: typedCollinearityResource
-    }]
-  });
+  resolvedCollinearCanonical = buildCollinear(proxiedCollinearityResource);
+  assert.equal(
+    Buffer.from(
+      resolvedCollinearCanonical.resources['comparison-canonical-collinearity-1'].data,
+      'base64'
+    ).toString('utf8'),
+    typedCollinearityText,
+    'the proxied typed result keeps its Python bytes'
+  );
+  assert.throws(
+    () => buildCollinear(JSON.parse(typedCollinearityText)),
+    /UNBOUND_CANONICAL_BYTES/
+  );
+  for (const schema of [1, 2]) {
+    assert.throws(
+      () => buildCollinear({ ...JSON.parse(typedCollinearityText), schema }),
+      /is not a canonical typed resource/
+    );
+  }
 } finally {
-  globalThis.TextEncoder = originalTextEncoder;
+  globalThis.window = previousWindow;
 }
-assert.equal(typedResourceEncodes, 1, 'The full typed result is encoded once, with identical resource bytes');
 assert.deepEqual(
   resolvedCollinearCanonical.renderRequest.comparisons.map(
     (comparison) => comparison.kind
@@ -3234,13 +3239,6 @@ assert.equal(
   'comparison-canonical-collinearity-1'
 );
 assert.equal(resolvedCollinearity.valueKind, 'result');
-assert.deepEqual(
-  JSON.parse(Buffer.from(
-    resolvedCollinearCanonical.resources[resolvedCollinearity.resourceId].data,
-    'base64'
-  ).toString('utf8')),
-  typedCollinearityResource
-);
 assert.equal(resolvedCollinearCanonical.renderRequest.comparisons[1].mode, 'none');
 assert.equal(
   resolvedCollinearCanonical.renderRequest.comparisons.some(
@@ -3310,20 +3308,8 @@ const resolvedWithFreshTable = buildCanonicalRenderRequest({
     edgeKey: 'first->third',
     queryRecordIndex: 0,
     subjectRecordIndex: 2,
-    rows: [{
-      query: 'fresh-a',
-      subject: 'fresh-b',
-      identity: 88,
-      alignment_length: 10,
-      mismatches: 1,
-      gap_opens: 0,
-      qstart: 1,
-      qend: 10,
-      sstart: 1,
-      send: 10,
-      evalue: 1e-10,
-      bitscore: 80
-    }]
+    canonicalTsv: 'query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\tsstart'
+      + '\tsend\tevalue\tbitscore\nfresh-a\tfresh-b\t88.0\t10\t1\t0\t1\t10\t1\t10\t1e-10\t80.0\n'
   }]
 });
 assert.deepEqual(
@@ -5412,7 +5398,7 @@ const resolvedSelectedProtein = buildCanonicalRenderRequestRaw({
   resolvedComparisons: [{
     kind: 'precomputedProteinComparison',
     edgeKey: 'b->c',
-    rows: [{ query: 'q', subject: 's', identity: 90 }]
+    canonicalTsv: 'query\tsubject\tidentity\nq\ts\t90.0\n'
   }]
 });
 assert.deepEqual(
@@ -5423,10 +5409,12 @@ const resolvedProteinMarker = resolvedSelectedProtein.renderRequest.comparisons[
 assert.equal(resolvedProteinMarker.mode, 'none');
 assert.deepEqual(resolvedProteinMarker.pairs, []);
 
-assert.equal(characterizedRequests.length, 83);
+// 81 since D-66: the schema-1 and schema-2 typed collinearity requests are gone (only schema 3 can be bound); the
+// other 81 requests are the 83 recorded before, byte for byte.
+assert.equal(characterizedRequests.length, 81);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  'e83da5f596b5dd31d20cd363ac246f7e980cafa8b4fe3ce25cfe2e5664945590',
-  'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
+  '9f0a68dde640b4645bbbef3813fbdce3d59072167910543562c539ca3bbbfea3',
+  'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {

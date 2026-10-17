@@ -2393,6 +2393,8 @@ def _require_comparison_columns(frame: DataFrame) -> None:
 
 
 def _comparison_frame_payload(pair: _ProteinPairFrame) -> dict[str, Any]:
+    from gbdraw.session_request_codec import encode_canonical_table
+
     frame = pair.frame
     tsv = frame.loc[:, list(COMPARISON_COLUMNS)].to_csv(
         sep="\t",
@@ -2400,13 +2402,14 @@ def _comparison_frame_payload(pair: _ProteinPairFrame) -> dict[str, Any]:
         index=False,
         lineterminator="\n",
     )
-    rows = json.loads(frame.to_json(orient="records"))
     return {
         "pair_index": pair.pair_index,
         "query_index": pair.query_index,
         "subject_index": pair.subject_index,
         "tsv": tsv,
-        "rows": rows,
+        "canonicalTsv": encode_canonical_table(
+            frame, name=f"comparison pair {pair.pair_index}"
+        ),
         "hit_count": len(frame),
     }
 

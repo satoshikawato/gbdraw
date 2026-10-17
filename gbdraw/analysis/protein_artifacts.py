@@ -88,6 +88,21 @@ def _is_nonnegative_integer(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
+def _has_one_empty_table_form(pair: Mapping[str, object]) -> bool:
+    """A zero-hit pair holds exactly one empty table: the header-only
+    ``canonicalTsv`` the current writer emits, or the ``rows == []`` that
+    derived entries carried from #312 until the canonical table replaced it."""
+
+    has_table = "canonicalTsv" in pair
+    has_rows = "rows" in pair
+    if has_table == has_rows:
+        return False
+    if has_rows:
+        return pair.get("rows") == []
+    table = pair.get("canonicalTsv")
+    return isinstance(table, str) and table.endswith("\n") and table.count("\n") == 1
+
+
 def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
     mode = entry.get("mode")
     if mode not in {"orthogroup", "collinear"}:
@@ -135,6 +150,7 @@ def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
                 "query_index",
                 "subject_index",
                 "tsv",
+                "canonicalTsv",
                 "rows",
                 "hit_count",
             }
@@ -145,7 +161,7 @@ def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
             not _is_nonnegative_integer(pair_index)
             or pair_index in pair_indices
             or pair.get("tsv") != ""
-            or pair.get("rows") != []
+            or not _has_one_empty_table_form(pair)
             or not _is_nonnegative_integer(pair.get("hit_count"))
             or pair.get("hit_count") != 0
         ):

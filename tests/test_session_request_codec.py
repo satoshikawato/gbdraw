@@ -88,6 +88,7 @@ from gbdraw.session_request_codec import (
     _read_typed_json_resource,
     decode_canonical_request,
     encode_canonical_request,
+    encode_canonical_table,
     encode_canonical_typed_resource,
 )
 from gbdraw.tracks import (
@@ -1204,6 +1205,50 @@ def test_decoded_comparisons_re_encode_with_their_kind_and_bytes(tmp_path: Path)
     ]
     assert comparisons(canonical) == comparisons(encoded)
     assert comparisons(canonical)[0][3] == nucleotide_bytes
+
+
+def test_canonical_table_encoder_writes_the_one_tsv_form(tmp_path: Path) -> None:
+    # D-66: the request tables and the Web protein comparison tables share one
+    # encoder, so an equal frame gives equal bytes on every surface (OV-1049).
+    frame = pd.DataFrame(
+        {
+            "query": ["a\tb", 'say "x"', "\u03b2-lactamase"],
+            "hit": [283, 100, 7],
+            "bitscore": [283.0, 1.0, 0.5],
+            "evalue": [1.38e-92, 1e-05, float("nan")],
+            "rbh": [True, False, True],
+            "note": ["", None, "kept"],
+        }
+    )
+
+    assert encode_canonical_table(frame) == (
+        "query\thit\tbitscore\tevalue\trbh\tnote\n"
+        '"a\tb"\t283\t283.0\t1.38e-92\tTrue\t\n'
+        '"say ""x"""\t100\t1.0\t1e-05\tFalse\t\n'
+        "\u03b2-lactamase\t7\t0.5\t\tTrue\tkept\n"
+    )
+    assert encode_canonical_table(frame.iloc[0:0]) == "query\thit\tbitscore\tevalue\trbh\tnote\n"
+
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(
+                RecordInput(source=GenBankInputSource(_source_file(tmp_path / "a.gbk"))),
+                RecordInput(source=GenBankInputSource(_source_file(tmp_path / "b.gbk"))),
+            ),
+            options=LinearDiagramOptions(protein_comparisons=(frame,)),
+            output=RenderOutputRequest(output_prefix="canonical-linear"),
+        )
+    )
+    (comparison,) = encoded.payload["comparisons"]
+    (resource,) = (
+        item for item in encoded.resources if item.resource_id == comparison["resourceId"]
+    )
+    assert resource.content == encode_canonical_table(frame).encode("utf-8")
+
+    with pytest.raises(CanonicalRequestEncodingError, match="^comparison must be a pandas DataFrame.$"):
+        encode_canonical_table([{"query": "a"}], name="comparison")
+    with pytest.raises(CanonicalRequestEncodingError, match="'comparison' must have at least one column"):
+        encode_canonical_table(pd.DataFrame(), name="comparison")
 
 
 @pytest.mark.parametrize("schema", (1, 2))
