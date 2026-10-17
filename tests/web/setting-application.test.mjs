@@ -138,8 +138,10 @@ const isControl = (element) => {
   return element.tag.includes('-') && !PRESENTATION_COMPONENTS.has(element.tag);
 };
 const isTransient = (element) => [...ancestorsOrSelf(element)].some((node) => node.attributes.get('data-history-scope') === 'transient');
-// An app preference, not a drawing setting (`ui.richFeaturePopup`); it is not
-// in the Session's drawing request and takes effect on the next feature click.
+// An app preference, not a drawing setting (`ui.richFeaturePopup`, PD-OI-086);
+// it is not in the Session's drawing request. It takes effect on the next
+// feature click and sets the popup mode of Interactive SVG exports
+// (svg-serialization.js `popupMode`), so no Applies on Generate row fits it.
 const APP_PREFERENCES = new Set(['richFeaturePopup']);
 const isAppPreference = (element) => APP_PREFERENCES.has(element.attributes.get('v-model'));
 
@@ -246,20 +248,28 @@ test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () 
   assert.match(settingApplicationNote('track-visibility').text, /at once.*Generate/);
 });
 
-test('removing the last Depth file hides the drawn Depth track at once, and the Depth blocks say so', () => {
+test('adding a Depth file shows and removing the last one hides the drawn Depth track at once, and the Depth blocks say so', () => {
   const depthSourceControls = settingsControls.filter((element) => /(?:remove(?:Circular|Linear)DepthTrack|clearLinearSourceDepthFile|set(?:Circular|LinearSource|Linear)DepthFile)\(/
     .test(`${element.attributes.get('@click') || ''} ${element.attributes.get('@update:model-value') || ''}`));
   assert.equal(depthSourceControls.length, 7, depthSourceControls.map(describe).join('\n'));
   for (const control of depthSourceControls) assert.equal(scopeOf(control).attributes.get('data-setting'), 'depth-sources', describe(control));
   const note = settingApplicationNote('depth-sources');
   assert.equal(note.application, 'generate');
-  assert.match(note.text, /last Depth file.*at once.*Generate/);
+  assert.match(note.text, /Adding a Depth file shows.*removing the last one hides.*at once.*Generate/);
 });
 
 test('Feature Visibility notes that exclusion from comparisons applies on Generate', () => {
   const note = settingApplicationNote('feature-visibility');
   assert.equal(note.application, 'live');
   assert.match(note.text, /at once.*comparisons.*Generate/);
+});
+
+test('Output Prefix names the Results of the next Generate (OV-1042)', () => {
+  // Exports take their file name from the Result's name (export.js
+  // `getDownloadName`), which the request sets from the prefix at Generate.
+  const [control] = settingsControls.filter((element) => element.attributes.get('v-model') === 'form.prefix');
+  assert.ok(control);
+  assert.equal(ROWS.get(scopeOf(control).attributes.get('data-setting')).application, 'generate', describe(control));
 });
 
 test('Embed font in exported SVG is an export-only setting', () => {

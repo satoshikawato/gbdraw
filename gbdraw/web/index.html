@@ -3219,7 +3219,7 @@
                     <div class="card-header"><i class="ph ph-sliders" aria-hidden="true"></i> Basic</div>
                     <div class="space-y-2">
                         <div data-setting="output-prefix">
-                            <span class="input-label"><label for="output-prefix">Output Prefix</label> <help-tip id="help-output-prefix" :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></span>
+                            <span class="input-label"><label for="output-prefix">Output Prefix</label> <setting-note setting="output-prefix"></setting-note> <help-tip id="help-output-prefix" :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></span>
                             <input id="output-prefix" type="text" v-model="form.prefix" aria-describedby="help-output-prefix" class="form-input" :placeholder="mode === 'circular' ? 'Optional (Default: Record ID)' : 'Optional (Default: out)'" :disabled="!semanticMutationAvailable">
                         </div>
 

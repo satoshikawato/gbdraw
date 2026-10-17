@@ -23,23 +23,25 @@ const rows = (application, ids) => ids.map((id) => ({ id, application }));
 
 /** @type {readonly Readonly<SettingApplicationRow>[]} */
 export const SETTING_APPLICATION = Object.freeze([
-  ...rows('generate', ['inputs', 'comparison', 'species-strain', 'advanced-comparison', 'region-annotations',
+  // OV-1042: `output-prefix` names the Results at Generate, and exports take
+  // their file names from the Result (export.js `getDownloadName`).
+  ...rows('generate', ['output-prefix', 'inputs', 'comparison', 'species-strain', 'advanced-comparison', 'region-annotations',
     'pairwise-comparisons', 'preserved-settings', 'layout', 'track-slots', 'font', 'titles', 'legend', 'features',
     'stroke', 'labels', 'axis-scale', 'dinucleotide', 'feature-placement']),
   // OV-1036: `applyTrackVisibility` (app/svg-styles.js) hides or shows a drawn
   // group at once; a track the Result lacks and the layout wait for Generate.
   { id: 'track-visibility', application: /** @type {const} */ ('generate'),
     note: 'Hiding or showing a drawn track applies at once; a new track and the layout apply on Generate' },
-  // Removing the last Depth source turns Show Depth off (OV-82), which hides
-  // the drawn Depth track through the same `applyTrackVisibility`.
+  // Show Depth follows the Depth files: adding one turns it on, removing the
+  // last one turns it off (OV-82), and `applyTrackVisibility` shows or hides
+  // the drawn Depth track at once.
   { id: 'depth-sources', application: /** @type {const} */ ('generate'),
-    note: 'Removing the last Depth file hides the drawn Depth track at once; the rest applies on Generate' },
+    note: 'Adding a Depth file shows and removing the last one hides the drawn Depth track at once; the rest applies on Generate' },
   ...rows('live', ['colors']),
   // Show and Off redraw at once; matching reads the rules at Generate
   // (`should_include_feature_in_analysis`).
   { id: 'feature-visibility', application: /** @type {const} */ ('live'),
     note: 'Showing and hiding apply at once; exclusion from protein comparisons applies on Generate' },
-  ...rows('export', ['output-prefix']),
   { id: 'font-embedding', application: /** @type {const} */ ('export'),
     note: 'Applies to SVG and Interactive SVG exports, not to Generate.' }
 ].map((row) => Object.freeze(row)));
