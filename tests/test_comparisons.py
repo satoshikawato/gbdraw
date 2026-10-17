@@ -573,5 +573,6 @@ def test_comparison_rows_refuse_an_ordered_table_past_the_last_record(source: st
     tables = (pd.DataFrame(columns=list(COMPARISON_COLUMNS)), pd.DataFrame(columns=list(COMPARISON_COLUMNS)))
     blast, protein = (tables, None) if source == "blast" else ((), ProteinComparisonFrames(ordered=tables))
 
-    with pytest.raises(ValidationError, match="outside the loaded records: query=#2, subject=#3, record_count=2"):
+    with pytest.raises(ValidationError, match="outside the loaded records: query=#2, subject=#3, record_count=2") as caught:
         linear_comparison_rows(blast, protein, (), thresholds, records, (0, 1), False)
+    assert caught.value.diagnostic["code"] == "COMPARISON_INPUT"

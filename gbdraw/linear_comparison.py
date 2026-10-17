@@ -166,7 +166,8 @@ def validate_linear_comparison_topology(
             raise ValidationError(
                 "Linear comparison endpoint is outside the loaded records: "
                 f"query=#{query_index + 1}, subject=#{subject_index + 1}, "
-                f"record_count={record_count}."
+                f"record_count={record_count}.",
+                diagnostic={"code": "COMPARISON_INPUT"},
             )
         query_row = int(rows_by_record[query_index])
         subject_row = int(rows_by_record[subject_index])
@@ -174,13 +175,15 @@ def validate_linear_comparison_topology(
             raise ValidationError(
                 "Linear comparison endpoints must be in different rows: "
                 f"query=#{query_index + 1} row={query_row + 1}, "
-                f"subject=#{subject_index + 1} row={subject_row + 1}."
+                f"subject=#{subject_index + 1} row={subject_row + 1}.",
+                diagnostic={"code": "COMPARISON_INPUT"},
             )
         if abs(query_row - subject_row) != 1:
             raise ValidationError(
                 "Linear comparison endpoints must be in adjacent rows: "
                 f"query=#{query_index + 1} row={query_row + 1}, "
-                f"subject=#{subject_index + 1} row={subject_row + 1}."
+                f"subject=#{subject_index + 1} row={subject_row + 1}.",
+                diagnostic={"code": "COMPARISON_INPUT"},
             )
 
 
