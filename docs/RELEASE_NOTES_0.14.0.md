@@ -93,6 +93,16 @@ required. The fold is not saved in a Session, and Undo does not change it. A
 long file name in a file input now ends with an ellipsis instead of being cut
 at both ends.
 
+Click a drawn element to reach its settings. With Layout edit off, the Circular
+scale ticks and the Linear scale show **Axis & Scale**, a GC content or GC skew
+track shows **Dinucleotide content/skew**, and the plot title shows **Titles &
+Record Labels**, each in a popup beside the figure. The hint **Click to open
+its settings** appears when the pointer is on one of these elements. The popup
+holds the section itself: an edit there is the same setting and the same
+**Undo** step as in the settings panel, and it applies at the same time.
+Opening or closing the popup changes nothing in the figure. Popups of the preview now
+move back inside the window when you resize it.
+
 Each change of a setting's checkbox, radio button, or button is one **Undo**
 step. **Rich Feature Popup** and the search's **Regular expression** are not
 Undo steps, and Undo and Redo do not change them. Undo and Redo are unavailable while Generate runs, and
