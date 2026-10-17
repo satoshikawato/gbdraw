@@ -119,6 +119,7 @@ in the same change.
 | Session 46 mode slices and the split of a Session 27–44 draft into them | `js/services/mode-scoped-migration.js` (Python twin: `split_draft_into_modes` in `gbdraw/session_io.py`) |
 | Generate-button orchestration | `js/app/run-analysis.js` |
 | Canonical request/session projection and equivalence | `js/services/session-request.js` |
+| When each setting reaches the Result: the application class and note of every settings control (R1) | `js/services/setting-application.js` (`SETTING_APPLICATION`; `SettingNote` in `js/components.js` renders the note) |
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
 | Historical Gallery session migration | `js/services/gallery-session-migration.js` |
 | Per-feature edits and Feature placements by source identity (draft key, row checks, request rows, notices) | `js/services/feature-placement.js` |
@@ -195,8 +196,10 @@ optional geometry reflow. If canonical output requires creating or removing
 geometry and no mounted target exists, queue the owning automatic rerender in
 the same action and replace the Result when it completes. That rerender renders
 the committed Session plus the current editor-intent tables
-(`projectCommittedEditorIntent` in `services/session-request.js`) and never reads
-draft settings (R1). A rerender failure must keep any direct edit already
+(`projectCommittedEditorIntent` in `services/session-request.js`). Of the draft
+settings it reads only the values an action changed in the live rows of
+`SETTING_APPLICATION` (`services/setting-application.js`), and no other draft
+setting (R1). A rerender failure must keep any direct edit already
 applied and report the failure. Metadata-only edits
 with no static SVG target, such as Similarity group names and descriptions,
 update canonical state only.
@@ -218,11 +221,21 @@ The current Result changes only through:
   same executor;
 - (b) a composition edit that keeps parity with the Python renderer;
 - (c) an automatic rerender from the committed Session and declared projection
-  fields.
+  fields, plus the draft values an action changed in the live rows of
+  `SETTING_APPLICATION` (`services/setting-application.js`). It commits those
+  values to the committed Session (`services/config.js`) only when it succeeds
+  and the committed Session has not changed since it started. If the committed
+  Session changed, it is stale and runs again from the current committed
+  Session; if it fails, it commits nothing and does not run again.
 
 A setting that none of these applies is **Applies on Generate**: say so beside
 the control, write only the draft, and leave the Result unchanged. Never patch
-the Result from a draft or with a helper's SVG fragment. A Generate reply's
+the Result from a draft value outside the declared live rows or with a helper's
+SVG fragment. The one exception is the drawn-track hide and show that
+`PD-OI-104` keeps (`web.layout.track-toggle-application`): `applyTrackVisibility`
+in `app/svg-styles.js` hides or shows a track the Result draws at once (rows
+`track-visibility` and `depth-sources`); a track the Result lacks and the
+layout apply on Generate. A Generate reply's
 pieces are not a helper fragment: they are the Generate compiler's input and
 are admitted whole into one new Result. A new Python helper that
 returns SVG text (`DIAGRAM_HELPER_OPERATIONS` in
@@ -238,7 +251,8 @@ Guards:
   production change may only remove entries;
 - `tests/web/history-generated-authority.playwright.spec.js` and the label-reflow
   test in `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a draft edit
-  leaves the Result unchanged until Generate).
+  of a setting that applies on Generate leaves the Result unchanged until
+  Generate).
 
 ### R2: Lifetime of editor intent
 
@@ -889,8 +903,10 @@ Before adding or changing a control, trace its complete lifecycle:
 
 For a dynamically available control, also identify its availability, fallback,
 reconciliation, and live-edit owner under the invariants above. For a setting
-the Result shows, choose its application path under R1: a live-edit owner, or
-**Applies on Generate** with the note beside the control.
+the Result shows, choose its application path under R1 and record it in its
+`SETTING_APPLICATION` row: a live-edit owner, a live row that the automatic
+rerender (c) applies, or **Applies on Generate** with the note beside the
+control.
 
 Do not add a diagram argv builder. Project each control once at the canonical
 request boundary instead of duplicating it in configuration and session modules.
