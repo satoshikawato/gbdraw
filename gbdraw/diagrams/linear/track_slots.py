@@ -393,7 +393,7 @@ def _span_resolved_slot(
     overlay: LinearResolvedSlot,
     referenced: Sequence[tuple[LinearResolvedTrack, LinearSlotFootprint, float]],
 ) -> LinearResolvedSlot:
-    """Stretch a to_slot overlay over the hull of the bodies its two slots have.
+    """Stretch a spanning overlay over the hull of the bodies its slots have.
 
     A slot without data for the record has no body; with none at all, the
     overlay keeps its place on the anchor. Label overhangs keep their size.
@@ -547,11 +547,15 @@ def resolve_linear_record_vertical_plan(
             )
             continue
         relative_origin = float(overlay.y_offset) - float(anchor.y_offset)
+        # cover_anchor on a features slot spans that slot's lanes.
+        span_to = annotation.to_slot or (
+            anchor.id if annotation.cover_anchor and anchor.renderer == "features" else None
+        )
         # A span pushes no slot: its extent comes from the packed slots. Its label
         # overhang still joins the record body through its reserve band.
-        if annotation.to_slot is None:
+        if span_to is None:
             overlays_by_anchor.setdefault(anchor.id, []).append((relative_origin, overlay_footprint))
-        relative_overlay_origins[overlay.id] = (anchor.id, relative_origin, annotation.to_slot)
+        relative_overlay_origins[overlay.id] = (anchor.id, relative_origin, span_to)
 
     structural_slots: list[LinearResolvedSlot] = []
     seed_band = axis_band
@@ -598,13 +602,13 @@ def resolve_linear_record_vertical_plan(
         relation = relative_overlay_origins.get(overlay.id)
         if relation is None:
             continue
-        anchor_id, relative_origin, to_slot = relation
+        anchor_id, relative_origin, span_to = relation
         anchor_slot = anchors.get(anchor_id)
         if anchor_slot is None:
             continue
         footprint = footprint_map.get(overlay.id, _default_slot_footprint(overlay))
         item = _resolved_slot(overlay, footprint, anchor_slot.origin_y + relative_origin)
-        if to_slot is not None:
+        if span_to is not None:
             item = _span_resolved_slot(
                 item,
                 [
@@ -613,7 +617,7 @@ def resolve_linear_record_vertical_plan(
                         footprint_map.get(slot_id, _default_slot_footprint(tracks_by_id[slot_id])),
                         anchors[slot_id].origin_y,
                     )
-                    for slot_id in (anchor_id, to_slot)
+                    for slot_id in dict.fromkeys((anchor_id, span_to))
                     if slot_id in anchors
                 ],
             )

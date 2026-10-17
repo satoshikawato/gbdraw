@@ -943,6 +943,8 @@ def _linear_slot_footprints_for_record(
             bottom_overhang = 0.0
             if params.show_labels:
                 for placement in placements:
+                    if not placement.annotation.label:
+                        continue
                     style = placement.annotation.style
                     label_overhang = float(style.label_offset) + 0.5 * float(
                         style.label_font_size or 10.0
@@ -2686,7 +2688,8 @@ def assemble_linear_diagram(
                 band = record_feature_lane_geometries[
                     record_index
                 ].occupied_band.translate(plan_slot.origin_y)
-            else:
+            elif plan_slot.side != "overlay":
+                # An overlay lies on slots counted here or on the feature lanes themselves.
                 non_feature_band = band if non_feature_band is None else non_feature_band.union(band)
             attachment_band = attachment_band.union(band)
         record_placements[record_index] = replace(
@@ -2886,18 +2889,6 @@ def assemble_linear_diagram(
                     if annotation_layout is None:
                         continue
                     params = annotation_track_params_from_mapping(slot.params)
-                    annotation_height = float(resolved_slot.height)
-                    if params.to_slot is None and params.cover_anchor and any(
-                        anchor.renderer == "features"
-                        and anchor.id == params.anchor_slot
-                        for anchor in linear_track_layout.slots
-                    ):
-                        feature_band = record_feature_lane_geometries[
-                            record_index
-                        ].occupied_band
-                        if feature_band.height > 0.0:
-                            track_offset_y = float(feature_band.top_y)
-                            annotation_height = float(feature_band.height)
                     bar_length = (
                         float(sequence_width)
                         if sequence_width is not None
@@ -2918,7 +2909,7 @@ def assemble_linear_diagram(
                         bar_length_px=bar_length,
                         y_offset_px=0.0,
                         side=slot.side,
-                        height_px=annotation_height,
+                        height_px=float(resolved_slot.height),
                         font_family=str(cfg.objects.text.font_family),
                         params=params,
                         dom_group_id=slot_group_id,

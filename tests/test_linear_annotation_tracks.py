@@ -244,6 +244,139 @@ def test_linear_annotation_cover_anchor_expands_overlay_to_feature_band() -> Non
     assert covered_height > uncovered_height
 
 
+def _cover_anchor_drawing(
+    track_layout: str, *, highlight: bool = True, slots: tuple[str, ...] = (), label: str | None = None
+):
+    record = SeqRecord(Seq("ACGT" * 600), id="rec1", name="rec1")
+    record.features = [
+        SeqFeature(FeatureLocation(120, 250, strand=1), type="CDS"),
+        SeqFeature(FeatureLocation(400, 700, strand=-1), type="CDS"),
+    ]
+    tint = RegionAnnotation("tint", CoordinateSpan(None, 100, 300), label=label, mark="highlight")
+    return assemble_linear_diagram_from_records(
+        [record],
+        cfg=apply_config_overrides(
+            None,
+            {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout},
+        ),
+        legend="none",
+        selected_features_set=["CDS"],
+        annotation_options=(
+            AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),)) if highlight else None
+        ),
+        **(
+            {
+                "linear_track_slots": list(slots),
+                "linear_track_axis_index": sum("@side=above" in slot for slot in slots),
+            }
+            if slots
+            else {}
+        ),
+    )
+
+
+def _cover_anchor_geometry(drawing) -> dict[str, tuple[float, float] | float]:
+    """Feature lanes, features origin, record body, and the drawn tint from the axis."""
+
+    record = drawing._gbdraw_track_slot_geometry["records"][0]
+    slots = {slot["slotId"]: slot for slot in record["slots"]}
+    features = next(slot for slot in slots.values() if slot["renderer"] == "features")
+    geometry: dict[str, tuple[float, float] | float] = {
+        "lanes": (features["paintBand"]["topPx"], features["paintBand"]["bottomPx"]),
+        "origin": float(features["resolvedOriginPx"]),
+        "body": (record["recordBodyBand"]["topPx"], record["recordBodyBand"]["bottomPx"]),
+    }
+    root = ElementTree.fromstring(drawing.tostring())
+    marks = [e for e in root.iter() if e.attrib.get("data-gbdraw-annotation-id") == "tint"]
+    if not marks:
+        return geometry
+    overlay = next(slot for slot in slots.values() if slot["renderer"] == "annotations")
+    geometry["plan"] = (overlay["paintBand"]["topPx"], overlay["paintBand"]["bottomPx"])
+    parents = {child: parent for parent in root.iter() for child in parent}
+    rect = next(element for element in marks[0].iter() if element.tag.endswith("rect"))
+    top, element = float(rect.attrib["y"]), rect
+    while element is not None:
+        top += sum(
+            float(value)
+            for value in re.findall(r"translate\([^,]+,\s*([^)]+)\)", element.attrib.get("transform", ""))
+        )
+        element = parents.get(element)
+    top -= float(record["axisYpx"])
+    geometry["drawn"] = (top, top + float(rect.attrib["height"]))
+    return geometry
+
+
+_COVER_ANCHOR_SLOTS = (
+    "features:features@side=below",
+    "gc:dinucleotide_content@side=below",
+    "regions:annotations@side=overlay,set_id=regions,padding_px=0,show_labels=false,"
+    "anchor_slot=features,cover_anchor=true,layer=underlay,z=-1",
+)
+
+
+@pytest.mark.parametrize(
+    ("track_layout", "slots"),
+    [
+        pytest.param("below", (), id="highlight-below"),
+        pytest.param("above", (), id="highlight-above"),
+        pytest.param("middle", (), id="highlight-middle"),
+        pytest.param("middle", _COVER_ANCHOR_SLOTS, id="slot-list-features-below"),
+        pytest.param(
+            "middle",
+            (_COVER_ANCHOR_SLOTS[0].replace("below", "above"), *_COVER_ANCHOR_SLOTS[1:]),
+            id="slot-list-features-above",
+        ),
+        pytest.param(
+            "middle",
+            (_COVER_ANCHOR_SLOTS[0].replace("below", "overlay"), *_COVER_ANCHOR_SLOTS[1:]),
+            id="slot-list-features-overlay",
+        ),
+    ],
+)
+def test_linear_cover_anchor_covers_the_feature_lanes_and_moves_nothing(
+    track_layout: str, slots: tuple[str, ...]
+) -> None:
+    plain_slots = tuple(slot for slot in slots if not slot.startswith("regions:"))
+    plain = _cover_anchor_geometry(
+        _cover_anchor_drawing(track_layout, highlight=False, slots=plain_slots)
+    )
+    covered = _cover_anchor_geometry(_cover_anchor_drawing(track_layout, slots=slots))
+
+    shift = covered["origin"] - plain["origin"]
+    lanes = (plain["lanes"][0] + shift, plain["lanes"][1] + shift)
+    # The tint covers the lanes as drawn (OV-474), and the plan records that band (OV-476).
+    assert covered["drawn"] == pytest.approx(lanes, abs=1e-6)
+    assert covered["plan"] == pytest.approx(lanes, abs=1e-6)
+    # Its own nominal band reserves nothing: the lanes and the record stay where they were.
+    assert shift == pytest.approx(0.0, abs=1e-6)
+    assert covered["lanes"] == pytest.approx(plain["lanes"], abs=1e-6)
+    assert covered["body"] == pytest.approx(plain["body"], abs=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("show_labels", "label", "room"),
+    [
+        pytest.param(False, "Region", 0.0, id="labels-off"),
+        # label_offset (4) plus half the label font size (10) above an underlay, as for a span.
+        pytest.param(True, "Region", 9.0, id="labelled"),
+        # No label text, no room (OV-842).
+        pytest.param(True, None, 0.0, id="no-label-text"),
+    ],
+)
+def test_linear_cover_anchor_labels_keep_room_beyond_the_lanes(
+    show_labels: bool, label: str | None, room: float
+) -> None:
+    slots = (
+        "features:features@side=above",
+        "gc:dinucleotide_content@side=below",
+        _COVER_ANCHOR_SLOTS[2].replace("show_labels=false", f"show_labels={str(show_labels).lower()}"),
+    )
+    geometry = _cover_anchor_geometry(_cover_anchor_drawing("middle", slots=slots, label=label))
+
+    assert geometry["drawn"] == pytest.approx(geometry["lanes"], abs=1e-6)
+    assert geometry["body"][0] == pytest.approx(geometry["lanes"][0] - room)
+
+
 def _span_slot(
     spec: str = "anchor_slot=features,to_slot=gc,layer=underlay,z=-1", *, labels: bool = False
 ) -> str:
@@ -283,6 +416,7 @@ def _build_linear_span(
                     RegionAnnotation(
                         f"span{index}",
                         CoordinateSpan(parse_record_selector(f"#{index}"), 100, 300),
+                        label=f"Span {index}",
                         mark="highlight",
                     )
                     for index in range(1, record_count + 1)
@@ -468,10 +602,10 @@ def test_linear_annotation_to_slot_covers_every_feature_lane() -> None:
 
 def test_linear_annotation_to_slot_follows_a_features_slot_off_the_axis() -> None:
     stack = ("features:features@side=below", "gc:dinucleotide_content@side=below")
-    # A second overlay on the features slot pushes that slot away from the axis.
+    # A second overlay on the features slot reserves its own band and pushes that slot away from the axis.
     pushing = (
-        "pin:annotations@side=overlay,set_id=regions,show_labels=false,"
-        "anchor_slot=features,cover_anchor=true,layer=underlay,z=-2"
+        "pin:annotations@side=overlay,set_id=regions,show_labels=false,h=40px,"
+        "anchor_slot=features,layer=underlay,z=-2"
     )
 
     def features_origin(drawing) -> float:

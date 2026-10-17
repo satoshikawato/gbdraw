@@ -139,6 +139,14 @@ write-up of a release.
   parameters (`anchor_slot`, `layer`, `cover_anchor`, `to_slot`). Fixed: a
   Python slot mapping that spelled the key with capitals (`Anchor_Slot`) was
   accepted but drawn on the axis instead of on its anchor slot (OV-475).
+- Linear tints that cover the feature track (a `highlight` annotation row
+  without custom slots, a feature drawn as an underlay such as
+  `repeat_region`, and an overlay slot with `cover_anchor=true`) now cover
+  the feature lanes with `--track_layout above` and `below`. They were drawn
+  9.5 to 18.5 px nearer the axis than the lanes, and their own height pushed
+  the lanes away from the axis and left empty space. The tint now adds no
+  space, its labels keep room beyond the lanes as for `to_slot`, and a region
+  without a label keeps none (OV-474, OV-476, OV-842).
 - Web app feature popup: the header shows the gene name, the product on up to
   two lines, and the record and location with thousands separators. **Edit**
   groups **Appearance** (fill, stroke, the label text with its visibility and
