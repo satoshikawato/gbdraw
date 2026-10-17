@@ -90,3 +90,19 @@ export const createArtifactSlot = ({
     retainedBytes: Math.max(0, Number(retainedBytes) || 0)
   });
 };
+
+/**
+ * The selected Result of `mode`: the displayed one while `mode` is shown, otherwise the one its
+ * slot keeps (undefined for an empty slot). A Result kept in a slot is the same object when the
+ * mode is shown again.
+ * @template T
+ * @param {'circular' | 'linear'} mode
+ * @param {{ mode: string, results: readonly T[], selectedResultIndex: number }} shown The displayed artifact.
+ * @param {Readonly<Record<'circular' | 'linear', Readonly<ArtifactSlot> | null>>} slots The kept artifacts.
+ * @returns {T | undefined}
+ */
+export const selectedResultOfMode = (mode, shown, slots) => {
+  if (shown.mode === mode) return shown.results[shown.selectedResultIndex];
+  const kept = slots[mode]?.values;
+  return kept ? kept.results[kept.selectedResultIndex] : undefined;
+};

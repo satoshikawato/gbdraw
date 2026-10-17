@@ -179,3 +179,16 @@ test('a mode-switch step whose alignment receipt does not bind fails before the 
     snapshots.registerModeCommittedSession?.(null);
   }
 });
+
+// Review alignment compares its mode's own Result whichever mode is shown (OV-622, D-45).
+test('the selected Result of a mode is the shown one, or the one its slot keeps', async () => {
+  const { selectedResultOfMode, createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+  const linearResult = { name: 'linear.svg' };
+  const otherLinearResult = { name: 'other.svg' };
+  const circularResult = { name: 'circular.svg' };
+  const kept = createArtifactSlot({ mode: 'linear', values: { results: [otherLinearResult, linearResult], selectedResultIndex: 1 } });
+  const slots = { circular: null, linear: kept };
+  assert.equal(selectedResultOfMode('linear', { mode: 'linear', results: [linearResult], selectedResultIndex: 0 }, slots), linearResult);
+  assert.equal(selectedResultOfMode('linear', { mode: 'circular', results: [circularResult], selectedResultIndex: 0 }, slots), linearResult);
+  assert.equal(selectedResultOfMode('circular', { mode: 'linear', results: [linearResult], selectedResultIndex: 0 }, slots), undefined);
+});
