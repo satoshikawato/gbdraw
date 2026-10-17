@@ -3244,6 +3244,22 @@ for (const previousSuppressed of [false, true]) {
   release();
   await renaming;
   assert.equal(history.getUndoCount(), 1, 'the rename is in no step: the drawn array replaced it');
+
+  // N-A (review of #1091): a step that must first settle another owner's open
+  // step is numbered when it begins, not after that wait, so a rerender its
+  // own edit requests in the same task counts it as the requester.
+  const pendingOther = await history.begin('Move legend', { owner: 'drag' });
+  const opening = history.begin('Change setting', { owner: 'checkbox' });
+  // The request is read in the task that began the step (a watcher flush).
+  const ownRequest = history.intentStepSerial();
+  const opened = await opening;
+  assert.notEqual(opened, pendingOther, 'the other owner\'s step was settled');
+  visible = false;
+  history.adoptDrawnWrite(() => { legend = ['renamed', 'shown feature', 'own row']; }, { requestedAt: ownRequest });
+  await history.commit(opened);
+  await history.undo();
+  assert.deepEqual({ visible, legend }, { visible: true, legend: ['renamed', 'shown feature', 'drawn row'] },
+    'Undo restores the rows from before the step that requested them');
   console.log('history drawn write requester tests passed');
 }
 

@@ -20,6 +20,7 @@ const modulePaths = [
   'gbdraw/web/js/services/conservation-series.js',
   'gbdraw/web/js/utils/color-utils.js',
   'gbdraw/web/js/utils/named-colors.js',
+  'gbdraw/web/js/utils/vue-raw.js',
   'gbdraw/web/js/services/losat-normalization.js',
   'gbdraw/web/js/contracts/request-shape.generated.js',
   'gbdraw/web/js/utils/contract-shape.js',

@@ -186,6 +186,7 @@ globalThis.Worker = AuditSimplePathWorker;
 const {
   afterFrame,
   afterPaint,
+  afterTask,
   buildLosatCachePayload,
   createRunAnalysis,
   executeCanonicalRenderCandidate
@@ -2649,8 +2650,9 @@ test('a render that reuses the held catalog build keeps the catalog object the p
 
 // Step 3c B3 (D-53): after the first status a Generate yields one task, not two
 // frames, at "Preparing render inputs and session..." and "Preparing preview...".
-// The fake yield is a macrotask, so a Cancel queued as a task while a status
-// shows (a click during busy work) runs before the run continues: GE-09 keeps
+// The yield is the production one (`afterTask`, counted here), so a Cancel
+// queued as a task while a status shows (a click during busy work) runs
+// before the run continues (#1119 review N-2): GE-09 keeps
 // the warm Worker before the post, and a Cancel during admission ends the run
 // before it commits or mounts the candidate.
 test('a Generate yields one frame wait and two task yields, and a Cancel queued at either later status ends the run there (3c B3)', async () => {
@@ -2686,7 +2688,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
     waitForAfterPaint: async () => { waits.afterPaint += 1; },
     yieldToTask: () => {
       waits.task += 1;
-      return new Promise((resolve) => setTimeout(resolve, 0));
+      return afterTask();
     },
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
     canonicalSessionVersion: SESSION_VERSION,

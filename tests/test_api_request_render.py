@@ -2331,10 +2331,29 @@ def _unencodable_result(context: SimpleNamespace) -> None:
     )
 
 
+def _extra_ordered_table(context: SimpleNamespace) -> None:
+    # OV-976: two records give one adjacent pair, so the second ordered table
+    # has no pair; with a protein raw entry the pair lookup used to raise
+    # IndexError outside the switch and return nothing inside it.
+    context.monkeypatch.setattr(
+        request_render_module, "is_protein_losat_cache_entry", lambda _entry: True
+    )
+    frame = DataFrame(columns=request_render_module.COMPARISON_COLUMNS)
+    context.metadata = diagram_module.LinearDiagramMetadata(
+        protein_comparisons=(frame, frame.copy()),
+    )
+
+
 @pytest.mark.parametrize("inside_switch", [False, True], ids=["outside", "inside"])
 @pytest.mark.parametrize(
     ("break_input", "error", "message"),
     [
+        pytest.param(
+            _extra_ordered_table,
+            ValidationError,
+            "Protein comparison table 2 has no adjacent record pair: the request has 2 records",
+            id="extra-ordered-table",
+        ),
         pytest.param(_missing_manifest, ValidationError, "identity manifest", id="manifest"),
         pytest.param(_missing_direct_column, ValidationError, "canonical column", id="direct-column"),
         pytest.param(_missing_explicit_column, ValidationError, "canonical column", id="explicit-column"),

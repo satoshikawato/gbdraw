@@ -1,6 +1,7 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
+import { toRaw } from '../utils/vue-raw.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import {
@@ -808,15 +809,6 @@ let adoptedProteinIdentityManifest = null;
 // exact manifest that already validated its protein references and raw text.
 const adoptedLosatCacheValues = new WeakMap();
 
-/**
- * @template T
- * @param {T} value
- * @returns {T}
- */
-const rawReactiveValue = (value) => (
-  globalThis.window?.Vue?.toRaw?.(value) ?? value
-);
-
 /** @param {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown } | null | undefined} canonical */
 const cloneCanonicalSession = (canonical) => {
   if (
@@ -941,7 +933,7 @@ const defaultEditorStateData = () => ({
  * @returns {FeatureCatalog | null}
  */
 const admittedFeatureCatalog = (catalog) => {
-  const rawCatalog = rawReactiveValue(catalog);
+  const rawCatalog = toRaw(catalog);
   return isAdoptedFeatureCatalog(rawCatalog) ? rawCatalog : null;
 };
 
@@ -3227,7 +3219,7 @@ const serializeLosatCache = () => {
     return { entries: [], validatedManifest: null, manifestValidated: false };
   }
   const manifest = state.proteinIdentityManifest.value;
-  const rawManifest = rawReactiveValue(manifest);
+  const rawManifest = toRaw(manifest);
   const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
   /** @type {Record<string, unknown>[]} */
   const entries = [];
@@ -3240,7 +3232,7 @@ const serializeLosatCache = () => {
    * @param {{ filename?: unknown, display?: unknown }} [infoEntry]
    */
   const buildEntry = (key, cached, infoEntry = {}) => {
-    const rawCached = rawReactiveValue(cached);
+    const rawCached = toRaw(cached);
     let serialized = rawCached;
     if (!adoptedLosatCacheValues.has(rawCached)) {
       const { text, ...metadata } = rawCached;
@@ -3364,7 +3356,7 @@ const applyLosatCache = (
       if (!adoptCurrent) {
         excludedFields.forEach((field) => delete restored[field]);
       } else {
-        adoptedLosatCacheValues.set(restored, rawReactiveValue(validatedManifest));
+        adoptedLosatCacheValues.set(restored, toRaw(validatedManifest));
       }
       map.set(entry.key, restored);
       if (entry.display === false) return;
@@ -4503,9 +4495,9 @@ const captureSessionImportSnapshot = () => ({
   runState: buildRunStateData(),
   losatCache: state.losatCache.value,
   losatDerivedCache: state.losatDerivedCache.value,
-  proteinIdentityManifest: rawReactiveValue(state.proteinIdentityManifest.value)
+  proteinIdentityManifest: toRaw(state.proteinIdentityManifest.value)
     === adoptedProteinIdentityManifest
-    ? rawReactiveValue(state.proteinIdentityManifest.value)
+    ? toRaw(state.proteinIdentityManifest.value)
     : cloneJsonData(state.proteinIdentityManifest.value),
   adoptedProteinIdentityManifest,
   legacyProteinRawCandidates: cloneJsonData(state.legacyProteinRawCandidates.value),
@@ -4836,8 +4828,8 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
 // a reactive read of each of their 10k-40k nested properties.
 /** @param {DrawingState} drawing */
 export const buildFeatureStateData = (drawing) => ({
-  extractedFeatures: sanitizeExtractedFeaturesForSession(rawReactiveValue(state.extractedFeatures.value)),
-  biologicalFeatures: sanitizeExtractedFeaturesForSession(rawReactiveValue(state.biologicalFeatures?.value)),
+  extractedFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.extractedFeatures.value)),
+  biologicalFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.biologicalFeatures?.value)),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
@@ -4897,7 +4889,7 @@ const applyDrawingFeatureData = (drawing, features = {}) => {
 
 /** @param {DrawingState} drawing */
 export const buildOrthogroupStateData = (drawing) => ({
-  groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(rawReactiveValue(state.orthogroups.value)) : [],
+  groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(toRaw(state.orthogroups.value)) : [],
   selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
   orthogroupNameOverrides: cloneStringMap(drawing.orthogroupNameOverrides),
   orthogroupDescriptionOverrides: cloneStringMap(drawing.orthogroupDescriptionOverrides),
@@ -5327,9 +5319,9 @@ const exportSessionDocument = async (
     losatDerivedCache: {
       entries: []
     },
-    proteinIdentityManifest: rawReactiveValue(state.proteinIdentityManifest.value)
+    proteinIdentityManifest: toRaw(state.proteinIdentityManifest.value)
       === adoptedProteinIdentityManifest
-      ? rawReactiveValue(state.proteinIdentityManifest.value)
+      ? toRaw(state.proteinIdentityManifest.value)
       : cloneJsonData(state.proteinIdentityManifest.value),
     cliInvocation: exportableCliInvocation
   });

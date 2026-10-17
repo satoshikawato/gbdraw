@@ -36,6 +36,7 @@ import {
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
 import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
+import { toRaw } from './utils/vue-raw.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -46,8 +47,6 @@ import {
 } from './services/session-active-config-contract.js';
 export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
-/** @type {<T>(value: T) => T} */
-const toRaw = window.Vue.toRaw || ((value) => value);
 
 // System State
 const processing = ref(false);

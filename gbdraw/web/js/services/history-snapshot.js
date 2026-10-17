@@ -14,6 +14,7 @@ import {
 } from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
+import { toRaw } from '../utils/vue-raw.js';
 /** @import { HistoryArtifactHandle } from './history.js' */
 
 export { cloneJsonData };
@@ -418,18 +419,6 @@ const setGeneratedArtifactRef = (target, value) => {
  */
 const getGeneratedArtifactRef = (target, fallback) => (
   target && typeof target === 'object' && 'value' in target ? target.value : fallback
-);
-
-// The vendored Vue is a global of the page (index.html); a unit test without a page may not set it.
-/** @type {typeof globalThis & { Vue?: { toRaw?: <T>(value: T) => T } }} */
-const vueHost = globalThis;
-/**
- * @template T
- * @param {T} value
- * @returns {T}
- */
-const artifactOwnedValue = (value) => (
-  typeof vueHost.Vue?.toRaw === 'function' ? vueHost.Vue.toRaw(value) : value
 );
 
 /** @param {Record<string, any>} state */
@@ -1102,59 +1091,59 @@ export const createHistorySnapshotService = ({
   /** @typedef {ReturnType<typeof captureGeneratedArtifactOwnerSet>} GeneratedArtifactOwnerSet The owners' values, by reference, key by key. */
   const captureGeneratedArtifactOwnerSet = () => {
     const drawing = drawingOfMode(state, getGeneratedArtifactRef(state.generatedMode, null));
-    const results = artifactOwnedValue(getGeneratedArtifactRef(state.results, []));
+    const results = toRaw(getGeneratedArtifactRef(state.results, []));
     return Object.freeze({
       results,
-      featureCatalog: artifactOwnedValue(getGeneratedArtifactRef(state.featureCatalog, null)),
-      extractedFeatures: artifactOwnedValue(getGeneratedArtifactRef(state.extractedFeatures, null)),
-      biologicalFeatures: artifactOwnedValue(getGeneratedArtifactRef(state.biologicalFeatures, null)),
-      featureRecordIds: artifactOwnedValue(getGeneratedArtifactRef(state.featureRecordIds, null)),
-      orthogroups: artifactOwnedValue(getGeneratedArtifactRef(state.orthogroups, null)),
-      featureOrthogroupIndex: artifactOwnedValue(
+      featureCatalog: toRaw(getGeneratedArtifactRef(state.featureCatalog, null)),
+      extractedFeatures: toRaw(getGeneratedArtifactRef(state.extractedFeatures, null)),
+      biologicalFeatures: toRaw(getGeneratedArtifactRef(state.biologicalFeatures, null)),
+      featureRecordIds: toRaw(getGeneratedArtifactRef(state.featureRecordIds, null)),
+      orthogroups: toRaw(getGeneratedArtifactRef(state.orthogroups, null)),
+      featureOrthogroupIndex: toRaw(
         getGeneratedArtifactRef(state.featureOrthogroupIndex, null)
       ),
-      collinearGroups: artifactOwnedValue(getGeneratedArtifactRef(state.collinearGroups, null)),
-      similarityAlignmentResetReceipt: artifactOwnedValue(
+      collinearGroups: toRaw(getGeneratedArtifactRef(state.collinearGroups, null)),
+      similarityAlignmentResetReceipt: toRaw(
         getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)
       ),
-      similarityAlignmentPlan: artifactOwnedValue(
+      similarityAlignmentPlan: toRaw(
         getGeneratedArtifactRef(state.similarityAlignmentPlan, null)
       ),
-      linearRecordTranslations: artifactOwnedValue(
+      linearRecordTranslations: toRaw(
         getGeneratedArtifactRef(state.linearRecordTranslations, null)
       ),
-      linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
-      annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
-      featureIdentityNotices: artifactOwnedValue(
+      linearRecordOrientations: toRaw(captureLinearRecordOrientations()),
+      annotationWarnings: toRaw(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      featureIdentityNotices: toRaw(
         getGeneratedArtifactRef(state.featureIdentityNotices, null)
       ),
-      comparisonWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.comparisonWarnings, null)),
-      labelFitReports: artifactOwnedValue(getGeneratedArtifactRef(state.labelFitReports, null)),
+      comparisonWarnings: toRaw(getGeneratedArtifactRef(state.comparisonWarnings, null)),
+      labelFitReports: toRaw(getGeneratedArtifactRef(state.labelFitReports, null)),
       specificRules: (drawing.manualSpecificRules || []).map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule })),
       fileLegendCaptions: new Set(drawing.fileLegendCaptions?.value || []),
-      trackSlotResolvedGeometry: artifactOwnedValue(
+      trackSlotResolvedGeometry: toRaw(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
-      proteinIdentityManifest: artifactOwnedValue(
+      proteinIdentityManifest: toRaw(
         getGeneratedArtifactRef(state.proteinIdentityManifest, null)
       ),
-      legacyProteinRawCandidates: artifactOwnedValue(
+      legacyProteinRawCandidates: toRaw(
         getGeneratedArtifactRef(state.legacyProteinRawCandidates, null)
       ),
-      legacyProteinDerivedEvidence: artifactOwnedValue(
+      legacyProteinDerivedEvidence: toRaw(
         getGeneratedArtifactRef(state.legacyProteinDerivedEvidence, null)
       ),
-      losatCache: artifactOwnedValue(getGeneratedArtifactRef(state.losatCache, null)),
-      losatDerivedCache: artifactOwnedValue(
+      losatCache: toRaw(getGeneratedArtifactRef(state.losatCache, null)),
+      losatDerivedCache: toRaw(
         getGeneratedArtifactRef(state.losatDerivedCache, null)
       ),
-      losatCacheInfo: artifactOwnedValue(getGeneratedArtifactRef(state.losatCacheInfo, null)),
+      losatCacheInfo: toRaw(getGeneratedArtifactRef(state.losatCacheInfo, null)),
       matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
-      lastRunInfo: artifactOwnedValue(getGeneratedArtifactRef(state.lastRunInfo, null)),
-      pairwiseMatchFactors: artifactOwnedValue(
+      lastRunInfo: toRaw(getGeneratedArtifactRef(state.lastRunInfo, null)),
+      pairwiseMatchFactors: toRaw(
         getGeneratedArtifactRef(state.pairwiseMatchFactors, null)
       ),
-      editableLabels: artifactOwnedValue(getGeneratedArtifactRef(state.editableLabels, null)),
+      editableLabels: toRaw(getGeneratedArtifactRef(state.editableLabels, null)),
       generatedLegendPosition: getGeneratedArtifactRef(state.generatedLegendPosition, null),
       generatedMode: getGeneratedArtifactRef(state.generatedMode, null),
       generatedMultiRecordCanvas: getGeneratedArtifactRef(
@@ -1166,11 +1155,11 @@ export const createHistorySnapshotService = ({
         null
       ),
       appliedPaletteName: getGeneratedArtifactRef(state.appliedPaletteName, ''),
-      appliedPaletteColors: artifactOwnedValue(
+      appliedPaletteColors: toRaw(
         getGeneratedArtifactRef(state.appliedPaletteColors, null)
       ),
       pendingPaletteName: getGeneratedArtifactRef(drawing.pendingPaletteName, ''),
-      pendingPaletteColors: artifactOwnedValue(
+      pendingPaletteColors: toRaw(
         getGeneratedArtifactRef(drawing.pendingPaletteColors, null)
       )
     });
@@ -1187,8 +1176,8 @@ export const createHistorySnapshotService = ({
     }
     const drawing = drawingOfMode(state, ownerSet.generatedMode);
     const results = Array.isArray(ownerSet.results) ? ownerSet.results : [];
-    const replacesShownResults = artifactOwnedValue(results)
-      !== artifactOwnedValue(getGeneratedArtifactRef(state.results, []));
+    const replacesShownResults = toRaw(results)
+      !== toRaw(getGeneratedArtifactRef(state.results, []));
     if (typeof installResults === 'function') installResults(results);
     else setGeneratedArtifactRef(state.results, results);
     setGeneratedArtifactRef(
@@ -1273,7 +1262,7 @@ export const createHistorySnapshotService = ({
     // `state.generatedMode` is always a ref, so the fallback `null` never applies.
     mode: /** @type {'circular' | 'linear'} */ (getGeneratedArtifactRef(state.generatedMode, null)),
     values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
-      key, artifactOwnedValue(getGeneratedArtifactRef(state[key], null))
+      key, toRaw(getGeneratedArtifactRef(state[key], null))
     ])),
     legendInventory: getGeneratedArtifactRef(state.originalLegendOrder, []) || [],
     matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
@@ -1334,7 +1323,7 @@ export const createHistorySnapshotService = ({
       fingerprint,
       ownerReferences: Object.freeze({
         ...ownerReferences,
-        results: artifactOwnedValue(committedResults)
+        results: toRaw(committedResults)
       })
     });
     currentGeneratedArtifactRetainedBytes = Math.max(

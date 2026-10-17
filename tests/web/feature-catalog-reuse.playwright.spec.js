@@ -430,6 +430,17 @@ const wholeAndPieces = (page) => page.evaluate(async () => {
   };
 });
 
+// The segments the shown Result keeps (the next request names them).
+const heldSegmentCount = (page) => page.evaluate(async () => {
+  const { SEGMENTS } = await import('./js/services/current-worker-result-source.js');
+  const { state } = await import('./js/state.js');
+  return window.Vue.toRaw(state.results.value[0])?.[SEGMENTS]?.size ?? 0;
+});
+// The page elements whose `name` (an `object` also by `id`) becomes a property
+// of `document`, which DOMPurify's SANITIZE_DOM reads (CW-06 input of a held text).
+const namedDocumentElementCount = (page) => page.evaluate(() =>
+  document.querySelectorAll('embed[name], form[name], iframe[name], img[name], object[name], object[id]').length);
+
 const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
 const setTitle = (page, title) => undoable(page, 'Set the plot title', { fields: { 'form.plot_title': title } });
 // A live palette edit rewrites the mounted Result (hazard 6); the draft keeps the color.
@@ -508,6 +519,9 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
       .toEqual({ held: [pieceCount], sanitized: 0, reused: pieceCount, decoded: 0 });
     expect(counts(warm)).toEqual(shownOnce);
     expect(warm.content).toBe(cold.content);
+    // A held text equals a fresh sanitization while the page names no
+    // `document` property; the app page has no such element.
+    expect(await namedDocumentElementCount(page)).toBe(0);
 
     console.log('STEP S-3', Date.now());
     // S-3 (live-edit residue): a live palette edit and a title change; the
@@ -583,6 +597,33 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
     expect(afterCancel.held).toEqual(cancelled.held);
     expect(afterCancel.reused).toBeGreaterThan(0);
 
+    // S-6b (a failed Generate): a reply that fails admission (RESULT_INVALID)
+    // commits nothing; the shown Result keeps its text and its segments, and
+    // the next request names them.
+    const heldShown = await heldSegmentCount(page);
+    expect(heldShown).toBeGreaterThan(0);
+    await setTitle(page, 'Failed title');
+    await page.evaluate(() => {
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
+        delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+        const purifier = window.DOMPurify;
+        const { sanitize } = purifier;
+        window.__RESTORE_SANITIZE__ = () => { purifier.sanitize = sanitize; };
+        // A sanitized root that is not a whole document: admission refuses it.
+        purifier.sanitize = () => '<svg/>';
+      };
+    });
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.processing.value), { timeout: 180_000 }).toBe(false);
+    await page.evaluate(() => window.__RESTORE_SANITIZE__());
+    expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.errorLog))).toContain('RESULT_INVALID');
+    expect(await restoredContent()).toBe(afterCancel.content);
+    expect(await heldSegmentCount(page)).toBe(heldShown);
+    await page.evaluate(async () => { (await import('./js/state.js')).state.errorLog.value = null; });
+    const afterFailure = await generatePieces(page);
+    expect(afterFailure.held).toEqual([heldShown]);
+    expect(afterFailure.reused).toBeGreaterThan(0);
+
     console.log('STEP S-7', Date.now());
     // S-7: hostile markup in the head, a start tag, a raw piece or a children
     // text (also one that closes its group early) leaves no script, event
@@ -595,5 +636,36 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
   } finally {
     await page.context().close();
     await fresh.context().close();
+  }
+});
+
+// OV-971: a live palette edit rewrites the shown Result's text; its Undo
+// restores the palette on that Result. Both keep the Result's held segments,
+// so the Generate after the Undo sanitizes nothing and draws the text of the
+// first Generate. (The Result shown after the Undo is the page's serialization
+// of the same figure, so its text is not compared.)
+test('a Result keeps its held segments through a live palette edit and its Undo', async ({ browser }) => {
+  test.setTimeout(400_000);
+  const page = await start(browser, { captureReplies: true });
+  try {
+    await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
+    const cold = await generatePieces(page);
+    const held = await heldSegmentCount(page);
+    expect(held).toBe(await contentPieceCount(page));
+    const before = await undoCount(page);
+    await livePalette(page);
+    expect(await undoCount(page)).toBe(before + 1);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).not.toBe(cold.content);
+    expect(await heldSegmentCount(page)).toBe(held);
+    await history(page, 'undo');
+    expect(await heldSegmentCount(page)).toBe(held);
+    const afterUndo = await generatePieces(page);
+    expect({ held: afterUndo.held, sanitized: afterUndo.sanitized, reused: afterUndo.reused })
+      .toEqual({ held: [held], sanitized: 0, reused: held });
+    expect(afterUndo.content).toBe(cold.content);
+    await history(page, 'redo');
+    expect(await heldSegmentCount(page)).toBe(held);
+  } finally {
+    await page.context().close();
   }
 });

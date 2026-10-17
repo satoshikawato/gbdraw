@@ -3,6 +3,7 @@ import { normalizeSpecificRule } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
 import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { toRaw } from '../utils/vue-raw.js';
 import {
   recordRuleMatches, recordVisibilityMatch, ruleKey, ruleKeysPending, ruleMatcher, visibilityRuleKnown
 } from '../services/rule-matchers.js';
@@ -68,13 +69,6 @@ const declinesVisibilityMatch = (feature, rule) => {
  * @property {{ hash: string | null, location: string | null, record_location: string | null }} selector
  * @property {string} label
  */
-/**
- * The object behind a Vue proxy (itself outside Vue).
- * @template T
- * @param {T} value
- * @returns {T}
- */
-const rawValue = (value) => globalThis.window?.Vue?.toRaw?.(value) ?? value;
 /** @type {WeakMap<object, RuleFeaturePayload>} */
 const payloads = new WeakMap();
 /**
@@ -83,7 +77,7 @@ const payloads = new WeakMap();
  * @returns {RuleFeaturePayload}
  */
 export const ruleFeaturePayload = (feature, label = '') => {
-  const source = rawValue(feature);
+  const source = toRaw(feature);
   const known = label === '' ? payloads.get(source) : undefined;
   if (known) return known;
   const payload = buildRuleFeaturePayload(feature, label);
@@ -235,8 +229,8 @@ export const createRulePreparation = ({
   let union = null;
   /** @returns {RuleFeature[]} */
   const features = () => {
-    const catalog = rawValue(state.extractedFeatures.value);
-    const biology = rawValue(state.biologicalFeatures?.value);
+    const catalog = toRaw(state.extractedFeatures.value);
+    const biology = toRaw(state.biologicalFeatures?.value);
     if (!union || union.catalog !== catalog || union.biology !== biology) {
       union = { catalog, biology, union: [...new Set([
         ...(state.extractedFeatures.value || []), ...(state.biologicalFeatures?.value || [])

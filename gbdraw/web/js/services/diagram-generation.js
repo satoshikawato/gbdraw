@@ -19,6 +19,7 @@ import { markCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-
 import { normalizeLabelFitFailure } from './label-fit.js';
 /** @import { LabelFitFailure } from './label-fit.js' */
 import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
+import { toRaw } from '../utils/vue-raw.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
 /** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
@@ -271,13 +272,6 @@ const selectHeldFeatureCatalog = (catalog, resultNames) => {
 const NOTHING_HELD = Object.freeze({ catalog: null, segments: new Map() });
 
 /**
- * The raw object behind a Vue proxy: a reactive Result would hand out a
- * reactive Map for its symbol key.
- * @type {<T>(value: T) => T}
- */
-const rawValue = (value) => globalThis.window?.Vue?.toRaw?.(value) ?? value;
-
-/**
  * The held render state of the shown drawing: its catalog (as
  * `selectHeldFeatureCatalog` above) and the segments of its committed Results.
  * @param {FeatureCatalog | null | undefined} catalog
@@ -288,8 +282,9 @@ const rawValue = (value) => globalThis.window?.Vue?.toRaw?.(value) ?? value;
 export const selectHeldRenderState = (catalog, results, resultNames) => {
   /** @type {Map<string, Readonly<HeldSegment>>} */
   const segments = new Map();
-  for (const result of rawValue(results) ?? []) {
-    const raw = result && typeof result === 'object' ? rawValue(result) : null;
+  // A reactive Result would hand out a reactive Map for its symbol key.
+  for (const result of toRaw(results) ?? []) {
+    const raw = result && typeof result === 'object' ? toRaw(result) : null;
     /** @type {unknown} */
     const held = raw ? /** @type {{ [SEGMENTS]?: unknown }} */ (raw)[SEGMENTS] : undefined;
     if (held instanceof Map) held.forEach((segment, revision) => segments.set(revision, segment));
