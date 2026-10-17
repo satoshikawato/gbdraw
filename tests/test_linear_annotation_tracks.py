@@ -414,6 +414,22 @@ def test_linear_cover_anchor_on_a_record_without_lane_features_stays_off_the_axi
     if tint == "repeat_region":
         # An underlay feature keeps the nominal lanes, so its tint covers them as on the first record.
         assert tints[1] == pytest.approx(tints[0])
+        # ... and the tint is drawn there, not only planned there.
+        root = ElementTree.fromstring(drawing.tostring())
+        parents = {child: parent for parent in root.iter() for child in parent}
+        for rect in root.iter():
+            if rect.attrib.get("data-gbdraw-auto-feature-underlay") != "true":
+                continue
+            top, element = float(rect.attrib["y"]), rect
+            while element is not None:
+                top += sum(
+                    float(value)
+                    for value in re.findall(r"translate\([^,]+,\s*([^)]+)\)", element.attrib.get("transform", ""))
+                )
+                element = parents.get(element)
+            top -= float(drawing._gbdraw_track_slot_geometry["records"][int(rect.attrib["data-gbdraw-record-index"])]["axisYpx"])
+            drawn = (top, top + float(rect.attrib["height"]))
+            assert drawn == pytest.approx((9.5, 54.5) if track_layout == "below" else (-54.5, -9.5))
     # Without lanes the tint keeps its own band on its side of the axis, clear of GC.
     if track_layout == "below":
         assert 0.0 < tints[1][0] and tints[1][1] <= bands[1]["dinucleotide_content"]["topPx"]

@@ -1602,7 +1602,7 @@ def test_final_placement_ribbons_follow_paint_with_four_unit_clearance(start, fe
     assert source.seq == before.seq and source.features == before.features
 
 
-def _moved_feature_ribbons(slots):
+def _moved_feature_ribbons(slots, **request_options):
     """Feature-bound ribbon endpoints (query y, gap, subject y, gap) and tint bands by record."""
 
     import re
@@ -1628,7 +1628,7 @@ def _moved_feature_ribbons(slots):
                                    label="Reg", mark="highlight") for index in (1, 2))
     request = _request(mode="linear", linear_comparisons=[replace(comparison, matches=DataFrame(rows))],
         records=tuple(RecordInput(InMemoryRecordSource(source), record_key=key) for key in ("left", "right")),
-        pairwise_match_style="ribbon",
+        pairwise_match_style="ribbon", **request_options,
         tracks=LinearRequestTrackOptions(linear_track_slots=list(slots),
                                          linear_track_axis_index=sum("@side=above" in s for s in slots)),
         annotations=AnnotationOptions(sets=(AnnotationSet("regions", tints),)),
@@ -1704,6 +1704,22 @@ def test_moved_feature_ribbons_ignore_a_to_slot_span(stack):
     # A span adds no space, so each ribbon keeps its gap to its own feature's lane.
     assert [(gap_q, gap_s) for _, gap_q, _, gap_s in spanned] == pytest.approx(
         [(gap_q, gap_s) for _, gap_q, _, gap_s in plain])
+
+
+def test_moved_feature_ribbons_ignore_a_to_slot_span_whose_slots_have_no_data():
+    import pandas as pd
+    depth = pd.DataFrame({"reference_name": ["duplicate"] * 120, "position": list(range(1, 121)),
+                          "depth": [20.0] * 120})
+    options = {"depth_track_tables": [[None, None], [depth, depth]], "depth_window": 10, "depth_step": 10}
+    stack = (*_RIBBON_FEATURES_AND_GC, "d0:depth@side=below,track_index=0", "d1:depth@side=below,track_index=1")
+    span = ("regions:annotations@side=overlay,set_id=regions,show_labels=false,"
+            "anchor_slot=d0,to_slot=d1,layer=foreground,z=5")
+    endpoints, tints = _moved_feature_ribbons((*stack, span), **options)
+    # Record 1 has no depth data, so the span keeps its nominal band: it adds no space and
+    # the feature-bound ribbons still stop outside its tint.
+    assert len(endpoints) == 2
+    for query_y, _, _, _ in endpoints:
+        assert query_y >= tints["t1"][1]
 
 
 def test_circular_existing_cli_keeps_separate_strand_resolver(tmp_path, monkeypatch):

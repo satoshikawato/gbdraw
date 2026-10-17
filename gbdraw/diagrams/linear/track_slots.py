@@ -415,7 +415,6 @@ def _span_resolved_slot(
         for track, footprint, origin_y in referenced
         if (body := _span_body(track, footprint)) is not None
     ]
-    overlay = replace(overlay, spans_slots=True)
     if not bodies:
         return overlay
     span = union_vertical_bands(bodies)
@@ -423,6 +422,7 @@ def _span_resolved_slot(
     grow = span.height - overlay.height
     return replace(
         overlay,
+        spans_slots=True,
         origin_y=span.top_y,
         height=span.height,
         paint_band=(
