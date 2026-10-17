@@ -1223,8 +1223,8 @@ every one is numbered in legend order, for example `Packaging (1)` and
 `Packaging (2)`, and a name drawn once has no number. A color or stroke edit
 of such a merged row changes every row it stands for, so it stays one row.
 The same holds for two tracks with one legend label. The number is not part of a color rule's
-caption: the rule list, the downloaded color table, and the Session keep the
-caption as written. The rule is specified under
+legend name: the rule list, the downloaded color table, and the Session keep the
+legend name as written. The rule is specified under
 [Feature presentation](palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation).
 
 **Region Annotations → Selected features** makes one annotation per selected

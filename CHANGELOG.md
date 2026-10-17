@@ -247,17 +247,28 @@ write-up of a release.
     with **First Record Only** on a short first record it reads 24 px, not
     5 px (OV-493). The Circular values follow the records that are drawn: a
     Multi-Record Canvas as one diagram, separate diagrams one record each,
-    and neither a record turned off nor one that is not selected. They read
-    **Auto (by genome size)** when separate diagrams take different sizes, or
-    when the one record is cropped to a region (OV-494).
+    and neither a record turned off nor one that is not selected (OV-494).
+    They read **Auto (by genome size)** when separate diagrams take different
+    sizes. A record cropped to a region is sized by the length of the region,
+    as Generate sizes it: a 306,008 bp record cropped to 1..30,000 reads
+    14 px for **Label Font Size**, not 8 px (OV-512). The sliding window and
+    **Scale interval** follow each Circular record's own length, as Generate
+    does; where the drawn records take different values they read **Auto (by
+    genome size)** and `by record length (auto)` (OV-512). The track preview
+    estimates the diagram that draws the record of the shown Result.
 - Web app: the Feature Visibility rule action **Exclude from matching** is now
-  **Leave out of protein search**, and the field **Legend caption** of a color
-  rule and of the selected-feature bar is now **Legend name**, the words the
-  feature popup uses; the selected-feature bar's apply button, the Reset Fill
-  Color message and the notice after matching colors say it too. Saved Sessions
-  and rule files are unchanged. A Feature
-  Visibility rule shows **Action** on its own line under **Value regex**, so
-  the closed list shows the whole action (OV-513).
+  **Leave out of protein search**, also in the selected-feature bar's
+  visibility list, where it read **Suppress**. The color rule field **Legend
+  caption** and the selected-feature bar's name field are now **Legend name**,
+  the words the feature popup uses, and the selected-feature bar's color
+  button and the Reset Fill Color dialog say legend name too. Saved Sessions
+  and rule files are unchanged. A Feature Visibility rule shows **Action** on
+  its own line under **Value regex**, so the closed list shows the whole
+  action.
+- Web app: **Display start** of a Circular record is no longer unavailable as
+  for a cropped record when the region fields were emptied, or when separate
+  diagrams or a Multi-Record Canvas draw the record whole; a record is
+  cropped only where Generate crops it.
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row

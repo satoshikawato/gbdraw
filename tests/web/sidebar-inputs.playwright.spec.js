@@ -92,6 +92,40 @@ for (const viewport of [{ width: 1600, height: 1000 }, { width: 390, height: 844
       await expect(action.locator('option:checked')).toHaveText(text);
       expect(await missingWidth(), `px missing to show "${text}"`).toBe(0);
     }
+    // Record ID, Feature Type and Qualifier share the first line in thirds.
+    const shares = await page.evaluate(() => ['record ID', 'feature type', 'qualifier'].map((name) => {
+      const field = /** @type {HTMLElement} */ (document.querySelector(`[aria-label="Visibility rule 1 ${name}"]`));
+      return field.getBoundingClientRect().width / /** @type {HTMLElement} */ (field.parentElement).getBoundingClientRect().width;
+    }));
+    for (const share of shares) expect(share, 'a third of the line').toBeGreaterThan(0.3);
+  });
+}
+
+// The selected-feature bar names the action as a Feature Visibility rule does.
+// With it chosen, the visibility list and its Apply button share a row and
+// Apply stays in the window.
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test(`at ${viewport.width}x${viewport.height} the selected-feature visibility list keeps its Apply button in view`, async ({ page }, testInfo) => {
+    test.setTimeout(240000);
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const id = app.extractedFeatures.map((feature) => String(feature?.svg_id || '')).find(Boolean);
+      app.selectedFeatureIds = new Set([id]);
+      app.selectedFeatureAnchorId = id;
+    });
+    const list = page.locator('select[aria-label="Selected feature visibility"]');
+    await list.scrollIntoViewIfNeeded();
+    await list.selectOption('exclude_matching');
+    await expect(list.locator('option:checked')).toHaveText('Leave out of protein search');
+    const apply = page.locator('button[aria-label="Apply visibility to selected features"]');
+    await expect(apply).toBeInViewport({ ratio: 1 });
+    const [listBox, applyBox] = [await list.boundingBox(), await apply.boundingBox()];
+    expect(Math.abs((listBox.y + listBox.height / 2) - (applyBox.y + applyBox.height / 2)), 'one row').toBeLessThan(2);
+    expect(applyBox.x + applyBox.width).toBeLessThanOrEqual(viewport.width);
+    await page.screenshot({ path: testInfo.outputPath('selected-feature-bar.png') });
   });
 }
 
