@@ -1767,7 +1767,11 @@ export const createRunAnalysis = ({
   // A rerender requested while Generate (or a committed-candidate run) is in
   // progress waits for it: the rerender would take the newer generation token
   // and silently supersede the run (OV-48). It runs once after the run settles.
-  let reflowDeferredByProcessing = false;
+  // OV-1076: so do the requests of an action that holds the rerender while it
+  // writes (`holdAutomaticRerender`): one action, one rerender.
+  let reflowDeferred = false;
+  let rerenderHolds = 0;
+  const reflowWaits = () => processing.value || rerenderHolds > 0;
   // R1 (c), PD-OI-102: the request paths of live setting values each drawing's
   // actions committed and its Result does not show yet (R15: per drawing).
   // An automatic rerender applies them; it runs for a request of these alone
@@ -6344,15 +6348,15 @@ export const createRunAnalysis = ({
     if (!settings || settings.some((path) => activeLiveSettings.includes(path))) reflowSupersededAt = pendingReflowRequestId;
     pendingReflowRequestedAt = readHistoryStepSerial();
     if (activeReflowRequestId !== 0) return;
-    if (processing.value) {
-      reflowDeferredByProcessing = true;
+    if (reflowWaits()) {
+      reflowDeferred = true;
       return;
     }
 
     labelReflowProcessing.value = true;
     activeReflowRun = (async () => {
       // Generate takes priority: an iteration never starts while it runs.
-      while (!processing.value && activeReflowRequestId < pendingReflowRequestId) {
+      while (!reflowWaits() && activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
         const historyRequestedAt = pendingReflowRequestedAt;
         let decorationContinuity;
@@ -6381,8 +6385,8 @@ export const createRunAnalysis = ({
         else settings.forEach((path) => pending.delete(path));
         if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
       }
-      if (processing.value && activeReflowRequestId < pendingReflowRequestId) {
-        reflowDeferredByProcessing = true;
+      if (reflowWaits() && activeReflowRequestId < pendingReflowRequestId) {
+        reflowDeferred = true;
       }
     })().finally(() => {
       activeReflowRequestId = 0;
@@ -6427,13 +6431,33 @@ export const createRunAnalysis = ({
     return true;
   };
 
-  // Called where a run clears `processing`: the requests it held back run once.
-  // An editor request held back kept its flag; live values the Generate
-  // committed are equal now, so a replay with nothing left is skipped.
+  // Called where a run clears `processing`, and when a hold ends: the requests
+  // held back run once. An editor request held back kept its flag; live values
+  // the Generate committed are equal now, so a replay with nothing left is
+  // skipped.
   const replayDeferredLabelReflow = () => {
-    if (!reflowDeferredByProcessing || processing.value) return;
-    reflowDeferredByProcessing = false;
+    if (!reflowDeferred || reflowWaits()) return;
+    reflowDeferred = false;
     void runLabelReflow({ settings: [] });
+  };
+  // OV-1076: Reset Settings asks for the rerender while it writes (its label
+  // projection), again for the rules it removed, and its History checkpoint
+  // asks to apply the live values it changed. A rerender started midway reads
+  // a Legend the action has not finished writing and runs again. The action
+  // holds the requests and one rerender draws what it wrote.
+  /**
+   * @template T
+   * @param {() => T} run
+   * @returns {Promise<Awaited<T>>}
+   */
+  const holdAutomaticRerender = async (run) => {
+    rerenderHolds += 1;
+    try {
+      return await run();
+    } finally {
+      rerenderHolds -= 1;
+      replayDeferredLabelReflow();
+    }
   };
 
   const downloadLosatCache = async () => {
@@ -6491,6 +6515,7 @@ export const createRunAnalysis = ({
     captureGeneratedArtifactRuntimeState,
     restoreGeneratedArtifactRuntimeState,
     runLabelReflow,
+    holdAutomaticRerender,
     requestLiveSettingApply,
     discardLiveSettingRequests,
     refreshCircularRecordOrder,

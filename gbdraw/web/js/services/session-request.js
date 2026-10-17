@@ -125,7 +125,6 @@ import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   createDefaultLayoutPreferences,
   legendPositionOfMode,
-  resolveActiveLayoutPreference,
   updateActiveLayoutPreference
 } from './layout-preferences.js';
 import {
@@ -1478,11 +1477,11 @@ const sharedLengthOverrides = (path, value) => {
 
 // G1 request fields (PD-OI-103), each projected by one function that Generate
 // and the live apply of its `SETTING_APPLICATION` row both call (R3, no twin).
-/** @param {unknown} legend @param {string} mode */
-const requestLegendPosition = (legend, mode) => legendPositionOfMode(legend, mode)
+/** @param {Record<string, unknown>} form @param {string} mode */
+const requestLegendPosition = (form, mode) => legendPositionOfMode(form.legend, mode)
   ?? WEB_UX_PROFILE[mode === 'linear' ? 'linear' : 'circular'].legend;
-/** @param {unknown} position @param {string} mode */
-const requestPlotTitlePosition = (position, mode) => String(position || (mode === 'linear' ? 'bottom' : 'none'));
+/** @param {Record<string, unknown>} adv @param {string} mode */
+const requestPlotTitlePosition = (adv, mode) => String(adv.plot_title_position || (mode === 'linear' ? 'bottom' : 'none'));
 /** @param {Record<string, unknown>} form */
 const requestPlotTitle = (form) => String(form.plot_title || '').trim() || null;
 /** @param {Record<string, unknown>} adv */
@@ -1549,16 +1548,6 @@ const configWrites = (path, value) => {
   return [`${path}.short`, `${path}.long`].map((key) => [['diagramOptions', 'configOverrides', key], overrides[key]]);
 };
 /**
- * The drawing's Legend and Plot Title positions for the canvas the committed
- * request draws: a Circular drawing keeps them per single or multi-record
- * canvas, and a pending Multi-Record Canvas change selects the other canvas's
- * positions only at Generate (OV-1074).
- * @param {RequestDrawing} drawing @param {CanonicalRenderRequest} request
- */
-const committedCanvasLayout = (drawing, request) => resolveActiveLayoutPreference(
-  drawing.layoutPreferences, request.mode, request.grouping === 'grid'
-);
-/**
  * The projector of each request path a live `SETTING_APPLICATION` row names
  * (services/setting-application.js). Context a value depends on (the mode,
  * the grouping, the drawn records) is the committed request's, never the
@@ -1567,11 +1556,10 @@ const committedCanvasLayout = (drawing, request) => resolveActiveLayoutPreferenc
  */
 const LIVE_SETTING_PROJECTORS = Object.freeze({
   'diagramOptions.output.legend': (drawing, request) => [
-    [['diagramOptions', 'output', 'legend'], requestLegendPosition(committedCanvasLayout(drawing, request).legend, request.mode)]
+    [['diagramOptions', 'output', 'legend'], requestLegendPosition(drawing.form, request.mode)]
   ],
   'diagramOptions.output.plotTitlePosition': (drawing, request) => [
-    [['diagramOptions', 'output', 'plotTitlePosition'],
-      requestPlotTitlePosition(committedCanvasLayout(drawing, request).plotTitlePosition, request.mode)]
+    [['diagramOptions', 'output', 'plotTitlePosition'], requestPlotTitlePosition(drawing.adv, request.mode)]
   ],
   'diagramOptions.plotTitle': (drawing) => [[['diagramOptions', 'plotTitle'], requestPlotTitle(drawing.form)]],
   'diagramOptions.plotTitleFontSize': (drawing, request) => [
@@ -1597,16 +1585,23 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
 /** The request paths that live setting rows may name. */
 export const LIVE_SETTING_REQUEST_PATHS = Object.freeze(Object.keys(LIVE_SETTING_PROJECTORS));
 const CIRCULAR_GRID_REQUEST_PATHS = new Set(Object.keys(CIRCULAR_MULTI_RECORD_LAYOUT).map((field) => `layout.${field}`));
+const CANVAS_POSITION_REQUEST_PATHS = new Set(['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition']);
 /**
- * Whether the committed request can show a live value of `requestPath`: a
- * Circular multi-record layout field only a committed grid draws; a pending
- * Multi-Record Canvas change applies on Generate (PD-OI-103). The setting
- * note says so (`SettingNote`).
- * @param {CanonicalRenderRequest} request @param {string} requestPath
+ * Whether the committed request can show the drawing's live value of
+ * `requestPath`: a Circular multi-record layout field only a committed grid
+ * draws; a Circular Legend or Plot Title position only while the draft draws
+ * the committed canvas, since each canvas keeps its own positions and a
+ * pending Multi-Record Canvas change selects the other canvas's at Generate
+ * (OV-1074, OV-1077). Otherwise the value applies on Generate (PD-OI-103),
+ * and the setting note says so (`SettingNote`).
+ * @param {CanonicalRenderRequest} request @param {string} requestPath @param {RequestDrawing} drawing
  */
-export const liveSettingApplies = (request, requestPath) => (
-  !CIRCULAR_GRID_REQUEST_PATHS.has(requestPath) || request.grouping === 'grid'
-);
+export const liveSettingApplies = (request, requestPath, drawing) => {
+  const grid = request.grouping === 'grid';
+  if (CIRCULAR_GRID_REQUEST_PATHS.has(requestPath)) return grid;
+  return !CANVAS_POSITION_REQUEST_PATHS.has(requestPath) || request.mode !== 'circular'
+    || Boolean(drawing.form.multi_record_canvas) === grid;
+};
 
 /** @param {unknown} root @param {readonly string[]} path */
 const valueAtPath = (root, path) => path.reduce(
@@ -1624,7 +1619,7 @@ export const projectLiveSettingWrites = ({ committed, drawing, requestPaths }) =
   return [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];
     if (!project) throw diagnosticError('INPUT_INVALID', { field: requestPath, reason: 'UNKNOWN_CONFIG_PATH' });
-    if (!liveSettingApplies(request, requestPath)) return [];
+    if (!liveSettingApplies(request, requestPath, drawing)) return [];
     return project(drawing, request).filter(([path, value]) => (
       JSON.stringify(valueAtPath(request, path)) !== JSON.stringify(value)
     ));
@@ -3235,8 +3230,8 @@ const projectCanonicalRenderInput = ({
     }),
     tracks: trackPlan.tracks,
     output: {
-      legend: requestLegendPosition(drawing.form.legend, state.mode.value),
-      plotTitlePosition: requestPlotTitlePosition(drawing.adv.plot_title_position, state.mode.value)
+      legend: requestLegendPosition(drawing.form, state.mode.value),
+      plotTitlePosition: requestPlotTitlePosition(drawing.adv, state.mode.value)
     },
     selectedFeaturesSet: Array.from(drawing.adv.features || []).map((value) => String(value)),
     featureShapes: {

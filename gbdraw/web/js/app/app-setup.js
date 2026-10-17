@@ -3271,6 +3271,7 @@ export const createAppSetup = () => {
     projectCommittedSimilarityAlignment,
     cancelRunAnalysis,
     runLabelReflow,
+    holdAutomaticRerender,
     requestLiveSettingApply,
     discardLiveSettingRequests,
     refreshCircularRecordOrder,
@@ -5160,8 +5161,10 @@ export const createAppSetup = () => {
     // gone); the rule owner follows the removed rules (a
     // changed Legend source asks for the rerender, as their Undo does), and
     // the Legend list follows the Result. The reset itself runs at once, so a
-    // caller reads the reset settings right after resetSettings().
-    return history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
+    // caller reads the reset settings right after resetSettings(). One
+    // rerender follows the step: the rerender requests wait until it ends
+    // (OV-1076).
+    return holdAutomaticRerender(() => history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
       const palette = { ...appliedPaletteColors.value };
@@ -5202,7 +5205,7 @@ export const createAppSetup = () => {
         legendActions.extractLegendEntries();
       }
       return true;
-    }));
+    })));
   };
 
   const resetLayout = () => {

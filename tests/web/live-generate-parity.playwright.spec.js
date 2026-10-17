@@ -1445,8 +1445,11 @@ const WORK_ALLOWLIST = [
     // Legend rows and colors (OV-287) and the feature visibility (OV-290) it
     // clears in one compile; the palette watcher shows the default palette's
     // fills in a compile of its own, so a Reset that changes the palette
-    // compiles twice. With nothing to reflow it sends no request.
-    kind: 'Reset Settings', stages: ['fills', 'legend', 'legendFills', 'strokes', 'visibility'], compiles: 2, requests: [],
+    // compiles twice. Removing the color rules changes a Legend source, which
+    // Python draws again in one rerender (OV-43, Owner 2026-10-06), and that
+    // rerender applies the live setting values Reset changes (PD-OI-102,
+    // PD-OI-103). One action asks for one rerender (OV-1076).
+    kind: 'Reset Settings', stages: ['fills', 'legend', 'legendFills', 'strokes', 'visibility'], compiles: 2, requests: ['render'],
     run: resetSettings
   }
 ];

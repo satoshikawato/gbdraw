@@ -22,13 +22,16 @@
  */
 /**
  * One setting, or a group of settings with one application. `note` replaces
- * the class text where parts of the change apply at different times.
- * @typedef {{ readonly id: SettingApplicationId, readonly application: SettingApplicationClass, readonly note?: string, readonly requestPaths?: SettingRequestPaths }} SettingApplicationRow
+ * the class text where parts of the change apply at different times;
+ * `partialNote` is a live row's note while the shown Result can draw only some
+ * of its request paths.
+ * @typedef {{ readonly id: SettingApplicationId, readonly application: SettingApplicationClass, readonly note?: string, readonly partialNote?: string, readonly requestPaths?: SettingRequestPaths }} SettingApplicationRow
  */
 /** @typedef {{ application: SettingApplicationClass, text: string, qualified: boolean }} SettingApplicationNote */
 
 /** @param {SettingApplicationClass} application @param {SettingApplicationId[]} ids @returns {SettingApplicationRow[]} */
 const rows = (application, ids) => ids.map((id) => ({ id, application }));
+const CANVAS_CHANGE_NOTE = 'Live edit; the position applies on Generate after the Multi-Record Canvas change';
 
 /** @type {readonly Readonly<SettingApplicationRow>[]} */
 export const SETTING_APPLICATION = Object.freeze([
@@ -40,14 +43,15 @@ export const SETTING_APPLICATION = Object.freeze([
   // G1 (PD-OI-103): a committed value redraws the shown Result through the
   // automatic rerender (PD-OI-102). Legend position and Plot Title position
   // are the drawing's layout preferences (`ui.layoutPreferences`, per mode and
-  // for Circular per single or multi-record canvas).
-  { id: 'legend', application: /** @type {const} */ ('live'), requestPaths: {
+  // for Circular per single or multi-record canvas): a pending Multi-Record
+  // Canvas change draws the other canvas's position on Generate (OV-1077).
+  { id: 'legend', application: /** @type {const} */ ('live'), partialNote: CANVAS_CHANGE_NOTE, requestPaths: {
     'ui.layoutPreferences.linear.legend': 'diagramOptions.output.legend',
     'ui.layoutPreferences.circular.*.legend': 'diagramOptions.output.legend',
     'config.adv.legend_box_size': 'diagramOptions.configOverrides.objects.legends.color_rect_size',
     'config.adv.legend_font_size': 'diagramOptions.configOverrides.objects.legends.font_size'
   } },
-  { id: 'plot-title', application: /** @type {const} */ ('live'), requestPaths: {
+  { id: 'plot-title', application: /** @type {const} */ ('live'), partialNote: CANVAS_CHANGE_NOTE, requestPaths: {
     'config.form.plot_title': 'diagramOptions.plotTitle',
     'ui.layoutPreferences.linear.plotTitlePosition': 'diagramOptions.output.plotTitlePosition',
     'ui.layoutPreferences.circular.*.plotTitlePosition': 'diagramOptions.output.plotTitlePosition',
@@ -109,19 +113,24 @@ export const SETTING_NOTE_APPLIES = Symbol('setting-note-applies');
 
 /**
  * The note a `<setting-note>` shows; empty text shows none. A live setting
- * row applies on Generate while the shown Result cannot draw one of its
- * request paths (`applies`, from the committed request; a Circular layout
- * field without a committed grid).
+ * row applies on Generate while the shown Result can draw none of its request
+ * paths (`applies`, `liveSettingApplies` of the committed request: a Circular
+ * layout field without a committed grid), and shows its `partialNote` while
+ * it can draw some (a Circular position during a Multi-Record Canvas change).
  * @param {SettingApplicationId} id
  * @param {(requestPath: string) => boolean} [applies]
  * @returns {SettingApplicationNote}
  */
 export const settingApplicationNote = (id, applies = () => true) => {
   const row = rowOf(id);
-  const application = Object.values(row.requestPaths || {}).every(applies) ? row.application : 'generate';
-  return application === row.application
-    ? { application, text: row.note || TEXT[application], qualified: Boolean(row.note) }
-    : { application, text: TEXT[application], qualified: false };
+  const paths = Object.values(row.requestPaths || {});
+  const drawn = paths.filter((path) => applies(path)).length;
+  if (drawn === paths.length) {
+    return { application: row.application, text: row.note || TEXT[row.application], qualified: Boolean(row.note) };
+  }
+  return drawn > 0 && row.partialNote
+    ? { application: row.application, text: row.partialNote, qualified: true }
+    : { application: 'generate', text: TEXT.generate, qualified: false };
 };
 
 /** The text of a note whose class follows state (Palette Instant Preview). @param {SettingApplicationClass} application */

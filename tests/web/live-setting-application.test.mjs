@@ -192,11 +192,11 @@ test('a Circular live apply writes the plot title font override and the grid lay
   drawing.adv.multi_record_positions = [];
 });
 
-// OV-1074: a Circular drawing keeps the Legend and Plot Title positions per
-// canvas. Reset Settings turns Multi-Record Canvas on and fills the multi-record
-// positions; a single-canvas Result keeps its own canvas's positions until
-// Generate, and a change of those still applies.
-test('a live position apply reads the canvas the committed request draws, not a pending Multi-Record Canvas change', () => {
+// OV-1074, OV-1077: a Circular drawing keeps the Legend and Plot Title
+// positions per canvas. Reset Settings turns Multi-Record Canvas on and fills
+// the multi-record positions; while that change is pending, the Result keeps
+// its positions and any position change applies on Generate.
+test('a live position applies only while the draft draws the canvas of the committed request', () => {
   const drawing = state.drawings.circular;
   const positions = ['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition'];
   drawing.form.multi_record_canvas = false;
@@ -209,8 +209,12 @@ test('a live position apply reads the canvas the committed request draws, not a 
   assert.equal(drawing.form.legend, 'bottom');
   assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions }), []);
   drawing.layoutPreferences.circular.single.legend = 'right';
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions }), [],
+    'a change of the committed canvas\'s position applies on Generate while Multi-Record Canvas is pending on');
+  drawing.form.multi_record_canvas = false;
   assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions }),
     [[['diagramOptions', 'output', 'legend'], 'right']]);
+  drawing.form.multi_record_canvas = true;
   const grid = generate('circular');
   assert.equal(grid.renderRequest.grouping, 'grid');
   drawing.form.multi_record_canvas = false;
@@ -312,12 +316,25 @@ test('a live setting row the shown Result cannot draw says Applies on Generate',
   assert.equal(owner.settingApplicationNote('multi-record-layout').text, 'Live edit');
   const generateNote = { application: 'generate', text: 'Applies on Generate', qualified: false };
   // A single-canvas Result: the layout fields apply on Generate (PD-OI-103).
-  const single = { grouping: 'single' };
-  assert.equal(request.liveSettingApplies(single, 'layout.multiRecordColumnGapRatio'), false);
-  assert.equal(request.liveSettingApplies({ grouping: 'grid' }, 'layout.multiRecordColumnGapRatio'), true);
-  assert.equal(request.liveSettingApplies(single, 'diagramOptions.output.legend'), true);
-  assert.deepEqual(owner.settingApplicationNote('multi-record-layout', (path) => request.liveSettingApplies(single, path)), generateNote);
-  assert.equal(owner.settingApplicationNote('legend', (path) => request.liveSettingApplies(single, path)).text, 'Live edit');
+  const single = { mode: 'circular', grouping: 'single' };
+  const draft = (multiRecordCanvas) => ({ form: { multi_record_canvas: multiRecordCanvas } });
+  const note = (id, committed, multiRecordCanvas) => owner.settingApplicationNote(
+    id, (path) => request.liveSettingApplies(committed, path, draft(multiRecordCanvas))
+  );
+  assert.equal(request.liveSettingApplies(single, 'layout.multiRecordColumnGapRatio', draft(true)), false);
+  assert.equal(request.liveSettingApplies({ mode: 'circular', grouping: 'grid' }, 'layout.multiRecordColumnGapRatio', draft(true)), true);
+  assert.equal(request.liveSettingApplies(single, 'diagramOptions.output.legend', draft(false)), true);
+  assert.deepEqual(note('multi-record-layout', single, true), generateNote);
+  assert.equal(note('legend', single, false).text, 'Live edit');
+  // OV-1077: during a Multi-Record Canvas change the positions apply on
+  // Generate; the sizes, font sizes and the title text stay live.
+  const partial = { application: 'live', text: 'Live edit; the position applies on Generate after the Multi-Record Canvas change', qualified: true };
+  assert.equal(request.liveSettingApplies(single, 'diagramOptions.output.legend', draft(true)), false);
+  assert.equal(request.liveSettingApplies(single, 'diagramOptions.plotTitleFontSize', draft(true)), true);
+  assert.deepEqual(note('legend', single, true), partial);
+  assert.deepEqual(note('plot-title', single, true), partial);
+  assert.deepEqual(note('plot-title', { mode: 'circular', grouping: 'grid' }, false), partial);
+  assert.equal(note('legend', { mode: 'linear', grouping: 'single' }, false).text, 'Live edit');
   // A row without request paths keeps its own note.
   assert.equal(owner.settingApplicationNote('track-visibility', () => false).qualified, true);
 });

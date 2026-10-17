@@ -3893,14 +3893,14 @@ export const getCommittedCanonicalRenderRequest = () => {
 };
 
 /**
- * Whether the committed request can show a live value of `requestPath`
- * (`liveSettingApplies`); without a committed Session every path can. The app
- * setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
+ * Whether the committed request can show the live value of `requestPath` of
+ * its mode's drawing (`liveSettingApplies`); without a committed Session every
+ * path can. The app setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
  * @param {string} requestPath
  */
 export const committedLiveSettingApplies = (requestPath) => {
   const request = getCommittedCanonicalRenderRequest();
-  return !request || liveSettingApplies(request, requestPath);
+  return !request || liveSettingApplies(request, requestPath, state.drawings[request.mode === 'linear' ? 'linear' : 'circular']);
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.

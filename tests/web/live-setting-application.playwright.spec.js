@@ -8,7 +8,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
-const { open, addColorRule } = require('./helpers/live-generate-parity-steps.cjs');
+const { open, addColorRule, addVisibilityRule } = require('./helpers/live-generate-parity-steps.cjs');
 
 const TOBACCO = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
 const HEPA = 'gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz';
@@ -597,16 +597,48 @@ test('Reset Settings on a batch Circular Result keeps its positions and draws on
   }
 });
 
+// OV-1076: one Reset Settings asks for the editor rerender twice: its label
+// projection for a feature the Result does not draw, then the rule owner for
+// the removed color rule, with the same editor state. One render draws both.
+for (const [mode, results, rule, hidden] of [
+  ['circular', 'batch', '_0001$', '_0004$'], ['linear', 'single', 'FL1$', 'FL2$']
+]) {
+test(`${mode}: Reset Settings that shows a hidden feature and removes a color rule draws once`, async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
+  try {
+    await open(page, { mode, results, reflow: 'off' });
+    await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: rule, color: '#c83366', cap: 'CDS' });
+    await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: hidden, action: 'off' });
+    await generateNow(page);
+    await installGate(page, []);
+    await page.locator('button[aria-label="Reset Settings"]').click();
+    await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
+    await settleLive(page);
+    expect(await gateCalls(page), 'one rerender for the shown feature and the removed rule').toBe(1);
+    expect((await facts(page)).reflowError).toBeNull();
+  } finally {
+    await removeGate(page);
+    await page.context().close();
+  }
+});
+}
+
 // Review F2: the layout rows apply live only to a multi-record canvas Result.
+// OV-1077: during that Multi-Record Canvas change a Legend or Plot Title
+// position applies on Generate; their sizes and the title text stay live.
 test('with a single-canvas Result, the Multi-Record layout rows say Applies on Generate', async ({ browser }) => {
   test.setTimeout(600_000);
   const page = await load(browser, TOBACCO);
   try {
     await generateNow(page);
+    const positionNote = /the position applies on Generate after the Multi-Record Canvas change/;
+    for (const id of ['legend', 'plot-title']) await expect(page.locator(`[data-setting="${id}"]`).getByText(positionNote)).toHaveCount(0);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
     const note = page.locator('[data-setting="multi-record-layout"] > span').first();
     await expect(note).toHaveText(/Applies on Generate/);
     await expect(note).toHaveAttribute('data-applies-on-generate', 'multi-record-layout');
+    for (const id of ['legend', 'plot-title']) await expect(page.locator(`[data-setting="${id}"]`).getByText(positionNote)).toHaveCount(1);
   } finally {
     await page.context().close();
   }
