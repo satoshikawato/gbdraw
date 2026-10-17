@@ -274,6 +274,11 @@ write-up of a release.
   or a Multi-Record Canvas are drawn, the record's reverse-complement override
   and **Display start** now count in the record list, as they already did in
   the drawing.
+- Fixed (web app): on a phone, or with a short Preview, the selected-feature
+  bar's color, visibility and stroke rows ran under the preview controls and
+  could not be reached. The bar now stays inside the Preview and scrolls
+  inside itself, and it no longer runs under the Editor toggle at 1024 px. Its
+  three edits wrap to new rows when the Preview is narrow (OV-1098).
 - Fixed (web app): loading a Session that stores a full resolved
   configuration, such as one written by the CLI `--session_output`, no longer
   turns the packaged font list into an explicit **Font**. **Font** stays at the
