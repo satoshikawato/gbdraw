@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `57`
+- Contract revision: `58`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -1307,6 +1307,46 @@ Status: active Product authority
     other record is amended or retired.
   - This authority-only amendment contains no runtime; dependent runtime
     requires it merged into its base.
+- Revision 58 change: `PD-OI-039` is replaced for scenario revision `4`
+  (`A / DOCKED-REVIEW-AT-EVERY-WIDTH`, the same outcome) from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-12` and `2026-10-13` on
+  fitting the figure again during Review alignment in the Web app. Each
+  quotation below is the part of a reply that carries the answer; what it
+  leaves out is stated.
+  - Reply 1 (`2026-10-12`), to a page that asked, among other things, what
+    the figure does when its room changes while Review alignment is open:
+    `A`, recommended, fit the figure again whenever the room of the Result
+    changes, with the stated cost that a zoom or position changed by hand
+    during the review is replaced at such a change; `B`, on a display switch
+    only; or `C`, leave it. 「推奨通りでいきます。Product Decisionも承認します」
+    The reply selects `A`. It does not word the receipt.
+  - Reply 2 (`2026-10-13`), to a page of Before/After images of the built
+    behaviour (nine causes of a room change, each from the fit of the
+    opening and after a zoom made by hand) and the request to approve the
+    receipt recorded below as written or to name what to change. Section 6
+    of that page showed the fields in full with the passages added to
+    scenario revision `3` marked.
+    「OV-536（上のページの 6）: そのまま承認」
+    The shown text had a placeholder for the decision date; the date recorded
+    is the day of this reply. The receipt is recorded byte for byte.
+  - Scope: scenario revision `3` (same outcome, receipt SHA-256
+    `3d1ec79f071f7f6f5ea1c407853d8550df2491085954f253f1b00aa9cb62eb44`) is
+    retained in Git history, and what it retired stays retired. Every
+    sentence of its receipt is kept; the receipt below adds one sentence to
+    the Rationale, the passage `〔review 中の Fit のし直し〕` to Must preserve,
+    one sentence to May retire, and the sentences after 「…区別する必要がある。」
+    to Accepted residual risk. `PD-OI-035` keeps its text; only its reference
+    to the governing `PD-OI-039` scenario revision now reads `4`.
+  - `PD-OI-093` keeps its receipt byte for byte. The last sentences of its
+    Accepted residual risk
+    (「Review alignment を開いたまま表示を切り替えるか section を開閉すると、図は自動では合わせ直されない（窓の幅を変えたときの今の動きと同じ）。」)
+    described the Web app until this change, as its
+    Revision 44 entry announced; from this revision the figure is fitted
+    again in those cases and that risk no longer exists.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime and tests
+    that implement it are in the same pull request, and the Review is
+    `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -2722,7 +2762,7 @@ Decision date: 2026-10-04
   正確な feature identity に基づく選択、候補一覧からの keyboard radio 選択と Skip、390 px での操作と適切な focus、描画されない候補の一覧からの選択、図上位置だけによる自動選択の禁止、デスクトップでの canvas 選択と手動 pan／zoom、レビューを閉じた後のプレビュー、ガイド・番号・draft が Result・download・Session に混入しないこと。
 
   The compact review presentation, visible canvas and simultaneous canvas
-  interaction are governed by `PD-OI-039`, scenario revision `3`, in full.
+  interaction are governed by `PD-OI-039`, scenario revision `4`, in full.
   This record and `PD-OI-039` are jointly required; presentation does not
   replace identity, keyboard/Skip, non-rendered-candidate, desktop canvas,
   focus, or overlay-exclusion guarantees. No candidate may be selected from
@@ -2832,61 +2872,64 @@ Decision date: 2026-10-04
 ### PD-OI-039: Compact review with exclusive alignment directions
 
 - Concern key: `web.similarity-alignment.review-presentation`
-- Scenario revision: `3`
+- Scenario revision: `4`
 - Status: `ACCEPTED`
 - Selected outcome: `A / DOCKED-REVIEW-AT-EVERY-WIDTH`
-- Supersedes: `PD-OI-039`, scenario revision `2`
-  (`A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH`), replacing its place of the
-  review (docked below the figure only on a narrow Preview, free to drag on a
-  wide one) and its Editor rule (closed only for the narrow review, then an
-  explicit reopen) with the review docked at every width, and adding the
-  feature-popup and view terms of the receipt below. The exclusive direction
-  controls and all independent identity, keyboard/Skip,
-  non-rendered-candidate, canvas, focus, validation/retry, artifact, Session
-  and History requirements remain, as the receipt restates. What scenario
-  revision `2` retired stays retired. The scenario-2 mobile coverage
-  exception and close-review continuation in `PD-OI-035` remain superseded;
-  its scenario-3 independent guarantees remain jointly required. Free drag of
-  the review, concurrent Editor opening during a review, and showing the
-  feature popup or opening or switching it from the figure during a review
-  may retire only as stated in this receipt. Non-modal canvas interaction
-  remains required.
+- Supersedes: `PD-OI-039`, scenario revision `3`
+  (`A / DOCKED-REVIEW-AT-EVERY-WIDTH`, the same outcome), adding one rule: while
+  the review shows the figure it fitted, the figure is fitted again whenever
+  the width or height of its room in the Result changes, so a zoom or
+  position changed by hand during the review lasts only until such a change.
+  Every sentence of the scenario revision `3` receipt is kept in the receipt
+  below: the review docked at every width, its Editor, feature-popup and view
+  terms, the exclusive direction controls and all independent identity,
+  keyboard/Skip, non-rendered-candidate, canvas, focus, validation/retry,
+  artifact, Session and History requirements remain. What scenario revisions
+  `2` and `3` retired stays retired. The scenario-2 mobile coverage exception
+  and close-review continuation in `PD-OI-035` remain superseded; its
+  scenario-3 independent guarantees remain jointly required. Keeping a zoom
+  or position changed by hand during a review after the room changes may
+  retire only as stated in this receipt. Non-modal canvas interaction remains
+  required.
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   below. The four issue `#598` decisions are unchanged.
-- Decision source: the Owner replies of `2026-10-12` quoted in the Revision 42
-  entry above, which states what each quotation leaves out. The receipt and
-  JSON below reproduce all nine approved fields without translation or
-  additional terms. The runtime that realizes this outcome merged before this
-  record (pull request `#1020`); this amendment supplies no runtime
-  acceptance evidence.
+- Decision source: the Owner replies of `2026-10-12` and `2026-10-13` quoted
+  in the Revision 58 entry above, which states what each quotation leaves
+  out. The Owner approved the receipt text below as written. The receipt and
+  JSON below reproduce its fields without translation or additional terms.
+  Dependent runtime requires this authority merged into its base, or merged
+  together with it through the reviewed static Product Contract co-change
+  route; this record supplies no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `3d1ec79f071f7f6f5ea1c407853d8550df2491085954f253f1b00aa9cb62eb44`.
+  `8f755440a6655699b1341600bd2aba0d17ef80172490fe600a7cf25d5e16b899`.
 - Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-026`.
 
 ```text
 PRODUCT_DECISION
 Concern: web.similarity-alignment.review-presentation
-Scenario revision: 3
+Scenario revision: 4
+Supersedes: PD-OI-039, scenario revision 3 (web.similarity-alignment.review-presentation)
 Choice: A / DOCKED-REVIEW-AT-EVERY-WIDTH
-Rationale: 候補の番号はrecordごとに振り直されて図上の位置と対応せず、浮動panelは候補を隠すため、reviewをすべての幅でResult内に固定する（広い幅では図の右、狭い幅では図の下）。Apply後の並びをrecordごとの帯で示し、図上では番号の代わりにリング・矢印・reference線で候補を示し、選択が必要なrecordを先頭に置く。
-Must preserve: PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、Issue #598で承認済みの排他的Keep/right/left/Custom、referenceを含むselected known-strand anchorsの方向選択と各recordのbefore/after矢印、unknown/skipped/missing/unusableの理由付き不変、canvas操作（図上の候補選択と手動pan/zoom）、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。すべての幅で、review開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisableし、開始時に開いていたEditorは終了時に同じtabで開き直す。review中はfeature popupを隠し、終了時（Cancel・閉じる・Escape・Apply成功）に戻す。review中、図のクリックはpopupを開かず、切り替えず、閉じない。検索のOpenは表示位置を動かしてpopupの対象を切り替え、そのpopupは終了時に表示する。review開始時に図を残りの領域へFitし、終了時に開始前のzoomと位置へ戻す。review中に保存したSessionとApplyのHistoryには開始前のzoomと位置を残す。リング・矢印・reference線・帯・draftはResult・download・Sessionに混入しない。非モーダルcanvasを維持する。
-May retire: review panelの自由drag（すべての幅）、review中にEditorを同時openする継続（すべての幅）、review中にfeature popupを表示する継続、review中に図のクリックでpopupを開く・切り替える継続、候補の番号バッジ、review中に変えたzoomと位置を終了後に残すこと。これ以外のPD-OI-035/039の独立要求とIssue #598の承認済み4決定は退役しない。
-Accepted residual risk: 広い幅でもreview中はEditorとfeature popupを使えず、panelを動かせない。review中に変えたzoomと位置は終了時に失われる。候補は番号ではなく名前・座標・図上のリングで見分けるため、同名の候補は座標と図上の位置で区別する必要がある。
+Rationale: 候補の番号はrecordごとに振り直されて図上の位置と対応せず、浮動panelは候補を隠すため、reviewをすべての幅でResult内に固定する（広い幅では図の右、狭い幅では図の下）。Apply後の並びをrecordごとの帯で示し、図上では番号の代わりにリング・矢印・reference線で候補を示し、選択が必要なrecordを先頭に置く。review中に図を表示する領域（残りの領域）の大きさが変わると、開始時の大きさのままの図は切れるか余白が残るので、そのたびに図をFitし直す。
+Must preserve: PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、Issue #598で承認済みの排他的Keep/right/left/Custom、referenceを含むselected known-strand anchorsの方向選択と各recordのbefore/after矢印、unknown/skipped/missing/unusableの理由付き不変、canvas操作（図上の候補選択と手動pan/zoom）、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。すべての幅で、review開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisableし、開始時に開いていたEditorは終了時に同じtabで開き直す。review中はfeature popupを隠し、終了時（Cancel・閉じる・Escape・Apply成功）に戻す。review中、図のクリックはpopupを開かず、切り替えず、閉じない。検索のOpenは表示位置を動かしてpopupの対象を切り替え、そのpopupは終了時に表示する。review開始時に図を残りの領域へFitし、終了時に開始前のzoomと位置へ戻す。review中に保存したSessionとApplyのHistoryには開始前のzoomと位置を残す。リング・矢印・reference線・帯・draftはResult・download・Sessionに混入しない。非モーダルcanvasを維持する。〔review 中の Fit のし直し〕review が Fit した図を表示している間、残りの領域の幅か高さが変わるたびに、Fit ボタンと同じ合わせ方で図をその領域へ Fit し直す。領域が変わるのは、窓の大きさを変えたとき、設定ペインの幅をドラッグしたとき（ドラッグの間、動きに合わせて Fit し続ける）、設定ペインの表示（今の表示とアイコンの列）を切り替えたとき、アイコンの列の横の section を開閉したとき、review の panel が図の右と下のあいだで移ったとき、Result の上の通知やバナーが出たとき・消えたとき。領域が変わらない間は、手で変えた zoom と位置を残す（候補を選ぶ、行にマウスを載せる、キーを押す、Run info のタブに切り替えて戻る）。Fit ボタンは review 中も今までどおり使える。Fit のし直しは History に入らず、panel の内容とリング・矢印・reference 線を変えない。review 中に保存した Session と Apply の History に開始前の zoom と位置を残すこと、終了時に開始前の zoom と位置へ戻すことは変えない。review を開いていないときは、領域が変わっても zoom と位置を変えない。
+May retire: review panelの自由drag（すべての幅）、review中にEditorを同時openする継続（すべての幅）、review中にfeature popupを表示する継続、review中に図のクリックでpopupを開く・切り替える継続、候補の番号バッジ、review中に変えたzoomと位置を終了後に残すこと。これ以外のPD-OI-035/039の独立要求とIssue #598の承認済み4決定は退役しない。加えて、review中に変えたzoomと位置を、残りの領域の大きさが変わったあとまで残すことは退役する。
+Accepted residual risk: 広い幅でもreview中はEditorとfeature popupを使えず、panelを動かせない。review中に変えたzoomと位置は終了時に失われる。候補は番号ではなく名前・座標・図上のリングで見分けるため、同名の候補は座標と図上の位置で区別する必要がある。review中に変えたzoomと位置は、終了時のほかに、残りの領域の大きさが変わるたびに失われる。窓や設定ペインの操作のほか、Resultの上の通知やバナーが出る・消えるとき、Applyを押したとき（「Applying similarity alignment…」が出ている間、領域が低くなる。Applyが成功すれば開始前のzoomと位置に戻る）にも起きる。スマートフォンでは、ブラウザのツールバーが出入りして領域の高さが変わるときにも起きうる（コードから。実機では確かめていない）。図をドラッグして動かしている途中に領域が変わると、その移動はそこで終わる。reviewを開いたままSessionの読み込み、Undo、CircularとLinearの切り替えでResultが置き換わったあとは、panelが開いていても図はFitし直されない（今と同じ）。
 Owner: satoshikawato
-Decision date: 2026-10-12
+Decision date: 2026-10-13
 ```
 
 ```json
 {
   "concern": "web.similarity-alignment.review-presentation",
-  "scenarioRevision": 3,
+  "scenarioRevision": 4,
+  "supersedes": "PD-OI-039, scenario revision 3 (web.similarity-alignment.review-presentation)",
   "choice": "A / DOCKED-REVIEW-AT-EVERY-WIDTH",
-  "rationale": "候補の番号はrecordごとに振り直されて図上の位置と対応せず、浮動panelは候補を隠すため、reviewをすべての幅でResult内に固定する（広い幅では図の右、狭い幅では図の下）。Apply後の並びをrecordごとの帯で示し、図上では番号の代わりにリング・矢印・reference線で候補を示し、選択が必要なrecordを先頭に置く。",
-  "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、Issue #598で承認済みの排他的Keep/right/left/Custom、referenceを含むselected known-strand anchorsの方向選択と各recordのbefore/after矢印、unknown/skipped/missing/unusableの理由付き不変、canvas操作（図上の候補選択と手動pan/zoom）、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。すべての幅で、review開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisableし、開始時に開いていたEditorは終了時に同じtabで開き直す。review中はfeature popupを隠し、終了時（Cancel・閉じる・Escape・Apply成功）に戻す。review中、図のクリックはpopupを開かず、切り替えず、閉じない。検索のOpenは表示位置を動かしてpopupの対象を切り替え、そのpopupは終了時に表示する。review開始時に図を残りの領域へFitし、終了時に開始前のzoomと位置へ戻す。review中に保存したSessionとApplyのHistoryには開始前のzoomと位置を残す。リング・矢印・reference線・帯・draftはResult・download・Sessionに混入しない。非モーダルcanvasを維持する。",
-  "mayRetire": "review panelの自由drag（すべての幅）、review中にEditorを同時openする継続（すべての幅）、review中にfeature popupを表示する継続、review中に図のクリックでpopupを開く・切り替える継続、候補の番号バッジ、review中に変えたzoomと位置を終了後に残すこと。これ以外のPD-OI-035/039の独立要求とIssue #598の承認済み4決定は退役しない。",
-  "acceptedResidualRisk": "広い幅でもreview中はEditorとfeature popupを使えず、panelを動かせない。review中に変えたzoomと位置は終了時に失われる。候補は番号ではなく名前・座標・図上のリングで見分けるため、同名の候補は座標と図上の位置で区別する必要がある。",
+  "rationale": "候補の番号はrecordごとに振り直されて図上の位置と対応せず、浮動panelは候補を隠すため、reviewをすべての幅でResult内に固定する（広い幅では図の右、狭い幅では図の下）。Apply後の並びをrecordごとの帯で示し、図上では番号の代わりにリング・矢印・reference線で候補を示し、選択が必要なrecordを先頭に置く。review中に図を表示する領域（残りの領域）の大きさが変わると、開始時の大きさのままの図は切れるか余白が残るので、そのたびに図をFitし直す。",
+  "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、Issue #598で承認済みの排他的Keep/right/left/Custom、referenceを含むselected known-strand anchorsの方向選択と各recordのbefore/after矢印、unknown/skipped/missing/unusableの理由付き不変、canvas操作（図上の候補選択と手動pan/zoom）、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。すべての幅で、review開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisableし、開始時に開いていたEditorは終了時に同じtabで開き直す。review中はfeature popupを隠し、終了時（Cancel・閉じる・Escape・Apply成功）に戻す。review中、図のクリックはpopupを開かず、切り替えず、閉じない。検索のOpenは表示位置を動かしてpopupの対象を切り替え、そのpopupは終了時に表示する。review開始時に図を残りの領域へFitし、終了時に開始前のzoomと位置へ戻す。review中に保存したSessionとApplyのHistoryには開始前のzoomと位置を残す。リング・矢印・reference線・帯・draftはResult・download・Sessionに混入しない。非モーダルcanvasを維持する。〔review 中の Fit のし直し〕review が Fit した図を表示している間、残りの領域の幅か高さが変わるたびに、Fit ボタンと同じ合わせ方で図をその領域へ Fit し直す。領域が変わるのは、窓の大きさを変えたとき、設定ペインの幅をドラッグしたとき（ドラッグの間、動きに合わせて Fit し続ける）、設定ペインの表示（今の表示とアイコンの列）を切り替えたとき、アイコンの列の横の section を開閉したとき、review の panel が図の右と下のあいだで移ったとき、Result の上の通知やバナーが出たとき・消えたとき。領域が変わらない間は、手で変えた zoom と位置を残す（候補を選ぶ、行にマウスを載せる、キーを押す、Run info のタブに切り替えて戻る）。Fit ボタンは review 中も今までどおり使える。Fit のし直しは History に入らず、panel の内容とリング・矢印・reference 線を変えない。review 中に保存した Session と Apply の History に開始前の zoom と位置を残すこと、終了時に開始前の zoom と位置へ戻すことは変えない。review を開いていないときは、領域が変わっても zoom と位置を変えない。",
+  "mayRetire": "review panelの自由drag（すべての幅）、review中にEditorを同時openする継続（すべての幅）、review中にfeature popupを表示する継続、review中に図のクリックでpopupを開く・切り替える継続、候補の番号バッジ、review中に変えたzoomと位置を終了後に残すこと。これ以外のPD-OI-035/039の独立要求とIssue #598の承認済み4決定は退役しない。加えて、review中に変えたzoomと位置を、残りの領域の大きさが変わったあとまで残すことは退役する。",
+  "acceptedResidualRisk": "広い幅でもreview中はEditorとfeature popupを使えず、panelを動かせない。review中に変えたzoomと位置は終了時に失われる。候補は番号ではなく名前・座標・図上のリングで見分けるため、同名の候補は座標と図上の位置で区別する必要がある。review中に変えたzoomと位置は、終了時のほかに、残りの領域の大きさが変わるたびに失われる。窓や設定ペインの操作のほか、Resultの上の通知やバナーが出る・消えるとき、Applyを押したとき（「Applying similarity alignment…」が出ている間、領域が低くなる。Applyが成功すれば開始前のzoomと位置に戻る）にも起きる。スマートフォンでは、ブラウザのツールバーが出入りして領域の高さが変わるときにも起きうる（コードから。実機では確かめていない）。図をドラッグして動かしている途中に領域が変わると、その移動はそこで終わる。reviewを開いたままSessionの読み込み、Undo、CircularとLinearの切り替えでResultが置き換わったあとは、panelが開いていても図はFitし直されない（今と同じ）。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-12"
+  "decisionDate": "2026-10-13"
 }
 ```
 
@@ -6240,7 +6283,7 @@ Decision date: 2026-10-17
 | `OIC-023` | `PD-OI-024`: only Web fresh/reset selects Lock ON; explicit OFF, saved values and supported omission meanings, saved Result on Load, CLI/Python defaults, accepted anchors, D2-P and D3-A remain supported. ON/OFF and Generate application are always explained in Linear Layout. |
 | `OIC-024` | `PD-OI-037` revision 2: operation-level Live edit, Applies on Generate, and Apply required remain truthful, including Palette Instant Preview and Alignment review. No always-on derived Pending/Applied status or its computation remains. Live applying/error, Processing/Canceling, real errors, and recovery are shown when they occur, with no status-only Worker, genome-byte read/hash, canonical request projection, generated-table build, or SVG/checkpoint clone. |
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
-| `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. At every width the review is docked in the Result, closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then reopens an Editor that was open on the same tab; the review cannot be dragged. During the review the feature popup is hidden, a click on the figure neither opens, switches nor closes it, search Open switches its target, and it returns when the review ends. The figure is fitted when the review opens and the earlier zoom and pan return when it ends; a Session saved during the review and the History of its Apply keep the earlier zoom and pan. Browser verification must show presentation changes leave draft and Result unchanged. |
+| `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. At every width the review is docked in the Result, closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then reopens an Editor that was open on the same tab; the review cannot be dragged. During the review the feature popup is hidden, a click on the figure neither opens, switches nor closes it, search Open switches its target, and it returns when the review ends. The figure is fitted when the review opens and the earlier zoom and pan return when it ends; a Session saved during the review and the History of its Apply keep the earlier zoom and pan. While the review shows the figure it fitted, the figure is fitted again, as by the Fit button and without a History step, whenever the width or height of its room changes; a zoom and pan changed by hand stay while the room does not change, and outside a review a change of the room keeps the zoom and pan. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066` scenario revision `2`: a live-edited Result, including after Session load and export, agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element when no pending Applies on Generate value changes those elements; otherwise it agrees with a Generate of the committed Session plus the applied live values. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
 | `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (`Merge into "<name>"` or `Keep both: name it "<name 2>"`), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
 | `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
