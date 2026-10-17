@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import base64
-import binascii
+import copy
+import csv
 import dataclasses
 import gc
 import gzip
 import hashlib
+import io
 import json
 import math
 import os
@@ -40,15 +42,7 @@ from gbdraw.session_io import (  # noqa: E402
     validate_session,
     write_session_json,
 )
-from gbdraw.analysis.protein_colinearity import (  # noqa: E402
-    OrthogroupGraphResult,
-    OrthogroupResult,
-)
-from gbdraw.session_request_codec import (  # noqa: E402
-    CANONICAL_REQUEST_SCHEMA,
-    decode_canonical_typed_resource,
-    encode_canonical_typed_resource,
-)
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
     CircularTrackSlot,
     normalize_circular_track_slots_with_axis,
@@ -959,82 +953,6 @@ def _validate_staged_gallery_session(
     _validate_session_interactive_orthogroups(example, session)
 
 
-def _canonicalize_orthogroup_resources(session: dict[str, Any]) -> int:
-    """Rewrite referenced orthogroup payloads through the current typed codec."""
-
-    render_request = session.get("renderRequest")
-    resources = session.get("resources")
-    if not isinstance(render_request, Mapping) or not isinstance(resources, Mapping):
-        raise ValueError("Gallery session requires renderRequest and resources objects")
-    comparisons = render_request.get("comparisons", [])
-    if not isinstance(comparisons, list):
-        raise ValueError("Gallery renderRequest.comparisons must be an array")
-
-    rewritten = 0
-    seen_resource_ids: set[str] = set()
-    for index, comparison in enumerate(comparisons):
-        if not isinstance(comparison, Mapping):
-            raise ValueError(
-                f"Gallery renderRequest.comparisons[{index}] must be an object"
-            )
-        if comparison.get("kind") != "orthogroupResult":
-            continue
-        resource_id = comparison.get("resourceId")
-        if not isinstance(resource_id, str) or not resource_id:
-            raise ValueError(
-                f"Gallery renderRequest.comparisons[{index}] has no resourceId"
-            )
-        if resource_id in seen_resource_ids:
-            continue
-        seen_resource_ids.add(resource_id)
-        resource = resources.get(resource_id)
-        if (
-            not isinstance(resource, dict)
-            or resource.get("kind") != "orthogroup-result"
-            or resource.get("encoding") != "base64"
-            or not isinstance(resource.get("data"), str)
-        ):
-            raise ValueError(
-                f"Gallery orthogroup resource {resource_id!r} is not canonical base64"
-            )
-        try:
-            published = base64.b64decode(resource["data"], validate=True)
-        except (binascii.Error, ValueError) as exc:
-            raise ValueError(
-                f"Gallery orthogroup resource {resource_id!r} has invalid base64"
-            ) from exc
-        path = f"renderRequest.comparisons[{index}]"
-        decoded = decode_canonical_typed_resource(
-            published,
-            value_kind="orthogroupResult",
-            expected=OrthogroupResult | OrthogroupGraphResult,
-            path=path,
-        )
-        canonical = encode_canonical_typed_resource(
-            "orthogroupResult",
-            decoded,
-        )
-        verified = decode_canonical_typed_resource(
-            canonical,
-            value_kind="orthogroupResult",
-            expected=OrthogroupResult | OrthogroupGraphResult,
-            path=f"{path} canonical migration",
-        )
-        if verified != decoded or (
-            encode_canonical_typed_resource("orthogroupResult", verified)
-            != canonical
-        ):
-            raise ValueError(
-                f"Gallery orthogroup resource {resource_id!r} did not round-trip"
-            )
-        if canonical == published:
-            continue
-        resource["size"] = len(canonical)
-        resource["data"] = base64.b64encode(canonical).decode("ascii")
-        rewritten += 1
-    return rewritten
-
-
 def _gallery_id(session_path: Path) -> str:
     """The Gallery id of a Session file: its name without the Session suffix."""
 
@@ -1310,18 +1228,102 @@ def _declared_command_session(
     )
 
 
-def _store_resolved_protein_comparisons(session_path: Path) -> None:
-    """Replace a generated protein pipeline with its stored result.
+# The request comparisons that hold a computed protein result. Next to a
+# pipeline marker of mode "none" they are what the Web wrote after a Generate.
+_RESOLVED_PROTEIN_KINDS = frozenset(
+    {"precomputedProteinComparison", "orthogroupResult", "collinearityResult"}
+)
+# The comparisons whose resource is the typed analysis result itself.
+_PROTEIN_RESULT_KINDS = frozenset({"orthogroupResult", "collinearityResult"})
 
-    A Gallery Session stores its protein comparison results, so the first
-    Generate after Load reuses them instead of computing them again (perf-014x
-    D-17 / docs-restructure D-20: the regenerated Vibrio Session must store the
-    finished protein comparison results; replaces the empty-derived-cache-only
-    rule of 7aab08f8). The Session is rendered once from its raw LOSATP cache, and
-    its comparisons become the codec's encoding of the resolved request: the
-    collinear result and the marker that reuses it, as the Web writes them
-    after a Generate. The replay and ``finalize`` then check that the CLI and
-    the Web rebuild draw and request the same.
+
+def _draft_losat_blastp(session: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The protein settings of the Web Linear draft (Session 46 keeps them in the Linear slice)."""
+
+    modes = session.get("modes")
+    linear = modes.get("linear") if isinstance(modes, Mapping) else None
+    config = linear.get("config") if isinstance(linear, Mapping) else None
+    losat = config.get("losat") if isinstance(config, Mapping) else None
+    blastp = losat.get("blastp") if isinstance(losat, Mapping) else None
+    return blastp if isinstance(blastp, dict) else None
+
+
+def _declared_protein_mode(session: Mapping[str, Any]) -> str | None:
+    """The LOSATP mode of the Session's recorded CLI invocation, if it ran LOSATP."""
+
+    invocation = session.get("cliInvocation")
+    if not isinstance(invocation, Mapping) or invocation.get("mode") != "linear":
+        return None
+    from gbdraw.api.options import LOSATP_MODE_WIRE
+    from gbdraw.linear import _get_args
+
+    args = _get_args([str(arg) for arg in invocation.get("args") or ()])
+    return LOSATP_MODE_WIRE[args.losatp_mode] if args.losat == "losatp" else None
+
+
+def _reopen_stored_protein_comparisons(session: dict[str, Any], mode: str) -> int:
+    """Turn a request's stored protein results back into the pipeline that computes them.
+
+    The stored comparisons and their resources leave the request, the
+    pipeline marker asks for ``mode``, and the Web draft's protein mode
+    follows it, so the next resolve computes the results from the raw LOSATP
+    cache in the mode the Web also rebuilds in (OV-1031, OV-1048).
+    """
+
+    request = session["renderRequest"]
+    comparisons = list(request.get("comparisons") or [])
+    markers = [
+        comparison
+        for comparison in comparisons
+        if comparison.get("kind") == "generatedProteinComparison"
+    ]
+    stored = [
+        comparison
+        for comparison in comparisons
+        if comparison.get("kind") in _RESOLVED_PROTEIN_KINDS
+    ]
+    if len(markers) != 1 or markers[0].get("mode") != "none" or not stored:
+        return 0
+    request["comparisons"] = [
+        comparison
+        for comparison in comparisons
+        if comparison is not markers[0] and comparison not in stored
+    ] + [{**markers[0], "mode": mode}]
+    for resource_id in set(_referenced_resource_ids(stored)):
+        session["resources"].pop(resource_id, None)
+    blastp = _draft_losat_blastp(session)
+    if blastp is not None:
+        blastp["mode"] = mode
+    return 1
+
+
+def _reopen_for_publication(session_path: Path, session: dict[str, Any]) -> int:
+    """Reopen a public Gallery Session's stored protein results in its declared mode.
+
+    The declared mode is the recorded CLI invocation's, else the Web draft's.
+    A test input keeps its pipeline, which the Generate-pipeline specs run.
+    """
+
+    if _is_test_input_session(session_path):
+        return 0
+    blastp = _draft_losat_blastp(session) or {}
+    mode = _declared_protein_mode(session) or blastp.get("mode")
+    if not isinstance(mode, str):
+        return 0
+    return _reopen_stored_protein_comparisons(session, mode)
+
+
+def _resolved_protein_comparisons(
+    session: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]]] | None:
+    """Compute a Session's protein pipeline once from its raw LOSATP cache.
+
+    Returns the codec's encoding of the resolved comparisons (the analysis
+    result, the display tables of a similarity-groups result, and the marker
+    that reuses them, as the Web writes them after a Generate) with their
+    resource descriptors; ``None`` when the request runs no protein pipeline.
+    A result that needed a LOSATP search the raw cache does not hold is
+    refused: a refresh keeps the Session's search evidence.
     """
 
     from gbdraw.api.request_render import _resolved_losat_search
@@ -1329,43 +1331,185 @@ def _store_resolved_protein_comparisons(session_path: Path) -> None:
     from gbdraw.session_request_codec import encode_canonical_request
     from gbdraw.session_resources import SessionResourceTable
 
-    session = load_session(session_path)
-    request = session["renderRequest"]
     modes = {
         comparison.get("mode")
-        for comparison in request.get("comparisons") or []
+        for comparison in session["renderRequest"].get("comparisons") or []
         if comparison.get("kind") == "generatedProteinComparison"
     } - {"none"}
     if not modes:
-        return
-    if modes != {"collinear"}:
+        return None
+    if not modes <= {"collinear", "orthogroup"} or len(modes) != 1:
         raise ValueError(
-            f"{session_path.name}: Gallery publication stores collinear protein "
-            f"comparison results only, not {sorted(modes)}"
+            "Gallery publication stores collinear or similarity-group protein "
+            f"results only, not {sorted(modes)}"
         )
+    (mode,) = modes
+    raw_keys = {
+        str(entry.get("key") or "")
+        for entry in (session.get("losatCache") or {}).get("entries") or []
+    }
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-resolve-") as output_dir:
         with materialize_session(session, output_directory=output_dir) as materialized:
             typed = session_to_request(materialized)
-            metadata = render_session(materialized).linear_metadata
-            if metadata is None or metadata.collinearity_result is None:
-                raise ValueError(f"{session_path.name} computed no collinear result")
-            resolved = dataclasses.replace(
-                typed,
-                options=dataclasses.replace(
-                    typed.options,
-                    losat_search=_resolved_losat_search(typed.options.losat_search),
-                    collinearity_blocks=metadata.collinearity_result,
-                ),
+            rendered = render_session(materialized)
+            metadata = getattr(rendered, "linear_metadata", None)
+            searched = {
+                str(entry.get("key") or "")
+                for entry in getattr(rendered, "losat_cache_entries", ())
+            } - raw_keys
+            if searched:
+                raise ValueError(
+                    f"the {mode} result needs {len(searched)} LOSATP search(es) "
+                    "that the raw cache does not hold"
+                )
+            if metadata is None or (
+                metadata.collinearity_result is None
+                if mode == "collinear"
+                else metadata.orthogroups is None
+            ):
+                raise ValueError(f"computed no {mode} result")
+            options = dataclasses.replace(
+                typed.options,
+                losat_search=_resolved_losat_search(typed.options.losat_search),
+            )
+            options = (
+                dataclasses.replace(
+                    options, collinearity_blocks=metadata.collinearity_result
+                )
+                if mode == "collinear"
+                else dataclasses.replace(
+                    options,
+                    orthogroups=metadata.orthogroups,
+                    protein_comparisons=tuple(metadata.protein_comparisons or ()),
+                )
             )
             table = SessionResourceTable(session["resources"])
-            comparisons = encode_canonical_request(resolved, table=table).payload[
-                "comparisons"
-            ]
-            descriptors = table.descriptors()
-    request["comparisons"] = comparisons
+            comparisons = encode_canonical_request(
+                dataclasses.replace(typed, options=options), table=table
+            ).payload["comparisons"]
+            return comparisons, table.descriptors()
+
+
+def _store_resolved_protein_comparisons(session_path: Path) -> None:
+    """Replace a generated protein pipeline with its stored result.
+
+    A Gallery Session stores its protein comparison results, so the first
+    Generate after Load reuses them instead of computing them again (perf-014x
+    D-17 / docs-restructure D-20: the regenerated Vibrio Session must store the
+    finished protein comparison results; replaces the empty-derived-cache-only
+    rule of 7aab08f8). The results are computed from the raw LOSATP cache with
+    the current code at every refresh (D-65, OV-1031). The replay and
+    ``finalize`` then check that the CLI and the Web rebuild draw and request
+    the same.
+    """
+
+    session = load_session(session_path)
+    try:
+        resolved = _resolved_protein_comparisons(session)
+    except ValueError as exc:
+        raise ValueError(f"{session_path.name}: {exc}") from exc
+    if resolved is None:
+        return
+    comparisons, descriptors = resolved
+    session["renderRequest"]["comparisons"] = comparisons
     for resource_id in _referenced_resource_ids(comparisons):
         session["resources"].setdefault(resource_id, dict(descriptors[resource_id]))
     write_session_json(session_path, session)
+
+
+def _resource_bytes(session: Mapping[str, Any], resource_id: str) -> bytes:
+    resource = session["resources"][resource_id]
+    data = str(resource.get("data") or "")
+    return base64.b64decode(data) if resource.get("encoding") == "base64" else data.encode("utf-8")
+
+
+def _canonical_table_rows(payload: bytes) -> list[dict[str, str]]:
+    """A canonical TSV's rows by column name, as text: equal tables compare equal however written."""
+
+    text = payload.decode("utf-8")
+    rows = list(csv.DictReader(io.StringIO(text), delimiter="\t"))
+    return [
+        {key: _canonical_cell(value) for key, value in row.items()}
+        for row in rows
+    ]
+
+
+def _canonical_cell(value: str | None) -> str:
+    """One table cell by value: the Web writes ``true`` where pandas writes ``True``, and numbers vary in spelling."""
+
+    text = "" if value is None else str(value)
+    if text.lower() in {"true", "false"}:
+        return text.lower()
+    try:
+        number = float(text)
+    except ValueError:
+        return text
+    return repr(number) if math.isfinite(number) else text
+
+
+def stored_protein_result_differences(session: dict[str, Any]) -> list[str]:
+    """How a Session's stored protein results differ from a rebuild from its raw cache.
+
+    The rebuild runs in the Web draft's protein mode, the mode the Web
+    computes in when a setting changes, with the current code. An empty list
+    means the stored results are the ones the Web would compute (OV-1031).
+    """
+
+    request = session["renderRequest"]
+    stored = [
+        comparison
+        for comparison in request.get("comparisons") or []
+        if comparison.get("kind") in _RESOLVED_PROTEIN_KINDS
+    ]
+    mode = (_draft_losat_blastp(session) or {}).get("mode")
+    if not stored or not isinstance(mode, str):
+        return []
+    rebuild = copy.deepcopy(session)
+    if not _reopen_stored_protein_comparisons(rebuild, mode):
+        return []
+    try:
+        resolved = _resolved_protein_comparisons(rebuild)
+    except Exception as exc:  # the rebuild itself failing is the difference to report
+        return [f"cannot rebuild the {mode} result from the raw cache: {exc}"]
+    if resolved is None:
+        return []
+    rebuilt_comparisons, descriptors = resolved
+    rebuilt = [
+        comparison
+        for comparison in rebuilt_comparisons
+        if comparison.get("kind") in _RESOLVED_PROTEIN_KINDS
+    ]
+    stored_kinds = [comparison["kind"] for comparison in stored]
+    rebuilt_kinds = [comparison["kind"] for comparison in rebuilt]
+    if stored_kinds != rebuilt_kinds:
+        return [f"stores {stored_kinds}; the {mode} rebuild gives {rebuilt_kinds}"]
+    rebuilt_session = {"resources": descriptors}
+    differences = []
+    for index, (old, new) in enumerate(zip(stored, rebuilt)):
+        old_bytes = _resource_bytes(session, old["resourceId"])
+        new_bytes = _resource_bytes(rebuilt_session, new["resourceId"])
+        same = (
+            old_bytes == new_bytes
+            if old["kind"] in _PROTEIN_RESULT_KINDS
+            else _canonical_table_rows(old_bytes) == _canonical_table_rows(new_bytes)
+        )
+        if not same:
+            differences.append(
+                f"comparisons[{index}] {old['kind']} differs from the {mode} rebuild"
+            )
+    return differences
+
+
+def check_stored_protein_results(session_names: tuple[str, ...] | None = None) -> int:
+    """Print every Gallery Session whose stored protein results are stale; return their count."""
+
+    stale = 0
+    for session_path in _refresh_session_paths(session_names):
+        differences = stored_protein_result_differences(load_session(session_path))
+        for difference in differences:
+            print(f"{session_path.name}: {difference}")
+        stale += bool(differences)
+    return stale
 
 
 def _assert_declared_figure(declared_path: Path, published_path: Path) -> None:
@@ -1406,7 +1550,7 @@ def _refresh_one_session(
         publication_input_path = session_path
         # The Output Prefix is part of the request the publication rebuilds and
         # `finalize` keeps, so it is set on the input, before `prepare`.
-        if _canonicalize_orthogroup_resources(session) + _set_output_prefix(
+        if _reopen_for_publication(session_path, session) + _set_output_prefix(
             session, gallery_id
         ) + _resolve_default_colors(session):
             publication_input_path = (
@@ -1574,9 +1718,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Only prepare gallery SVG/thumbnail/examples.json assets from the existing session files.",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "Write nothing: rebuild each stored protein comparison result from its "
+            "Session's raw LOSATP cache with the current code, and exit 1 when one differs."
+        ),
+    )
     args = parser.parse_args(argv)
 
     session_names = tuple(args.session) if args.session else None
+    if args.check:
+        return 1 if check_stored_protein_results(session_names) else 0
     targets = _gallery_mutation_targets(
         () if args.skip_session_refresh else session_names,
         include_assets=not args.no_assets,
