@@ -226,9 +226,29 @@ test('status, selection, and input build no tables; each Generate builds its lab
   }
   const help = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
   const tip = await observe(page, () => help.click());
-  await expect(page.locator('[role="tooltip"]')).toContainText('Changes apply on Generate');
+  const tooltip = page.locator('[role="tooltip"]');
+  await expect(tooltip).toContainText('ON aligns Linear definitions');
   expect(tip.undo).toBe(0);
   expectNoStatusWork(tip, 'help-tip');
+
+  // PD-OI-103 (G1-LIVE): Linear Lock Definition Column either applies on
+  // Generate, as its help says, and leaves the Result unchanged until then, or
+  // applies live: the Result changes without Generate, in one History step.
+  // The help sentence (`settingApplicationSentence`) tells which applies.
+  const onGenerate = (await tooltip.textContent()).includes('Changes apply on Generate');
+  const shown = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.results[app.selectedResultIndex].content;
+  });
+  const before = await shown();
+  const lock = page.locator('input[type="checkbox"][aria-describedby="linear-definition-lock-help"]');
+  const flip = await observe(page, () => lock.click());
+  expect(flip.undo).toBe(1);
+  if (onGenerate) {
+    expect(await shown()).toBe(before);
+    await clickGenerate(page);
+  }
+  await expect.poll(shown).not.toBe(before);
 });
 
 test('a double press on Generate starts one operation', async ({ page }) => {

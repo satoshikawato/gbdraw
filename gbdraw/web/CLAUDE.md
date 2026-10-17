@@ -507,9 +507,9 @@ or Reset Settings).
   open intent. `begin`, `beginCheckpoint`, `beginArtifactReplacement`,
   `runUndoableCommand`, `undo`, and `redo` share it.
 - A discrete control begins in the capture phase of the event that commits its
-  value: `change` for a checkbox, radio, or file input, `click` for a button. A
-  text control begins on focus. The pointer, the label, the keyboard, and a file
-  picker opened by another button record the same one step
+  value: `change` for a checkbox, radio, file input, or select, `click` for a
+  button. A text control begins on focus. The pointer, the label, the keyboard,
+  and a file picker opened by another button record the same one step
   (`app/history-inputs.js`).
 - A file input whose change ends with asynchronous work is
   `data-history-managed` and owns one `runUndoable` step that commits after
