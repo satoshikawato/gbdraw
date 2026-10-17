@@ -169,7 +169,7 @@
       "AP027132.gb",
       "NZ_CP006932.gb"
     ],
-    "fileSizeLabel": "15.7 MB",
+    "fileSizeLabel": "15.9 MB",
     "command": "gbdraw linear --losat_threads 32 --losat losatp --losatp_mode collinear -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --gc --skew --palette ajisai --collinear_color_mode orientation_identity -o hepatoplasmataceae_collinear",
     "commandKind": "runnable",
     "commandNote": "Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",

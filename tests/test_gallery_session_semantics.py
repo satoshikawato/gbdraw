@@ -513,17 +513,19 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
 
 
 @pytest.mark.parametrize(
-    ("example_id", "record_count", "precomputed_count", "orthogroup_count"),
+    ("example_id", "record_count", "precomputed_count", "result_kind", "orthogroup_count"),
     [
-        ("hepatoplasmataceae_collinear", 5, 4, 554),
-        ("hepatoplasmataceae_orthogroup", 5, 4, 577),
-        ("majanivirus_orthogroup", 9, 8, 152),
+        # A collinear result stores its blocks, not the pairwise tables (OV-1048).
+        ("hepatoplasmataceae_collinear", 5, 0, "collinearityResult", 587),
+        ("hepatoplasmataceae_orthogroup", 5, 4, "orthogroupResult", 577),
+        ("majanivirus_orthogroup", 9, 8, "orthogroupResult", 152),
     ],
 )
 def test_gallery_sessions_keep_precomputed_comparisons_and_orthogroups(
     example_id: str,
     record_count: int,
     precomputed_count: int,
+    result_kind: str,
     orthogroup_count: int,
     gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
 ) -> None:
@@ -539,13 +541,11 @@ def test_gallery_sessions_keep_precomputed_comparisons_and_orthogroups(
         for item in comparisons
         if item["kind"] == "precomputedProteinComparison"
     ]
-    orthogroups = [
-        item for item in comparisons if item["kind"] == "orthogroupResult"
-    ]
+    results = [item for item in comparisons if item["kind"] == result_kind]
     assert len(precomputed) == precomputed_count
-    assert len(orthogroups) == 1
+    assert len(results) == 1
     assert all(_resource_bytes(session, item) for item in precomputed)
-    assert _resource_bytes(session, orthogroups[0])
+    assert _resource_bytes(session, results[0])
 
     state = session["orthogroupState"]
     assert isinstance(state, dict)

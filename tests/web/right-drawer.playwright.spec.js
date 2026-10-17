@@ -12,8 +12,9 @@ const snapshot = async (page) => {
   return { ...artifact, mounted: await svgSemantics(page, mounted) };
 };
 
-const loadGallerySession = async (page, filename) => evaluateWithRetainedPromise(page, async (name) => {
-  const response = await fetch(`/gbdraw/web/gallery/sessions/${name}`);
+const loadSessionUrl = async (page, url) => evaluateWithRetainedPromise(page, async (path) => {
+  const name = path.split('/').pop();
+  const response = await fetch(path);
   if (!response.ok) throw new Error(`Could not load ${name}: ${response.status}`);
   const bytes = await response.arrayBuffer();
   const file = new File([bytes], name, {
@@ -22,7 +23,8 @@ const loadGallerySession = async (page, filename) => evaluateWithRetainedPromise
   return window.__GBDRAW_APP__.importSession({
     target: { files: [file], value: 'selected' }
   });
-}, filename);
+}, url);
+const loadGallerySession = (page, filename) => loadSessionUrl(page, `/gbdraw/web/gallery/sessions/${filename}`);
 
 const ISSUE_461_VIEWPORTS = [
   { id: 'issue-desktop', width: 2541, height: 1409 },
@@ -1087,9 +1089,10 @@ test('a collinear ribbon without a collinear group scope pairs its genes by simi
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  expect(await loadGallerySession(page, 'hepatoplasmataceae_collinear.gbdraw-session.json.gz'))
+  // The historical Gallery Session's ribbons name ordinary similarity groups and carry no collinear
+  // group scope; the current Gallery Session stores a collinear result with scoped groups (OV-1048).
+  expect(await loadSessionUrl(page, '/tests/fixtures/performance/hepatoplasmataceae_collinear.2afba711.gbdraw-session.json.gz'))
     .toMatchObject({ status: 'ok' });
-  // The Gallery ribbons name ordinary similarity groups and carry no collinear group scope.
   const ribbon = page.locator('.gbdraw-preview-surface path[data-match-kind="collinear"][data-collinearity-block-id="block_0024"]').first();
   await expect(ribbon).not.toHaveAttribute('data-collinear-group-scope', /./);
   await ribbon.dispatchEvent('click', { clientX: 500, clientY: 350 });

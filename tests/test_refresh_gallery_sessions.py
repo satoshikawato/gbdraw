@@ -53,15 +53,16 @@ from tools.refresh_gallery_sessions import (
     VIBRIO_GZIP_REGRESSION_CEILING,
     VIBRIO_RAW_ENTRY_COUNT,
     _gallery_file_transaction,
-    _canonicalize_orthogroup_resources,
     _public_gallery_session_files,
     _refresh_one_session,
+    _reopen_for_publication,
     _refresh_session_paths,
     _session_artifact_measurements,
     _session_path,
     _validate_current_session_catalog_structure,
     _validate_gallery_session_inventory,
     _validate_staged_gallery_session,
+    stored_protein_result_differences,
 )
 
 
@@ -258,59 +259,71 @@ def test_session_artifact_measurements_report_component_bytes(
         assert measurements[key] > 0
 
 
-def test_gallery_refresh_canonicalizes_legacy_orthogroup_resource_once() -> None:
-    legacy_payload = {
-        "schema": 2,
-        "kind": "orthogroupResult",
-        "value": {
-            "type": "OrthogroupResult",
-            "fields": {
-                "orthogroups": {},
-                "memberByProteinId": {},
-                "namesByOrthogroupId": {},
-                "descriptionsByOrthogroupId": {},
-                "nameCandidatesByOrthogroupId": {},
-                "confidenceByOrthogroupId": {},
-                "rbhOrthogroups": {},
-                "orthologEdgesByOrthogroupId": {},
-                "orthologPathsByOrthogroupId": {},
-                "relatedEdgesByOrthogroupId": {},
-                "scopeByOrthogroupId": {},
-                "sourceRecordIndexByOrthogroupId": {},
-            },
-        },
-    }
-    published = json.dumps(legacy_payload, separators=(",", ":")).encode("utf-8")
-    resource = {
-        "kind": "orthogroup-result",
-        "name": "orthogroups.json",
-        "type": "application/json",
-        "size": len(published),
-        "lastModified": 0,
-        "encoding": "base64",
-        "data": base64.b64encode(published).decode("ascii"),
-    }
-    session = {
+def _stored_protein_session(cli_args: list[str] | None) -> dict[str, object]:
+    session: dict[str, object] = {
         "renderRequest": {
             "comparisons": [
-                {
-                    "kind": "orthogroupResult",
-                    "resourceId": "orthogroups",
-                    "encoding": "canonicalJson",
-                }
+                {"kind": "precomputedProteinComparison", "resourceId": "table-1"},
+                {"kind": "orthogroupResult", "resourceId": "groups"},
+                {"kind": "generatedProteinComparison", "mode": "none", "pairs": [], "settings": {}},
             ]
         },
-        "resources": {"orthogroups": resource},
+        "resources": {"table-1": {"data": "x"}, "groups": {"data": "y"}, "record-1": {"data": "z"}},
+        "modes": {"linear": {"config": {"losat": {"blastp": {"mode": "orthogroup"}}}}},
     }
+    if cli_args is not None:
+        session["cliInvocation"] = {"schema": 1, "mode": "linear", "args": cli_args}
+    return session
 
-    assert _canonicalize_orthogroup_resources(session) == 1
-    canonical = base64.b64decode(resource["data"], validate=True)
-    canonical_payload = json.loads(canonical)
-    assert canonical_payload["schema"] == 3
-    assert canonical_payload["kind"] == "orthogroupResult"
-    assert canonical_payload["value"]["type"] == "OrthogroupGraphResult"
-    assert resource["size"] == len(canonical)
-    assert _canonicalize_orthogroup_resources(session) == 0
+
+def test_refresh_reopens_stored_protein_results_in_the_declared_mode() -> None:
+    """A refresh computes stored protein results again (D-65, OV-1031, OV-1048).
+
+    The stored comparisons and their resources leave the request, and the
+    pipeline marker and the Web draft both take the mode of the recorded CLI
+    invocation, so the Web rebuilds in the mode the Gallery declares.
+    """
+
+    session = _stored_protein_session(
+        ["--losat", "losatp", "--losatp_mode", "collinear", "--gbk", "a.gb", "b.gb"]
+    )
+    gallery_path = Path("hepatoplasmataceae_collinear.gbdraw-session.json.gz")
+
+    assert _reopen_for_publication(gallery_path, session) == 1
+    assert session["renderRequest"]["comparisons"] == [
+        {"kind": "generatedProteinComparison", "mode": "collinear", "pairs": [], "settings": {}}
+    ]
+    assert set(session["resources"]) == {"record-1"}
+    assert session["modes"]["linear"]["config"]["losat"]["blastp"]["mode"] == "collinear"
+    assert _reopen_for_publication(gallery_path, session) == 0
+
+    web_saved = _stored_protein_session(None)
+    assert _reopen_for_publication(gallery_path, web_saved) == 1
+    assert web_saved["renderRequest"]["comparisons"][0]["mode"] == "orthogroup"
+
+    test_input = _stored_protein_session(None)
+    assert _reopen_for_publication(TEST_INPUT_SESSION_ROOT / TEST_INPUT_SESSION_FILES[0], test_input) == 0
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "session_path",
+    [example.session_path for example in EXAMPLES],
+    ids=lambda path: path.name,
+)
+def test_gallery_protein_results_equal_a_rebuild_from_the_raw_cache(
+    session_path: Path,
+) -> None:
+    """The first Generate draws what a changed setting would compute (OV-1031).
+
+    The Web reuses a Session's stored protein results only while its filters
+    are unchanged; any other value computes them from the raw LOSATP cache.
+    A stored result older than the current code would make a filter round
+    trip change the drawing.
+    """
+
+    session = load_session(session_path)
+    assert stored_protein_result_differences(session) == []
 
 
 def test_current_session_catalog_structure_rejects_duplicate_payloads(

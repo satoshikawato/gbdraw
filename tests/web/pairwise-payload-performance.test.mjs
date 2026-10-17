@@ -786,7 +786,9 @@ const exactSequenceRegistry = createSequenceSourceRegistry(exactState.sequenceSo
 const exactOptions = {
   featureLookup: exactFeatureLookup,
   sourceFeatures: exactState.biologicalFeatures,
-  orthogroups: [...exactState.orthogroups, ...exactState.collinearGroups],
+  // The app passes the catalog groups, collinear presentation groups included
+  // (svg-actions.js groupsForMatch); adding collinearGroups would list them twice.
+  orthogroups: exactState.orthogroups,
   resolveSequenceSource: exactSequenceRegistry.resolve
 };
 const exactFeatureTokens = new WeakMap([
@@ -811,13 +813,13 @@ const EXACT_BASELINES = {
       blockId: 'block_0024',
       orthogroupIds: 'og_34;og_35;og_36;og_37;og_38;og_39;og_40;og_41;og_42;og_43;og_44;og_45;og_46;og_47;og_48'
     },
-    digest: 'a1b15f0356b7c7aec35188f9487eb3a9cd33488c698714ae042b757d70090666',
+    digest: '3f6c0764dc30dea26e3db988346acfe4a8a511f9287c0d1868222945e9cebf9d',
     hoverRows: [
       { label: 'Kind', value: 'collinear' },
       { label: 'Identity', value: '43.9684414414' },
       { label: 'Query', value: '61879..78669' },
       { label: 'Subject', value: '19161..35565' },
-      { label: 'Similarity groups', value: '15' },
+      { label: 'Collinear groups', value: '15' },
       { label: 'Block', value: 'block_0024' }
     ],
     sectionTitles: [],
@@ -834,13 +836,13 @@ const EXACT_BASELINES = {
       blockId: 'block_0155',
       orthogroupIds: 'og_274;og_275;og_276;og_277;og_278;og_279;og_280;og_281;og_282;og_283;og_284;og_285;og_286;og_287;og_288;og_289;og_290;og_291;og_292;og_293'
     },
-    digest: 'a86114d1d7195b48815b02e86ffca8a08e21120c2d29abd2e01bfcb2a15e421a',
+    digest: 'c8ec284c95e56ae9c50cd198d5b38a794a835394b5dc83236b94f129f4adc37c',
     hoverRows: [
       { label: 'Kind', value: 'collinear' },
       { label: 'Identity', value: '64.1326369725' },
       { label: 'Query', value: '484749..494272' },
       { label: 'Subject', value: '586163..595833' },
-      { label: 'Similarity groups', value: '20' },
+      { label: 'Collinear groups', value: '20' },
       { label: 'Block', value: 'block_0155' }
     ],
     sectionTitles: [],
