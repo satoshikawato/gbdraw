@@ -151,7 +151,7 @@
     },
     {
       "key": "product.saved-session-regeneration-continuity",
-      "scenarioRevision": 1,
+      "scenarioRevision": 2,
       "title": "Saved Session regeneration continuity",
       "layer": "STATE",
       "journeys": [
@@ -204,7 +204,7 @@
         {
           "id": "EFF-REGEN-ACTIVE-DRAFT-DISTINCT",
           "checkpointRef": "JRN-REGEN-001:saved-preview",
-          "statement": "The active draft remains distinct from the committed saved artifact until a successful Generate replaces it."
+          "statement": "The active draft remains distinct from the committed saved artifact until a successful Generate replaces it, or a successful live apply of changed live settings replaces those values."
         },
         {
           "id": "EFF-REGEN-CANONICAL-EXECUTION",
@@ -415,6 +415,7 @@
           "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md#oipc-c07-failure-isolation",
           "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-016-generation-failure-cancellation-and-stale-result-isolation",
           "gbdraw/web/CLAUDE.md#module-ownership",
+          "gbdraw/web/CLAUDE.md#r1-three-writers-of-the-result",
           "gbdraw/web/CLAUDE.md#reactive-availability-and-live-edit-invariants",
           "gbdraw/web/CLAUDE.md#runtime-data-flow"
         ]
