@@ -1755,6 +1755,13 @@ export const createRunAnalysis = ({
   const committedDrawing = (committed) => state.drawings[committed?.renderRequest?.mode === 'linear' ? 'linear' : 'circular'];
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
+  // The latest request that makes the running iteration stale: an editor
+  // request, or one for a live setting value that iteration applies. A
+  // request for other live values queues the next iteration only: the running
+  // one commits only its own values (OV-1075).
+  let reflowSupersededAt = 0;
+  /** @type {readonly string[]} The live setting request paths the running iteration applies. */
+  let activeLiveSettings = [];
   // `readHistoryStepSerial()` at the latest request (D-40).
   let pendingReflowRequestedAt = 0;
   // A rerender requested while Generate (or a committed-candidate run) is in
@@ -6210,7 +6217,7 @@ export const createRunAnalysis = ({
     let colorCandidate = null;
     clearLabelBuildNotices({ rerender: true });
     skipCaptureBaseConfig.value = true;
-    const isRequested = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
+    const isRequested = () => generationToken === latestGenerationToken && requestId >= reflowSupersededAt;
     const isCurrent = () => isRequested() && readCommittedCanonicalRevision() === committedRevision;
     // The editor state the rerender draws from; an edit made from here on is
     // shown on its Results after they commit (OV-346).
@@ -6323,13 +6330,18 @@ export const createRunAnalysis = ({
     }
   };
 
-  /** @param {{ settingsOnly?: boolean }} [options] `settingsOnly`: a request to apply live setting values alone. */
-  const runLabelReflow = async ({ settingsOnly = false } = {}) => {
+  /**
+   * @param {{ settings?: readonly string[] }} [options] `settings`: the live
+   *   setting request paths of a request to apply live values alone; without
+   *   it, an editor edit's rerender.
+   */
+  const runLabelReflow = async ({ settings } = {}) => {
     const drawing = committedDrawing(getCommittedCanonicalSession?.());
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!settingsOnly) editorRerenderRequested = true;
+    if (!settings) editorRerenderRequested = true;
     pendingReflowRequestId += 1;
+    if (!settings || settings.some((path) => activeLiveSettings.includes(path))) reflowSupersededAt = pendingReflowRequestId;
     pendingReflowRequestedAt = readHistoryStepSerial();
     if (activeReflowRequestId !== 0) return;
     if (processing.value) {
@@ -6354,6 +6366,7 @@ export const createRunAnalysis = ({
         editorRerenderRequested = false;
         const pending = pendingLiveSettingsOf(drawing);
         const settings = [...pending];
+        activeLiveSettings = settings;
         const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
           requestId: activeReflowRequestId,
@@ -6373,6 +6386,7 @@ export const createRunAnalysis = ({
       }
     })().finally(() => {
       activeReflowRequestId = 0;
+      activeLiveSettings = [];
       labelReflowProcessing.value = false;
       activeReflowRun = null;
     });
@@ -6409,7 +6423,7 @@ export const createRunAnalysis = ({
     const pending = pendingLiveSettingsOf(committedDrawing(committed));
     requestPaths.forEach((path) => pending.add(path));
     labelReflowLastError.value = null;
-    void runLabelReflow({ settingsOnly: true });
+    void runLabelReflow({ settings: requestPaths });
     return true;
   };
 
@@ -6419,7 +6433,7 @@ export const createRunAnalysis = ({
   const replayDeferredLabelReflow = () => {
     if (!reflowDeferredByProcessing || processing.value) return;
     reflowDeferredByProcessing = false;
-    void runLabelReflow({ settingsOnly: true });
+    void runLabelReflow({ settings: [] });
   };
 
   const downloadLosatCache = async () => {

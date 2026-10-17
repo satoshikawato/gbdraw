@@ -8,6 +8,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
+const { open, addColorRule } = require('./helpers/live-generate-parity-steps.cjs');
 
 const TOBACCO = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
 const HEPA = 'gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz';
@@ -567,6 +568,34 @@ test(`${name}: Reset Settings applies the live rows and leaves the rest pending`
   }
 });
 }
+
+// OV-1074, OV-1075: Reset Settings turns Multi-Record Canvas on and fills the
+// multi-record Legend and Plot Title positions. A single-canvas Result keeps
+// its own canvas's positions, and the one rerender the removed color rule asks
+// for is not discarded by the request of live values that change nothing.
+test('Reset Settings on a batch Circular Result keeps its positions and draws once', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
+  try {
+    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0001$', color: '#c83366', cap: 'CDS' });
+    await generateNow(page);
+    const before = JSON.parse((await facts(page)).diagramOptions).output;
+    expect(before).toEqual({ legend: 'left', plotTitlePosition: 'none' });
+    await installGate(page, []);
+    await page.locator('button[aria-label="Reset Settings"]').click();
+    await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
+    await settleLive(page);
+    const after = await facts(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.multi_record_canvas), 'the draft canvas is multi-record').toBe(true);
+    expect(JSON.parse(after.diagramOptions).output, 'the committed single-canvas positions').toEqual(before);
+    expect(await gateCalls(page), 'one rerender for the removed rule').toBe(1);
+    expect(after.reflowError).toBeNull();
+  } finally {
+    await removeGate(page);
+    await page.context().close();
+  }
+});
 
 // Review F2: the layout rows apply live only to a multi-record canvas Result.
 test('with a single-canvas Result, the Multi-Record layout rows say Applies on Generate', async ({ browser }) => {

@@ -192,6 +192,34 @@ test('a Circular live apply writes the plot title font override and the grid lay
   drawing.adv.multi_record_positions = [];
 });
 
+// OV-1074: a Circular drawing keeps the Legend and Plot Title positions per
+// canvas. Reset Settings turns Multi-Record Canvas on and fills the multi-record
+// positions; a single-canvas Result keeps its own canvas's positions until
+// Generate, and a change of those still applies.
+test('a live position apply reads the canvas the committed request draws, not a pending Multi-Record Canvas change', () => {
+  const drawing = state.drawings.circular;
+  const positions = ['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition'];
+  drawing.form.multi_record_canvas = false;
+  drawing.recordsOff.splice(0);
+  const single = generate('circular');
+  assert.notEqual(single.renderRequest.grouping, 'grid');
+  assert.deepEqual(single.renderRequest.diagramOptions.output, { legend: 'left', plotTitlePosition: 'none' });
+  drawing.form.multi_record_canvas = true;
+  Object.assign(drawing.layoutPreferences.circular.multi, { legend: 'bottom', plotTitlePosition: 'bottom' });
+  assert.equal(drawing.form.legend, 'bottom');
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions }), []);
+  drawing.layoutPreferences.circular.single.legend = 'right';
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions }),
+    [[['diagramOptions', 'output', 'legend'], 'right']]);
+  const grid = generate('circular');
+  assert.equal(grid.renderRequest.grouping, 'grid');
+  drawing.form.multi_record_canvas = false;
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: grid, drawing, requestPaths: positions }), [],
+    'a grid keeps the multi-record positions while Multi-Record Canvas is pending off');
+  Object.assign(drawing.layoutPreferences.circular.single, { legend: 'left', plotTitlePosition: 'none' });
+  Object.assign(drawing.layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
+});
+
 // Review F1: a loaded Session's request may lack optional containers (Gallery
 // `tobacco-chloroplast`, a CLI `--save_session` without overrides); a live
 // value creates the object Generate would have sent. The editor intent alone

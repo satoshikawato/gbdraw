@@ -125,6 +125,7 @@ import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   createDefaultLayoutPreferences,
   legendPositionOfMode,
+  resolveActiveLayoutPreference,
   updateActiveLayoutPreference
 } from './layout-preferences.js';
 import {
@@ -1477,11 +1478,11 @@ const sharedLengthOverrides = (path, value) => {
 
 // G1 request fields (PD-OI-103), each projected by one function that Generate
 // and the live apply of its `SETTING_APPLICATION` row both call (R3, no twin).
-/** @param {Record<string, unknown>} form @param {string} mode */
-const requestLegendPosition = (form, mode) => legendPositionOfMode(form.legend, mode)
+/** @param {unknown} legend @param {string} mode */
+const requestLegendPosition = (legend, mode) => legendPositionOfMode(legend, mode)
   ?? WEB_UX_PROFILE[mode === 'linear' ? 'linear' : 'circular'].legend;
-/** @param {Record<string, unknown>} adv @param {string} mode */
-const requestPlotTitlePosition = (adv, mode) => String(adv.plot_title_position || (mode === 'linear' ? 'bottom' : 'none'));
+/** @param {unknown} position @param {string} mode */
+const requestPlotTitlePosition = (position, mode) => String(position || (mode === 'linear' ? 'bottom' : 'none'));
 /** @param {Record<string, unknown>} form */
 const requestPlotTitle = (form) => String(form.plot_title || '').trim() || null;
 /** @param {Record<string, unknown>} adv */
@@ -1548,6 +1549,16 @@ const configWrites = (path, value) => {
   return [`${path}.short`, `${path}.long`].map((key) => [['diagramOptions', 'configOverrides', key], overrides[key]]);
 };
 /**
+ * The drawing's Legend and Plot Title positions for the canvas the committed
+ * request draws: a Circular drawing keeps them per single or multi-record
+ * canvas, and a pending Multi-Record Canvas change selects the other canvas's
+ * positions only at Generate (OV-1074).
+ * @param {RequestDrawing} drawing @param {CanonicalRenderRequest} request
+ */
+const committedCanvasLayout = (drawing, request) => resolveActiveLayoutPreference(
+  drawing.layoutPreferences, request.mode, request.grouping === 'grid'
+);
+/**
  * The projector of each request path a live `SETTING_APPLICATION` row names
  * (services/setting-application.js). Context a value depends on (the mode,
  * the grouping, the drawn records) is the committed request's, never the
@@ -1556,10 +1567,11 @@ const configWrites = (path, value) => {
  */
 const LIVE_SETTING_PROJECTORS = Object.freeze({
   'diagramOptions.output.legend': (drawing, request) => [
-    [['diagramOptions', 'output', 'legend'], requestLegendPosition(drawing.form, request.mode)]
+    [['diagramOptions', 'output', 'legend'], requestLegendPosition(committedCanvasLayout(drawing, request).legend, request.mode)]
   ],
   'diagramOptions.output.plotTitlePosition': (drawing, request) => [
-    [['diagramOptions', 'output', 'plotTitlePosition'], requestPlotTitlePosition(drawing.adv, request.mode)]
+    [['diagramOptions', 'output', 'plotTitlePosition'],
+      requestPlotTitlePosition(committedCanvasLayout(drawing, request).plotTitlePosition, request.mode)]
   ],
   'diagramOptions.plotTitle': (drawing) => [[['diagramOptions', 'plotTitle'], requestPlotTitle(drawing.form)]],
   'diagramOptions.plotTitleFontSize': (drawing, request) => [
@@ -3223,8 +3235,8 @@ const projectCanonicalRenderInput = ({
     }),
     tracks: trackPlan.tracks,
     output: {
-      legend: requestLegendPosition(drawing.form, state.mode.value),
-      plotTitlePosition: requestPlotTitlePosition(drawing.adv, state.mode.value)
+      legend: requestLegendPosition(drawing.form.legend, state.mode.value),
+      plotTitlePosition: requestPlotTitlePosition(drawing.adv.plot_title_position, state.mode.value)
     },
     selectedFeaturesSet: Array.from(drawing.adv.features || []).map((value) => String(value)),
     featureShapes: {
