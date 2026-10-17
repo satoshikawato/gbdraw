@@ -192,6 +192,41 @@ test('a Circular live apply writes the plot title font override and the grid lay
   drawing.adv.multi_record_positions = [];
 });
 
+// Review F1: a loaded Session's request may lack optional containers (Gallery
+// `tobacco-chloroplast`, a CLI `--save_session` without overrides); a live
+// value creates the object Generate would have sent. The editor intent alone
+// never needed it (no OV).
+test('a live apply onto a committed request without configOverrides creates them, as a Generate sends them', () => {
+  const withoutOverrides = (committed) => {
+    const renderRequest = structuredClone(committed.renderRequest);
+    delete renderRequest.diagramOptions.configOverrides;
+    return { ...committed, renderRequest };
+  };
+  const linear = state.drawings.linear;
+  Object.assign(linear.adv, { legend_font_size: '', legend_box_size: '' });
+  const linearCommitted = withoutOverrides(generate('linear'));
+  assert.equal(request.projectCommittedEditorIntent({ committed: linearCommitted, state, drawing: linear })
+    .renderRequest.diagramOptions.configOverrides, undefined, 'editor intent alone writes no override');
+  Object.assign(linear.adv, { legend_font_size: 19, legend_box_size: 11 });
+  const linearOverrides = liveCandidate(linearCommitted, linear).renderRequest.diagramOptions.configOverrides;
+  assert.deepEqual(pick(linearOverrides, LEGEND_KEYS),
+    pick(generate('linear').renderRequest.diagramOptions.configOverrides, LEGEND_KEYS));
+  assert.equal(linearOverrides['objects.legends.font_size.short'], 19);
+  // A blank value removes nothing and creates nothing.
+  Object.assign(linear.adv, { legend_font_size: '', legend_box_size: '' });
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: linearCommitted, drawing: linear, requestPaths: allPaths() })
+    .filter(([path]) => path.includes('configOverrides')), []);
+
+  const circular = state.drawings.circular;
+  circular.form.multi_record_canvas = false;
+  circular.adv.plot_title_font_size = '';
+  const circularCommitted = withoutOverrides(generate('circular'));
+  circular.adv.plot_title_font_size = 38;
+  const titleKey = 'objects.definition.circular.plot_title_font_size';
+  assert.equal(liveCandidate(circularCommitted, circular).renderRequest.diagramOptions.configOverrides[titleKey], 38);
+  circular.adv.plot_title_font_size = '';
+});
+
 test('a successful apply commits only its paths, as a new committed Session', () => {
   const drawing = state.drawings.linear;
   drawing.adv.legend_font_size = 12;
@@ -218,12 +253,14 @@ test('a successful apply commits only its paths, as a new committed Session', ()
   config.canonicalRenderArtifactOwner.restore(null);
 });
 
-test('History reports each recorded intent step with its changes, and a checkpoint restore as any setting', async () => {
+// Review F3: History is the one notifier: a recorded step, a committed
+// checkpoint (Reset Settings, the Bakta preset), and the Undo or Redo of each.
+test('History reports each step, checkpoint, Undo and Redo with its changes, and a checkpoint restore as any setting', async () => {
   let value = { config: { adv: { legend_font_size: 10 } } };
   const steps = [];
   const history = createHistoryManager({
     buildIntent: () => structuredClone(value),
-    applyIntent: (intent) => { value = intent; },
+    applyIntent: (intent) => { value = structuredClone(intent); },
     buildCheckpoint: () => structuredClone(value),
     applyCheckpoint: (checkpoint) => { value = checkpoint; }
   });
@@ -232,11 +269,29 @@ test('History reports each recorded intent step with its changes, and a checkpoi
   await history.runUndoable('Legend font size', () => { value.config.adv.legend_font_size = 14; });
   assert.deepEqual(steps, [['config.adv.legend_font_size']]);
   await history.undo();
-  assert.equal(steps.length, 1, 'an Undo records no step; its restore asks for the apply');
+  await history.redo();
+  assert.deepEqual(steps, [['config.adv.legend_font_size'], ['config.adv.legend_font_size'], ['config.adv.legend_font_size']],
+    'an Undo and a Redo name the paths of the step they restore');
+  steps.length = 0;
   await history.runUndoableCheckpoint('Reset', () => { value.config.adv.legend_font_size = 8; });
+  assert.deepEqual(steps, [['config.adv.legend_font_size']], 'a committed checkpoint names the settings it changed');
   steps.length = 0;
   await history.undo();
   assert.deepEqual(steps, [null], 'a checkpoint restore names no paths: every live row is asked');
+});
+
+test('a live setting row the shown Result cannot draw says Applies on Generate', () => {
+  assert.equal(owner.settingApplicationNote('multi-record-layout').text, 'Live edit');
+  const generateNote = { application: 'generate', text: 'Applies on Generate', qualified: false };
+  // A single-canvas Result: the layout fields apply on Generate (PD-OI-103).
+  const single = { grouping: 'single' };
+  assert.equal(request.liveSettingApplies(single, 'layout.multiRecordColumnGapRatio'), false);
+  assert.equal(request.liveSettingApplies({ grouping: 'grid' }, 'layout.multiRecordColumnGapRatio'), true);
+  assert.equal(request.liveSettingApplies(single, 'diagramOptions.output.legend'), true);
+  assert.deepEqual(owner.settingApplicationNote('multi-record-layout', (path) => request.liveSettingApplies(single, path)), generateNote);
+  assert.equal(owner.settingApplicationNote('legend', (path) => request.liveSettingApplies(single, path)).text, 'Live edit');
+  // A row without request paths keeps its own note.
+  assert.equal(owner.settingApplicationNote('track-visibility', () => false).qualified, true);
 });
 
 test('no live note text is written outside the owner', async () => {

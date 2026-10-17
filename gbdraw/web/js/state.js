@@ -674,14 +674,6 @@ const generatedLegendPosition = ref('left');
 const generatedMode = ref('circular');
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
-// A pending Multi-Record Canvas change (Applies on Generate) holds the
-// automatic rerender: it draws the committed record grouping. The Legend and
-// Plot Title positions are live rows the rerender itself applies (PD-OI-103).
-const shouldDeferCircularPreviewUpdates = computed(() => (
-  generatedMode.value === 'circular' &&
-  mode.value === 'circular' &&
-  Boolean(drawings.circular.form.multi_record_canvas) !== Boolean(generatedMultiRecordCanvas.value)
-));
 
 // Flag to skip captureBaseConfig when editing SVG (repositioning legend, adding legend entries, etc.)
 // This prevents base config from being overwritten during incremental edits
@@ -1303,7 +1295,6 @@ export const state = {
   generatedMode,
   generatedMultiRecordCanvas,
   generatedCircularPlotTitlePosition,
-  shouldDeferCircularPreviewUpdates,
   skipCaptureBaseConfig,
   skipExtractOnSvgChange,
   trustedArtifactRestoreInProgress,

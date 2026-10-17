@@ -253,7 +253,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   serial?: number,
  *   beforeSignature?: string,
  *   beforeFileIds?: Set<any>,
- *   beforeIntentCheckpoint?: any
+ *   beforeIntentCheckpoint?: any,
+ *   beforeIntent?: HistoryIntent | null
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
  *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
@@ -998,6 +999,8 @@ export const createHistoryManager = ({
       return {
         label,
         before,
+        // The settings a committed checkpoint changed name the live values it asks to apply.
+        beforeIntent: currentIntent,
         closed: false,
         source: options.source || ''
       };
@@ -1074,6 +1077,7 @@ export const createHistoryManager = ({
     enforceLimits();
     touch();
     notifyCheckpointCapture(options, 'after-end');
+    settingsStepListener(buildIntentPatch(transaction.beforeIntent ?? {}, intent.intent));
     return true;
   };
 
@@ -1599,6 +1603,8 @@ export const createHistoryManager = ({
       signature,
       fileIds: collectIntentFileIds(nextIntent)
     });
+    // The restored live setting values return to the Result once applied (6.4).
+    settingsStepListener(entry.changes);
   };
 
   /** @param {CheckpointRecord} record */
@@ -1732,9 +1738,10 @@ export const createHistoryManager = ({
   const redoLabel = () => (canRedo() ? redoStack[redoStack.length - 1].label : '');
 
   /**
-   * The one listener of the settings a History step records or a checkpoint
-   * restore installs (`null`: any setting). The composition root registers it
-   * once both History and the automatic rerender exist (R1 (c), PD-OI-102).
+   * The one listener of the settings a History step records, a checkpoint
+   * commits, or an Undo or Redo restores (`null`: any setting, a checkpoint
+   * restore). The composition root registers it once both History and the
+   * automatic rerender exist (R1 (c), PD-OI-102).
    * @param {(changes: readonly HistoryIntentChange[] | null) => void} listener
    */
   const setSettingsStepListener = (listener) => { settingsStepListener = listener; };

@@ -67,6 +67,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  committedLiveSettingApplies,
   commitLiveSettingValues,
   readCommittedCanonicalRevision,
   getLoadedTrackSettings,
@@ -116,7 +117,7 @@ import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
-import { allLiveSettingRequestPaths, liveSettingRequestPaths } from '../services/setting-application.js';
+import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
@@ -309,7 +310,7 @@ import {
 /** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
 /** @import { UnvalidatedFields } from '../services/session-authority.js' */
 
-const { onMounted, onUnmounted, watch, nextTick, computed, ref, shallowRef, reactive, isRef } = window.Vue;
+const { onMounted, onUnmounted, watch, nextTick, computed, provide, ref, shallowRef, reactive, isRef } = window.Vue;
 
 /** @type {Promise<typeof import('../services/export.js')> | null} */
 let exportServicePromise = null;
@@ -426,6 +427,7 @@ const historyStepSwitchesMode = (changes) => (Array.isArray(changes) ? changes :
   .some((/** @type {{ path?: unknown[] }} */ { path } = {}) => path?.[0] === 'ui' && path[1] === 'mode');
 
 export const createAppSetup = () => {
+  provide(SETTING_NOTE_APPLIES, committedLiveSettingApplies);
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
     payload
@@ -3270,6 +3272,7 @@ export const createAppSetup = () => {
     cancelRunAnalysis,
     runLabelReflow,
     requestLiveSettingApply,
+    discardLiveSettingRequests,
     refreshCircularRecordOrder,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
@@ -3334,10 +3337,9 @@ export const createAppSetup = () => {
     omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog().omittedRecordKeys || [],
     onCircularRecordsDiscovered: handleCircularRecordsDiscovered
   });
-  // R1 (c), PD-OI-102: a History step and a checkpoint restore that change
-  // live setting rows of the shown drawing ask the automatic rerender to apply
-  // them; an Undo or Redo of a step (afterApplyHistoryIntent) and Reset
-  // Settings ask it themselves.
+  // R1 (c), PD-OI-102: a History step, a checkpoint (Reset Settings, a rule
+  // preset), and their Undo and Redo that change live setting rows of the
+  // shown drawing ask the automatic rerender to apply them.
   history.setSettingsStepListener((changes) => {
     requestLiveSettingApply(changes ? liveSettingRequestPaths(changes, mode.value) : allLiveSettingRequestPaths(), mode.value);
   });
@@ -3595,6 +3597,8 @@ export const createAppSetup = () => {
     }),
     afterImport: async (/** @type {{ status: string, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
+        // The loaded draft's live values wait for their next change or Generate (6.7).
+        discardLiveSettingRequests();
         historySnapshots.clearGeneratedArtifactIdentity({
           retainedBytes: result?.status === 'ok'
             ? Number(result.decompressedCharacters || 0) * 2
@@ -3851,8 +3855,6 @@ export const createAppSetup = () => {
       labels: changedDomains.has('features') || editorState,
       domains: editorPaintDomains(changes)
     });
-    // The restored live setting values return to the Result once applied (6.4).
-    requestLiveSettingApply(liveSettingRequestPaths(/** @type {readonly { path?: readonly (string | number)[] }[] | undefined} */ (changes), mode.value), mode.value);
     if (!projected) return;
     await nextTick();
     // The restored form decides which track groups the mounted Result shows.
@@ -5187,8 +5189,6 @@ export const createAppSetup = () => {
       depthTrackUiCounts.circular = 1;
       ensureDepthTrackConfigCount(state.drawings.circular, activeDepthTrackCount('circular'));
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
-      // The reset values of the live setting rows apply at once; the rest waits for Generate (7.3).
-      if (shown) requestLiveSettingApply(allLiveSettingRequestPaths(), mode.value);
       if (shown) {
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({

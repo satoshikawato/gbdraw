@@ -110,7 +110,6 @@ export const setupWatchers = ({
     results,
     svgContent,
     selectedResultIndex,
-    shouldDeferCircularPreviewUpdates,
     mode,
     cInputType,
     lInputType,
@@ -303,7 +302,6 @@ export const setupWatchers = ({
     async (nextSeq, prevSeq) => {
       if (nextSeq === prevSeq) return;
       if (!autoLabelReflowEnabled.value) return;
-      if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (typeof runLabelReflow !== 'function') return;
       await runLabelReflow();
     }
@@ -313,7 +311,6 @@ export const setupWatchers = ({
     () => labelReflowForceRequestSeq.value,
     async (nextSeq, prevSeq) => {
       if (nextSeq === prevSeq) return;
-      if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (typeof runLabelReflow !== 'function') return;
       await runLabelReflow();
     }

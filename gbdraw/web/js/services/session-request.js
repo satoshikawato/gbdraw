@@ -1551,7 +1551,7 @@ const configWrites = (path, value) => {
  * The projector of each request path a live `SETTING_APPLICATION` row names
  * (services/setting-application.js). Context a value depends on (the mode,
  * the grouping, the drawn records) is the committed request's, never the
- * draft's: a Circular layout field applies only to a committed grid.
+ * draft's (`liveSettingApplies`).
  * @type {Readonly<Record<string, (drawing: RequestDrawing, request: CanonicalRenderRequest) => LiveSettingWrite[]>>}
  */
 const LIVE_SETTING_PROJECTORS = Object.freeze({
@@ -1577,13 +1577,24 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
   ),
   ...Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT).map(([field, project]) => [
     `layout.${field}`,
-    (/** @type {RequestDrawing} */ drawing, /** @type {CanonicalRenderRequest} */ request) => (request.grouping === 'grid'
-      ? /** @type {LiveSettingWrite[]} */ ([[['layout', field], project(drawing.adv, committedCircularSourceIndexes(request))]])
-      : [])
+    (/** @type {RequestDrawing} */ drawing, /** @type {CanonicalRenderRequest} */ request) => (
+      /** @type {LiveSettingWrite[]} */ ([[['layout', field], project(drawing.adv, committedCircularSourceIndexes(request))]])
+    )
   ]))
 });
 /** The request paths that live setting rows may name. */
 export const LIVE_SETTING_REQUEST_PATHS = Object.freeze(Object.keys(LIVE_SETTING_PROJECTORS));
+const CIRCULAR_GRID_REQUEST_PATHS = new Set(Object.keys(CIRCULAR_MULTI_RECORD_LAYOUT).map((field) => `layout.${field}`));
+/**
+ * Whether the committed request can show a live value of `requestPath`: a
+ * Circular multi-record layout field only a committed grid draws; a pending
+ * Multi-Record Canvas change applies on Generate (PD-OI-103). The setting
+ * note says so (`SettingNote`).
+ * @param {CanonicalRenderRequest} request @param {string} requestPath
+ */
+export const liveSettingApplies = (request, requestPath) => (
+  !CIRCULAR_GRID_REQUEST_PATHS.has(requestPath) || request.grouping === 'grid'
+);
 
 /** @param {unknown} root @param {readonly string[]} path */
 const valueAtPath = (root, path) => path.reduce(
@@ -1601,24 +1612,30 @@ export const projectLiveSettingWrites = ({ committed, drawing, requestPaths }) =
   return [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];
     if (!project) throw new Error(`No live setting projector for ${requestPath}.`);
+    if (!liveSettingApplies(request, requestPath)) return [];
     return project(drawing, request).filter(([path, value]) => (
       JSON.stringify(valueAtPath(request, path)) !== JSON.stringify(value)
     ));
   });
 };
 /**
- * Writes live setting values into a render request in place; Generate's
- * builders made the objects they enter.
+ * Writes live setting values into a render request in place. A request a
+ * Session was loaded with may lack an optional object a write enters
+ * (`diagramOptions.configOverrides`): a value creates it, as Generate sends
+ * it, and a removal of a key it would hold has nothing to remove.
  * @param {object} request
  * @param {readonly LiveSettingWrite[]} writes
  */
 export const applyLiveSettingWrites = (request, writes) => {
-  /** @typedef {Record<string, unknown>} RequestNode */
   writes.forEach(([path, value]) => {
-    const parent = path.slice(0, -1).reduce(
-      (/** @type {RequestNode} */ node, key) => /** @type {RequestNode} */ (node[key]),
-      /** @type {RequestNode} */ (request)
-    );
+    /** @type {Record<string, unknown>} */
+    let parent = /** @type {Record<string, unknown>} */ (request);
+    for (const key of path.slice(0, -1)) {
+      const node = parent[key];
+      if (isPlainObject(node)) parent = node;
+      else if (value === undefined) return;
+      else parent = parent[key] = {};
+    }
     const key = /** @type {string} */ (path[path.length - 1]);
     if (value === undefined) delete parent[key];
     else parent[key] = cloneCanonicalJsonValue(value);
@@ -6646,7 +6663,7 @@ const referencedResourceIds = (value, ids = new Set()) => {
  * an action changed (`projectLiveSettingWrites`; none by default). An
  * automatic rerender renders this request, so no other draft setting reaches
  * the Result before Generate (R1(c), N-16).
- * @param {{ committed: any, state: Record<string, any>, drawing: RequestDrawing, liveSettingWrites?: readonly LiveSettingWrite[] }} input
+ * @param {{ committed: CommittedCanonicalSession & { config?: Record<string, unknown> | null }, state: Record<string, any>, drawing: RequestDrawing, liveSettingWrites?: readonly LiveSettingWrite[] }} input
  */
 export const projectCommittedEditorIntent = ({
   committed,

@@ -1679,7 +1679,6 @@ export const createRunAnalysis = ({
     files,
     // Every Linear record card; a Generate reads the drawn ones (`drawing.drawnLinearSeqs`).
     linearSeqs: allLinearSeqs,
-    shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
@@ -1765,9 +1764,10 @@ export const createRunAnalysis = ({
   // R1 (c), PD-OI-102: the request paths of live setting values each drawing's
   // actions committed and its Result does not show yet (R15: per drawing).
   // An automatic rerender applies them; it runs for a request of these alone
-  // only while one of them still differs from the committed request.
-  /** @type {WeakMap<DrawingState, Set<string>>} */
-  const pendingLiveSettings = new WeakMap();
+  // only while one of them still differs from the committed request. A
+  // Generate keeps only the paths it did not draw, and a Load none (6.7).
+  /** @type {Map<DrawingState, Set<string>>} */
+  const pendingLiveSettings = new Map();
   /** @param {DrawingState} drawing */
   const pendingLiveSettingsOf = (drawing) => {
     const pending = pendingLiveSettings.get(drawing) || new Set();
@@ -5548,6 +5548,7 @@ export const createRunAnalysis = ({
         // target-only renders and Similarity alignment use it without LOSATP.
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
       }
+      settlePendingLiveSettings(drawing);
       if (!useCommittedComparison && drawing.importedComparisonIntent) {
         Object.assign(
           drawing.importedComparisonIntent,
@@ -6182,9 +6183,6 @@ export const createRunAnalysis = ({
    * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
    */
   const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor }) => {
-    if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
-      return { status: 'skipped' };
-    }
     const committed = getCommittedCanonicalSession?.();
     if (!committed) {
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
@@ -6298,15 +6296,18 @@ export const createRunAnalysis = ({
           previewRuntime.selectResult(nextSelectedResultIndex);
         }
       }, { requestedAt: historyRequestedAt });
-      // The committed Session names what the new Results draw (PD-OI-102).
+      // The committed Session names what the new Results draw (PD-OI-102); the
+      // binder reports for these Results while that Session stays committed.
       commitLiveSettingValues(liveSettingWrites);
+      const drawnRevision = readCommittedCanonicalRevision();
+      const isShownReflow = () => isRequested() && readCommittedCanonicalRevision() === drawnRevision;
       if (canonical.renderRequest.mode === 'circular') {
         state.generatedCircularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(
           canonical.renderRequest.diagramOptions.output.plotTitlePosition
         );
       }
       expectReflowBindings(
-        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions, drawnPaint,
+        execution.commit, nextSelectedResultIndex, isShownReflow, canonical.renderRequest.diagramOptions, drawnPaint,
         historyRequestedAt
       );
       logPostGbdrawTimings(timingEntries);
@@ -6377,6 +6378,25 @@ export const createRunAnalysis = ({
     });
     await activeReflowRun;
   };
+
+  // A Generate drew the drawing's draft: the paths whose values now equal the
+  // committed request are done; a value changed after its request was built
+  // stays for the rerender that follows it.
+  /** @param {DrawingState} drawing */
+  const settlePendingLiveSettings = (drawing) => {
+    const pending = pendingLiveSettings.get(drawing);
+    const committed = getCommittedCanonicalSession?.();
+    if (!pending || !committed) return;
+    for (const path of [...pending]) {
+      try {
+        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path] }).length === 0) pending.delete(path);
+      } catch {
+        // A value Generate would refuse stays for the rerender, which reports it.
+      }
+    }
+  };
+  // A Load replaces both drawings' committed Sessions and applies nothing (6.7).
+  const discardLiveSettingRequests = () => { pendingLiveSettings.clear(); };
 
   // R1 (c), PD-OI-102: an action committed the values of these live setting
   // request paths in the drawing of `mode` (the shown one). Its Result shows
@@ -6458,6 +6478,7 @@ export const createRunAnalysis = ({
     restoreGeneratedArtifactRuntimeState,
     runLabelReflow,
     requestLiveSettingApply,
+    discardLiveSettingRequests,
     refreshCircularRecordOrder,
     releaseSourceInputFailure,
     downloadCliHelperFiles,

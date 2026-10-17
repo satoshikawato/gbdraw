@@ -95,6 +95,7 @@ import {
   draftFieldsForConfigValues,
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
+  liveSettingApplies,
   managedConfigOverridePathsForMode,
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
@@ -3889,6 +3890,17 @@ export const adoptCanonicalRenderArtifacts = (
 export const getCommittedCanonicalRenderRequest = () => {
   void committedCanonicalRevision.value;
   return committedCanonicalSession?.renderRequest || null;
+};
+
+/**
+ * Whether the committed request can show a live value of `requestPath`
+ * (`liveSettingApplies`); without a committed Session every path can. The app
+ * setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
+ * @param {string} requestPath
+ */
+export const committedLiveSettingApplies = (requestPath) => {
+  const request = getCommittedCanonicalRenderRequest();
+  return !request || liveSettingApplies(request, requestPath);
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.

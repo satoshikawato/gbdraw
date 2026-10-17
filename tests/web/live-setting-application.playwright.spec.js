@@ -4,7 +4,7 @@
 // live values and commits them only when it succeeds and the committed
 // Session has not changed since it started. Controls are selected by CSS.
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
@@ -69,23 +69,24 @@ const appliedLegendFont = async (page, size) => {
   await settleLive(page);
 };
 
-// Holds the first diagram reply after it is installed until `releaseGate`,
-// and counts every reply (the Worker's renders).
-const installGate = (page) => page.evaluate(() => {
-  const gate = { calls: 0, entered: false };
-  gate.released = new Promise((resolve) => { gate.release = resolve; });
+// Holds the diagram replies `held` (1-based, counted from its install) until
+// `releaseGate`, and counts every reply (the Worker's renders).
+const installGate = (page, held = [1]) => page.evaluate((held) => {
+  const gate = { calls: 0, entered: [], releases: {} };
+  const released = Object.fromEntries(held.map((call) => [call, new Promise((resolve) => { gate.releases[call] = resolve; })]));
   window.__G1_GATE__ = gate;
   window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
     gate.calls += 1;
-    if (gate.calls !== 1) return;
-    gate.entered = true;
-    await gate.released;
+    const call = gate.calls;
+    if (!released[call]) return;
+    gate.entered.push(call);
+    await released[call];
   };
-});
-const gateEntered = (page) => expect.poll(
-  () => page.evaluate(() => window.__G1_GATE__.entered), { timeout: APPLY_TIMEOUT }
+}, held);
+const gateEntered = (page, call = 1) => expect.poll(
+  () => page.evaluate((call) => window.__G1_GATE__.entered.includes(call), call), { timeout: APPLY_TIMEOUT }
 ).toBe(true);
-const releaseGate = (page) => page.evaluate(() => window.__G1_GATE__.release());
+const releaseGate = (page, call = 1) => page.evaluate((call) => window.__G1_GATE__.releases[call](), call);
 const gateCalls = (page) => page.evaluate(() => window.__G1_GATE__.calls);
 const removeGate = (page) => page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
 
@@ -109,6 +110,27 @@ for (const [name, file] of [['tobacco', TOBACCO], ['hepa', HEPA]]) {
     }
   });
 }
+
+// Review F1: the Gallery Session's request has no `configOverrides`; a live
+// value creates them, as a Generate from the same draft sends them.
+test('tobacco: a loaded Session applies a Legend font size with no Generate', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await settleLive(page);
+    const before = await facts(page);
+    expect(before.overrides, 'the Gallery request has no config overrides').toBeNull();
+    const size = nextLegendFont(before.legendFontSizes);
+    await commitValue(page, LEGEND_FONT, size);
+    await appliedLegendFont(page, size);
+    const after = await facts(page);
+    expect(after.reflowError).toBeNull();
+    expect(after.generationKey).toBe(before.generationKey);
+    expect(after.overrides[LEGEND_FONT_OVERRIDE]).toBe(size);
+  } finally {
+    await page.context().close();
+  }
+});
 
 test('lambda: a Plot Title change redraws the Linear Result and equals a Generate from the same draft', async ({ browser }) => {
   test.setTimeout(600_000);
@@ -214,6 +236,130 @@ test('a failed apply keeps the Result and the committed Session, says Live edit 
   }
 });
 
+// Review F7 (d): a failed value waits for its next change or Generate; a
+// later rerender does not apply it (R1 (c)).
+test('a failed apply does not run again', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await generateNow(page);
+    const before = await facts(page);
+    await page.evaluate(() => {
+      window.__G1_FAILURES__ = 0;
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
+        window.__G1_FAILURES__ += 1;
+        throw new Error('G1 forced failure');
+      };
+    });
+    const size = nextLegendFont(before.legendFontSizes);
+    await commitValue(page, LEGEND_FONT, size);
+    await expect.poll(async () => (await facts(page)).reflowError, { timeout: APPLY_TIMEOUT }).not.toBeNull();
+    await settleLive(page);
+    expect(await page.evaluate(() => window.__G1_FAILURES__)).toBe(1);
+    await removeGate(page);
+    // An editor rerender after it draws the committed Session without the failed value.
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      state.labelReflowForceRequestSeq.value += 1;
+    });
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(true);
+    await settleLive(page);
+    const after = await facts(page);
+    expect(after.reflowError).toBeNull();
+    expect(after.legendFontSizes).toEqual(before.legendFontSizes);
+    expect(after.diagramOptions).toBe(before.diagramOptions);
+    expect(after.draftLegendFont).toBe(size);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// Review F6: the label binder of a live apply reports to it after the apply
+// committed its value (the committed revision it checks is the new one).
+test('a forced label the live apply does not draw says Live edit failed', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await generateNow(page);
+    // Label visibility On for a labelled feature: the binder checks its label.
+    const forced = await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      const label = app.svgContainer.querySelector('svg text[data-label-feature-id]');
+      const featureId = label.getAttribute('data-label-feature-id');
+      await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === featureId), null);
+      await window.Vue.nextTick();
+      app.clickedFeature.labelVisibility = 'on';
+      await app.updateClickedFeatureLabelText();
+      app.clickedFeature = null;
+      return label.textContent;
+    });
+    await settleLive(page);
+    expect((await facts(page)).reflowError).toBeNull();
+    // The apply's Result is mounted without that label. Each Result gets a
+    // new preview surface, whose markup v-preview-markup sets through
+    // `replaceChildren`; the binder reads it in the same flush.
+    await page.evaluate((text) => {
+      const replaceChildren = HTMLElement.prototype.replaceChildren;
+      window.__G1_RESTORE_MOUNT__ = () => { HTMLElement.prototype.replaceChildren = replaceChildren; };
+      HTMLElement.prototype.replaceChildren = function replaceWithoutLabel(...nodes) {
+        if (this.classList.contains('gbdraw-preview-surface')) {
+          for (const node of nodes) {
+            node.querySelectorAll?.('text').forEach((label) => { if (label.textContent === text) label.remove(); });
+          }
+        }
+        return replaceChildren.apply(this, nodes);
+      };
+    }, forced);
+    const size = nextLegendFont((await facts(page)).legendFontSizes);
+    await commitValue(page, LEGEND_FONT, size);
+    await expect.poll(async () => (await facts(page)).reflowError, { timeout: APPLY_TIMEOUT }).not.toBeNull();
+    await page.evaluate(() => window.__G1_RESTORE_MOUNT__());
+    await settleLive(page);
+    await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
+    expect((await facts(page)).overrides[LEGEND_FONT_OVERRIDE], 'the apply itself committed').toBe(size);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// Review F3: a checkpoint step (the Bakta preset changes the Legend rows)
+// applies the Legend sizes it sets in its own rerender; Undo and Redo give
+// the Result of the action.
+test('the Bakta preset applies its Legend sizes; Undo and Redo give the same Results', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await generateNow(page);
+    const original = await facts(page);
+    const originalSnapshot = await semanticSnapshot(page);
+    expect(original.legendFontSizes).not.toEqual(['12']);
+    const preset = page.locator('select[aria-label="Preset scheme"]');
+    for (const details of await preset.locator('xpath=ancestor::details').all()) {
+      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+    }
+    await preset.selectOption('bakta');
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.applySpecificRulePreset());
+    await appliedLegendFont(page, 12);
+    const applied = await facts(page);
+    expect(applied.generationKey).toBe(original.generationKey);
+    expect(applied.reflowError).toBeNull();
+    expect(applied.overrides[LEGEND_FONT_OVERRIDE]).toBe(12);
+    const appliedSnapshot = await semanticSnapshot(page);
+
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    await expect.poll(async () => (await facts(page)).legendFontSizes, { timeout: APPLY_TIMEOUT })
+      .toEqual(original.legendFontSizes);
+    await settleLive(page);
+    expect(await semanticSnapshot(page)).toEqual(originalSnapshot);
+
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+    await appliedLegendFont(page, 12);
+    expect(await semanticSnapshot(page)).toEqual(appliedSnapshot);
+  } finally {
+    await page.context().close();
+  }
+});
+
 test('with an Applies on Generate value pending, a live change shows only the live value', async ({ browser }) => {
   test.setTimeout(900_000);
   const page = await load(browser, TOBACCO);
@@ -240,9 +386,11 @@ test('with an Applies on Generate value pending, a live change shows only the li
   }
 });
 
-// 6.3: an Undo of a Generate step during a rerender makes it stale; it reruns
-// from the restored committed Session.
-test('an Undo of a Generate step during a rerender is not admitted, and the rerender runs from the restored Session', async ({ browser }) => {
+// 6.3, review F7 (a): a value committed while a Generate runs applies after
+// it (the replay). An Undo of that Generate step while the apply is held
+// makes it stale by the committed revision alone: nothing of it is committed
+// into the restored Session, and it runs again from that Session.
+test('an Undo of a Generate step during an apply commits nothing from it; it runs again from the restored Session', async ({ browser }) => {
   test.setTimeout(900_000);
   const page = await load(browser, TOBACCO);
   try {
@@ -250,22 +398,74 @@ test('an Undo of a Generate step during a rerender is not admitted, and the rere
     const first = await facts(page);
     const firstSnapshot = await semanticSnapshot(page);
     await page.evaluate(() => { window.__GBDRAW_APP__.adv.def_font_size = 31; });
-    await generateNow(page);
-    expect((await facts(page)).diagramOptions).not.toBe(first.diagramOptions);
-    await installGate(page);
-    await page.evaluate(async () => {
-      const { state } = await import('./js/state.js');
-      state.labelReflowForceRequestSeq.value += 1;
-    });
-    await gateEntered(page);
+    await installGate(page, [1, 2]);
+    const generated = evaluateWithRetainedPromise(page, async () => (await window.__GBDRAW_APP__.runAnalysis())?.status);
+    await gateEntered(page, 1);
+    const size = nextLegendFont(first.legendFontSizes);
+    await commitValue(page, LEGEND_FONT, size);
+    await releaseGate(page, 1);
+    expect(await generated).toBe('ok');
+    // The replay applies the value the Generate did not draw; hold it.
+    await gateEntered(page, 2);
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toMatch(/Generate/i);
     await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-    await releaseGate(page);
+    const restored = await facts(page);
+    expect(restored.diagramOptions).toBe(first.diagramOptions);
+    await releaseGate(page, 2);
     await settleLive(page);
     await removeGate(page);
     const after = await facts(page);
     expect(after.reflowError).toBeNull();
-    expect(after.diagramOptions).toBe(first.diagramOptions);
-    expect(await semanticSnapshot(page)).toEqual(firstSnapshot);
+    const drawnFont = after.draftLegendFont === null ? undefined : Number(after.draftLegendFont);
+    // The Result shows the restored Session plus the restored draft's live value.
+    expect(after.overrides?.[LEGEND_FONT_OVERRIDE]).toBe(drawnFont);
+    expect(after.overrides?.[DEFINITION_FONT_OVERRIDE]).toEqual(first.overrides?.[DEFINITION_FONT_OVERRIDE]);
+    if (drawnFont === undefined) {
+      expect(after.diagramOptions).toBe(first.diagramOptions);
+      expect(await semanticSnapshot(page)).toEqual(firstSnapshot);
+    } else {
+      expect(await gateCalls(page), 'the stale apply and its rerun').toBe(3);
+      expect(after.legendFontSizes).toEqual([String(drawnFont)]);
+    }
+  } finally {
+    await page.context().close();
+  }
+});
+
+// Review F7 (b): values committed while a Generate runs. One changed and
+// changed back is equal to the Generate's: the replay renders nothing. One
+// the Generate did not draw is applied by the replay.
+test('a value committed during a Generate: the replay skips an equal value and applies a new one', async ({ browser }) => {
+  test.setTimeout(900_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await generateNow(page);
+    const before = await facts(page);
+    const size = nextLegendFont(before.legendFontSizes);
+    const draft = await page.locator(LEGEND_FONT).inputValue().catch(() => '');
+    await installGate(page);
+    let generated = evaluateWithRetainedPromise(page, async () => (await window.__GBDRAW_APP__.runAnalysis())?.status);
+    await gateEntered(page);
+    await commitValue(page, LEGEND_FONT, size);
+    await commitValue(page, LEGEND_FONT, draft);
+    await releaseGate(page);
+    expect(await generated).toBe('ok');
+    await settleLive(page);
+    expect(await gateCalls(page), 'the Generate alone').toBe(1);
+    expect((await facts(page)).legendFontSizes).toEqual(before.legendFontSizes);
+
+    await installGate(page);
+    generated = evaluateWithRetainedPromise(page, async () => (await window.__GBDRAW_APP__.runAnalysis())?.status);
+    await gateEntered(page);
+    await commitValue(page, LEGEND_FONT, size);
+    await releaseGate(page);
+    expect(await generated).toBe('ok');
+    await appliedLegendFont(page, size);
+    expect(await gateCalls(page), 'the Generate and the replay').toBe(2);
+    const after = await facts(page);
+    expect(after.reflowError).toBeNull();
+    expect(after.overrides[LEGEND_FONT_OVERRIDE]).toBe(size);
+    await removeGate(page);
   } finally {
     await page.context().close();
   }
@@ -336,12 +536,15 @@ test('Save waits for an apply, and Save then Load gives the same Result and requ
   }
 });
 
-// Linear: in Circular, Reset turns Multi-Record Canvas on (its default), and a
-// pending Multi-Record Canvas change holds every automatic rerender
-// (`shouldDeferCircularPreviewUpdates`, OV-1070).
-test('Reset Settings applies the live rows and leaves the rest pending', async ({ browser }) => {
+// OV-1070 (review F2): in Circular, Reset turns Multi-Record Canvas on (its
+// default) while the Result is single-canvas; that pending change no longer
+// holds the automatic rerender.
+for (const [name, file, definitionOverride] of [
+  ['lambda', LAMBDA, LINEAR_DEFINITION_FONT_OVERRIDE], ['tobacco', TOBACCO, DEFINITION_FONT_OVERRIDE]
+]) {
+test(`${name}: Reset Settings applies the live rows and leaves the rest pending`, async ({ browser }) => {
   test.setTimeout(900_000);
-  const page = await load(browser, LAMBDA);
+  const page = await load(browser, file);
   try {
     await generateNow(page);
     const size = nextLegendFont((await facts(page)).legendFontSizes);
@@ -357,8 +560,79 @@ test('Reset Settings applies the live rows and leaves the rest pending', async (
     expect(after.generationKey).toBe(before.generationKey);
     expect(after.draftLegendFont).toBeNull();
     expect(after.overrides[LEGEND_FONT_OVERRIDE], 'the default leaves the override out').toBeUndefined();
-    expect(after.overrides[LINEAR_DEFINITION_FONT_OVERRIDE], 'an Applies on Generate value stays pending')
-      .toEqual(before.overrides[LINEAR_DEFINITION_FONT_OVERRIDE]);
+    expect(after.overrides[definitionOverride], 'an Applies on Generate value stays pending')
+      .toEqual(before.overrides[definitionOverride]);
+  } finally {
+    await page.context().close();
+  }
+});
+}
+
+// Review F2: the layout rows apply live only to a multi-record canvas Result.
+test('with a single-canvas Result, the Multi-Record layout rows say Applies on Generate', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await generateNow(page);
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+    const note = page.locator('[data-setting="multi-record-layout"] > span').first();
+    await expect(note).toHaveText(/Applies on Generate/);
+    await expect(note).toHaveAttribute('data-applies-on-generate', 'multi-record-layout');
+  } finally {
+    await page.context().close();
+  }
+});
+
+// Review F4 (design 6.7): Load applies nothing. A value an apply left pending
+// (its render was canceled after the reply) does not reach a loaded Session
+// whose draft holds another value of that setting.
+test('a Load after a canceled apply applies none of the loaded draft', async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    const gallery = await facts(page);
+    await generateNow(page);
+    const generated = await facts(page);
+    const size = nextLegendFont(generated.legendFontSizes);
+    await page.evaluate(() => {
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
+        delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+        (await import('./js/services/diagram-generation.js')).cancelDiagramGeneration();
+      };
+    });
+    await commitValue(page, LEGEND_FONT, size);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse === undefined),
+      { timeout: APPLY_TIMEOUT }).toBe(true);
+    await settleLive(page);
+    const canceled = await facts(page);
+    expect(canceled.reflowError).toBeNull();
+    expect(canceled.diagramOptions, 'the canceled apply committed nothing').toBe(generated.diagramOptions);
+    // The Gallery Session with a draft Legend font size its Result does not
+    // draw (and the config overrides object a Generate writes).
+    const session = JSON.parse(readFileSync(TOBACCO, 'utf8'));
+    session.modes.circular.config.adv.legend_font_size = size + 7;
+    session.renderRequest.diagramOptions.configOverrides = {};
+    const file = testInfo.outputPath('pending-legend.gbdraw-session.json');
+    writeFileSync(file, JSON.stringify(session));
+    await page.locator('input[accept^=".json,"]').setInputFiles(file);
+    await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
+      && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180_000 }).toBe(true);
+    await settleLive(page);
+    const loaded = await facts(page);
+    expect(Number(loaded.draftLegendFont)).toBe(size + 7);
+    expect(loaded.legendFontSizes).toEqual(gallery.legendFontSizes);
+    // An editor rerender draws the loaded committed Session.
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      state.labelReflowForceRequestSeq.value += 1;
+    });
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(true);
+    await settleLive(page);
+    const after = await facts(page);
+    expect(after.reflowError).toBeNull();
+    expect(after.diagramOptions).toBe(loaded.diagramOptions);
+    expect(after.overrides[LEGEND_FONT_OVERRIDE]).toBeUndefined();
+    expect(after.legendFontSizes).toEqual(gallery.legendFontSizes);
   } finally {
     await page.context().close();
   }

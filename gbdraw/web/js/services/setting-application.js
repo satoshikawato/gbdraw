@@ -100,10 +100,28 @@ const rowOf = (id) => {
   return row;
 };
 
-/** The note a `<setting-note>` shows; empty text shows none. @param {SettingApplicationId} id @returns {SettingApplicationNote} */
-export const settingApplicationNote = (id) => {
+/**
+ * The Vue injection key of the `applies` predicate `SettingNote`
+ * (components.js) passes to `settingApplicationNote`: the app setup provides
+ * `committedLiveSettingApplies` (services/config.js).
+ */
+export const SETTING_NOTE_APPLIES = Symbol('setting-note-applies');
+
+/**
+ * The note a `<setting-note>` shows; empty text shows none. A live setting
+ * row applies on Generate while the shown Result cannot draw one of its
+ * request paths (`applies`, from the committed request; a Circular layout
+ * field without a committed grid).
+ * @param {SettingApplicationId} id
+ * @param {(requestPath: string) => boolean} [applies]
+ * @returns {SettingApplicationNote}
+ */
+export const settingApplicationNote = (id, applies = () => true) => {
   const row = rowOf(id);
-  return { application: row.application, text: row.note || TEXT[row.application], qualified: Boolean(row.note) };
+  const application = Object.values(row.requestPaths || {}).every(applies) ? row.application : 'generate';
+  return application === row.application
+    ? { application, text: row.note || TEXT[application], qualified: Boolean(row.note) }
+    : { application, text: TEXT[application], qualified: false };
 };
 
 /** The text of a note whose class follows state (Palette Instant Preview). @param {SettingApplicationClass} application */

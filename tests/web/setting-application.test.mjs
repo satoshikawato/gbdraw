@@ -235,7 +235,12 @@ test('every row renders its note or its class text', () => {
   const component = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'components.js'), 'utf8')
     .match(/export const SettingNote = \{([\s\S]*?)\n\};/);
   assert.ok(component, 'components.js defines SettingNote');
-  assert.match(component[1], /setup: \(props\) => \(\{ note: settingApplicationNote\(props\.setting\) \}\)/);
+  // A live setting row says Applies on Generate while the committed request
+  // cannot draw one of its request paths (review F2 of #1145).
+  assert.match(component[1], /const applies = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => true\)\);\n\s*return \{ note: computed\(\(\) => settingApplicationNote\(props\.setting, applies\)\) \};/);
+  // The app setup provides the predicate of the committed request.
+  const setup = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
+  assert.match(setup, /provide\(SETTING_NOTE_APPLIES, committedLiveSettingApplies\);/);
   assert.match(component[1], /:data-applies-on-generate="note\.application === 'generate' \? setting : null"/);
   assert.match(component[1], /\{\{ note\.text \}\}/);
 });
