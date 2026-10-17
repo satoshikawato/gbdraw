@@ -163,6 +163,17 @@ write-up of a release.
   complement, display start, and region, in Linear also the organism line and the
   alignment, and edits the definition text and Reverse complement, which apply
   on Generate.
+- Web app: a click on the Circular scale ticks, the Linear scale, a GC content
+  or GC skew (dinucleotide) track, or the plot title in the preview shows that
+  element's settings section in a popup beside the figure while Layout edit is
+  off: **Axis & Scale**, **Dinucleotide content/skew**, or **Titles & Record
+  Labels**. The pointer on one of these elements shows the hint **Click to open
+  its settings**. The popup holds the section itself, so the settings panel does
+  not list that section until the popup closes; an edit there is the same
+  setting as in the panel and applies at the same time. This popup and a
+  feature, match, Legend row, or record definition popup replace each other,
+  so the preview shows one popup at a time. Every popup of the preview now moves back inside the window when the
+  window is resized, instead of staying partly outside it (OV-626).
 - Web app: the Editor's Features list uses one compact row per feature that
   expands to its label text field; the label and feature-edit TSV actions move
   into one **Import / export** menu. The Legend tab reorders rows by a drag

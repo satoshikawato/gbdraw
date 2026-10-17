@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `57`
+- Contract revision: `58`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -40,7 +40,7 @@ Status: active Product authority
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
-  `PD-OI-102`, `PD-OI-103`, and `PD-OI-104`
+  `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, and `PD-OI-105`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -1307,6 +1307,53 @@ Status: active Product authority
     other record is amended or retired.
   - This authority-only amendment contains no runtime; dependent runtime
     requires it merged into its base.
+- Revision 58 changes: `PD-OI-105` is added
+  (`B / CLICK-DRAWN-ELEMENT-SHOWS-ITS-SECTION-IN-POPUP`, concern
+  `web.result.element-settings-entry`). It comes from the Product Decision
+  Owner `satoshikawato`'s replies of `2026-10-12` and `2026-10-13` on reaching
+  the settings of a drawn element from the figure in the Web app. Each
+  quotation below is the part of a reply that carries the answer.
+  - Reply 1 (`2026-10-12`), to mock images in which a click on the Circular
+    scale ticks, the GC skew track, the Linear scale, or the plot title shows
+    that element's settings section beside the figure.
+    「図の要素をクリックして設定を開く案(D、1 回目の最後)を足す。」
+  - Reply 2 (`2026-10-13`), to a page of Before/After images of a first built
+    form, in which the section opened in the settings pane. The page asked
+    three choices: where the settings open (`A` in the settings pane, built;
+    `B` beside the figure, as in the mock images), what the plot title and
+    the Linear scale say on hover (both sentences; the present sentence only;
+    or not clickable), and the English wording **Click to open its settings**.
+    「PR-C（図の要素から設定を開く）: 図の横に浮かべる（最初の案の画像の形）。設定はポップアップする方がいいと思う。選んでいただく点 2：タイトルと Linear の scale の説明: 2文とも出す。選んでいただく点 3：英語の文言：このままでよい。」
+  - Reply 3 (`2026-10-13`), to a page of Before/After images of the rebuilt
+    form `B` and the request to approve its receipt text as written or to
+    name what to change.
+    「PR-C（https://claude.ai/artifact/RDBmSKD27nNQ6Xd21ivmrb の 12）: そのまま承認」
+    Section 12 of that page showed the nine fields of the receipt as recorded
+    below, the Must preserve text as a list whose `〔…〕` headings were set in
+    bold without the brackets, and the decision date as the day of the
+    approval. The receipt is recorded byte for byte.
+  - `PD-OI-053` keeps its text. With Layout edit off, the plot title and the
+    Linear scale keep its help cursor, dashed frame, and "Turn on Layout edit
+    to move this item"; the receipt below adds a second line to that hint
+    (`〔押せることの表示〕`). With Layout edit on, nothing of this record applies
+    (`〔出ないとき〕`).
+  - `PD-OI-039` keeps its text: while Review alignment is open a click on the
+    figure opens, switches, and closes nothing, this popup included
+    (`〔出ないとき〕`, `〔閉じるとき〕`).
+  - `PD-OI-092` and `PD-OI-093` keep their text: the section index and the
+    icon column work as recorded, and using either on the section that the
+    popup holds returns the section to the settings pane first
+    (`〔閉じるとき〕`, `〔アイコンの列〕`).
+  - `PD-OI-102`, `PD-OI-103`, and `PD-OI-104` keep their text. The receipt
+    below was approved on `2026-10-13`, before they were added (Revision
+    57); the popup holds the section itself, so a row of that section
+    applies when those records say it applies, and the receipt's
+    「値は今までどおり Generate で反映される」 does not change when a row
+    applies.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -6208,6 +6255,50 @@ Decision date: 2026-10-17
   "acceptedResidualRisk": "a gap where a hidden track was, until Generate.",
   "owner": "Satoshi Kawato",
   "decisionDate": "2026-10-17"
+}
+```
+
+### PD-OI-105: A click on a drawn element shows its settings in a popup
+
+- Concern key: `web.result.element-settings-entry`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / CLICK-DRAWN-ELEMENT-SHOWS-ITS-SECTION-IN-POPUP`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies quoted verbatim in the Revision 58 entry
+  above. The Owner approved the receipt text below as written. The receipt
+  reproduces its fields without translation or additional terms. Dependent
+  runtime requires this authority merged into its base, or merged together
+  with it through the reviewed static Product Contract co-change route; this
+  record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `0ed87f6520aeac57b438bed6bd00b609083e36fd6d03af4c28a94cb957caf82d`.
+
+```text
+PRODUCT_DECISION
+Concern: web.result.element-settings-entry
+Scenario revision: 1
+Choice: B / CLICK-DRAWN-ELEMENT-SHOWS-ITS-SECTION-IN-POPUP
+Rationale: 図の目盛りやタイトルを変えたいとき、設定ペインのどの section にあるかを探さなくても、図のその要素を押せば設定が出るようにする。設定は図の横に popup で出す。
+Must preserve: 〔押せる要素と出る section〕Circular の目盛り → Axis & Scale。Linear の scale → Axis & Scale。GC content、GC skew などの dinucleotide の track → Dinucleotide content/skew。図のタイトル → Titles & Record Labels。〔押したとき〕Result の中に popup が出て、その section が入る。popup は押した要素に重ならない場所（右、左、下、上の順で、入るところ）に出る。どこにも入らないとき（Result いっぱいの輪の track、上下に余白のない横長の要素、スマートフォンの幅）は、押した場所の横に出て要素の一部を覆う。入るのは section そのもので、写しではない。popup に出ている間、その section は設定ペインにはなく、目次のボタンは残る。フォーカスは popup の見出しに移る。値は今までどおり Generate で反映される。〔popup が出ている間〕popup の中の編集は設定ペインでの編集と同じで、Undo の履歴に 1 つずつ入る。Undo、Redo、Generate、図の移動と拡大縮小、Fit、Result の外のクリックでは閉じない。見出しをドラッグすると popup が動き、見出しを押しても section は畳まれない。幅は 320 px で、長い section は popup の中でスクロールする。別の押せる要素を押すと、同じ popup の中身がその section に替わる。窓の大きさが変わって popup が画面からはみ出すときは、閉じずに、画面の中の一番近い位置へ動く。〔Result の popup は 1 つ〕feature、比較の帯、凡例の行、レコードの定義の popup が開いているときに押せる要素を押すと、その 1 回のクリックで前の popup が閉じて設定の popup が出る。それらの popup が開くと、設定の popup は閉じる。feature の選択は残る。〔閉じるとき〕popup の Close section のボタン。Escape（feature などの popup が開いていないとき。右の Editor の引き出しが開いていても、先に popup だけが閉じる）。Result の何もない場所、または popup も動作も持たない要素のクリック。ほかの popup が開いたとき。Layout edit を ON にしたとき。Review alignment を開いたとき。Circular と Linear を切り替えたとき（Undo で切り替わったときも）。Session を読み込んだとき（読み込みに失敗したときは、popup は読み込む前のまま残る）。Reset Settings。Run info のタブに切り替えたとき。Result がなくなったとき（最初の Generate より前まで Undo したとき）。目次のボタンまたはアイコンの列でその section を開いたとき。閉じると section は設定ペインに戻り、開いていたか畳んでいたかは popup に出す前のまま。フォーカスは popup を出す前にあった場所に戻る。〔アイコンの列〕押した要素の section が、横に開いている section と同じときは、popup は出ず、フォーカスがその見出しに移る。ほかの section のときは popup が出て、横に開いている section はそのまま。〔押せることの表示〕Layout edit が OFF のとき、これらの要素にマウスを載せると「Click to open its settings」が出る。目盛りと track ではポインターが手の形になる。タイトルと Linear の scale では、「Click to open its settings」と今の「Turn on Layout edit to move this item」が 2 行で出て、「?」のポインターと点線の枠は今のまま。〔出ないとき〕Layout edit が ON のあいだ。Review alignment を開いているあいだ（説明も手の形のポインターも出ない）。図をドラッグして動かしたとき。〔変えないもの〕feature、比較の帯、凡例の行、レコードの定義を押したときの動きと、それらの popup（窓の大きさが変わって画面からはみ出すときに、画面の中の一番近い位置へ動くようになる点だけが変わる）。popup を出す・閉じるだけでは、設定の値、図、Session、Undo の履歴、書き出した SVG・PNG・PDF は変わらない。popup とその位置は保存しない。
+May retire: none
+Accepted residual risk: 目盛りは線と小さい数字なので、押せる範囲が狭い。キーボードでは図の要素からは出せない（目次のボタンで同じ section を開ける）。Result いっぱいの輪の track や、上下に popup の入る余白がない横長の要素（図の下の端にある Linear の scale など）を押したとき、およびスマートフォンの幅では、popup が押した要素の一部を覆う。長い section の popup は Result の高さいっぱいになり、図の一部を覆う。popup はドラッグすると Result の外へも動かせる。popup に出ている間、設定ペインはその section のぶん短くなり、ペインのスクロールの位置がずれることがある。アイコンの列で、押した要素の section がすでに横に開いているときは、押しても見た目は変わらない。popup の見出しは、読み上げではボタンと読まれるが、popup の中では畳めない。Custom Track Slots が有効な図では、section の一部の欄が無効になっている。
+Owner: satoshikawato
+Decision date: 2026-10-13
+```
+
+```json
+{
+  "concern": "web.result.element-settings-entry",
+  "scenarioRevision": 1,
+  "choice": "B / CLICK-DRAWN-ELEMENT-SHOWS-ITS-SECTION-IN-POPUP",
+  "rationale": "図の目盛りやタイトルを変えたいとき、設定ペインのどの section にあるかを探さなくても、図のその要素を押せば設定が出るようにする。設定は図の横に popup で出す。",
+  "mustPreserve": "〔押せる要素と出る section〕Circular の目盛り → Axis & Scale。Linear の scale → Axis & Scale。GC content、GC skew などの dinucleotide の track → Dinucleotide content/skew。図のタイトル → Titles & Record Labels。〔押したとき〕Result の中に popup が出て、その section が入る。popup は押した要素に重ならない場所（右、左、下、上の順で、入るところ）に出る。どこにも入らないとき（Result いっぱいの輪の track、上下に余白のない横長の要素、スマートフォンの幅）は、押した場所の横に出て要素の一部を覆う。入るのは section そのもので、写しではない。popup に出ている間、その section は設定ペインにはなく、目次のボタンは残る。フォーカスは popup の見出しに移る。値は今までどおり Generate で反映される。〔popup が出ている間〕popup の中の編集は設定ペインでの編集と同じで、Undo の履歴に 1 つずつ入る。Undo、Redo、Generate、図の移動と拡大縮小、Fit、Result の外のクリックでは閉じない。見出しをドラッグすると popup が動き、見出しを押しても section は畳まれない。幅は 320 px で、長い section は popup の中でスクロールする。別の押せる要素を押すと、同じ popup の中身がその section に替わる。窓の大きさが変わって popup が画面からはみ出すときは、閉じずに、画面の中の一番近い位置へ動く。〔Result の popup は 1 つ〕feature、比較の帯、凡例の行、レコードの定義の popup が開いているときに押せる要素を押すと、その 1 回のクリックで前の popup が閉じて設定の popup が出る。それらの popup が開くと、設定の popup は閉じる。feature の選択は残る。〔閉じるとき〕popup の Close section のボタン。Escape（feature などの popup が開いていないとき。右の Editor の引き出しが開いていても、先に popup だけが閉じる）。Result の何もない場所、または popup も動作も持たない要素のクリック。ほかの popup が開いたとき。Layout edit を ON にしたとき。Review alignment を開いたとき。Circular と Linear を切り替えたとき（Undo で切り替わったときも）。Session を読み込んだとき（読み込みに失敗したときは、popup は読み込む前のまま残る）。Reset Settings。Run info のタブに切り替えたとき。Result がなくなったとき（最初の Generate より前まで Undo したとき）。目次のボタンまたはアイコンの列でその section を開いたとき。閉じると section は設定ペインに戻り、開いていたか畳んでいたかは popup に出す前のまま。フォーカスは popup を出す前にあった場所に戻る。〔アイコンの列〕押した要素の section が、横に開いている section と同じときは、popup は出ず、フォーカスがその見出しに移る。ほかの section のときは popup が出て、横に開いている section はそのまま。〔押せることの表示〕Layout edit が OFF のとき、これらの要素にマウスを載せると「Click to open its settings」が出る。目盛りと track ではポインターが手の形になる。タイトルと Linear の scale では、「Click to open its settings」と今の「Turn on Layout edit to move this item」が 2 行で出て、「?」のポインターと点線の枠は今のまま。〔出ないとき〕Layout edit が ON のあいだ。Review alignment を開いているあいだ（説明も手の形のポインターも出ない）。図をドラッグして動かしたとき。〔変えないもの〕feature、比較の帯、凡例の行、レコードの定義を押したときの動きと、それらの popup（窓の大きさが変わって画面からはみ出すときに、画面の中の一番近い位置へ動くようになる点だけが変わる）。popup を出す・閉じるだけでは、設定の値、図、Session、Undo の履歴、書き出した SVG・PNG・PDF は変わらない。popup とその位置は保存しない。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "目盛りは線と小さい数字なので、押せる範囲が狭い。キーボードでは図の要素からは出せない（目次のボタンで同じ section を開ける）。Result いっぱいの輪の track や、上下に popup の入る余白がない横長の要素（図の下の端にある Linear の scale など）を押したとき、およびスマートフォンの幅では、popup が押した要素の一部を覆う。長い section の popup は Result の高さいっぱいになり、図の一部を覆う。popup はドラッグすると Result の外へも動かせる。popup に出ている間、設定ペインはその section のぶん短くなり、ペインのスクロールの位置がずれることがある。アイコンの列で、押した要素の section がすでに横に開いているときは、押しても見た目は変わらない。popup の見出しは、読み上げではボタンと読まれるが、popup の中では畳めない。Custom Track Slots が有効な図では、section の一部の欄が無効になっている。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-13"
 }
 ```
 
