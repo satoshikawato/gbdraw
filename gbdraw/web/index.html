@@ -2030,8 +2030,9 @@
 
             <div id="settings-sections" class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
 
-                <div v-settings-section="'input-genomes'" class="card">
+                <div v-settings-section="'input-genomes'" data-setting="inputs" class="card">
                     <div tabindex="-1" class="card-header min-w-0"><settings-section-title section="input-genomes"></settings-section-title></div>
+                    <p class="mb-2"><setting-note setting="inputs"></setting-note></p>
 
                     <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">Record rotation, feature placement, or tolerance has changes pending Generate. This notice covers record display only; the Result keeps its applied settings.</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
@@ -2090,7 +2091,7 @@
                             </div>
                         </section>
                         <section v-if="recordDisplayControls.rowsFor('circular').length" aria-label="Record rotation" class="space-y-2">
-                            <div class="flex items-center justify-between gap-2"><span class="input-label text-[10px]">Topology and display start</span><span class="apply-note" data-applies-on-generate="record-rotation">Applies on Generate</span></div>
+                            <div class="flex items-center justify-between gap-2"><span class="input-label text-[10px]">Topology and display start</span></div>
                             <record-display-control v-for="row in recordDisplayControls.rowsFor('circular')" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
                         </section>
                         <details ref="circularRecordPresentationPanel" data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
@@ -2127,7 +2128,7 @@
                                     </div>
                                     <div class="pt-1 border-t border-slate-200 border-dashed">
                                         <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                            <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">Region (optional)</span> <span class="apply-note ml-auto">Applies on Generate</span>
+                                            <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">Region (optional)</span>
                                             <help-tip id="help-circular-region" text="Use 1-based inclusive coordinates within the selected record. Both values are required and must be within record bounds."></help-tip>
                                         </div>
                                         <div class="grid grid-cols-2 gap-2">
@@ -2556,7 +2557,6 @@
                                         :disabled="!semanticMutationAvailable"
                                     > Draw this record
                                 </label>
-                                <span class="apply-note">Applies on Generate</span>
                                 <button
                                     v-if="!recordSelection.isDrawn('linear', seq.uid)"
                                     type="button"
@@ -2598,7 +2598,7 @@
                             <linear-record-names v-if="!linearFileCardRecord(source)" :seq="seq" :idx="idx" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                    <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">Region (optional)</span> <span class="apply-note ml-auto">Applies on Generate</span>
+                                    <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">Region (optional)</span>
                                     <help-tip :id="`help-linear-region-${seq.uid}`" text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #index."></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
@@ -2810,8 +2810,9 @@
                                 </div>
                             </div>
                         </details>
-                        <section data-linear-comparison-card v-settings-section="'comparison'" class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
+                        <section data-linear-comparison-card v-settings-section="'comparison'" data-setting="comparison" class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
                             <div id="linear-comparison-heading" tabindex="-1" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700 [&>i]:text-lg [&>i]:text-blue-600"><settings-section-title section="comparison"></settings-section-title></div>
+                            <setting-note setting="comparison"></setting-note>
                             <div
                                 v-if="importedComparisonNeedsResolution"
                                 data-imported-comparison-resolution
@@ -2980,7 +2981,6 @@
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('result-filters')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                         <div class="linear-primary-label">Result filters</div>
-                                        <p class="ui-hint">Applies on Generate: comparison result filters.</p>
                                         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div>
                                                 <label class="linear-primary-label mb-1">Bitscore</label>
@@ -3214,13 +3214,13 @@
                 <div class="card basic-settings" v-settings-section="'basic'">
                     <div class="card-header"><i class="ph ph-sliders" aria-hidden="true"></i> Basic</div>
                     <div class="space-y-2">
-                        <div>
+                        <div data-setting="output-prefix">
                             <span class="input-label"><label for="output-prefix">Output Prefix</label> <help-tip id="help-output-prefix" :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></span>
                             <input id="output-prefix" type="text" v-model="form.prefix" aria-describedby="help-output-prefix" class="form-input" :placeholder="mode === 'circular' ? 'Optional (Default: Record ID)' : 'Optional (Default: out)'" :disabled="!semanticMutationAvailable">
                         </div>
 
-                        <template v-if="mode === 'circular'">
-                            <p class="apply-note" data-applies-on-generate="species-strain"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate: species and strain</p>
+                        <div v-if="mode === 'circular'" data-setting="species-strain" class="space-y-2">
+                            <setting-note setting="species-strain"></setting-note>
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <span class="input-label"><label for="circular-species">Species</label> <help-tip id="help-species" text="Species name used in the circular center label when no custom plot title is set."></help-tip></span>
@@ -3232,7 +3232,7 @@
                                     <input type="text" v-model="form.strain" aria-label="Strain" aria-describedby="help-strain" class="form-input" placeholder="e.g. K-12" :disabled="!semanticMutationAvailable">
                                 </div>
                             </div>
-                        </template>
+                        </div>
 
                         <div class="flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs">
                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -3245,9 +3245,10 @@
                     </div>
                 </div>
 
-                <div v-if="mode === 'linear'" data-linear-advanced-comparison v-settings-section="'advanced-comparison'" class="card">
+                <div v-if="mode === 'linear'" data-linear-advanced-comparison v-settings-section="'advanced-comparison'" data-setting="advanced-comparison" class="card">
                     <details data-linear-comparison-disclosure="advanced">
                         <summary role="button" aria-label="Advanced comparison and layout"><settings-section-title section="advanced-comparison"></settings-section-title></summary>
+                        <setting-note setting="advanced-comparison" class="mt-2"></setting-note>
                         <div class="mt-2 min-w-0 space-y-4 border-t border-slate-200 pt-3">
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('record-layout')" class="min-w-0 space-y-2">
                                 <div class="linear-primary-label">Record Layout</div>
@@ -3321,9 +3322,10 @@
                     </details>
                 </div>
 
-                <div v-settings-section="'region-annotations'" class="card">
+                <div v-settings-section="'region-annotations'" data-setting="region-annotations" class="card">
                     <details>
                         <summary aria-label="Region Annotations"><settings-section-title section="region-annotations"></settings-section-title> <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
+                        <setting-note setting="region-annotations" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Add set</button>
@@ -3411,9 +3413,10 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'circular'" v-settings-section="'pairwise-comparisons'" class="card">
+                <div v-if="mode === 'circular'" v-settings-section="'pairwise-comparisons'" data-setting="pairwise-comparisons" class="card">
                     <details>
                         <summary aria-label="Pairwise Comparisons"><settings-section-title section="pairwise-comparisons"></settings-section-title> <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
+                        <setting-note setting="pairwise-comparisons" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600" :disabled="!semanticMutationAvailable"> Run LOSAT</label>
@@ -3568,6 +3571,7 @@
                     v-if="unmanagedConfigOverrideEntries.length"
                     data-unmanaged-config-overrides
                     v-settings-section="'preserved-settings'"
+                    data-setting="preserved-settings"
                     class="card border-blue-200 bg-blue-50/60"
                 >
                     <div class="flex items-start gap-2">
@@ -3577,6 +3581,7 @@
                             <p class="ui-hint mt-0.5">
                                 These validated settings are not editable in the Web UI. They remain active until reset.
                             </p>
+                            <setting-note setting="preserved-settings" class="mt-1"></setting-note>
                         </div>
                     </div>
                     <div class="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
@@ -3606,9 +3611,10 @@
                 </div>
 
 
-                <div v-settings-section="'layout'" class="card">
+                <div v-settings-section="'layout'" data-setting="layout" class="card">
                     <details :open="mode === 'linear'">
                         <summary aria-label="Layout"><settings-section-title section="layout"></settings-section-title> <help-tip text="Control track placement and layout-related options."></help-tip></summary>
+                        <setting-note setting="layout" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <template v-if="mode === 'linear'">
                                 <div class="text-[11px] text-slate-600 space-y-1" data-linear-label-auto-layout>
@@ -3656,7 +3662,7 @@
                                             <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox" aria-label="Lock Definition Column" aria-describedby="linear-definition-lock-help" :disabled="!semanticMutationAvailable">
                                             <span>Lock Definition Column</span>
                                         </label>
-                                        <help-tip id="linear-definition-lock-help" text="ON aligns Linear definitions in a common left column. OFF centers them in a common column width and follows row offsets, including center or similarity alignment. Changes apply on Generate."></help-tip>
+                                        <help-tip id="linear-definition-lock-help" :text="'ON aligns Linear definitions in a common left column. OFF centers them in a common column width and follows row offsets, including center or similarity alignment. ' + settingApplicationSentence('layout')"></help-tip>
                                     </div>
                                     <div class="flex items-center text-xs">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -3665,33 +3671,36 @@
                                         </label>
                                         <help-tip id="help-linear-normalize-record-lengths" text="Normalize sequence lengths to be equal. Suppresses the length bar."></help-tip>
                                     </div>
-                                    <div class="flex items-center text-xs">
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
-                                            <input type="checkbox" v-model="form.show_gc" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-content" class="form-checkbox">
-                                            <span>Show GC Content</span>
-                                        </label>
-                                        <help-tip id="help-linear-show-gc-content" text="Simple mode only. Display a GC content track; use Reset to copy it into the custom stack."></help-tip>
-                                    </div>
-                                    <div class="flex items-center text-xs">
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
-                                            <input type="checkbox" v-model="form.show_skew" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-skew" class="form-checkbox">
-                                            <span>Show GC Skew</span>
-                                        </label>
-                                        <help-tip id="help-linear-show-gc-skew" text="Simple mode only. Display a GC skew track; use Reset to copy it into the custom stack."></help-tip>
-                                    </div>
-                                    <div class="flex items-center text-xs">
-                                        <label
-                                            class="option-label flex items-center gap-2 text-xs select-none"
-                                            :class="depthToggleOptionClass"
-                                            :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
-                                        >
-                                            <input type="checkbox" v-model="form.show_depth" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled || !canShowDepthTrack)" aria-describedby="help-linear-show-depth" class="form-checkbox">
-                                            <span>Show Depth</span>
-                                        </label>
-                                        <help-tip id="help-linear-show-depth" text="Simple mode only. Display depth coverage tracks from uploaded TSV files; use Reset to copy them into the custom stack."></help-tip>
+                                    <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
+                                                <input type="checkbox" v-model="form.show_gc" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-content" class="form-checkbox">
+                                                <span>Show GC Content</span>
+                                            </label>
+                                            <help-tip id="help-linear-show-gc-content" text="Simple mode only. Display a GC content track; use Reset to copy it into the custom stack."></help-tip>
+                                        </div>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
+                                                <input type="checkbox" v-model="form.show_skew" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-skew" class="form-checkbox">
+                                                <span>Show GC Skew</span>
+                                            </label>
+                                            <help-tip id="help-linear-show-gc-skew" text="Simple mode only. Display a GC skew track; use Reset to copy it into the custom stack."></help-tip>
+                                        </div>
+                                        <div class="flex items-center text-xs">
+                                            <label
+                                                class="option-label flex items-center gap-2 text-xs select-none"
+                                                :class="depthToggleOptionClass"
+                                                :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
+                                            >
+                                                <input type="checkbox" v-model="form.show_depth" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled || !canShowDepthTrack)" aria-describedby="help-linear-show-depth" class="form-checkbox">
+                                                <span>Show Depth</span>
+                                            </label>
+                                            <help-tip id="help-linear-show-depth" text="Simple mode only. Display depth coverage tracks from uploaded TSV files; use Reset to copy them into the custom stack."></help-tip>
+                                        </div>
+                                        <setting-note setting="track-visibility"></setting-note>
                                     </div>
                                 </div>
-                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                <div data-setting="track-slots" class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div class="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
                                         <div class="min-w-0">
                                             <div class="inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold">
@@ -3710,7 +3719,7 @@
                                                 </button>
                                                 <help-tip id="help-linear-custom-track-slots" label="Help: Custom Track Slots" text="Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
                                             </div>
-                                            <p id="linear-custom-track-slots-timing" class="apply-note">Applies on Generate</p>
+                                            <setting-note id="linear-custom-track-slots-timing" setting="track-slots"></setting-note>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -4008,25 +4017,28 @@
                                         <input type="checkbox" v-model="form.multi_record_canvas" data-circular-canvas-setting class="form-checkbox" :disabled="!semanticMutationAvailable">
                                         <span>Multi-Record Canvas</span>
                                     </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Suppress the GC content track.">
-                                        <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox" aria-label="Hide GC Content" :disabled="!semanticMutationAvailable">
-                                        <span>Hide GC Content</span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Suppress the GC skew track.">
-                                        <input type="checkbox" :checked="form.suppress_skew" @change="setCircularSkewSuppressed($event.target.checked, $event)" class="form-checkbox" aria-label="Hide GC Skew" :disabled="!semanticMutationAvailable">
-                                        <span>Hide GC Skew</span>
-                                    </label>
-                                    <label
-                                        class="option-label flex items-center gap-2 text-xs select-none"
-                                        :class="depthToggleOptionClass"
-                                        :title="adv.circular_track_slots_enabled ? 'Custom stack Depth rows control rendering. Disable the custom stack to change this simple control.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
-                                    >
-                                        <input type="checkbox" v-model="form.show_depth" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled || !canShowDepthTrack)" class="form-checkbox">
-                                        <span>Show Depth</span>
-                                    </label>
+                                    <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Suppress the GC content track.">
+                                            <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox" aria-label="Hide GC Content" :disabled="!semanticMutationAvailable">
+                                            <span>Hide GC Content</span>
+                                        </label>
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Suppress the GC skew track.">
+                                            <input type="checkbox" :checked="form.suppress_skew" @change="setCircularSkewSuppressed($event.target.checked, $event)" class="form-checkbox" aria-label="Hide GC Skew" :disabled="!semanticMutationAvailable">
+                                            <span>Hide GC Skew</span>
+                                        </label>
+                                        <label
+                                            class="option-label flex items-center gap-2 text-xs select-none"
+                                            :class="depthToggleOptionClass"
+                                            :title="adv.circular_track_slots_enabled ? 'Custom stack Depth rows control rendering. Disable the custom stack to change this simple control.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
+                                        >
+                                            <input type="checkbox" v-model="form.show_depth" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled || !canShowDepthTrack)" class="form-checkbox">
+                                            <span>Show Depth</span>
+                                        </label>
+                                        <setting-note setting="track-visibility"></setting-note>
+                                    </div>
                                 </div>
 
-                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                <div data-setting="track-slots" class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div class="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
                                         <div class="min-w-0">
                                             <div class="inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold">
@@ -4045,7 +4057,7 @@
                                                 </button>
                                                 <help-tip id="help-circular-custom-track-slots" label="Help: Custom Track Slots" text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
                                             </div>
-                                            <p id="circular-custom-track-slots-timing" class="apply-note">Applies on Generate</p>
+                                            <setting-note id="circular-custom-track-slots-timing" setting="track-slots"></setting-note>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -4064,7 +4076,7 @@
                                         </div>
                                     </div>
                                     <div v-if="circularTrackSlotsPanelOpen" id="circular-custom-track-slots-panel" class="space-y-1.5">
-                                        <p class="flex items-center gap-1 text-[10px] text-slate-500">Width and Radius: px or ×R <help-tip id="circular-measure-help" label="Help: Width and Radius" text="Width and Radius: px or ×R, where R is the base circular radius. Paste 20px or 65% (0.65 ×R). Changing units keeps the number; changes apply on the next Generate. Blank means Auto; its unit selection is for the next input only."></help-tip></p>
+                                        <p class="flex items-center gap-1 text-[10px] text-slate-500">Width and Radius: px or ×R <help-tip id="circular-measure-help" label="Help: Width and Radius" text="Width and Radius: px or ×R, where R is the base circular radius. Paste 20px or 65% (0.65 ×R). Changing units keeps the number. Blank means Auto; its unit selection is for the next input only."></help-tip></p>
                                         <div v-if="!adv.circular_track_slots_enabled" class="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-700">
                                             Custom stack is saved but inactive; generation uses the simple track controls.
                                         </div>
@@ -4429,10 +4441,10 @@
                     </details>
                 </div>
 
-                <div v-settings-section="'font'" class="card">
+                <div v-settings-section="'font'" data-setting="font" class="card">
                     <details>
                         <summary aria-label="Font"><settings-section-title section="font"></settings-section-title> <help-tip id="help-font-family" text="The font of all diagram text: labels, titles, legend, and scale."></help-tip></summary>
-                        <p class="apply-note mt-2" data-applies-on-generate="font"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
+                        <setting-note setting="font" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <label class="block">
                                 <span class="input-label text-[10px] mb-1">Font</span>
@@ -4461,10 +4473,10 @@
                     </details>
                 </div>
 
-                <div v-settings-section="'titles'" class="card">
+                <div v-settings-section="'titles'" data-setting="titles" class="card">
                     <details>
                         <summary aria-label="Titles and Record Labels"><settings-section-title section="titles"></settings-section-title> <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
-                        <p class="apply-note mt-2" data-applies-on-generate="titles"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
+                        <setting-note setting="titles" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-4 pt-2 border-t border-slate-200">
                             <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
                                 <h4 id="plot-title-settings-heading" class="group-heading">Plot Title</h4>
@@ -4558,11 +4570,11 @@
                     </details>
                 </div>
 
-                <div v-settings-section="'legend'" class="card">
+                <div v-settings-section="'legend'" data-setting="legend" class="card">
                     <details>
                         <summary aria-label="Legend settings"><settings-section-title section="legend"></settings-section-title> · {{ legendPositionLabel(form.legend) }} <help-tip text="Adjust legend position and typography."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <p class="apply-note" data-applies-on-generate="legend"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
+                            <setting-note setting="legend"></setting-note>
                             <div>
                                 <span class="input-label text-[10px] mb-1"><label for="legend-position">Position</label> <help-tip id="help-legend-position" text="Position of the legend. 'None' hides the legend."></help-tip></span>
                                 <select id="legend-position" v-model="form.legend" class="form-input text-xs py-1" aria-label="Legend position" aria-describedby="help-legend-position" :disabled="!semanticMutationAvailable">
@@ -4595,7 +4607,7 @@
                     </details>
                 </div>
 
-                <div v-settings-section="'colors'" class="card">
+                <div v-settings-section="'colors'" data-setting="colors" class="card">
                     <details>
                         <summary aria-label="Colors"><settings-section-title section="colors"></settings-section-title> <help-tip text="Customize palettes, default colors, and specific color rules."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
@@ -4636,14 +4648,14 @@
                                 </div>
                                 <div class="mb-1 flex items-center justify-between gap-2">
                                     <span class="input-label text-[10px] !mb-0">Palette</span>
-                                    <span data-palette-application-help class="apply-note">{{ paletteInstantPreviewEnabled ? 'Live edit' : 'Applies on Generate' }}</span>
+                                    <span data-palette-application-help class="apply-note">{{ settingApplicationText(paletteInstantPreviewEnabled ? 'live' : 'generate') }}</span>
                                 </div>
                                 <select :value="selectedPalette" @change="requestPaletteChange($event)" aria-label="Palette" class="form-input form-input-compact mb-2" :disabled="!semanticMutationAvailable">
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>
                                 <div class="mb-1 flex items-center justify-between gap-2">
                                     <span class="input-label text-[10px] !mb-0">Colors in this figure or changed</span>
-                                    <span data-default-color-application-help class="apply-note">{{ hasPendingPaletteDraft ? 'Applies on Generate' : 'Live edit' }}</span>
+                                    <span data-default-color-application-help class="apply-note">{{ settingApplicationText(hasPendingPaletteDraft ? 'generate' : 'live') }}</span>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
                                     <div v-for="feat in defaultColorGroups.primary" :key="feat" class="min-w-0">
@@ -4742,9 +4754,10 @@
                     </details>
                 </div>
 
-                <div v-settings-section="'features'" class="card">
+                <div v-settings-section="'features'" data-setting="features" class="card">
                     <details>
                         <summary aria-label="Features"><settings-section-title section="features"></settings-section-title> <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
+                        <setting-note setting="features" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <span class="input-label">Feature Types <help-tip id="help-feature-feature-types" text="Select which feature types to draw."></help-tip></span>
@@ -4810,9 +4823,9 @@
                                 </div>
                             </div>
 
-                            <div>
+                            <div data-setting="feature-visibility">
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <span class="input-label mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></span>
+                                    <span class="input-label mb-0">Feature Visibility <setting-note setting="feature-visibility"></setting-note> <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></span>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -4909,39 +4922,41 @@
                                             <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.' : ''" aria-label="Feature Track Width" aria-describedby="help-feature-feature-track-width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
-                                    <p class="apply-note" data-applies-on-generate="stroke"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
-                                    <div class="grid grid-cols-2 gap-1.5">
-                                        <div>
-                                            <span class="input-label text-[10px]">Block Stroke Color <help-tip id="help-feature-block-stroke-color" text="Use Auto for the configured default, None for no outline, or Color for an explicit value."></help-tip></span>
-                                            <color-value-control
-                                                v-model="adv.block_stroke_color"
-                                                fallback="#000000"
-                                                aria-label="Block stroke color"
-                                                aria-describedby="help-feature-block-stroke-color">
-                                            </color-value-control>
+                                    <div data-setting="stroke" class="space-y-2">
+                                        <setting-note setting="stroke"></setting-note>
+                                        <div class="grid grid-cols-2 gap-1.5">
+                                            <div>
+                                                <span class="input-label text-[10px]">Block Stroke Color <help-tip id="help-feature-block-stroke-color" text="Use Auto for the configured default, None for no outline, or Color for an explicit value."></help-tip></span>
+                                                <color-value-control
+                                                    v-model="adv.block_stroke_color"
+                                                    fallback="#000000"
+                                                    aria-label="Block stroke color"
+                                                    aria-describedby="help-feature-block-stroke-color">
+                                                </color-value-control>
+                                            </div>
+                                            <div>
+                                                <span class="input-label text-[10px]">Block Stroke Width <help-tip id="help-feature-block-stroke-width" text="Width of the outline for feature blocks."></help-tip></span>
+                                                <auto-value-field :visible="autoValueVisible(adv.block_stroke_width, 'blockStrokeWidth')" :text="autoValueText('blockStrokeWidth')">
+                                                    <input type="number" v-model.number="adv.block_stroke_width" aria-label="Block Stroke Width" aria-describedby="help-feature-block-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                </auto-value-field>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <span class="input-label text-[10px]">Block Stroke Width <help-tip id="help-feature-block-stroke-width" text="Width of the outline for feature blocks."></help-tip></span>
-                                            <auto-value-field :visible="autoValueVisible(adv.block_stroke_width, 'blockStrokeWidth')" :text="autoValueText('blockStrokeWidth')">
-                                                <input type="number" v-model.number="adv.block_stroke_width" aria-label="Block Stroke Width" aria-describedby="help-feature-block-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
-                                            </auto-value-field>
-                                        </div>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-1.5">
-                                        <div>
-                                            <span class="input-label text-[10px]">Line Stroke Color <help-tip id="help-feature-line-stroke-color" text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></span>
-                                            <color-value-control
-                                                v-model="adv.line_stroke_color"
-                                                fallback="#000000"
-                                                aria-label="Line stroke color"
-                                                aria-describedby="help-feature-line-stroke-color">
-                                            </color-value-control>
-                                        </div>
-                                        <div>
-                                            <span class="input-label text-[10px]">Line Stroke Width <help-tip id="help-feature-line-stroke-width" text="Width of the lines representing introns."></help-tip></span>
-                                            <auto-value-field :visible="autoValueVisible(adv.line_stroke_width, 'lineStrokeWidth')" :text="autoValueText('lineStrokeWidth')">
-                                                <input type="number" v-model.number="adv.line_stroke_width" aria-label="Line Stroke Width" aria-describedby="help-feature-line-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
-                                            </auto-value-field>
+                                        <div class="grid grid-cols-2 gap-1.5">
+                                            <div>
+                                                <span class="input-label text-[10px]">Line Stroke Color <help-tip id="help-feature-line-stroke-color" text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></span>
+                                                <color-value-control
+                                                    v-model="adv.line_stroke_color"
+                                                    fallback="#000000"
+                                                    aria-label="Line stroke color"
+                                                    aria-describedby="help-feature-line-stroke-color">
+                                                </color-value-control>
+                                            </div>
+                                            <div>
+                                                <span class="input-label text-[10px]">Line Stroke Width <help-tip id="help-feature-line-stroke-width" text="Width of the lines representing introns."></help-tip></span>
+                                                <auto-value-field :visible="autoValueVisible(adv.line_stroke_width, 'lineStrokeWidth')" :text="autoValueText('lineStrokeWidth')">
+                                                    <input type="number" v-model.number="adv.line_stroke_width" aria-label="Line Stroke Width" aria-describedby="help-feature-line-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                </auto-value-field>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -4950,9 +4965,10 @@
                     </details>
                 </div>
 
-                <div v-settings-section="'labels'" class="card">
+                <div v-settings-section="'labels'" data-setting="labels" class="card">
                     <details>
                         <summary aria-label="Labels"><settings-section-title section="labels"></settings-section-title> <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
+                        <setting-note setting="labels" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
                                 <span class="input-label text-[10px] mb-1"><label for="linear-show-labels">Show Labels</label> <help-tip id="help-label-show-labels" text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></span>
@@ -5171,10 +5187,10 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'linear'" v-settings-section="'linear-axis'" class="card">
+                <div v-if="mode === 'linear'" v-settings-section="'linear-axis'" data-setting="axis-scale" class="card">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><settings-section-title section="linear-axis"></settings-section-title> <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
-                        <p class="apply-note mt-2" data-applies-on-generate="axis-scale"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
+                        <setting-note setting="axis-scale" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -5311,10 +5327,10 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'circular'" v-settings-section="'circular-axis'" class="card">
+                <div v-if="mode === 'circular'" v-settings-section="'circular-axis'" data-setting="axis-scale" class="card">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><settings-section-title section="circular-axis"></settings-section-title> <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
-                        <p class="apply-note mt-2" data-applies-on-generate="axis-scale"><i class="ph ph-clock" aria-hidden="true"></i> Applies on Generate</p>
+                        <setting-note setting="axis-scale" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
                                 <label
@@ -5380,9 +5396,10 @@
                     </details>
                 </div>
 
-                <div v-settings-section="'dinucleotide'" class="card">
+                <div v-settings-section="'dinucleotide'" data-setting="dinucleotide" class="card">
                     <details>
                         <summary aria-label="Dinucleotide content/skew"><settings-section-title section="dinucleotide"></settings-section-title> <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
+                        <setting-note setting="dinucleotide" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div>
@@ -5884,10 +5901,13 @@
                                 <i class="ph ph-selection" aria-hidden="true"></i>
                                 {{ selectedFeatureCount }} selected
                             </span>
-                            <select data-history-managed aria-label="Selected feature placements" :disabled="!semanticMutationAvailable" value="" @change="featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''" class="rounded border p-1 text-xs">
-                                <option value="" disabled>Placement…</option>
-                                <option v-for="choice in featurePlacementActions.choices(selectedFeatures)" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
-                            </select>
+                            <span data-setting="feature-placement" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1">
+                                    <select data-history-managed aria-label="Selected feature placements" :disabled="!semanticMutationAvailable" value="" @change="featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''" class="rounded border p-1 text-xs">
+                                    <option value="" disabled>Placement…</option>
+                                    <option v-for="choice in featurePlacementActions.choices(selectedFeatures)" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
+                                </select>
+                                <setting-note setting="feature-placement"></setting-note>
+                            </span>
 
                             <button type="button"
                                     class="btn btn-secondary btn-sm"
@@ -6348,7 +6368,7 @@
                         </section>
                         <section aria-labelledby="feature-popup-layout-heading" class="border-t border-slate-100 pt-3" data-feature-popup-group="layout" data-nodrag="true">
                             <h3 id="feature-popup-layout-heading" class="feature-popup-heading">Layout</h3>
-                            <label class="block text-xs font-medium text-slate-500 mb-2">Feature placement <span class="ui-hint font-normal">Applies on Generate</span>
+                            <label data-setting="feature-placement" class="block text-xs font-medium text-slate-500 mb-2">Feature placement <setting-note setting="feature-placement"></setting-note>
                                 <select data-history-managed aria-label="Feature placement" :disabled="!semanticMutationAvailable" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="mt-1 block max-w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700">
                                     <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
                                 </select>
@@ -6645,8 +6665,8 @@
                                             <dd>{{ fact.value }}</dd>
                                         </template>
                                     </dl>
-                                    <section v-if="previewItemView.draft" class="space-y-2 border-t border-slate-100 pt-3">
-                                        <h3 class="feature-popup-heading">Definition text <span class="ui-hint font-normal normal-case tracking-normal">Applies on Generate</span></h3>
+                                    <section v-if="previewItemView.draft" data-setting="inputs" class="space-y-2 border-t border-slate-100 pt-3">
+                                        <h3 class="feature-popup-heading">Definition text <setting-note setting="inputs" class="normal-case tracking-normal"></setting-note></h3>
                                         <label class="block text-xs text-slate-600">{{ previewItemView.draft.nameLabel }}
                                             <input type="text" :value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
@@ -8369,7 +8389,7 @@
             <h2 id="record-list-title" class="text-base font-bold text-slate-800">Choose records</h2>
             <p id="record-list-description" class="mt-1 text-sm leading-relaxed text-slate-600">
                 <strong class="break-all text-slate-800">{{ recordSelection.recordListView.value.name }}</strong>:
-                <span data-record-list-count>{{ recordSelection.recordListView.value.drawn }} of {{ recordSelection.recordListView.value.total }} records drawn</span>. Changes apply on Generate.
+                <span data-record-list-count>{{ recordSelection.recordListView.value.drawn }} of {{ recordSelection.recordListView.value.total }} records drawn</span>. {{ settingApplicationSentence('inputs') }}
             </p>
             <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <label class="text-xs font-semibold text-slate-600">Search record IDs

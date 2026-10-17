@@ -11,7 +11,9 @@ import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsView } from './services/settings-sections.js';
+import { settingApplicationNote } from './services/setting-application.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
+/** @import { SettingApplicationId } from './services/setting-application.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
 /** @import { SettingsPaneView } from './app/settings-pane.js' */
@@ -256,6 +258,19 @@ export const SettingsSectionTitle = {
   /** @param {{ section: SettingsSectionKey }} props */
   setup: (props) => ({ entry: SETTINGS_SECTIONS.find((section) => section.key === props.section) }),
   template: '<i class="ph" :class="entry.icon" aria-hidden="true"></i> {{ entry.title }}'
+};
+
+// The timing note of a `SETTING_APPLICATION` row (services/setting-application.js),
+// placed inside that row's `data-setting` scope: "Applies on Generate" with
+// `data-applies-on-generate="<key>"`, "Live edit" for a live block inside a
+// Generate scope, or the row's own qualified note as a hint line.
+export const SettingNote = {
+  props: { setting: { type: String, required: true } },
+  /** @param {{ setting: SettingApplicationId }} props */
+  setup: (props) => ({ note: settingApplicationNote(props.setting) }),
+  template: `<span v-if="note.text" :class="note.qualified ? 'ui-hint block' : 'apply-note'"
+    :data-applies-on-generate="note.application === 'generate' ? setting : null"><i v-if="note.application === 'generate'"
+    class="ph ph-clock" aria-hidden="true"></i> {{ note.text }}</span>`
 };
 
 // `v-settings-section="'<key>'"` on the element of a settings section: it
