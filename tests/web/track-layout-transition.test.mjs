@@ -295,9 +295,9 @@ test('the stack editors are created once, with the transition', () => {
     .map((match) => [relative(`${WEB}/js`, path), match[1].replace(/\s+/g, ' ').trim()]));
   // The Circular editor also takes the choice dialog and History's undoable step,
   // which its Hide GC content / skew question uses, and the reader of the
-  // records the next Generate draws, which its estimates use.
+  // record lengths its estimates describe.
   assert.deepEqual(sites, [
-    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, circularDiagramLengths: readCircularDiagramLengths'],
+    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths'],
     ['app/app-setup.js', 'state, changeTrackLayout']
   ]);
 });

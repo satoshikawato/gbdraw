@@ -433,6 +433,31 @@ test('the Circular Auto notes and slot estimates show the sizes Generate draws f
   expect(await drawnLabelFontSizes(page)).toEqual([[8]]);
 });
 
+// OV-512, OV-518: Generate crops the one record to its region before it sizes
+// the diagram (a 90,000 bp record cropped to 1..30,000 is drawn short); the
+// Auto notes and the slot estimates read the length of the region.
+test('a Circular record cropped to a region shows the sizes Generate draws for the region', async ({ page }) => {
+  test.setTimeout(420_000);
+  await openApp(page);
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setDiagramMode('circular');
+    app.setCircularSourceFile('c_gb', new File([text], 'long.gb', { type: 'text/plain', lastModified: 1 }));
+    Object.assign(app.form, { multi_record_canvas: false, suppress_gc: true, suppress_skew: true, labels_mode: 'out', legend: 'none',
+      circular_region_start: 1, circular_region_end: 30_000 });
+  }, genbank([{ id: 'L90', repeats: 30_000 }]));
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(1);
+  const featureWidthNote = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.adv.circular_track_slots.findIndex((slot) => slot.renderer === 'features');
+    return app.circularTrackSlotGeometryAutoText(app.adv.circular_track_slots[index], index, 'width');
+  });
+  await expect(labelFontNote(page)).toHaveText('14 px (auto)');
+  expect(await featureWidthNote()).toBe('≈ 37 px (estimate)');
+  await generateAndWaitForResult(page);
+  expect(await drawnLabelFontSizes(page)).toEqual([[14]]);
+});
+
 // OV-493: Generate sizes the Linear labels by the records in the label scope
 // (a 30,000 bp first record and a 120,000 bp second one: short and long by the
 // 100 kb boundary); the note reads the same records.

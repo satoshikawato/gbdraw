@@ -4,6 +4,7 @@
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LegendEntry, LinearSeq, PopupPosition } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
+/** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
 /** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
@@ -184,9 +185,10 @@ import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linea
 import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
-  circularDiagramRecordLengths,
+  circularDrawingRecordSet,
+  circularEstimateLengths,
+  circularRequestDiagrams,
   formatRecordLength,
-  resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
 import {
@@ -219,9 +221,8 @@ import {
 import {
   RECORD_SETTINGS_DEFAULTS,
   circularRecordDrawKey,
-  circularRecordRequestKey,
+  circularRecordRequestKeys,
   circularRecordsToDraw,
-  circularSingleRecordKey,
   linearCardHasSettings,
   pruneRecordsOff,
   recordsWithEdits,
@@ -1523,13 +1524,7 @@ export const createAppSetup = () => {
   const getAnnotationRecordCatalog = (linearSourcesOverride = null) => {
     const drawing = state.drawings.circular;
     const circularDiscovery = getCircularRecordDiscoveryState();
-    const circularRecordSet = resolveCircularRequestRecordSet(/** @type {any} */ ({
-      records: circularDiscovery.records,
-      selector: drawing.form.circular_record_selector,
-      multiRecordCanvas: drawing.form.multi_record_canvas,
-      groupingIntent: drawing.adv.circular_grouping_intent,
-      recordsOff: drawing.recordsOff
-    }));
+    const circularRecordSet = circularDrawingRecordSet(circularDiscovery.records, drawing);
     const linearRecordsOff = new Set(state.drawings.linear.recordsOff);
     return buildAnnotationRecordCatalog(/** @type {any} */ ({
       mode: mode.value,
@@ -2064,15 +2059,17 @@ export const createAppSetup = () => {
       })
     })(change);
   };
-  // The records each diagram of the next Circular Generate draws, by length:
-  // the record set of the request, read once for the Auto notes and the track
-  // slot estimates.
-  const circularDiagramLengths = computed(() => (
-    circularDiagramRecordLengths(state.circularRecordList.value, state.drawings.circular)
+  // The diagrams the next Circular Generate draws, from the record set of the
+  // request, read once: the Auto notes take the record lengths of each, and the
+  // track slot estimates those of the diagram that draws the shown Result's
+  // record.
+  const circularDiagrams = computed(() => circularRequestDiagrams(state.circularRecordList.value, state.drawings.circular));
+  const circularEstimateRecordLengths = computed(() => circularEstimateLengths(
+    circularDiagrams.value, getCommittedCanonicalRenderRequest(), state.selectedResultIndex.value
   ));
-  const readCircularDiagramLengths = () => circularDiagramLengths.value;
+  const readCircularEstimateLengths = () => circularEstimateRecordLengths.value;
   const circularTrackSlotEditor = createCircularTrackSlotEditor({
-    state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, circularDiagramLengths: readCircularDiagramLengths
+    state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths
   });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
   const annotationImportNotice = ref('');
@@ -2095,14 +2092,14 @@ export const createAppSetup = () => {
     { immediate: true }
   );
   const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(
-    state, state.drawings.circular, circularDiagramLengths.value
+    state, state.drawings.circular, circularEstimateRecordLengths.value
   ));
   const losatSettings = createLosatSettings({ state });
   // Auto values follow the records the next Generate draws. The Linear ones are
   // known once every drawn record is read and none is cropped; until then the
   // values name their rule.
   const autoValueDisplay = createAutoValueDisplay(state, {
-    circularDiagramLengths: readCircularDiagramLengths,
+    circularDiagramLengths: () => circularDiagrams.value.map((/** @type {CircularDiagramRecords} */ diagram) => diagram.lengths),
     linearRecordLengths: () => {
       const lengths = state.drawings.linear.drawnLinearSeqs.value.map((seq) => {
         if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
@@ -6312,7 +6309,7 @@ export const createAppSetup = () => {
     );
     return circularRecordEntries().map((entry, index) => ({
       key: circularRecordDrawKey(entry),
-      requestKeys: [circularRecordRequestKey(entry.sourceIndex), circularSingleRecordKey(entry)],
+      requestKeys: circularRecordRequestKeys(entry),
       bindingKeys: bindingKeys[index] ? [bindingKeys[index]] : [],
       displaySource: 'circular', displaySelector: circularRecordDrawKey(entry)
     }));

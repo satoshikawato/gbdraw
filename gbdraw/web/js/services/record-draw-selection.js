@@ -99,6 +99,16 @@ export const circularSingleRecordKey = (record) => {
 };
 
 /**
+ * The request keys that can name a Circular record: the key it has when drawn
+ * with others and the key it has when drawn alone.
+ * @param {{ sourceIndex: number, recordKey?: unknown, recordId?: unknown, selector?: unknown }} record
+ * @returns {string[]}
+ */
+export const circularRecordRequestKeys = (record) => [
+  circularRecordRequestKey(record.sourceIndex), circularSingleRecordKey(record)
+];
+
+/**
  * The request record keys of a drawing's OFF records: a Linear card's uid, or
  * a Circular record's `record-N`.
  * @param {string} mode 'circular', or a Linear mode.

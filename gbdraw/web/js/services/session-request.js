@@ -59,8 +59,9 @@ import {
 } from './depth-track-state.js';
 import {
   buildDisambiguatedRecordEntries,
+  circularDrawingRecordSet,
+  circularFormRegion,
   isSingleCircularJourney,
-  resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
 import { circularRecordRequestKey, circularSingleRecordKey } from './record-draw-selection.js';
@@ -198,7 +199,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
  *   WebFileBindings } from './session-resource-backing.js'
  */
-/** @import { CircularRequestRecordSetOptions } from './record-options.js' */
+/** @import { CircularRecordDrawing, CircularRegionForm, CircularRequestRecordSetOptions } from './record-options.js' */
 /** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
@@ -1218,35 +1219,18 @@ const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
 );
 
 /**
- * @param {{ circular_region_start?: unknown, circular_region_end?: unknown, circular_reverse?: unknown }} form
+ * @param {CircularRegionForm & { circular_reverse?: unknown }} form
  * @param {{ recordLength?: unknown, record_length?: unknown, value?: unknown } | null} record
  * @returns {CanonicalRecord['region']}
  */
 const circularRegionPayload = (form, record) => {
-  const rawStart = form.circular_region_start;
-  const rawEnd = form.circular_region_end;
-  const hasStart = rawStart !== null && rawStart !== undefined && String(rawStart).trim() !== '';
-  const hasEnd = rawEnd !== null && rawEnd !== undefined && String(rawEnd).trim() !== '';
-  if (!hasStart && !hasEnd) return null;
-  if (hasStart !== hasEnd) {
-    throw new Error('Circular region requires both Start and End coordinates.');
-  }
-  const start = Number(rawStart);
-  const end = Number(rawEnd);
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < 1) {
-    throw new Error('Circular region Start and End must be positive integers.');
-  }
-  if (start > end) {
-    throw new Error('Circular region Start must not exceed End. Use Reverse complement to change display orientation.');
-  }
-  const recordLength = Number(record?.recordLength ?? record?.record_length);
-  if (Number.isInteger(recordLength) && recordLength > 0 && end > recordLength) {
-    throw new Error(`Circular region End (${end}) exceeds the selected record length (${recordLength}).`);
-  }
+  const region = circularFormRegion(form, record);
+  if (region === null) return null;
+  if ('error' in region) throw new Error(region.error);
   return {
     selector: selectorPayload(record?.value),
-    start,
-    end,
+    start: region.start,
+    end: region.end,
     reverseComplement: Boolean(form.circular_reverse)
   };
 };
@@ -1419,13 +1403,8 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
         kind: 'genbank',
         resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
       };
-  const recordSet = resolveCircularRequestRecordSet(/** @type {Record<string, any>} */ ({
-    records: state.circularRecordList.value,
-    selector: drawing.form.circular_record_selector,
-    multiRecordCanvas: drawing.form.multi_record_canvas,
-    groupingIntent: drawing.adv.circular_grouping_intent,
-    recordsOff: drawing.recordsOff
-  }));
+  // The drawing is the Circular drawing of `state.js`, which holds every field the record set reads.
+  const recordSet = circularDrawingRecordSet(state.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
   const { recordSelectors } = recordSet;
   const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];

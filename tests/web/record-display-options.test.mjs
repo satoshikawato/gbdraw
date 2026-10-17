@@ -597,3 +597,24 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
   assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, true, 'the row override comes back');
   assert.equal(state.linearSeqs[0].region_reverse, false);
 });
+
+// A Circular record is cropped only where Generate crops it: one record offered
+// alone, with a region in the form. Emptied region fields name no region, and
+// separate diagrams or a Multi-Record Canvas draw whole records.
+test('a Circular row is cropped where Generate crops its record', () => {
+  const model = compositeControls();
+  const cropped = () => model.controls.rows.value.filter((row) => row.sourceUid === 'circular').map((row) => row.cropped);
+  const { form } = model.state.activeDrawing();
+  form.multi_record_canvas = false;
+  form.circular_region_start = 1;
+  form.circular_region_end = 50;
+  assert.deepEqual(cropped(), [false, false], 'two records offered: separate diagrams draw whole records');
+  form.circular_record_selector = 'first';
+  assert.deepEqual(cropped(), [true], 'the record chosen alone is cropped');
+  form.multi_record_canvas = true;
+  assert.deepEqual(cropped(), [false], 'a Multi-Record Canvas draws whole records');
+  form.multi_record_canvas = false;
+  form.circular_region_start = '';
+  form.circular_region_end = '';
+  assert.deepEqual(cropped(), [false], 'emptied fields name no region');
+});

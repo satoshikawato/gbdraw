@@ -18,6 +18,7 @@ import { cloneJsonData } from '../services/json-clone.js';
 import { featureIdentityKey, requestFeaturePlacements } from '../services/feature-placement.js';
 import { committedRecordForKey, committedRecordUsesSource } from '../services/feature-identity.js';
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
+import { circularDrawingCropped } from '../services/record-options.js';
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
@@ -125,7 +126,7 @@ export const createRecordDisplayControls = ({
         paired: state.cInputType.value === 'gff' ? state.files.c_fasta : null,
         records: state.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
           recordId: record.record_id ?? record.recordId, recordLength: record.record_length ?? record.recordLength })), selector: drawing.form.circular_record_selector,
-        cropped: drawing.form.circular_region_start != null || drawing.form.circular_region_end != null,
+        cropped: circularDrawingCropped(state.circularRecordList.value, drawing),
         reverse: drawing.form.circular_reverse },
       ...state.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', sourceUid: seq.uid,
         source: state.lInputType.value === 'gff' ? seq.gff : seq.gb,

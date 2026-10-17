@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
-import { circularDiagramRecordLengths } from '../../gbdraw/web/js/services/record-options.js';
+import { createCircularTrackSlotEditor } from '../../gbdraw/web/js/app/circular-track-slots.js';
+import { circularEstimateLengths, circularRequestDiagrams } from '../../gbdraw/web/js/services/record-options.js';
+import { circularSingleRecordKey } from '../../gbdraw/web/js/services/record-draw-selection.js';
+import { createDefaultAdv, createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import { sizeClassForRecordLengths } from '../../gbdraw/web/js/services/track-slot-display.js';
 import { withDrawings as withFixtureDrawings } from './helpers/drawing-state.mjs';
 
@@ -98,9 +101,12 @@ const circularDrawing = (/** @type {Record<string, unknown>} */ form = {}, /** @
   recordsOff,
   unmanagedConfigOverrides: {}
 });
-const circularNotes = (/** @type {ReturnType<typeof circularDrawing>} */ drawing) => createAutoValueDisplay(
+/** @typedef {Parameters<typeof circularRequestDiagrams>[0]} DiscoveredRecords */
+/** @param {DiscoveredRecords} records @param {ReturnType<typeof circularDrawing>} drawing */
+const circularDiagramRecordLengths = (records, drawing) => circularRequestDiagrams(records, drawing).map(({ lengths }) => lengths);
+const circularNotes = (/** @type {ReturnType<typeof circularDrawing>} */ drawing, records = SHORT_AND_LONG) => createAutoValueDisplay(
   withDrawings({ mode: { value: 'circular' }, ...drawing }),
-  { circularDiagramLengths: () => circularDiagramRecordLengths(SHORT_AND_LONG, drawing) }
+  { circularDiagramLengths: () => circularDiagramRecordLengths(records, drawing) }
 );
 
 test('OV-494: the drawn Circular records are those of the request, one list per diagram', () => {
@@ -113,10 +119,10 @@ test('OV-494: the drawn Circular records are those of the request, one list per 
   assert.deepEqual(lengths({}, ['#2']), [[30_000]]);
   assert.deepEqual(lengths({ circular_record_selector: 'short' }), [[30_000]], 'a single choice');
   assert.deepEqual(lengths({ circular_record_selector: 'long' }, ['#2']), [[300_000]], 'a single choice draws its record ON or OFF');
-  // Not known: a region crop of the one record, a selector that matches no record, every record OFF, nothing read.
-  assert.deepEqual(lengths({ circular_record_selector: 'long', circular_region_start: 1, circular_region_end: 30_000 }), []);
-  assert.deepEqual(lengths({ circular_record_selector: 'missing' }), []);
-  assert.deepEqual(lengths({ multi_record_canvas: true }, ['#1', '#2']), []);
+  // A selector that matches no record, or every record OFF: the records the drawing offers, as before a choice.
+  assert.deepEqual(lengths({ circular_record_selector: 'missing' }), [[30_000], [300_000]]);
+  assert.deepEqual(lengths({ multi_record_canvas: true }, ['#1', '#2']), [[30_000, 300_000]]);
+  // Not known: nothing read, or no length read.
   assert.deepEqual(circularDiagramRecordLengths([], circularDrawing()), []);
   assert.deepEqual(circularDiagramRecordLengths([{ selector: '#1' }], circularDrawing()), []);
 });
@@ -166,3 +172,77 @@ test('OV-493: the Linear Label Font Size note follows the records in the label s
   assert.equal(notes('first', []).autoValueText('labelFontSize'), 'Auto (by genome size)');
 });
 
+// OV-518: Generate crops the one record of a single choice to its region
+// before it sizes the diagram, and the notes and the track preview estimate
+// the diagram at the lengths they know. One 16,569 bp record, Region 1..5000.
+const MITOGENOME = Object.freeze([{ selector: '#1', record_id: 'mito', record_length: 16_569 }]);
+/** @param {DiscoveredRecords} records @param {ReturnType<typeof circularDrawing>} drawing */
+const featureWidthEstimate = (records, drawing, shownRequest = null, resultIndex = 0) => {
+  const state = withDrawings({
+    mode: { value: 'circular' }, ...drawing,
+    form: { ...createDefaultForm(), ...drawing.form }, adv: { ...createDefaultAdv('circular'), ...drawing.adv }
+  });
+  const editor = createCircularTrackSlotEditor({
+    state,
+    estimateRecordLengths: () => circularEstimateLengths(circularRequestDiagrams(records, drawing), shownRequest, resultIndex)
+  });
+  editor.normalizeCircularTrackSlots();
+  const features = state.adv.circular_track_slots.findIndex((/** @type {{ renderer: string }} */ slot) => slot.renderer === 'features');
+  return editor.circularTrackSlotGeometryAutoText(state.adv.circular_track_slots[features], features, 'width');
+};
+
+test('OV-518: a record cropped to a region is drawn at the length of the region', () => {
+  const cropped = circularDrawing({ circular_region_start: 1, circular_region_end: 5000 });
+  assert.deepEqual(circularDiagramRecordLengths(MITOGENOME, cropped), [[5000]]);
+  assert.equal(featureWidthEstimate(MITOGENOME, cropped), '≈ 37 px (estimate)');
+  const notes = circularNotes(cropped, MITOGENOME);
+  assert.equal(notes.autoValueText('labelFontSize'), '14 px (auto)');
+  assert.equal(notes.autoValueText('scaleInterval'), '1 kbp (auto)');
+  assert.equal(notes.autoValueText('dinucleotideWindow'), '1 kbp (auto)');
+
+  // A long record cropped to a short region is drawn short.
+  const longCropped = circularDrawing({ circular_record_selector: 'long', circular_region_start: 1, circular_region_end: 30_000 });
+  assert.deepEqual(circularDiagramRecordLengths(SHORT_AND_LONG, longCropped), [[30_000]]);
+  assert.equal(circularNotes(longCropped).autoValueText('labelFontSize'), '14 px (auto)');
+  // A region Generate cannot draw yet (End not typed) leaves the record whole.
+  assert.deepEqual(circularDiagramRecordLengths(MITOGENOME, circularDrawing({ circular_region_start: 1 })), [[16_569]]);
+  // Only a record offered alone is cropped: separate diagrams draw whole records.
+  assert.deepEqual(
+    circularDiagramRecordLengths(SHORT_AND_LONG, circularDrawing({ circular_region_start: 1, circular_region_end: 5000 })),
+    [[30_000], [300_000]]
+  );
+});
+
+test('OV-518: a record of unknown length leaves the lengths that are known', () => {
+  const partlyRead = [{ selector: '#1', record_id: 'short', record_length: 30_000 }, { selector: '#2', record_id: 'unread' }];
+  assert.deepEqual(circularDiagramRecordLengths(partlyRead, circularDrawing()), [[30_000]]);
+  assert.deepEqual(circularDiagramRecordLengths(partlyRead, circularDrawing({ multi_record_canvas: true })), [[30_000]]);
+  assert.equal(featureWidthEstimate(partlyRead, circularDrawing()), '≈ 37 px (estimate)');
+  assert.equal(circularNotes(circularDrawing(), partlyRead).autoValueText('labelFontSize'), '14 px (auto)');
+  // Long only while no length is known at all.
+  assert.equal(featureWidthEstimate([{ selector: '#1', record_id: 'unread' }], circularDrawing()), '≈ 18.5 px (estimate)');
+});
+
+// OV-519: three separate records of 30 kb, 300 kb and 30 kb, drawn as a batch;
+// Result 2 is shown and record 1 is turned off. The next Generate draws records
+// 2 and 3, so the estimate is that of record 2 (the shown Result's record), not
+// that of the second diagram of the next Generate (record 3).
+test('OV-519: the track preview estimates the shown Result by its record, not its position', () => {
+  const three = [
+    { selector: '#1', record_id: 'a', record_length: 30_000 },
+    { selector: '#2', record_id: 'b', record_length: 300_000 },
+    { selector: '#3', record_id: 'c', record_length: 30_000 }
+  ];
+  const batch = { mode: 'circular', grouping: 'batch', records: [{ recordKey: 'record-1' }, { recordKey: 'record-2' }, { recordKey: 'record-3' }] };
+  const firstOff = circularDrawing({}, ['#1']);
+  assert.equal(featureWidthEstimate(three, firstOff, batch, 1), '≈ 18.5 px (estimate)');
+  assert.equal(featureWidthEstimate(three, firstOff, batch, 2), '≈ 37 px (estimate)');
+  // The shown Result's record is OFF now: the first diagram of the next Generate.
+  assert.equal(featureWidthEstimate(three, circularDrawing({}, ['#2']), batch, 1), '≈ 37 px (estimate)');
+  // A Result of one record chosen alone has the key of a record drawn alone;
+  // the next Generate draws the same record among the others of a batch.
+  const single = { mode: 'circular', grouping: 'single', records: [{ recordKey: circularSingleRecordKey({ recordId: 'b', selector: '#2' }) }] };
+  assert.equal(featureWidthEstimate(three, circularDrawing(), single, 0), '≈ 18.5 px (estimate)');
+  // A Linear Result names no Circular record.
+  assert.equal(featureWidthEstimate(three, firstOff, { ...batch, mode: 'linear' }, 1), '≈ 18.5 px (estimate)');
+});
