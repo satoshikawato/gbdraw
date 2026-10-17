@@ -227,6 +227,15 @@ final directions or reference position differ from the preview, the preview
 refreshes and you apply again. If Apply fails, your choices and the previous
 Result stay.
 
+While the panel is open, the figure is fitted again whenever its room changes:
+when you resize the window, drag the settings panel wider or narrower, switch
+it to icons or back, open or close a section beside the icons, the review
+panel moves between the side of the figure and below it, or a notice above the
+Result appears or is dismissed. A zoom or position you set by hand during the review
+stays until the next such change, and the view you had before the review
+returns when the panel closes. Dragging the settings panel's width now follows
+the pointer from the first move.
+
 The alignment is saved with every anchor and **Skip** choice. A record's
 direction is its **Reverse complement** setting. Generate, reordering
 records, and a manual **Reverse complement** keep the alignment. Changing a
