@@ -10,13 +10,23 @@
 // component element except the presentation-only ones, inside an element
 // marked `v-settings-section` (the settings pane's only containers; the
 // catalog `SETTINGS_SECTIONS` owns their keys), unless it sits in a
-// `data-history-ignore` or `data-history-scope="transient"` subtree, which
-// the History input adapter (`isIgnoredTarget`) also leaves out because no
-// Session setting changes there. Outside the settings pane the controls that
-// write draft settings are the Result's Feature placement selects (popup and
-// selection toolbar) and the record popup's definition fields; every other
-// Result control is an editor edit (live), a review with its own Apply, or a
-// dialog.
+// `data-history-scope="transient"` subtree (a value that is not kept).
+// `data-history-ignore` controls count: the History input adapter skips them
+// because they record their own step (Inherit, Replace and Clear comparison
+// write a setting) or change no Session setting, which this test does not
+// tell apart. Outside the settings pane the controls that write draft
+// settings are the Result's Feature placement selects (popup and selection
+// toolbar) and the record popup's definition fields, found by their handler
+// names; every other Result control is an editor edit (live), a review with
+// its own Apply, or a dialog.
+//
+// What this catches: a control without any scope (the Basic card, a new
+// section, a new Result writer with a known handler), a scope or note without
+// a row, a missing note, and the literal wording "applies on Generate". What
+// it does not catch: a control is classified by its nearest scope, and every
+// card except Basic is a scope, so a new control inside a card inherits the
+// card's row whether or not it applies that way; a new Result writer with
+// another handler; and a timing note in other words. A reviewer checks those.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -127,12 +137,15 @@ const isControl = (element) => {
   }
   return element.tag.includes('-') && !PRESENTATION_COMPONENTS.has(element.tag);
 };
-const isIgnored = (element) => [...ancestorsOrSelf(element)].some((node) => node.attributes.has('data-history-ignore')
-  || node.attributes.get('data-history-scope') === 'transient');
+const isTransient = (element) => [...ancestorsOrSelf(element)].some((node) => node.attributes.get('data-history-scope') === 'transient');
+// An app preference, not a drawing setting (`ui.richFeaturePopup`); it is not
+// in the Session's drawing request and takes effect on the next feature click.
+const APP_PREFERENCES = new Set(['richFeaturePopup']);
+const isAppPreference = (element) => APP_PREFERENCES.has(element.attributes.get('v-model'));
 
 const sections = allElements.filter((element) => element.attributes.has('v-settings-section'));
 const settingsControls = sections.flatMap((section) => [...descendants(section)]
-  .filter((element) => isControl(element) && !isIgnored(element)));
+  .filter((element) => isControl(element) && !isTransient(element) && !isAppPreference(element)));
 const RESULT_DRAFT_WRITERS = /featurePlacementActions\.setPlacement\(|setPreviewRecordField\(/;
 const resultDraftControls = allElements.filter((element) => !sections.some((section) => [...ancestorsOrSelf(element)].includes(section))
   && RESULT_DRAFT_WRITERS.test(element.attributes.get('@change') || ''));
@@ -145,7 +158,7 @@ test('the owner has one row per key with a known application', () => {
   for (const row of SETTING_APPLICATION) {
     assert.match(row.id, /^[a-z][a-z0-9-]*$/, `${row.id}: a stable key, not a caption`);
     assert.ok(['live', 'generate', 'apply', 'export'].includes(row.application), `${row.id}: ${row.application}`);
-    if ('note' in row) assert.equal(row.application, 'generate', `${row.id}: only a Generate row qualifies its note`);
+    if ('note' in row) assert.match(row.note, /\S/, `${row.id}: a note has text`);
   }
   assert.ok(Object.isFrozen(SETTING_APPLICATION) && SETTING_APPLICATION.every(Object.isFrozen));
 });
@@ -202,18 +215,17 @@ test('the selection toolbar placement select has the note of the popup Feature p
   for (const control of placements) assert.equal(scopeOf(control).attributes.get('data-setting'), 'feature-placement', describe(control));
 });
 
-test('every Generate row renders the note, and live rows render Live edit', () => {
+test('every row renders its note or its class text', () => {
   for (const row of SETTING_APPLICATION) {
     const note = settingApplicationNote(row.id);
-    if (row.application === 'generate') {
-      assert.equal(note.text, row.note || 'Applies on Generate', row.id);
-      assert.equal(note.application, 'generate');
-      assert.equal(settingApplicationSentence(row.id), 'Changes apply on Generate.');
-    } else if (row.application === 'live') {
-      assert.equal(note.text, 'Live edit', row.id);
+    assert.equal(note.application, row.application, row.id);
+    assert.equal(note.qualified, Boolean(row.note), row.id);
+    if (row.note) {
+      assert.equal(note.text, row.note, row.id);
     } else {
-      assert.equal(note.text, '', row.id);
+      assert.equal(note.text, { generate: 'Applies on Generate', live: 'Live edit', apply: '', export: '' }[row.application], row.id);
     }
+    assert.equal(settingApplicationSentence(row.id), row.application === 'generate' ? 'Changes apply on Generate.' : '', row.id);
   }
   assert.throws(() => settingApplicationNote('no-such-setting'), /no-such-setting/);
   // The component (components.js `SettingNote`) renders exactly that text and,
@@ -234,9 +246,31 @@ test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () 
   assert.match(settingApplicationNote('track-visibility').text, /at once.*Generate/);
 });
 
+test('removing the last Depth file hides the drawn Depth track at once, and the Depth blocks say so', () => {
+  const depthSourceControls = settingsControls.filter((element) => /(?:remove(?:Circular|Linear)DepthTrack|clearLinearSourceDepthFile|set(?:Circular|LinearSource|Linear)DepthFile)\(/
+    .test(`${element.attributes.get('@click') || ''} ${element.attributes.get('@update:model-value') || ''}`));
+  assert.equal(depthSourceControls.length, 7, depthSourceControls.map(describe).join('\n'));
+  for (const control of depthSourceControls) assert.equal(scopeOf(control).attributes.get('data-setting'), 'depth-sources', describe(control));
+  const note = settingApplicationNote('depth-sources');
+  assert.equal(note.application, 'generate');
+  assert.match(note.text, /last Depth file.*at once.*Generate/);
+});
+
+test('Feature Visibility notes that exclusion from comparisons applies on Generate', () => {
+  const note = settingApplicationNote('feature-visibility');
+  assert.equal(note.application, 'live');
+  assert.match(note.text, /at once.*comparisons.*Generate/);
+});
+
+test('Embed font in exported SVG is an export-only setting', () => {
+  const [control] = settingsControls.filter((element) => element.attributes.get('v-model') === 'fontSettings.embedInExports.value');
+  assert.ok(control);
+  assert.equal(ROWS.get(scopeOf(control).attributes.get('data-setting')).application, 'export', describe(control));
+});
+
 test('no timing note is written as literal text in index.html', () => {
   const page = html.replace(/<!--[\s\S]*?-->/g, '');
-  const literal = [...page.matchAll(/appl(?:y|ies) on (?:the next )?Generate|data-applies-on-generate/gi)]
+  const literal = [...page.matchAll(/appl(?:y|ies) (?:on|to) (?:the next )?Generate|not to Generate|data-applies-on-generate/gi)]
     .map((match) => `${match[0]} at line ${page.slice(0, match.index).split('\n').length}`);
   assert.deepEqual(literal, []);
 });
