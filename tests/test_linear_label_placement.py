@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import ParamSpec, TypeVar
 
 import pytest
 from Bio import SeqIO
@@ -45,6 +45,9 @@ from gbdraw.labels.linear import (
 )
 from gbdraw.render.drawers.linear.labels import LabelDrawer
 from tests.utils.linear_render_context import make_linear_record_render_context
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 
 def _synthetic_label_record(record_id: str, length: int, label: str, extra_label: str | None = None) -> SeqRecord:
@@ -822,14 +825,29 @@ def test_linear_above_feature_resolves_overlaps_above_300_labels(
     45 deg 73,930 before, 10,560 after (cap 25,000).
     """
     calls = {"query": 0, "range": 0}
+    resolved_labels = 0
+    inside_resolver = False
 
-    def counting(name: str, original: Callable[..., Any]) -> Callable[..., Any]:
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            calls[name] += 1
+    def counting(name: str, original: Callable[_P, _R]) -> Callable[_P, _R]:
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            if inside_resolver:
+                calls[name] += 1
             return original(*args, **kwargs)
 
         return wrapper
 
+    resolve = linear_labels_module._resolve_above_feature_label_overlaps
+
+    def counted_resolve(labels: list[dict], min_gap_px: float) -> None:
+        nonlocal resolved_labels, inside_resolver
+        resolved_labels += len(labels)
+        inside_resolver = True
+        try:
+            resolve(labels, min_gap_px)
+        finally:
+            inside_resolver = False
+
+    monkeypatch.setattr(linear_labels_module, "_resolve_above_feature_label_overlaps", counted_resolve)
     for index_class in (AabbIndex, IntervalIndex):
         monkeypatch.setattr(index_class, "query", counting("query", index_class.query))
     monkeypatch.setattr(
@@ -844,8 +862,8 @@ def test_linear_above_feature_resolves_overlaps_above_300_labels(
         input_filename="AP027078.gb",
     )
     monkeypatch.undo()
-    assert len(labels) > 300
-    assert calls["query"] <= len(labels)
+    assert resolved_labels > 300
+    assert calls["query"] <= resolved_labels
     if label_rotation:
         assert calls["range"] <= 25_000
 
