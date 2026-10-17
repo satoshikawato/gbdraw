@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, NoReturn, TextIO
 from importlib import resources
 from functools import partial
 
+from .api.request_render import _without_derived_losat_entries
 from .circular import circular_main
 from .linear import linear_main
 from .exceptions import LabelLeadersCrossWarning, GbdrawError
@@ -177,7 +178,8 @@ def main() -> None:
     command: str = sys.argv[1].lower()
     args: list[str] = sys.argv[2:]
 
-    with warnings.catch_warnings():
+    # A CLI render never reads the derived LOSAT entries, so it does not build them.
+    with warnings.catch_warnings(), _without_derived_losat_entries():
         # Crossing outer leaders draw the figure and print their report (LP-D46).
         warnings.simplefilter("always", LabelLeadersCrossWarning)
         warnings.showwarning = _CliWarningPrinter(warnings.showwarning)
