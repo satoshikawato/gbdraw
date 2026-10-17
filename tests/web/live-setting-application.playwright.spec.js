@@ -569,10 +569,10 @@ test(`${name}: Reset Settings applies the live rows and leaves the rest pending`
 });
 }
 
-// OV-1074, OV-1075: Reset Settings turns Multi-Record Canvas on and fills the
+// OV-1074: Reset Settings turns Multi-Record Canvas on and fills the
 // multi-record Legend and Plot Title positions. A single-canvas Result keeps
-// its own canvas's positions, and the one rerender the removed color rule asks
-// for is not discarded by the request of live values that change nothing.
+// its own canvas's positions. Reset holds the rerender over its checkpoint
+// (OV-1076), so the removed color rule and the live values draw in one render.
 test('Reset Settings on a batch Circular Result keeps its positions and draws once', async ({ browser }) => {
   test.setTimeout(600_000);
   const page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
@@ -590,6 +590,39 @@ test('Reset Settings on a batch Circular Result keeps its positions and draws on
     expect(await page.evaluate(() => window.__GBDRAW_APP__.form.multi_record_canvas), 'the draft canvas is multi-record').toBe(true);
     expect(JSON.parse(after.diagramOptions).output, 'the committed single-canvas positions').toEqual(before);
     expect(await gateCalls(page), 'one rerender for the removed rule').toBe(1);
+    expect(after.reflowError).toBeNull();
+  } finally {
+    await removeGate(page);
+    await page.context().close();
+  }
+});
+
+// OV-1075: a live request for a value the running editor rerender does not
+// apply, equal to the committed one, does not make that rerender stale: it
+// commits, and the next iteration finds nothing to write.
+test('a live request during an editor rerender for a value equal to the committed one draws once', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await generateNow(page);
+    const before = await facts(page);
+    const size = nextLegendFont(before.legendFontSizes);
+    const draft = await page.locator(LEGEND_FONT).inputValue().catch(() => '');
+    await installGate(page);
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      state.labelReflowForceRequestSeq.value += 1;
+    });
+    await gateEntered(page);
+    await commitValue(page, LEGEND_FONT, size);
+    await commitValue(page, LEGEND_FONT, draft);
+    await releaseGate(page);
+    await settleLive(page);
+    const after = await facts(page);
+    expect(await gateCalls(page), 'the editor rerender alone').toBe(1);
+    expect(after.generationKey).toBe(before.generationKey);
+    expect(after.legendFontSizes).toEqual(before.legendFontSizes);
+    expect(after.diagramOptions).toBe(before.diagramOptions);
     expect(after.reflowError).toBeNull();
   } finally {
     await removeGate(page);
