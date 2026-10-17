@@ -1281,13 +1281,14 @@ const anchorsAgree = (left, right) => {
  */
 
 /**
- * What `captureArtifact` records to tell whether a draft's source artifact changed.
+ * What `captureArtifact` records to tell whether the sources of a draft changed: the records,
+ * the Similarity Group, the feature catalog of the Generate, the translations. Not the Result: a
+ * live setting change draws a new Result from the same sources (PD-OI-102).
  * @typedef {object} AlignmentArtifactStamp
  * @property {string} records
  * @property {string} group
  * @property {any} selectedGroup
  * @property {any} catalog
- * @property {any} result
  * @property {string} translations
  */
 
@@ -1392,7 +1393,6 @@ export const createSimilarityAlignmentActions = ({
     group: JSON.stringify(getOrthogroupById(groupId)),
     selectedGroup: state.selectedOrthogroupId?.value,
     catalog: state.featureCatalog?.value,
-    result: state.results?.value?.[state.selectedResultIndex?.value ?? 0],
     translations: JSON.stringify(state.linearRecordTranslations?.value || [])
   });
   const artifactIsCurrent = () => {
@@ -1402,7 +1402,6 @@ export const createSimilarityAlignmentActions = ({
       && current.group === artifactStamp.group
       && current.selectedGroup === artifactStamp.selectedGroup
       && current.catalog === artifactStamp.catalog
-      && current.result === artifactStamp.result
       && current.translations === artifactStamp.translations;
   };
   const rejectStaleDraft = () => {

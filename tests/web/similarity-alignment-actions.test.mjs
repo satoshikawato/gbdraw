@@ -603,10 +603,15 @@ test('stale initial resolution and canceled Apply cannot publish late completion
   assert.deepEqual(fixture.state.results.value, [{ name: 'prior.svg' }]);
 });
 
-test('changed committed Result rejects an old draft before validation', async () => {
+test('a new Result of the same sources keeps the draft; a new feature catalog rejects it before validation', async () => {
   const fixture = create();
   await startReview(fixture);
+  // A live setting change draws a new Result from the same sources (PD-OI-102, OV-1082).
   fixture.state.results.value = [{ name: 'new.svg' }];
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), true);
+  // A Generate or a Session load installs a new feature catalog.
+  fixture.state.featureCatalog.value = { ...fixture.state.featureCatalog.value };
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), false);
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
   assert.equal(fixture.helperCalls.length, 1);
   assert.deepEqual(fixture.state.results.value, [{ name: 'new.svg' }]);

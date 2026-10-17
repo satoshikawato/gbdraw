@@ -2929,6 +2929,106 @@ test('outside Review alignment a change of the room of the Result keeps the zoom
   expect(new Set(rooms.map(String)).size).toBe(rooms.length);
 });
 
+// The user's own view and Editor tab, then the review opened from a feature popup.
+const openReviewOverOwnView = async (page) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.canvasPan.x += 37;
+    app.canvasPan.y += 11;
+    app.openRightDrawerTab('orthogroups');
+  });
+  const before = await previewView(page);
+  const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
+  return { before, dialog };
+};
+
+// OV-1082: a live setting change redraws the Result of the same records (PD-OI-102). The review
+// still shows its draft on it: the rings are drawn again, the figure follows the room, and the
+// end (Cancel, Apply) gives back the view and the Editor.
+test('a live setting change under an open review keeps its rings, its fit and the view it gives back', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  const { before, dialog } = await openReviewOverOwnView(page);
+  const rings = page.locator('button.gbdraw-alignment-ring');
+  const ringCount = await rings.count();
+  expect(ringCount).toBeGreaterThan(0);
+  const fitted = await previewView(page);
+  const recolor = async (color) => {
+    await page.locator('input[type="color"][aria-label="CDS feature color"]').first().evaluate((input, value) => {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, color);
+    await expect.poll(() => page.evaluate((value) => window.__GBDRAW_APP__.results
+      .some(({ content }) => String(content).toLowerCase().includes(value)), color)).toBe(true);
+    await roomSettled(page);
+  };
+  await recolor('#e76f51');
+  await expect(dialog).toBeVisible();
+  await expect(rings).toHaveCount(ringCount);
+  expect(await previewView(page)).toEqual(fitted);
+  // The figure is fitted again when the room changes.
+  const room = (await figureFit(page)).room;
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  await expect.poll(async () => {
+    const found = await figureFit(page);
+    return found.fitted && found.inFrame && String(found.room) !== String(room);
+  }).toBe(true);
+  // Cancel gives back the view and the Editor from before the review.
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+
+  // Apply after a live change: one History action, and the view from before the review.
+  const { dialog: again } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  await recolor('#2a9d8f');
+  await expect(rings).toHaveCount(ringCount);
+  const undoBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await chooseUnresolved(page, again);
+  await again.getByRole('radio', { name: 'All left', exact: true }).check();
+  await applyReview(page, again);
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+  expect(pageErrors).toEqual([]);
+});
+
+// OV-622: a mode switch brings no view of its own. After Circular and back, the review still
+// holds the view from before it and gives it back; the figure is not fitted again (the draft no
+// longer shows on it, as before).
+test('a mode switch and back under an open review leaves the view the review gives back', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  const { before, dialog } = await openReviewOverOwnView(page);
+  const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
+  for (const target of ['circular', 'linear']) {
+    await page.evaluate((next) => window.__GBDRAW_APP__.setDiagramMode(next), target);
+    await expect.poll(shownMode).toBe(target);
+  }
+  await expect(dialog).toBeVisible();
+  await roomSettled(page);
+  const shown = await previewView(page);
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(shown);
+  // Circular has no Similarity tab, so the switch left the Editor on its Features tab.
+  const { tab } = await editorDrawer(page);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await editorDrawer(page)).toEqual({ open: true, tab });
+  expect(pageErrors).toEqual([]);
+});
+
 // The majanivirus og_13 review opens with records that need a choice.
 test('records that need a choice come first; a ring or a row chooses, and the chosen box is on the line', async ({ page }) => {
   test.setTimeout(600000);
