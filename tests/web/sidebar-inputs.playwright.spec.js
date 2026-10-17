@@ -120,12 +120,33 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await list.scrollIntoViewIfNeeded();
     await list.selectOption('exclude_matching');
     await expect(list.locator('option:checked')).toHaveText('Leave out of protein search');
+    await page.screenshot({ path: testInfo.outputPath('selected-feature-bar.png') });
+    // The list shows its longest option in full: the text, its padding and the
+    // arrow fit the list's own width.
+    const fit = await list.evaluate((select) => {
+      const style = getComputedStyle(select);
+      const probe = document.createElement('span');
+      probe.style.font = style.font;
+      probe.style.whiteSpace = 'pre';
+      probe.style.position = 'absolute';
+      probe.textContent = [...select.options].map((option) => option.text).sort((a, b) => b.length - a.length)[0];
+      document.body.append(probe);
+      const text = probe.getBoundingClientRect().width;
+      probe.remove();
+      return { need: text + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + 16, width: select.clientWidth,
+        scrollWidth: select.scrollWidth };
+    });
+    expect(fit.scrollWidth, 'no hidden overflow').toBeLessThanOrEqual(fit.width);
+    expect(fit.need, 'the longest option and the arrow fit').toBeLessThanOrEqual(fit.width);
+    // The wider list leaves the legend name beside it readable.
+    const name = page.locator('input[aria-label="Selected feature legend name"]');
+    await expect(name).toHaveValue('Selected features');
+    expect(await name.evaluate((input) => input.scrollWidth <= input.clientWidth), 'the legend name fits').toBe(true);
     const apply = page.locator('button[aria-label="Apply visibility to selected features"]');
     await expect(apply).toBeInViewport({ ratio: 1 });
     const [listBox, applyBox] = [await list.boundingBox(), await apply.boundingBox()];
     expect(Math.abs((listBox.y + listBox.height / 2) - (applyBox.y + applyBox.height / 2)), 'one row').toBeLessThan(2);
     expect(applyBox.x + applyBox.width).toBeLessThanOrEqual(viewport.width);
-    await page.screenshot({ path: testInfo.outputPath('selected-feature-bar.png') });
   });
 }
 

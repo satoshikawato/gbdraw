@@ -1177,7 +1177,7 @@
             top: 8.5rem;
             left: 1rem;
             z-index: 24;
-            width: min(680px, calc(100% - 2rem));
+            width: min(720px, calc(100% - 2rem));
             border: 1px solid #cbd5e1;
             border-radius: 8px;
             background: rgba(255, 255, 255, 0.96);
@@ -5932,7 +5932,7 @@
                                 <i class="ph ph-cursor-click" aria-hidden="true"></i> Open
                             </button>
                         </div>
-                        <div class="mt-2 grid grid-cols-1 lg:grid-cols-3 gap-2">
+                        <div class="mt-2 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
                             <div class="flex items-center gap-1 min-w-0">
                                 <input type="color"
                                        v-model="selectedFeatureBulkColor"

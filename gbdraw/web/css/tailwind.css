@@ -89,7 +89,7 @@
 .disabled\:hover\:bg-white:hover:disabled{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}
 @media (min-width: 640px){.sm\:grid-cols-2{grid-template-columns:repeat(2, minmax(0, 1fr))}}
 @media (min-width: 768px){.md\:grid-cols-4{grid-template-columns:repeat(4, minmax(0, 1fr))}}
-@media (min-width: 1024px){.lg\:grid-cols-3{grid-template-columns:repeat(3, minmax(0, 1fr))}}
+@media (min-width: 1024px){.lg\:grid-cols-\[minmax\(0\2c 1fr\)_auto_auto\]{grid-template-columns:minmax(0,1fr) auto auto}}
 .\[\&\>i\]\:text-lg>i{font-size:1.125rem;line-height:1.75rem}
 .\[\&\>i\]\:text-blue-600>i{--tw-text-opacity:1;color:rgb(37 99 235 / var(--tw-text-opacity, 1))}
 .\[\&_button\:disabled\]\:cursor-wait button:disabled{cursor:wait}
