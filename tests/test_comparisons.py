@@ -559,3 +559,20 @@ def test_pairwise_match_group_draws_smaller_high_identity_hits_above_broad_hits(
     svg = drawing.tostring()
 
     assert svg.index('data-identity-factor="0.1"') < svg.index('data-identity-factor="0.95"')
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("source", ["blast", "protein"])
+def test_comparison_rows_refuse_an_ordered_table_past_the_last_record(source: str) -> None:
+    # OV-977 (D-67 A): the stage used to drop the second table of two records.
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+    from gbdraw.linear_comparison import ProteinComparisonFrames
+
+    thresholds = ComparisonThresholds(evalue=1e-2, bitscore=0, identity=0, alignment_length=0)
+    records = (SeqRecord(Seq("A" * 400), id="q1"), SeqRecord(Seq("A" * 400), id="s1"))
+    tables = (pd.DataFrame(columns=list(COMPARISON_COLUMNS)), pd.DataFrame(columns=list(COMPARISON_COLUMNS)))
+    blast, protein = (tables, None) if source == "blast" else ((), ProteinComparisonFrames(ordered=tables))
+
+    with pytest.raises(ValidationError, match="outside the loaded records: query=#2, subject=#3, record_count=2") as caught:
+        linear_comparison_rows(blast, protein, (), thresholds, records, (0, 1), False)
+    assert caught.value.diagnostic["code"] == "COMPARISON_INPUT"
