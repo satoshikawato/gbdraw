@@ -414,12 +414,12 @@ def _edit_selected_features(page: Page, feature_ids: tuple[str, ...]) -> None:
     fill.fill(EDIT_FILL)
     expect(fill).to_have_value(EDIT_FILL)
     caption = page.get_by_role(
-        "textbox", name="Selected feature legend caption", exact=True
+        "textbox", name="Selected feature legend name", exact=True
     )
     caption.fill(EDIT_LEGEND)
     page.get_by_role(
         "button",
-        name="Apply color and caption to selected features",
+        name="Apply color and legend name to selected features",
         exact=True,
     ).click()
     expect(result_region.locator("#legend")).to_contain_text(

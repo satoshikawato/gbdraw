@@ -59,7 +59,9 @@ import {
 } from './depth-track-state.js';
 import {
   buildDisambiguatedRecordEntries,
-  resolveCircularRequestRecordSet,
+  circularDrawingRecordSet,
+  circularFormRegion,
+  isSingleCircularJourney,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
 import { circularRecordRequestKey, circularSingleRecordKey } from './record-draw-selection.js';
@@ -115,6 +117,7 @@ import {
   linearAxisRulerApplies,
   MODE_DEFAULT_FEATURE_TYPES,
   modeProfile,
+  PACKAGED_FONT_FAMILY,
   resolveComparisonThresholds,
   trackDefaultsForMode
 } from '../mode-profiles.js';
@@ -197,7 +200,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
  *   WebFileBindings } from './session-resource-backing.js'
  */
-/** @import { CircularRequestRecordSetOptions } from './record-options.js' */
+/** @import { CircularRecordDrawing, CircularRegionForm, CircularRequestRecordSetOptions } from './record-options.js' */
 /** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
@@ -1217,35 +1220,18 @@ const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
 );
 
 /**
- * @param {{ circular_region_start?: unknown, circular_region_end?: unknown, circular_reverse?: unknown }} form
+ * @param {CircularRegionForm & { circular_reverse?: unknown }} form
  * @param {{ recordLength?: unknown, record_length?: unknown, value?: unknown } | null} record
  * @returns {CanonicalRecord['region']}
  */
 const circularRegionPayload = (form, record) => {
-  const rawStart = form.circular_region_start;
-  const rawEnd = form.circular_region_end;
-  const hasStart = rawStart !== null && rawStart !== undefined && String(rawStart).trim() !== '';
-  const hasEnd = rawEnd !== null && rawEnd !== undefined && String(rawEnd).trim() !== '';
-  if (!hasStart && !hasEnd) return null;
-  if (hasStart !== hasEnd) {
-    throw new Error('Circular region requires both Start and End coordinates.');
-  }
-  const start = Number(rawStart);
-  const end = Number(rawEnd);
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < 1) {
-    throw new Error('Circular region Start and End must be positive integers.');
-  }
-  if (start > end) {
-    throw new Error('Circular region Start must not exceed End. Use Reverse complement to change display orientation.');
-  }
-  const recordLength = Number(record?.recordLength ?? record?.record_length);
-  if (Number.isInteger(recordLength) && recordLength > 0 && end > recordLength) {
-    throw new Error(`Circular region End (${end}) exceeds the selected record length (${recordLength}).`);
-  }
+  const region = circularFormRegion(form, record);
+  if (region === null) return null;
+  if ('error' in region) throw new Error(region.error);
   return {
     selector: selectorPayload(record?.value),
-    start,
-    end,
+    start: region.start,
+    end: region.end,
     reverseComplement: Boolean(form.circular_reverse)
   };
 };
@@ -1418,22 +1404,14 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
         kind: 'genbank',
         resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
       };
-  const recordSet = resolveCircularRequestRecordSet(/** @type {Record<string, any>} */ ({
-    records: state.circularRecordList.value,
-    selector: drawing.form.circular_record_selector,
-    multiRecordCanvas: drawing.form.multi_record_canvas,
-    groupingIntent: drawing.adv.circular_grouping_intent,
-    recordsOff: drawing.recordsOff
-  }));
+  // The drawing is the Circular drawing of `state.js`, which holds every field the record set reads.
+  const recordSet = circularDrawingRecordSet(state.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
   const { recordSelectors } = recordSet;
   const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
   // The offered records decide the journey, so one ON record of several
   // stays a batch of one or a grid of one.
-  const singleJourney = (
-    recordSet.presentedCount <= 1 &&
-    recordSet.singlePresentation
-  );
+  const singleJourney = isSingleCircularJourney(recordSet);
   /** @type {RequestDraftRecord[]} */
   const records = selectedRecords.map((record, index) => {
     const region = singleJourney
@@ -4238,6 +4216,11 @@ const projectFullConfigOverrides = (config, mode) => {
       projected[path] = null;
     }
   });
+  // A resolved config always names a font list; the packaged one is the Font
+  // default (null), not a font the drawing chose (OV-1014).
+  if (projected[CONFIG_OVERRIDE_PATHS.fontFamily] === PACKAGED_FONT_FAMILY) {
+    projected[CONFIG_OVERRIDE_PATHS.fontFamily] = null;
+  }
   if (!Object.prototype.hasOwnProperty.call(projected, labelScopePath)) {
     const modeShowLabels = nestedConfigValue(config, `canvas.${mode}.show_labels`);
     const sharedShowLabels = nestedConfigValue(config, 'canvas.show_labels');

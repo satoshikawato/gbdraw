@@ -41,7 +41,7 @@ export const SETTING_APPLICATION = Object.freeze([
   // Show and Off redraw at once; matching reads the rules at Generate
   // (`should_include_feature_in_analysis`).
   { id: 'feature-visibility', application: /** @type {const} */ ('live'),
-    note: 'Showing and hiding apply at once; exclusion from protein comparisons applies on Generate' },
+    note: 'Showing and hiding apply at once; leaving a feature out of protein search applies on Generate' },
   { id: 'font-embedding', application: /** @type {const} */ ('export'),
     note: 'Applies to SVG and Interactive SVG exports, not to Generate.' }
 ].map((row) => Object.freeze(row)));

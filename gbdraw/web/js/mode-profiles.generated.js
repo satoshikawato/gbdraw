@@ -14,6 +14,12 @@ const deepFreeze = (value) => {
 
 export const MODE_PROFILE_DATA = deepFreeze({
   "autoSizes": {
+    "linearLabelSizeRecords": {
+      "all": "all",
+      "first": "first",
+      "none": "all",
+      "orthogroup_top": "all"
+    },
     "sizeClassThresholdBp": {
       "circular": 75000,
       "linear": 100000
@@ -45,6 +51,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "reason": "PERCENT"
     }
   },
+  "defaultFontFamily": "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
   "featureTypes": [
     "CDS",
     "rRNA",

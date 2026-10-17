@@ -397,7 +397,7 @@
       "title": "Add feature color rules",
       "body": "Use product-based CDS rules for the broad viral protein categories visible in the Gallery legend.",
       "table": {
-        "columns": ["Color source", "Feature", "Qualifier", "Value pattern", "Color", "Legend caption"],
+        "columns": ["Color source", "Feature", "Qualifier", "Value pattern", "Color", "Legend name"],
         "rows": [
           ["Specific rule", "CDS", "product", "wsv.*-like protein", "#89d1fa", "WSSV-like proteins"],
           ["Specific rule", "CDS", "product", "baculoviral IAP repeat-containing protein", "#ffff00", "BIRP"],

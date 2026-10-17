@@ -278,7 +278,7 @@ test('two color rules of one caption: the popups and the deleted list show names
   expect.soft(await nameField.getAttribute('list')).toBeNull();
   expect.soft(await page.locator('#specific-rule-legend-name-options').count()).toBe(0);
   // The list shows each group as the Legend shows its row: by the drawn name, never by the key.
-  const offered = () => page.getByLabel('Legend captions of color rules', { exact: true }).locator('option').allTextContents()
+  const offered = () => page.getByLabel('Legend names of color rules', { exact: true }).locator('option').allTextContents()
     .then((texts) => texts.map((text) => text.trim()).slice(1).filter((text) => text.startsWith('Shared')).sort());
   expect.soft(await offered()).toEqual(['Shared (1)', 'Shared (2)']);
 

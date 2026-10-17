@@ -258,10 +258,10 @@ test('adding a Depth file shows and removing the last one hides the drawn Depth 
   assert.match(note.text, /Adding a Depth file shows.*removing the last one hides.*at once.*Generate/);
 });
 
-test('Feature Visibility notes that exclusion from comparisons applies on Generate', () => {
+test('Feature Visibility notes that leaving a feature out of protein search applies on Generate', () => {
   const note = settingApplicationNote('feature-visibility');
   assert.equal(note.application, 'live');
-  assert.match(note.text, /at once.*comparisons.*Generate/);
+  assert.match(note.text, /at once.*leaving a feature out of protein search applies on Generate/);
 });
 
 test('Output Prefix names the Results of the next Generate (OV-1042)', () => {

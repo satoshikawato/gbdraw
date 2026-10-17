@@ -159,16 +159,25 @@ const slotSides = (state) => Object.fromEntries(
 // that the drawing keeps from its Session.
 test('the track preview uses the short/long boundary the Circular drawing keeps', () => {
   const featureWidthNote = (unmanagedConfigOverrides) => {
-    const state = {
-      ...createState(),
-      circularRecordList: { value: [{ record_length: 60_000 }] },
-      unmanagedConfigOverrides
-    };
-    const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+    const state = { ...createState(), unmanagedConfigOverrides };
+    const editor = createCircularTrackSlotEditor({ state: withDrawings(state), estimateRecordLengths: () => [60_000] });
     return editor.circularTrackSlotGeometryAutoText(state.adv.circular_track_slots[0], 0, 'width');
   };
   assert.equal(featureWidthNote({}), '≈ 37 px (estimate)');
   assert.equal(featureWidthNote({ 'labels.length_threshold.circular': 50_000 }), '≈ 18.5 px (estimate)');
+});
+
+// OV-494: the estimates take the size class of the records they describe
+// (`circularEstimateLengths`), and the long class only while no length is known.
+test('the track preview estimates the records it is given', () => {
+  const featureWidthNote = (/** @type {number[]} */ recordLengths) => {
+    const state = { ...createState(), unmanagedConfigOverrides: {} };
+    const editor = createCircularTrackSlotEditor({ state: withDrawings(state), estimateRecordLengths: () => recordLengths });
+    return editor.circularTrackSlotGeometryAutoText(state.adv.circular_track_slots[0], 0, 'width');
+  };
+  assert.equal(featureWidthNote([30_000]), '≈ 37 px (estimate)');
+  assert.equal(featureWidthNote([30_000, 300_000]), '≈ 18.5 px (estimate)');
+  assert.equal(featureWidthNote([]), '≈ 18.5 px (estimate)', 'long while no length is known');
 });
 
 // OV-487: Python draws a content or skew slot without a dinucleotide with the

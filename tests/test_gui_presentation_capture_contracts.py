@@ -172,7 +172,7 @@ def test_presentation_capture_has_semantic_svg_guards() -> None:
         "_normalized_visibility_rules(report) != EXPECTED_VISIBILITY_RULES",
         "if len(underlays) != 22:",
         'raise AssertionError("The off rule did not remove COX1")',
-        'raise AssertionError("Exclude from matching incorrectly hid ATP6")',
+        'raise AssertionError("Leave out of protein search incorrectly hid ATP6")',
         'raise AssertionError("D-loop or rRNA did not render as a rectangle")',
         'raise AssertionError("A CDS did not render with arrow-head geometry")',
         "if len(radial_bands) < 2:",

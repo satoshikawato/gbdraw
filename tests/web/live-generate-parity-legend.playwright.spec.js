@@ -733,7 +733,7 @@ const colorIdNames = (page) => page.evaluate(() => {
     ...rows.map((row) => row.querySelector('text')?.textContent || ''),
     ...app.legendEntries.map((entry) => entry.caption),
     ...app.manualSpecificRules.map((rule) => rule.cap),
-    ...[...document.querySelectorAll('select[aria-label="Legend captions of color rules"] option')].map((option) => option.textContent.trim())
+    ...[...document.querySelectorAll('select[aria-label="Legend names of color rules"] option')].map((option) => option.textContent.trim())
   ].filter((name) => name.includes(' [#'));
 });
 const ruleTable = (page) => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap, color }) => [val, cap, color]));
@@ -778,7 +778,7 @@ const openPopup = async (page, match) => {
       Object.entries(fields).every(([field, value]) => item[field] === value))), null);
     await window.Vue.nextTick();
   }, match);
-  return page.getByLabel('Legend captions of color rules');
+  return page.getByLabel('Legend names of color rules');
 };
 const featureFill = async (page, match) => {
   const id = await page.evaluate((fields) => window.__GBDRAW_APP__.filteredFeatures.find((item) => (

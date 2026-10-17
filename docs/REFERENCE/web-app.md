@@ -143,7 +143,7 @@ settings. The app does not show a separate always-on application status.
 | Operation label | When the Result changes |
 |---|---|
 | **Applies on Generate** | Every setting the Result draws that is not **Live edit** or **Apply required**, including **Feature placement** in the feature popup and the selection toolbar, and **Default colors** while a palette change waits. The page shows the note in each such card or group. **Show GC Content**, **Show GC Skew**, and **Show Depth** (Linear) and **Hide GC Content**, **Hide GC Skew**, and **Show Depth** (Circular) are partly live: hiding or showing a track the Result draws applies at once; a track it does not draw yet, and the layout, apply on Generate. In the same way, adding a Depth file shows the drawn Depth track and removing the last one hides it at once. **Output Prefix** names the Results of the next Generate, and exports take their file names from the Result. **Embed font in exported SVG** affects exported SVG files only. |
-| **Live edit** | Feature color, label text, and visibility, including **Feature Visibility** rules, update the current Result directly (a rule's exclusion from protein comparisons applies on Generate); an edit that adds or removes geometry rerenders the Result automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits. Legend text, order, stroke, and removal, and stroke edits on selected features, are live. Palette selection is live when **Instant Preview** is on. |
+| **Live edit** | Feature color, label text, and visibility, including **Feature Visibility** rules, update the current Result directly (leaving a feature out of protein search applies on Generate); an edit that adds or removes geometry rerenders the Result automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits. Legend text, order, stroke, and removal, and stroke edits on selected features, are live. Palette selection is live when **Instant Preview** is on. |
 | **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
 
 A live edit can succeed while other settings stay in the draft. **Live edit
@@ -1117,7 +1117,7 @@ edit** on, a press on these items drags them instead. The comparison legend
 opens no popup. Both popups open beside the clicked item and stay below the
 app header, as the feature popup does.
 
-Ctrl-click selects features for bulk color, legend-caption, visibility, and
+Ctrl-click selects features for bulk color, legend name, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the name of another
 entry of a different color or feature type, or of a deleted entry, opens the
@@ -1223,8 +1223,8 @@ every one is numbered in legend order, for example `Packaging (1)` and
 `Packaging (2)`, and a name drawn once has no number. A color or stroke edit
 of such a merged row changes every row it stands for, so it stays one row.
 The same holds for two tracks with one legend label. The number is not part of a color rule's
-caption: the rule list, the downloaded color table, and the Session keep the
-caption as written. The rule is specified under
+legend name: the rule list, the downloaded color table, and the Session keep the
+legend name as written. The rule is specified under
 [Feature presentation](palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation).
 
 **Region Annotations → Selected features** makes one annotation per selected
@@ -1454,7 +1454,7 @@ Feature Search and Interactive SVG search. TSV columns and pattern semantics
 are specified in [Input formats and TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
 
 Each specific color rule is one line: its color, then a summary of feature
-type, qualifier, pattern and legend caption. The summary opens the rule's
+type, qualifier, pattern and legend name. The summary opens the rule's
 editor with those fields and the **Move rule up**, **Move rule down** and
 **Delete rule** buttons.
 

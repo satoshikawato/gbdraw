@@ -63,6 +63,36 @@ export const sizeClassForRecordLengths = (mode, recordLengths, drawing) => {
 };
 
 /**
+ * The size class every diagram of a Generate takes, by the record lengths of
+ * each diagram.
+ * @param {'circular' | 'linear'} mode
+ * @param {number[][]} diagramRecordLengths
+ * @param {SizeClassDrawing} drawing the drawing of that mode
+ * @returns {'short' | 'long' | null} null when no length is known or the diagrams differ
+ */
+export const sharedSizeClass = (mode, diagramRecordLengths, drawing) => {
+  const sizeClasses = new Set(diagramRecordLengths.map((lengths) => sizeClassForRecordLengths(mode, lengths, drawing)));
+  return sizeClasses.size === 1 ? [...sizeClasses][0] : null;
+};
+
+/**
+ * Which records set the Auto Linear label font size, by label display scope
+ * (linear_label_size_records in gbdraw/auto_sizes.py).
+ * @type {Readonly<Record<string, string>>}
+ */
+const LINEAR_LABEL_SIZE_RECORDS = MODE_PROFILE_DATA.autoSizes.linearLabelSizeRecords;
+
+/**
+ * The lengths of the records that set the Auto Linear label font size.
+ * @param {number[]} recordLengths the drawn records, in drawing order
+ * @param {string} labelScope the label display scope of the drawing (Show Labels)
+ * @returns {number[]}
+ */
+export const linearLabelSizeLengths = (recordLengths, labelScope) => (
+  LINEAR_LABEL_SIZE_RECORDS[labelScope] === 'first' ? recordLengths.slice(0, 1) : recordLengths
+);
+
+/**
  * The note an Auto field shows: a value measured in the last render, or,
  * before one, an estimate marked as such (TK-15).
  * @param {string} text

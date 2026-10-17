@@ -241,6 +241,50 @@ write-up of a release.
   - The aminoglycoside BGC Gallery figure is unchanged. Its tutorial now
     types Head Length Ratio 0.64 in step 10, **Finish the figure**, and its
     intermediate previews show the short Auto sizes.
+  - In the Web app, the Auto values beside the size fields and the Circular
+    track preview now read the records Generate draws. The Linear **Label Font
+    Size** value follows the records in the label scope (**Show Labels**), so
+    with **First Record Only** on a short first record it reads 24 px, not
+    5 px (OV-493). The Circular values follow the records that are drawn: a
+    Multi-Record Canvas as one diagram, separate diagrams one record each,
+    and neither a record turned off nor one that is not selected (OV-494).
+    They read **Auto (by genome size)** when separate diagrams take different
+    sizes. A record cropped to a region is sized by the length of the region,
+    as Generate sizes it: a 306,008 bp record cropped to 1..30,000 reads
+    14 px for **Label Font Size**, not 8 px (OV-512). The sliding window and
+    **Scale interval** follow each Circular record's own length, as Generate
+    does; where the drawn records take different values they read **Auto (by
+    genome size)** and `by record length (auto)` (OV-512). The track preview
+    estimates the diagram that draws the record of the shown Result, or the
+    first diagram while no Result is shown.
+- Web app: the Feature Visibility rule action **Exclude from matching** is now
+  **Leave out of protein search**, also in the selected-feature bar's
+  visibility list, where it read **Suppress**. The color rule field **Legend
+  caption** and the selected-feature bar's name field are now **Legend name**,
+  the words the feature popup uses, and the selected-feature bar's color
+  button and the Reset Fill Color dialog say legend name too. Saved Sessions
+  and rule files are unchanged. A Feature Visibility rule shows **Action** on
+  its own line under **Value regex**, so the closed list shows the whole
+  action.
+- Web app: a Circular record counts as cropped only where Generate crops it:
+  one record offered alone, with a region Generate can draw (OV-1093). Its
+  **Display start** was unavailable, as for a cropped record, when the region
+  fields were emptied, or when separate diagrams or a Multi-Record Canvas draw
+  the record whole. With a region left in the fields while separate diagrams
+  or a Multi-Record Canvas are drawn, the record's reverse-complement override
+  and **Display start** now count in the record list, as they already did in
+  the drawing.
+- Fixed (web app): on a phone, or with a short Preview, the selected-feature
+  bar's color, visibility and stroke rows ran under the preview controls and
+  could not be reached. The bar now stays inside the Preview and scrolls
+  inside itself, and it no longer runs under the Editor toggle at 1024 px. Its
+  three edits wrap to new rows when the Preview is narrow (OV-1098).
+- Fixed (web app): loading a Session that stores a full resolved
+  configuration, such as one written by the CLI `--session_output`, no longer
+  turns the packaged font list into an explicit **Font**. **Font** stays at the
+  default, Run info lists no `--font_family`, and **Save Session** writes no
+  font override; the drawing is unchanged. The Gallery Sessions are saved again
+  with the current writer (OV-1014).
 - Web Comparison card (Linear): **Settings** lists the mode, the result filters
   and the appearance first, then **Search limits** and **Performance** (formerly
   **Runtime and reproducibility**). **Selected pairs** shows each pair as one row

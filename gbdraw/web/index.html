@@ -1177,7 +1177,11 @@
             top: 8.5rem;
             left: 1rem;
             z-index: 24;
-            width: min(680px, calc(100% - 2rem));
+            /* Clear of the Editor toggle at the right edge, and no taller than
+               the Preview below its top, scrolling inside itself (OV-1098). */
+            width: min(720px, calc(100% - 1.5rem - var(--editor-toggle-width, 2.25rem)));
+            max-height: calc(100% - 9rem);
+            overflow-y: auto;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
             background: rgba(255, 255, 255, 0.96);
@@ -4736,7 +4740,7 @@
                                         <input type="color" v-model="newSpecRule.color" aria-label="New color rule color" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="flex gap-1">
-                                        <input v-model="newSpecRule.cap" aria-label="New color rule legend caption" placeholder="Legend caption (optional)" class="form-input form-input-compact min-w-0 flex-grow" :disabled="!semanticMutationAvailable">
+                                        <input v-model="newSpecRule.cap" aria-label="New color rule legend name" placeholder="Legend name (optional)" class="form-input form-input-compact min-w-0 flex-grow" :disabled="!semanticMutationAvailable">
                                         <button aria-label="Add color rule" @click="addSpecificRule" class="btn btn-secondary h-7 whitespace-nowrap px-2 text-xs" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Add color rule</button>
                                     </div>
                                 </div>
@@ -4749,7 +4753,7 @@
                                 <div class="mt-2">
                                     <file-uploader label="Specific rules file" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" :artifact-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
-                                        <help-tip text="TSV file of rules: feature type, qualifier, regular expression, color, and optional legend caption."></help-tip>
+                                        <help-tip text="TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name."></help-tip>
                                         Optional TSV of specific rules.
                                     </div>
                                 </div>
@@ -4829,7 +4833,7 @@
 
                             <div data-setting="feature-visibility">
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <span class="input-label mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></span>
+                                    <span class="input-label mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and leaves it out of protein search; Leave out of protein search keeps its visibility and leaves it out of protein search."></help-tip></span>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -4869,27 +4873,30 @@
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1 px-1 text-[9px] font-semibold uppercase text-slate-500">
-                                            <span class="col-span-3">Record ID</span>
-                                            <span class="col-span-3">Feature Type</span>
-                                            <span class="col-span-3">Qualifier</span>
-                                            <span class="col-span-3">Action</span>
+                                            <span class="col-span-4">Record ID</span>
+                                            <span class="col-span-4">Feature Type</span>
+                                            <span class="col-span-4">Qualifier</span>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="`Visibility rule ${i + 1} record ID`" placeholder="record_id" class="form-input form-input-compact col-span-3 font-mono" :disabled="!semanticMutationAvailable">
-                                            <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" :aria-label="`Visibility rule ${i + 1} feature type`" class="form-input form-input-compact col-span-3" :disabled="!semanticMutationAvailable">
+                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="`Visibility rule ${i + 1} record ID`" placeholder="record_id" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
+                                            <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" :aria-label="`Visibility rule ${i + 1} feature type`" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                                 <option v-if="rule.featureType && !featureVisibilityFeatureSuggestions.includes(rule.featureType)" :value="rule.featureType">{{ rule.featureType }}</option>
                                                 <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fv-type-${value}`" :value="value">{{ value }}</option>
                                             </select>
-                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" :aria-label="`Visibility rule ${i + 1} qualifier`" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-3" :disabled="!semanticMutationAvailable">
-                                            <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" :aria-label="`Visibility rule ${i + 1} action`" class="form-input form-input-compact col-span-3" :disabled="!semanticMutationAvailable">
-                                                <option value="show">Show</option>
-                                                <option value="off">Off</option>
-                                                <option value="exclude_matching">Exclude from matching</option>
-                                            </select>
+                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" :aria-label="`Visibility rule ${i + 1} qualifier`" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <label class="block px-1 text-[9px] font-semibold uppercase text-slate-500">Value regex</label>
                                             <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" :aria-label="`Visibility rule ${i + 1} value regex`" placeholder="value regex" class="form-input form-input-compact w-full font-mono" :disabled="!semanticMutationAvailable">
+                                        </div>
+                                        <!-- The action has its own line: its longest text does not fit a quarter of the row. -->
+                                        <div>
+                                            <span class="block px-1 text-[9px] font-semibold uppercase text-slate-500">Action</span>
+                                            <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" :aria-label="`Visibility rule ${i + 1} action`" class="form-input form-input-compact w-full" :disabled="!semanticMutationAvailable">
+                                                <option value="show">Show</option>
+                                                <option value="off">Off</option>
+                                                <option value="exclude_matching">Leave out of protein search</option>
+                                            </select>
                                         </div>
                                     </div>
                                     <div v-if="featureVisibilityManualRules.length === 0" class="ui-hint italic text-center py-2">No manual visibility rules</div>
@@ -5929,8 +5936,8 @@
                                 <i class="ph ph-cursor-click" aria-hidden="true"></i> Open
                             </button>
                         </div>
-                        <div class="mt-2 grid grid-cols-1 lg:grid-cols-3 gap-2">
-                            <div class="flex items-center gap-1 min-w-0">
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <div class="flex grow basis-56 items-center gap-1">
                                 <input type="color"
                                        v-model="selectedFeatureBulkColor"
                                        data-history-ignore
@@ -5939,20 +5946,20 @@
                                 <input type="text"
                                        v-model="selectedFeatureBulkCaption"
                                        data-history-ignore
-                                       class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
-                                       placeholder="Legend caption"
-                                       aria-label="Selected feature legend caption">
+                                       class="w-0 min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
+                                       placeholder="Legend name"
+                                       aria-label="Selected feature legend name">
                                 <button type="button"
                                         class="btn btn-primary btn-sm shrink-0"
                                         data-history-managed
                                         @click="applySelectedFeatureColor"
-                                        title="Apply color and caption to selected features"
-                                        aria-label="Apply color and caption to selected features" :disabled="!semanticMutationAvailable">
+                                        title="Apply color and legend name to selected features"
+                                        aria-label="Apply color and legend name to selected features" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-palette" aria-hidden="true"></i>
                                     <span>Apply</span>
                                 </button>
                             </div>
-                            <div class="flex items-center gap-1 min-w-0">
+                            <div class="flex grow items-center gap-1">
                                 <select v-model="selectedFeatureBulkVisibility"
                                         data-history-ignore
                                         class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
@@ -5960,7 +5967,7 @@
                                     <option value="default">Default</option>
                                     <option value="on">Show</option>
                                     <option value="off">Hide</option>
-                                    <option value="exclude_matching">Suppress</option>
+                                    <option value="exclude_matching">Leave out of protein search</option>
                                 </select>
                                 <button type="button"
                                         class="btn btn-secondary btn-sm shrink-0"
@@ -5972,7 +5979,7 @@
                                     <span>Apply</span>
                                 </button>
                             </div>
-                            <div class="flex items-center gap-1 min-w-0">
+                            <div class="flex grow items-center gap-1">
                                 <input type="color"
                                        v-model="selectedFeatureBulkStrokeColor"
                                        data-history-ignore
@@ -6262,7 +6269,7 @@
                             <select v-if="popupLegendGroups.length > 0"
                                     :disabled="!semanticMutationAvailable" @change="joinLegendGroup(popupLegendGroups[$event.target.value].group); $event.target.value = ''"
                                     data-history-managed
-                                    aria-label="Legend captions of color rules"
+                                    aria-label="Legend names of color rules"
                                     class="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
                                 <option value="">Choose from color rules…</option>
                                 <option v-for="({ group, shownName }, index) in popupLegendGroups"
@@ -7320,7 +7327,7 @@
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">Reset Fill Color</h3>
                             <p id="reset-color-description" class="text-sm text-slate-600 mb-4">
-                                There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span>".
+                                There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the legend name "<span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span>".
                                 <br>How do you want to reset the color?
                             </p>
 
@@ -8630,7 +8637,7 @@
                         <button type="button" :disabled="!available" @pointerdown.prevent @click="$emit('revert-pattern', rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="font-semibold text-blue-700 underline disabled:opacity-40">Revert</button>
                     </div>
                 </div>
-                <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend caption`" placeholder="Legend caption" class="form-input form-input-compact w-full" :disabled="!available">
+                <input :value="rule.cap" @change="$emit('set-field', i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend name`" placeholder="Legend name" class="form-input form-input-compact w-full" :disabled="!available">
                 <div class="flex items-center justify-end gap-0.5">
                     <button aria-label="Move rule up" @click="$emit('move-up', i)" :disabled="!available || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
                     <button aria-label="Move rule down" @click="$emit('move-down', i)" :disabled="!available || (i === rules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>

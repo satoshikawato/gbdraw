@@ -16,6 +16,7 @@ import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
  * }} ModeProfile
  * @typedef {{
  *   comparisonDomains: Record<string, ComparisonDomain>,
+ *   defaultFontFamily: string,
  *   featureTypes: string[],
  *   modes: Record<ModeProfileName, ModeProfile>,
  *   version: number
@@ -72,6 +73,8 @@ const valuesEquivalent = (left, right) => {
 
 export const MODE_PROFILE_VERSION = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).version;
 export const MODE_DEFAULT_FEATURE_TYPES = Object.freeze([.../** @type {ModeProfileData} */ (MODE_PROFILE_DATA).featureTypes]);
+/** The packaged text font list (config.toml `objects.text.font_family`). */
+export const PACKAGED_FONT_FAMILY = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).defaultFontFamily;
 
 /** @param {unknown} mode */
 export const modeProfile = (mode) => /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).modes[normalizeMode(mode)];
