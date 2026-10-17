@@ -137,3 +137,24 @@ test('a full config whose small tick interval Python reads as unset projects as 
   });
   assert.deepEqual([config.adv.gc_content_small_tick_interval, config.adv.depth_small_tick_interval], [null, null]);
 });
+
+// A resolved config always names a font list. The packaged list is the Font
+// default (null), not a chosen font; another list is the font chosen (OV-1014).
+test('a full config with the packaged font list projects as the default Font', () => {
+  const { renderRequest } = corpus.requests.find(({ id }) => id === 'lambda_basic_linear@10d3a3d2');
+  const fontOf = (request) => {
+    const read = readStored(request);
+    assert.ok(!('kind' in read));
+    return projectCanonicalSessionRequest({
+      renderRequest: read.value, resources: resourcesOf(request), deferResourceContent: true
+    }).config.adv.font_family;
+  };
+  assert.equal(
+    renderRequest.diagramOptions.config.objects.text.font_family,
+    "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+  );
+  assert.equal(fontOf(renderRequest), null);
+  const chosen = structuredClone(renderRequest);
+  chosen.diagramOptions.config.objects.text.font_family = "'DejaVu Serif', serif";
+  assert.equal(fontOf(chosen), "'DejaVu Serif', serif");
+});

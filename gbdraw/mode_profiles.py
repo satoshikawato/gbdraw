@@ -225,9 +225,12 @@ def _camel_threshold_name(name: str) -> str:
 def mode_profiles_payload() -> dict[str, object]:
     """Return the JSON-compatible profile representation used by the web app."""
 
-    length_threshold = load_config_toml("gbdraw.data", "config.toml")["labels"]["length_threshold"]
+    packaged = load_config_toml("gbdraw.data", "config.toml")
+    length_threshold = packaged["labels"]["length_threshold"]
     return {
         "version": MODE_PROFILE_VERSION,
+        # The packaged text font list: a resolved config that holds it names no font.
+        "defaultFontFamily": str(packaged["objects"]["text"]["font_family"]),
         # The packaged short/long boundary of each mode (rule: gbdraw/auto_sizes.py).
         "autoSizes": {
             "sizeClassThresholdBp": {mode: int(length_threshold[mode]) for mode in MODE_PROFILES},

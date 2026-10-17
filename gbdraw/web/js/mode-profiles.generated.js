@@ -45,6 +45,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "reason": "PERCENT"
     }
   },
+  "defaultFontFamily": "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
   "featureTypes": [
     "CDS",
     "rRNA",
