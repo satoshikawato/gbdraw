@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 
-import { getGroupsByBaseIds } from '../../gbdraw/web/js/app/svg-styles.js';
+import {
+  DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, TICK_GROUPS, findTrackGroups
+} from '../../gbdraw/web/js/services/drawn-groups.js';
 
 const makeGroup = (id, renderer = null) => ({
   getAttribute(name) {
@@ -47,25 +49,21 @@ const svg = {
 };
 
 assert.deepEqual(
-  getGroupsByBaseIds(
-    svg,
-    ['skew', 'gc_skew'],
-    ['dinucleotide_skew']
-  ),
+  findTrackGroups(svg, DINUCLEOTIDE_SKEW_GROUPS),
   [semanticSkew, semanticLegacySkew],
   'semantic slot groups should suppress persisted-ID fallback matches'
 );
 
 assert.deepEqual(
-  getGroupsByBaseIds(svg, ['gc_content'], ['dinucleotide_content']),
+  findTrackGroups(svg, DINUCLEOTIDE_CONTENT_GROUPS),
   [semanticContent]
 );
 assert.deepEqual(
-  getGroupsByBaseIds(svg, ['depth'], ['depth']),
+  findTrackGroups(svg, DEPTH_GROUPS),
   [semanticDepth]
 );
 assert.deepEqual(
-  getGroupsByBaseIds(svg, ['tick'], ['ticks']),
+  findTrackGroups(svg, TICK_GROUPS),
   [semanticTicks]
 );
 
@@ -76,11 +74,7 @@ const persistedSvg = {
   }
 };
 assert.deepEqual(
-  getGroupsByBaseIds(
-    persistedSvg,
-    ['skew', 'gc_skew'],
-    ['dinucleotide_skew']
-  ),
+  findTrackGroups(persistedSvg, DINUCLEOTIDE_SKEW_GROUPS),
   [legacySkew],
   'legacy IDs should remain a fallback for persisted SVGs without semantic hooks'
 );

@@ -10,7 +10,7 @@ import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidan
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
-import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsView } from './services/settings-sections.js';
+import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsView } from './services/settings-sections.js';
 import { settingApplicationNote } from './services/setting-application.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { SettingApplicationId } from './services/setting-application.js' */
@@ -235,6 +235,29 @@ export const previewTransform = {
   }
 };
 
+/** @type {WeakMap<HTMLElement, () => void>} */
+const previewPanningStops = new WeakMap();
+// `v-preview-panning` on the preview viewport: its attribute
+// `data-preview-panning` follows the panning flag, which the stylesheet reads
+// (an item shows the canvas's cursor and no hint while the figure is panned),
+// so the app template does not read the flag (OV-912). An attribute, not a
+// class: the viewport's class binding rewrites its classes.
+export const previewPanning = {
+  /** @param {HTMLElement} element */
+  beforeMount: (element) => {
+    previewPanningStops.set(element, watch(
+      () => state.isPanning.value,
+      (/** @type {boolean} */ panning) => { element.toggleAttribute('data-preview-panning', panning); },
+      { immediate: true }
+    ));
+  },
+  /** @param {HTMLElement} element */
+  unmounted: (element) => {
+    previewPanningStops.get(element)?.();
+    previewPanningStops.delete(element);
+  }
+};
+
 // `v-preview-markup="svgContent"` on the preview surface: its children are the
 // Result's markup, as `v-html` would set them, at the same points of the
 // patch. The markup is parsed outside the page document (OV-1030).
@@ -276,11 +299,24 @@ export const SettingNote = {
 // `v-settings-section="'<key>'"` on the element of a settings section: it
 // names the section (`data-settings-section`) and tells the stylesheet whether
 // the docked rail entry shows it (`data-settings-in-dock`). The pane says which
-// display shows, so the stacked display ignores the second attribute.
+// display shows, so the stacked display ignores the second attribute. A section
+// in the popup beside the Result (`data-settings-floating`) is open there; back
+// in the pane its disclosure is open or closed as it was, which the attribute
+// remembers.
 /** @param {HTMLElement} element @param {{ value: SettingsSectionKey }} binding */
 export const settingsSection = (element, { value }) => {
   element.dataset.settingsSection = value;
   element.dataset.settingsInDock = String(settingsEntryOf(value) === state.settingsPaneDocked.value);
+  const floating = state.settingsPopup.value?.section === value;
+  const details = /** @type {HTMLDetailsElement | null} */ (element.querySelector(':scope > details'));
+  if (!details || floating === ('settingsFloating' in element.dataset)) return;
+  if (floating) {
+    element.dataset.settingsFloating = String(details.open);
+    details.open = true;
+  } else {
+    details.open = element.dataset.settingsFloating === 'true';
+    delete element.dataset.settingsFloating;
+  }
 };
 
 // The section index of the settings: one button per section of the shown
@@ -298,8 +334,8 @@ export const settingsSection = (element, { value }) => {
 //   marked entry is the docked one, and the close button leaves the rail alone.
 //   A column too low for its entries scrolls: the docked entry and the focused
 //   one are brought into view.
-// An entry never closes a section and writes no setting. Both forms bring a
-// section into view through `reveal`, the pane's one way to show a setting.
+// An entry never closes a section and writes no setting. Both forms open a
+// section through `reveal`, the pane's one way to open a section by its key.
 // The text shown for a hovered or keyboard-focused button (the section title,
 // or the words of a switch or of the close button) is the index's own: each
 // button is named by its aria-label ("Go to <title>" for an entry; the
@@ -308,9 +344,9 @@ export const settingsSection = (element, { value }) => {
 // column scrolls, the text of a hovered entry goes and the text of the focused
 // entry follows it.
 /**
- * The pane's way to bring a section into view: its top at the top edge of the
- * settings, the focus on `focus`.
- * @typedef {(section: HTMLElement, options: { align: 'start', focus: HTMLElement }) => unknown} RevealSection
+ * The pane's way to open a section: open, its top at the top edge of the
+ * settings, the focus on its heading, or on `focus` when one is given.
+ * @typedef {(key: SettingsSectionKey, focus?: HTMLElement | null) => unknown} RevealSection
  */
 export const SettingsSectionIndex = {
   template: '#settings-section-index-template',
@@ -358,7 +394,7 @@ export const SettingsSectionIndex = {
 
     const area = () => /** @type {HTMLElement} */ (document.getElementById(props.controls));
     /** @param {SettingsSectionKey} key */
-    const sectionOf = (key) => /** @type {HTMLElement | null} */ (area().querySelector(`[data-settings-section="${key}"]`));
+    const sectionOf = (key) => settingsSectionElement(area(), key);
     /** @param {string} selector A button of the index. */
     const focusButton = (selector) => /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(selector))
       ?.focus({ preventScroll: true });
@@ -370,17 +406,13 @@ export const SettingsSectionIndex = {
       current.value = (reached.at(-1) ?? entries.value[0]).key;
     };
     // Opens a section and brings it to the top. The focus goes to its heading
-    // (the summary of a card that is one disclosure, or the heading element
-    // that takes the focus: Input Genomes, Comparison) unless `focus` names a
-    // button of the index.
+    // unless `focus` names a button of the index.
     /** @param {SettingsSectionKey} key @param {string} [focus] */
     const bringToTop = async (key, focus) => {
-      const section = /** @type {HTMLElement} */ (sectionOf(key));
-      const heading = /** @type {HTMLElement} */ (section.querySelector(':scope > details:first-child > summary, :scope > [tabindex="-1"]'));
-      if (heading.parentElement instanceof HTMLDetailsElement) heading.parentElement.open = true;
-      await props.reveal(section, { align: 'start', focus: /** @type {HTMLElement} */ (focus ? root.value?.querySelector(focus) : heading) });
+      await props.reveal(key, focus ? /** @type {HTMLElement | null | undefined} */ (root.value?.querySelector(focus)) : null);
       // A section without an entry in this form (About & Citation in the row) leaves the mark to the geometry.
-      held = entries.value.some((entry) => entry.key === key) ? { key, top: section.getBoundingClientRect().top } : null;
+      const top = sectionOf(key)?.getBoundingClientRect().top;
+      held = top !== undefined && entries.value.some((entry) => entry.key === key) ? { key, top } : null;
       if (held) current.value = key; else mark();
     };
     /** @param {SettingsSectionKey} key */
@@ -480,8 +512,11 @@ export const SettingsSectionIndex = {
       if (rail.value) root.value?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
     }));
     // A mode change may remove the entry whose text is shown, and the marked
-    // section; so may a display that changes with the layout (the phone width).
-    watch(() => [props.mode, props.view.display], () => {
+    // section; so may the phone width, which changes the display of a rail and
+    // the layout of the stacked settings, and a section that leaves the pane
+    // for the popup or returns. One source each: one getter that returns them
+    // all would also run when only the docked section changes.
+    watch([() => props.mode, () => props.view.display, () => props.view.switchable, () => props.view.floating], () => {
       hideTip();
       held = null;
       nextTick(mark);

@@ -8,6 +8,7 @@ import {
   normalizeCanvasPadding
 } from './composition-actions.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
+import { LENGTH_BAR_ID } from '../../services/drawn-groups.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 /** @import { SvgResultTransform } from '../../services/svg-result-ingestion.js' */
 /** @import { CompositionBinding } from './composition-actions.js' */
@@ -62,7 +63,7 @@ const nonzero = delta => Array.isArray(delta) && delta.some(value => value !== 0
 const readDecorations = (svg) => {
   const binding = bindCompositionMetadata(svg);
   const deltas = compositionUserDeltas(svg);
-  const scaleIndexes = binding.primary.targets.flatMap((target, index) => target.id === 'length_bar' ? [index] : []);
+  const scaleIndexes = binding.primary.targets.flatMap((target, index) => target.id === LENGTH_BAR_ID ? [index] : []);
   const decorations = { legend: deltas.legend, title: deltas.title,
     scale: scaleIndexes.length === 1 ? deltas.primary[scaleIndexes[0]] : null };
   if (scaleIndexes.length > 1) fail({ field: 'scale', diagnosticReason: 'DECORATION_TARGET' });
@@ -153,7 +154,7 @@ export const captureDecorationContinuity = ({ canonical, results = [], catalog, 
             fail({ field: role, inputOrdinal: snapshot.index + 1, diagnosticReason: 'FINITE' });
           }
           if (role === 'scale') {
-            const indexes = binding.primary.targets.flatMap((element, index) => element.id === 'length_bar' ? [index] : []);
+            const indexes = binding.primary.targets.flatMap((element, index) => element.id === LENGTH_BAR_ID ? [index] : []);
             if (indexes.length !== 1) fail({ field: 'scale', inputOrdinal: snapshot.index + 1, diagnosticReason: 'DECORATION_TARGET' });
             deltas.primary = [];
             deltas.primary[indexes[0]] = snapshot.deltas.scale;

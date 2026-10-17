@@ -32,7 +32,7 @@ for (const source of [
   'utils/error-normalization.js', 'app/ui.js', 'services/feature-dom.js',
   'app/feature-editor/svg-actions.js', 'utils/popup-bounds.js', 'services/runtime-test-hooks.js',
   'services/feature-placement.js', 'services/json-clone.js', 'app/feature-selection.js',
-  'services/svg-serialization.js'
+  'services/svg-serialization.js', 'services/settings-sections.js', 'services/drawn-groups.js'
 ]) await copyModule(source);
 // The identity owner, with its rendered-identity reads counted.
 await copyModule('services/feature-identity.js', 'services/feature-identity-owner.js');
