@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import math
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from Bio import SeqIO
@@ -31,7 +33,7 @@ from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
-from gbdraw.layout.spatial import candidate_aabb_pairs
+from gbdraw.layout.spatial import AabbIndex, IntervalIndex, candidate_aabb_pairs
 from gbdraw.labels.linear import (
     _find_lowest_available_track_indexed,
     _insert_external_label_index,
@@ -808,15 +810,44 @@ def test_linear_above_feature_shifted_labels_get_leader_lines() -> None:
 
 @pytest.mark.linear
 @pytest.mark.parametrize("label_rotation", (0.0, 45.0))
-def test_linear_above_feature_resolves_overlaps_above_300_labels(label_rotation: float) -> None:
-    """OV-695: a record with more than 300 above-feature labels gets the same overlap fix."""
+def test_linear_above_feature_resolves_overlaps_above_300_labels(
+    label_rotation: float,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OV-695: a record with more than 300 above-feature labels gets the same overlap fix.
+
+    OV-841: a label climbing a stack makes one broad-phase query and solves each
+    neighbour's overlap range once, not once per round. Measured on this input:
+    queries 11,073 (0 deg) and 7,967 (45 deg) before, one per label after; ranges at
+    45 deg 73,930 before, 10,560 after (cap 25,000).
+    """
+    calls = {"query": 0, "range": 0}
+
+    def counting(name: str, original: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            calls[name] += 1
+            return original(*args, **kwargs)
+
+        return wrapper
+
+    for index_class in (AabbIndex, IntervalIndex):
+        monkeypatch.setattr(index_class, "query", counting("query", index_class.query))
+    monkeypatch.setattr(
+        linear_labels_module,
+        "_vertical_overlap_shift_range",
+        counting("range", linear_labels_module._vertical_overlap_shift_range),
+    )
     labels = _prepare_linear_labels(
         label_placement="above_feature",
         label_rotation=label_rotation,
         separate_strands=True,
         input_filename="AP027078.gb",
     )
+    monkeypatch.undo()
     assert len(labels) > 300
+    assert calls["query"] <= len(labels)
+    if label_rotation:
+        assert calls["range"] <= 25_000
 
     overlapping = [
         (left, right)

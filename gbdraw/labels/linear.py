@@ -23,7 +23,7 @@ from ..layout.linear import (
     LinearFeatureLaneGeometry,
     calculate_feature_position_factors_linear,
 )
-from ..layout.spatial import Aabb, AabbIndex, Interval, IntervalIndex
+from ..layout.spatial import Aabb, Interval, IntervalIndex
 from ..layout.text_geometry import (
     GEOMETRY_EPSILON,
     Point,
@@ -91,10 +91,10 @@ def _external_label_bucket_size(alignment_width: float) -> float:
 
 
 def _above_feature_label_bucket_size(labels: list[dict], min_gap_px: float) -> float:
-    """Grid cell of the above-feature broad phase: a few label heights.
+    """Bucket width of the above-feature broad phase on x: a few label heights.
 
-    A cell sized by the widest label puts most of a dense record in a few cells,
-    which made the collision pass quadratic (OV-695).
+    A bucket sized by the widest label puts most of a dense record in a few
+    buckets, which made the collision pass quadratic (OV-695).
     """
     max_height = max((float(label.get("height_px", 0.0)) for label in labels), default=0.0)
     return max(16.0, 4.0 * max_height + float(min_gap_px))
@@ -353,35 +353,82 @@ def _vertical_label_shift_to_clear(
 
 def _place_linear_label_without_overlap(
     label: dict,
-    placed_index: AabbIndex,
+    placed_x_index: IntervalIndex,
     placed_by_id: dict[int, _PlacedLinearLabel],
     min_gap_px: float,
     direction: float,
 ) -> bool:
-    """Move one linear label away from the axis until its bbox clears placed labels."""
+    """Move one linear label away from the axis until its bbox clears placed labels.
+
+    The label moves only vertically (OV-841), so the work that does not depend on
+    its height is done once per label instead of once per round:
+
+    - the placed labels whose bbox x range meets the label's form its column; a
+      round looks only at the column members whose y range its bbox has reached
+      and not yet left, which the climb visits in order;
+    - each neighbour's overlap range is solved for the start position and
+      translated by the shift accumulated since. The rounding of the translation is
+      far below ``_SHIFT_DECISION_MARGIN_PX``, inside which the polygon test decides.
+    """
     original_y = float(label["middle_y"])
+    original_corners = _label_corners(label)
+    clearance = _SHIFT_DECISION_MARGIN_PX
+    moves_up = direction < 0.0
+    start_aabb = _linear_label_aabb(label)
+    column = [
+        (placed_id, placed_by_id[placed_id])
+        for placed_id in (
+            cast(int, label_id)  # only int ids are inserted
+            for label_id in placed_x_index.query(Interval(start_aabb.min_x, start_aabb.max_x), padding=min_gap_px)
+        )
+        if start_aabb.min_x < placed_by_id[placed_id].aabb.max_x + clearance
+        and start_aabb.max_x > placed_by_id[placed_id].aabb.min_x - clearance
+    ]
+    # The order in which the climbing bbox reaches each column member's y range.
+    column.sort(key=(lambda item: -item[1].aabb.max_y) if moves_up else (lambda item: item[1].aabb.min_y))
+    next_member = 0
+    reached: list[tuple[int, _PlacedLinearLabel]] = []
+    start_ranges: dict[int, tuple[float, float] | None] = {}
     for _ in range(len(placed_by_id) + 1):
         required_shift = 0.0
         label_aabb = _linear_label_aabb(label)
-        label_corners = _label_corners(label)
+        accumulated_shift = float(label["middle_y"]) - original_y
+        # The y clauses of ``Aabb.intersects(other, clearance)``: as the label moves
+        # away from the axis, the first becomes true and stays true, the second
+        # becomes false and stays false. The column already meets the x clauses.
+        if moves_up:
+            while next_member < len(column) and label_aabb.min_y < column[next_member][1].aabb.max_y + clearance:
+                reached.append(column[next_member])
+                next_member += 1
+            reached = [item for item in reached if label_aabb.max_y > item[1].aabb.min_y - clearance]
+        else:
+            while next_member < len(column) and label_aabb.max_y > column[next_member][1].aabb.min_y - clearance:
+                reached.append(column[next_member])
+                next_member += 1
+            reached = [item for item in reached if label_aabb.min_y < item[1].aabb.max_y + clearance]
 
-        for label_id in placed_index.query(label_aabb, padding=min_gap_px):
-            other = placed_by_id[cast(int, label_id)]  # only int ids are inserted
+        # ``reached`` now holds exactly the placed labels whose bbox the label's meets.
+        for placed_id, other in reached:
             other_aabb = other.aabb
-            if not label_aabb.intersects(other_aabb, clearance=_SHIFT_DECISION_MARGIN_PX):
-                continue
-            overlap_range = _vertical_overlap_shift_range(label_corners, other.corners)
+            if placed_id not in start_ranges:
+                start_ranges[placed_id] = _vertical_overlap_shift_range(original_corners, other.corners)
+            start_range = start_ranges[placed_id]
+            overlap_range = (
+                None
+                if start_range is None
+                else (start_range[0] - accumulated_shift, start_range[1] - accumulated_shift)
+            )
             if not _shifted_label_overlaps(label, other.corners, 0.0, overlap_range):
                 continue
 
-            if direction < 0.0:
+            if moves_up:
                 fallback_shift = (other_aabb.min_y - float(min_gap_px)) - label_aabb.max_y
             else:
                 fallback_shift = (other_aabb.max_y + float(min_gap_px)) - label_aabb.min_y
             shift = _vertical_label_shift_to_clear(
                 label, other.corners, overlap_range, direction, fallback_shift, min_gap_px
             )
-            required_shift = min(required_shift, shift) if direction < 0.0 else max(required_shift, shift)
+            required_shift = min(required_shift, shift) if moves_up else max(required_shift, shift)
 
         if required_shift == 0.0:
             return abs(float(label["middle_y"]) - original_y) > 0.001
@@ -401,16 +448,16 @@ def _resolve_above_feature_label_overlaps(labels: list[dict], min_gap_px: float)
         if not side_labels:
             continue
         placed_by_id: dict[int, _PlacedLinearLabel] = {}
-        placed_index = AabbIndex(bucket_size=_above_feature_label_bucket_size(side_labels, min_gap_px))
+        placed_x_index = IntervalIndex(bucket_size=_above_feature_label_bucket_size(side_labels, min_gap_px))
         direction = -1.0 if place_above else 1.0
         for label in sorted(side_labels, key=lambda item: float(item.get("feature_anchor_x", item["middle_x"]))):
-            if _place_linear_label_without_overlap(label, placed_index, placed_by_id, min_gap_px, direction):
+            if _place_linear_label_without_overlap(label, placed_x_index, placed_by_id, min_gap_px, direction):
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
             placed = _PlacedLinearLabel(label, _linear_label_aabb(label), _label_corners(label))
             placed_id = len(placed_by_id)
             placed_by_id[placed_id] = placed
-            placed_index.insert(placed_id, placed.aabb)
+            placed_x_index.insert(placed_id, Interval(placed.aabb.min_x, placed.aabb.max_x))
 
 
 def _passes_orthogroup_label_eligibility(
