@@ -9,6 +9,7 @@ import { stripResultBaseAttributes } from './result-paint-bases.js';
 import { downloadBlob } from './text-download.js';
 import { preparePdfFonts } from './pdf-fonts.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { parseMarkupInertly } from '../utils/inert-markup.js';
 /** @import { ResolvePdfFonts } from './pdf-fonts.js' */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -238,9 +239,7 @@ const getInteractiveSvgString = async (snapshot, embedFonts) => {
  */
 const getSvgFromString = (svgString) => {
   if (!svgString) return null;
-  const svgEl = document.createElement('div');
-  svgEl.innerHTML = svgString;
-  return svgEl.querySelector('svg');
+  return parseMarkupInertly(svgString).querySelector('svg');
 };
 
 /** @param {SVGSVGElement | null} svg */
