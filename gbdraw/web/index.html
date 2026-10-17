@@ -2148,13 +2148,14 @@
                                 </div>
                             </div>
                         </details>
-                        <details class="rounded border border-slate-200 bg-white/70 p-2">
+                        <details data-setting="depth-sources" class="rounded border border-slate-200 bg-white/70 p-2">
                             <summary aria-label="Depth TSV tracks">
                                 <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                 Depth TSV tracks
                                 <help-tip text="A tab-separated read-depth table drawn as a track. With several records, one file is used for the same series of every record; a Session keeps any per-record blanks."></help-tip>
                                 <span v-if="hasCircularDepthFiles" class="ml-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(files.c_depth) }}</span>
                             </summary>
+                            <setting-note setting="depth-sources" class="pt-1"></setting-note>
                             <p v-if="circularRecordDiscoveryState.records.length > 1" class="ui-hint pt-1">Each file is used for every record.</p>
                             <div v-if="!hasCircularDepthFiles" class="pt-1">
                                 <file-uploader
@@ -2441,7 +2442,7 @@
                                 </div>
                             </div>
                             <linear-record-names v-if="linearFileCardRecord(source)" class="mt-2 rounded border border-slate-200 bg-white/70 p-2" :seq="linearFileCardRecord(source).sequence" :idx="linearFileCardRecord(source).index" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
-                            <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-source-depth="source.uid">
+                            <details data-setting="depth-sources" class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-source-depth="source.uid">
                                 <summary
                                     role="button"
                                     :aria-label="`Depth tracks for file ${sourceIndex + 1}`"
@@ -2449,6 +2450,7 @@
                                 >
                                     <span class="min-w-0 truncate">{{ linearSourceDepthSummary(source) }}</span>
                                 </summary>
+                                <setting-note setting="depth-sources" class="pt-1"></setting-note>
                                 <div class="min-w-0 space-y-1.5 pt-1">
                                     <div
                                         v-for="track in linearSourceDepthRows(source)"
@@ -2574,12 +2576,13 @@
                                     <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">Inspect records</button>
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
-                            <details v-if="source.records.length > 1" class="rounded border border-slate-200 bg-white/70 p-2">
+                            <details v-if="source.records.length > 1" data-setting="depth-sources" class="rounded border border-slate-200 bg-white/70 p-2">
                                 <summary>
                                     <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                     Per-record Depth TSV
                                     <span v-if="hasLinearDepthFiles(seq)" class="ml-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(seq.depth) }}</span>
                                 </summary>
+                                <setting-note setting="depth-sources" class="pt-1"></setting-note>
                                 <div class="space-y-1.5 pt-1">
                                     <div class="space-y-1.5">
                                         <div v-for="track in linearDepthTrackRows()" :key="`${seq.uid}-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
@@ -2662,11 +2665,12 @@
                             <button type="button" aria-label="Add sequence" data-linear-file-add @click="addLinearSeq()" class="btn btn-primary min-w-0 w-full bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Add sequence</button>
                             <button v-if="linearSourceGroups.length > 1" type="button" aria-label="Remove last sequence" data-history-managed @click="removeLastLinearSeq($event)" class="btn btn-danger min-w-0 w-full py-2.5 text-sm font-bold" :disabled="!semanticMutationAvailable"><i class="ph ph-minus" aria-hidden="true"></i> Remove</button>
                         </div>
-                        <details v-if="linearSeqs.some((seq) => hasLinearDepthFiles(seq))" data-linear-depth-settings class="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
+                        <details v-if="linearSeqs.some((seq) => hasLinearDepthFiles(seq))" data-linear-depth-settings data-setting="depth-sources" class="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
                             <summary role="button" aria-label="Depth track settings" class="linear-primary-label">
                                 <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                 Depth track settings
                             </summary>
+                            <setting-note setting="depth-sources" class="pt-1"></setting-note>
                             <p class="ui-hint pt-1">These settings are shared by the same numbered series across every File and record.</p>
                             <div class="space-y-2 pt-2">
                                 <div class="rounded border border-slate-200 bg-white/80 p-2 space-y-2">
@@ -4459,7 +4463,7 @@
                             <p v-if="fontSettings.loading.value" class="text-[10px] text-slate-500" role="status">Loading the font…</p>
                             <p v-if="fontSettings.loadError.value" class="text-[10px] text-red-600" role="alert" data-font-load-error>{{ fontSettings.loadError.value }}</p>
                             <p v-if="fontSettings.customFontSelected.value" class="text-[10px] text-amber-700" data-font-custom-note><i class="ph ph-warning" aria-hidden="true"></i> This font is not part of gbdraw. A saved Session keeps only its name, not the font file: to open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.</p>
-                            <div v-if="fontSettings.customFontSelected.value" class="space-y-1" data-font-embedding data-history-ignore>
+                            <div v-if="fontSettings.customFontSelected.value" class="space-y-1" data-font-embedding data-setting="font-embedding" data-history-ignore>
                                 <div class="flex items-center text-xs">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="fontSettings.embedInExports.value" aria-describedby="help-font-embedding" class="form-checkbox">
@@ -4467,7 +4471,7 @@
                                     </label>
                                     <help-tip id="help-font-embedding" text="SVG and Interactive SVG exports carry the characters they use of this font, so they show it on computers without it. Fonts whose license forbids embedding are not embedded. Turned off, the SVG files keep only the font name. PNG export always draws this font, whatever this setting and the font's license. PDF export embeds this font whatever this setting; a font whose license forbids embedding is drawn in the nearest Liberation font."></help-tip>
                                 </div>
-                                <p class="text-[10px] text-slate-500">Applies to SVG and Interactive SVG exports, not to Generate.</p>
+                                <setting-note setting="font-embedding"></setting-note>
                             </div>
                         </div>
                     </details>
@@ -4825,7 +4829,7 @@
 
                             <div data-setting="feature-visibility">
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <span class="input-label mb-0">Feature Visibility <setting-note setting="feature-visibility"></setting-note> <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></span>
+                                    <span class="input-label mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></span>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -4841,6 +4845,7 @@
                                         </button>
                                     </div>
                                 </div>
+                                <setting-note setting="feature-visibility" class="mb-1.5"></setting-note>
                                 <datalist id="feature-visibility-qualifier-options">
                                     <option v-for="value in featureVisibilityQualifierSuggestions" :key="`fv-qual-${value}`" :value="value"></option>
                                 </datalist>

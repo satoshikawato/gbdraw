@@ -13,7 +13,7 @@
 /** @typedef {string} SettingApplicationId A row key such as `legend`; never a caption. */
 /**
  * One setting, or a group of settings with one application. `note` replaces
- * "Applies on Generate" where part of the change shows before Generate.
+ * the class text where parts of the change apply at different times.
  * @typedef {{ readonly id: SettingApplicationId, readonly application: SettingApplicationClass, readonly note?: string }} SettingApplicationRow
  */
 /** @typedef {{ application: SettingApplicationClass, text: string, qualified: boolean }} SettingApplicationNote */
@@ -30,8 +30,18 @@ export const SETTING_APPLICATION = Object.freeze([
   // group at once; a track the Result lacks and the layout wait for Generate.
   { id: 'track-visibility', application: /** @type {const} */ ('generate'),
     note: 'Hiding or showing a drawn track applies at once; a new track and the layout apply on Generate' },
-  ...rows('live', ['colors', 'feature-visibility']),
-  ...rows('export', ['output-prefix'])
+  // Removing the last Depth source turns Show Depth off (OV-82), which hides
+  // the drawn Depth track through the same `applyTrackVisibility`.
+  { id: 'depth-sources', application: /** @type {const} */ ('generate'),
+    note: 'Removing the last Depth file hides the drawn Depth track at once; the rest applies on Generate' },
+  ...rows('live', ['colors']),
+  // Show and Off redraw at once; matching reads the rules at Generate
+  // (`should_include_feature_in_analysis`).
+  { id: 'feature-visibility', application: /** @type {const} */ ('live'),
+    note: 'Showing and hiding apply at once; exclusion from protein comparisons applies on Generate' },
+  ...rows('export', ['output-prefix']),
+  { id: 'font-embedding', application: /** @type {const} */ ('export'),
+    note: 'Applies to SVG and Interactive SVG exports, not to Generate.' }
 ].map((row) => Object.freeze(row)));
 
 /** @type {Readonly<Record<SettingApplicationClass, string>>} */
