@@ -1177,7 +1177,11 @@
             top: 8.5rem;
             left: 1rem;
             z-index: 24;
-            width: min(720px, calc(100% - 2rem));
+            /* Clear of the Editor toggle at the right edge, and no taller than
+               the Preview below its top, scrolling inside itself (OV-1098). */
+            width: min(720px, calc(100% - 1.5rem - var(--editor-toggle-width, 2.25rem)));
+            max-height: calc(100% - 9rem);
+            overflow-y: auto;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
             background: rgba(255, 255, 255, 0.96);
@@ -5932,8 +5936,8 @@
                                 <i class="ph ph-cursor-click" aria-hidden="true"></i> Open
                             </button>
                         </div>
-                        <div class="mt-2 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
-                            <div class="flex items-center gap-1 min-w-0">
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <div class="flex grow basis-56 items-center gap-1">
                                 <input type="color"
                                        v-model="selectedFeatureBulkColor"
                                        data-history-ignore
@@ -5942,7 +5946,7 @@
                                 <input type="text"
                                        v-model="selectedFeatureBulkCaption"
                                        data-history-ignore
-                                       class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
+                                       class="w-0 min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
                                        placeholder="Legend name"
                                        aria-label="Selected feature legend name">
                                 <button type="button"
@@ -5955,7 +5959,7 @@
                                     <span>Apply</span>
                                 </button>
                             </div>
-                            <div class="flex items-center gap-1 min-w-0">
+                            <div class="flex grow items-center gap-1">
                                 <select v-model="selectedFeatureBulkVisibility"
                                         data-history-ignore
                                         class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
@@ -5975,7 +5979,7 @@
                                     <span>Apply</span>
                                 </button>
                             </div>
-                            <div class="flex items-center gap-1 min-w-0">
+                            <div class="flex grow items-center gap-1">
                                 <input type="color"
                                        v-model="selectedFeatureBulkStrokeColor"
                                        data-history-ignore
