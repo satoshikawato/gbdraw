@@ -4748,7 +4748,7 @@
                                     <div v-for="feat in defaultColorGroups.primary" :key="feat" class="min-w-0">
                                         <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
                                         <color-value-control
-                                            v-model="currentColors[feat]"
+                                            :model-value="currentColors[feat]" @update:model-value="editDefaultColor(feat, $event)"
                                             :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
                                             :aria-label="`${feat} feature color`">
                                         </color-value-control>
@@ -4760,7 +4760,7 @@
                                         <div v-for="feat in defaultColorGroups.more" :key="feat" class="min-w-0">
                                             <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
                                             <color-value-control
-                                                v-model="currentColors[feat]"
+                                                :model-value="currentColors[feat]" @update:model-value="editDefaultColor(feat, $event)"
                                                 :fallback="paletteDefinitions?.[selectedPalette]?.[feat] || '#cccccc'"
                                                 :aria-label="`${feat} feature color`">
                                             </color-value-control>
@@ -5088,7 +5088,7 @@
 
                                     <div v-if="filterMode === 'Blacklist'" class="space-y-2 bg-white p-2 rounded border">
                                         <p class="ui-hint">Exclude labels containing these keywords.</p>
-                                        <textarea v-model="manualBlacklist" class="form-input h-20" placeholder="hypothetical, unknown" :disabled="!semanticMutationAvailable"></textarea>
+                                        <textarea :value="manualBlacklist" @input="setBlacklistText($event.target.value)" class="form-input h-20" placeholder="hypothetical, unknown" :disabled="!semanticMutationAvailable"></textarea>
                                         <div class="ui-hint text-center">- OR -</div>
                                         <file-uploader label="Blacklist File" v-model="files.blacklist" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
                                     </div>
@@ -6121,24 +6121,24 @@
                             <div></div>
                             <div>
                                 <label for="canvas-padding-top" class="text-[10px] text-slate-500 block">Top</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-top" type="number" v-model.number="canvasPadding.top" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-top" type="number" :value="canvasPadding.top" @input="setCanvasPaddingSide('top', $event.target.value)" @change="setCanvasPaddingSide('top', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
                                 <label for="canvas-padding-left" class="text-[10px] text-slate-500 block">Left</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-left" type="number" v-model.number="canvasPadding.left" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-left" type="number" :value="canvasPadding.left" @input="setCanvasPaddingSide('left', $event.target.value)" @change="setCanvasPaddingSide('left', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div class="flex items-center justify-center">
                                 <i class="ph ph-selection-background text-slate-300 text-lg" aria-hidden="true"></i>
                             </div>
                             <div>
                                 <label for="canvas-padding-right" class="text-[10px] text-slate-500 block">Right</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-right" type="number" v-model.number="canvasPadding.right" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-right" type="number" :value="canvasPadding.right" @input="setCanvasPaddingSide('right', $event.target.value)" @change="setCanvasPaddingSide('right', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                             <div>
                                 <label for="canvas-padding-bottom" class="text-[10px] text-slate-500 block">Bottom</label>
-                                <span class="flex items-center gap-0.5"><input id="canvas-padding-bottom" type="number" v-model.number="canvasPadding.bottom" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
+                                <span class="flex items-center gap-0.5"><input id="canvas-padding-bottom" type="number" :value="canvasPadding.bottom" @input="setCanvasPaddingSide('bottom', $event.target.value)" @change="setCanvasPaddingSide('bottom', $event.target.value || 0)" step="10" class="w-full min-w-0 text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable"><span class="text-[10px] text-slate-500" aria-hidden="true">px</span></span>
                             </div>
                             <div></div>
                         </div>

@@ -31,7 +31,7 @@ import { replaceColorRules } from '../../services/drawing/color-rules.js';
 import { setDefaultColors } from '../../services/drawing/palette.js';
 import {
   addWhitelistRules, removePriorityRule as removeDrawingPriorityRule, removeWhitelistRule as removeDrawingWhitelistRule,
-  setLabelFilterMode as setDrawingLabelFilterMode, setPriorityRules, setWhitelistRuleField as setDrawingWhitelistRuleField
+  setBlacklistText as setDrawingBlacklistText, setLabelFilterMode as setDrawingLabelFilterMode, setPriorityRules, setWhitelistRuleField as setDrawingWhitelistRuleField
 } from '../../services/drawing/label-tables.js';
 /** @import { StoredWhitelistRule } from '../../services/config-field-readers.js' */
 import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
@@ -712,6 +712,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (busy) return busy;
     setDrawingLabelFilterMode(drawing.slices.labelTables, value);
   };
+  /** @param {string} text */
+  const setBlacklistText = (text) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    setDrawingBlacklistText(state.activeDrawing().slices.labelTables, text);
+  };
   const addWhitelistRule = () => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
@@ -1053,6 +1059,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     setFeatureShape,
     addPriorityRule,
     setLabelFilterMode,
+    setBlacklistText,
     addWhitelistRule,
     setWhitelistRuleField,
     removeWhitelistRule,

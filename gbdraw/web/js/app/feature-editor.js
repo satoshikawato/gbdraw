@@ -219,6 +219,7 @@ export const createFeatureEditor = ({
     addCustomColor: ruleActions.addCustomColor,
     addPriorityRule: ruleActions.addPriorityRule,
     setLabelFilterMode: ruleActions.setLabelFilterMode,
+    setBlacklistText: ruleActions.setBlacklistText,
     addWhitelistRule: ruleActions.addWhitelistRule,
     setWhitelistRuleField: ruleActions.setWhitelistRuleField,
     removeWhitelistRule: ruleActions.removeWhitelistRule,

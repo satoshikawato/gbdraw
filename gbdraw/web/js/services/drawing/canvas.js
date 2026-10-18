@@ -58,4 +58,16 @@ const install = (slice, { canvasPadding }) => {
 /** @param {CanvasSlice} slice */
 const reset = (slice) => writeSides(slice, () => 0);
 
+/**
+ * One side of the padding, as its number field gives it; a field that holds
+ * no number (empty, or a value being typed) leaves the side.
+ * @param {CanvasSlice} slice
+ * @param {typeof SIDES[number]} side
+ * @param {unknown} value
+ */
+export const setCanvasPaddingSide = (slice, side, value) => {
+  const number = typeof value === 'number' ? value : Number.parseFloat(String(value));
+  if (Number.isFinite(number)) membersOf(slice).canvasPadding[side] = number;
+};
+
 export const CANVAS_SLICE = Object.freeze({ members: Object.freeze(['canvasPadding']), create, capture, install, reset });

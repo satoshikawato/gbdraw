@@ -146,14 +146,6 @@ const MEMBERS = SLICES.flatMap(([, slice]) => slice.members).filter((member) => 
 const MUTATING_METHODS = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin', 'add', 'delete', 'clear', 'set'];
 const ASSIGNMENT = /^\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])/;
 const DRAWING_RECEIVER = /(?:[\w$]*[dD]rawing|activeDrawing\s*\(\s*\)|drawings\s*(?:\??\.\s*[\w$]+|\[[^\]]*\]))\s*\??$/;
-// The template writes M3.13 replaces by writer ports (M3.2-M3.8 listed each
-// binding as its slice came; M3.13 empties the list and deletes it).
-const TEMPLATE_WRITES_BEFORE_M3_13 = Object.freeze([
-  'v-model.number="canvasPadding.top"', 'v-model.number="canvasPadding.left"',
-  'v-model.number="canvasPadding.right"', 'v-model.number="canvasPadding.bottom"',
-  'v-model="currentColors[feat]"', 'v-model="manualBlacklist"'
-]);
-
 // Comments and quoted strings blanked, so offsets stay and prose is no writer.
 const codeOnly = (source) => source.replace(
   /\/\*[\s\S]*?\*\/|\/\/[^\n]*|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, (text) => text.replace(/[^\n]/g, ' ')
@@ -238,9 +230,7 @@ test('only a slice writes its members: no module and no template binding writes 
     .flatMap((file) => memberWriteSites(readFileSync(join(JS, file), 'utf8')).map((site) => `${file} ${site}`));
   assert.deepEqual(found, []);
   const html = readFileSync(join(ROOT, 'gbdraw', 'web', 'index.html'), 'utf8');
-  const template = templateMemberWrites(html).map((site) => site.replace(/:\d+$/, ''));
-  assert.deepEqual(template.filter((site) => !TEMPLATE_WRITES_BEFORE_M3_13.includes(site)), []);
-  assert.deepEqual(TEMPLATE_WRITES_BEFORE_M3_13.filter((site) => !template.includes(site)), [], 'remove the bindings M3.13 replaced');
+  assert.deepEqual(templateMemberWrites(html), []);
 });
 
 test('the slice write scan flags a planted write and leaves reads alone', () => {

@@ -230,6 +230,14 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     }
   };
 
+  // An edit in the Default colors list sets the active drawing's color; the
+  // drawing's color watcher syncs the palette draft.
+  /**
+   * @param {string} key
+   * @param {string} color
+   */
+  const editDefaultColor = (key, color) => setDefaultColors(state.activeDrawing().slices.palette, { [key]: color });
+
   return {
     requestPaletteChange,
     selectPalette,
@@ -239,6 +247,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     readUserDefaultColor,
     userDefaultColorRows,
     setDefaultColor,
+    editDefaultColor,
     applyPaletteDraftToPreview,
     syncPaletteDraftState
   };
