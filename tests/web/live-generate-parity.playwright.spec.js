@@ -970,13 +970,22 @@ test('a batch Result displayed while Save runs shows the edits once Save ends (c
 // the rule matches to prepare: the Legend row color after it is the edit the
 // displayed Result lacks, and the Save prepares the matches it needs. (The
 // case above holds its Save with its own `beforeExport`, so it never reaches
-// the app's Save.)
-const saveWhileDisplaying = (page, resultIndex) => Promise.all([evaluateWithRetainedPromise(page, async (index) => {
+// the app's Save.) The Session has a title while it saves, so Save asks for
+// none: the title dialog would wait for its answer while the display paints,
+// and the Save would no longer run while the displayed Result lacks paint.
+// The title is restored after it, so a later Save asks as before.
+const saveWhileDisplaying = (page, resultIndex) => evaluateWithRetainedPromise(page, async (index) => {
   const app = window.__GBDRAW_APP__;
-  const saved = app.saveSessionWithTitle();
-  app.selectResult(index);
-  await saved;
-}, resultIndex), answerSessionTitle(page, '')]);
+  const title = app.sessionTitle;
+  app.sessionTitle = 'save-while-displaying';
+  try {
+    const saved = app.saveSessionWithTitle();
+    app.selectResult(index);
+    await saved;
+  } finally {
+    app.sessionTitle = title;
+  }
+}, resultIndex);
 test('a batch Result displayed while Save runs is saved with the edits (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
   test.setTimeout(240_000);
   await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });

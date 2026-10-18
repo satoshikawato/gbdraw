@@ -620,8 +620,12 @@ test('a Circular row is cropped, and loses Display start, where Generate crops i
   form.circular_region_end = '';
   assert.deepEqual(cropped(), [false], 'Start without End crops nothing: Generate refuses the region');
   form.circular_region_end = 200;
-  assert.deepEqual(cropped(), [false], 'an End beyond the 100 bp record crops nothing: Generate refuses the region');
+  assert.deepEqual(cropped(), [true], 'an End beyond the 100 bp record is clamped: Generate crops to the record end');
+  assert.deepEqual(startEnabled(), [false]);
+  form.circular_region_start = 150;
+  assert.deepEqual(cropped(), [false], 'a Start beyond the 100 bp record crops nothing: Generate refuses the region');
   assert.deepEqual(startEnabled(), [true]);
+  form.circular_region_start = 1;
   form.circular_region_end = 50;
   form.multi_record_canvas = true;
   assert.deepEqual(cropped(), [false], 'a Multi-Record Canvas draws whole records');

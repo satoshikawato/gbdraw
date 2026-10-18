@@ -566,12 +566,15 @@ const focusMenuToggle = (menu) => {
 // and focus returns to its toggle; when the item removed the menu's row, focus
 // goes to the menu now in its place in the `[data-action-menu-list]` around
 // it, else the one before it, else that list's `[data-action-menu-list-fallback]`.
+// `ariaLabel` names a menu repeated in a list after its row (it begins with the
+// visible label), so its toggle and the group around its items are unambiguous.
 export const ActionMenu = {
   components: { HelpTip },
   props: {
     label: { type: String, required: true },
     icon: { type: String, default: '' },
     title: { type: String, default: '' },
+    ariaLabel: { type: String, default: '' },
     closeOnRun: { type: Boolean, default: false },
     /** @type {{ type: ArrayConstructor, default: () => (ActionMenuItem | ActionMenuSection)[] }} */
     items: { type: Array, default: () => [] }
@@ -625,8 +628,8 @@ export const ActionMenu = {
     return { root, onKeydown, runItem };
   },
   template: `
-    <details ref="root" class="action-menu" data-nodrag="true" @keydown="onKeydown">
-      <summary class="action-menu-toggle" :title="title || label">
+    <details ref="root" class="action-menu" data-nodrag="true" :aria-label="ariaLabel || null" @keydown="onKeydown">
+      <summary class="action-menu-toggle" :title="title || label" :aria-label="ariaLabel || null">
         <i v-if="icon" :class="['ph', icon]" aria-hidden="true"></i><span>{{ label }}</span>
         <i class="ph ph-caret-down action-menu-caret" aria-hidden="true"></i>
       </summary>

@@ -426,12 +426,14 @@ const NAME_OF = (element) => {
     .map((id) => content(document.getElementById(id) || document.createTextNode(''))).join(' '))
     || text(element.getAttribute('aria-label'))
     || text(Array.from(element.labels || []).map((label) => content(label)).join(' '))
-    || (element.matches('button, [role="button"]') ? text(content(element)) : '');
+    || (element.matches('button, [role="button"], summary') ? text(content(element)) : '');
 };
 
 // UI-04, TK-16 (R12): a stack row's controls and help tips carry the slot id,
 // so no two controls in one Custom Track Slots panel share a name, and every
-// help tip on the page is named after the label it explains.
+// help tip on the page is named after the label it explains. loadMode opens
+// every <details>, so every Row actions menu is open here: an item is named
+// within its menu, and the menu (its toggle and its group) names the row.
 for (const mode of ['circular', 'linear']) {
   test(`${mode} Custom Track Slots names are unique and help tips name their labels`, async ({ page }) => {
     test.setTimeout(240_000);
@@ -441,8 +443,14 @@ for (const mode of ['circular', 'linear']) {
       const name = new Function(`return (${nameOf})`)();
       const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
       const panel = document.getElementById(`${mode}-custom-track-slots-panel`);
-      const controls = Array.from(panel?.querySelectorAll('input:not([type="file"]), select, textarea, button') || [])
-        .filter(visible).map(name);
+      // An item of an open Row actions menu is met inside that menu, so its
+      // name counts with the menu's own name, which must name the row.
+      const inContext = (element) => {
+        const menu = element.closest('.action-menu');
+        return menu && element !== menu.querySelector(':scope > summary') ? `${name(menu)} > ${name(element)}` : name(element);
+      };
+      const controls = Array.from(panel?.querySelectorAll('input:not([type="file"]), select, textarea, button, summary') || [])
+        .filter(visible).map(inContext);
       const tips = Array.from(document.querySelectorAll('.help-tip > button')).filter(visible).map(name);
       return { controls, tips };
     }, { mode, nameOf: NAME_OF.toString() });
