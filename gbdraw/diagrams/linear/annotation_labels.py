@@ -2,11 +2,13 @@
 
 An annotation label keeps the place ``linear_annotation_labels`` gives it
 when its painted letters are clear of the record's feature labels, their
-leaders and the annotation labels placed before it. Otherwise it moves, with
-its centre over one of its marks (never into a gap between them), to the
-nearest clear place; with none, to the place with the fewest conflicts,
-nearest first. A conflict that remains is drawn without a fit warning
-(OV-1155).
+leaders, the record names and definition text, and the annotation labels
+placed before it. Otherwise it moves, with its centre over one of its marks
+(never into a gap between them), to the nearest clear place; with none, to
+the place with the fewest conflicts, nearest first. Its letters may hang past
+either end of the bar (the figure's bounds follow them); only the names and
+definition text stop them there. A conflict that remains is drawn without a
+fit warning (OV-1155).
 """
 
 from __future__ import annotations
@@ -68,16 +70,13 @@ def _feature_label_obstacles(
     return obstacles
 
 
-def _place_along_span(
-    label: LinearAnnotationLabel, origin_y: float, obstacles: Sequence[Aabb], gap: float, bar_length: float
-) -> float:
+def _place_along_span(label: LinearAnnotationLabel, origin_y: float, obstacles: Sequence[Aabb], gap: float) -> float:
     """The anchor x for ``label`` (in a slot at ``origin_y``).
 
     Its own x when its letters are clear; else, with the label's centre over
-    one of its marks and its letters on the bar (``0`` to ``bar_length``,
-    OV-1157), the x with the fewest conflicts, nearest its own x, the smaller
-    x on a tie. A sorted sweep keeps this O(B log B) in the B obstacles in
-    the label's row.
+    one of its marks, the x with the fewest conflicts, nearest its own x, the
+    smaller x on a tie. A sorted sweep keeps this O(B log B) in the B
+    obstacles in the label's row.
     """
 
     ink = label.ink.translated(0.0, origin_y)
@@ -98,10 +97,7 @@ def _place_along_span(
 
     if conflicts(label.x) == 0:
         return label.x
-    allowed = [
-        (max(low - centre, -left), min(high - centre, bar_length - right)) for low, high in label.segments
-    ]
-    allowed = [(low, high) for low, high in allowed if low <= high]
+    allowed = [(low - centre, high - centre) for low, high in label.segments]
     candidates = {label.x}
     for low, high in allowed:
         candidates.update((low, high))
@@ -117,16 +113,24 @@ def place_linear_annotation_labels(
     plan: LinearRecordVerticalPlan,
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack],
     feature_labels: Sequence[dict[str, object]],
+    name_boxes: Sequence[Aabb],
     font_family: str,
     leader_stroke_width: float,
     gap: float,
 ) -> dict[str, tuple[LinearAnnotationLabel, ...]]:
-    """Each annotation slot's labels on one record, placed along their spans (slot-local y)."""
+    """Each annotation slot's labels on one record, placed along their spans (slot-local y).
+
+    ``name_boxes`` are the record names and definition text, from this
+    record's bar start and axis.
+    """
 
     features_origin_y = next(
         (float(slot.origin_y) for slot in plan.slots if slot.renderer == "features"), 0.0
     )
-    obstacles = _feature_label_obstacles(feature_labels, features_origin_y, 0.5 * leader_stroke_width)
+    obstacles = [
+        *_feature_label_obstacles(feature_labels, features_origin_y, 0.5 * leader_stroke_width),
+        *name_boxes,
+    ]
     placed: dict[str, tuple[LinearAnnotationLabel, ...]] = {}
     for slot in plan.slots:
         track = annotation_track_layouts.get(slot.id)
@@ -147,7 +151,7 @@ def place_linear_annotation_labels(
         slot_labels: list[LinearAnnotationLabel] = []
         origin_y = float(slot.origin_y)
         for label in labels:
-            moved = label.moved_to(_place_along_span(label, origin_y, obstacles, gap, sequence_width))
+            moved = label.moved_to(_place_along_span(label, origin_y, obstacles, gap))
             obstacles.append(moved.ink.translated(0.0, origin_y))
             slot_labels.append(moved)
         placed[slot.id] = tuple(slot_labels)
