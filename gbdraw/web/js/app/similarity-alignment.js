@@ -1281,13 +1281,18 @@ const anchorsAgree = (left, right) => {
  */
 
 /**
- * What `captureArtifact` records to tell whether a draft's source artifact changed.
+ * What `captureArtifact` records to tell whether the sources of a draft changed: the records,
+ * the Similarity Group, the committed resources, the translations. Not the Result or the feature
+ * catalog: a live setting change draws a new Result, and the automatic rerender a new catalog,
+ * from the same sources (PD-OI-102, OV-1120). The resources object is the identity of those
+ * sources: the rerender keeps it (`commitLiveSettingValues`), and a Generate, a Session load or
+ * an Undo across one installs another, also from the same files (PD-OI-039). Every path that
+ * changes the catalog's features is one of these.
  * @typedef {object} AlignmentArtifactStamp
  * @property {string} records
  * @property {string} group
  * @property {any} selectedGroup
- * @property {any} catalog
- * @property {any} result
+ * @property {unknown} resources
  * @property {string} translations
  */
 
@@ -1391,8 +1396,7 @@ export const createSimilarityAlignmentActions = ({
     records: JSON.stringify(currentRequest()?.records || []),
     group: JSON.stringify(getOrthogroupById(groupId)),
     selectedGroup: state.selectedOrthogroupId?.value,
-    catalog: state.featureCatalog?.value,
-    result: state.results?.value?.[state.selectedResultIndex?.value ?? 0],
+    resources: getCommittedSession()?.resources,
     translations: JSON.stringify(state.linearRecordTranslations?.value || [])
   });
   const artifactIsCurrent = () => {
@@ -1401,8 +1405,7 @@ export const createSimilarityAlignmentActions = ({
     return current.records === artifactStamp.records
       && current.group === artifactStamp.group
       && current.selectedGroup === artifactStamp.selectedGroup
-      && current.catalog === artifactStamp.catalog
-      && current.result === artifactStamp.result
+      && current.resources === artifactStamp.resources
       && current.translations === artifactStamp.translations;
   };
   const rejectStaleDraft = () => {
@@ -1434,20 +1437,32 @@ export const createSimilarityAlignmentActions = ({
     return svg ? materializeRecordTranslations(svg, base, recordKeys, plan) : base;
   };
 
-  const baseline = ({ materializePlan = false } = {}) => {
+  // `drafted`: the translations a draft's baseline materialized, kept as they are.
+  /** @param {{ materializePlan?: boolean, drafted?: unknown }} [options] */
+  const baseline = ({ materializePlan = false, drafted = null } = {}) => {
     const canonical = getCommittedSession();
     const request = cloneJson(canonical?.renderRequest);
     if (!request) throw new Error('Generate a Linear diagram before aligning.');
     const recordKeys = request.records.map((/** @type {CommittedRecord} */ { recordKey }) => recordKey);
-    const translations = materializePlan
-      ? materializedTranslations(recordKeys, request.layout?.similarityAlignment)
-      : cloneJson(request.layout?.recordTranslations || replacementTranslations(state, recordKeys));
+    const translations = drafted ? cloneJson(drafted)
+      : materializePlan
+        ? materializedTranslations(recordKeys, request.layout?.similarityAlignment)
+        : cloneJson(request.layout?.recordTranslations || replacementTranslations(state, recordKeys));
     const orientations = request.records.map((/** @type {CommittedRecord} */ record) => ({ recordKey: record.recordKey,
       reverseComplement: baseReverseComplement(record) }));
     const materialized = projectCommittedAlignment({ committed: canonical,
       plan: materializePlan ? null : request.layout?.similarityAlignment,
       translations, orientations });
     return { canonical: materialized, request: materialized.renderRequest, translations };
+  };
+
+  // The draft's baseline on the committed Session as it is now. The stamp keeps its records and
+  // translations; a live setting that the automatic rerender committed during the review is
+  // in the rest of that Session, so the helper, Apply and the Reset receipt read it (PD-OI-102,
+  // OV-1120). Only an open draft calls it, which has its baseline (see `applyPlan`).
+  const rebaseDraftBaseline = () => {
+    activeBaseline = baseline({ materializePlan: true,
+      drafted: /** @type {AlignmentBaseline} */ (activeBaseline).translations });
   };
 
   /** @param {AlignmentBaseline | null | undefined} value */
@@ -1548,6 +1563,7 @@ export const createSimilarityAlignmentActions = ({
     if (!projected.selectionComplete || !projected.geometryValidated) {
       throw new Error('Alignment selection or final geometry is not validated.');
     }
+    rebaseDraftBaseline();
     const orientations = projected.records.map(({ recordKey, afterReverseComplement }) => ({
       recordKey, reverseComplement: afterReverseComplement }));
     // An applying draft has its baseline: `start` and `prepareStaleTargetRepair` set it with
@@ -1706,6 +1722,7 @@ export const createSimilarityAlignmentActions = ({
     const orientations = Object.fromEntries(preview.records.map(record => [record.recordKey, record.afterReverseComplement]));
     status.value = 'applying';
     try {
+      rebaseDraftBaseline();
       // An open draft (`activeRequest`, checked above) always has its baseline (see `applyPlan`).
       const helper = await runHelperOperation(resolveOperation, { request,
         projection: { canonicalRequest: /** @type {AlignmentBaseline} */ (activeBaseline).request, orientations },

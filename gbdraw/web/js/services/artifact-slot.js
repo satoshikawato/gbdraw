@@ -90,3 +90,22 @@ export const createArtifactSlot = ({
     retainedBytes: Math.max(0, Number(retainedBytes) || 0)
   });
 };
+
+/**
+ * A value of `mode`'s artifact: read from the displayed artifact while `mode` is shown, otherwise
+ * from the slot that keeps it (undefined for an empty slot). Every read of "this mode's artifact,
+ * shown or kept" goes through here. A value kept in a slot is the same object when the mode is
+ * shown again.
+ * @template T
+ * @param {'circular' | 'linear'} mode
+ * @param {string} shownMode
+ * @param {Readonly<Record<'circular' | 'linear', Readonly<ArtifactSlot> | null>>} slots The kept artifacts.
+ * @param {() => T} readShown
+ * @param {(slot: Readonly<ArtifactSlot>) => T} readKept
+ * @returns {T | undefined}
+ */
+export const readArtifactOfMode = (mode, shownMode, slots, readShown, readKept) => {
+  if (shownMode === mode) return readShown();
+  const kept = slots[mode];
+  return kept ? readKept(kept) : undefined;
+};

@@ -30,18 +30,18 @@ const fitted = { zoom: 0.31, canvasPan: { x: -40, y: 3 } };
 test('the pan/zoom owner holds the view from before the review and restores or drops it', () => {
   setLive(0.46, 12, -7);
   assert.equal(panZoom.heldPreviewViewport(), null);
-  panZoom.holdPreviewViewport();
+  panZoom.holdPreviewViewport(() => true);
   setLive(0.31, -40, 3);
   assert.deepEqual(panZoom.heldPreviewViewport(), before);
   // A second hold keeps the first view.
-  panZoom.holdPreviewViewport();
+  panZoom.holdPreviewViewport(() => true);
   assert.deepEqual(panZoom.heldPreviewViewport(), before);
 
   panZoom.releasePreviewViewport({ restore: true });
   assert.deepEqual(live(), before);
   assert.equal(panZoom.heldPreviewViewport(), null);
 
-  panZoom.holdPreviewViewport();
+  panZoom.holdPreviewViewport(() => true);
   setLive(0.31, -40, 3);
   panZoom.releasePreviewViewport({ restore: false });
   assert.deepEqual(live(), fitted);
@@ -54,7 +54,7 @@ test('the pan/zoom owner holds the view from before the review and restores or d
 test('the UI capture with navigation reads the held view, and the capture without it has none', () => {
   setHeldPreviewViewportReader(panZoom.heldPreviewViewport);
   setLive(0.46, 12, -7);
-  panZoom.holdPreviewViewport();
+  panZoom.holdPreviewViewport(() => true);
   setLive(0.31, -40, 3);
   const ui = buildUiStateData(state.activeDrawing(), { includePreviewNavigation: true });
   assert.deepEqual({ zoom: ui.zoom, canvasPan: ui.canvasPan }, before);
@@ -74,7 +74,7 @@ test('a Session saved during the hold stores the view from before it', async () 
   };
   setHeldPreviewViewportReader(panZoom.heldPreviewViewport);
   setLive(0.46, 12, -7);
-  panZoom.holdPreviewViewport();
+  panZoom.holdPreviewViewport(() => true);
   setLive(0.31, -40, 3);
   const held = await savedUi('during review');
   assert.deepEqual({ zoom: held.zoom, canvasPan: held.canvasPan }, before);

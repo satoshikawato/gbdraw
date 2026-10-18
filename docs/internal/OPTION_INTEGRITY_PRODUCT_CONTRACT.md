@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `60`
+- Contract revision: `61`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -1448,6 +1448,29 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 61 change: `PD-OI-039` keeps scenario revision `4` and its
+  receipt byte for byte (SHA-256
+  `8f755440a6655699b1341600bd2aba0d17ef80172490fe600a7cf25d5e16b899`). The
+  Product Decision Owner `satoshikawato`'s reply of `2026-10-18` reads one
+  sentence of its Accepted residual risk. The quotation below is the part of
+  the reply that carries the answer; what it leaves out is stated.
+  - The reply (`2026-10-18`), to the question whether an Undo or Redo of a
+    change that applies at once (`PD-OI-102`, such as a feature colour)
+    replaces the Result in the Accepted residual risk sentence
+    「reviewを開いたままSessionの読み込み、Undo、CircularとLinearの切り替えでResultが置き換わったあとは、panelが開いていても図はFitし直されない（今と同じ）。」:
+    `B`, recommended, it does not: the review still shows the figure it
+    fitted, keeps its rings and the view from before the review, and fits
+    the figure again when the room changes; or `A`, after any Undo or Redo
+    the figure is not fitted again. 「D-41: B、D-44: B」
+    「D-44: B」 selects `B`. A Session load, a Generate, and an Undo or Redo
+    across a Generate still replace the Result as that sentence says.
+    「D-41: B」 answers a question on the record of a click on a drawn
+    element that opens its settings section, recorded in its own revision.
+  - The Decision source of `PD-OI-039` now names this reply too. No other
+    record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime and tests
+    that keep the rings and the held view across a change that applies at
+    once are in the same pull request, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -2996,7 +3019,9 @@ Decision date: 2026-10-04
   below. The four issue `#598` decisions are unchanged.
 - Decision source: the Owner replies of `2026-10-12` and `2026-10-13` quoted
   in the Revision 58 entry above, which states what each quotation leaves
-  out. The Owner approved the receipt text below as written. The receipt and
+  out. The Owner approved the receipt text below as written. The reply of
+  `2026-10-18` quoted in the Revision 61 entry above reads one sentence of
+  its Accepted residual risk on an Undo without changing it. The receipt and
   JSON below reproduce its fields without translation or additional terms.
   Dependent runtime requires this authority merged into its base, or merged
   together with it through the reviewed static Product Contract co-change

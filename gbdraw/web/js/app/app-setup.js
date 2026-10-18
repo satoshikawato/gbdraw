@@ -32,6 +32,7 @@ import {
 } from '../services/feature-visibility.js';
 import { drawnBlockStroke, drawsPythonLegendRow, legendEntryKey, legendStructureEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { readArtifactOfMode } from '../services/artifact-slot.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -1870,7 +1871,9 @@ export const createAppSetup = () => {
   // outside opens, retargets or closes a popup. The one predicate of that hold: the figure's
   // gestures read it, and the preview's `preview-reviewing` class (the hint and the hand cursor
   // of a drawn element) is bound to the same computed.
-  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, popup: unknown } | null} */ (null));
+  // `figure` is the identity of the Result of the review's mode (`mode`) that the review last
+  // showed its draft on.
+  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, popup: unknown, mode: 'circular' | 'linear', figure: string } | null} */ (null));
   const previewPopupsHeldNow = computed(() => similarityAlignmentTakeover.value !== null);
   const previewPopupsHeld = () => previewPopupsHeldNow.value;
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
@@ -4242,11 +4245,9 @@ export const createAppSetup = () => {
   };
   historySnapshots.registerModeTransition(transitionDiagramMode);
   // The committed Session of a mode's artifact, shown or kept in its slot.
-  historySnapshots.registerModeCommittedSession((targetMode) => (
-    targetMode === mode.value
-      ? getCommittedCanonicalSession()
-      : artifactSlots[targetMode]?.runtimeState?.canonical?.committedCanonicalSession ?? null
-  ));
+  historySnapshots.registerModeCommittedSession((targetMode) => readArtifactOfMode(targetMode, mode.value,
+    artifactSlots, getCommittedCanonicalSession,
+    (slot) => slot.runtimeState?.canonical?.committedCanonicalSession) ?? null);
   // A switch waits for Generate, a label rerender, Save and Load, so each
   // Result lands in its own mode's slot (OIPC-C07): the mode buttons and an
   // Undo or Redo of a switch read this one predicate. The buttons also wait
@@ -4855,12 +4856,19 @@ export const createAppSetup = () => {
   // meanwhile keeps that view. While Apply runs, the ending waits for its outcome, and its new
   // Result is the review's own.
   let similarityAlignmentApplying = false;
-  // Something else replaced the Result under the open review (a Session load, History, a mode
-  // switch, a new Generate): the view and the drawer are that change's, and the review gives
-  // neither back.
+  // The identity of the selected Result of the review's mode, shown or kept in its slot.
+  /** @param {'circular' | 'linear'} reviewMode */
+  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(readArtifactOfMode(reviewMode,
+    mode.value, artifactSlots, () => results.value[Number(selectedResultIndex.value) || 0],
+    (slot) => slot.values.results[slot.values.selectedResultIndex]));
+  // The draft no longer matches the figure. Another Result of the review's mode replaced it (a
+  // Session load, History, a new Generate), whichever mode is shown: the view and the drawer are
+  // that change's, and the review gives neither back. A mode switch brings no view: the review's
+  // own Result, kept in its slot or shown again, leaves the hold, so the end gives the view back.
   const dropSimilarityAlignmentView = () => {
-    if (!similarityAlignmentTakeover.value || similarityAlignmentApplying) return;
-    similarityAlignmentTakeover.value.drawerOpen = false;
+    const takeover = similarityAlignmentTakeover.value;
+    if (!takeover || similarityAlignmentApplying || reviewModeFigure(takeover.mode) === takeover.figure) return;
+    takeover.drawerOpen = false;
     releasePreviewViewport({ restore: false });
   };
   similarityAlignmentPorts.refreshCanvas = () => {
@@ -4882,6 +4890,8 @@ export const createAppSetup = () => {
       dropSimilarityAlignmentView();
       return;
     }
+    // A live rerender of the draft's records draws a new Result of the same figure (PD-OI-102).
+    if (similarityAlignmentTakeover.value) similarityAlignmentTakeover.value.figure = reviewModeFigure(similarityAlignmentTakeover.value.mode);
     // Without a mounted preview (the Run info tab) nothing is measured: the strips keep the
     // geometry of the same Result.
     similarityAlignmentGeometry.value = featureActions.showAlignmentOverlay({
@@ -4937,8 +4947,11 @@ export const createAppSetup = () => {
       return;
     }
     // A review shown again while an Apply is pending keeps what the first one took.
-    similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value };
-    holdPreviewViewport();
+    const reviewMode = mode.value === 'circular' ? 'circular' : 'linear';
+    similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value,
+      mode: reviewMode, figure: reviewModeFigure(reviewMode) };
+    // The figure is fitted again only while it shows the draft.
+    holdPreviewViewport(similarityAlignmentActions.isDraftArtifactCurrent);
     rightDrawerActions.closeRightDrawer();
     settingsPaneActions.closeSettingsPopup();
   }, { flush: 'sync' });

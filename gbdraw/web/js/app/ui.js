@@ -408,18 +408,24 @@ export const createPanZoom = (state) => {
   // writer and the UI capture read it through `heldPreviewViewport`.
   /** @type {PersistedPreviewViewport | null} */
   let held = null;
-  // While a view is held, the figure shown in its place follows its room: it is fitted again each
-  // time the canvas changes size, whatever changed it (the window, the settings pane, the docked
-  // panel changing sides). A zoom or a pan made in between lasts until the next such change. A
-  // hidden canvas (the Run info tab) has no room, and the room of the last Fit is no change.
+  /** @type {() => boolean} */
+  let heldFigureShown = () => false;
+  // While a view is held and the figure fitted in its place is shown, that figure follows its
+  // room: it is fitted again each time the canvas changes size, whatever changed it (the window,
+  // the settings pane, the docked panel changing sides). A zoom or a pan made in between lasts
+  // until the next such change. A hidden canvas (the Run info tab) has no room, and the room of
+  // the last Fit is no change. Another figure shown under the hold is not fitted.
   const heldRoomObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
     const container = canvasContainerRef.value;
-    if (!container?.offsetWidth || !container.offsetHeight || previewRoom(container) === fittedRoom) return;
+    if (!container?.offsetWidth || !container.offsetHeight || previewRoom(container) === fittedRoom
+      || !heldFigureShown()) return;
     fitPreviewToViewport();
   }) : null;
-  const holdPreviewViewport = () => {
+  /** @param {() => boolean} figureShown Whether the figure fitted in place of the held view is shown. */
+  const holdPreviewViewport = (figureShown) => {
     if (held) return;
     held = { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } };
+    heldFigureShown = figureShown;
     fittedRoom = '';
     if (canvasContainerRef.value) heldRoomObserver?.observe(canvasContainerRef.value);
   };

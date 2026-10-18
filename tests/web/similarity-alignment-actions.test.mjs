@@ -235,7 +235,9 @@ const create = ({
     previewCandidate, clearCandidatePreview
   });
   return { actions, state: controllerState, helperCalls, generationCalls, currentGroup, history,
-    enrichCalls: () => enrichCalls };
+    enrichCalls: () => enrichCalls,
+    // A Session load or a Generate of the same files commits a Session with its own resources.
+    replaceCommittedResources: () => { canonical = { ...canonical, resources: structuredClone(canonical.resources) }; } };
 };
 const startReview = (fixture, selected = reference) => fixture.actions.startFromPopup({
   groupId: 'og-1', reference: selected, mode: 'review'
@@ -603,13 +605,38 @@ test('stale initial resolution and canceled Apply cannot publish late completion
   assert.deepEqual(fixture.state.results.value, [{ name: 'prior.svg' }]);
 });
 
-test('changed committed Result rejects an old draft before validation', async () => {
+test('a new Result or catalog under the same committed resources keeps the draft; other resources reject it before validation', async () => {
   const fixture = create();
   await startReview(fixture);
+  // A live setting change draws a new Result from the same sources (PD-OI-102, OV-1082), and
+  // the automatic rerender a new feature catalog of the same features (OV-1120). It keeps the
+  // committed resources.
   fixture.state.results.value = [{ name: 'new.svg' }];
+  const catalog = fixture.state.featureCatalog.value;
+  fixture.state.featureCatalog.value = { ...catalog, items: catalog.items.map((item) => ({ ...item })) };
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), true);
+  // A Generate or a Session load, even of the same files and features, commits other resources:
+  // it replaces the figure (PD-OI-039). The resources decide, not the catalog.
+  fixture.replaceCommittedResources();
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), false);
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
   assert.equal(fixture.helperCalls.length, 1);
   assert.deepEqual(fixture.state.results.value, [{ name: 'new.svg' }]);
+});
+
+// OV-1120: the automatic rerender commits a live setting during the review. The helper, Apply
+// and the Reset receipt read the committed Session as it is then (PD-OI-102).
+test('Apply composes onto the committed Session that a live setting changed during the review', async () => {
+  let committed = structuredClone(renderRequest);
+  const fixture = create({ getCommittedRequest: () => committed });
+  await startReview(fixture);
+  committed = { ...structuredClone(committed), diagramOptions: { plotTitle: 'live' } };
+  assert.equal(fixture.actions.isDraftArtifactCurrent(), true);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.at(-1).payload.projection.canonicalRequest.diagramOptions.plotTitle, 'live');
+  const [call] = fixture.generationCalls;
+  assert.equal(call.canonical.renderRequest.diagramOptions.plotTitle, 'live');
+  assert.equal(call.alignmentResetBefore.renderRequest.diagramOptions.plotTitle, 'live');
 });
 
 test('active schema-2 plan validates on regeneration and supports Reset and stable reorder', async () => {

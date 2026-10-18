@@ -613,6 +613,17 @@ write-up of a release.
   before the review still returns when the panel closes (OV-536). The settings
   panel now follows the pointer from the first move of a width drag; it jumped
   10 px wider first (OV-620).
+- Similarity alignment (web app): changing a feature colour, **Show**/**Off**,
+  or a **Legend** or **Plot Title** setting while **Review alignment** is open,
+  or undoing such a change, no longer ends the review's rings and fitting: the
+  rings are drawn again, the figure is still fitted when its room changes, and
+  the view from before the review returns when the panel closes (OV-1082,
+  OV-1120). Apply keeps a Legend or Plot Title setting changed during the
+  review. Switching between Circular and Linear and back
+  with the panel open no longer loses the view from before the review (OV-622).
+  Apply now keeps a colour changed before or during the review; before, it drew
+  the old colour or failed with "The operation failed without recognized
+  diagnostic information" (OV-1083).
 - Similarity alignment (web app): the **Reset alignment** dialog says "Undo
   the latest Align." and offers **Positions only** and **Positions and
   directions (N records)**. The reason a scope is unavailable sits under it.
