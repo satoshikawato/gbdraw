@@ -23,7 +23,6 @@ import { evaluateWithRetainedPromise } from './app-lifecycle.cjs';
 import { expectLiveEqualsGenerate, settleLive, showResult } from './live-generate-parity.cjs';
 import { download } from './mode-transition.cjs';
 import { SINGLE_FIXTURE, generate, open } from './live-generate-parity-steps.cjs';
-import { modeDrawing } from './drawing-state.mjs';
 
 // The step kinds. Each run draws every kind at least once.
 export const WALK_KINDS = Object.freeze([
@@ -627,7 +626,7 @@ const resetKeepingGenerateSettings = async (page) => {
   const kept = await page.evaluate(async (settings) => {
     const { state } = await import('/gbdraw/web/js/state.js');
     return Object.fromEntries(Object.entries(settings).map(([drawingId, paths]) => [
-      drawingId, paths.map(([group, key]) => [group, key, window.Vue.unref(modeDrawing(state, drawingId)[group])[key]])
+      drawingId, paths.map(([group, key]) => [group, key, window.Vue.unref(state.drawingOf(drawingId)[group])[key]])
     ]));
   }, GENERATE_SETTINGS);
   const notes = await applyStepWithin(page, { kind: 'reset' });
