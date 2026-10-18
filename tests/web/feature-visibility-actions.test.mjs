@@ -671,9 +671,20 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   };
   // Python's rule matches are evaluated over the catalog's biological features.
   displayState.biologicalFeatures = ref(resultCatalogFeatures(displayState).biological);
+  // While `holding`, each prepareDrawn call waits for its own release.
+  const basePreparation = rulePreparationFor(displayState);
+  const held = [];
+  let holding = false;
+  const gatedPreparation = {
+    ...basePreparation,
+    prepareDrawn: async (...args) => {
+      if (holding) await new Promise((release) => held.push(release));
+      return basePreparation.prepareDrawn(...args);
+    }
+  };
   const owner = createFeatureVisibilityActions({
     state: withDrawings(displayState),
-    rulePreparation: rulePreparationFor(displayState),
+    rulePreparation: gatedPreparation,
     getCommittedRequest: committedRequest(['CDS']),
     showEditorIntent: visibilityPort(displayState, committedRequest(['CDS']), () => false,
       () => admitFeatureCatalog(catalog, displayState.results.value, { mode: 'circular' })),
@@ -708,6 +719,40 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     [{ reflow: false, rerender: true, labels: false }],
     'a History step that supersedes the edit asks; the edit asks nothing more'
   );
+  // Review finding 1 (D-109). The settle step lets the awaiting edits run.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+  const display = () => owner.projectFeatureVisibility();
+  // (a) The edit follows the newest display while a later one replaces it.
+  holding = true;
+  held.length = 0;
+  follows.length = 0;
+  const followEdit = owner.setFeatureVisibilityRuleField(0, 'value', '^D$');
+  const display1 = display();
+  await settle();
+  held.shift()(); // the edit's preparation: superseded by D1, so it follows D1
+  await settle();
+  const display2 = display();
+  await settle();
+  held.shift()(); // D1: superseded by D2
+  held.shift()(); // D2: projects
+  await Promise.all([followEdit, display1, display2]);
+  holding = false;
+  assert.deepEqual(follows, [{ rerender: true }], 'an edit superseded by two displays asks once');
+  // (b) A burst: only the newest edit asks, though a display supersedes both.
+  holding = true;
+  held.length = 0;
+  follows.length = 0;
+  const burst1 = owner.setFeatureVisibilityRuleField(0, 'value', '^E$');
+  const burst2 = owner.setFeatureVisibilityRuleField(0, 'value', '^F$');
+  await settle();
+  const display3 = display();
+  await settle();
+  held.shift()(); // E1
+  held.shift()(); // E2
+  held.shift()(); // the display
+  await Promise.all([burst1, burst2, display3]);
+  holding = false;
+  assert.deepEqual(follows, [{ rerender: true }], 'a burst superseded by a display asks once');
 }
 
 console.log('feature visibility action tests passed');
