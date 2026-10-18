@@ -614,6 +614,18 @@ GC-content and Depth axes and ticks are unaffected. User-explicit
 remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
 
+A `--circular_track_slot` takes only the parameters its renderer reads:
+`features` takes `lane_direction` (alias `lanes`) and `stack_preset` (alias
+`preset`); `ticks` takes `tick_label_layout` and `preset` (alias
+`track_preset`); `dinucleotide_content` takes `nt` (alias `dinucleotide`) and
+`legend_label` (alias `label`); `dinucleotide_skew` takes those and
+`positive_color` and `negative_color` (aliases `high_color`, `low_color`);
+`depth` takes `track_index` and `legend_label` (alias `label`); `sequence_conservation` takes
+`track_index` and `source_index`, and keeps the `label`, `color`, `managed`,
+`series_key`, and `fileName` that saved Sessions store; `spacer` takes none.
+Any other parameter is an error that names the slot and the parameter;
+`anchor_slot` and `to_slot` belong to annotation slots only.
+
 Small label defects of horizontal Circular labels, up to 100 per record
 (overlaps, crossing leader lines, and inner labels over the definition text),
 are first repaired by moving outer and inner labels slightly.
@@ -888,7 +900,7 @@ The approved pure pixel text grammar is limited to Circular `inner_gap_px`/`oute
 
 Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary and is converted internally to a split feature slot. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
 
-Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, and `visible`. Retired Circular keys `spacing`, `strict`, `compress`, and `reserve` are rejected whether supplied as slot fields or parameters. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid.
+Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, and `visible`. Retired Circular keys `spacing`, `strict`, `compress`, and `reserve` are rejected whether supplied as slot fields or parameters. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid; a key the row's renderer does not take is an error, as for `--circular_track_slot`.
 
 ```tsv
 id	renderer	side	r	w	params
@@ -1539,6 +1551,16 @@ globally out-of-range values are rejected. Slot order changes placement, not
 source binding. When a custom stack is active, enabled Depth slots are
 authoritative for the legend: entries follow slot order, `legend_label`
 overrides the series title, and series without an enabled slot are omitted.
+
+A `--linear_track_slot` takes only the parameters its renderer reads:
+`dinucleotide_content` takes `nt` (alias `dinucleotide`) and `legend_label`
+(alias `label`); `dinucleotide_skew` takes those and `positive_color` and
+`negative_color` (aliases `high_color`, `low_color`); `depth` takes
+`track_index` and `legend_label` (alias `label`); `features` and `spacer` take none. Any other
+parameter is an error that names the slot and the parameter; `anchor_slot` and
+`to_slot` belong to annotation slots only. Each enabled content and skew slot
+draws its own legend rows, named by its `legend_label` or else by its
+dinucleotide (for example `AT content`), as in Circular.
 
 An overlay annotation's `anchor_slot` and `to_slot` must each resolve to an
 enabled drawable, non-annotation slot in the complete stack. Unknown IDs,

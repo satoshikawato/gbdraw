@@ -388,7 +388,7 @@ def test_v32_web_slot_specs_drop_only_legacy_feature_geometry(
 ) -> None:
     canonical_slots = (
         "gc_content:dinucleotide_content@side=above,h=27px,spacing=4px,nt=GC",
-        "features:features@side=below,z=3,legend_label=Genes",
+        "features:features@side=below,z=3",
     )
     request = LinearDiagramRequest(
         records=(_record(),),
@@ -406,7 +406,7 @@ def test_v32_web_slot_specs_drop_only_legacy_feature_geometry(
     ]
     encoded_slots[1] = (
         "features:features@side=below,h=48px,spacing=9px,"
-        "z=3,legend_label=Genes"
+        "z=3"
     )
     document = load_session_document(data)
 
@@ -415,7 +415,7 @@ def test_v32_web_slot_specs_drop_only_legacy_feature_geometry(
 
     assert decoded.options.tracks.linear_track_slots == (
         "gc_content:dinucleotide_content@side=above,h=27px,spacing=4px,nt=GC",
-        "features:features@side=below,z=3,legend_label=Genes",
+        "features:features@side=below,z=3",
     )
     assert decoded.options.tracks.linear_track_axis_index == 1
     assert document.to_dict()["renderRequest"]["diagramOptions"]["tracks"][
@@ -432,7 +432,7 @@ def test_v32_structured_slots_preserve_non_feature_geometry_and_fields(
         enabled=False,
         side="below",
         z=3,
-        params={"legend_label": "Genes"},
+        params={},
     )
     numeric_slot = LinearTrackSlot(
         id="gc_content",
@@ -471,7 +471,7 @@ def test_v32_structured_slots_preserve_non_feature_geometry_and_fields(
         height=None,
         spacing=None,
         z=3,
-        params={"legend_label": "Genes"},
+        params={},
     )
     assert preserved_numeric == numeric_slot
     assert decoded.options.tracks.linear_track_axis_index == 1

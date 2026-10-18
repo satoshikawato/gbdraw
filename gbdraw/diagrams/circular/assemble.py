@@ -128,7 +128,7 @@ from ...render.composition import apply_composition_plan
 from ...svg.ids import track_slot_svg_id
 from .positioning import _parse_svg_number as _svg_number, center_group_on_canvas
 from ...tracks.circular import tick_sides_for_tick_label_layout
-from ...tracks.parsing import slot_dinucleotide
+from ...tracks.parsing import slot_dinucleotide, slot_legend_label
 
 from .builders import (
     add_axis_group_on_canvas,
@@ -1343,21 +1343,6 @@ def _slot_dataframe_for_nt(
 
 
 
-def _slot_legend_label(slot: LegendSlotSource, fallback: str) -> str:
-    raw_label = slot.params.get("legend_label", slot.params.get("label"))
-    label = str(raw_label).strip() if raw_label is not None else ""
-    return label or fallback
-
-
-def _add_numeric_legend_sources(out: LegendTable, label: str, swatch: NumericLegendSource) -> None:
-    stroke = {"stroke": swatch.stroke_color, "width": swatch.stroke_width}
-    if swatch.high_fill_color == swatch.low_fill_color:
-        out.add_source(label, {"type": "solid", "fill": swatch.high_fill_color, **stroke})
-    else:
-        out.add_source(f"{label} (+)", {"type": "solid", "fill": swatch.high_fill_color, **stroke})
-        out.add_source(f"{label} (-)", {"type": "solid", "fill": swatch.low_fill_color, **stroke})
-
-
 def _sync_legend_table_for_circular_slots(
     out: LegendTable,
     *,
@@ -1404,12 +1389,12 @@ def _sync_legend_table_for_circular_slots(
                 if track is None:
                     continue
                 swatch = track
-                label = _slot_legend_label(slot, track.label)
+                label = slot_legend_label(slot, track.label)
             elif depth is None:
                 continue
             else:
                 swatch = depth
-                label = _slot_legend_label(slot, "Depth")
+                label = slot_legend_label(slot, "Depth")
             out.add_source(label, {
                 "type": "solid",
                 "fill": swatch.fill_color,
@@ -1418,12 +1403,10 @@ def _sync_legend_table_for_circular_slots(
             })
         elif renderer == "dinucleotide_content":
             nt = slot_dinucleotide(slot.params, default_nt)
-            _add_numeric_legend_sources(out, _slot_legend_label(slot, f"{nt} content"), gc)
+            out.add_numeric_source(slot_legend_label(slot, f"{nt} content"), gc)
         elif renderer == "dinucleotide_skew":
             nt = slot_dinucleotide(slot.params, default_nt)
-            _add_numeric_legend_sources(
-                out, _slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt)
-            )
+            out.add_numeric_source(slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt))
     if conservation_legend:
         default_min_color, default_max_color = conservation_colors
         if any(track.track_color for track in conservation_legend):

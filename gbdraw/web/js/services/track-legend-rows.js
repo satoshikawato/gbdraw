@@ -101,13 +101,12 @@ const trackRequestView = (request) => {
 };
 
 /**
- * The content and skew tracks a mode draws from its track slots, in Python's order.
- * @param {'circular' | 'linear'} mode
+ * The content and skew tracks drawn from track slots, in Python's order (the same rule in both modes).
  * @param {string} defaultNt The dinucleotide of a slot that names none.
  * @param {readonly TrackRowSlot[] | null} slots null: the default tracks.
  * @returns {readonly DrawnTrack[]}
  */
-const slotTracks = (mode, defaultNt, slots) => {
+const slotTracks = (defaultNt, slots) => {
   /** @param {DrawnTrack['kind']} kind @param {TrackRowSlot | null} slot @returns {DrawnTrack} */
   const track = (kind, slot) => {
     const params = slot?.params ?? {};
@@ -121,9 +120,8 @@ const slotTracks = (mode, defaultNt, slots) => {
     };
   };
   if (!slots) return [track('content', null), track('skew', null)];
-  // Linear slots replace only the skew rows: the content row stays the default one.
-  const drawn = slots.filter((slot) => slot.enabled && TRACK_KIND[slot.renderer] && !(mode === 'linear' && TRACK_KIND[slot.renderer] === 'content'));
-  return [...(mode === 'linear' ? [track('content', null)] : []), ...drawn.map((slot) => track(TRACK_KIND[slot.renderer], slot))];
+  // Each enabled content and skew slot draws its own rows, in both modes (OV-846).
+  return slots.filter((slot) => slot.enabled && TRACK_KIND[slot.renderer]).map((slot) => track(TRACK_KIND[slot.renderer], slot));
 };
 /**
  * The content and skew tracks the request that drew a Result draws. None for a
@@ -138,7 +136,7 @@ export const drawnTracks = (request) => {
   if (!view) return [];
   const { mode, defaultNt, entries } = view;
   try {
-    return slotTracks(mode, defaultNt, entries && (mode === 'linear'
+    return slotTracks(defaultNt, entries && (mode === 'linear'
       ? parseLinearTrackSlotSpecs(entries, defaultNt)
       : entries.map((entry, index) => (typeof entry === 'string'
           ? parseCircularTrackSlotSpec(entry, index, defaultNt) : normalizeCircularTrackSlot(entry, index, defaultNt)))));
@@ -154,7 +152,7 @@ export const drawnTracks = (request) => {
  * @returns {readonly DrawnTrack[]}
  */
 export const loadedTracks = (settings) => (
-  settings ? slotTracks(settings.mode, normalizeNt(settings.dinucleotide), settings.slots).map((track) => ({ ...track, saved: true })) : []
+  settings ? slotTracks(normalizeNt(settings.dinucleotide), settings.slots).map((track) => ({ ...track, saved: true })) : []
 );
 
 /**

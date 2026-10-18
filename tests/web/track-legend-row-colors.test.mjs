@@ -146,6 +146,7 @@ test('the tracks of a Result loaded without a request are those of its loaded se
   // the request Generate writes from the same slots.
   const slots = normalizeLinearTrackSlots([
     { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: {} },
+    { id: 'share', renderer: 'dinucleotide_content', enabled: true, side: 'below', params: { legend_label: 'Share' } },
     { id: 'own', renderer: 'dinucleotide_skew', enabled: true, side: 'below', params: { positive_color: '#ff0000', negative_color: '#0000ff' } },
     { id: 'named', renderer: 'dinucleotide_skew', enabled: true, side: 'below', params: { nt: 'GC', legend_label: 'Skew' } },
     { id: 'off', renderer: 'dinucleotide_skew', enabled: false, side: 'below', params: {} }
@@ -155,7 +156,7 @@ test('the tracks of a Result loaded without a request are those of its loaded se
     mode: 'linear', dinucleotide: 'AT', slots: slots.filter((slot) => slot.enabled).map(buildLinearTrackSlotPayload)
   })).map(asSaved));
   assert.deepEqual(tracks.map(({ slotId, label, positiveColor }) => [slotId, label, positiveColor]),
-    [[null, 'AT content', null], ['own', 'AT skew', '#ff0000'], ['named', 'Skew', null]]);
+    [['share', 'Share', null], ['own', 'AT skew', '#ff0000'], ['named', 'Skew', null]]);
 });
 
 // The loaded settings are the Session's saved draft: a slot added after the
