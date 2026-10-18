@@ -16,7 +16,6 @@ import { fileLegendCaptionsOf } from '../services/drawing/color-rules.js';
 import {
   nameFeaturePlacementFailure,
   requestFeatureOverrides,
-  restorePlacements,
   validateFeatureIdentityNotices
 } from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
@@ -197,6 +196,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { GROUP_NAMES_SLICE } from '../services/drawing/group-names.js';
+import { FEATURE_EDITS_SLICE } from '../services/drawing/feature-edits.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   createImportedComparisonIntentState,
@@ -5439,8 +5439,7 @@ export const createRunAnalysis = ({
       // source removes only the edits whose feature that source no longer has,
       // and the edits of records the request dropped; Python names them.
       featureEditRemovalCount.value = sourceReplaced ? pruneUnmatchedFeatureOverrides({
-        featureOverrides: drawing.featureOverrides,
-        featurePlacementOverrides: drawing.featurePlacementOverrides,
+        featureEdits: drawing.slices.featureEdits,
         featureStrokeOverrides: drawing.featureStrokeOverrides,
         notices: canonicalExecution.featureIdentityNotices,
         replacedRecordKeys: replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
@@ -5610,12 +5609,12 @@ export const createRunAnalysis = ({
               // part of the Result, so Undo and Redo restore them, and the
               // removal count, with this step.
               captureIntentCheckpoint: () => ({
-                placements: cloneJsonData(drawing.featurePlacementOverrides) || {},
+                placements: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
                 removed: Number(featureEditRemovalCount.value) || 0
               }),
               // The checkpoint is what `captureIntentCheckpoint` above returned.
               restoreIntentCheckpoint: (/** @type {{ placements: FeaturePlacementDraft, removed: number }} */ { placements, removed }) => {
-                restorePlacements(drawing.featurePlacementOverrides, placements);
+                FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featurePlacementOverrides: placements });
                 featureEditRemovalCount.value = removed;
               },
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,

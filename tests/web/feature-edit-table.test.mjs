@@ -11,6 +11,9 @@ import {
   replaceFeatureEdits
 } from '../../gbdraw/web/js/app/feature-editor/feature-edit-table.js';
 import { featureIdentityKey } from '../../gbdraw/web/js/services/feature-placement.js';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+// A feature-edits slice over a draft map, so a writer writes the map.
+const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
 const record = (recordKey, cardinality = 'exactly_one') => ({
   recordKey, cardinality, source: { kind: 'genbank', resourceId: `source-${recordKey}` }
@@ -74,7 +77,7 @@ test('a load replaces the edits of the committed records and keeps the other rec
   put({ ...row('linear-other', 'f1', { labelText: 'Other record' }), labelSourceText: null });
   const circular = { [featureIdentityKey('a', 'gone')]: { ...row('a', 'gone', { labelText: 'Same key' }), labelSourceText: null } };
   const circularBefore = structuredClone(circular);
-  replaceFeatureEdits(draft, [row('a', 'old', { labelText: 'New' }), row('a', 'f9', { featureVisibility: 'exclude_matching' })],
+  replaceFeatureEdits(editsOf(draft), [row('a', 'old', { labelText: 'New' }), row('a', 'f9', { featureVisibility: 'exclude_matching' })],
     [record('a')]);
   assert.deepEqual(Object.values(draft).map((value) => [value.recordKey, value.biologicalFeatureId,
     value.featureVisibility, value.labelVisibility, value.labelText, value.labelSourceText]).sort(), [

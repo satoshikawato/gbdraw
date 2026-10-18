@@ -18,6 +18,7 @@ import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
 import { PALETTE_SLICE, createDefaultPaletteData } from './drawing/palette.js';
 import { clearLabelTextEdits, resetLabelFilters } from './drawing/label-tables.js';
+import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -126,7 +127,6 @@ const resetEditorDraftState = (state, drawing) => {
   const editorDefaults = createDefaultEditorDraftState();
   clearReactiveObject(drawing.featureColorOverrides);
   VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
-  clearReactiveObject(drawing.featureOverrides);
   clearReactiveObject(drawing.featureStrokeOverrides);
   clearReactiveObject(drawing.legendColorOverrides);
   clearReactiveObject(drawing.legendStrokeOverrides);
@@ -192,7 +192,7 @@ export const resetSettings = (state) => {
     clearReactiveObject(drawing.unmanagedConfigOverrides);
     ANNOTATION_SETS_SLICE.reset(drawing.slices.annotationSets);
     replaceReactiveArray(drawing.recordDisplayDrafts);
-    Object.keys(drawing.featurePlacementOverrides).forEach((key) => delete drawing.featurePlacementOverrides[key]);
+    FEATURE_EDITS_SLICE.reset(drawing.slices.featureEdits);
     state.selectedAnnotation.value = null;
     resetLinearComparisonPlan(drawing);
     drawing.losatProgram.value = 'blastn';

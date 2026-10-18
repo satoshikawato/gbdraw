@@ -12,13 +12,14 @@ import { VISIBILITY_RULES_SLICE } from '../../../gbdraw/web/js/services/drawing/
 import { COLOR_RULES_SLICE } from '../../../gbdraw/web/js/services/drawing/color-rules.js';
 import { PALETTE_SLICE } from '../../../gbdraw/web/js/services/drawing/palette.js';
 import { LABEL_TABLES_SLICE } from '../../../gbdraw/web/js/services/drawing/label-tables.js';
+import { FEATURE_EDITS_SLICE } from '../../../gbdraw/web/js/services/drawing/feature-edits.js';
 
 // The slices that own a drawing's editor edits (gbdraw/web/js/services/drawing/),
 // by the name of their handle in `drawing.slices`.
 export const DRAWING_SLICES = Object.freeze({
   visibilityRules: VISIBILITY_RULES_SLICE, colorRules: COLOR_RULES_SLICE, palette: PALETTE_SLICE, labelTables: LABEL_TABLES_SLICE,
   annotationSets: ANNOTATION_SETS_SLICE,
-  groupNames: GROUP_NAMES_SLICE, canvas: CANVAS_SLICE
+  groupNames: GROUP_NAMES_SLICE, canvas: CANVAS_SLICE, featureEdits: FEATURE_EDITS_SLICE
 });
 
 export const DRAWING_DRAFT_KEYS = Object.freeze([

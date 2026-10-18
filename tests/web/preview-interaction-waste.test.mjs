@@ -20,7 +20,7 @@ globalThis.__PREVIEW_WASTE_COUNTS__ = counts;
 
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-waste-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-for (const folder of ['app/feature-editor', 'services', 'utils']) {
+for (const folder of ['app/feature-editor', 'services/drawing', 'utils']) {
   await mkdir(join(tempDir, folder), { recursive: true });
 }
 const copyModule = async (source, destination = source) => writeFile(
@@ -32,7 +32,8 @@ for (const source of [
   'utils/error-normalization.js', 'app/ui.js', 'services/feature-dom.js',
   'app/feature-editor/svg-actions.js', 'utils/popup-bounds.js', 'services/runtime-test-hooks.js',
   'services/feature-placement.js', 'services/json-clone.js', 'app/feature-selection.js',
-  'services/svg-serialization.js', 'services/settings-sections.js', 'services/drawn-groups.js'
+  'services/svg-serialization.js', 'services/settings-sections.js', 'services/drawn-groups.js',
+  'services/drawing/feature-edits.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js'
 ]) await copyModule(source);
 // The identity owner, with its rendered-identity reads counted.
 await copyModule('services/feature-identity.js', 'services/feature-identity-owner.js');

@@ -22,7 +22,9 @@ import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
 import { PALETTE_SLICE, queuedPaletteData, restoreArtifactQueuedPalette } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
+import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
+/** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { PaletteColors, PaletteSlice } from './drawing/palette.js' */
 /** @import { GroupNamesData } from './drawing/group-names.js' */
 /** @import { HistoryArtifactHandle } from './history.js' */
@@ -388,7 +390,10 @@ const replaceFeatureEditState = (drawing, features = {}) => {
   VISIBILITY_RULES_SLICE.install(drawing.slices.visibilityRules, {
     featureVisibilityManualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules)
   });
-  replacePlainObject(drawing.featureOverrides, clonePlainObject(features.featureOverrides));
+  // A History step holds the draft the slice captured (the cast).
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, {
+    featureOverrides: /** @type {FeatureOverrideDraft} */ (clonePlainObject(features.featureOverrides))
+  });
   LABEL_TABLES_SLICE.install(drawing.slices.labelTables, {
     // A History step holds the rows the slice captured (the cast).
     canonicalLabelOverrideRows: /** @type {StoredLabelOverrideRow[]} */ (cloneLabelOverrideRows(features.labelOverrideRows)),
@@ -644,7 +649,7 @@ const buildFallbackFeatureStateData = (state, drawing) => ({
   selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
   featureColorOverrides: clonePlainObject(drawing.featureColorOverrides),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
-  featureOverrides: clonePlainObject(drawing.featureOverrides),
+  featureOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides,
   ...labelTextEditsData(drawing.slices.labelTables)
 });
 
@@ -1447,7 +1452,7 @@ export const createHistorySnapshotService = ({
       featureVisibilityManualRules: cloneFeatureVisibilityRules(
         VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules
       ),
-      featureOverrides: clonePlainObject(drawing.featureOverrides),
+      featureOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides,
       ...labelTextEditsData(drawing.slices.labelTables)
     };
     const editorState = {
@@ -1802,7 +1807,7 @@ export const createHistorySnapshotService = ({
       features: buildFeatureIntentData({
         featureColorOverrides: drawing.featureColorOverrides,
         featureVisibilityManualRules: VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules,
-        featureOverrides: drawing.featureOverrides,
+        featureOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides,
         ...labelTextEditsData(drawing.slices.labelTables)
       }),
       editorState: buildEditorIntentData({

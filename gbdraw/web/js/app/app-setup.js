@@ -4325,11 +4325,7 @@ export const createAppSetup = () => {
     const notices = Array.isArray(featureIdentityNotices.value) ? featureIdentityNotices.value : [];
     const summary = {
       dormant: notices.filter((/** @type {UnresolvedNotice} */ notice) => notice.status !== 'unresolved').length,
-      unmatched: countUnresolvedFeatureEdits({
-        featureOverrides: drawing.featureOverrides,
-        featurePlacementOverrides: drawing.featurePlacementOverrides,
-        notices
-      }),
+      unmatched: countUnresolvedFeatureEdits({ featureEdits: drawing.slices.featureEdits, notices }),
       removed: Number(featureEditRemovalCount.value) || 0
     };
     return summary.dormant || summary.unmatched || summary.removed ? summary : null;
@@ -4340,9 +4336,7 @@ export const createAppSetup = () => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     return removeUnresolvedFeatureEdits({
-      featureOverrides: drawing.featureOverrides,
-      featurePlacementOverrides: drawing.featurePlacementOverrides,
-      notices: featureIdentityNotices.value
+      featureEdits: drawing.slices.featureEdits, notices: featureIdentityNotices.value
     }) > 0;
   });
   const addFeatureVisibilityRuleWithHistory = undoableAction('Add feature visibility rule', addFeatureVisibilityRule);
@@ -6400,8 +6394,7 @@ export const createAppSetup = () => {
   };
   /** @param {DrawingState} drawing @returns {RecordEditData} */
   const recordEditData = (drawing) => ({
-    featureOverrides: drawing.featureOverrides,
-    featurePlacementOverrides: drawing.featurePlacementOverrides,
+    featureEdits: drawing.slices.featureEdits,
     featureStrokeOverrides: drawing.featureStrokeOverrides,
     annotationSets: drawing.annotationSets,
     removeAnnotation: (/** @type {object} */ annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]),

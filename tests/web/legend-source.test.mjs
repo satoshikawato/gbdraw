@@ -12,6 +12,9 @@ import {
   setFeatureVisibilityOverride
 } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+// A feature-edits slice over a draft map, so a writer writes the map.
+const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
 // OV-42, OV-43 (Owner decision 2026-10-06, option A): a live edit that changes
 // what a Result's Legend derives from asks for the automatic rerender, so the
@@ -53,7 +56,7 @@ const sourcesOf = (hidden = [], rules = []) => {
   const featureOverrides = {};
   const { biological: features } = resultCatalogFeatures(stateOf());
   hidden.forEach((id) => setFeatureVisibilityOverride(
-    featureOverrides, features.find((feature) => feature.biological_feature_id === id), 'off'
+    editsOf(featureOverrides), features.find((feature) => feature.biological_feature_id === id), 'off'
   ));
   const state = stateOf(featureOverrides, rules);
   const context = {

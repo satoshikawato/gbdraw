@@ -132,10 +132,11 @@ test('install(capture(x)) gives back x, also after reset, on the Session 46 fixt
 // name (an identifier that ends in `drawing` or `Drawing`, `activeDrawing()`,
 // `drawings.<mode>`, or `drawings[<mode>]`); and in the template, a `v-model`
 // on a member or on a row of a `v-for` over one (nested rows too), and a
-// handler that writes through either. Blind spots: an alias (a member or a row
-// held in a local or destructured, a slice handle held in a local) and a
-// drawing held under another name; the type checker sees those where the
-// holder is typed.
+// handler that writes through either. A name that is a member's (a helper's
+// parameter or a destructured member) counts as the member. Blind spots: an
+// alias under another name (a member or a row held in a local, a slice handle
+// held in a local) and a drawing held under another name; the type checker
+// sees those where the holder is typed.
 const MEMBERS = SLICES.flatMap(([, slice]) => slice.members);
 const MUTATING_METHODS = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin', 'add', 'delete', 'clear', 'set'];
 const ASSIGNMENT = /^\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])/;
@@ -163,7 +164,7 @@ const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 
 export const memberWriteSites = (source, members = MEMBERS) => {
   const code = codeOnly(source);
-  return [...code.matchAll(new RegExp(`\\??\\.\\s*(${members.join('|')})\\b`, 'g'))].flatMap((match) => {
+  const sites = [...code.matchAll(new RegExp(`\\??\\.\\s*(${members.join('|')})\\b`, 'g'))].flatMap((match) => {
     const before = code.slice(0, match.index);
     if (!DRAWING_RECEIVER.test(before)) return [];
     const receiver = before.match(/[\w$]+(?:\(\s*\))?(?:\??\.[\w$]+(?:\(\s*\))?|\[[^\]]*\])*\??$/)?.[0] ?? '';
@@ -173,6 +174,18 @@ export const memberWriteSites = (source, members = MEMBERS) => {
       || /\bObject\.assign\s*\(\s*$/.test(code.slice(0, start));
     return writes ? [`${match[1]}:${lineOf(code, match.index)}`] : [];
   });
+  // A name that is a member's (a parameter, a destructured member, an alias
+  // under its name): a write through it, `delete`, or `Object.assign` into it.
+  // A rebinding of the name is no write of a member.
+  const bare = [...code.matchAll(new RegExp(`(?<![\\w$.])(${members.join('|')})\\b`, 'g'))].flatMap((match) => {
+    const before = code.slice(0, match.index);
+    const after = code.slice(match.index + match[0].length);
+    const step = /^\s*(?:\??\.|\[)/.test(after);
+    const writes = (step && (writesThrough(after) || /\bdelete\s+$/.test(before)))
+      || /\bObject\.assign\s*\(\s*$/.test(before);
+    return writes ? [`${match[1]}:${lineOf(code, match.index)}`] : [];
+  });
+  return [...sites, ...bare].sort((left, right) => Number(left.split(':')[1]) - Number(right.split(':')[1]));
 };
 
 // The markup of the element whose start tag holds `index` (a void element: its tag).
@@ -242,6 +255,16 @@ test('the slice write scan flags a planted write and leaves reads alone', () => 
     `};`
   ].join('\n'), [member, other]);
   assert.deepEqual(writes, [`${member}:2`, `${member}:3`, `${member}:4`, `${other}:5`, `${other}:6`]);
+  // A helper that holds a member under its name (the M3.9 blind spot).
+  assert.deepEqual(memberWriteSites([
+    `const prune = ({ ${member} = {}, ${other} }, key) => {`,
+    `  delete ${member}[key];`,
+    `  ${other}.value = [];`,
+    `  Object.assign(${member}, next);`,
+    `  ${member} = {};`,
+    `  return ${member}[key] === ${other}.value;`,
+    `};`
+  ].join('\n'), [member, other]), [`${member}:2`, `${other}:3`, `${member}:4`]);
   const rows = (inner) => `<div v-for="set in ${member}"><div v-for="(item, index) in set.rows">${inner}</div></div>`;
   assert.deepEqual(templateMemberWrites(rows(`<input :value="item.label" @input="setLabel(set, item, $event.target.value)">`), [member]), []);
   assert.equal(templateMemberWrites(rows('<input v-model="item.label">'), [member]).length, 1);
@@ -300,7 +323,17 @@ const SAMPLES = {
     orthogroupDescriptionOverrides: mode === 'linear' ? {} : { 'sample-group': 'Sample description' },
     orthogroupDormantOverrides: { '["sample-member"]': { name: 'Dormant name', description: 'Dormant description' } }
   }),
-  canvas: () => ({ canvasPadding: { top: 12, right: 3, bottom: 7, left: 5 } })
+  canvas: () => ({ canvasPadding: { top: 12, right: 3, bottom: 7, left: 5 } }),
+  // Load keeps the rows `canonicalFeatureOverrides` and the placement reader
+  // of the drawing's mode accept.
+  featureEdits: (mode) => ({
+    featureOverrides: { '["record-1","CDS_1"]': {
+      recordKey: 'record-1', biologicalFeatureId: 'CDS_1', featureVisibility: 'off', labelVisibility: null, labelText: 'Sample', labelSourceText: null
+    } },
+    featurePlacementOverrides: { '["record-1","CDS_2"]': {
+      recordKey: 'record-1', biologicalFeatureId: 'CDS_2', placement: { kind: 'lane', side: mode === 'linear' ? 'above' : 'outward', level: 1 }
+    } }
+  })
 };
 // A view member as plain data: a ref's value, a set's values.
 const plain = (value) => {

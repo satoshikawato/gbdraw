@@ -89,7 +89,7 @@ test('each input of the list lists the features again', async () => {
     assert.ok(derivations() > seen, `${name} did not list the features again`);
     seen = derivations();
   };
-  setFeatureVisibilityOverride(drawing.featureOverrides, state.featureList.value.rows[1], 'off');
+  setFeatureVisibilityOverride(drawing.slices.featureEdits, state.featureList.value.rows[1], 'off');
   changed('a Feature visibility edit');
   assert.deepEqual(rows(), [['A', true], ['B', false], ['C', false]]);
 

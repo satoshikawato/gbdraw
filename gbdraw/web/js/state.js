@@ -43,6 +43,7 @@ import { VISIBILITY_RULES_SLICE } from './services/drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './services/drawing/color-rules.js';
 import { PALETTE_SLICE } from './services/drawing/palette.js';
 import { LABEL_TABLES_SLICE } from './services/drawing/label-tables.js';
+import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -1038,6 +1039,7 @@ const createDrawingState = (drawingMode) => {
   const canvas = CANVAS_SLICE.create();
   const annotationSets = ANNOTATION_SETS_SLICE.create();
   const groupNames = GROUP_NAMES_SLICE.create();
+  const featureEdits = FEATURE_EDITS_SLICE.create();
   return Object.freeze({
     // Settings
     form,
@@ -1056,12 +1058,9 @@ const createDrawingState = (drawingMode) => {
     layoutPreferences,
     linearTypographyLinked: ref(true),
     // Editor edits
-    // Per-feature edits keyed by original-source identity (design Q4, R2):
-    // {JSON.stringify([recordKey, biologicalFeatureId]): {recordKey,
-    // biologicalFeatureId, featureVisibility, labelVisibility, labelText,
-    // labelSourceText}} (services/feature-placement.js owns the row shape).
-    featureOverrides: reactive({}),
-    featurePlacementOverrides: reactive({}),
+    // Per-feature edits and Feature placements keyed by original-source
+    // identity (design Q4, R2; services/feature-placement.js owns the row shape).
+    ...featureEdits.view,
     featureColorOverrides: reactive({}), // {featureKey: color}
     // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
     featureStrokeOverrides: reactive({}),
@@ -1105,7 +1104,8 @@ const createDrawingState = (drawingMode) => {
     ),
     // The handles a slice's writers take.
     slices: Object.freeze({
-      visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, labelTables: labelTables.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle })
+      visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, labelTables: labelTables.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle,
+      featureEdits: featureEdits.handle })
   });
 };
 const circularDrawing = createDrawingState('circular');

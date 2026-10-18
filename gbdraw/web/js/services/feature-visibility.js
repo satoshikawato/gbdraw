@@ -3,6 +3,7 @@ import { exactRegexValue } from './feature-selector.js';
 import { ruleMatcher, visibilityRuleMatchesFeature } from './rule-matchers.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey as stableKeyOf } from './feature-catalog.js';
 import {
+  FEATURE_OVERRIDE_EDIT_FIELDS,
   featureIdentityKey,
   featureIdentityKeyOf,
   featureOverrideValue,
@@ -12,7 +13,9 @@ import {
 } from './feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
 import { pythonLegendRows } from './legend-svg.js';
-/** @import { FeatureOverrideDraft, FeaturePlacementDraft, FeatureRequestRecord } from './feature-placement.js' */
+import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
+/** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
+/** @import { FeatureOverrideDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
 /** @import { LegendRowContext, SpecificColorRule } from './specific-color-rules.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
@@ -274,14 +277,14 @@ export const getFeatureVisibilityOverride = (featureOverrides, feature) => norma
 );
 
 /**
- * @param {FeatureOverrideDraft | null | undefined} featureOverrides
+ * @param {FeatureEditsSlice} slice `drawing.slices.featureEdits`.
  * @param {VisibilityFeature | null | undefined} feature
  * @param {unknown} modeRaw
  */
-export const setFeatureVisibilityOverride = (featureOverrides, feature, modeRaw) => {
-  const previous = getFeatureVisibilityOverride(featureOverrides, feature);
+export const setFeatureVisibilityOverride = (slice, feature, modeRaw) => {
+  const previous = getFeatureVisibilityOverride(featureEditsOf(slice).featureOverrides, feature);
   const mode = normalizeVisibilityMode(modeRaw);
-  updateFeatureOverride(featureOverrides, feature, { featureVisibility: mode === 'default' ? null : mode });
+  updateFeatureOverride(slice, feature, { featureVisibility: mode === 'default' ? null : mode });
   return previous;
 };
 
@@ -310,22 +313,21 @@ export const buildFeatureVisibilityChanges = (features, modeRaw, featureOverride
 };
 
 /**
- * @param {FeatureOverrideDraft | null | undefined} featureOverrides
+ * @param {FeatureEditsSlice} slice `drawing.slices.featureEdits`.
  * @param {readonly FeatureVisibilityChange[] | null | undefined} changes
  */
-export const applyFeatureVisibilityOverrideChanges = (featureOverrides, changes) => {
-  if (!featureOverrides || !Array.isArray(changes)) return 0;
+export const applyFeatureVisibilityOverrideChanges = (slice, changes) => {
+  if (!Array.isArray(changes)) return 0;
   let applied = 0;
   changes.forEach((change) => {
     if (!featureIdentityKeyOf(change)) return;
     const mode = Object.prototype.hasOwnProperty.call(change || {}, 'mode') ? change.mode : change?.after;
-    setFeatureVisibilityOverride(featureOverrides, change, mode);
+    setFeatureVisibilityOverride(slice, change, mode);
     applied += 1;
   });
   return applied;
 };
 
-const EDIT_FIELDS = ['featureVisibility', 'labelVisibility', 'labelText'];
 const KIND_FIELDS = Object.freeze({
   feature_visibility: 'featureVisibility', label_visibility: 'labelVisibility', label_text: 'labelText'
 });
@@ -347,37 +349,37 @@ const unresolvedNoticeKinds = (notices, recordKeyFilter = () => true) => {
   return unresolved;
 };
 
-// Removes edits from the identity-keyed drafts: every edit of a dropped
-// record, the unresolved edit kinds of an identity, and (`sourceGone`) the
-// label source text kept for a bulk edit. Returns the count of removed edits.
+// Removes edits from the identity-keyed drafts of a drawing's feature-edits
+// slice: every edit of a dropped record, the unresolved edit kinds of an
+// identity, and (`sourceGone`) the label source text kept for a bulk edit.
+// Returns the count of removed edits.
 /**
  * @typedef {object} FeatureEditRemoval
- * @property {Record<string, any>} [featureOverrides]
- * @property {Record<string, any>} [featurePlacementOverrides]
+ * @property {FeatureEditsSlice} featureEdits `drawing.slices.featureEdits`.
  * @property {Map<string, Set<string>>} [unresolved]
- * @property {(row: any) => boolean} [dropped]
- * @property {(key: string, row: any) => boolean} [sourceGone]
+ * @property {(row: { readonly recordKey: string }) => boolean} [dropped]
+ * @property {(key: string, row: { readonly recordKey: string }) => boolean} [sourceGone]
  */
 
 /** @param {FeatureEditRemoval} options */
 const removeFeatureEdits = ({
-  featureOverrides = {},
-  featurePlacementOverrides = {},
+  featureEdits,
   unresolved = new Map(),
   dropped = () => false,
   sourceGone = () => false
 }) => {
+  const { featureOverrides, featurePlacementOverrides } = featureEditsOf(featureEdits);
   let removed = 0;
-  Object.entries(featurePlacementOverrides || {}).forEach(([key, row]) => {
+  Object.entries(featurePlacementOverrides).forEach(([key, row]) => {
     if (!dropped(row) && !unresolved.get(key)?.has('placement')) return;
-    delete featurePlacementOverrides[key];
+    setFeaturePlacementRow(featureEdits, key, null);
     removed += 1;
   });
-  Object.entries(featureOverrides || {}).forEach(([key, row]) => {
-    const edits = EDIT_FIELDS.filter((field) => row?.[field] !== null && row?.[field] !== undefined);
+  Object.entries(featureOverrides).forEach(([key, row]) => {
+    const edits = FEATURE_OVERRIDE_EDIT_FIELDS.filter((field) => row[field] !== null && row[field] !== undefined);
     if (dropped(row)) {
       removed += edits.length;
-      delete featureOverrides[key];
+      setFeatureOverrideRow(featureEdits, key, null);
       return;
     }
     const kinds = unresolved.get(key);
@@ -388,7 +390,7 @@ const removeFeatureEdits = ({
     removed += gone.length;
     const patch = Object.fromEntries(gone.map((field) => [field, null]));
     if (source) patch.labelSourceText = null;
-    updateFeatureOverride(featureOverrides, row, patch);
+    updateFeatureOverride(featureEdits, row, patch);
   });
   return removed;
 };
@@ -404,8 +406,7 @@ const removeFeatureEdits = ({
 // so the other mode's edits are not read (R2). Returns the count of removed edits.
 /**
  * @param {{
- *   featureOverrides?: Record<string, any>,
- *   featurePlacementOverrides?: Record<string, any>,
+ *   featureEdits: FeatureEditsSlice,
  *   featureStrokeOverrides?: Record<string, any>,
  *   notices?: UnresolvedNotice[],
  *   replacedRecordKeys?: string[],
@@ -413,12 +414,11 @@ const removeFeatureEdits = ({
  *   currentRecords?: Record<string, any>[],
  *   retainedRecordKeys?: Iterable<string>,
  *   biologicalFeatures?: Record<string, any>[]
- * }} [options] `retainedRecordKeys`: the request keys of OFF records, which the
+ * }} options `retainedRecordKeys`: the request keys of OFF records, which the
  *   request leaves out without dropping them (record selection D-05).
  */
 export const pruneUnmatchedFeatureOverrides = ({
-  featureOverrides = {},
-  featurePlacementOverrides = {},
+  featureEdits,
   featureStrokeOverrides = {},
   notices = [],
   replacedRecordKeys = [],
@@ -426,7 +426,7 @@ export const pruneUnmatchedFeatureOverrides = ({
   currentRecords = [],
   retainedRecordKeys = [],
   biologicalFeatures = []
-} = {}) => {
+}) => {
   const retained = new Set(retainedRecordKeys);
   const replaced = new Set(replacedRecordKeys.filter((recordKey) => !retained.has(recordKey)));
   const presentFeatures = Array.isArray(biologicalFeatures) ? biologicalFeatures : [];
@@ -440,8 +440,7 @@ export const pruneUnmatchedFeatureOverrides = ({
     removedStrokes += 1;
   });
   return removedStrokes + removeFeatureEdits({
-    featureOverrides,
-    featurePlacementOverrides,
+    featureEdits,
     unresolved: unresolvedNoticeKinds(notices, (recordKey) => replaced.has(recordKey)),
     // The records are those of canonical render requests, which all carry `recordKey`.
     dropped: (row) => rowBelongsToRequest(row, /** @type {FeatureRequestRecord[]} */ (previousRecords))
@@ -454,16 +453,15 @@ export const pruneUnmatchedFeatureOverrides = ({
 // The unresolved edits the drafts still hold after a Generate that replaced no
 // source; "Remove N unmatched feature edits" removes them (an explicit Reset,
 // R2). The drafts are those of the drawing of the request whose notices these are.
-/** @typedef {{ featureOverrides?: FeatureOverrideDraft, featurePlacementOverrides?: FeaturePlacementDraft, notices?: UnresolvedNotice[] }} UnresolvedEditDrafts */
+/** @typedef {{ featureEdits: FeatureEditsSlice, notices?: readonly UnresolvedNotice[] }} UnresolvedEditDrafts */
 
-/** @param {UnresolvedEditDrafts} [drafts] */
-export const countUnresolvedFeatureEdits = ({
-  featureOverrides = {}, featurePlacementOverrides = {}, notices = []
-} = {}) => {
+/** @param {UnresolvedEditDrafts} drafts */
+export const countUnresolvedFeatureEdits = ({ featureEdits, notices = [] }) => {
+  const { featureOverrides, featurePlacementOverrides } = featureEditsOf(featureEdits);
   let count = 0;
   unresolvedNoticeKinds(notices).forEach((kinds, key) => {
-    if (kinds.has('placement') && featurePlacementOverrides?.[key]) count += 1;
-    const row = featureOverrides?.[key];
+    if (kinds.has('placement') && featurePlacementOverrides[key]) count += 1;
+    const row = featureOverrides[key];
     Object.entries(KIND_FIELDS).forEach(([kind, field]) => {
       if (kinds.has(kind) && row?.[field] !== null && row?.[field] !== undefined) count += 1;
     });
@@ -471,11 +469,9 @@ export const countUnresolvedFeatureEdits = ({
   return count;
 };
 
-/** @param {UnresolvedEditDrafts} [drafts] */
-export const removeUnresolvedFeatureEdits = ({
-  featureOverrides = {}, featurePlacementOverrides = {}, notices = []
-} = {}) => (
-  removeFeatureEdits({ featureOverrides, featurePlacementOverrides, unresolved: unresolvedNoticeKinds(notices) })
+/** @param {UnresolvedEditDrafts} drafts */
+export const removeUnresolvedFeatureEdits = ({ featureEdits, notices = [] }) => (
+  removeFeatureEdits({ featureEdits, unresolved: unresolvedNoticeKinds(notices) })
 );
 
 /** @param {readonly FeatureVisibilityRuleDraft[] | null | undefined} rules */

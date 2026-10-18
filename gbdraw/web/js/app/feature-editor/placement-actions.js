@@ -11,6 +11,7 @@ import {
 import { resolveCircularTrackFeaturePlacement } from '../../services/circular-track-slot-model.js';
 import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../../services/linear-track-slot-model.js';
 import { validateCustomTrackPlan } from '../../services/track-slot-validation.js';
+import { setFeaturePlacementRow } from '../../services/drawing/feature-edits.js';
 
 /**
  * A feature the placement control lists: a row of the Features list or a clicked feature.
@@ -150,13 +151,13 @@ export const createFeaturePlacementActions = ({
     return runUndoable(features.length === 1 ? 'Change feature placement' : 'Change selected feature placements', () => {
       for (const feature of features) {
         const key = featureIdentityKeyOf(feature);
-        if (value === 'auto') delete drawing.featurePlacementOverrides[key];
+        if (value === 'auto') setFeaturePlacementRow(drawing.slices.featureEdits, key, null);
         else {
           // `key` comes from featureIdentityKeyOf, so parseFeatureIdentityKey reads it back; canonicalFeaturePlacements validates the row.
           const row = /** @type {FeaturePlacementDraftRow} */ ({ ...parseFeatureIdentityKey(key), placement: /** @type {FeaturePlacementTarget} */ (value === 'main'
             ? { kind: 'main' } : { kind: 'lane', side: value, level: 1 }) });
           canonicalFeaturePlacements({ [key]: row }, state.mode.value);
-          drawing.featurePlacementOverrides[key] = row;
+          setFeaturePlacementRow(drawing.slices.featureEdits, key, row);
         }
       }
     });
@@ -186,8 +187,9 @@ export const createFeaturePlacementActions = ({
   const lostLaneKeys = (drawing, before) => {
     const after = laneSides(drawing);
     return Object.keys(drawing.featurePlacementOverrides).filter((key) => {
-      const { placement } = drawing.featurePlacementOverrides[key] || {};
-      return before.includes(placement?.side) && !after.includes(placement?.side);
+      const placement = drawing.featurePlacementOverrides[key]?.placement;
+      const side = placement?.kind === 'lane' ? placement.side : null;
+      return side !== null && before.includes(side) && !after.includes(side);
     });
   };
   /** @param {() => HTMLElement | null | undefined} find */
@@ -229,7 +231,7 @@ export const createFeaturePlacementActions = ({
     const result = choice === 'reset' && await runUndoable('Change setting and reset Feature placements', () => {
       const before = laneSides(drawing);
       change.apply();
-      for (const key of lostLaneKeys(drawing, before)) delete drawing.featurePlacementOverrides[key];
+      for (const key of lostLaneKeys(drawing, before)) setFeaturePlacementRow(drawing.slices.featureEdits, key, null);
     });
     // A Row actions item closed its menu when it ran: focus returns to the menu's toggle.
     void focusAfterRender(() => /** @type {HTMLElement | null | undefined} */ (

@@ -261,6 +261,8 @@ import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, clearLabelTextEdits, labelTextEditsData } from './drawing/label-tables.js';
+import { FEATURE_EDITS_SLICE, clearFeatureOverrides } from './drawing/feature-edits.js';
+/** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
 const { nextTick, ref } = window.Vue;
@@ -893,7 +895,7 @@ export const buildConfigData = (drawing) => ({
   recordDisplayDrafts: cloneJsonData(drawing.recordDisplayDrafts),
   // Written only when a record is OFF: a Session with every record ON keeps its bytes (omission = all ON).
   ...(drawing.recordsOff?.length ? { recordsOff: [...drawing.recordsOff] } : {}),
-  featurePlacementOverrides: cloneJsonData(drawing.featurePlacementOverrides),
+  featurePlacementOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
   linearRecordLayout: {
     enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
     recordGap: Number(draftLinearRecordGap(drawing.linearRecordGap.value)) || 0,
@@ -1280,7 +1282,7 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
   return {
     config: cloneJsonData(buildConfigData(drawing)),
     features: {
-      featureOverrides: featureOverridesForState(drawing.featureOverrides),
+      featureOverrides: featureOverridesForState(FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides),
       featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
       featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
       ...labelTextEditsData(drawing.slices.labelTables)
@@ -2789,7 +2791,10 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(readRecordDisplayDrafts(data.recordDisplayDrafts).value));
   // Omitted: every record is drawn.
   drawing.recordsOff.splice(0, drawing.recordsOff.length, ...recordsOffReader(mode)(data.recordsOff).value);
-  replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(featurePlacementsReader(mode)(data.featurePlacementOverrides).value));
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, {
+    // The reader keeps the placement rows of this mode (the cast).
+    featurePlacementOverrides: /** @type {FeaturePlacementDraft} */ (featurePlacementsReader(mode)(data.featurePlacementOverrides).value)
+  });
   ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets: readAnnotationSets(data.annotationSets).value });
   const linearLayout = readPlainObject(data.linearRecordLayout).value;
   // Omission takes the fresh default in every Session version.
@@ -4655,7 +4660,7 @@ const resetSessionBaseline = () => {
     GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
     clearObject(drawing.featureColorOverrides);
     VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
-    clearObject(drawing.featureOverrides);
+    clearFeatureOverrides(drawing.slices.featureEdits);
     clearObject(drawing.featureStrokeOverrides);
     clearLabelTextEdits(drawing.slices.labelTables);
     drawing.legendEntries.value = [];
@@ -4851,7 +4856,7 @@ export const buildFeatureStateData = (drawing) => ({
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
   featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
-  featureOverrides: featureOverridesForState(drawing.featureOverrides),
+  featureOverrides: featureOverridesForState(FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides),
   ...labelTextEditsData(drawing.slices.labelTables)
 });
 
@@ -4896,7 +4901,7 @@ const applyDrawingFeatureData = (drawing, features = {}) => {
   VISIBILITY_RULES_SLICE.install(drawing.slices.visibilityRules, {
     featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(readList(features.featureVisibilityManualRules).value)
   });
-  replacePlainObject(drawing.featureOverrides, featureOverridesForState(features.featureOverrides));
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featureOverrides: featureOverridesForState(features.featureOverrides) });
   LABEL_TABLES_SLICE.install(drawing.slices.labelTables, {
     // The rows the reader kept are label table rows.
     canonicalLabelOverrideRows: /** @type {StoredLabelOverrideRow[]} */ (readLabelOverrideRows(features.labelOverrideRows).value),

@@ -15,6 +15,9 @@ import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+// A feature-edits slice over a draft map, so a writer writes the map.
+const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
 /**
  * @param {typeof evaluatePythonRules} [evaluate]
@@ -474,7 +477,7 @@ test('a rule commit owns no type row of the displayed Result for a feature it do
   const hidden = { type: 'CDS', svg_id: 'a2', fill_color: '#54bcf8', qualifiers: { locus_tag: ['A2'] }, record_key: 'A', biological_feature_id: 'a2' };
   s.state.extractedFeatures.value = [a1, hidden, fl2];
   s.state.results.value = [{ name: 'A', content: 'a' }, { name: 'B', content: 'b' }];
-  setFeatureVisibilityOverride(s.state.featureOverrides, hidden, 'off');
+  setFeatureVisibilityOverride(editsOf(s.state.featureOverrides), hidden, 'off');
   Object.assign(s.state, {
     displayedResultMetadata: () => ({ renderedFeatureIdentities: { renderedIds: new Set(['a1', 'a2']) } }),
     originalLegendOrder: { value: ['CDS'] }, svgContainer: mounted([['CDS', '#54bcf8']])

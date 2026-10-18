@@ -104,7 +104,7 @@ for (const [domain, key, first, second] of [
   await editorHistory.initializeIntentBaseline();
   await editorHistory.runUndoable('Delete record settings', () => {
     removeRecordEdits([{ key: uid, requestKeys: [uid], ownsExpansions: true, bindingKeys: [], displaySource: uid, displaySelector: null }],
-      { featureOverrides: drawing.featureOverrides, annotationSets: drawing.annotationSets, annotationBindingField: 'binding',
+      { featureEdits: drawing.slices.featureEdits, annotationSets: drawing.annotationSets, annotationBindingField: 'binding',
         removeAnnotation: (annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]) });
     Object.assign(card, RECORD_SETTINGS_DEFAULTS);
   });

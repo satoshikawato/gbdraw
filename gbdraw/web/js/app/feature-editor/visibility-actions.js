@@ -401,7 +401,7 @@ export const createFeatureVisibilityActions = ({
       const useAfter = direction === 'apply';
       const overrideChanged = changes.some((change) => change.before !== change.after);
       applyFeatureVisibilityOverrideChanges(
-        drawing.featureOverrides,
+        drawing.slices.featureEdits,
         changes.map((change) => ({
           ...change,
           mode: useAfter ? change.after : change.before
@@ -450,7 +450,7 @@ export const createFeatureVisibilityActions = ({
       ? uniqueFeaturesBySvgId(scope.features || [])
       : [feat];
     targetFeatures.forEach((targetFeat) => {
-      setFeatureVisibilityOverride(drawing.featureOverrides, targetFeat, nextMode);
+      setFeatureVisibilityOverride(drawing.slices.featureEdits, targetFeat, nextMode);
     });
     const { needsRerender } = projectDrawn(drawing, targetFeatures, { targeted: true });
     showClickedFeatureVisibility(targetFeatures, nextMode);

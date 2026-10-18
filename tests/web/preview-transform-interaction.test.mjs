@@ -35,7 +35,7 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-transform-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
-await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'services', 'drawing'), { recursive: true });
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 
 const copyModule = async (source, destination) => {
@@ -55,6 +55,7 @@ await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('services/feature-placement.js', 'services/feature-placement.js');
 await copyModule('services/json-clone.js', 'services/json-clone.js');
+for (const path of ['services/drawing/feature-edits.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js']) await copyModule(path, path);
 // No admitted catalog: features open as the Result draws them.
 await writeFile(
   join(tempDir, 'services', 'feature-catalog.js'),

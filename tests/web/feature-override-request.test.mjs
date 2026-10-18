@@ -10,6 +10,9 @@ import {
   requestFeatureOverrides,
   updateFeatureOverride
 } from '../../gbdraw/web/js/services/feature-placement.js';
+import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+// A feature-edits slice over a draft map, so a writer writes the map.
+const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
 // A drawing's draft key is the identity pair (PR-1: the mode is the drawing's).
 const key = (recordKey, featureId) => JSON.stringify([recordKey, featureId]);
@@ -25,16 +28,16 @@ test('without label edits the projection is empty and reads no input', () => {
 
 test('the request carries the rows of its records without the Web-only source text (R2)', () => {
   const draft = {};
-  updateFeatureOverride(draft, feature('seq-b', 'f9'), { featureVisibility: 'off' });
-  updateFeatureOverride(draft, feature('seq-a', 'f1~2'), { labelText: 'Renamed', labelSourceText: 'source' });
-  updateFeatureOverride(draft, feature('circular-x', 'f1'), { labelVisibility: 'on' });
-  updateFeatureOverride(draft, feature('seq-a', 'f3'), { labelSourceText: 'kept for a bulk edit' });
+  updateFeatureOverride(editsOf(draft), feature('seq-b', 'f9'), { featureVisibility: 'off' });
+  updateFeatureOverride(editsOf(draft), feature('seq-a', 'f1~2'), { labelText: 'Renamed', labelSourceText: 'source' });
+  updateFeatureOverride(editsOf(draft), feature('circular-x', 'f1'), { labelVisibility: 'on' });
+  updateFeatureOverride(editsOf(draft), feature('seq-a', 'f3'), { labelSourceText: 'kept for a bulk edit' });
   assert.deepEqual(requestFeatureOverrides(draft, [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }]), [
     { recordKey: 'seq-a', biologicalFeatureId: 'f1~2', featureVisibility: null, labelVisibility: null, labelText: 'Renamed' },
     { recordKey: 'seq-b', biologicalFeatureId: 'f9', featureVisibility: 'off', labelVisibility: null, labelText: null }
   ]);
   // An ALL record owns its `<recordKey>:<n>` expansions.
-  updateFeatureOverride(draft, feature('all-input:2', 'f4'), { featureVisibility: 'on' });
+  updateFeatureOverride(editsOf(draft), feature('all-input:2', 'f4'), { featureVisibility: 'on' });
   assert.equal(requestFeatureOverrides(draft, [{ recordKey: 'all-input', cardinality: 'all' }])[0].recordKey,
     'all-input:2');
 });
@@ -43,8 +46,8 @@ test('the request carries the rows of its records without the Web-only source te
 // labels of every batch Result: the displayed ones and the recorded sources.
 test('a bulk label edit reaches the recorded source of a feature on another Result', () => {
   const draft = {};
-  updateFeatureOverride(draft, feature('record-2', 'f6'), { labelSourceText: 'gtg start' });
-  updateFeatureOverride(draft, feature('record-3', 'f6'), { labelSourceText: 'gtg start', labelText: 'OWN' });
+  updateFeatureOverride(editsOf(draft), feature('record-2', 'f6'), { labelSourceText: 'gtg start' });
+  updateFeatureOverride(editsOf(draft), feature('record-3', 'f6'), { labelSourceText: 'gtg start', labelText: 'OWN' });
   const { bulkLabelText, rows } = buildBulkLabelProjection({ 'gtg start': 'BULK' }, {
     labelTargets: [{ identityKey: key('record-1', 'f6'), sourceText: 'gtg start' }],
     featureOverrides: draft
