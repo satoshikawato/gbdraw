@@ -5174,7 +5174,7 @@ export const createAppSetup = () => {
       items: [
         'Colors, color rules, and the palette',
         'Labels, Feature visibility, and Feature placements',
-        'Legend names, deleted Legend rows, and Region Annotations',
+        'Legend names, deleted Legend rows, Similarity group names, and Region Annotations',
         'Linear record definitions, subtitles, regions, reverse complement, and alignment',
         'Linear comparisons, which turn off; their uploaded tables stay'
       ],

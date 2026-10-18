@@ -3319,6 +3319,7 @@ for (const previousSuppressed of [false, true]) {
     featureStrokeOverrides: {},
     canonicalLabelOverrideRows: ref([savedRow]),
     labelTextBulkOverrides: {},
+    orthogroupDormantOverrides: { OG_1: { name: 'Saved group' } },
     orthogroups: ref([]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -3358,6 +3359,21 @@ for (const previousSuppressed of [false, true]) {
   assert.deepEqual(
     [state.labelTextBulkOverrides, state.canonicalLabelOverrideRows.value],
     [{ SavedPhe: 'MyLabel' }, []]
+  );
+  // R15-21: Reset Settings removes the saved label table and the dormant
+  // Similarity group names in its one step; Undo returns both.
+  await history.undo();
+  await history.runUndoableCheckpoint('Reset settings', () => {
+    delete state.labelTextBulkOverrides.SavedPhe;
+    state.canonicalLabelOverrideRows.value = [];
+    delete state.orthogroupDormantOverrides.OG_1;
+  });
+  assert.deepEqual([state.canonicalLabelOverrideRows.value, state.orthogroupDormantOverrides], [[], {}]);
+  await history.undo();
+  assert.deepEqual(
+    [state.canonicalLabelOverrideRows.value, state.orthogroupDormantOverrides],
+    [[savedRow], { OG_1: { name: 'Saved group' } }],
+    'Undo of Reset returns the saved label table and the dormant group names'
   );
   console.log('history saved label table tests passed');
 }

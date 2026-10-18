@@ -1402,7 +1402,9 @@ select has focus. In a text field these keys keep the browser's text undo. Undo 
 it was: a setting that was not set, such as a track slot side or the Circular
 multi-record legend position, stays unset. **Reset Settings** is broader than undo and asks
 first; its dialog lists what it resets and what stays, and **Reset all settings** applies it. Every Legend rename, of a feature row or a track row such as GC content, returns
-to the caption Python draws. In Linear it also clears each record's **Definition**, **Subtitle**,
+to the caption Python draws. The reset also removes the label table that a loaded
+Session saved and every Similarity group name, including the saved names of
+groups that the current results do not show. In Linear it also clears each record's **Definition**, **Subtitle**,
 crop, and reverse complement, and the comparison alignment plan, and turns the
 Linear comparisons off (their uploaded tables stay); the Files, each
 row's selected record, the file defaults, and Depth assignments stay. The name
