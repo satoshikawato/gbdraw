@@ -1148,11 +1148,12 @@ export const createCircularTrackSlotEditor = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     drawing.adv.circular_track_slots_enabled = Boolean(enabled);
-    if (
-      drawing.adv.circular_track_slots_enabled &&
-      (!Array.isArray(drawing.adv.circular_track_slots) || drawing.adv.circular_track_slots.length === 0)
-    ) {
+    if (!drawing.adv.circular_track_slots_enabled) return;
+    if (!Array.isArray(drawing.adv.circular_track_slots) || drawing.adv.circular_track_slots.length === 0) {
       resetCircularTrackSlotsFromSimpleControls();
+    } else {
+      // The stack it turns on holds the managed comparison ring rows.
+      syncCircularConservationSlots();
     }
   };
 

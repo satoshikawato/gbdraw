@@ -452,6 +452,23 @@ const gcRows = (state) => state.adv.circular_track_slots
   .filter((slot) => slot.renderer === 'dinucleotide_content')
   .map((slot) => ({ id: slot.id, enabled: slot.enabled, marked: '_suppressed_by_global' in slot.params }));
 
+// A2 W4: turning a non-empty custom stack on adds the managed comparison ring
+// rows in that call (no watcher follows the toggle).
+test('turning the custom stack on adds the managed comparison ring rows', () => {
+  const state = createState({
+    conservationEnabled: true,
+    conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
+  });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  editor.setCircularTrackSlotsEnabled(false);
+  assert.equal(state.adv.circular_track_slots.some((slot) => slot.renderer === 'sequence_conservation'), false);
+
+  editor.setCircularTrackSlotsEnabled(true);
+
+  assert.deepEqual(state.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation')
+    .map((slot) => slot.params.fileName), ['pair.tsv']);
+});
+
 // TR-06: Hide GC Content owns the visibility of its rows whether or not the
 // custom stack is in use.
 test('un-hiding GC while the custom stack is off restores the row the hide disabled', () => {

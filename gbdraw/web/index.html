@@ -3476,8 +3476,8 @@
                         <setting-note setting="pairwise-comparisons" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600" :disabled="!semanticMutationAvailable"> Run LOSAT</label>
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" class="text-blue-600" :disabled="!semanticMutationAvailable"> Upload BLAST</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable"> Run LOSAT</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable"> Upload BLAST</label>
                             </div>
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
                                 <file-uploader
@@ -3583,9 +3583,9 @@
                                 <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">Comparison sequence files <help-tip text="Add one comparison sequence file (FASTA, GenBank, or DDBJ) per pairwise comparison ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order."></help-tip></span>
                                 <span v-else class="text-[9px] flex items-center">Series <help-tip text="Set the ring name, color, and default order for each pairwise comparison source. Custom Track Slots can override the radial track order."></help-tip></span>
                                 <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
-                                    <input type="color" v-model="circularConservation.series[row.index].color" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="`Color for ${row.filename}`" :disabled="!semanticMutationAvailable">
+                                    <input type="color" v-model="circularConservation.series[row.index].color" @input="refreshCircularConservationSlots()" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="`Color for ${row.filename}`" :disabled="!semanticMutationAvailable">
                                     <div class="min-w-0 space-y-0.5">
-                                        <input type="text" v-model="circularConservation.series[row.index].label" :aria-label="`Comparison ring label ${row.index + 1}`" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="text" v-model="circularConservation.series[row.index].label" @input="refreshCircularConservationSlots()" :aria-label="`Comparison ring label ${row.index + 1}`" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
                                         <label v-if="circularConservation.source === 'upload'"
                                                class="flex items-center gap-1 text-[9px] text-slate-500 cursor-pointer">

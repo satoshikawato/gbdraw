@@ -2860,7 +2860,7 @@ export const createAppSetup = () => {
       files.c_conservation_fastas = normalized;
     }
     losatCacheInfo.value = [];
-    syncCircularConservationSeries();
+    reconcileCircularConservation(drawing);
   };
   /** @param {FileLike | FileLike[] | null | undefined} nextFiles */
   const setCircularConservationUploadFiles = (nextFiles) => {
@@ -2870,16 +2870,20 @@ export const createAppSetup = () => {
     files.c_conservation_blasts_source = null;
     files.c_conservation_sequence_sources = [];
     losatCacheInfo.value = [];
-    syncCircularConservationSeries();
+    reconcileCircularConservation(state.drawings.circular);
   };
-  const syncCircularConservationSeries = () => {
-    const drawing = state.drawings.circular;
+  // The comparison rings of a Circular drawing follow their source files: the
+  // series, whether the rings are on, and the managed stack rows. Each
+  // transition that changes the source, its files, or the legacy series names
+  // calls it (R10): the ring controls, a Generate that adopts a LOSAT result,
+  // and Session Load (`afterImport`). A History restore and the Load rollback
+  // install what they captured.
+  /** @param {DrawingState} drawing */
+  const reconcileCircularConservation = (drawing) => {
     const sourceFiles = getCircularConservationSourceFiles(drawing);
     if (isDerivedCircularConservationReplay(drawing)) {
       drawing.circularConservation.enabled = true;
-      if (drawing.adv.circular_track_slots_enabled === true) {
-        circularTrackSlotEditor.syncCircularConservationSlots();
-      }
+      refreshCircularConservationSlots(drawing);
       return;
     }
     syncCircularConservationEnabled(drawing, sourceFiles);
@@ -2890,6 +2894,12 @@ export const createAppSetup = () => {
       legacyLabels
     });
     drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...nextSeries);
+    refreshCircularConservationSlots(drawing);
+  };
+  // A ring row's name or color, or a record label read for it, shows in its
+  // managed stack row.
+  /** @param {DrawingState} drawing */
+  const refreshCircularConservationSlots = (drawing) => {
     if (drawing.adv.circular_track_slots_enabled === true) {
       circularTrackSlotEditor.syncCircularConservationSlots();
     }
@@ -2932,9 +2942,7 @@ export const createAppSetup = () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (moveConservationSeriesEntry(drawing.circularConservation.series, index, direction)) {
-      if (drawing.adv.circular_track_slots_enabled === true) {
-        circularTrackSlotEditor.syncCircularConservationSlots();
-      }
+      refreshCircularConservationSlots(drawing);
     }
   };
   const openCircularConservationComparisonFilePicker = () => {
@@ -2962,12 +2970,16 @@ export const createAppSetup = () => {
     // (a read failure keeps the file-name default; Generate reports it).
     // Generate waits for these reads before it reads the row labels.
     const pending = discoverComparisonSequenceRecordLabel({ file: selectedFile })
-      .then((recordLabel) => applyComparisonSequenceRecordLabel({
-        series: drawing.circularConservation.series,
-        sourceFiles: getCircularConservationSourceFiles(drawing),
-        file: selectedFile,
-        recordLabel
-      }))
+      .then((recordLabel) => {
+        const applied = applyComparisonSequenceRecordLabel({
+          series: drawing.circularConservation.series,
+          sourceFiles: getCircularConservationSourceFiles(drawing),
+          file: selectedFile,
+          recordLabel
+        });
+        refreshCircularConservationSlots(drawing);
+        return applied;
+      })
       .catch(() => false)
       .finally(() => pendingComparisonRecordLabels.delete(pending));
     pendingComparisonRecordLabels.add(pending);
@@ -2978,7 +2990,7 @@ export const createAppSetup = () => {
     clearDerivedCircularConservationBlasts();
     files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
     losatCacheInfo.value = [];
-    syncCircularConservationSeries();
+    reconcileCircularConservation(drawing);
     if (target) target.value = '';
     return step;
   };
@@ -3033,9 +3045,7 @@ export const createAppSetup = () => {
         : null;
       drawing.circularConservation.enabled = kept.enabled;
       losatCacheInfo.value = [];
-      if (drawing.adv.circular_track_slots_enabled === true) {
-        circularTrackSlotEditor.syncCircularConservationSlots();
-      }
+      refreshCircularConservationSlots(drawing);
       return;
     }
     const entry = drawing.circularConservation.series[idx];
@@ -3056,34 +3066,6 @@ export const createAppSetup = () => {
     }
     setCircularConservationSourceFiles(drawing, sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
   };
-  watch(
-    () => {
-      const drawing = state.drawings.circular;
-      return [
-        drawing.circularConservation.source,
-        files.c_conservation_blasts,
-        files.c_conservation_blasts_source,
-        files.c_conservation_fastas,
-        drawing.circularConservation.labels
-      ];
-    },
-    syncCircularConservationSeries,
-    { deep: true, immediate: true }
-  );
-  watch(
-    () => {
-      const drawing = state.drawings.circular;
-      return [
-        drawing.adv.circular_track_slots_enabled,
-        drawing.circularConservation.enabled,
-        drawing.circularConservation.source,
-        drawing.circularConservation.series.map((/** @type {RawConservationSeriesEntry} */ entry) => `${entry?.sourceKey || ''}:${entry?.label || ''}:${entry?.color || ''}`).join('|')
-      ];
-    },
-    (/** @type {[unknown, ...unknown[]]} */ [slotsEnabled]) => {
-      if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
-    }
-  );
   // R13: a moved record clears the alignment plan and keeps the aligned record
   // positions. The alignment owner runs its candidate through Generate, which
   // reads this layout owner, so the root registers both ports once the
@@ -3347,7 +3329,11 @@ export const createAppSetup = () => {
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,
-    adoptCanonicalRenderArtifacts,
+    // A Generate that adopts a Circular LOSAT result reconciles its rings.
+    adoptCanonicalRenderArtifacts: (canonical, options) => {
+      adoptCanonicalRenderArtifacts(canonical, options);
+      reconcileCircularConservation(state.drawings.circular);
+    },
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
     commitLiveSettingValues,
@@ -3643,6 +3629,9 @@ export const createAppSetup = () => {
     }),
     afterImport: async (/** @type {{ status: string, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
+        // The comparison rings read from the loaded files and series (an older
+        // Session's series names included), before the History baseline.
+        reconcileCircularConservation(state.drawings.circular);
         // The loaded draft's live values wait for their next change or Generate (6.7).
         discardLiveSettingRequests();
         historySnapshots.clearGeneratedArtifactIdentity({
@@ -5233,6 +5222,7 @@ export const createAppSetup = () => {
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
       const circularCanvasWasOff = state.drawings.circular.form.multi_record_canvas === false;
+      const { source: ringSourceBefore, labels: ringLabelsBefore } = state.drawings.circular.circularConservation;
       resetSettingsState(state);
       // OV-1166 (Owner question Q-DR-6, open): today's outcome, kept as is. A
       // Reset that turns the shown Circular drawing's Multi-Record Canvas on
@@ -5240,6 +5230,14 @@ export const createAppSetup = () => {
       // shown, the multi-record sides stay unset. The answer changes this step.
       if (circularCanvasWasOff && state.activeDrawingId.value === 'circular') {
         storeCircularMultiRecordDefaults(state.drawings.circular);
+      }
+      // OV-1167 (Owner question Q-DR-7, open): today's outcome, kept as is. The
+      // comparison rings are re-read from the kept ring files only when Reset
+      // changed their source or the legacy series names; otherwise they stay
+      // off with their files kept. The answer changes this step.
+      const rings = state.drawings.circular.circularConservation;
+      if (rings.source !== ringSourceBefore || rings.labels !== ringLabelsBefore) {
+        reconcileCircularConservation(state.drawings.circular);
       }
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
@@ -6829,7 +6827,10 @@ export const createAppSetup = () => {
     openCircularConservationComparisonFilePicker,
     addCircularConservationComparisonFile,
     removeCircularConservationSource,
-    syncCircularConservationSeries,
+    // The ring controls' transitions: the source radio, and a ring row's name
+    // or color.
+    changeCircularConservationSource: () => reconcileCircularConservation(state.drawings.circular),
+    refreshCircularConservationSlots: () => refreshCircularConservationSlots(state.drawings.circular),
     depthTrackRows,
     circularDepthTrackRows,
     linearDepthTrackRows,

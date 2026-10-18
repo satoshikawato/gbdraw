@@ -180,9 +180,9 @@ const appSetupWatchCalls = () => [...APP_SETUP.matchAll(/\bwatch\(/g)].map(({ in
   throw new Error(`the watch call at ${index} has no end`);
 });
 // The settings fits that were watchers: each control, Reset, and setup call them (A2).
-const SETTINGS_FITS = /\bensureDepthTrackConfigCount\b/;
+const SETTINGS_FITS = /\b(ensureDepthTrackConfigCount|reconcileCircularConservation|syncCircularConservationSeries|refreshCircularConservationSlots|syncCircularConservationSlots)\b/;
 
-test('no app-setup watcher fits a drawing\'s settings (A2: Depth series)', () => {
+test('no app-setup watcher fits a drawing\'s settings (A2: Depth series, comparison rings)', () => {
   const calls = appSetupWatchCalls();
   assert.ok(calls.length > 0, 'the watch calls were found');
   assert.deepEqual(calls.filter((text) => SETTINGS_FITS.test(text)).map((text) => text.slice(0, 160)), []);
