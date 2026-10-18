@@ -87,7 +87,9 @@ import {
 import {
   ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView
 } from '../services/alignment-review-view.js';
-import { setMainSessionComparisonFrameConverter } from '../services/main-session-comparison-frame.js';
+import {
+  setMainSessionComparisonFrameConverter, setStoredProteinResultFrameConverter
+} from '../services/main-session-comparison-frame.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
@@ -439,6 +441,10 @@ export const createAppSetup = () => {
   ));
   setMainSessionComparisonFrameConverter((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME,
+    payload
+  ));
+  setStoredProteinResultFrameConverter((payload) => runDiagramHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES,
     payload
   ));
   const {
@@ -2030,6 +2036,7 @@ export const createAppSetup = () => {
     disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
     setMainSessionComparisonFrameConverter(null);
+    setStoredProteinResultFrameConverter(null);
     setDiagramWorkerFontSource(null);
     disposeSessionOperations();
     disposeDiagramGenerationWorker();

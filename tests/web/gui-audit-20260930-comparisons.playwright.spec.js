@@ -373,6 +373,73 @@ for (const scenario of ['upload', 'losatn']) {
   });
 }
 
+// OV-1145 B-LOAD (D-128): the stored protein results of each kind, by content,
+// of the Web re-save and of the Python upgrade of the same Session 47.
+const PROTEIN_RESOURCES_CHECK = `
+import base64, gzip, hashlib, json, sys
+from gbdraw.session import upgrade_session_document
+web_path, source = sys.argv[1], sys.argv[2]
+def contents(document):
+    return sorted((entry["kind"], hashlib.sha256(base64.b64decode(entry["data"])).hexdigest())
+                  for entry in document["resources"].values()
+                  if entry["kind"] in ("canonical-tsv", "orthogroup-result", "collinearity-result"))
+web = json.loads(gzip.decompress(open(web_path, "rb").read()))
+python = upgrade_session_document(source).document.to_dict()
+print(json.dumps({"version": web["version"], "web": contents(web), "python": contents(python),
+                  "stored": contents(json.loads(gzip.decompress(open(source, "rb").read())))}))
+`;
+
+test('a Session 47 with protein results of a reversed record shows its figure, then Python converts them once at Load', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  const directory = testInfo.outputDir;
+  mkdirSync(directory, { recursive: true });
+  const sessions = path.join(root, 'tests/fixtures/sessions');
+  const fixture = path.join(sessions, 'BGC0000708-BGC0000713.v47.gbdraw-session.json.gz');
+  await openFresh(page);
+  // What the app shows when each Worker helper is asked for.
+  await page.evaluate(() => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__;
+    const metric = hooks.onStructuralMetric;
+    window.__HELPER_REQUESTS__ = [];
+    hooks.onStructuralMetric = (event) => {
+      metric?.(event);
+      if (event.name !== 'diagramHelperRequest') return;
+      const app = window.__GBDRAW_APP__;
+      window.__HELPER_REQUESTS__.push({ operation: event.operation, pending: app.sessionImportPending,
+        shown: app.results.length, previewShown: window.__AUDIT_LIFECYCLE__.includes('firstCommittedPreview') });
+    };
+  });
+  await loadSessionFile(page, fixture);
+  const conversions = (await page.evaluate(() => window.__HELPER_REQUESTS__))
+    .filter(({ operation }) => operation === 'convertStoredProteinResultFrames');
+  // Once, after the stored figure is shown, while edits and Save wait for the Load (PD-OI-045).
+  expect(conversions).toEqual([{ operation: 'convertStoredProteinResultFrames', pending: true, shown: 1,
+    previewShown: true }]);
+  // History's base holds the converted results: an Undo after an edit keeps them.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.runUndoable('Ribbon style', () => {
+    const { adv } = window.__GBDRAW_APP__;
+    adv.pairwise_match_style = adv.pairwise_match_style === 'curve' ? 'ribbon' : 'curve';
+  }));
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
+  const file = path.join(directory, 'web.gbdraw-session.json.gz');
+  const download = page.waitForEvent('download', { timeout: 180_000 });
+  // The Session has a title, so Save asks for none.
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await (await download).saveAs(file);
+  const { stdout } = await promisify(execFile)('python', ['-c', PROTEIN_RESOURCES_CHECK, file, fixture],
+    { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
+  const saved = JSON.parse(stdout.trim().split('\n').pop());
+  expect(saved.version).toBe(48);
+  expect(saved.web).toEqual(saved.python);
+  expect(saved.web).not.toEqual(saved.stored);
+  // A Generate reads the converted results and draws like the CLI replay of the Session.
+  await generateAndWaitForResult(page);
+  const replay = await svgRibbons(page, readFileSync(path.join(sessions, 'BGC0000708-BGC0000713.v47.replay.svg'), 'utf8'));
+  expect(ribbonGeometry(await committedRibbons(page))).toEqual(ribbonGeometry(replay));
+});
+
 // OV-1145: Python reads the saved Session: its protein results of the cropped
 // and reversed record are in the search frame (a conversion leaves the request
 // as it is) and tagged; the CLI replay writes `<directory>/cli.svg`.

@@ -123,6 +123,7 @@ import {
 } from './file-content-cache.js';
 import {
   adoptCurrentSessionResources,
+  createSessionResourceFileView,
   isSessionResourceFileView
 } from './session-resource-backing.js';
 import { normalizeLogicalResults } from './result-normalization.js';
@@ -160,7 +161,9 @@ import {
   largeSessionDownloadMegabytes
 } from './session-file.js';
 import { importSessionFile } from './session-import-client.js';
-import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
+import {
+  convertMainSessionComparisonFrames, convertStoredProteinResultFrames, withConvertedResources
+} from './main-session-comparison-frame.js';
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
@@ -279,7 +282,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { CommittedCanonicalSession, LiveSettingWrite, SessionRequestProjection, SettingsOnlyProjectionInput } from './session-request.js' */
+/** @import { CommittedCanonicalSession, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
+ *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
@@ -303,7 +307,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
 /** @import { ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
-/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
 /** @import { DepthFileSlots } from './depth-track-state.js' */
@@ -3960,6 +3964,68 @@ export const canonicalRenderArtifactOwner = Object.freeze({
 });
 
 /**
+ * B-LOAD (OV-1145, D-128): a Session up to 47 stored the protein results of a
+ * reversed Linear record in the drawn frame. Once Load shows its stored
+ * figure, Python converts them; the bytes replace the stored ones under their
+ * IDs in the shown artifact, the kept one and the Linear draft's views of
+ * them, before History takes its base. Each resources object and resource
+ * table is replaced once. A failure throws, and the Load rolls back (PD-OI-046).
+ * @param {number} version
+ * @param {Readonly<ArtifactSlot> | null} keptSlot The other mode's artifact.
+ * @returns {Promise<Readonly<ArtifactSlot> | null>} The kept artifact holding the converted bytes; null when it is unchanged.
+ */
+const convertLoadedProteinResultFrames = async (version, keptSlot) => {
+  /** @typedef {{ committedCanonicalSession: typeof committedCanonicalSession, activeSessionResourceTable: typeof activeSessionResourceTable }} CanonicalHolder */
+  /** @type {CanonicalHolder | null} */
+  const kept = keptSlot?.runtimeState?.canonical ?? null;
+  /** @type {CanonicalHolder} */
+  const shown = { committedCanonicalSession, activeSessionResourceTable };
+  const converted = await convertStoredProteinResultFrames(version, [
+    shown.committedCanonicalSession, kept?.committedCanonicalSession
+  ]);
+  if (converted.size === 0) return null;
+  /** @type {Map<unknown, Record<string, unknown>>} */
+  const resourcesOf = new Map();
+  /** @type {Map<unknown, NonNullable<typeof activeSessionResourceTable>>} */
+  const tableOf = new Map();
+  /** @param {CanonicalHolder} holder @returns {Promise<CanonicalHolder>} */
+  const replace = async (holder) => {
+    const session = holder.committedCanonicalSession;
+    if (!session) return holder;
+    if (!resourcesOf.has(session.resources)) {
+      resourcesOf.set(session.resources, await withConvertedResources(session.resources, converted));
+    }
+    const resources = resourcesOf.get(session.resources);
+    if (resources === session.resources) return holder;
+    const table = holder.activeSessionResourceTable;
+    if (table && !tableOf.has(table)) tableOf.set(table, adoptCurrentSessionResources(resources));
+    const next = { ...session, resources };
+    return {
+      committedCanonicalSession: isAdoptedCanonicalSession(session) ? adoptRuntimeCanonicalSession(next) : next,
+      activeSessionResourceTable: table ? tableOf.get(table) ?? null : null
+    };
+  };
+  const nextShown = await replace(shown);
+  const nextKept = kept ? await replace(kept) : null;
+  if (nextShown !== shown) canonicalRenderArtifactOwner.restore(nextShown);
+  // The Linear draft reads them through views of the Linear artifact's table.
+  const linearTable = [nextShown, nextKept]
+    .find((holder) => holder?.committedCanonicalSession?.renderRequest?.mode === 'linear')?.activeSessionResourceTable;
+  if (linearTable) {
+    /** @type {RequestCanonicalComparison[]} */
+    const comparisons = state.files.linearCanonicalComparisons;
+    state.files.linearCanonicalComparisons = comparisons.map((comparison) => {
+      const view = /** @type {SessionResourceFileView | undefined} */ (comparison?.file);
+      const resourceId = /** @type {{ resourceId?: string } | null} */ (getSessionResourceSource(view))?.resourceId;
+      return view && resourceId !== undefined && converted.has(resourceId)
+        ? { ...comparison, file: createSessionResourceFileView(linearTable, resourceId, view) } : comparison;
+    });
+  }
+  return keptSlot && nextKept && nextKept !== kept
+    ? createArtifactSlot({ ...keptSlot, runtimeState: { ...keptSlot.runtimeState, canonical: nextKept } }) : null;
+};
+
+/**
  * OV-893 (E-OD30): a Circular comparison series whose BLAST table Load could
  * not read (an empty place of `c_conservation_blasts`) is left out with its
  * files, as Remove leaves a series out (`withoutConservationSeries`), and
@@ -6444,9 +6510,11 @@ const importSessionDocument = async (e, options = {}) => {
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
+    // The composition root keeps the loaded artifacts: the opening one is shown, the stashed one waits.
+    /** @type {((slots: { opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }) => void) | undefined} */
+    const installLoadedArtifactSlots = options.installLoadedArtifactSlots;
     {
-      /** @type {{ installLoadedArtifactSlots?: (slots: Record<string, any>) => void }} */ (options)
-        .installLoadedArtifactSlots?.(opensOtherSet
+      installLoadedArtifactSlots?.(opensOtherSet
         ? { opening: otherArtifactSlot, stashed: topArtifactSlot }
         : { opening: null, stashed: otherArtifactSlot });
       if (opensOtherSet) desiredResultIndex = Number(state.selectedResultIndex.value) || 0;
@@ -6498,6 +6566,12 @@ const importSessionDocument = async (e, options = {}) => {
       }
       setCommittedCanonicalSession(committed);
       activeSessionResourceTable = null;
+    } else {
+      // OV-1145 B-LOAD: after the stored figure, before History's base (`afterImport`).
+      const convertedKeptSlot = await convertLoadedProteinResultFrames(
+        sourceSessionVersion, opensOtherSet ? topArtifactSlot : otherArtifactSlot
+      );
+      if (convertedKeptSlot && options.isCurrent()) installLoadedArtifactSlots?.({ opening: null, stashed: convertedKeptSlot });
     }
     recordSessionLifecycleEvent('interactiveReady', {
       status: 'success',

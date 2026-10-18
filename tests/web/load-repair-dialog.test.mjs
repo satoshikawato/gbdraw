@@ -35,6 +35,10 @@ const { readSessionDocument } = await import('../../gbdraw/web/js/services/sessi
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 // A Session older than 40 has its Results transformed through the composition root's port.
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
+// Node has no diagram Worker: Python's conversion of the protein results a
+// Session up to 47 stored for a reversed record (OV-1145) is stubbed per test.
+const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+const { readSessionResourceText } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
@@ -1612,10 +1616,16 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
     /** @param {string | URL} url */
     constructor(url) { askedDiagramWorker ||= !String(url).endsWith('/session-import-worker.js'); super(url); }
   };
+  // The protein result conversion answers "nothing changed"; it is asked for
+  // exactly the Sessions that stored protein results of a reversed record.
+  const askedProteinConversion = new Set();
+  let current = '';
+  setStoredProteinResultFrameConverter(async () => { askedProteinConversion.add(current); return { result: { resources: {} } }; });
   for (const [name, url] of corpus) {
     const bytes = readFileSync(url);
     const session = JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
     askedDiagramWorker = false;
+    current = name;
     const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     if (NEEDS_DIAGRAM_WORKER.has(name)) {
       assert.equal(loaded.status, 'error', `${name} loads in node now: check it here`);
@@ -1633,6 +1643,63 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
     if (saved) assert.deepEqual(readSessionDocument(saved).repairs, [], `${name}: G2b`);
   }
   globalThis.Worker = ImportWorker;
+  setStoredProteinResultFrameConverter(null);
+  assert.deepEqual([...askedProteinConversion].sort(), [
+    'BGC0000708-BGC0000713.v47.gbdraw-session.json.gz', 'majanivirus_collinear-rc.v47.gbdraw-session.json.gz'
+  ]);
+});
+
+const COLLINEAR_RC = 'majanivirus_collinear-rc.v47.gbdraw-session.json.gz';
+const COLLINEARITY_ID = 'comparison-canonical-collinearity-1';
+const resourceText = (resource) => Buffer.from(resource.data, 'base64').toString('utf8');
+
+// OV-1145 B-LOAD: the Collinear Session 47 with a reversed record asks Python
+// once, before History's base; the returned bytes replace the stored ones
+// under their ID in what Load commits, the Linear draft and the next Save.
+test('a Collinear Session 47 with a reversed record installs the converted bytes Python returns at Load', async () => {
+  const session = fixture(COLLINEAR_RC);
+  const converted = `${resourceText(session.resources[COLLINEARITY_ID])}\n`;
+  const calls = [];
+  setStoredProteinResultFrameConverter(async (payload) => {
+    calls.push({ version: payload.version, resources: Object.keys(payload.resources).sort() });
+    return { result: { resources: { [COLLINEARITY_ID]: {
+      data: Buffer.from(converted, 'utf8').toString('base64'), size: Buffer.byteLength(converted)
+    } } } };
+  });
+  try {
+    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => assert.fail('no row') });
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual(calls, [{ version: 47, resources: Object.keys(session.resources).sort() }]);
+    const draft = state.files.linearCanonicalComparisons.find((item) => item.kind === 'collinearityResult');
+    assert.equal(await readSessionResourceText(draft.file), converted, 'the Linear draft holds the converted bytes');
+    const saved = await savedSession('collinear rc');
+    assert.equal(resourceText(saved.resources[COLLINEARITY_ID]), converted, 'Save writes the converted bytes');
+    assert.equal(saved.resources[COLLINEARITY_ID].size, Buffer.byteLength(converted));
+  } finally {
+    setStoredProteinResultFrameConverter(null);
+  }
+});
+
+// PD-OI-046: a conversion that fails fails the Load; the Session, Results
+// and input files committed before it stay. The shown artifact's run
+// metadata is the app's rollback extension (createSessionImportRollbackState),
+// which this harness does not compose.
+test('a failed protein result conversion fails the Load and keeps what was committed', async () => {
+  await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+  const before = loadedState();
+  const savedBefore = await savedSession('before');
+  setStoredProteinResultFrameConverter(async () => { throw new Error('probe: conversion failed'); });
+  try {
+    const loaded = await importSession(input(fixture('BGC0000708-BGC0000713.v47.gbdraw-session.json.gz')), {
+      transformLegacyResultSvg, confirmLoadRepairs: async () => true
+    });
+    assert.equal(loaded.status, 'error');
+  } finally {
+    setStoredProteinResultFrameConverter(null);
+  }
+  assert.equal(loadedState(), before);
+  const savedAfter = await savedSession('before');
+  assert.deepEqual({ ...savedAfter, createdAt: null, runMetadata: null }, { ...savedBefore, createdAt: null, runMetadata: null });
 });
 
 // A Session whose font this page cannot draw also asks the Font question

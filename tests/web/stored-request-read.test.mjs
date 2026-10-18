@@ -622,6 +622,10 @@ const requestRow = ({ code, path }) => REQUEST_ROW_CODES.has(code) || /^(otherMo
 
 test('every Gallery Session and Session fixture loads with no stored-request row and commits the current schema (G3)', { timeout: 600000 }, async () => {
   const { readdirSync } = await import('node:fs');
+  // Node has no diagram Worker: Python's conversion of the protein results a
+  // Session up to 47 stored for a reversed record (OV-1145) answers "nothing changed".
+  const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+  setStoredProteinResultFrameConverter(async () => ({ result: { resources: {} } }));
   const findings = {};
   let loaded = 0;
   for (const folder of ['gbdraw/web/gallery/sessions/', 'tests/fixtures/sessions/']) {
@@ -638,6 +642,7 @@ test('every Gallery Session and Session fixture loads with no stored-request row
       loaded += 1;
     }
   }
+  setStoredProteinResultFrameConverter(null);
   assert.deepEqual(findings, {});
   assert.ok(loaded >= 50, String(loaded));
 });
