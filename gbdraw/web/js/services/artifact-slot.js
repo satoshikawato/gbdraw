@@ -1,13 +1,14 @@
 // @ts-check
-// E1: one diagram mode's generated artifact, which the composition root keeps
-// while the other mode is shown. The History snapshot service captures and
-// installs it (`captureArtifactSlot`, `installArtifactSlot`); Session Save
-// writes it and Session Load builds it (`services/config.js`).
+// E1: one drawing's generated artifact, which the composition root keeps, by
+// drawing ID, while another drawing is shown. The History snapshot service
+// captures and installs it (`captureArtifactSlot`, `installArtifactSlot`);
+// Session Save writes it and Session Load builds it (`services/config.js`).
+/** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 
 /**
- * E1: the generated artifact of one diagram mode, which each mode keeps while
- * the other is shown. The state ref of every key and the value an empty slot
- * installs, given the slot's mode and the current value: the displayed-Result
+ * E1: the generated artifact of one drawing, which each drawing keeps while
+ * another is shown. The state ref of every key and the value an empty slot
+ * installs, given the mode of the slot's drawing and the current value: the displayed-Result
  * part of the owner set, the selected Result, the generated Legend colors and
  * stroke defaults, and the alignment Reset receipt (it binds the
  * committed Linear Session). Draft and project state stays shared: the specific
@@ -49,9 +50,9 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
 export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFACT_SLOT_EMPTY)[]} */ (Object.keys(ARTIFACT_SLOT_EMPTY)));
 
 /**
- * One mode's generated artifact, held by reference (no clone).
+ * One drawing's generated artifact, held by reference (no clone).
  * @typedef {object} ArtifactSlot
- * @property {'circular' | 'linear'} mode
+ * @property {DrawingId} drawingId The drawing whose artifact it is (its mode is the drawing's).
  * @property {Readonly<Record<string, any>>} values The value of every `ARTIFACT_SLOT_KEYS` key.
  * @property {readonly string[]} legendInventory The selected Result's generated Legend inventory
  *   (`originalLegendOrder`). The Legend owner keeps each Result's inventory (OV-47), so an install
@@ -64,24 +65,31 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
  */
 
 /**
- * @param {{ mode: 'circular' | 'linear', values: Record<string, any>, legendInventory?: readonly string[],
- *   matchSequenceOwner?: any,
- *   runtimeState?: Record<string, any> | null, transportIdentity?: Readonly<Record<string, any>> | null,
- *   retainedBytes?: number }} slot
+ * The artifact slots a Session Load installs before its preview mounts:
+ * `opening`, the artifact the Session opens on when it is not the top-level
+ * set's, and `stashed`, the one kept for a drawing not shown.
+ * @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots
+ */
+
+/**
+ * A slot of `drawing`'s artifact; a value it is not given is the empty
+ * slot's for the drawing's mode.
+ * @param {{ drawing: DrawingIdentity, values: ArtifactSlot['values'], legendInventory?: ArtifactSlot['legendInventory'],
+ *   matchSequenceOwner?: ArtifactSlot['matchSequenceOwner'], runtimeState?: ArtifactSlot['runtimeState'],
+ *   transportIdentity?: ArtifactSlot['transportIdentity'], retainedBytes?: number }} slot
  * @returns {Readonly<ArtifactSlot>}
  */
 export const createArtifactSlot = ({
-  mode, values, legendInventory = [], matchSequenceOwner = null, runtimeState = null,
+  drawing, values, legendInventory = [], matchSequenceOwner = null, runtimeState = null,
   transportIdentity = null, retainedBytes = 0
 }) => {
   // The cast widens the key list, so that a field of any name can be looked up in it.
   const unknown = Object.keys(values).filter((key) => !(/** @type {readonly string[]} */ (ARTIFACT_SLOT_KEYS)).includes(key));
   if (unknown.length > 0) throw new Error(`Unknown artifact slot field(s): ${unknown.join(', ')}.`);
-  const slotMode = mode === 'linear' ? 'linear' : 'circular';
   return Object.freeze({
-    mode: slotMode,
+    drawingId: drawing.id,
     values: Object.freeze(Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
-      key, Object.hasOwn(values, key) ? values[key] : ARTIFACT_SLOT_EMPTY[key](slotMode, null)
+      key, Object.hasOwn(values, key) ? values[key] : ARTIFACT_SLOT_EMPTY[key](drawing.mode, null)
     ]))),
     legendInventory: Object.freeze([...legendInventory]),
     matchSequenceOwner,
@@ -92,20 +100,20 @@ export const createArtifactSlot = ({
 };
 
 /**
- * A value of `mode`'s artifact: read from the displayed artifact while `mode` is shown, otherwise
- * from the slot that keeps it (undefined for an empty slot). Every read of "this mode's artifact,
- * shown or kept" goes through here. A value kept in a slot is the same object when the mode is
- * shown again.
+ * A value of drawing `drawingId`'s artifact: read from the displayed artifact while that drawing
+ * is shown, otherwise from the slot that keeps it (undefined for an empty slot). Every read of
+ * "this drawing's artifact, shown or kept" goes through here. A value kept in a slot is the same
+ * object when the drawing is shown again.
  * @template T
- * @param {'circular' | 'linear'} mode
- * @param {string} shownMode
- * @param {Readonly<Record<'circular' | 'linear', Readonly<ArtifactSlot> | null>>} slots The kept artifacts.
+ * @param {DrawingId} drawingId
+ * @param {DrawingId} shownDrawingId
+ * @param {ReadonlyMap<DrawingId, Readonly<ArtifactSlot>>} slots The kept artifacts, by drawing.
  * @param {() => T} readShown
  * @param {(slot: Readonly<ArtifactSlot>) => T} readKept
  * @returns {T | undefined}
  */
-export const readArtifactOfMode = (mode, shownMode, slots, readShown, readKept) => {
-  if (shownMode === mode) return readShown();
-  const kept = slots[mode];
+export const readArtifactOfDrawing = (drawingId, shownDrawingId, slots, readShown, readKept) => {
+  if (shownDrawingId === drawingId) return readShown();
+  const kept = slots.get(drawingId);
   return kept ? readKept(kept) : undefined;
 };

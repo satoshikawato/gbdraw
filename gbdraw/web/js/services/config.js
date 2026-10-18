@@ -299,9 +299,10 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
-/** @import { ArtifactSlot } from './artifact-slot.js' */
+/** @import { ArtifactSlot, LoadedArtifactSlots } from './artifact-slot.js' */
 /** @import { LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
-/** @import { DiagramMode, DrawingId, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DrawingId } from './drawing-view.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
@@ -2670,7 +2671,8 @@ const buildLoadedArtifactSlot = (set, {
   const generatedLegend = readLegendPositionOfMode(ui.generatedLegendPosition, mode, 'otherModeResult.ui.generatedLegendPosition');
   repairs?.push(...generatedLegend.repairs, ...sessionUiFieldRepairs(ui, 'otherModeResult.ui'));
   return createArtifactSlot({
-    mode,
+    // The drawing of the set's mode.
+    drawing: state.drawings[mode],
     values: {
       results,
       selectedResultIndex: Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
@@ -4991,9 +4993,9 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
   synchronizeRestoredFeatureSummaryStatus({ generationId });
 };
 
-// E1: one mode's generated artifact as Save reads it: the installed artifact
-// of the displayed mode, or the other mode's slot, which the composition root
-// keeps while that mode is not shown.
+// E1: one drawing's generated artifact as Save reads it: the installed
+// artifact of the shown drawing, or the slot of a drawing not shown, which
+// the composition root keeps. `mode` is the artifact's diagram mode.
 /**
  * @typedef {Readonly<Record<string, any>> & {
  *   mode: 'circular' | 'linear',
@@ -5016,7 +5018,7 @@ const displayedArtifactView = () => Object.freeze({
 const stashedArtifactView = (slot) => Object.freeze({
   ...slot.values,
   originalLegendOrder: slot.legendInventory,
-  mode: slot.mode,
+  mode: state.drawings[slot.drawingId].mode,
   committedCanonicalSession: slot.runtimeState?.canonical?.committedCanonicalSession ?? null,
   activeSessionResourceTable: slot.runtimeState?.canonical?.activeSessionResourceTable ?? null
 });
@@ -5024,11 +5026,13 @@ const stashedArtifactView = (slot) => Object.freeze({
 const artifactHasResult = (view) => Array.isArray(view?.results) && view.results.length > 0;
 // Save writes every Result (Owner, 2026-10-07). The top level holds the shown
 // mode's set when it has a Result, otherwise the other mode's set;
-// `otherModeResult` holds the remaining set only when it has a Result.
-/** @param {Readonly<ArtifactSlot> | null} otherSlot */
-const chooseSessionArtifacts = (otherSlot) => {
+// `otherModeResult` holds the remaining set only when it has a Result. A
+// Session holds one set per mode: the other set is the kept artifact of a
+// drawing of the other mode.
+/** @param {readonly Readonly<ArtifactSlot>[]} keptSlots The kept artifacts of the drawings not shown. */
+const chooseSessionArtifacts = (keptSlots) => {
   const displayed = displayedArtifactView();
-  const other = otherSlot && otherSlot.mode !== displayed.mode ? stashedArtifactView(otherSlot) : null;
+  const other = keptSlots.map(stashedArtifactView).find((view) => view.mode !== displayed.mode) ?? null;
   if (!other || !artifactHasResult(other)) return { artifact: displayed, otherArtifact: null };
   if (!artifactHasResult(displayed)) return { artifact: other, otherArtifact: null };
   return { artifact: displayed, otherArtifact: other };
@@ -6427,7 +6431,7 @@ const importSessionDocument = async (e, options = {}) => {
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
     {
-      /** @type {{ installLoadedArtifactSlots?: (slots: Record<string, any>) => void }} */ (options)
+      /** @type {{ installLoadedArtifactSlots?: (slots: LoadedArtifactSlots) => void }} */ (options)
         .installLoadedArtifactSlots?.(opensOtherSet
         ? { opening: otherArtifactSlot, stashed: topArtifactSlot }
         : { opening: null, stashed: otherArtifactSlot });
@@ -6568,8 +6572,8 @@ export const disposeSessionOperations = () => {
 // root composes from `sessionOperationAvailability` and the edits still
 // applying (R13); `options.recordDisplayRows` are the record display rows of
 // both drawings' sources, on which Save writes their drafts;
-// `options.readOtherModeArtifact` returns the other mode's artifact slot that
-// the root keeps (E1), `options.beforeExport` learns whether Save projects
+// `options.readKeptArtifacts` returns the artifact slots the root keeps for
+// the drawings not shown (E1), `options.beforeExport` learns whether Save projects
 // the draft request, and `options.onSaved` runs once the download is handed off.
 /**
  * What the composition root passes to `exportSession`.
@@ -6577,7 +6581,7 @@ export const disposeSessionOperations = () => {
  * @property {(operation: 'save' | 'load') => SessionBusy | null} [availability]
  * @property {DownloadChoicePort} [askChoice]
  * @property {{ value?: Parameters<typeof bindRecordDisplayDrafts>[1] }} [recordDisplayRows]
- * @property {() => Readonly<ArtifactSlot> | null} [readOtherModeArtifact]
+ * @property {() => readonly Readonly<ArtifactSlot>[]} [readKeptArtifacts]
  * @property {() => Promise<string | null>} [resolveTitle] Null when the person canceled the title dialog.
  * @property {(request: { draftRequest: boolean }) => Promise<Pick<ExportSessionDocumentOptions,
  *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]
@@ -6636,9 +6640,7 @@ export const exportSession = (titleOverride = null, options = {}) => {
     });
     const modes = { circular: sliceOf('circular'), linear: sliceOf('linear') };
     SLICE_MODES.forEach((mode) => validateModeSliceFields(modes[mode]));
-    const readArtifacts = () => chooseSessionArtifacts(
-      /** @type {{ readOtherModeArtifact?: () => Readonly<ArtifactSlot> | null }} */ (options).readOtherModeArtifact?.() ?? null
-    );
+    const readArtifacts = () => chooseSessionArtifacts(options?.readKeptArtifacts?.() ?? []);
     let { artifact, otherArtifact } = readArtifacts();
     if (!artifact.committedCanonicalSession
       && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {

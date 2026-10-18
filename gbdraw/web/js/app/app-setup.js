@@ -14,7 +14,8 @@
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { LegacyResultSvgData, LegacyResultSvgTransform, SessionFileInput } from '../services/config.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
-/** @import { ArtifactSlot } from '../services/artifact-slot.js' */
+/** @import { ArtifactSlot, LoadedArtifactSlots } from '../services/artifact-slot.js' */
+/** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
 /** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearComparisonEdge, LinearComparisonIssue, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
@@ -23,7 +24,6 @@
 /** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
-/** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
 import { createResultPaintRecord, editorPaintState, sameColors } from './result-paint-record.js';
@@ -35,7 +35,7 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '.
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
-import { readArtifactOfMode } from '../services/artifact-slot.js';
+import { readArtifactOfDrawing } from '../services/artifact-slot.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -332,9 +332,10 @@ const loadExportService = () => {
 
 /**
  * @typedef {object} SessionImportRollbackOptions
- * @property {Record<'circular' | 'linear', Readonly<ArtifactSlot> | null>} artifactSlots
- *   The modes' stashed generated artifacts (E1), held by reference.
- * @property {() => Readonly<ArtifactSlot>} captureDisplayedArtifact The History snapshot service's slot capture.
+ * @property {Map<DrawingId, Readonly<ArtifactSlot>>} artifactSlots
+ *   The kept generated artifacts of the drawings not shown (E1), held by reference.
+ * @property {() => Readonly<ArtifactSlot>} captureDisplayedArtifact The History snapshot service's slot capture
+ *   of the shown drawing.
  * @property {(slot: Readonly<ArtifactSlot>) => void} installDisplayedArtifact
  *   Installs a captured slot after the import rollback restored the document.
  * @property {{ circular: number }} depthTrackUiCounts
@@ -349,7 +350,7 @@ const loadExportService = () => {
 /**
  * What `capture` holds for `restore`.
  * @typedef {object} SessionImportRollbackSnapshot
- * @property {SessionImportRollbackOptions['artifactSlots']} artifactSlots
+ * @property {ReadonlyMap<DrawingId, Readonly<ArtifactSlot>>} artifactSlots
  * @property {Readonly<ArtifactSlot>} displayedArtifact
  * @property {number} circularDepthTrackUiCount
  * @property {SessionImportRollbackOptions['depthTracks']} depthTracks
@@ -372,7 +373,7 @@ export const createSessionImportRollbackState = ({
   restoreSpecificRulePatternDrafts = null
 }) => ({
   capture: () => ({
-    artifactSlots: { ...artifactSlots },
+    artifactSlots: new Map(artifactSlots),
     // The displayed artifact's parts outside state: its transport identity,
     // match-sequence owner, committed Session and CLI helper files.
     displayedArtifact: captureDisplayedArtifact(),
@@ -383,7 +384,8 @@ export const createSessionImportRollbackState = ({
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
   restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
-    Object.assign(artifactSlots, snapshot.artifactSlots);
+    artifactSlots.clear();
+    snapshot.artifactSlots.forEach((slot, id) => artifactSlots.set(id, slot));
     installDisplayedArtifact(snapshot.displayedArtifact);
     depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
     depthTracks.splice(
@@ -3131,19 +3133,19 @@ export const createAppSetup = () => {
     || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
     || (!context.bindingOptions.isIncrementalEdit && context.sourceClass !== 'legacy-import')
   );
-  // E1: each mode's generated artifact. The displayed mode's artifact is the
-  // installed state; the other mode's waits here, by reference, until the mode
-  // transition installs it. Only the transition and Session Load (with its
-  // rollback) write it.
-  /** @type {Record<'circular' | 'linear', Readonly<ArtifactSlot> | null>} */
-  const artifactSlots = { circular: null, linear: null };
-  // The Results of both modes. The per-Result caches (Legend inventories,
-  // retired Legend entries, projected editor state) keep a stashed Result's
-  // entries while the other mode is shown.
+  // E1: each drawing's generated artifact. The shown drawing's artifact is the
+  // installed state; another drawing's waits here, by its drawing ID and by
+  // reference, until the mode transition installs it (no entry: the drawing
+  // has no artifact yet, or is shown). Only the transition and Session Load
+  // (with its rollback) write it.
+  /** @type {Map<DrawingId, Readonly<ArtifactSlot>>} */
+  const artifactSlots = new Map();
+  // The Results of all drawings: the shown one's and every kept one's. The
+  // per-Result caches (Legend inventories, retired Legend entries, projected
+  // editor state) keep a kept Result's entries while another drawing is shown.
   const liveResultIdentities = () => [
     ...results.value,
-    ...(artifactSlots.circular?.values.results || []),
-    ...(artifactSlots.linear?.values.results || [])
+    ...[...artifactSlots.values()].flatMap((slot) => slot.values.results || [])
   ].map(previewRuntime.getResultIdentity);
   // Each Result's bytes reflect the editor state it was committed or last
   // shown with (`createResultPaintRecord`); the binder below reads it (R13).
@@ -3629,10 +3631,10 @@ export const createAppSetup = () => {
     },
     rollbackState: createSessionImportRollbackState({
       artifactSlots,
-      captureDisplayedArtifact: historySnapshots.captureArtifactSlot,
+      captureDisplayedArtifact: () => historySnapshots.captureArtifactSlot(state.activeDrawing()),
       // The rollback restored the pan already; the install keeps it.
       installDisplayedArtifact: (slot) => historySnapshots.installArtifactSlot(slot, {
-        mode: slot.mode, ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
+        drawing: state.drawings[slot.drawingId], ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
       }),
       depthTrackUiCounts,
       depthTracks: state.activeDrawing().adv.depth_tracks,
@@ -4211,8 +4213,9 @@ export const createAppSetup = () => {
     }
   };
 
-  // E1: shows `nextMode`'s artifact. Keeps the displayed one in its mode's
-  // slot and installs the arriving slot, or an empty one. The Legend owner
+  // E1: shows the artifact of drawing `nextId`. Keeps the displayed one in
+  // the departing drawing's slot and installs the arriving slot, or an empty
+  // one. The Legend owner
   // keeps each Result's inventory (OV-47): the arriving Result's goes to it,
   // and the binder adopts it when the Result is displayed, as for a batch
   // Result.
@@ -4222,16 +4225,16 @@ export const createAppSetup = () => {
     if (shown) legendActions.rememberResultInventory(previewRuntime.getResultIdentity(shown), [...slot.legendInventory]);
   };
   /**
-   * @param {'circular' | 'linear'} nextMode
-   * @returns {Readonly<ArtifactSlot> | null} The installed slot (null: the mode has no artifact yet).
+   * @param {DrawingIdentity} departingDrawing The shown drawing.
+   * @param {DrawingIdentity} arrivingDrawing
+   * @returns {Readonly<ArtifactSlot> | null} The installed slot (null: the drawing has no artifact yet).
    */
-  const swapArtifactSlots = (nextMode) => {
+  const swapArtifactSlots = (departingDrawing, arrivingDrawing) => {
     previewRuntime.clearActiveRuntime();
-    const departing = historySnapshots.captureArtifactSlot();
-    artifactSlots[departing.mode] = departing;
-    const arriving = artifactSlots[nextMode];
-    historySnapshots.installArtifactSlot(arriving, { mode: nextMode });
-    artifactSlots[nextMode] = null;
+    artifactSlots.set(departingDrawing.id, historySnapshots.captureArtifactSlot(departingDrawing));
+    const arriving = artifactSlots.get(arrivingDrawing.id) ?? null;
+    historySnapshots.installArtifactSlot(arriving, { drawing: arrivingDrawing });
+    artifactSlots.delete(arrivingDrawing.id);
     if (arriving) rememberShownResultInventory(arriving);
     return arriving;
   };
@@ -4265,7 +4268,7 @@ export const createAppSetup = () => {
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
     rememberDepartingResultProjection(drawing);
     // 2. Artifact slots.
-    swapArtifactSlots(nextMode);
+    swapArtifactSlots(drawing, state.drawings[nextMode]);
     // 3. The shown drawing.
     installShownDrawing(nextMode);
     // 4. Transient UI. "Showing the last successful result" named the
@@ -4287,8 +4290,8 @@ export const createAppSetup = () => {
   };
   historySnapshots.registerModeTransition(transitionDiagramMode);
   // The committed Session of a mode's artifact, shown or kept in its slot.
-  historySnapshots.registerModeCommittedSession((targetMode) => readArtifactOfMode(targetMode, mode.value,
-    artifactSlots, getCommittedCanonicalSession,
+  historySnapshots.registerModeCommittedSession((targetMode) => readArtifactOfDrawing(targetMode,
+    state.activeDrawingId.value, artifactSlots, getCommittedCanonicalSession,
     (slot) => slot.runtimeState?.canonical?.committedCanonicalSession) ?? null);
   // A switch waits for Generate, a label rerender, Save and Load, so each
   // Result lands in its own mode's slot (OIPC-C07): the mode buttons and an
@@ -4314,11 +4317,10 @@ export const createAppSetup = () => {
   // the loaded Session.
   /** @param {LoadedArtifactSlots} slots */
   const installLoadedArtifactSlots = ({ opening, stashed }) => {
-    artifactSlots.circular = null;
-    artifactSlots.linear = null;
-    if (stashed) artifactSlots[stashed.mode] = stashed;
+    artifactSlots.clear();
+    if (stashed) artifactSlots.set(stashed.drawingId, stashed);
     if (!opening) return;
-    historySnapshots.installArtifactSlot(opening, { mode: opening.mode });
+    historySnapshots.installArtifactSlot(opening, { drawing: state.drawings[opening.drawingId] });
     rememberShownResultInventory(opening);
   };
 
@@ -4894,8 +4896,8 @@ export const createAppSetup = () => {
   let similarityAlignmentApplying = false;
   // The identity of the selected Result of the review's mode, shown or kept in its slot.
   /** @param {'circular' | 'linear'} reviewMode */
-  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(readArtifactOfMode(reviewMode,
-    mode.value, artifactSlots, () => results.value[Number(selectedResultIndex.value) || 0],
+  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(readArtifactOfDrawing(reviewMode,
+    state.activeDrawingId.value, artifactSlots, () => results.value[Number(selectedResultIndex.value) || 0],
     (slot) => slot.values.results[slot.values.selectedResultIndex]));
   // The draft no longer matches the figure. Another Result of the review's mode replaced it (a
   // Session load, History, a new Generate), whichever mode is shown: the view and the drawer are
@@ -5745,8 +5747,8 @@ export const createAppSetup = () => {
     availability: sessionSaveLoadAvailability,
     askChoice,
     recordDisplayRows: recordDisplayControls.allRows,
-    // Save writes every Result: the other mode's slot goes beside the shown one (E1).
-    readOtherModeArtifact: () => artifactSlots[mode.value === 'linear' ? 'circular' : 'linear'],
+    // Save writes every Result: the kept artifacts of the drawings not shown go beside the shown one (E1).
+    readKeptArtifacts: () => [...artifactSlots.values()].filter((slot) => slot.drawingId !== state.activeDrawingId.value),
     resolveTitle: async () => {
       let title = normalizeSessionTitle(sessionTitle.value);
       if (!title) {

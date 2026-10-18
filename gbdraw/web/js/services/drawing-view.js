@@ -8,6 +8,7 @@
 // slice owns yet has the type its readers rely on, or `unknown` (state.js
 // builds the settings with Vue's untyped `reactive`).
 /** @import { Ref } from '../utils/reactivity.js' */
+/** @import { ModeProfileName } from '../mode-profiles.js' */
 /** @import { LayoutPreferences } from './layout-preferences.js' */
 /** @import { LinearComparisonPlan } from './linear-comparisons.js' */
 /** @import { AnnotationSetsSlice, AnnotationSetsView } from './drawing/annotation-sets.js' */
@@ -20,6 +21,19 @@
 /** @import { PaletteSlice, PaletteView } from './drawing/palette.js' */
 /** @import { SettingsSlice } from './drawing/settings.js' */
 /** @import { VisibilityRulesSlice, VisibilityRulesView } from './drawing/visibility-rules.js' */
+
+/**
+ * The identity of a drawing, its key in `state.drawings`. A drawing's mode is
+ * its `mode` member: code never reads a mode from an ID. Until a project holds
+ * several drawings of one mode, each mode has one drawing, whose ID is the
+ * mode's name, so a writer that knows only a mode (a mode button, a Session's
+ * `ui.mode`, a Result's request) names the drawing of that mode by it.
+ * @typedef {'circular' | 'linear'} DrawingId
+ */
+/**
+ * A drawing's identity members, constant: its ID and its diagram mode.
+ * @typedef {{ readonly id: DrawingId, readonly mode: ModeProfileName }} DrawingIdentity
+ */
 
 /**
  * The handles of a drawing's slices.
@@ -53,7 +67,7 @@
  */
 
 /**
- * @typedef {VisibilityRulesView & ColorRulesView & PaletteView & LabelTablesView & AnnotationSetsView
+ * @typedef {DrawingIdentity & VisibilityRulesView & ColorRulesView & PaletteView & LabelTablesView & AnnotationSetsView
  *   & GroupNamesView & CanvasView & FeatureEditsView & PaintView & DrawingSettings
  *   & { readonly slices: DrawingSlices }} DrawingView
  */

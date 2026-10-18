@@ -956,14 +956,7 @@ export const sessionOperationAvailability = (
 
 /** @import { ModeProfileName } from './mode-profiles.js' */
 /** @typedef {ModeProfileName} DiagramMode The diagram modes; `mode-profiles.js` owns the names. */
-/**
- * The identity of a drawing, its key in `state.drawings`. A drawing's mode is
- * its `mode` member: code never reads a mode from an ID. Until a project holds
- * several drawings of one mode, each mode has one drawing, whose ID is the
- * mode's name, so a writer that knows only a mode (a mode button, a Session's
- * `ui.mode`) names the drawing of that mode by it.
- * @typedef {'circular' | 'linear'} DrawingId
- */
+/** @import { DrawingId } from './services/drawing-view.js' */
 
 /** @import { PythonLegendKey } from './services/legend-svg.js' */
 /** @import { VisibilityFeature } from './services/feature-visibility.js' */

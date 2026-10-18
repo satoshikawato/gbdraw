@@ -89,10 +89,10 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   const registryOwner = state.matchSequenceRegistry.captureTrustedOwner();
   const rules = [...state.activeDrawing().manualSpecificRules];
 
-  const circular = snapshots.captureArtifactSlot();
+  const circular = snapshots.captureArtifactSlot(state.activeDrawing());
   assert.ok(Object.isFrozen(circular));
   assert.deepEqual(circular.legendInventory, ['CDS', 'tRNA']);
-  snapshots.installArtifactSlot(null, { mode: 'linear' });
+  snapshots.installArtifactSlot(null, { drawing: state.drawings.linear });
 
   // The arriving empty Linear slot: no Result, its own mode, no committed Session.
   assert.deepEqual(state.results.value, []);
@@ -109,8 +109,9 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.deepEqual(state.activeDrawing().manualSpecificRules, rules);
   assert.equal(state.linearSeqs[0].region_reverse, true);
 
-  const linear = snapshots.captureArtifactSlot();
-  snapshots.installArtifactSlot(circular, { mode: 'circular' });
+  // The displayed artifact is the Linear drawing's now (the test installs it without a switch).
+  const linear = snapshots.captureArtifactSlot(state.drawings.linear);
+  snapshots.installArtifactSlot(circular, { drawing: state.drawings.circular });
   SWAPPED.forEach((key) => assert.strictEqual(state[key].value, values[key], key));
   assert.strictEqual(canonicalRenderArtifactOwner.capture().committedCanonicalSession, committed.committedCanonicalSession);
   assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, committed.activeSessionResourceTable);
@@ -118,15 +119,16 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
 
   // The Linear slot captured while empty installs as empty again.
-  snapshots.installArtifactSlot(linear, { mode: 'linear' });
+  snapshots.installArtifactSlot(linear, { drawing: state.drawings.linear });
   assert.deepEqual(state.results.value, []);
   assert.equal(state.generatedMode.value, 'linear');
 });
 
-test('installing a slot of another mode is refused', async () => {
+test('installing a slot of another drawing is refused', async () => {
   await fillCircularArtifact();
-  const circular = snapshots.captureArtifactSlot();
-  assert.throws(() => snapshots.installArtifactSlot(circular, { mode: 'linear' }), /circular artifact.*linear/);
+  const circular = snapshots.captureArtifactSlot(state.activeDrawing());
+  assert.equal(circular.drawingId, state.activeDrawing().id, 'the slot is of the drawing it was captured for');
+  assert.throws(() => snapshots.installArtifactSlot(circular, { drawing: state.drawings.linear }), /drawing circular.*drawing linear/);
 });
 
 // OV-104 (PD-OI-052): decoration continuity throws on a mode change
@@ -136,8 +138,8 @@ test('installing a slot of another mode is refused', async () => {
 test('a Generate after a switch reads no decoration of the other mode\'s Result', async () => {
   const { captureDecorationContinuity } = await import('../../gbdraw/web/js/app/legend-layout/decoration-continuity.js');
   const { values } = await fillCircularArtifact();
-  const circular = snapshots.captureArtifactSlot();
-  snapshots.installArtifactSlot(null, { mode: 'linear' });
+  const circular = snapshots.captureArtifactSlot(state.activeDrawing());
+  snapshots.installArtifactSlot(null, { drawing: state.drawings.linear });
   const capture = () => captureDecorationContinuity({
     canonical: { renderRequest: { mode: 'linear', records: [] }, resources: {} },
     results: state.results.value,
@@ -147,7 +149,7 @@ test('a Generate after a switch reads no decoration of the other mode\'s Result'
     projectRecordIdentity: () => assert.fail('no Result of the other mode reaches continuity')
   });
   assert.equal(capture(), null);
-  snapshots.installArtifactSlot(circular, { mode: 'circular' });
+  snapshots.installArtifactSlot(circular, { drawing: state.drawings.circular });
   assert.strictEqual(state.results.value, values.results);
 });
 
@@ -179,15 +181,17 @@ test('a mode-switch step whose alignment receipt does not bind fails before the 
 });
 
 // Review alignment compares its mode's own Result whichever mode is shown (OV-622, D-45).
-test('a value of a mode\'s artifact is read from the shown one, or from the slot that keeps it', async () => {
-  const { readArtifactOfMode, createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+test('a value of a drawing\'s artifact is read from the shown one, or from the slot that keeps it', async () => {
+  const { readArtifactOfDrawing, createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
   const linearResult = { name: 'linear.svg' };
   const otherLinearResult = { name: 'other.svg' };
   const circularResult = { name: 'circular.svg' };
-  const kept = createArtifactSlot({ mode: 'linear', values: { results: [otherLinearResult, linearResult], selectedResultIndex: 1 } });
-  const slots = { circular: null, linear: kept };
-  /** @param {'circular' | 'linear'} mode @param {string} shownMode @param {unknown} shown */
-  const selected = (mode, shownMode, shown) => readArtifactOfMode(mode, shownMode, slots, () => shown,
+  const kept = createArtifactSlot({ drawing: state.drawings.linear, values: { results: [otherLinearResult, linearResult], selectedResultIndex: 1 } });
+  assert.equal(kept.drawingId, 'linear');
+  assert.equal(kept.values.generatedMode, state.drawings.linear.mode, 'an unset value is the empty slot\'s of the drawing\'s mode');
+  const slots = new Map([[kept.drawingId, kept]]);
+  /** @param {'circular' | 'linear'} id @param {'circular' | 'linear'} shownId @param {unknown} shown */
+  const selected = (id, shownId, shown) => readArtifactOfDrawing(id, shownId, slots, () => shown,
     (slot) => slot.values.results[slot.values.selectedResultIndex]);
   assert.equal(selected('linear', 'linear', linearResult), linearResult);
   assert.equal(selected('linear', 'circular', circularResult), linearResult);

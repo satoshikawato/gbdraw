@@ -2,7 +2,7 @@
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
-/** @import { DrawingView } from './drawing-view.js' */
+/** @import { DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -1257,11 +1257,11 @@ export const createHistorySnapshotService = ({
     if (replacesShownResults) clearSimilarityGroupCopyFeedback?.();
   };
 
-  // E1: the displayed mode's generated artifact, by reference, key by key.
-  // The state's `generatedMode` names the slot's mode.
-  const captureArtifactSlot = () => createArtifactSlot({
-    // `state.generatedMode` is always a ref, so the fallback `null` never applies.
-    mode: /** @type {'circular' | 'linear'} */ (getGeneratedArtifactRef(state.generatedMode, null)),
+  // E1: the displayed artifact, by reference, key by key, as the artifact of
+  // `drawing`, the shown drawing, which the caller resolves.
+  /** @param {DrawingIdentity} drawing */
+  const captureArtifactSlot = (drawing) => createArtifactSlot({
+    drawing,
     values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
       key, toRaw(getGeneratedArtifactRef(state[key], null))
     ])),
@@ -1272,23 +1272,23 @@ export const createHistorySnapshotService = ({
     retainedBytes: currentGeneratedArtifactRetainedBytes
   });
 
-  // Installs one mode's slot, or an empty slot of `mode` (no Result, no
-  // committed Session), as the displayed artifact. Nothing outside the slot
-  // changes, so the draft, the editor intent and the caches stay shared.
+  // Installs `drawing`'s slot, or its empty slot (no Result, no committed
+  // Session, the defaults of the drawing's mode), as the displayed artifact.
+  // Nothing outside the slot changes, so the draft, the editor intent and the
+  // caches stay shared.
   /**
    * @param {Readonly<ArtifactSlot> | null} slot
-   * @param {{ mode: 'circular' | 'linear', ui?: { canvasPan?: { x: number, y: number } } }} options
+   * @param {{ drawing: DrawingIdentity, ui?: { canvasPan?: { x: number, y: number } } }} options
    *   `ui.canvasPan` is the pan the runtime owner's viewport reset keeps.
    */
-  const installArtifactSlot = (slot, { mode, ui = {} }) => {
-    const slotMode = mode === 'linear' ? 'linear' : 'circular';
-    if (slot && slot.mode !== slotMode) {
-      throw new Error(`A ${slot.mode} artifact cannot be installed for ${slotMode}.`);
+  const installArtifactSlot = (slot, { drawing, ui = {} }) => {
+    if (slot && slot.drawingId !== drawing.id) {
+      throw new Error(`The artifact of drawing ${slot.drawingId} cannot be installed for drawing ${drawing.id}.`);
     }
     ARTIFACT_SLOT_KEYS.forEach((key) => {
       setGeneratedArtifactRef(state[key], slot
         ? slot.values[key]
-        : ARTIFACT_SLOT_EMPTY[key](slotMode, getGeneratedArtifactRef(state[key], null)));
+        : ARTIFACT_SLOT_EMPTY[key](drawing.mode, getGeneratedArtifactRef(state[key], null)));
     });
     if (slot?.matchSequenceOwner) state.matchSequenceRegistry?.replaceTrustedOwner?.(slot.matchSequenceOwner);
     else state.matchSequenceRegistry?.reset?.();

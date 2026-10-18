@@ -1145,9 +1145,9 @@ const depthTracks = [
 const featureListScrollRef = { value: { scrollTop: 144 } };
 const selectedPairwiseBlockOrthogroupId = { value: 'keep-orthogroup' };
 // E1: the other mode's stashed artifact comes back by reference.
-const stashedLinearArtifact = Object.freeze({ mode: 'linear' });
-const artifactSlots = { circular: null, linear: stashedLinearArtifact };
-const displayedArtifact = Object.freeze({ mode: 'circular' });
+const stashedLinearArtifact = Object.freeze({ drawingId: 'linear' });
+const artifactSlots = new Map([['linear', stashedLinearArtifact]]);
+const displayedArtifact = Object.freeze({ drawingId: 'circular' });
 const installedArtifacts = [];
 const sessionImportRollbackState = createSessionImportRollbackState({
   artifactSlots,
@@ -1312,7 +1312,7 @@ try {
       afterLoad: async () => {
         // The pane closes its popup while the load shows no Result.
         returnSettingsSection(state);
-        artifactSlots.linear = null;
+        artifactSlots.delete('linear');
         depthTrackUiCounts.circular = 5;
         state.featureListScrollTop.value = 0;
         featureListScrollRef.value.scrollTop = 0;
@@ -1342,9 +1342,9 @@ assert.equal(failedImport.status, 'error');
 assert.equal(failedImport.error.code, 'INPUT_INVALID');
 assert.deepEqual(failedImport.error.context, {field:'schema',reason:'JSON_FORMAT'});
 assert.deepEqual(rollbackState(), stateBeforeFailedImport);
-assert.strictEqual(artifactSlots.linear, stashedLinearArtifact);
+assert.strictEqual(artifactSlots.get('linear'), stashedLinearArtifact);
 assert.deepEqual(installedArtifacts, [displayedArtifact]);
-assert.equal(artifactSlots.circular, null);
+assert.deepEqual([...artifactSlots.keys()], ['linear']);
 assert.equal(alerts.length, 0);
 assert.deepEqual(state.errorLog.value, failedImport.error);
 assert.equal(failedImportEvent.target.value, '');
