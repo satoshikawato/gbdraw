@@ -184,7 +184,7 @@ _CONVERTER_ARGUMENTS = (
 )
 
 
-_GRID_2X2_VECTOR = Path(__file__).parent / "fixtures" / "losatp_collinear_grid_2x2.json"
+_GRID_2X2_VECTOR = Path(__file__).parent / "fixtures" / "losat_job_plan_cases.json"
 
 
 @pytest.mark.parametrize(
@@ -221,7 +221,7 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
     request, _identities = _request(mode, tmp_path)
     vector = None
     if display is None:
-        vector = json.loads(_GRID_2X2_VECTOR.read_text(encoding="utf-8"))
+        vector = json.loads(_GRID_2X2_VECTOR.read_text(encoding="utf-8"))["proteinGridCases"][0]
         fourth = tmp_path / "rec3.gbk"
         SeqIO.write(_record(3), fourth, "genbank")
         request = replace(

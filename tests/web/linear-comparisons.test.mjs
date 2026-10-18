@@ -825,7 +825,7 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
 {
   // Review F2: the Web's search order and pair numbers of a 2x2 grid match
   // the vector that the Python API test checks too.
-  const vector = JSON.parse(await readFile(join(repoRoot, 'tests', 'fixtures', 'losatp_collinear_grid_2x2.json'), 'utf8'));
+  const vector = JSON.parse(await readFile(join(repoRoot, 'tests', 'fixtures', 'losat_job_plan_cases.json'), 'utf8')).proteinGridCases[0];
   const uids = vector.grid.map((_, index) => String.fromCharCode(97 + index));
   const drawn = uids.map((uid) => ({ uid }));
   const rows = vector.grid.map(([row, column], index) => ({
