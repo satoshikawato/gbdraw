@@ -4289,8 +4289,9 @@ export const createAppSetup = () => {
     return true;
   };
   historySnapshots.registerModeTransition(transitionDiagramMode);
-  // The committed Session of a mode's artifact, shown or kept in its slot.
-  historySnapshots.registerModeCommittedSession((targetMode) => readArtifactOfDrawing(targetMode,
+  // The committed Session of a drawing's artifact: the shown drawing's
+  // (`getCommittedCanonicalSession`), or the one its slot keeps.
+  historySnapshots.registerDrawingCommittedSession((drawingId) => readArtifactOfDrawing(drawingId,
     state.activeDrawingId.value, artifactSlots, getCommittedCanonicalSession,
     (slot) => slot.runtimeState?.canonical?.committedCanonicalSession) ?? null);
   // A switch waits for Generate, a label rerender, Save and Load, so each

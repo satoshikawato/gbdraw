@@ -2,7 +2,7 @@
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
-/** @import { DrawingIdentity, DrawingView } from './drawing-view.js' */
+/** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -1028,7 +1028,7 @@ export const createHistorySnapshotService = ({
   };
 
   // E1: the composition root's mode transition and the committed Session of
-  // each mode's artifact, registered once they exist (R13). A History restore
+  // each drawing's artifact, by drawing ID, registered once they exist (R13). A History restore
   // of a mode switch runs the transition, so Undo and Redo swap the modes'
   // artifact slots. `restoreMode` is the one mode writer of the History
   // restores, through the registered transition only: the shown drawing has
@@ -1036,15 +1036,15 @@ export const createHistorySnapshotService = ({
   // without a composition root (a unit test) registers its own transition.
   /** @type {((mode: 'circular' | 'linear') => unknown) | null} */
   let modeTransition = null;
-  /** @type {((mode: 'circular' | 'linear') => Record<string, any> | null) | null} */
-  let modeCommittedSession = null;
+  /** @type {((drawingId: DrawingId) => Record<string, any> | null) | null} */
+  let drawingCommittedSession = null;
   /** @param {((mode: 'circular' | 'linear') => unknown) | null} transition */
   const registerModeTransition = (transition) => {
     modeTransition = typeof transition === 'function' ? transition : null;
   };
-  /** @param {((mode: 'circular' | 'linear') => Record<string, any> | null) | null} reader */
-  const registerModeCommittedSession = (reader) => {
-    modeCommittedSession = typeof reader === 'function' ? reader : null;
+  /** @param {((drawingId: DrawingId) => Record<string, any> | null) | null} reader */
+  const registerDrawingCommittedSession = (reader) => {
+    drawingCommittedSession = typeof reader === 'function' ? reader : null;
   };
   /** @param {string} mode */
   const restoreMode = async (mode) => {
@@ -1892,9 +1892,9 @@ export const createHistorySnapshotService = ({
       ? (intent.ui.mode === 'linear' ? 'linear' : 'circular')
       : currentMode;
     if (domains.has('alignmentState')) {
-      const canonical = stepMode === currentMode || !modeCommittedSession
+      const canonical = stepMode === currentMode || !drawingCommittedSession
         ? generatedArtifactRuntimeOwner?.capture?.()?.canonical?.committedCanonicalSession
-        : modeCommittedSession(stepMode);
+        : drawingCommittedSession(drawingOf(stepMode).id);
       await validateSimilarityAlignmentResetReceipt(intent.alignmentState?.receipt, canonical && {
         ...canonical,
         renderRequest: { ...canonical.renderRequest, layout: {
@@ -2100,7 +2100,7 @@ export const createHistorySnapshotService = ({
     installArtifactSlot,
     installGeneratedArtifactOwnerSet,
     registerCapture,
-    registerModeCommittedSession,
+    registerDrawingCommittedSession,
     registerModeTransition,
     restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity,

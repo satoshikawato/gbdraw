@@ -163,8 +163,8 @@ test('a mode-switch step whose alignment receipt does not bind fails before the 
   /** @type {string[]} */
   const transitions = [];
   snapshots.registerModeTransition((mode) => { transitions.push(mode); });
-  snapshots.registerModeCommittedSession?.((mode) => (
-    mode === 'circular' ? canonicalRenderArtifactOwner.capture().committedCanonicalSession : null
+  snapshots.registerDrawingCommittedSession((drawingId) => (
+    drawingId === state.drawings.circular.id ? canonicalRenderArtifactOwner.capture().committedCanonicalSession : null
   ));
   try {
     await assert.rejects(snapshots.applyHistoryIntent(
@@ -176,7 +176,7 @@ test('a mode-switch step whose alignment receipt does not bind fails before the 
     assert.strictEqual(state.results.value, values.results);
   } finally {
     snapshots.registerModeTransition(null);
-    snapshots.registerModeCommittedSession?.(null);
+    snapshots.registerDrawingCommittedSession(null);
   }
 });
 
