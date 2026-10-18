@@ -2,8 +2,9 @@
 // open items). Each mode has its own drawing, so the switch sets `mode`, swaps
 // the artifact slots, and writes no setting or edit:
 //   1. no watcher's source changes on a switch except the ones that watch the
-//      mode itself, so the drawing watchers (palette colors, Canvas padding)
-//      never take a switch for an edit;
+//      mode itself, and no watcher follows a drawing's palette or padding or an
+//      auxiliary table's file (M3.12: their edits are the writers' callers' and
+//      the file input's transition);
 //   2. the transition writes no drawing member and does not commit a Result
 //      edit;
 //   3. the Depth panels read the drawing's series and never write them (OV-109).
@@ -43,7 +44,7 @@ const sameSource = (before, after) => before.identity === after.identity && befo
 const watchers = [];
 /** @type {string[]} */
 const closedDialogs = [];
-const { resetModeTransientUi } = setupWatchers({
+const { resetModeTransientUi, importAuxiliaryTable } = setupWatchers({
   state,
   rulePreparation: port(),
   trackAuxiliaryFileImport: createAuxiliaryFileImports((target) => target).track,
@@ -72,9 +73,10 @@ const { resetModeTransientUi } = setupWatchers({
 });
 
 test('a mode switch changes the source of no drawing watcher', () => {
-  assert.ok(watchers.length > 10, 'the watchers were registered');
-  const drawingWatchers = watchers.filter(({ line }) => /drawing\./.test(line));
-  assert.ok(drawingWatchers.length >= 4, 'each drawing has its own palette and padding watchers');
+  assert.ok(watchers.length > 0, 'the watchers were registered');
+  // M3.12: no watcher follows a drawing's palette or padding; their edits
+  // apply through the writers' callers.
+  assert.deepEqual(watchers.filter(({ line }) => /\bdrawing\.(?:currentColors|canvasPadding)\b/.test(line)).map(({ line }) => line), []);
 
   // Distinct values in each drawing, so a watcher that followed the shown
   // drawing would see its source change.
@@ -94,6 +96,19 @@ test('a mode switch changes the source of no drawing watcher', () => {
     assert.deepEqual(unexpected, [], `${from} -> ${to}: these watchers would fire on the switch`);
   }
   state.mode.value = 'circular';
+});
+
+test('an auxiliary table imports through its file input, into the drawing shown when it was chosen', async () => {
+  assert.deepEqual(watchers.filter(({ line }) => /\bfiles(?:\[|\.(?:d_color|t_color|qualifier_priority|whitelist|blacklist)\b)/.test(line))
+    .map(({ line }) => line), [], 'no watcher imports a table file');
+  state.mode.value = 'linear';
+  const before = state.drawings.circular.manualBlacklist.value;
+  const imported = importAuxiliaryTable('blacklist', new File(['M3_12_WORD\n'], 'blacklist.txt', { type: 'text/plain' }));
+  state.mode.value = 'circular';
+  assert.equal(await imported, true);
+  assert.equal(state.files.blacklist?.name, 'blacklist.txt');
+  assert.match(state.drawings.linear.manualBlacklist.value, /M3_12_WORD/);
+  assert.equal(state.drawings.circular.manualBlacklist.value, before);
 });
 
 // OV-462: the label owner closes its dialogs, so a Label Not Shown dialog

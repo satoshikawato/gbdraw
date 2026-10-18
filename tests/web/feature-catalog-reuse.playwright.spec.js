@@ -467,7 +467,7 @@ const livePalette = (page) => evaluateWithRetainedPromise(page, async () => {
   const { state } = await import('./js/state.js');
   state.paletteInstantPreviewEnabled.value = true;
   await window.__GBDRAW_HISTORY__.runUndoable('Live palette', async () => {
-    state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS: '#123456' };
+    window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
     await window.Vue.nextTick();
   });
 });

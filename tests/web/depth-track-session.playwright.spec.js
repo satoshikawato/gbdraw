@@ -1088,7 +1088,7 @@ test('Color value controls preserve Auto, None, and named colors', async ({ page
 
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.currentColors.repeat_region = 'red';
+    app.editDefaultColor('repeat_region', 'red');
     app.adv.block_stroke_color = 'none';
     app.adv.line_stroke_color = null;
     await window.Vue.nextTick();

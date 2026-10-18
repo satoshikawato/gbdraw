@@ -212,6 +212,17 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     return undefined;
   };
 
+  // A default color edit; in the shown drawing it applies live, or joins the
+  // queued palette.
+  /**
+   * @param {ResultsManagerDrawing} drawing
+   * @param {Record<string, string>} colors
+   */
+  const editDefaultColors = (drawing, colors) => {
+    setDefaultColors(drawing.slices.palette, colors);
+    if (drawing === state.activeDrawing()) syncPaletteDraftState();
+  };
+
   // D-15: the popup's "Apply to all" on a palette row sets the type's default
   // color, as an edit in the Default colors list does. While a palette is
   // queued, the shown Result takes the color now too: a user color wins over
@@ -222,21 +233,20 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {string} color
    */
   const setDefaultColor = (drawing, key, color) => {
-    setDefaultColors(drawing.slices.palette, { [key]: color });
+    editDefaultColors(drawing, { [key]: color });
     if (drawing !== state.activeDrawing()) return;
-    syncPaletteDraftState();
     if (String(drawing.pendingPaletteName.value || '').trim() !== '') {
       appliedPaletteColors.value = { ...appliedPaletteColors.value, [key]: color };
     }
   };
 
-  // An edit in the Default colors list sets the active drawing's color; the
-  // drawing's color watcher syncs the palette draft.
   /**
+   * An edit in the Default colors list (the field, Add, a colors file, a
+   * preset).
    * @param {string} key
    * @param {string} color
    */
-  const editDefaultColor = (key, color) => setDefaultColors(state.activeDrawing().slices.palette, { [key]: color });
+  const editDefaultColor = (key, color) => editDefaultColors(state.activeDrawing(), { [key]: color });
 
   return {
     requestPaletteChange,
@@ -248,6 +258,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     userDefaultColorRows,
     setDefaultColor,
     editDefaultColor,
+    editDefaultColors,
     applyPaletteDraftToPreview,
     syncPaletteDraftState
   };

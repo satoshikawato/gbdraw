@@ -16,7 +16,6 @@ import {
 } from '../services/layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
-import { setDefaultColors } from '../services/drawing/palette.js';
 import { addWhitelistRules, appendBlacklistWords, setPriorityRules } from '../services/drawing/label-tables.js';
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 
@@ -102,10 +101,10 @@ export const createAuxiliaryFileImports = (reactive) => {
  *   syncLabelEditor: (options?: Record<string, any>) => void,
  *   importSpecificRules: (text: string, options?: { drawing?: DrawingState, isCurrent?: () => boolean }) => Promise<number | false>
  * }} featureActions The feature editor's label reaction and the rule owner's import of a rules TSV.
- * @property {{ applyCanvasPadding: () => void, refreshDiagramDragAffordances: () => void }} legendLayout
- *   The Legend layout owner's canvas padding and drag affordances.
- * @property {{ applyPaletteDraftToPreview: () => void, syncPaletteDraftState: () => void }} resultsManager
- *   The Results owner's palette draft projections.
+ * @property {{ refreshDiagramDragAffordances: () => void }} legendLayout
+ *   The Legend layout owner's drag affordances.
+ * @property {{ applyPaletteDraftToPreview: () => void, editDefaultColors: (drawing: DrawingState, colors: Record<string, string>) => void }} resultsManager
+ *   The Results owner's palette draft projection and default color edit.
  * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
  * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any> | SessionBusy) | null} [refreshCircularRecordOrder]
  * @property {((options?: { suppress?: boolean }) => Promise<any>) | null} [refreshLinearRecordSelectors]
@@ -180,14 +179,8 @@ export const setupWatchers = ({
   const { refreshLegendDragAffordances } = legendActions;
 
   const { syncLabelEditor } = featureActions;
-  const {
-    applyCanvasPadding,
-    refreshDiagramDragAffordances
-  } = legendLayout;
-  const {
-    applyPaletteDraftToPreview,
-    syncPaletteDraftState
-  } = resultsManager;
+  const { refreshDiagramDragAffordances } = legendLayout;
+  const { applyPaletteDraftToPreview, editDefaultColors } = resultsManager;
 
   /** @param {unknown} value */
   const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
@@ -206,19 +199,6 @@ export const setupWatchers = ({
       singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
   };
 
-  // Each drawing's watchers watch that drawing, so a mode switch, which
-  // changes neither drawing, fires none of them (R10); an edit of the drawing
-  // that is not shown (a Load, a History restore) touches no shown Result.
-  /** @type {DrawingState[]} */
-  const drawingsOfModes = [state.drawings.circular, state.drawings.linear];
-  drawingsOfModes.forEach((drawing) => watch(
-    () => drawing.currentColors.value,
-    () => {
-      if (drawing === state.activeDrawing()) syncPaletteDraftState();
-    },
-    { deep: true }
-  ));
-
   watch(
     () => paletteInstantPreviewEnabled.value,
     (enabled) => {
@@ -228,16 +208,6 @@ export const setupWatchers = ({
       applyPaletteDraftToPreview();
     }
   );
-
-  drawingsOfModes.forEach((drawing) => watch(
-    () => drawing.canvasPadding,
-    () => {
-      if (drawing !== state.activeDrawing()) return;
-      if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
-      applyCanvasPadding();
-    },
-    { deep: true }
-  ));
 
   watch(
     () => layoutRepositionMode.value,
@@ -372,37 +342,69 @@ export const setupWatchers = ({
   };
   /** @type {Promise<any>} */
   let fileImportApplications = Promise.resolve();
-  /** @type {Map<string, FileLike | null | undefined>} */
-  const restoredFileSelections = new Map();
   /**
-   * Applies the text of an auxiliary file to its drawing; false rejects the file.
+   * Applies the text of an auxiliary file to the drawing it was chosen in;
+   * false rejects the file.
    * @callback FileImportApply
+   * @param {DrawingState} drawing
    * @param {string} text
    * @param {() => boolean} isCurrent
    * @returns {unknown}
    */
   /**
-   * @param {string} key The `files` member the watcher follows.
-   * @param {FileImportApply} apply
+   * A parsed table, as its slice writer takes it; a parse error rejects the file.
+   * @template T
+   * @param {(text: string) => T} parse
+   * @param {(drawing: DrawingState, table: T) => void} write
+   * @returns {FileImportApply}
+   */
+  const tableImport = (parse, write) => (drawing, text) => {
+    try {
+      write(drawing, parse(text));
+    } catch (e) {
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
+    }
+  };
+  /** @type {Record<string, FileImportApply>} */
+  const AUXILIARY_TABLE_IMPORTS = {
+    d_color: tableImport(parseColorTable, (drawing, { colors }) => editDefaultColors(drawing, colors)),
+    t_color: async (drawing, text, isCurrent) => {
+      try {
+        const importedCount = await featureActions.importSpecificRules(text, { drawing, isCurrent });
+        if (importedCount === false) return false;
+      } catch (e) {
+        if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
+        return false;
+      }
+    },
+    qualifier_priority: tableImport(parsePriorityRules, (drawing, { rules }) => setPriorityRules(drawing.slices.labelTables, rules)),
+    whitelist: tableImport(parseWhitelistRules, (drawing, { rules }) => addWhitelistRules(drawing.slices.labelTables, rules)),
+    blacklist: tableImport(parseBlacklistWords, (drawing, { words }) => {
+      if (words.length > 0) appendBlacklistWords(drawing.slices.labelTables, words);
+    })
+  };
+  /**
+   * Reads `file` and applies it to the drawing shown now; a rejected file
+   * gives the input its previous file back.
+   * @param {string} key The `files` member of the auxiliary table.
    * @param {FileLike | null | undefined} file
    * @param {FileLike | null | undefined} previousFile
    * @returns {Promise<boolean> | undefined}
    */
-  const applyFileImport = (key, apply, file, previousFile) => {
-    const restored = restoredFileSelections.has(key) && restoredFileSelections.get(key) === file;
-    restoredFileSelections.delete(key);
-    if (restored) return;
+  const applyFileImport = (key, file, previousFile) => {
     if (semanticFileWatchersSuppressed.value || !file) return;
-    return startFileImport(key, apply, file, previousFile);
+    return startFileImport(key, file, previousFile);
   };
   /**
    * @param {string} key
-   * @param {FileImportApply} apply
    * @param {FileLike} file
    * @param {FileLike | null | undefined} previousFile
    * @returns {Promise<boolean>}
    */
-  const startFileImport = (key, apply, file, previousFile) => {
+  const startFileImport = (key, file, previousFile) => {
+    const drawing = state.activeDrawing();
+    const apply = AUXILIARY_TABLE_IMPORTS[key];
     // OV-1205, OV-1206: the import is current while its file stays selected.
     // The Specific rules owner (`runSpecificRuleWrite`) prepares and retries
     // the rules on the inputs current when it runs; one it gives up on comes
@@ -416,25 +418,20 @@ export const setupWatchers = ({
     const retainFailure = (inputsBound = key === 't_color') => {
       auxiliaryImportFailure.value = { error: errorLog.value, key, selection: files[key], snapshot: inputsBound ? rulePreparation.snapshot() : null,
         retry: () => {
-          if (files[key] !== file) {
-            // The watcher skips this selection; the retry starts its import.
-            restoredFileSelections.set(key, file);
-            files[key] = file;
-          }
-          return startFileImport(key, apply, file, previousFile);
+          files[key] = file;
+          return startFileImport(key, file, previousFile);
         } };
     };
     const pending = readFileText(file).then((text) => {
       // Reads may finish out of order; serialize only their live application.
       const application = fileImportApplications.then(async () => {
         if (!isCurrent()) return false;
-        if (await apply(text, isCurrent) === false && isCurrent()) {
+        if (await apply(drawing, text, isCurrent) === false && isCurrent()) {
           const gaveUp = key === 't_color' && errorLog.value === previousError;
           if (gaveUp) {
             errorLog.value = normalizeUserFacingError(diagnosticError('RULE_INPUTS_CHANGED', {},
               { operation: 'evaluateRules', stage: 'rule-validation' }));
           }
-          restoredFileSelections.set(key, previousFile);
           files[key] = previousFile;
           if (errorLog.value !== previousError) retainFailure(key === 't_color' && !gaveUp);
           return false;
@@ -449,7 +446,6 @@ export const setupWatchers = ({
     }).catch((error) => {
       if (isCurrent() && errorLog.value === previousError) {
         errorLog.value = normalizeUserFacingError(error, { operation: key === 't_color' ? 'evaluateRules' : 'unknown', stage: 'resource-staging' });
-        restoredFileSelections.set(key, previousFile);
         files[key] = previousFile;
         retainFailure();
       }
@@ -458,73 +454,20 @@ export const setupWatchers = ({
     trackAuxiliaryFileImport(file, pending);
     return pending;
   };
+  // The file input of an auxiliary table (Default colors, Specific rules,
+  // Priority, Whitelist, Blacklist): it stores the file and imports it into
+  // the shown drawing. The `file-uploader` owns its History step and waits
+  // for the import (`waitForAuxiliaryFileImport`, R11). A Load or a History
+  // restore sets `files` without importing.
   /**
    * @param {string} key
-   * @param {FileImportApply} apply
+   * @param {FileLike | null | undefined} file
    */
-  const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => applyFileImport(key, apply, file, previousFile));
-
-  watchFileImport('d_color', (text) => {
-    const drawing = state.activeDrawing();
-    try {
-      const { colors, count } = parseColorTable(text);
-      setDefaultColors(drawing.slices.palette, colors);
-      console.log(`Loaded ${count} colors from file.`);
-    } catch (e) {
-      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
-      return false;
-    }
-  });
-
-  watchFileImport('t_color', async (text, isCurrent) => {
-    const drawing = state.activeDrawing();
-    try {
-      const importedCount = await featureActions.importSpecificRules(text, { drawing, isCurrent });
-      if (importedCount === false) return false;
-      console.log(`Loaded ${importedCount} rules from file.`);
-    } catch (e) {
-      if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
-      return false;
-    }
-  });
-
-  watchFileImport('qualifier_priority', (text) => {
-    const drawing = state.activeDrawing();
-    try {
-      const { rules, count } = parsePriorityRules(text);
-      setPriorityRules(drawing.slices.labelTables, rules);
-      console.log(`Loaded ${count} priority rules.`);
-    } catch (e) {
-      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
-      return false;
-    }
-  });
-
-  watchFileImport('whitelist', (text) => {
-    const drawing = state.activeDrawing();
-    try {
-      const { rules, count } = parseWhitelistRules(text);
-      addWhitelistRules(drawing.slices.labelTables, rules);
-      console.log(`Loaded ${count} whitelist rules.`);
-    } catch (e) {
-      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
-      return false;
-    }
-  });
-
-  watchFileImport('blacklist', (text) => {
-    const drawing = state.activeDrawing();
-    try {
-      const { words, count } = parseBlacklistWords(text);
-      if (words.length > 0) {
-        appendBlacklistWords(drawing.slices.labelTables, words);
-        console.log(`Loaded ${count} blacklist words.`);
-      }
-    } catch (e) {
-      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
-      return false;
-    }
-  });
+  const importAuxiliaryTable = (key, file) => {
+    const previousFile = files[key];
+    files[key] = file;
+    return applyFileImport(key, file, previousFile);
+  };
 
   watch(
     () => isFeatureDrawerMounted.value,
@@ -592,5 +535,5 @@ export const setupWatchers = ({
       console.warn('Could not load browser palette definitions.', normalizeUserFacingError(error, { stage: 'initialization' }));
     }
   });
-  return { canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi };
+  return { importAuxiliaryTable, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi };
 };

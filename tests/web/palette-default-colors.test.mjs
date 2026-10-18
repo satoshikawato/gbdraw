@@ -407,3 +407,22 @@ test('a queued palette restored by reference is never written through', () => {
   assert.deepEqual(owned, { CDS: '#123456' });
   assert.notEqual(drawing.pendingPaletteColors.value, owned);
 });
+
+// M3.12: a Default colors edit syncs the palette draft itself (no watcher
+// writes a drawing): live, it applies at once; with a queued palette, it joins
+// the queue and the applied palette stays.
+test('a Default colors edit applies live, or joins the queued palette, without a watcher', async () => {
+  const live = setup({ instant: true });
+  live.manager.editDefaultColor('tRNA', '#565656');
+  assert.equal(live.drawing.currentColors.value.tRNA, '#565656');
+  assert.equal(live.state.appliedPaletteColors.value.tRNA, '#565656');
+
+  const queued = setup({ instant: false });
+  queued.manager.selectPalette('forest');
+  await queued.choose('keep');
+  const applied = JSON.stringify(queued.state.appliedPaletteColors.value);
+  queued.manager.editDefaultColor('tRNA', '#676767');
+  assert.equal(queued.drawing.pendingPaletteName.value, 'forest');
+  assert.equal(queued.drawing.pendingPaletteColors.value.tRNA, '#676767');
+  assert.equal(JSON.stringify(queued.state.appliedPaletteColors.value), applied);
+});

@@ -509,11 +509,11 @@ const SWITCH_EDITS = [
     await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), 'transfer RNA');
   }), null, 'transfer RNA'],
   ['reset positions', onApp(() => window.__GBDRAW_APP__.resetAllPositions())],
-  ['canvas padding', onApp(() => { window.__GBDRAW_APP__.canvasPadding.right = 40; })],
+  ['canvas padding', onApp(() => { window.__GBDRAW_APP__.setCanvasPaddingSide('right', 40); })],
   ['palette color', onApp(() => {
     const app = window.__GBDRAW_APP__;
     app.paletteInstantPreviewEnabled = true;
-    app.currentColors.CDS = '#457b9d';
+    app.editDefaultColor('CDS', '#457b9d');
   })],
   ['track visibility', onApp(() => { window.__GBDRAW_APP__.form.suppress_gc = true; })]
 ];

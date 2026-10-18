@@ -137,7 +137,7 @@ test('Live palette and its History keep the scale draft out of the committed req
       await window.__GBDRAW_HISTORY__.runUndoable('Change scale', () => { state.activeDrawing().adv.scale_interval = 12345; });
       state.paletteInstantPreviewEnabled.value = true;
       await window.__GBDRAW_HISTORY__.runUndoable('Live palette', async () => {
-        state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS:'#123456' };
+        window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
         await window.Vue.nextTick();
       });
     });
@@ -177,7 +177,7 @@ test('Live palette and its History keep the scale draft out of the committed req
     await noDerivedStatus(page);
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);
     await page.evaluate(async()=>{
-      const {state}=await import('./js/state.js');state.activeDrawing().currentColors.value={...state.activeDrawing().currentColors.value,CDS:'#345678'};
+      window.__GBDRAW_APP__.editDefaultColor('CDS', '#345678');
       await window.Vue.nextTick();
     });
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);
@@ -353,7 +353,7 @@ for (const mode of ['circular', 'linear']) {
         state.autoLabelReflowEnabled.value = false;
         state.paletteInstantPreviewEnabled.value = true;
         await window.__GBDRAW_HISTORY__.runUndoable('Live color', async () => {
-          state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS:'#123456' };
+          window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
           await window.Vue.nextTick();
         });
       });

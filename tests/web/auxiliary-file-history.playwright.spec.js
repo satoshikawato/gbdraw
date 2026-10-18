@@ -16,8 +16,8 @@ for (const sample of cases) {
     await page.evaluate((key) => {
       const a = window.__GBDRAW_APP__;
       a.form.labels_mode = 'out';
-      if (key === 'blacklist') a.filterMode = 'Blacklist';
-      if (key === 'whitelist') a.filterMode = 'Whitelist';
+      if (key === 'blacklist') a.setLabelFilterMode('Blacklist');
+      if (key === 'whitelist') a.setLabelFilterMode('Whitelist');
     }, sample.key);
     const inspect = () => page.evaluate((key) => {
       const a = window.__GBDRAW_APP__;

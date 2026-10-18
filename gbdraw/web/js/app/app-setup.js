@@ -1911,6 +1911,7 @@ export const createAppSetup = () => {
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true }),
     readUserDefaultColor: resultsManager.readUserDefaultColor,
     setDefaultColor: resultsManager.setDefaultColor,
+    editDefaultColors: resultsManager.editDefaultColors,
     legendRowIsNamed: legendActions.legendRowIsNamed,
     legendRowName: legendActions.legendRowName,
     findLegendRowNamed: legendActions.findLegendRowNamed,
@@ -3480,6 +3481,7 @@ export const createAppSetup = () => {
     }
   });
   const {
+    importAuxiliaryTable,
     canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi
   } = setupWatchers({
     state,
@@ -3508,7 +3510,11 @@ export const createAppSetup = () => {
     closeHiddenLabelTextDialog: featureActions.closeHiddenLabelTextDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     previewRuntime,
-    preparePaletteDefinitions: paletteLoader.loadPaletteAsset
+    // The shown drawing may take its palette's colors: its palette draft syncs.
+    preparePaletteDefinitions: async () => {
+      await paletteLoader.loadPaletteAsset();
+      resultsManager.syncPaletteDraftState();
+    }
   });
 
   // Save and Load also wait for an edit still applying. Its owners exist only
@@ -7137,7 +7143,7 @@ export const createAppSetup = () => {
     openOrthogroupInDrawer,
     circularRecordList,
     refreshCircularRecordOrder,
-    waitForAuxiliaryFileImport: auxiliaryFileImports.wait, canRetryAuxiliaryImportFailure,
+    importAuxiliaryTable, waitForAuxiliaryFileImport: auxiliaryFileImports.wait, canRetryAuxiliaryImportFailure,
     retryAuxiliaryImportFailure: () => history.runUndoableCheckpoint('Change uploaded file', retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
     circularRecordPresentationOptions,
     circularRecordPresentationError,

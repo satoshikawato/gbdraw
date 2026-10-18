@@ -28,7 +28,6 @@ import {
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
 import { replaceColorRules } from '../../services/drawing/color-rules.js';
-import { setDefaultColors } from '../../services/drawing/palette.js';
 import {
   addWhitelistRules, removePriorityRule as removeDrawingPriorityRule, removeWhitelistRule as removeDrawingWhitelistRule,
   setBlacklistText as setDrawingBlacklistText, setLabelFilterMode as setDrawingLabelFilterMode, setPriorityRules, setWhitelistRuleField as setDrawingWhitelistRuleField
@@ -61,6 +60,12 @@ import {
  *   Asks for the automatic rerender of an edit Python must draw again (OV-43).
  * @property {(drawing: DrawingState) => boolean} isRedrawOwed
  *   Whether a rerender asked for in `drawing` is not yet shown drawn from its current paint (D-36).
+ */
+
+/**
+ * The Results owner's default color edit (app/results.js): it sets the
+ * drawing's colors and, in the shown drawing, syncs the palette draft.
+ * @typedef {(drawing: DrawingState, colors: Record<string, string>) => void} EditDefaultColorsPort
  */
 
 /**
@@ -99,6 +104,7 @@ import {
  * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('../candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
  * @property {RuleActionsPorts} ports
+ * @property {EditDefaultColorsPort} editDefaultColors
  * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
  *   The committed canonical request (Python owns the option fields, R7).
  * @property {(value?: any) => { value: any }} ref Vue `ref`
@@ -112,7 +118,7 @@ import {
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -702,7 +708,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!newColorFeat.value) return;
-    setDefaultColors(drawing.slices.palette, { [newColorFeat.value]: newColorVal.value });
+    editDefaultColors(drawing, { [newColorFeat.value]: newColorVal.value });
   };
 
   /** @param {string} value */
@@ -838,7 +844,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
           isCurrent: () => selectedSpecificPreset.value === presetId,
           afterCommit: () => {
             if (presetId === 'bakta') {
-              setDefaultColors(drawing.slices.palette, { CDS: '#cccccc' });
+              editDefaultColors(drawing, { CDS: '#cccccc' });
               drawing.adv.legend_box_size = 12;
               drawing.adv.legend_font_size = 12;
             }

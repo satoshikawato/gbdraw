@@ -51,7 +51,7 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
     return applyCanvasPadding();
   };
 
-  // A padding field's edit; the drawing's padding watcher applies it.
+  // A padding field's edit applies to the displayed Result at once.
   /**
    * @param {'top' | 'right' | 'bottom' | 'left'} side
    * @param {unknown} value
@@ -60,6 +60,7 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     setDrawingCanvasPaddingSide(state.activeDrawing().slices.canvas, side, value);
+    return applyCanvasPadding();
   };
 
   const captureBaseConfig = () => {

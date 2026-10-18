@@ -15,9 +15,8 @@ const USER_CDS = '#123456';
 const openWithUserColor = async (page) => {
   await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
   await evaluateWithRetainedPromise(page, async (color) => {
-    const { state } = await import('/gbdraw/web/js/state.js');
     await window.__GBDRAW_HISTORY__.runUndoable('Change color', async () => {
-      state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS: color };
+      window.__GBDRAW_APP__.editDefaultColor('CDS', color);
       await window.Vue.nextTick();
     });
   }, USER_CDS);
@@ -258,9 +257,8 @@ test('a palette row offers and keeps the color it shows after palette edits', as
   await expectShown(original, 'Generate');
 
   await evaluateWithRetainedPromise(page, async (color) => {
-    const { state } = await import('/gbdraw/web/js/state.js');
     await window.__GBDRAW_HISTORY__.runUndoable('Change color', async () => {
-      state.activeDrawing().currentColors.value = { ...state.activeDrawing().currentColors.value, CDS: color };
+      window.__GBDRAW_APP__.editDefaultColor('CDS', color);
       await window.Vue.nextTick();
     });
   }, USER_CDS);
