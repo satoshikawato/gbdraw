@@ -22,9 +22,10 @@ const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs
 test.describe.configure({ retries: 0 });
 
 // A feature a live edit hides keeps its glyph with display none until the
-// rerender that the edit asks for (a rule that changes the Legend) leaves it
-// out of the drawing, as Generate does.
-const notDrawn = (value) => value === null || /\|hidden$/.test(value);
+// rerender that the edit asks for (a rule that changes the Legend, or an edit
+// made while a rerender runs) leaves it out of the drawing and of the Result's
+// feature catalog (no presentation), as Generate does.
+const notDrawn = (value) => value == null || /\|hidden$/.test(value);
 
 test('batch drawer lists and edits the features of the displayed Result', async ({ page }) => {
   test.setTimeout(300_000);
@@ -103,7 +104,8 @@ test('batch edits shown on another Result reach its export, its Session, and Und
   await selectResult(page, 1);
   const shown = await featurePresentation(page, ['TESTB_0001', 'TESTB_0004']);
   expect(shown.TESTB_0001.results[1]).toBe('#ff0000|shown');
-  expect(shown.TESTB_0004.results[1]).toMatch(/\|hidden$/);
+  expect(notDrawn(shown.TESTB_0004.mounted)).toBe(true);
+  expect(notDrawn(shown.TESTB_0004.results[1])).toBe(true);
   expect(await legendCaptions(page, { source: 'result' })).not.toContain('GC content');
 
   const [exportDownload] = await Promise.all([
@@ -124,7 +126,7 @@ test('batch edits shown on another Result reach its export, its Session, and Und
       timeout: 60_000
     }).toBe('#ff0000|shown');
     await settle(fresh);
-    expect((await featurePresentation(fresh, ['TESTB_0004'])).TESTB_0004.mounted).toMatch(/\|hidden$/);
+    expect(notDrawn((await featurePresentation(fresh, ['TESTB_0004'])).TESTB_0004.mounted)).toBe(true);
     expect(await legendCaptions(fresh)).not.toContain('GC content');
   } finally {
     await fresh.context().close();

@@ -542,9 +542,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       || (state.generatedMode?.value && state.mode?.value !== state.generatedMode.value)) return false;
     patternDrafts.suspend();
     const token = patternDrafts.begin(row, value);
+    // OV-1133 (S4-Q5): the edit stays current while its draft does. A Result
+    // or catalog that an automatic rerender replaces meanwhile makes its
+    // preparation stale, and the write prepares again (`runSpecificRuleWrite`).
     return queueRuleWrite(async () => {
-      const snapshot = rulePreparation.snapshot();
-      const current = () => patternDrafts.isCurrent(row, token) && rulePreparation.isCurrent(snapshot) && isPatternEditAvailable();
+      const current = () => patternDrafts.isCurrent(row, token) && isPatternEditAvailable();
       try {
         const applied = await runSpecificRuleWrite(drawing, reviseRow(row, { val: String(value ?? ''), fromFile: false }),
           'Edit specific color rule', { isCurrent: current });

@@ -191,6 +191,59 @@ test('a rule run waits for the automatic rerender in flight before it prepares (
   assert(s.preparation.isPrepared([saved,candidate]));
 });
 
+// OV-1133 (S4-Q5): a pattern edit made while the automatic rerender runs
+// waits for it. The rerender replaces the Result the edit's turn began
+// against, so the edit prepares again against the new Result and applies; it
+// is not dropped as stale.
+test('a pattern edit made during the automatic rerender waits for it, then applies (OV-1133)', async () => {
+  const s=setup();
+  await s.actions.commitSpecificRules(() => [{feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}]);
+  const row=s.state.manualSpecificRules[0];
+  s.setRerendering(true);
+  const pending=s.actions.setSpecificRuleField(0,'val','b');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(row.val,'a','not before the rerender is idle');
+  // The rerender lands: its Result, then idle.
+  s.state.svgResultIdentity.value='rerendered';
+  s.state.results.value=[{name:'figure',content:'rerendered'}];
+  s.setRerendering(false);
+  assert.equal(await pending,true);
+  assert.equal(row.val,'b');
+  assert.equal(s.actions.specificRulePatternDraft(row),null,'no draft stays');
+  assert.equal(s.transactions.length,2);
+});
+
+// The edit that waits is the edit of its Session: a Session operation made
+// while it waits (a Load, Reset Settings, an Undo across a Load, or one still
+// running when the rerender ends) supersedes it, and nothing is committed onto
+// the other Session.
+for (const operation of ['Load', 'Reset Settings', 'Undo across a Load', 'Session pending']) {
+  test(`a pattern edit waiting for the automatic rerender is superseded by ${operation}`, async () => {
+    const s=setup();
+    await s.actions.commitSpecificRules(() => [{feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}]);
+    s.setRerendering(true);
+    const pending=s.actions.setSpecificRuleField(0,'val','b');
+    await new Promise(resolve => setImmediate(resolve));
+    const replace = (rows) => s.state.manualSpecificRules.splice(0, s.state.manualSpecificRules.length, ...rows);
+    if (operation === 'Load') {
+      replace([{feat:'CDS',qual:'gene',val:'z',color:'#445566',cap:'Loaded'}]);
+      s.actions.clearSpecificRulePatternDrafts();
+    }
+    if (operation === 'Reset Settings') { s.actions.clearSpecificRulePatternDrafts(); replace([]); }
+    // History restores copies of the rows it saved.
+    if (operation === 'Undo across a Load') replace(s.state.manualSpecificRules.map(rule => ({...rule})));
+    if (operation === 'Session pending') s.state.sessionOperationAvailability = () => ({ status: 'busy' });
+    const after=JSON.stringify(s.state.manualSpecificRules);
+    s.state.svgResultIdentity.value='rerendered';
+    s.state.results.value=[{name:'figure',content:'rerendered'}];
+    s.setRerendering(false);
+    const outcome=await pending;
+    assert.notEqual(outcome,true);
+    assert.equal(JSON.stringify(s.state.manualSpecificRules),after,'nothing is committed onto the other Session');
+    assert.equal(s.transactions.length,1);
+  });
+}
+
 test('a caption written in two colors keeps a row per color, each under its own key, and stays as written',async()=>{
   const s=setup();s.state.manualSpecificRules.push(...rules.map(rule=>({...rule})));
   await s.actions.setSpecificRuleField(0,'val','a');
