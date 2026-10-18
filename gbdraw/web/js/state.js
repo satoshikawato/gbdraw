@@ -36,6 +36,7 @@ import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import { toRaw } from './utils/vue-raw.js';
 import { computed as typedComputed } from './utils/reactivity.js';
+import { CANVAS_SLICE } from './services/drawing/canvas.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -1032,6 +1033,9 @@ const createDrawingState = (drawingMode) => {
   const featureVisibilityManualRules = reactive([]);
   const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
   const labelFilters = createDefaultLabelFilterState();
+  // The editor edits a slice owns (services/drawing/): the drawing shows its
+  // view's members, and only the slice writes them, through its handle.
+  const canvas = CANVAS_SLICE.create();
   return Object.freeze({
     // Settings
     form,
@@ -1086,7 +1090,7 @@ const createDrawingState = (drawingMode) => {
     orthogroupDescriptionOverrides: reactive({}),
     // User names of groups whose members no longer form one group, keyed by member set (D-21).
     orthogroupDormantOverrides: reactive({}),
-    canvasPadding: reactive({ top: 0, right: 0, bottom: 0, left: 0 }),
+    ...canvas.view,
     // Derived from the members above
     activeLayoutPreferences,
     // The Linear record cards a Generate draws, in file order (read-only; the
@@ -1102,7 +1106,9 @@ const createDrawingState = (drawingMode) => {
       .map((rule) => normalizeFeatureVisibilityRule(rule))),
     hasPendingPaletteDraft: typedComputed(
       () => !paletteInstantPreviewEnabled.value && String(pendingPaletteName.value || '').trim() !== ''
-    )
+    ),
+    // The handles a slice's writers take.
+    slices: Object.freeze({ canvas: canvas.handle })
   });
 };
 const circularDrawing = createDrawingState('circular');

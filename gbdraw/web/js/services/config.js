@@ -254,6 +254,7 @@ import {
   unscopedDraftRows,
   validateModeSliceFields
 } from './mode-scoped-migration.js';
+import { CANVAS_SLICE } from './drawing/canvas.js';
 
 const { nextTick, ref } = window.Vue;
 
@@ -1297,7 +1298,7 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
     },
     ui: {
       layoutPreferences: cloneJsonData(drawing.layoutPreferences[mode]),
-      canvasPadding: { ...drawing.canvasPadding },
+      canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
       pendingPaletteName: drawing.pendingPaletteName.value,
       pendingPaletteColors: cloneColors(drawing.pendingPaletteColors.value),
       linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
@@ -1364,7 +1365,9 @@ const applyModeSliceData = (drawing, mode, slice, {
       ...cloneJsonData(drawing.layoutPreferences), [mode]: cloneJsonData(ui.layoutPreferences)
     });
   }
-  if (applyCanvasPadding && ui.canvasPadding !== undefined) Object.assign(drawing.canvasPadding, readCanvasPadding(ui.canvasPadding).value);
+  if (applyCanvasPadding && ui.canvasPadding !== undefined) {
+    CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: readCanvasPadding(ui.canvasPadding).value });
+  }
   restorePendingPaletteFromSession(drawing, ui);
   reconcileImportedLinearTypographyLink({ adv: drawing.adv, linked: drawing.linearTypographyLinked, ui });
 };
@@ -4709,7 +4712,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
   const ui = {
     title: String(state.sessionTitle.value || ''),
     mode: state.mode.value,
-    canvasPadding: { ...drawing.canvasPadding },
+    canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
     selectedResultIndex: state.selectedResultIndex.value,
     generatedLegendPosition: state.generatedLegendPosition.value,
     generatedMode: state.generatedMode.value,
@@ -4809,7 +4812,7 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
     state.plotTitleUserOffset.y = Number(ui.plotTitleUserOffset.y) || 0;
   }
 
-  if (ui.canvasPadding) Object.assign(drawing.canvasPadding, readCanvasPadding(ui.canvasPadding).value);
+  if (ui.canvasPadding) CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: readCanvasPadding(ui.canvasPadding).value });
   if (restorePreviewNavigation) {
     if (ui.canvasPan) {
       state.canvasPan.x = Number(ui.canvasPan.x) || 0;
@@ -6472,7 +6475,9 @@ const importSessionDocument = async (e, options = {}) => {
     }
 
     const shownPadding = modeSlices[displayMode].ui?.canvasPadding;
-    if (shownPadding !== undefined) Object.assign(shownDrawing.canvasPadding, readCanvasPadding(shownPadding).value);
+    if (shownPadding !== undefined) {
+      CANVAS_SLICE.install(shownDrawing.slices.canvas, { canvasPadding: readCanvasPadding(shownPadding).value });
+    }
     if (ui.canvasPan) {
       state.canvasPan.x = ui.canvasPan.x || 0;
       state.canvasPan.y = ui.canvasPan.y || 0;

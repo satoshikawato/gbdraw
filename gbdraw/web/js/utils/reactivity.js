@@ -3,7 +3,10 @@
 // global `window.Vue`, which web-globals.d.ts leaves untyped). The state
 // module and the drawing slices (services/drawing/) build their members here,
 // so a member's type is written once, where it is created. Vue is read at each
-// call: a unit test sets its own `window.Vue` before it creates a member.
+// call: a unit test sets its own `window.Vue` before it creates a member, and
+// without a page (a unit test's fixture) a member is a plain value.
+
+const vue = () => globalThis.window?.Vue;
 
 /**
  * A writable Vue ref.
@@ -33,7 +36,7 @@
  * @param {T} value
  * @returns {Ref<T>}
  */
-export const ref = (value) => window.Vue.ref(value);
+export const ref = (value) => vue()?.ref?.(value) ?? { value };
 
 /**
  * A reactive object over `value` (Vue `reactive`).
@@ -41,11 +44,11 @@ export const ref = (value) => window.Vue.ref(value);
  * @param {T} value
  * @returns {T}
  */
-export const reactive = (value) => window.Vue.reactive(value);
+export const reactive = (value) => vue()?.reactive?.(value) ?? value;
 
 /**
  * @template T
  * @param {() => T} getter
  * @returns {{ readonly value: T }}
  */
-export const computed = (getter) => window.Vue.computed(getter);
+export const computed = (getter) => vue()?.computed?.(getter) ?? { get value() { return getter(); } };

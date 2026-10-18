@@ -15,6 +15,7 @@ import {
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { CANVAS_SLICE } from './drawing/canvas.js';
 /** @import { HistoryArtifactHandle } from './history.js' */
 
 export { cloneJsonData };
@@ -492,12 +493,7 @@ const appUiPart = (ui = {}) => Object.fromEntries(
  */
 const applyDrawingUiIntentData = (drawing, ui = {}) => {
   if (ui.layoutPreferences) replaceLayoutPreferences(drawing.layoutPreferences, ui.layoutPreferences);
-  const { canvasPadding } = ui;
-  if (drawing.canvasPadding && canvasPadding) {
-    ['top', 'right', 'bottom', 'left'].forEach((side) => {
-      drawing.canvasPadding[side] = Number(canvasPadding[side]) || 0;
-    });
-  }
+  CANVAS_SLICE.install(drawing.slices.canvas, ui);
   if (typeof ui.linearTypographyLinked === 'boolean') setRef(drawing.linearTypographyLinked, ui.linearTypographyLinked);
   if (ui.pendingPaletteName !== undefined) setRef(drawing.pendingPaletteName, String(ui.pendingPaletteName || ''));
   if (ui.pendingPaletteColors) setRef(drawing.pendingPaletteColors, clonePlainObject(ui.pendingPaletteColors));
@@ -550,7 +546,7 @@ const buildFallbackUiStateData = (state, drawing) => ({
   losatProgram: getRef(drawing.losatProgram, 'blastn'),
   selectedResultIndex: getRef(state.selectedResultIndex, 0),
   downloadDpi: getRef(state.downloadDpi, 300),
-  canvasPadding: { ...(drawing.canvasPadding || {}) },
+  canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
   generatedLegendPosition: getRef(state.generatedLegendPosition, 'left'),
   generatedMode: getRef(state.generatedMode, 'circular'),
   generatedMultiRecordCanvas: Boolean(getRef(state.generatedMultiRecordCanvas, false)),
@@ -589,12 +585,7 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
     setRef(state.generatedCircularPlotTitlePosition, ui.generatedCircularPlotTitlePosition);
   }
   replaceLayoutPreferences(drawing.layoutPreferences, ui.layoutPreferences);
-  if (drawing.canvasPadding && ui.canvasPadding) {
-    drawing.canvasPadding.top = Number(ui.canvasPadding.top) || 0;
-    drawing.canvasPadding.right = Number(ui.canvasPadding.right) || 0;
-    drawing.canvasPadding.bottom = Number(ui.canvasPadding.bottom) || 0;
-    drawing.canvasPadding.left = Number(ui.canvasPadding.left) || 0;
-  }
+  CANVAS_SLICE.install(drawing.slices.canvas, ui);
   setRef(state.autoLabelReflowEnabled, Boolean(ui.autoLabelReflow));
   setRef(state.paletteInstantPreviewEnabled, Boolean(ui.paletteInstantPreviewEnabled));
   if (ui.appliedPaletteName !== undefined) setRef(state.appliedPaletteName, String(ui.appliedPaletteName || 'default'));

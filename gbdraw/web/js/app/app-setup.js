@@ -5273,7 +5273,7 @@ export const createAppSetup = () => {
     const padding = state.activeDrawing().canvasPadding;
     return [state.diagramOffset, state.legendCurrentOffset, state.plotTitleUserOffset, state.lengthBarUserOffset, canvasPan].some(moved)
       || zoom.value !== 1
-      || ['top', 'right', 'bottom', 'left'].some((side) => Number(padding[side]));
+      || /** @type {const} */ (['top', 'right', 'bottom', 'left']).some((side) => Number(padding[side]));
   });
 
   /** @param {Element | null} target */

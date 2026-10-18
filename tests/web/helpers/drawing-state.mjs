@@ -5,6 +5,11 @@
 // key is a generated artifact, a project input or cache, an app setting or
 // catalog, transient, or the drawing store. Each diagram mode has its own
 // drawing (PR-1, Session 46 `modes`).
+import { CANVAS_SLICE } from '../../../gbdraw/web/js/services/drawing/canvas.js';
+
+// The slices that own a drawing's editor edits (gbdraw/web/js/services/drawing/),
+// by the name of their handle in `drawing.slices`.
+export const DRAWING_SLICES = Object.freeze({ canvas: CANVAS_SLICE });
 
 export const DRAWING_DRAFT_KEYS = Object.freeze([
   'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',
@@ -28,7 +33,12 @@ export const DRAWING_DERIVED_KEYS = Object.freeze([
   'hasActiveLinearLosatIntent', 'hasActiveLinearUploadIntent', 'featureVisibilityRules', 'hasPendingPaletteDraft'
 ]);
 
-export const DRAWING_KEYS = Object.freeze([...DRAWING_DRAFT_KEYS, ...DRAWING_EDITOR_KEYS, ...DRAWING_DERIVED_KEYS]);
+// The handles of the drawing's slices, which a slice's writers take.
+export const DRAWING_HANDLE_KEYS = Object.freeze(['slices']);
+
+export const DRAWING_KEYS = Object.freeze([
+  ...DRAWING_DRAFT_KEYS, ...DRAWING_EDITOR_KEYS, ...DRAWING_DERIVED_KEYS, ...DRAWING_HANDLE_KEYS
+]);
 
 // What a Generate produces and shows: the Results and their catalog, run facts,
 // generated Legend inventory and colors, and the user's offsets on the Result.
@@ -99,16 +109,40 @@ export const TRANSIENT_KEYS = Object.freeze([
 export const STORE_KEYS = Object.freeze(['drawings', 'activeDrawing']);
 
 // A `state`-shaped node fixture's drawing: its own drawing members, by reference.
-export const drawingOf = (fixture) => Object.freeze(Object.fromEntries(
+export const drawingOf = (fixture) => Object.freeze(withSliceHandles(Object.fromEntries(
   DRAWING_KEYS.filter((key) => Object.hasOwn(fixture, key)).map((key) => [key, fixture[key]])
-));
+)));
+
+// A fixture drawing's slice handles (`drawing.slices`), over the members the
+// fixture holds: a writer writes the fixture's own objects. A handle is made
+// when it is first read, so a fixture without Vue makes none it does not use.
+// Not enumerable, so a test that clones or serializes the fixture sees only
+// its members; a drawing that has handles keeps them.
+const withSliceHandles = (drawing) => {
+  if (!drawing || typeof drawing !== 'object' || 'slices' in drawing || Object.isFrozen(drawing)) return drawing;
+  const handles = {};
+  const slices = {};
+  for (const [name, slice] of Object.entries(DRAWING_SLICES)) {
+    Object.defineProperty(slices, name, {
+      enumerable: true,
+      get: () => {
+        if (!handles[name]) {
+          const members = Object.fromEntries(slice.members.filter((key) => key in drawing).map((key) => [key, drawing[key]]));
+          handles[name] = slice.create(members).handle;
+        }
+        return handles[name];
+      }
+    });
+  }
+  return Object.defineProperty(drawing, 'slices', { value: Object.freeze(slices), configurable: true });
+};
 
 // The fixture with the drawing store that services and owners read
 // (`state.drawings`, `state.activeDrawing()`): the fixture is the drawing of
 // both modes, so a member the test replaces later is read. A test of per-mode
 // behavior uses `withModeDrawings`. The store is not enumerable, so a test that
 // clones or serializes the fixture sees only its members.
-export const withDrawings = (fixture) => Object.defineProperties(fixture, {
+export const withDrawings = (fixture) => Object.defineProperties(withSliceHandles(fixture), {
   drawings: { value: Object.freeze({ circular: fixture, linear: fixture }), configurable: true },
   activeDrawing: { value: () => fixture, configurable: true }
 });
@@ -116,6 +150,6 @@ export const withDrawings = (fixture) => Object.defineProperties(fixture, {
 // The fixture with one drawing per mode, as in state.js: `activeDrawing()`
 // follows `fixture.mode.value`.
 export const withModeDrawings = (fixture, { circular, linear }) => Object.defineProperties(fixture, {
-  drawings: { value: Object.freeze({ circular, linear }), configurable: true },
+  drawings: { value: Object.freeze({ circular: withSliceHandles(circular), linear: withSliceHandles(linear) }), configurable: true },
   activeDrawing: { value: () => (fixture.mode?.value === 'linear' ? linear : circular), configurable: true }
 });

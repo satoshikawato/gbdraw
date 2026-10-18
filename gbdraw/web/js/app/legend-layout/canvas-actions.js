@@ -4,6 +4,7 @@ import {
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
+import { CANVAS_SLICE } from '../../services/drawing/canvas.js';
 
 /**
  * @typedef {object} LegendCanvasActionsOptions
@@ -46,10 +47,7 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.canvasPadding.top = 0;
-    drawing.canvasPadding.right = 0;
-    drawing.canvasPadding.bottom = 0;
-    drawing.canvasPadding.left = 0;
+    CANVAS_SLICE.reset(drawing.slices.canvas);
     return applyCanvasPadding();
   };
 
