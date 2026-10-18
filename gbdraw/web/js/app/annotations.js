@@ -5,6 +5,7 @@
  * @import { AnnotationItem, AnnotationSet, AnnotationStyle, AnnotationTarget } from '../services/annotation-state.js'
  */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from '../services/annotation-state.js';
+import { nextCopyId } from '../services/track-slot-validation.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
 import { encodeAnnotationTableWithNotice, parseAnnotationTableWithNotice } from './annotations/table-codec.js';
 import {
@@ -153,7 +154,7 @@ export const createAnnotationEditor = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const copy = createAnnotationSet(JSON.parse(JSON.stringify(set)));
-    copy.id = uniqueAnnotationSetId(drawing.annotationSets);
+    copy.id = nextCopyId(set.id, drawing.annotationSets);
     drawing.annotationSets.push(copy);
     return copy;
   };

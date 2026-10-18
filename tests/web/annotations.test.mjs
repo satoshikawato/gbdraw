@@ -349,13 +349,15 @@ editor.setAnnotationTargetKind(created.annotations[0], 'coordinateSpan');
 assert.deepEqual(created.annotations[0].target.record, { kind: 'recordIndex', index: 1 });
 const copied = editor.duplicateAnnotationSet(created);
 assert.equal(state.annotationSets.length, 2);
-// OV-1139: a copy takes the ID Add set gives, the default set ID numbered with
-// the first unused number, as a duplicated track slot does.
-assert.equal(copied.id, 'annotations');
+// OV-1139 (Owner decision 2026-10-18): a copy is named from the source set's
+// own ID with the first unused number from 2, as a duplicated track slot is.
+assert.equal(copied.id, 'review_2');
 assert.deepEqual(copied.annotations.map((item) => item.id), created.annotations.map((item) => item.id));
 const copyOfCopy = editor.duplicateAnnotationSet(copied);
-assert.equal(copyOfCopy.id, 'annotations_2');
-assert.equal(editor.duplicateAnnotationSet(copyOfCopy).id, 'annotations_3');
+assert.equal(copyOfCopy.id, 'review_3');
+assert.equal(editor.duplicateAnnotationSet(created).id, 'review_4');
+// Add set keeps the default set ID rule.
+assert.equal(editor.addAnnotationSet().id, 'annotations');
 state.annotationSets.splice(2);
 editor.removeAnnotationSet(copied);
 assert.equal(state.annotationSets.length, 1);

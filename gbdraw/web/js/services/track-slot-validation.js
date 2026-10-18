@@ -791,11 +791,10 @@ export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntri
 );
 
 /**
- * The ID of a track slot or annotation set that Add or Duplicate creates, in
- * both modes: the default ID of its kind (a slot's renderer, `annotations` for
- * a set) while nothing uses it, then that ID numbered `_2`, `_3`, and so on,
- * taking the first unused number. A copy of `gc_skew_2` is therefore
- * `gc_skew_3`, not `gc_skew_2_2`. IDs compare after trimming.
+ * The ID of a track slot or annotation set that Add creates, in both modes: the
+ * default ID of its kind (a slot's renderer, `annotations` for a set) while
+ * nothing uses it, then that ID numbered `_2`, `_3`, and so on, taking the
+ * first unused number. IDs compare after trimming.
  * @param {string} baseId
  * @param {ReadonlyArray<{ id?: unknown } | null | undefined>} items
  * @returns {string}
@@ -805,6 +804,22 @@ export const nextNumberedId = (baseId, items) => {
   let id = baseId;
   for (let suffix = 2; usedIds.has(id); suffix += 1) id = `${baseId}_${suffix}`;
   return id;
+};
+
+/**
+ * The ID of a track slot or annotation set that Duplicate creates, in both
+ * modes: the source's own ID without one trailing `_<digits>`, numbered with
+ * the first unused number from 2. A copy never takes the bare base, so copying
+ * `my_skew` gives `my_skew_2`, and a copy of `my_skew_2` then gives `my_skew_3`,
+ * not `my_skew_2_2`.
+ * @param {string} sourceId
+ * @param {ReadonlyArray<{ id?: unknown } | null | undefined>} items
+ * @returns {string}
+ */
+export const nextCopyId = (sourceId, items) => {
+  const trimmed = sourceId.trim();
+  const baseId = trimmed.replace(/_\d+$/, '') || trimmed;
+  return nextNumberedId(baseId, [...items, { id: baseId }]);
 };
 
 /**

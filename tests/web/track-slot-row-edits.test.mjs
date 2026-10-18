@@ -151,9 +151,10 @@ for (const [mode, create] of Object.entries(MODES)) {
     assert.equal(editor.canDuplicate(slot), false);
   });
 
-  // OV-1099: both modes name a copy by its renderer's default ID and the first
-  // unused number, so a copy of a copy is numbered on, not suffixed again.
-  test(`${mode}: Duplicate names the copy with the next unused number`, () => {
+  // OV-1099 (Owner decision 2026-10-18): both modes name a copy from the source
+  // row's own ID, without one trailing number, and the first unused number from
+  // 2, so a copy of a copy is numbered on, not suffixed again.
+  test(`${mode}: Duplicate names the copy from the source row's ID with the next unused number`, () => {
     const editor = create(ROWS[mode]());
     const ids = () => editor.slots().map((slot) => slot.id);
     editor.duplicate(ids().indexOf('gc_skew'));
@@ -162,6 +163,28 @@ for (const [mode, create] of Object.entries(MODES)) {
     assert.deepEqual(ids().slice(-3), ['gc_skew', 'gc_skew_2', 'gc_skew_3']);
     const copy = editor.slots().at(-1);
     assert.equal(copy.params.positive_color, '#ff0000', 'the copy keeps the source params');
+  });
+
+  test(`${mode}: Duplicate of a row with its own ID keeps that ID as the base`, () => {
+    const rows = ROWS[mode]();
+    rows.at(-1).id = 'my_skew';
+    const editor = create(rows);
+    const ids = () => editor.slots().map((slot) => slot.id);
+    editor.duplicate(ids().indexOf('my_skew'));
+    assert.deepEqual(ids().slice(-2), ['my_skew', 'my_skew_2']);
+    editor.duplicate(ids().indexOf('my_skew'));
+    assert.deepEqual(ids().slice(-3), ['my_skew', 'my_skew_3', 'my_skew_2'], 'a second copy of the source takes the next free number');
+    editor.duplicate(ids().indexOf('my_skew_2'));
+    assert.deepEqual(ids().slice(-4), ['my_skew', 'my_skew_3', 'my_skew_2', 'my_skew_4'], 'a copy of a copy is numbered on');
+  });
+
+  test(`${mode}: a copy never takes the bare base ID, even when it is free`, () => {
+    const rows = ROWS[mode]();
+    rows.at(-1).id = 'my_skew_2';
+    const editor = create(rows);
+    const ids = () => editor.slots().map((slot) => slot.id);
+    editor.duplicate(ids().indexOf('my_skew_2'));
+    assert.deepEqual(ids().slice(-2), ['my_skew_2', 'my_skew_3']);
   });
 
   // TK-10: Reset rebuilds from the loaded Depth series; Show Depth is not an

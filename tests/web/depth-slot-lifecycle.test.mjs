@@ -97,7 +97,8 @@ const MODES = {
         change: (nextSourced, nextWidth) => editor.changeCircularDepthSources(() => {
           state.files.c_depth = sourceRow(nextSourced, nextWidth);
         }),
-        issue: (index) => editor.circularTrackSlotIssue(state.adv.circular_track_slots[index], index)
+        issue: (index) => editor.circularTrackSlotIssue(state.adv.circular_track_slots[index], index),
+        duplicate: (index) => editor.duplicateCircularTrackSlot(index)
       };
     }
   },
@@ -226,6 +227,22 @@ test('linear: a Duplicate of an unedited Depth row is managed and leaves with th
   editor.change([], 1);
   assert.deepEqual(depthRows(editor.slots()), []);
 });
+
+// OV-1099 (Owner decision 2026-10-18): a copy is named from the source row's
+// ID, so a copy of a Depth row with its own ID is a manual row like its source:
+// it stays, with its row issue, when the last Depth source goes, while the
+// managed row leaves. (Before, the copy took a managed `depth_<n>` ID.)
+for (const [mode, adapter] of Object.entries(MODES)) {
+  test(`${mode}: a Duplicate of a Depth row with its own ID is manual and stays without a source`, () => {
+    const editor = adapter.create([{ id: 'depth', track: 0 }, { id: 'my_depth', track: 0 }], [0], 1);
+    editor.duplicate(editor.slots().findIndex((slot) => slot.id === 'my_depth'));
+    assert.deepEqual(depthRows(editor.slots()), ['depth:0:on', 'my_depth:0:on', 'my_depth_2:0:on']);
+    editor.change([], 1);
+    assert.deepEqual(depthRows(editor.slots()), ['my_depth:0:on', 'my_depth_2:0:on']);
+    const index = editor.slots().findIndex((slot) => slot.id === 'my_depth_2');
+    assert.match(editor.issue(index), /Depth track 'my_depth_2' has no logical Depth source\./);
+  });
+}
 
 // TK-08: a row's Depth legend label is the series name (setDepthTrackLegendLabelForSlot
 // renames the series), so its help and the series card's say so and give the
