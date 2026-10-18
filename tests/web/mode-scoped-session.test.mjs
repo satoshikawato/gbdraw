@@ -25,7 +25,7 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
 
-const { SESSION_VERSION, assertActiveModeInputs, exportSession, importSession, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, assertDrawingInputs, exportSession, importSession, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -446,8 +446,8 @@ test('a Linear drawing with no ON record names the fix', () => {
   const sourceState = withModeDrawings({
     files: {}, lInputType: { value: 'gb' }, linearSeqs: [{ uid: 'a', gb: {} }, { uid: 'b', gb: {} }]
   }, { circular: {}, linear: { recordsOff: ['a', 'b'] } });
-  assert.throws(() => assertActiveModeInputs('linear', sourceState),
+  assert.throws(() => assertDrawingInputs(modeDrawing(sourceState, 'linear'), sourceState),
     (error) => error.code === 'RECORD_SELECTION' && error.context.reason === 'NONE_DRAWN');
   modeDrawing(sourceState, 'linear').recordsOff = ['a'];
-  assert.doesNotThrow(() => assertActiveModeInputs('linear', sourceState));
+  assert.doesNotThrow(() => assertDrawingInputs(modeDrawing(sourceState, 'linear'), sourceState));
 });

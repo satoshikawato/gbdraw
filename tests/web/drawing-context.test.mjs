@@ -69,9 +69,9 @@ test('every state key and drawing member is in exactly one class', () => {
 test('only the drawings hold the drawing keys, one drawing per mode', () => {
   const circular = modeDrawing(state, 'circular');
   const linear = modeDrawing(state, 'linear');
-  assert.deepEqual([...state.drawings.keys()], ['circular', 'linear']);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular', 'linear']);
   assert.notEqual(circular, linear, 'each diagram mode has its own drawing');
-  assert.ok(state.drawings instanceof Map && Object.isFrozen(circular) && Object.isFrozen(linear));
+  assert.ok(Object.isFrozen(circular) && Object.isFrozen(linear));
   assert.deepEqual(Object.keys(circular), [...DRAWING_IDENTITY_KEYS, ...DRAWING_KEYS]);
   assert.deepEqual(Object.keys(linear), [...DRAWING_IDENTITY_KEYS, ...DRAWING_KEYS]);
   assert.deepEqual([circular.id, circular.mode, linear.id, linear.mode], ['circular', 'circular', 'linear', 'linear']);

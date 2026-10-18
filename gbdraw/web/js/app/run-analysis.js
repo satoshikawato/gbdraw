@@ -9,7 +9,6 @@
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
-import { drawingIdOfMode } from '../services/drawing-view.js';
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
@@ -1447,7 +1446,8 @@ export const executeCanonicalRenderCandidate = async ({
  *   The Session owner's commit of the live setting values an automatic rerender drew (R1 (c)).
  * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
- * @property {() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
+ * @property {(drawing: DrawingState) => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact, with the edits of `drawing`.
+ * @property {() => DrawingState} displayedArtifactDrawing The drawing the displayed Result belongs to.
  * @property {() => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
  * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
  * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: unknown[]) => void }) => void} installRedrawnArtifact
@@ -1472,7 +1472,7 @@ export const executeCanonicalRenderCandidate = async ({
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settlePendingInputs] The input reads Generate waits for before it reads the drawing:
  *   ring row names (D12) and auxiliary file imports still applying (OV-1193).
- * @property {((mode: string, state: any) => void) | null} [assertActiveModeInputs]
+ * @property {((drawing: DrawingState, state: any) => void) | null} [assertDrawingInputs]
  * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
  *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
  *   services/config.js owns the active-mode input check shared with Save.
@@ -1501,6 +1501,7 @@ export const createRunAnalysis = ({
   commitLiveSettingValues = () => {},
   captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
+  displayedArtifactDrawing,
   captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet,
   installRedrawnArtifact,
@@ -1523,7 +1524,7 @@ export const createRunAnalysis = ({
   // D12, OV-1193: the input reads still applying settle before Generate reads the drawing.
   settlePendingInputs = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
-  assertActiveModeInputs = null,
+  assertDrawingInputs = null,
   readDraftSignature = null,
   readHistoryStepSerial = () => 0,
   adoptDrawnWrite = (write) => write(),
@@ -1643,10 +1644,6 @@ export const createRunAnalysis = ({
           slots: request.mode === 'linear' ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots
         })
   );
-  // A target-record transform and a label reflow draw the committed Results
-  // again, with the settings and edits of the committed request's mode.
-  /** @param {Record<string, any> | null | undefined} committed */
-  const committedDrawing = (committed) => state.drawingOf(drawingIdOfMode(committed?.renderRequest?.mode === 'linear' ? 'linear' : 'circular'));
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   // The latest request that makes the running iteration stale: an editor
@@ -1880,15 +1877,15 @@ export const createRunAnalysis = ({
   /** @type {ReadonlySet<string>} */
   const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
   /**
-   * Record discovery read every source input of `drawingMode`: a shown
-   * Generate failure about those inputs no longer holds, so it ends here.
-   * @param {string} drawingMode
+   * Record discovery read every source input of `drawing`: a shown Generate
+   * failure about those inputs no longer holds, so it ends here.
+   * @param {DrawingState} drawing
    */
-  const releaseSourceInputFailure = (drawingMode) => {
-    if (!sourceInputFailure || sourceInputFailure.mode !== drawingMode
+  const releaseSourceInputFailure = (drawing) => {
+    if (!sourceInputFailure || sourceInputFailure.mode !== drawing.mode
       || errorLog.value !== sourceInputFailure.error) return;
     try {
-      assertActiveModeInputs?.(drawingMode, state);
+      assertDrawingInputs?.(drawing, state);
     } catch (_) {
       return;
     }
@@ -2104,7 +2101,7 @@ export const createRunAnalysis = ({
    * @param {{ recordId?: string } | null} [subjectEntry]
    */
   const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
-    const drawing = state.drawingOf(drawingIdOfMode('linear'));
+    const drawing = state.drawingOfMode('linear');
     return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
   };
 
@@ -2190,7 +2187,7 @@ export const createRunAnalysis = ({
    * @param {unknown} customName
    */
   const downloadLosatPair = async (edgeKey, customName) => {
-    const drawing = state.drawingOf(drawingIdOfMode('linear'));
+    const drawing = state.drawingOfMode('linear');
     const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
@@ -2222,7 +2219,7 @@ export const createRunAnalysis = ({
    * @param {unknown} customName
    */
   const setLosatPairFilename = (edgeKey, customName) => {
-    const drawing = state.drawingOf(drawingIdOfMode('linear'));
+    const drawing = state.drawingOfMode('linear');
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const entry = getLosatCacheInfoEntry(edgeKey);
@@ -2309,7 +2306,7 @@ export const createRunAnalysis = ({
   };
 
   const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
-    const drawing = state.drawingOf(drawingIdOfMode('circular'));
+    const drawing = state.drawingOfMode('circular');
     // An inactive Circular source keeps its records and Multi-Record Canvas
     // order; only a read still running for it is superseded.
     if (mode.value !== 'circular') {
@@ -2414,7 +2411,7 @@ export const createRunAnalysis = ({
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
       const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...nextPositions);
-      if (nextRecords.length > 0) releaseSourceInputFailure('circular');
+      if (nextRecords.length > 0) releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: nextRecords.length });
     } catch (error) {
       if (
@@ -2577,7 +2574,7 @@ export const createRunAnalysis = ({
     let generationAbortController = null;
     /** @type {AbortSignal | null} */
     let generationAbortSignal = null;
-    const committedArtifactHandle = generatedArtifactHandle || await captureGeneratedArtifactHandle();
+    const committedArtifactHandle = generatedArtifactHandle || await captureGeneratedArtifactHandle(drawing);
     /** @type {ReturnType<typeof generatedArtifactTransactionOwner.build> | null} */
     let activatedGeneratedArtifactCandidate = null;
     /** @type {ReadyReceipt | null} */
@@ -5579,7 +5576,7 @@ export const createRunAnalysis = ({
       // UI-07: the active mode's input check runs before anything here starts
       // the diagram Worker, so a missing input is named at once.
       try {
-        assertActiveModeInputs?.(mode.value, state);
+        assertDrawingInputs?.(drawing, state);
       } catch (cause) {
         outcome = await failOperation(cause, { handle: null, stage: 'request-validation',
           isCurrent: isCurrentAlert, isCurrentOperation, recovery: results.value.length ? 'preserved' : 'no-result' });
@@ -5651,7 +5648,7 @@ export const createRunAnalysis = ({
               }
             }
           )
-        : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle());
+        : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle(drawing));
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
         completedLosatSearch = null;
@@ -5716,7 +5713,7 @@ export const createRunAnalysis = ({
     const generationAbortSignal = generationAbortController?.signal || null;
     activeLosatAbortController = generationAbortController;
     const committedArtifactHandle = generatedArtifactHandle
-      || await captureGeneratedArtifactHandle();
+      || await captureGeneratedArtifactHandle(drawing);
     /** @type {ReturnType<typeof generatedArtifactTransactionOwner.build> | null} */
     let activatedCandidate = null;
     /** @type {ReadyReceipt | null} */
@@ -5954,7 +5951,9 @@ export const createRunAnalysis = ({
     alignmentResetReceipt = undefined,
     operation = 'generate'
   }) => {
-    const drawing = committedDrawing(canonical);
+    // A target-record transform and a label reflow draw the committed Results
+    // again, with the settings and edits of the drawing they belong to.
+    const drawing = displayedArtifactDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     /** @type {Record<string, any> | null} */
@@ -6006,7 +6005,7 @@ export const createRunAnalysis = ({
               historyRecovery = beforeHandle.ownerSet.results.length ? 'restored' : 'no-result';
             }
           })
-        : await execute(await captureGeneratedArtifactHandle());
+        : await execute(await captureGeneratedArtifactHandle(drawing));
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
       }
@@ -6266,7 +6265,7 @@ export const createRunAnalysis = ({
         activeReflowRequestId = pendingReflowRequestId;
         const historyRequestedAt = pendingReflowRequestedAt;
         // Each iteration draws the drawing of the committed Session it starts from.
-        const drawing = committedDrawing(getCommittedCanonicalSession?.());
+        const drawing = displayedArtifactDrawing();
         let decorationContinuity;
         try {
           decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
@@ -6332,7 +6331,7 @@ export const createRunAnalysis = ({
   const requestLiveSettingApply = (requestPaths, mode) => {
     const committed = getCommittedCanonicalSession?.();
     if (requestPaths.length === 0 || !committed || committed.renderRequest?.mode !== mode) return false;
-    const pending = pendingLiveSettingsOf(committedDrawing(committed));
+    const pending = pendingLiveSettingsOf(displayedArtifactDrawing());
     requestPaths.forEach((path) => pending.add(path));
     labelReflowLastError.value = null;
     void runLabelReflow({ settings: requestPaths });

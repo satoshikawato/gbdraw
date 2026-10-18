@@ -133,10 +133,10 @@ export const TRANSIENT_KEYS = Object.freeze([
 ]);
 
 // The drawing store itself.
-export const STORE_KEYS = Object.freeze(['drawings', 'drawingList', 'drawingOf', 'activeDrawing']);
+export const STORE_KEYS = Object.freeze(['drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing']);
 
 // A `state`-shaped node fixture's drawing: its own drawing members, by reference.
-export const drawingOf = (fixture) => Object.freeze(withSliceHandles(Object.fromEntries(
+export const fixtureDrawing = (fixture) => Object.freeze(withSliceHandles(Object.fromEntries(
   DRAWING_KEYS.filter((key) => Object.hasOwn(fixture, key)).map((key) => [key, fixture[key]])
 )));
 
@@ -169,17 +169,19 @@ const withSliceHandles = (drawing) => {
 // mode names.
 export const modeDrawing = (state, mode) => state.drawingOf(drawingIdOfMode(mode));
 
-// The drawing store as state.js builds it: a ReadonlyMap by drawing ID in
-// creation order, with `drawingList` and `drawingOf`. A fake `state` spreads it.
+// The drawing store as state.js builds it: the drawings by ID in creation
+// order, read through `drawingList`, `drawingOf`, and `drawingOfMode`. A fake
+// `state` spreads it.
 export const drawingStore = (circular, linear) => {
   const drawings = new Map([[drawingIdOfMode('circular'), circular], [drawingIdOfMode('linear'), linear]]);
+  const drawingOf = (id) => {
+    if (!drawings.has(id)) throw new Error(`Unknown drawing ${id}`);
+    return drawings.get(id);
+  };
   return {
-    drawings,
     drawingList: () => [...drawings.values()],
-    drawingOf: (id) => {
-      if (!drawings.has(id)) throw new Error(`Unknown drawing ${id}`);
-      return drawings.get(id);
-    }
+    drawingOf,
+    drawingOfMode: (mode) => drawingOf(drawingIdOfMode(mode))
   };
 };
 
@@ -195,6 +197,7 @@ const storeProperties = (circular, linear) => Object.fromEntries(Object.entries(
 // members.
 export const withDrawings = (fixture) => Object.defineProperties(withSliceHandles(fixture), {
   ...storeProperties(fixture, fixture),
+  ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: drawingIdOfMode('circular'), configurable: true } }),
   activeDrawing: { value: () => fixture, configurable: true }
 });
 

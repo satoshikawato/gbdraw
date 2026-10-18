@@ -4,7 +4,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
-import { drawingIdOfMode, inputTypeKeyOf } from './drawing-view.js';
+import { inputTypeKeyOf } from './drawing-view.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
@@ -1020,18 +1020,18 @@ export const createHistorySnapshotService = ({
     throw new Error('createHistorySnapshotService requires state and fileStore.');
   }
 
-  // A History intent, checkpoint, or generated artifact holds the settings and
-  // edits of one diagram mode: the drawing of that mode.
+  // A generated artifact holds the settings and edits of the drawing of its
+  // mode (`generatedMode`, Circular when unset): the one reading of that mode.
   /**
-   * @param {unknown} mode
+   * @param {unknown} generatedMode
    * @returns {D}
    */
-  const drawingOf = (mode) => state.drawingOf(drawingIdOfMode(mode === 'linear' ? 'linear' : 'circular'));
+  const drawingOfGeneratedMode = (generatedMode) => state.drawingOfMode(generatedMode === 'linear' ? 'linear' : 'circular');
   // The drawing the displayed artifact belongs to: the drawing of its mode
   // (`generatedMode`). It differs from the shown drawing after a Load of a
   // Session with no Result whose request mode is not its `ui.mode`. Every
   // capture of the displayed artifact names its drawing so.
-  const displayedArtifactDrawing = () => drawingOf(getGeneratedArtifactRef(state.generatedMode, null));
+  const displayedArtifactDrawing = () => drawingOfGeneratedMode(getGeneratedArtifactRef(state.generatedMode, null));
 
   /** @type {((intent: HistorySnapshotData, context: Record<string, any>) => unknown) | null} */
   let afterApplyHistoryIntent = null;
@@ -1178,7 +1178,7 @@ export const createHistorySnapshotService = ({
     if (!ownerSet || typeof ownerSet !== 'object') {
       throw new Error('A generated artifact owner set is required.');
     }
-    const drawing = drawingOf(ownerSet.generatedMode);
+    const drawing = drawingOfGeneratedMode(ownerSet.generatedMode);
     const results = Array.isArray(ownerSet.results) ? ownerSet.results : [];
     const replacesShownResults = toRaw(results)
       !== toRaw(getGeneratedArtifactRef(state.results, []));
@@ -1449,12 +1449,14 @@ export const createHistorySnapshotService = ({
     });
   };
 
-  const captureGeneratedArtifactHandle = () => {
+  // The handle holds the edits of the drawing whose step or Generate captures
+  // it (the shown one), and its restore installs them in that drawing.
+  /** @param {D} drawing */
+  const captureGeneratedArtifactHandle = (drawing) => {
     recordStructuralMetric('generatedArtifactFullSignatureCount', 0);
     recordStructuralMetric('generatedArtifactHeavyTraversalCount', 0);
     recordStructuralMetric('generatedArtifactMutableIntentSnapshotCount', 1);
     const ownerSet = captureGeneratedArtifactOwnerSet();
-    const drawing = drawingOf(getRef(state.mode, 'circular'));
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: true })
       : buildFallbackUiStateData(state, drawing);
@@ -1533,6 +1535,7 @@ export const createHistorySnapshotService = ({
     ) ? currentGeneratedArtifactIdentity : null;
     return Object.freeze({
       kind: 'GeneratedArtifactHandle',
+      drawingId: drawing.id,
       ownerSet,
       mutableIntent,
       runtimeState,
@@ -1554,6 +1557,7 @@ export const createHistorySnapshotService = ({
    * the fields `captureGeneratedArtifactHandle` wrote beside them, as a restore reads them.
    * @typedef {Pick<HistoryArtifactHandle, 'retainedBytes' | 'fileIds' | 'identity'> & {
    *   kind?: unknown,
+   *   drawingId?: DrawingId,
    *   ownerSet?: GeneratedArtifactOwnerSet | null,
    *   mutableIntent?: Partial<GeneratedArtifactIntent>,
    *   runtimeState?: { canonical?: { committedCanonicalSession?: AlignmentResetCanonical | null } | null } | null,
@@ -1566,7 +1570,8 @@ export const createHistorySnapshotService = ({
     handle,
     { clearFailedGeneratePresentation = false } = {}
   ) => {
-    if (!handle || handle.kind !== 'GeneratedArtifactHandle') return false;
+    if (!handle || handle.kind !== 'GeneratedArtifactHandle' || !handle.drawingId) return false;
+    const { drawingId } = handle;
     await validateSimilarityAlignmentResetReceipt(
       handle.ownerSet?.similarityAlignmentResetReceipt,
       handle.runtimeState?.canonical?.committedCanonicalSession
@@ -1589,7 +1594,7 @@ export const createHistorySnapshotService = ({
       closeTransientState(state);
       const mutableIntent = handle.mutableIntent || {};
       const ui = mutableIntent.ui || {};
-      const drawing = drawingOf(getRef(state.mode, 'circular'));
+      const drawing = state.drawingOf(drawingId);
       const inputType = inputTypeKeyOf(drawing);
       if (ui[inputType]) setGeneratedArtifactRef(state[inputType], ui[inputType]);
       await nextTick();
@@ -2107,6 +2112,7 @@ export const createHistorySnapshotService = ({
     writeArtifactValues,
     installGeneratedArtifactOwnerSet,
     installRedrawnArtifact,
+    displayedArtifactDrawing,
     registerCapture,
     restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity,

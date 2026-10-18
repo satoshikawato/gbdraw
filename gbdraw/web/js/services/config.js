@@ -268,7 +268,7 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, clearLabelTextEdits, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE, clearFeatureOverrides } from './drawing/feature-edits.js';
-import { drawingIdOfMode, inputTypeKeyOf } from './drawing-view.js';
+import { inputTypeKeyOf } from './drawing-view.js';
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -2672,7 +2672,7 @@ const buildLoadedArtifactSlot = (set, {
   repairs?.push(...generatedLegend.repairs, ...sessionUiFieldRepairs(ui, 'otherModeResult.ui'));
   return createArtifactSlot({
     // The drawing of the set's mode.
-    drawing: state.drawingOf(drawingIdOfMode(mode)),
+    drawing: state.drawingOfMode(mode),
     values: {
       results,
       selectedResultIndex: Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
@@ -2780,7 +2780,7 @@ export const applyLabelFitValues = (drawing, values, mode) => {
  *   settings the app wrote (`applyCapturedConfigData`).
  */
 const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true, captured = false } = {}) => {
-  const mode = drawing === state.drawingOf(drawingIdOfMode('linear')) ? 'linear' : 'circular';
+  const mode = drawing === state.drawingOfMode('linear') ? 'linear' : 'circular';
   // The execution settings of a Session 44 or older draft or of a request
   // projection are app-level (`state.losatExecution`); the drawing keeps the
   // search settings. A group of no object holds none.
@@ -2813,7 +2813,7 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   // The record translations and alignment plan are the Linear mode's
   // artifact; only the Linear drawing's settings carry them. A History
   // config step carries neither and leaves them alone (OV-383).
-  const ownsAlignment = applyAlignment && drawing === state.drawingOf(drawingIdOfMode('linear'));
+  const ownsAlignment = applyAlignment && drawing === state.drawingOfMode('linear');
   if (state.linearRecordTranslations && ownsAlignment) {
     state.linearRecordTranslations.value = cloneJsonData(readList(linearLayout.recordTranslations).value);
   }
@@ -3539,13 +3539,14 @@ const customDepthRequested = (mode, drawing) => {
 };
 
 /**
- * The one check that the active mode has its biological inputs; Generate and
- * Save from the draft both use it, so both explain the same missing input.
- * @param {string} [mode] The mode to check; the Generate port passes a drawing's mode as text.
+ * The one check that a drawing has its biological inputs; Generate and Save
+ * from the draft both use it, so both explain the same missing input. The
+ * caller passes the drawing it resolved.
+ * @param {{ readonly mode: string, readonly recordsOff: readonly string[] }} drawing
  */
-export const assertActiveModeInputs = (mode = state.mode.value, sourceState = state) => {
+export const assertDrawingInputs = (drawing, sourceState = state) => {
   const files = sourceState.files || {};
-  if (mode === 'circular') {
+  if (drawing.mode === 'circular') {
     const gff = sourceState.cInputType?.value === 'gff';
     if (!(gff ? files.c_gff : files.c_gb)) throw diagnosticError('INPUT_REQUIRED');
     if (gff && !files.c_fasta) throw diagnosticError('FASTA_REQUIRED');
@@ -3559,7 +3560,7 @@ export const assertActiveModeInputs = (mode = state.mode.value, sourceState = st
   });
   // Only a hand-edited Session turns every record OFF (D-06 asks first).
   if (sequences.length > 0
-    && drawnLinearSequences(sequences, sourceState.drawingOf(drawingIdOfMode('linear')).recordsOff).length === 0) {
+    && drawnLinearSequences(sequences, drawing.recordsOff).length === 0) {
     throw diagnosticError('RECORD_SELECTION', { reason: 'NONE_DRAWN' });
   }
 };
@@ -3802,7 +3803,7 @@ export const adoptCanonicalRenderArtifacts = (
   /** @type {ReturnType<typeof deserializeCanonicalComparisons> | null} */
   let nextLinearComparisons = null;
   // The Circular conservation settings belong to the Circular drawing.
-  const drawing = state.drawingOf(drawingIdOfMode('circular'));
+  const drawing = state.drawingOfMode('circular');
   /** @type {{
    *   blasts: any[], fastas: any[], sequenceSources: any[],
    *   projectedConservation: Record<string, any> | undefined, series: Record<string, any>[]
@@ -3885,7 +3886,7 @@ export const getCommittedCanonicalRenderRequest = () => {
  */
 export const committedLiveSettingApplies = (requestPath) => {
   const request = getCommittedCanonicalRenderRequest();
-  return !request || liveSettingApplies(request, requestPath, state.drawingOf(drawingIdOfMode(request.mode === 'linear' ? 'linear' : 'circular')));
+  return !request || liveSettingApplies(request, requestPath, state.drawingOfMode(request.mode));
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.
@@ -4486,14 +4487,13 @@ const captureDrawingImportSnapshot = (drawing) => ({
   importedComparisonIntent: cloneJsonData(drawing.importedComparisonIntent)
 });
 
+// Load's rollback snapshot of the store: each drawing by ID and the ID of the
+// shown one (`state.activeDrawingId`), which the rollback shows again.
 const captureSessionImportSnapshot = () => ({
-  modes: {
-    circular: captureDrawingImportSnapshot(state.drawingOf(drawingIdOfMode('circular'))),
-    linear: captureDrawingImportSnapshot(state.drawingOf(drawingIdOfMode('linear')))
-  },
-  ui: cloneJsonData(buildUiStateData(state.activeDrawing())),
+  drawingSnapshots: new Map(state.drawingList().map((drawing) => [drawing.id, captureDrawingImportSnapshot(drawing)])),
+  shownDrawingId: state.activeDrawingId.value,
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
-  files: cloneLiveFileState(state.drawingOf(drawingIdOfMode('linear'))),
+  files: cloneLiveFileState(state.drawingOfMode('linear')),
   results: state.results.value,
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
@@ -4519,23 +4519,25 @@ const captureSessionImportSnapshot = () => ({
 
 /** @param {ReturnType<typeof captureSessionImportSnapshot>} snapshot */
 const restoreSessionImportSnapshot = async (snapshot) => {
-  const shownMode = snapshot.ui.mode === 'linear' ? 'linear' : 'circular';
-  /** @type {Array<'circular' | 'linear'>} */
-  const restoreOrder = shownMode === 'linear' ? ['circular', 'linear'] : ['linear', 'circular'];
+  /** @param {DrawingState} drawing */
+  const savedOf = (drawing) => /** @type {ReturnType<typeof captureDrawingImportSnapshot>} */ (
+    snapshot.drawingSnapshots.get(drawing.id));
   state.sessionImportRollbackInProgress.value = true;
   try {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
-    installShownDrawing(drawingIdOfMode(shownMode));
-    restoreOrder.forEach((drawingMode) => {
-      const drawing = state.drawingOf(drawingIdOfMode(drawingMode));
-      const saved = snapshot.modes[drawingMode];
+    const shownDrawing = installShownDrawing(snapshot.shownDrawingId);
+    const shownUi = savedOf(shownDrawing).ui;
+    // The shown drawing last, so its app-level values win.
+    const restoreOrder = [...state.drawingList().filter((drawing) => drawing !== shownDrawing), shownDrawing];
+    restoreOrder.forEach((drawing) => {
+      const saved = savedOf(drawing);
       applyCapturedConfigData(drawing, saved.config, { resolveTrackPlacements: false });
       applyUiStateData(drawing, saved.ui);
     });
-    applyUiStateData(state.activeDrawing(), snapshot.ui);
+    applyUiStateData(shownDrawing, shownUi);
     state.richFeaturePopup.value = snapshot.richFeaturePopup;
-    restoreLiveFileState(state.drawingOf(drawingIdOfMode('linear')), snapshot.files);
+    restoreLiveFileState(state.drawingOfMode('linear'), snapshot.files);
     state.losatCache.value = snapshot.losatCache;
     state.losatDerivedCache.value = snapshot.losatDerivedCache;
     adoptedProteinIdentityManifest = snapshot.adoptedProteinIdentityManifest;
@@ -4551,10 +4553,9 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       : cloneCanonicalSession(snapshot.committedCanonicalSession));
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
     state.skipCaptureBaseConfig.value = true;
-    applyResultsData(snapshot.results, snapshot.ui);
-    restoreOrder.forEach((drawingMode) => {
-      const drawing = state.drawingOf(drawingIdOfMode(drawingMode));
-      const saved = snapshot.modes[drawingMode];
+    applyResultsData(snapshot.results, shownUi);
+    restoreOrder.forEach((drawing) => {
+      const saved = savedOf(drawing);
       Object.assign(
         drawing.importedComparisonIntent,
         createImportedComparisonIntentState(),
@@ -4582,10 +4583,14 @@ const restoreSessionImportSnapshot = async (snapshot) => {
 // mode follows it. Each caller installs the drawing where it shows another
 // one: the mode transition (app/app-setup.js), a new Session's baseline,
 // Session Load and its rollback. The caller installs the drawing's artifact.
-/** @param {DrawingId} id */
+/**
+ * @param {DrawingId} id
+ * @returns {DrawingState} The drawing it shows.
+ */
 export const installShownDrawing = (id) => {
-  state.drawingOf(id);
+  const drawing = state.drawingOf(id);
   state.activeDrawingId.value = id;
+  return drawing;
 };
 
 // Both drawings return to their defaults before a Session installs its own.
@@ -4603,7 +4608,7 @@ const resetSessionBaseline = () => {
   // Reset Settings keeps which records are ON (PD-OI-070); a new Session draws
   // every record its slices do not turn OFF (PD-OI-091).
   for (const drawing of state.drawingList()) SETTINGS_SLICE.install(drawing.slices.settings, { recordsOff: [] });
-  installShownDrawing(drawingIdOfMode('circular'));
+  installShownDrawing(state.drawingOfMode('circular').id);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   state.sessionTitle.value = '';
@@ -4619,7 +4624,7 @@ const resetSessionBaseline = () => {
   state.featureEditRemovalCount.value = 0;
   state.comparisonWarnings.value = [];
   state.labelFitReports.value = [];
-  applyFiles(null, { targetDrawing: state.drawingOf(drawingIdOfMode('linear')) });
+  applyFiles(null, { targetDrawing: state.drawingOfMode('linear') });
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
   state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
@@ -5286,7 +5291,7 @@ const exportSessionDocument = async (
       omitUnsourcedDepth: true
     });
   }
-  const canonical = await assembleSessionResources(state, committed, state.drawingOf(drawingIdOfMode('linear')), other?.committed ?? null);
+  const canonical = await assembleSessionResources(state, committed, state.drawingOfMode('linear'), other?.committed ?? null);
   await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   if (other) {
     await validateSimilarityAlignmentResetReceipt(other.editorState.alignmentResetReceipt, {
@@ -6247,7 +6252,7 @@ const importSessionDocument = async (e, options = {}) => {
     state.sessionTitle.value = canonicalSession
       ? projectionResult.documentMetadata.title
       : (typeof data.title === 'string' ? data.title : '');
-    if (ui.mode) installShownDrawing(drawingIdOfMode(candidateMode));
+    if (ui.mode) installShownDrawing(state.drawingOfMode(candidateMode).id);
     state.cInputType.value = inputTypes.cInputType;
     state.lInputType.value = inputTypes.lInputType;
     state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;
@@ -6268,12 +6273,13 @@ const importSessionDocument = async (e, options = {}) => {
     // drawing's Canvas padding follows once its Result is mounted. A Session 46
     // slice without its mode's request projection is stored settings: its track
     // stacks install as saved, unset axis indexes included (R11).
-    for (const mode of SLICE_MODES) {
+    for (const drawing of state.drawingList()) {
+      const { mode } = drawing;
       // The committed mode's slice takes its request's per-feature edits where
       // it has none (OV-220).
       const features = mode === generatedMode && canonicalSession && !settingsOnly
         ? { features: featureEditsOverProjection(modeSlices[mode].features, projectionResult.renderState) } : {};
-      applyModeSliceData(state.drawingOf(drawingIdOfMode(mode)), mode, {
+      applyModeSliceData(drawing, mode, {
         ...modeSlices[mode], ...features, config: modeConfigs[mode], editorState: modeEditorStates[mode]
       }, {
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(mode),
@@ -6285,8 +6291,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
     preservedCliOptions = isPlainObject(sessionCliOptions) ? cloneJsonData(sessionCliOptions) : null;
-    installShownDrawing(drawingIdOfMode(displayMode));
-    const shownDrawing = state.activeDrawing();
+    const shownDrawing = installShownDrawing(state.drawingOfMode(displayMode).id);
     const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;
     if (canonicalLinearLayout && state.linearRecordTranslations) {
       state.linearRecordTranslations.value = cloneJsonData(
@@ -6304,17 +6309,17 @@ const importSessionDocument = async (e, options = {}) => {
     // 27-44 keeps one set, read once, which both drawings take.
     if (modeScopedSession) {
       if (projectedLayout && !isPlainObject(modeSlices[generatedMode].ui?.layoutPreferences)) {
-        const drawingOfCommit = state.drawingOf(drawingIdOfMode(generatedMode));
+        const drawingOfCommit = state.drawingOfMode(generatedMode);
         SETTINGS_SLICE.install(drawingOfCommit.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
           ...cloneJsonData(drawingOfCommit.layoutPreferences),
           [generatedMode]: normalizeLayoutPreferences(projectedLayout)[generatedMode]
         }) });
       }
     } else {
-      SLICE_MODES.forEach((mode) => restoreLayoutPreferences(state.drawingOf(drawingIdOfMode(mode)), ui, { projected: projectedLayout }));
+      state.drawingList().forEach((drawing) => restoreLayoutPreferences(drawing, ui, { projected: projectedLayout }));
     }
 
-    restoreLiveFileState(state.drawingOf(drawingIdOfMode('linear')), {
+    restoreLiveFileState(state.drawingOfMode('linear'), {
       files: candidateFiles.files,
       linearSeqs: candidateFiles.linearSeqs,
       circularRecordList: candidateFiles.circularRecordList.value,
@@ -6329,16 +6334,16 @@ const importSessionDocument = async (e, options = {}) => {
     );
     // The comparisons are the Linear drawing's.
     restoreImportedComparisonIntent(
-      state.drawingOf(drawingIdOfMode('linear')).importedComparisonIntent,
+      state.drawingOfMode('linear').importedComparisonIntent,
       comparisonClassification,
       linearDraftConfig?.importedComparisonResolution
     );
     if (!settingsOnly) {
-      SLICE_MODES.forEach((mode) => reconcileDepthTrackStateAfterSessionFiles(state.drawingOf(drawingIdOfMode(mode)), mode));
+      state.drawingList().forEach((drawing) => reconcileDepthTrackStateAfterSessionFiles(drawing, drawing.mode));
     }
     if (canonicalSession) {
       applyLosatCache(
-        state.drawingOf(drawingIdOfMode('linear')),
+        state.drawingOfMode('linear'),
         projectionResult.artifactState.losatCache?.entries,
         projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates,
         {
@@ -6357,7 +6362,7 @@ const importSessionDocument = async (e, options = {}) => {
     } else {
       const legacyArtifacts = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (data.legacyArtifacts);
       applyLosatCache(
-        state.drawingOf(drawingIdOfMode('linear')),
+        state.drawingOfMode('linear'),
         /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries,
         legacyArtifacts?.proteinRawCandidates
       );
@@ -6388,7 +6393,7 @@ const importSessionDocument = async (e, options = {}) => {
 
     // Group names are the Linear drawing's (Session 46 `webEdits`).
     applyOrthogroupStateData(
-      state.drawingOf(drawingIdOfMode('linear')),
+      state.drawingOfMode('linear'),
       loadedOrthogroupState,
       {
         legacyRecords: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION ? data.renderRequest?.records : null,
@@ -6397,7 +6402,7 @@ const importSessionDocument = async (e, options = {}) => {
     );
     applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(generatedMode)) });
     if (legacyFeatureRecoveryPlan) {
-      applySessionFeatureRecoveryPlan(state.drawingOf(drawingIdOfMode(generatedMode)), legacyFeatureRecoveryPlan, { generationId: 'session-load' });
+      applySessionFeatureRecoveryPlan(state.drawingOfMode(generatedMode), legacyFeatureRecoveryPlan, { generationId: 'session-load' });
     }
 
     let desiredResultIndex = (
@@ -6501,7 +6506,7 @@ const importSessionDocument = async (e, options = {}) => {
       data,
       decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
-      comparisonDisposition: state.drawingOf(drawingIdOfMode('linear')).importedComparisonIntent.disposition
+      comparisonDisposition: state.drawingOfMode('linear').importedComparisonIntent.disposition
     };
   } catch (err) {
     if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
@@ -6616,28 +6621,30 @@ export const exportSession = (titleOverride = null, options = {}) => {
     // Each drawing's drafts are written on the rows of their records (OV-278,
     // OV-325): a Session without a Web draft loads a draft selected by record ID on '#1'.
     const recordDisplayRows = /** @type {{ recordDisplayRows?: { value?: Parameters<typeof bindRecordDisplayDrafts>[1] } }} */ (options).recordDisplayRows?.value || [];
-    /** @param {'circular' | 'linear'} mode @returns {DrawingState} */
-    const savedDrawing = (mode) => {
-      const live = state.drawingOf(drawingIdOfMode(mode));
+    /** @type {DrawingState[]} */
+    const savedDrawings = state.drawingList().map((live) => {
       const drafts = bindRecordDisplayDrafts(live.recordDisplayDrafts, recordDisplayRows);
       return drafts === live.recordDisplayDrafts ? live : { ...live, recordDisplayDrafts: drafts };
-    };
+    });
     // Each drawing is checked as it is, before the JSON copy, so a value JSON
     // cannot write (Infinity, NaN) fails Save instead of being written as null.
-    SLICE_MODES.forEach((mode) => validateCurrentWriterActiveConfig({
-      mode, storedConfig: buildConfigData(savedDrawing(mode))
+    savedDrawings.forEach((saved) => validateCurrentWriterActiveConfig({
+      mode: saved.mode, storedConfig: buildConfigData(saved)
     }));
-    /** @param {'circular' | 'linear'} mode */
-    const sliceOf = (mode) => buildModeSliceData(savedDrawing(mode), mode, {
-      selectedFeatureRecordIdx: mode === state.mode.value ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
+    /** @type {Partial<Record<DiagramMode, ReturnType<typeof buildModeSliceData>>>} */
+    const slices = {};
+    savedDrawings.forEach((saved) => {
+      slices[saved.mode] = buildModeSliceData(saved, saved.mode, {
+        selectedFeatureRecordIdx: saved.id === drawing.id ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
+      });
     });
-    const modes = { circular: sliceOf('circular'), linear: sliceOf('linear') };
+    const modes = /** @type {Record<DiagramMode, ReturnType<typeof buildModeSliceData>>} */ (slices);
     SLICE_MODES.forEach((mode) => validateModeSliceFields(modes[mode]));
     const readArtifacts = () => chooseSessionArtifacts(options?.readKeptArtifacts?.() ?? []);
     let { artifact, otherArtifact } = readArtifacts();
     if (!artifact.committedCanonicalSession
       && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {
-      assertActiveModeInputs();
+      assertDrawingInputs(drawing);
     }
     const artifactUi = artifactUiState(artifact);
     const savedUi = {

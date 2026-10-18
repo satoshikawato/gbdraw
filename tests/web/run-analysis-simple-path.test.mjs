@@ -325,6 +325,7 @@ const generatedArtifactHandleOptions = {
   captureGeneratedArtifactOwnerSet: artifactSnapshots.captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet: artifactSnapshots.installGeneratedArtifactOwnerSet,
   installRedrawnArtifact: artifactSnapshots.installRedrawnArtifact,
+  displayedArtifactDrawing: artifactSnapshots.displayedArtifactDrawing,
   restoreGeneratedArtifactHandle: artifactSnapshots.restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity: artifactSnapshots.setGeneratedArtifactIdentity,
   previewRuntime: immediatePreviewRuntime,
@@ -643,7 +644,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     assert.equal(state.processing.value, true);
     assert.notEqual(state.processingStatus.value, '');
     lifecycleEvents.push('test.before-handle-capture');
-    return artifactSnapshots.captureGeneratedArtifactHandle(...args);
+    return artifactSnapshots.captureGeneratedArtifactHandle(args[0] ?? state.activeDrawing());
   };
   const generationHistory = createHistoryManager({
     buildIntent: async () => ({}),
@@ -1094,7 +1095,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   // A failed readiness restoration must retain the initiating cause, and must
   // never advertise completed rollback merely because the old Results exist.
   const originalRestore = readinessRuntime.restorePreviousSelectedResult;
-  const checkpointBeforeRestoreFailure = await artifactSnapshots.captureGeneratedArtifactHandle();
+  const checkpointBeforeRestoreFailure = await artifactSnapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   readinessRuntime.restorePreviousSelectedResult = async () => { throw new Error('PRIVATE_ROLLBACK_SENTINEL'); };
   failArtifactAdoption = true;
   const restoreFailureResult = result('restore-failure.svg', 'restore-failure');

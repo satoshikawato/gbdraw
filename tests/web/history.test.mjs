@@ -1997,7 +1997,7 @@ const createLayoutPreferences = () => ({
     retainedBytes: 400_000
   }, { results: state.results.value });
 
-  const handleA = snapshots.captureGeneratedArtifactHandle();
+  const handleA = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   {
     // A reused Generate's commit: new Results with the shown groups array.
     const clears = copyFeedbackClears;
@@ -2033,7 +2033,7 @@ const createLayoutPreferences = () => ({
   state.resultGenerationKey.value += 1;
   state.zoom.value = 2;
   state.canvasPan.x = 120;
-  const transientOnlyHandle = snapshots.captureGeneratedArtifactHandle();
+  const transientOnlyHandle = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   assert.equal(
     snapshots.compareGeneratedArtifactHandles(handleA, transientOnlyHandle),
     true,
@@ -2089,7 +2089,7 @@ const createLayoutPreferences = () => ({
     retainedBytes: 123_456,
     resultBytes: 654_321
   }, { results: state.results.value });
-  const poisonHandle = snapshots.captureGeneratedArtifactHandle();
+  const poisonHandle = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   assert.equal(poisonHandle.ownerSet.results[0], poisonResult);
   assert.equal(poisonHandle.ownerSet.featureCatalog, poisonCatalog);
   assert.equal(poisonHandle.ownerSet.losatCache, poisonCache);
@@ -2137,7 +2137,7 @@ const createLayoutPreferences = () => ({
   globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
 
   state.results.value = [{ name: 'a.svg', content: '<svg id="b" />' }];
-  const invalidatedIdentityHandle = snapshots.captureGeneratedArtifactHandle();
+  const invalidatedIdentityHandle = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   assert.equal(
     invalidatedIdentityHandle.identity.fingerprint,
     '',
@@ -2177,7 +2177,7 @@ const createLayoutPreferences = () => ({
     fingerprint: 'b'.repeat(64),
     retainedBytes: 1024
   }, { results: state.results.value });
-  const handleB = snapshots.captureGeneratedArtifactHandle();
+  const handleB = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
 
   assert.equal(handleA.ownerSet.results[0], resultA);
   assert.equal(handleA.mutableIntent.features.featureColorOverrides['feature-a'], '#112233');
@@ -2215,7 +2215,7 @@ const createLayoutPreferences = () => ({
   assertAuthorityOwners(authorityOwnersA);
   assert.equal(state.appliedPaletteColors.value, appliedPaletteColorsA);
   assert.equal(state.pendingPaletteColors.value, pendingPaletteColorsA);
-  const recapturedA = snapshots.captureGeneratedArtifactHandle();
+  const recapturedA = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   assert.equal(recapturedA.identity.fingerprint, 'a'.repeat(64));
   assert.equal(recapturedA.retainedBytes, handleA.retainedBytes);
 
@@ -2262,7 +2262,7 @@ const createLayoutPreferences = () => ({
     applyCheckpoint: async () => {
       throw new Error('LOSAT authority History must not apply a full checkpoint.');
     },
-    captureGeneratedArtifactHandle: snapshots.captureGeneratedArtifactHandle,
+    captureGeneratedArtifactHandle: () => snapshots.captureGeneratedArtifactHandle(state.activeDrawing()),
     restoreGeneratedArtifactHandle: snapshots.restoreGeneratedArtifactHandle,
     compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
   });
@@ -2308,12 +2308,12 @@ const createLayoutPreferences = () => ({
   assertAuthorityOwners(authorityOwnersB);
   assert.equal(successfulGenerateCalls, 1, 'Undo/Redo must not rerun Generate.');
 
-  const restoredHandleBeforePaletteReplacement = snapshots.captureGeneratedArtifactHandle();
+  const restoredHandleBeforePaletteReplacement = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   const equivalentAppliedPaletteColors = { ...state.appliedPaletteColors.value };
   const equivalentPendingPaletteColors = { ...state.pendingPaletteColors.value };
   state.appliedPaletteColors.value = equivalentAppliedPaletteColors;
   state.pendingPaletteColors.value = equivalentPendingPaletteColors;
-  const equivalentPaletteHandle = snapshots.captureGeneratedArtifactHandle();
+  const equivalentPaletteHandle = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
   assert.notEqual(equivalentAppliedPaletteColors, handleB.ownerSet.appliedPaletteColors);
   assert.notEqual(equivalentPendingPaletteColors, handleB.ownerSet.pendingPaletteColors);
   assert.equal(equivalentPaletteHandle.identity.fingerprint, 'b'.repeat(64));

@@ -1134,6 +1134,16 @@ const drawingOf = (id) => {
   if (!drawing) throw new Error(`Unknown drawing: ${id}`);
   return drawing;
 };
+/**
+ * The drawing of a diagram mode: until a project holds several drawings of one
+ * mode, each mode has one, named by the mode. The one mode lookup; like
+ * `drawingOf`, it throws for a value that names no drawing. B replaces each
+ * call with `activeDrawing()` or the drawing's `DrawingId`
+ * (`tests/web/drawing-slices.test.mjs` caps the calls).
+ * @param {ModeProfileName} mode
+ * @returns {DrawingState}
+ */
+const drawingOfMode = (mode) => drawingOf(drawingIdOfMode(mode));
 /** @returns {DrawingState} The shown drawing. */
 const activeDrawing = () => drawingOf(activeDrawingId.value);
 
@@ -1174,9 +1184,9 @@ export const state = Object.freeze({
   canvasContainerRef,
   activeDrawingId,
   mode,
-  drawings,
   drawingList,
   drawingOf,
+  drawingOfMode,
   activeDrawing,
   cInputType,
   lInputType,
