@@ -352,6 +352,26 @@ def _gff_fasta_errors(gff_file: str, fasta_file: str):
         ) from e
 
 
+def _read_fasta_records(fasta_file: str) -> list[SeqRecord]:
+    """Read the records of a FASTA file the same way under every Biopython version.
+
+    Text before the first ">" line is skipped, as Biopython 1.85 (the Web's) does;
+    Biopython 1.88 refuses it. A file without a ">" line has no entry (OV-1257).
+    Only the lines before the first entry are read twice.
+    """
+
+    with open(fasta_file) as handle:
+        while True:
+            start = handle.tell()
+            line = handle.readline()
+            if not line:
+                raise ValidationError(f"FASTA file {fasta_file} has no sequence entry.", diagnostic=_FASTA_WITHOUT_ENTRIES)
+            if line.startswith(">"):
+                break
+        handle.seek(start)
+        return list(SeqIO.parse(handle, "fasta"))
+
+
 def parse_gff_fasta(
     gff_file: str,
     fasta_file: str,
@@ -377,9 +397,7 @@ def parse_gff_fasta(
             id(record): build_source_feature_catalog(record) for record in gff_records
         } if source_feature_catalogs is not None else {}
         logger.info("INFO: Loading FASTA file {}".format(fasta_file))
-        fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
-        if not fasta_records:
-            raise ValidationError(f"FASTA file {fasta_file} has no sequence entry.", diagnostic=_FASTA_WITHOUT_ENTRIES)
+        fasta_records = _read_fasta_records(fasta_file)
         merged_records = merge_gff_fasta_records(gff_records, fasta_records, fasta_file=fasta_file)
         if source_feature_catalogs is not None:
             source_feature_catalogs.extend(catalogs[id(record)] for record in merged_records)

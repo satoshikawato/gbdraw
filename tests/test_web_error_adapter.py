@@ -284,6 +284,18 @@ def test_a_gff3_or_fasta_slot_file_without_entries_says_which(helpers, tmp_path,
                                'stage': 'helper', 'context': {'reason': reason}}
 
 
+def test_a_fasta_with_text_before_its_first_entry_reads_under_every_biopython(helpers, tmp_path):
+    # Biopython 1.85 skips text before the first ">" line and 1.88 refuses it;
+    # gbdraw reads such a file the same way under both.
+    gff_path = tmp_path / 'PRIVATE.gff3'
+    fasta_path = tmp_path / 'PRIVATE.fasta'
+    gff_path.write_bytes((GFF_INPUTS / 'NC_013668.gff3').read_bytes())
+    fasta_path.write_bytes(b'notes before the entries\n\n' + (GFF_INPUTS / 'NC_013668.fasta').read_bytes())
+    listed = json.loads(helpers['list_gff_fasta_records'](str(gff_path), str(fasta_path)))
+    assert 'error' not in listed
+    assert [record['record_id'] for record in listed['records']] == ['NC_013668.3']
+
+
 @pytest.mark.parametrize(('content', 'reason'), [
     (b'', 'EMPTY_FILE'),
     (b'\n  \r\n', 'EMPTY_FILE'),
