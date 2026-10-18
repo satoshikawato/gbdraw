@@ -151,16 +151,29 @@ def parse_ascii_float(text: str) -> float | None:
         return None
 
 
+def parse_ascii_finite_float(text: str) -> float | None:
+    """The finite float :func:`ascii_float` reads from ``text``, or ``None``.
+
+    ``nan``, ``inf`` and their other spellings are ``None``: no gbdraw option
+    or table number takes a non-finite value.
+    """
+
+    value = parse_ascii_float(text)
+    return value if value is not None and math.isfinite(value) else None
+
+
 def argparse_float(text: str) -> float:
-    """argparse ``type=`` of a float option: what ``float()`` read, in ASCII only.
+    """argparse ``type=`` of every float option: a finite ``float()`` in ASCII only.
 
     Other digits and underscores (``"1_0"``) are refused with argparse's own
-    message for a ``float`` option.
+    message for a ``float`` option; ``nan`` and ``inf`` are refused as not finite.
     """
 
     value = parse_ascii_float(text)
     if value is None:
         raise argparse.ArgumentTypeError(f"invalid float value: {text!r}")
+    if not math.isfinite(value):
+        raise argparse.ArgumentTypeError(f"invalid float value: {text!r} (must be a finite number)")
     return value
 
 
@@ -173,6 +186,7 @@ __all__ = [
     "ascii_float",
     "ascii_int",
     "compensated_sum",
+    "parse_ascii_finite_float",
     "parse_ascii_float",
     "parse_ascii_integer",
     "parse_ascii_nonnegative_integer",

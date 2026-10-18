@@ -5,7 +5,6 @@
 import argparse
 import copy
 import logging
-import math
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -133,7 +132,7 @@ from .cli_utils.losat_output import (
     write_losat_output_files,
 )
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
-from .core.numeric import argparse_float, argparse_integer, ascii_float, parse_ascii_integer
+from .core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float, parse_ascii_integer
 
 
 # ``--losat`` choices (design 3.2).
@@ -208,12 +207,11 @@ def _parse_linear_track_axis_gap(value: str) -> float | None:
     normalized = str(value).strip().lower()
     if normalized in {"", "auto"}:
         return None
-    try:
-        axis_gap = ascii_float(normalized)
-    except ValueError as exc:
+    axis_gap = parse_ascii_finite_float(normalized)
+    if axis_gap is None:
         raise argparse.ArgumentTypeError(
             "track axis gap must be a non-negative number or 'auto'"
-        ) from exc
+        )
     if axis_gap < 0:
         raise argparse.ArgumentTypeError("track axis gap must be >= 0")
     return axis_gap
@@ -878,11 +876,9 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         )
     if args.comparisons_table and args.blast:
         parser.error("--comparisons_table cannot be combined with -b/--blast")
-    if not math.isfinite(args.linear_record_gap) or args.linear_record_gap < 0:
+    if args.linear_record_gap < 0:
         parser.error("--linear_record_gap must be a finite non-negative number")
-    if args.comparison_height is not None and (
-        not math.isfinite(args.comparison_height) or args.comparison_height <= 0
-    ):
+    if args.comparison_height is not None and args.comparison_height <= 0:
         parser.error("--comparison_height must be a positive finite number")
     if args.losat and args.blast:
         parser.error("--losat cannot be used with -b/--blast")
@@ -940,16 +936,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
             option_text = str(option_value).strip().lower()
             if option_text in {"", "auto", "none", "null", "-"}:
                 continue
-            try:
-                numeric_option_value = ascii_float(option_value)
-            except (TypeError, ValueError):
+            numeric_option_value = parse_ascii_finite_float(str(option_value))
+            if numeric_option_value is None:
                 parser.error(f"--{option_name} values must be numbers or auto")
             if numeric_option_value <= 0:
                 parser.error(f"--{option_name} values must be > 0")
-    for option_name in ("gc_content_min_percent", "gc_content_max_percent"):
-        option_value = getattr(args, option_name)
-        if option_value is not None and not math.isfinite(float(option_value)):
-            parser.error(f"--{option_name} must be a finite number")
     if (
         args.gc_content_min_percent is not None
         and args.gc_content_max_percent is not None

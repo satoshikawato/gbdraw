@@ -5,7 +5,6 @@ import sys
 import argparse
 import copy
 import logging
-import math
 import os
 from pathlib import Path
 from dataclasses import replace
@@ -65,7 +64,7 @@ from .tracks import (
 
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
 from .comparisons.losat_jobs import unique_losat_filenames
-from .core.numeric import argparse_float, argparse_integer, ascii_float
+from .core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     _add_arrow_geometry_args,
@@ -597,10 +596,6 @@ def _get_args(
         parser.error("--gc_content_width must be > 0")
     if args.gc_content_radius is not None and args.gc_content_radius <= 0:
         parser.error("--gc_content_radius must be > 0")
-    for option_name in ("gc_content_min_percent", "gc_content_max_percent"):
-        option_value = getattr(args, option_name)
-        if option_value is not None and not math.isfinite(float(option_value)):
-            parser.error(f"--{option_name} must be a finite number")
     if (
         args.gc_content_min_percent is not None
         and args.gc_content_max_percent is not None
@@ -627,9 +622,7 @@ def _get_args(
         parser.error("--conservation_ring_width must be > 0")
     if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
         parser.error("--conservation_ring_gap must be > 0")
-    if args.center_reserved_radius is not None and (
-        not math.isfinite(float(args.center_reserved_radius)) or args.center_reserved_radius < 0
-    ):
+    if args.center_reserved_radius is not None and args.center_reserved_radius < 0:
         parser.error("--center_reserved_radius must be a finite number >= 0")
     try:
         ComparisonThresholds(
@@ -683,9 +676,8 @@ def _get_args(
             option_text = str(option_value).strip().lower()
             if option_text in {"", "auto", "none", "null", "-"}:
                 continue
-            try:
-                numeric_option_value = ascii_float(option_value)
-            except (TypeError, ValueError):
+            numeric_option_value = parse_ascii_finite_float(str(option_value))
+            if numeric_option_value is None:
                 parser.error(f"--{option_name} values must be numbers or auto")
             if numeric_option_value <= 0:
                 parser.error(f"--{option_name} values must be > 0")
@@ -720,9 +712,9 @@ def _get_args(
             parser.error(str(exc))
     if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
         parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
-    if not math.isfinite(args.multi_record_column_gap_ratio) or args.multi_record_column_gap_ratio < 0:
+    if args.multi_record_column_gap_ratio < 0:
         parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
-    if not math.isfinite(args.multi_record_row_gap_ratio) or args.multi_record_row_gap_ratio < 0:
+    if args.multi_record_row_gap_ratio < 0:
         parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
     return args
 

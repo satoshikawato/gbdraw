@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from collections.abc import Iterable, Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import asdict, fields, is_dataclass, replace
@@ -221,6 +222,13 @@ def _literal_domain_values(annotation: object) -> tuple[object, ...]:
     return ()
 
 
+def _is_finite_real(value: Real) -> bool:
+    try:
+        return math.isfinite(value)
+    except OverflowError:  # an int beyond the float range
+        return False
+
+
 def _matches_annotation(annotation: object, value: object) -> bool:
     if annotation is Any:
         return True
@@ -237,7 +245,8 @@ def _matches_annotation(annotation: object, value: object) -> bool:
     if annotation is int:
         return not isinstance(value, bool) and isinstance(value, Integral)
     if annotation is float:
-        return not isinstance(value, bool) and isinstance(value, Real)
+        # A float leaf holds a finite number (its reason is ``FINITE``).
+        return not isinstance(value, bool) and isinstance(value, Real) and _is_finite_real(value)
     if annotation is str:
         return isinstance(value, str)
     if origin in {dict, Mapping, MappingABC}:
