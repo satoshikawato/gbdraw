@@ -1,8 +1,8 @@
 // @ts-check
 /** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
-/** @import { RulePreparation, RuleInputsSnapshot } from './rule-matching.js' */
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
+/** @import { RulePreparation } from './rule-matching.js' */
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   parseBlacklistWords,
   parseColorTable,
@@ -43,11 +43,11 @@ export const runRecordDiscoveryWatcher = async ({
 };
 
 /**
- * The auxiliary file imports still applying (OV-1193). The file watchers add
- * them; Save and Load read whether one is pending, and Generate waits for them.
- * The composition root creates it before both readers.
+ * The auxiliary file imports still applying (OV-1193). The file watchers
+ * track them; Save and Load read whether one is pending, and Generate waits
+ * for them. The composition root creates it before all of them.
  * @typedef {object} AuxiliaryFileImports
- * @property {Map<FileLike, Promise<boolean>>} pending Each selected file's import, until it settles.
+ * @property {(file: FileLike, pending: Promise<boolean>) => void} track Holds `file`'s import until it settles.
  * @property {(file: FileLike) => Promise<boolean> | undefined} wait The import of `file`, while it applies.
  * @property {() => boolean} isPending
  * @property {() => Promise<void>} settle Waits until no import is pending, including one that starts meanwhile.
@@ -61,7 +61,12 @@ export const createAuxiliaryFileImports = (reactive) => {
   /** @type {Map<FileLike, Promise<boolean>>} */
   const pending = reactive(new Map());
   return {
-    pending,
+    track: (file, promise) => {
+      pending.set(file, promise);
+      void promise.finally(() => {
+        if (pending.get(file) === promise) pending.delete(file);
+      });
+    },
     wait: (file) => pending.get(file),
     isPending: () => pending.size > 0,
     settle: async () => {
@@ -83,7 +88,7 @@ export const createAuxiliaryFileImports = (reactive) => {
  * @typedef {object} WatchersOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {RulePreparation} rulePreparation
- * @property {AuxiliaryFileImports} auxiliaryFileImports The imports still applying, which the file watchers add.
+ * @property {AuxiliaryFileImports['track']} trackAuxiliaryFileImport Holds an import until it settles (`createAuxiliaryFileImports`).
  * @property {(value?: any) => { value: any }} ref Vue `ref`.
  * @property {(getter: () => any) => { readonly value: any }} computed Vue `computed`.
  * @property {(source: any, callback: (...args: any[]) => any, options?: Record<string, any>) => any} watch Vue `watch`.
@@ -115,7 +120,7 @@ export const createAuxiliaryFileImports = (reactive) => {
 export const setupWatchers = ({
   state,
   rulePreparation,
-  auxiliaryFileImports,
+  trackAuxiliaryFileImport,
   ref, computed, watch,
   nextTick,
   onMounted,
@@ -363,7 +368,6 @@ export const setupWatchers = ({
     const busy = state.sessionOperationAvailability?.();
     return busy || (canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false);
   };
-  const pendingFileImports = auxiliaryFileImports.pending;
   /** @type {Promise<any>} */
   let fileImportApplications = Promise.resolve();
   /** @type {Map<string, FileLike | null | undefined>} */
@@ -387,40 +391,52 @@ export const setupWatchers = ({
     restoredFileSelections.delete(key);
     if (restored) return;
     if (semanticFileWatchersSuppressed.value || !file) return;
-    const isSelected = () => files[key] === file && !semanticFileWatchersSuppressed.value
+    return startFileImport(key, apply, file, previousFile);
+  };
+  /**
+   * @param {string} key
+   * @param {FileImportApply} apply
+   * @param {FileLike} file
+   * @param {FileLike | null | undefined} previousFile
+   * @returns {Promise<boolean>}
+   */
+  const startFileImport = (key, apply, file, previousFile) => {
+    // OV-1205, OV-1206: the import is current while its file stays selected.
+    // The Specific rules owner (`runSpecificRuleWrite`) prepares and retries
+    // the rules on the inputs current when it runs; one it gives up on comes
+    // back as false with no error, and is reported here with Retry.
+    const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value
       && !state.sessionOperationAvailability?.();
-    // The rule inputs the Specific rules import applies to, read as it applies.
-    /** @type {RuleInputsSnapshot | null} */
-    let ruleContext = null;
-    const isCurrent = () => isSelected() && (!ruleContext || rulePreparation.isCurrent(ruleContext));
     const previousError = errorLog.value;
-    const retainFailure = () => {
-      auxiliaryImportFailure.value = { error: errorLog.value, key, selection: files[key], snapshot: key === 't_color' ? rulePreparation.snapshot() : null,
-        retry: async () => {
-          if (files[key] === file) return applyFileImport(key, apply, file, previousFile);
-          files[key] = file;
-          await nextTick();
-          return pendingFileImports.get(file);
+    // A Specific rules failure found on given inputs offers Retry while they
+    // stay; one about inputs that kept changing offers it on any inputs, since
+    // Retry is meant to run on the new ones.
+    const retainFailure = (inputsBound = key === 't_color') => {
+      auxiliaryImportFailure.value = { error: errorLog.value, key, selection: files[key], snapshot: inputsBound ? rulePreparation.snapshot() : null,
+        retry: () => {
+          if (files[key] !== file) {
+            // The watcher skips this selection; the retry starts its import.
+            restoredFileSelections.set(key, file);
+            files[key] = file;
+          }
+          return startFileImport(key, apply, file, previousFile);
         } };
     };
     const pending = readFileText(file).then((text) => {
       // Reads may finish out of order; serialize only their live application.
       const application = fileImportApplications.then(async () => {
-        if (!isSelected()) return false;
-        // OV-1205: the rule inputs are read when the import applies, after the
-        // imports queued before it, so a file uploaded meanwhile does not make
-        // it stale. Inputs that change while it applies run it again on the
-        // current ones; an import that cannot apply unselects its file.
-        for (let attempt = 0; ; attempt += 1) {
-          ruleContext = key === 't_color' ? rulePreparation.snapshot() : null;
-          if (await apply(text, isCurrent) !== false || !isSelected()) break;
-          if (!isCurrent() && attempt < 2) continue;
+        if (!isCurrent()) return false;
+        if (await apply(text, isCurrent) === false && isCurrent()) {
+          const gaveUp = key === 't_color' && errorLog.value === previousError;
+          if (gaveUp) {
+            errorLog.value = normalizeUserFacingError(diagnosticError('RULE_INPUTS_CHANGED', {},
+              { operation: 'evaluateRules', stage: 'rule-validation' }));
+          }
           restoredFileSelections.set(key, previousFile);
           files[key] = previousFile;
-          if (errorLog.value !== previousError) retainFailure();
+          if (errorLog.value !== previousError) retainFailure(key === 't_color' && !gaveUp);
           return false;
-        }
-        if (files[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
+        } else if (files[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
           errorLog.value = null;
           auxiliaryImportFailure.value = null;
         }
@@ -429,7 +445,7 @@ export const setupWatchers = ({
       fileImportApplications = application.catch(() => {});
       return application;
     }).catch((error) => {
-      if (isSelected() && errorLog.value === previousError) {
+      if (isCurrent() && errorLog.value === previousError) {
         errorLog.value = normalizeUserFacingError(error, { operation: key === 't_color' ? 'evaluateRules' : 'unknown', stage: 'resource-staging' });
         restoredFileSelections.set(key, previousFile);
         files[key] = previousFile;
@@ -437,10 +453,7 @@ export const setupWatchers = ({
       }
       return false;
     });
-    pendingFileImports.set(file, pending);
-    void pending.finally(() => {
-      if (pendingFileImports.get(file) === pending) pendingFileImports.delete(file);
-    });
+    trackAuxiliaryFileImport(file, pending);
     return pending;
   };
   /**

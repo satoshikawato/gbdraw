@@ -139,6 +139,9 @@ const REASONS = Object.freeze({
   FONT_RASTER: 'The PNG cannot draw this font. Choose another font.',
   FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.'
 });
+// What a decline names as changed under an evaluation of rule inputs (OV-447,
+// OV-449): the label table import and the Specific rules import read it here.
+export const RULE_INPUT_CHANGE_WORDS = "colors, color rules, the Legend, or the diagram's inputs";
 /**
  * Per code: the message, the actions offered, and the correction guidance when the context gives no reason.
  * @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>}
@@ -160,6 +163,11 @@ const DEFINITIONS = Object.freeze({
   // OV-644: a rule commit whose Legend row would take the key of a listed row
   // of another color; committing again fails the same way.
   LEGEND_ROW_CONFLICT: ['A color rule would draw a Legend item that already exists in another color. Change the rule\'s Legend name or color, or rename that Legend item.', ['edit-input']],
+  // OV-1206: the Specific rules owner (`runSpecificRuleWrite`) retried while
+  // the rule inputs kept changing and gave up. Its result names no cause, so
+  // one phrase covers a redraw too: the label table decline words a redraw
+  // apart (OV-449), which here would need a wider port from the owner.
+  RULE_INPUTS_CHANGED: [`The Specific rules file was not applied: ${RULE_INPUT_CHANGE_WORDS} changed while it was applied. Retry the table import.`, ['retry']],
   INPUT_REQUIRED: ['Supply GenBank input or matching GFF3 and FASTA inputs.', ['select-input', 'retry']],
   FASTA_REQUIRED: ['Supply a matching FASTA input for each GFF3 input.', ['select-input', 'retry']],
   INPUT_UNREADABLE: ['An input could not be read. Replace or reselect it.', ['select-input', 'retry']],

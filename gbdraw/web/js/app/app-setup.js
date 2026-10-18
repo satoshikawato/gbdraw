@@ -3489,7 +3489,7 @@ export const createAppSetup = () => {
   } = setupWatchers({
     state,
     rulePreparation,
-    auxiliaryFileImports,
+    trackAuxiliaryFileImport: auxiliaryFileImports.track,
     ref, computed, watch,
     nextTick,
     onMounted,
