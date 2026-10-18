@@ -1434,6 +1434,8 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
+ * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
+ *   The ring owner's switch of a Circular drawing's comparison rings, with their managed stack rows.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
  * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
  * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
@@ -1488,6 +1490,7 @@ export const createRunAnalysis = ({
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
+  setCircularConservationEnabled,
   getCommittedCanonicalSession = null,
   readCommittedCanonicalRevision = () => 0,
   commitLiveSettingValues = () => {},
@@ -3277,7 +3280,7 @@ export const createRunAnalysis = ({
           ? normalizeFileList(files.c_conservation_blasts)
           : normalizeFileList(files.c_conservation_fastas);
         const shouldDrawCircularPairwiseComparisons = circularConservationSourceFiles.length > 0;
-        drawing.circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
+        setCircularConservationEnabled(drawing, shouldDrawCircularPairwiseComparisons);
 
         if (shouldDrawCircularPairwiseComparisons) {
           setProcessingStatus('Preparing conservation comparisons...');

@@ -2900,6 +2900,26 @@ export const createAppSetup = () => {
     drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...nextSeries);
     refreshCircularConservationSlots(drawing);
   };
+  // The settings a reconcile reads besides the ring files: the source and the
+  // legacy series names. Reset and a legacy config import reconcile only when
+  // they changed (OV-1167, today's outcome).
+  /** @param {DrawingState} drawing */
+  const ringSettingsOf = (drawing) => ({
+    source: drawing.circularConservation.source, labels: drawing.circularConservation.labels
+  });
+  /** @param {DrawingState} drawing @param {{ source: unknown, labels: unknown }} before */
+  const reconcileChangedRingSettings = (drawing, before) => {
+    const after = ringSettingsOf(drawing);
+    if (after.source !== before.source || after.labels !== before.labels) reconcileCircularConservation(drawing);
+  };
+  // Generate turns the rings on or off by their source files; the managed stack
+  // rows follow in the same step, also when the run then fails or is canceled.
+  /** @param {DrawingState} drawing @param {boolean} enabled */
+  const setCircularConservationEnabled = (drawing, enabled) => {
+    if (drawing.circularConservation.enabled === enabled) return;
+    drawing.circularConservation.enabled = enabled;
+    refreshCircularConservationSlots(drawing);
+  };
   // A ring row's name or color, or a record label read for it, shows in its
   // managed stack row.
   /** @param {DrawingState} drawing */
@@ -3333,11 +3353,12 @@ export const createAppSetup = () => {
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,
-    // A Generate that adopts a Circular LOSAT result reconciles its rings.
+    // A Generate that adopts a Circular LOSAT result reconciles its rings; a
+    // Linear Generate and a Circular one without such a result leave them.
     adoptCanonicalRenderArtifacts: (canonical, options) => {
-      adoptCanonicalRenderArtifacts(canonical, options);
-      reconcileCircularConservation(state.drawings.circular);
+      if (adoptCanonicalRenderArtifacts(canonical, options)) reconcileCircularConservation(state.drawings.circular);
     },
+    setCircularConservationEnabled,
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
     commitLiveSettingValues,
@@ -3560,6 +3581,8 @@ export const createAppSetup = () => {
     'Load Session', () => sessionInput.value?.click()
   );
   let nextSessionPreviewToken = 1;
+  // The Circular ring settings as the Load found them (`beforeImport`).
+  let ringSettingsBeforeImport = ringSettingsOf(state.drawings.circular);
   // A loaded Session says so in the notice banner, with what the load changed
   // without a loss as a list; what it could not restore was listed in the
   // Load dialog before.
@@ -3593,6 +3616,7 @@ export const createAppSetup = () => {
     },
     transformLegacyResultSvg,
     beforeImport: async () => {
+      ringSettingsBeforeImport = ringSettingsOf(state.drawings.circular);
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
@@ -3635,8 +3659,11 @@ export const createAppSetup = () => {
     afterImport: async (/** @type {{ status: string, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
         // The comparison rings read from the loaded files and series (an older
-        // Session's series names included), before the History baseline.
-        reconcileCircularConservation(state.drawings.circular);
+        // Session's series names included), before the History baseline. A
+        // legacy config import keeps the ring files, so it reconciles only when
+        // it changed the source or the series names.
+        if (result.status === 'ok') reconcileCircularConservation(state.drawings.circular);
+        else reconcileChangedRingSettings(state.drawings.circular, ringSettingsBeforeImport);
         // The loaded draft's live values wait for their next change or Generate (6.7).
         discardLiveSettingRequests();
         historySnapshots.clearGeneratedArtifactIdentity({
@@ -5229,7 +5256,7 @@ export const createAppSetup = () => {
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
       const circularCanvasWasOff = state.drawings.circular.form.multi_record_canvas === false;
-      const { source: ringSourceBefore, labels: ringLabelsBefore } = state.drawings.circular.circularConservation;
+      const ringSettingsBefore = ringSettingsOf(state.drawings.circular);
       resetSettingsState(state);
       // OV-1166 (Owner question Q-DR-6, open): today's outcome, kept as is. A
       // Reset that turns the shown Circular drawing's Multi-Record Canvas on
@@ -5242,10 +5269,7 @@ export const createAppSetup = () => {
       // comparison rings are re-read from the kept ring files only when Reset
       // changed their source or the legacy series names; otherwise they stay
       // off with their files kept. The answer changes this step.
-      const rings = state.drawings.circular.circularConservation;
-      if (rings.source !== ringSourceBefore || rings.labels !== ringLabelsBefore) {
-        reconcileCircularConservation(state.drawings.circular);
-      }
+      reconcileChangedRingSettings(state.drawings.circular, ringSettingsBefore);
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
       // also clears the alignment plan (D-15).

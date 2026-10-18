@@ -1116,7 +1116,7 @@ const createDrawingState = (id, drawingMode) => {
 };
 const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circular');
 /** @typedef {typeof circularDrawing} DrawingState */
-/** @type {Readonly<Record<string, DrawingState> & { circular: DrawingState, linear: DrawingState }>} */
+/** @type {Readonly<Record<DrawingId, DrawingState> & { circular: DrawingState, linear: DrawingState }>} */
 const drawings = Object.freeze({ circular: circularDrawing, linear: createDrawingState(drawingIdOfMode('linear'), 'linear') });
 /** @returns {DrawingState} The shown drawing. */
 const activeDrawing = () => drawings[activeDrawingId.value];

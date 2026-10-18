@@ -2,8 +2,8 @@
 // the drawing of its mode (`generatedMode`), which may differ from the drawing
 // shown. A Load of a Session with no Result whose request mode differs from
 // `ui.mode` leaves that state; a round trip through the other mode must give
-// each drawing its own artifact back, so Save writes the Result the other mode
-// made (A2 I1 review, Medium 1).
+// each drawing its own artifact back (A2 I1 review, Medium 1). This checks the
+// shown artifact and the slots after each switch, not what Save writes.
 import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import test from 'node:test';

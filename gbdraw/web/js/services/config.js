@@ -3786,6 +3786,7 @@ const deserializeCanonicalComparisons = (
  * @param {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown }} canonical A Generate candidate:
  *   the request it built or projected, its resources and Web file bindings.
  * @param {{ adoptOwnedRequest?: boolean }} [options]
+ * @returns {boolean} Whether it installed the Circular drawing's ring files (a LOSAT-cache result).
  */
 export const adoptCanonicalRenderArtifacts = (
   canonical,
@@ -3876,6 +3877,7 @@ export const adoptCanonicalRenderArtifacts = (
       );
     }
   }
+  return Boolean(nextCircularState);
 };
 
 /** @returns {CanonicalRenderRequest | null} */

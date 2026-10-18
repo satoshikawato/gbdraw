@@ -716,6 +716,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       return serializeActiveRenderFiles(state.mode.value, state, drawing);
     },
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failArtifactAdoption) {
         throw new Error('forced late canonical artifact adoption failure');
@@ -1592,6 +1593,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     recordDisplayRows,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
         throw new Error('injected LOSAT late artifact adoption failure');
@@ -2381,6 +2383,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => {
       annotationValidationCalls += 1;
@@ -2749,6 +2752,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
     },
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
     canonicalSessionVersion: SESSION_VERSION,
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
       results: structuredClone(generationResponse.results),

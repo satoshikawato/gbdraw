@@ -159,11 +159,35 @@ const functionBody = (name) => {
   }
   throw new Error(`${name} has no end`);
 };
-const DRAWING_WRITE = /\bdrawing\.[\w.]+(\.value)?\s*(=(?!=)|\+=|-=)|\bdrawing\.[\w.]+\.(splice|push|pop|shift|unshift)\(|\b(replaceReactiveObject|replaceReactiveArray|clearReactiveObject|apply(?:Captured)?ConfigData)\(/;
+// A drawing write: an assignment or an array mutator through a drawing (a
+// `drawing` parameter, `state.drawings.<id>` or `[...]`, `activeDrawing()`, or a
+// local alias of one of these), or a whole-object writer.
+const DRAWING_RECEIVER = String.raw`\bdrawing|\bstate\.drawings(?:\.\w+|\[[^\]]+\])|\bdrawings\.\w+|\bactiveDrawing\(\)`;
+const DRAWING_ALIAS = /\b(?:const|let)\s+(\w+)\s*=\s*(?:state\.drawings(?:\.\w+|\[[^\]]+\])|(?:state\.)?activeDrawing\(\))/g;
+const WHOLE_OBJECT_WRITE = /\b(replaceReactiveObject|replaceReactiveArray|clearReactiveObject|apply(?:Captured)?ConfigData)\(/;
+/** @param {string} text */
+const writesDrawing = (text) => {
+  const receiver = `(?:${[DRAWING_RECEIVER, ...[...text.matchAll(DRAWING_ALIAS)].map(([, name]) => String.raw`\b${name}`)].join('|')})`;
+  return new RegExp(String.raw`(?:${receiver})\.[\w.]+(\.value)?\s*(=(?!=)|\+=|-=)|(?:${receiver})\.[\w.]+\.(splice|push|pop|shift|unshift)\(`)
+    .test(text) || WHOLE_OBJECT_WRITE.test(text);
+};
+
+test('the drawing-write scan sees each receiver form (A2 review-I2, Low 2)', () => {
+  for (const planted of [
+    'const drawing = state.drawings.circular; drawing.form.show_depth = true',
+    'state.drawings.circular.adv.depth_tracks.splice(0)',
+    'state.activeDrawing().form.show_depth = true',
+    'const d = state.drawings.circular; d.form.show_depth = true',
+    'state.drawings.circular.circularConservation.enabled = false',
+    "state.drawings['linear'].form.show_depth = false"
+  ]) assert.equal(writesDrawing(`watch(() => x, () => { ${planted}; })`), true, planted);
+  for (const read of ['const d = state.drawings.circular; if (d.form.show_depth === true) f(d)', 'drawing.form.show_depth !== x'])
+    assert.equal(writesDrawing(read), false, read);
+});
 
 test('the mode transition writes no drawing member and commits no Result edit', () => {
   const body = functionBody('transitionDiagramMode');
-  assert.doesNotMatch(body, DRAWING_WRITE);
+  assert.equal(writesDrawing(body), false);
   assert.doesNotMatch(body, /commitActiveResultEdit|recordHistory|history\.(record|commit)/);
   // The removed steps stay removed: the Show Depth repair and the profile transition.
   assert.ok(!/modeProfileStateManager|\.transition\(drawing\.adv/.test(APP_SETUP),
@@ -191,7 +215,7 @@ const SETTINGS_WRITES = /\b(ensureDepthTrackConfigCount|reconcileCircularConserv
 test('no watcher of an app module writes a drawing (A2: settings watchers)', () => {
   const calls = appModules.flatMap(([file, source]) => watchCalls(source).map((text) => ({ file, text })));
   assert.ok(calls.some(({ file }) => file === 'app-setup.js'), 'the watch calls were found');
-  assert.deepEqual(calls.filter(({ text }) => SETTINGS_WRITES.test(text) || DRAWING_WRITE.test(text))
+  assert.deepEqual(calls.filter(({ text }) => SETTINGS_WRITES.test(text) || writesDrawing(text))
     .map(({ file, text }) => `${file}: ${text.slice(0, 160)}`), []);
 });
 
