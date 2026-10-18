@@ -469,6 +469,7 @@ export const createFeatureVisibilityActions = ({
    * @typedef {{ status: 'projected', projection: DrawnProjection } | { status: 'superseded' | 'rejected' }} VisibilityProjectionOutcome
    */
   let projectionRun = 0;
+  let visibilityEditRun = 0;
   /** @type {unknown} */
   let ruleTableError = null;
   /**
@@ -522,10 +523,12 @@ export const createFeatureVisibilityActions = ({
   // Generate rejects. An edit that leaves the rules Generate reads as they
   // were (a rule added, or a field set before its value) projects nothing.
   // A rerender that runs when the rules change may have read the old ones and
-  // is about to replace the Result this edit is decided against, so the edit
-  // asks for one more, which the running one coalesces (OV-330). It asks also
-  // when a later projection superseded its own, as the display of that
-  // rerender's Result does (OV-1134), but not for a table Generate rejects.
+  // is about to replace the Result this edit is decided against. The newest
+  // edit asks for one more rerender when a rerender was running as it began,
+  // or when a later projection superseded its own, as the display of that
+  // rerender's Result does (OV-330, OV-1134). An older edit does not: the
+  // newer edit asks, or projects on the newer Result. Nor does an edit of a
+  // table Generate rejects.
   /**
    * @param {DrawingState} drawing
    * @param {(rules: FeatureVisibilityRuleDraft[]) => boolean | void} edit Changes the copy; false writes nothing.
@@ -538,10 +541,11 @@ export const createFeatureVisibilityActions = ({
     const requested = JSON.stringify(requestFeatureVisibilityRules(drawing.featureVisibilityManualRules));
     drawing.featureVisibilityManualRules.splice(0, drawing.featureVisibilityManualRules.length, ...rules);
     if (JSON.stringify(requestFeatureVisibilityRules(rules)) === requested) return true;
+    const editRun = ++visibilityEditRun;
     const rerendering = Boolean(state.labelReflowProcessing?.value);
     const outcome = await runProjection(drawing);
     const projection = outcome.status === 'projected' ? outcome.projection : null;
-    const rerender = Boolean(projection?.needsRerender) || (rerendering && outcome.status !== 'rejected');
+    const rerender = Boolean(projection?.needsRerender) || (rerendering && outcome.status !== 'rejected' && editRun === visibilityEditRun);
     if (projection?.updated || rerender) followLabels({ rerender });
     return true;
   };

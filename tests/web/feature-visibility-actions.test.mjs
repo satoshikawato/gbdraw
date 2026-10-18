@@ -602,12 +602,26 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   await owner.projectFeatureVisibility();
   await edit;
   assert.deepEqual(follows, [{ rerender: true }], 'a superseded edit during a rerender still asks for one more');
+  // Two edits of one burst, both superseded by that display projection, ask
+  // for one rerender: only the newest edit asks.
+  follows.length = 0;
+  const first = owner.setFeatureVisibilityRuleField(0, 'value', '^(((A)))$');
+  const second = owner.setFeatureVisibilityRuleField(0, 'value', '^((((A))))$');
+  await owner.projectFeatureVisibility();
+  await Promise.all([first, second]);
+  assert.deepEqual(follows, [{ rerender: true }], 'a burst of superseded edits asks for one rerender');
   // A rule table Generate rejects asks for none: the rerender would fail.
   rerenderState.biologicalFeatures = ref(catalog.items[0].biologicalFeatures);
   follows.length = 0;
   await owner.setFeatureVisibilityRuleField(0, 'value', '[');
   assert.deepEqual(follows, [], 'a rejected table asks for nothing');
   assert.ok(rerenderState.errorLog.value, 'and reports why');
+  // Also when the display of the rerender's Result supersedes that edit.
+  follows.length = 0;
+  const rejected = owner.setFeatureVisibilityRuleField(0, 'value', '[[');
+  await owner.projectFeatureVisibility();
+  await rejected;
+  assert.deepEqual(follows, [], 'a superseded edit of a rejected table asks for nothing');
 }
 
 console.log('feature visibility action tests passed');
