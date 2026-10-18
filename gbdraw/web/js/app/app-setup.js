@@ -158,7 +158,7 @@ import {
   storedLegendSideIsOfMode
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
-import { setupWatchers } from './watchers.js';
+import { createAuxiliaryFileImports, setupWatchers } from './watchers.js';
 import { createDialogChoice, setupHistoryInputs } from './history-inputs.js';
 import { createChoicePrompt, createNoticeBanner } from './app-messages.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
@@ -2941,6 +2941,9 @@ export const createAppSetup = () => {
       await Promise.allSettled([...pendingComparisonRecordLabels]);
     }
   };
+  // The auxiliary file imports still applying: the watchers add them, Save and
+  // Load read them, and Generate waits for them (OV-1193).
+  const auxiliaryFileImports = createAuxiliaryFileImports(reactive);
   /** @param {Event & { target: HTMLInputElement }} event */
   const addCircularConservationComparisonFile = (event) => {
     const drawing = state.drawings.circular;
@@ -3316,10 +3319,9 @@ export const createAppSetup = () => {
   } = createRunAnalysis({
     state,
     rulePreparation,
-    // The watchers below own the auxiliary file imports; Generate runs after setup.
     settlePendingInputs: async () => {
       await settleComparisonRecordLabels();
-      await settleAuxiliaryFileImports();
+      await auxiliaryFileImports.settle();
     },
     isCurrentFeature: isCurrentResultFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, drawing) => (
@@ -3483,11 +3485,11 @@ export const createAppSetup = () => {
     }
   });
   const {
-    waitForAuxiliaryFileImport, settleAuxiliaryFileImports, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure,
-    retryAuxiliaryImportFailure, resetModeTransientUi
+    canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi
   } = setupWatchers({
     state,
     rulePreparation,
+    auxiliaryFileImports,
     ref, computed, watch,
     nextTick,
     onMounted,
@@ -3518,7 +3520,7 @@ export const createAppSetup = () => {
   // here, so the root composes the availability that Save, Load, and their
   // controls read (R13).
   const sessionPreparationBusyReason = () => (
-    history.mutationPending() || ruleMatchingBlocking.value || auxiliaryFileImportPending()
+    history.mutationPending() || ruleMatchingBlocking.value || auxiliaryFileImports.isPending()
       ? 'Applying an edit. Retry after the edit finishes.'
       : ''
   );
@@ -7143,7 +7145,7 @@ export const createAppSetup = () => {
     openOrthogroupInDrawer,
     circularRecordList,
     refreshCircularRecordOrder,
-    waitForAuxiliaryFileImport, canRetryAuxiliaryImportFailure,
+    waitForAuxiliaryFileImport: auxiliaryFileImports.wait, canRetryAuxiliaryImportFailure,
     retryAuxiliaryImportFailure: () => history.runUndoableCheckpoint('Change uploaded file', retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
     circularRecordPresentationOptions,
     circularRecordPresentationError,
