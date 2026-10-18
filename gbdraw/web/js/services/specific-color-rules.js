@@ -393,7 +393,7 @@ export const colorRuleLegendGroups = (rules, type) => {
  * Returns rule -> the key of the Legend row Generate draws for that rule.
  * @param {Partial<SpecificColorRule>[] | null} [rules]
  * @param {RendererLegendRow[]} [rendererRows]
- * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey}
+ * @returns {(rule: SpecificRuleInput) => PythonLegendKey}
  */
 export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
   /** @type {Map<string, RendererLegendRow>} */

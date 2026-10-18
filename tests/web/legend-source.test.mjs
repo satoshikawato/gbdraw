@@ -143,14 +143,14 @@ const prepareMatches = (state, rules) => {
     });
   });
 };
-const rowKeysOf = (rows, rules, { prepared = true } = {}) => {
+const rowKeysOf = (rows, rules, { prepared = true, byColor = true } = {}) => {
   const state = batchStateOf(rows, rules);
   if (prepared) prepareMatches(state, rules);
   const context = {
     ...featureDrawnContext(state, { diagramOptions: { selectedFeaturesSet: ['CDS', 'repeat_region'] } }),
     colorRules: rules
   };
-  return resultLegendRowKeys(state, context);
+  return resultLegendRowKeys(state, context, { byColor });
 };
 /** @param {string[]} shown */
 const showing = (shown) => (key) => shown.includes(key);
@@ -198,6 +198,23 @@ test('a merge into a row whose rule comes later asks Python; a merge into an "ot
     'alpha merged into other proteins (its rule removed)');
 });
 
+// The same order by the rows' keys when a caption is written in several
+// colors (OV-1235): a row of one color merged in from an earlier rule moves
+// the row it joins.
+test('a merge into a row of one color of a shared caption whose rule comes later asks Python (OV-1235)', () => {
+  const THREE = [[['A', 'CDS'], ['G', 'CDS'], ['B', 'CDS']]];
+  const tail = [tagRule('G', 'alpha'), tagRule('B', 'alpha', '#00ff00')];
+  // The merged row is hidden and the row it joins shown, as a merge shows them live.
+  const shows = showing(['alpha [#ff0000]', 'alpha [#00ff00]']);
+  assert.equal(showable(THREE, [tagRule('A', 'beta', '#00ff00'), ...tail], [tagRule('A', 'alpha', '#00ff00'), ...tail], { shows }), false,
+    'beta renamed alpha joins the later row alpha [#00ff00]');
+  assert.equal(showable(THREE, [tagRule('A', 'alpha', '#111111'), ...tail], [tagRule('A', 'alpha', '#00ff00'), ...tail],
+    { shows }), false,
+    'alpha [#111111] recolored joins the later row alpha [#00ff00]');
+  assert.equal(showable(THREE, [...tail, tagRule('A', 'beta', '#00ff00')], [...tail, tagRule('A', 'alpha', '#00ff00')], { shows }), true,
+    'a row of a later rule joins the earlier row alpha [#00ff00]');
+});
+
 // U3a review M1, L1: a History restore shows the bytes History kept. A
 // relabel shows only where the new row took the old row's place; the rows a
 // restore splits are exact when the restored Result shows Python's rows.
@@ -241,4 +258,53 @@ test('another batch Result changes no row live; its colors may change', () => {
     { shows: showing(['alpha', 'repeat_region']) }), true, 'a recolor');
   assert.equal(showable(BATCH, [tagRule('A|B', 'alpha')], [tagRule('A|B', 'beta')], { shows }), true,
     'a row only the displayed Result draws');
+});
+
+// OV-1235, OV-1236: Python keys the row of a caption written in several colors
+// by its caption and its color (`<caption> [<fill>]`, PD-OI-042), and draws a
+// row only for a (caption, color) pair a drawn feature uses
+// (prepare_legend_table's `used_color_rules`).
+const shared = [tagRule('A', 'alpha'), tagRule('B', 'alpha', '#00ff00')];
+test('a caption written in several colors keys each color\'s row as Python does (OV-1235)', () => {
+  assert.deepEqual(rowKeysOf(ONE, shared).map((keys) => [...keys.values()]),
+    [['alpha [#ff0000]', 'repeat_region', 'alpha [#00ff00]']]);
+  assert.deepEqual(rowKeysOf(ONE, [tagRule('A', 'alpha'), tagRule('B', 'alpha')]).map((keys) => [...keys.values()]),
+    [['alpha', 'repeat_region', 'alpha']], 'one color: the caption is the key');
+  // D-15-38: a History restore reads the rows by caption (accepted residual OV-357).
+  assert.deepEqual(rowKeysOf(ONE, shared, { byColor: false }).map((keys) => [...keys.values()]),
+    [['alpha', 'repeat_region', 'alpha']], 'a History restore');
+  assert.equal(legendRuleOrder(shared, { byColor: false })('alpha'), 0);
+  assert.equal(legendRuleOrder(shared)('alpha [#00ff00]'), 1);
+});
+
+test('a rule color that splits the row of its caption asks Python; a row re-keyed in its place does not (OV-1235)', () => {
+  const all = showing(['alpha', 'alpha [#ff0000]', 'alpha [#00ff00]', 'beta', 'repeat_region']);
+  assert.equal(showable(ONE, [tagRule('A', 'alpha'), tagRule('B', 'alpha')], shared, { shows: all }), false,
+    'B leaves the alpha row for a row of its own color');
+  assert.equal(showable(ONE, shared, [tagRule('A', 'alpha'), tagRule('B', 'alpha')], { shows: all }), false,
+    'the two rows of alpha merge');
+  const before = [tagRule('A', 'alpha'), tagRule('B', 'beta', '#00ff00')];
+  const shows = showing(['alpha [#ff0000]', 'alpha [#00ff00]', 'repeat_region']);
+  const inPlace = new Map([['alpha', 'alpha [#ff0000]'], ['beta', 'alpha [#00ff00]']]);
+  assert.equal(showable(ONE, before, shared, { shows, placed: (key, next) => inPlace.get(key) === next }), true,
+    'each row takes a new key in its place');
+  assert.equal(showable(ONE, before, shared, { shows, placed: () => false }), false, 'the rows drawn anew');
+});
+
+test('hiding the only feature of one color of a caption written in several colors changes the source (OV-1236)', () => {
+  const sourcesWith = (rules, hidden = []) => {
+    const state = batchStateOf(ONE, rules);
+    prepareMatches(state, rules);
+    const { biological: features } = resultCatalogFeatures(state);
+    hidden.forEach((id) => setFeatureVisibilityOverride(
+      state.featureOverrides, features.find((feature) => feature.biological_feature_id === id), 'off'
+    ));
+    return resultLegendSources(state, {
+      ...featureDrawnContext(state, { diagramOptions: { selectedFeaturesSet: ['CDS', 'repeat_region'] } }),
+      colorRules: rules
+    });
+  };
+  assert.equal(sameLegendSources(sourcesWith(shared), sourcesWith(shared, ['B'])), false, 'the alpha [#00ff00] row is gone');
+  const oneColor = [tagRule('A', 'alpha'), tagRule('B', 'alpha')];
+  assert.equal(sameLegendSources(sourcesWith(oneColor), sourcesWith(oneColor, ['B'])), true, 'A still draws the alpha row');
 });

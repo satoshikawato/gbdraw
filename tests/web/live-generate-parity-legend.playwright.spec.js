@@ -1676,6 +1676,33 @@ test('legend names: a rule row keeps its place when its key changes with the sha
   await expectNamesLiveAndGenerated(page, ['other proteins', 'alpha', 'repeat_region', 'beta'], 'the name stops being shared in a user order');
 });
 
+// OV-1235: a rule color that writes a caption in a second color splits its
+// row in two (`alpha [#e63946]`, `alpha [#2a9d8f]`), which Python places in
+// rule order; the live edit asks Python, as for any row that loses part of its
+// features (OV-43).
+test('OV-1235: a rule color that splits the row of its caption draws the rows in rule order, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, RULE_ROWS[0]);
+  await addColorRule(page, { ...RULE_ROWS[1], cap: 'alpha', color: RULE_ROWS[0].color });
+  await expectLegendNames(page, ['alpha', 'other proteins', 'repeat_region'], 'two rules of one name and one color');
+  await setRuleField(page, 1, 'color', RULE_ROWS[1].color);
+  await expectNamesLiveAndGenerated(page, ['alpha (1)', 'alpha (2)', 'other proteins', 'repeat_region'], 'the second rule in another color');
+});
+
+// OV-1236: Python draws no row for a color of a caption that no drawn feature
+// uses, so hiding the only feature of `alpha [#2a9d8f]` leaves one row, named
+// `alpha`; the live edit asks Python (OV-42).
+test('OV-1236: hiding the only feature of one color of a shared caption leaves one row of the caption, live = Generate (linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, RULE_ROWS[0]);
+  await addColorRule(page, { ...RULE_ROWS[1], cap: 'alpha' });
+  await expectLegendNames(page, ['alpha (1)', 'alpha (2)', 'other proteins', 'repeat_region'], 'two rules of one name');
+  await addVisibilityRule(page, { ...FL1_OFF, value: '^fl2$' });
+  await expectNamesLiveAndGenerated(page, ['alpha', 'other proteins', 'repeat_region'], 'FL2 hidden');
+});
+
 // OV-660: a stroke stored on a rule row follows the row when its key changes
 // with the sharing of its name (`alpha [#e63946]` to `alpha` and back), live
 // and at Generate.
