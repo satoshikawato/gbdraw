@@ -242,7 +242,15 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
     const tag = String(target.tagName || '').toLowerCase();
     if (tag === 'select' || tag === 'input' || tag === 'textarea') {
-      void commitElement(target);
+      // OV-1116: an editable control (input, select, textarea) that keeps focus after its change (Enter)
+      // begins its next edit now, as on focus, so a value written without a
+      // keydown first (paste, a number spinner) is a step of its own.
+      void commitElement(target).then(() => {
+        if (isEditableControl(target) && target.ownerDocument?.activeElement === target) {
+          return beginForElement(target);
+        }
+        return null;
+      });
     }
   };
 

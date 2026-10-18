@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from svgwrite.container import Group
 
-from ....config.models import GbdrawConfig
 from ....svg.text_path import generate_name_path, generate_text_path
 
 
@@ -17,10 +16,10 @@ class DefinitionDrawer:
     Draws the definition section (species/strain/accession/len/GC) on a circular canvas.
     """
 
-    def __init__(self, *, cfg: GbdrawConfig) -> None:
-        self.interval = cfg.objects.definition.circular.interval
-        self.font_size = cfg.objects.definition.circular.font_size
-        self.font_family = cfg.objects.text.font_family
+    def __init__(self, *, interval: int, font_size: float, font_family: str) -> None:
+        self.interval = interval
+        self.font_size = font_size
+        self.font_family = font_family
 
     def draw(
         self,

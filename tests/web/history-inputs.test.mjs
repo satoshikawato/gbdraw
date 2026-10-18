@@ -467,3 +467,40 @@ test('N-18: a gesture owner settles the focused control before its own transacti
     assert.equal(h.state.prefix, 'audit');
   } finally { h.cleanup(); }
 });
+
+// OV-1116: Enter commits a text field's value (`change`) and the field keeps
+// focus. The next value, typed, pasted, or set by a number spinner (no keydown
+// before it), is a step of its own; leaving the field with the committed value
+// adds none.
+for (const [name, write] of [
+  ['typed', async (h, value) => { await h.key(h.controls.text, value.at(-1)); h.state.prefix = value; }],
+  ['pasted without a keydown', async (h, value) => { h.state.prefix = value; }]
+]) {
+  test(`OV-1116: each Enter in a still-focused text field records one step (${name})`, async () => {
+    const h = await createBoundaryHarness();
+    globalThis.document.activeElement = h.controls.text;
+    h.controls.text.ownerDocument = globalThis.document;
+    const enter = async () => {
+      await h.key(h.controls.text, 'Enter');
+      await h.dispatch('change', h.controls.text);
+      await settleTasks();
+    };
+    try {
+      await h.dispatch('focusin', h.controls.text);
+      await settleTasks();
+      for (const [index, value] of ['A', 'B', 'C'].entries()) {
+        await write(h, value);
+        await enter();
+        assert.deepEqual(h.counts(), [index + 1, 0], `value ${value}`);
+      }
+      globalThis.document.activeElement = null;
+      await h.dispatch('focusout', h.controls.text);
+      await settleTasks();
+      assert.deepEqual(h.counts(), [3, 0]);
+      await h.history.undo();
+      assert.equal(h.state.prefix, 'B');
+      await h.history.undo();
+      assert.equal(h.state.prefix, 'A');
+    } finally { h.cleanup(); }
+  });
+}

@@ -221,7 +221,7 @@ from gbdraw.render.group_content import (
     build_group_content,
     place_content,
 )
-from gbdraw.render.groups.circular import DefinitionGroup
+from gbdraw.render.groups.circular import CircularDefinitionStyle, DefinitionGroup
 from gbdraw.render.groups.circular.definition import definition_record_facts
 from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render_stages import render_stage
@@ -1362,11 +1362,10 @@ def _circular_plot_title_content(
         DefinitionGroup,
         definition_record_facts(gb_record, gc_percent=False),
         plot_title_canvas_config.geometry(),
-        cfg=cfg,
+        style=CircularDefinitionStyle.of(cfg, "shared_common"),
         species=species,
         strain=strain,
         plot_title=plot_title,
-        definition_profile="shared_common",
         definition_group_id="plot_title",
         record_presentation=record_presentation,
     )

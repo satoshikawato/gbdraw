@@ -122,8 +122,9 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "legend_measurement": frozenset(),
     "legend_content": frozenset(),
     "plot_title_content": frozenset(),
-    # The Circular title is a shared-common definition (its font and interval).
-    "circular_plot_title_content": frozenset({"objects.definition", "objects.text"}),
+    # The Circular title and definition take their font and interval as a
+    # ``CircularDefinitionStyle`` argument, not the config (OV-1115).
+    "circular_plot_title_content": frozenset(),
     "composition_plan": frozenset(),
     # The Circular track groups take their norm factor from the radial plan.
     "gc_content_content": frozenset(),
@@ -131,8 +132,7 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "depth_content": frozenset(),
     "length_bar_content": frozenset(),
     "definition_content": frozenset(),
-    # The Circular centre or edge definition reads its font and interval.
-    "circular_definition_content": frozenset({"objects.definition", "objects.text"}),
+    "circular_definition_content": frozenset(),
     "annotation_content": frozenset(),
     # Linear: the record group draws the axis, the ruler, features and labels.
     "record_content": frozenset(
