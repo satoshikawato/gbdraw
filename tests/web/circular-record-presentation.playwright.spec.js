@@ -120,7 +120,9 @@ test('Circular single-record presentation selects, transforms, titles, and round
   const savedSessionPath = await (await downloadPromise).path();
   expect(savedSessionPath).toBeTruthy();
 
-  await page.getByLabel('Circular region end').fill('60000');
+  // An End past the record end is drawn to the record end; a Start past it is refused.
+  await page.getByLabel('Circular region end').fill('61000');
+  await page.getByLabel('Circular region start').fill('60000');
   const failed = await generateAndWaitForResult(page, {
     expectedStatus: 'error',
     requireCommittedResult: true
