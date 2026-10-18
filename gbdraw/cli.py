@@ -16,6 +16,7 @@ Functions:
 """
 
 
+import argparse
 import sys
 import warnings
 import webbrowser
@@ -133,6 +134,15 @@ def print_help_message() -> NoReturn:
     sys.exit(0)
 
 
+def _gui_parser() -> argparse.ArgumentParser:
+    """The ``gbdraw gui`` parser: it takes no options, so ``--help`` and unknown arguments stop before the server starts."""
+
+    return argparse.ArgumentParser(
+        prog="gbdraw gui",
+        description="Serve the gbdraw web UI from this installation on localhost and open it in your browser.",
+    )
+
+
 class _CliWarningPrinter:
     """Print gbdraw's label fit warning like its errors; pass other warnings on."""
 
@@ -170,8 +180,7 @@ def main() -> None:
     """
     if len(sys.argv) <= 1 or sys.argv[1] in ['-h', '--help']:
         print_help_message()
-        sys.exit(0)
-    elif '--version' in sys.argv:
+    elif sys.argv[1] == '--version':
         print_version()
         sys.exit(0)
 
@@ -195,6 +204,7 @@ def main() -> None:
                 from .losat_setup import setup_main
                 setup_main(args)
             elif command == "gui":
+                _gui_parser().parse_args(args)
                 web_dir: Traversable | str
                 try:
                     # Python 3.9+
