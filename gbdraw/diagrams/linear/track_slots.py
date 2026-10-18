@@ -408,7 +408,8 @@ def _overlay_span(
     """The slots an annotation overlay spans on one record, or ``None`` when it is not a span.
 
     A ``to_slot`` overlay is a span and adds no space; it covers those of its
-    two slots that have a body on the record (none: it keeps its own place).
+    two slots that have a body on the record (none: it keeps its own place
+    and reserves only its label room, ``_span_label_rooms``).
     ``cover_anchor`` on a ``features`` slot spans the slot when it has lanes
     there; without them the overlay is not a span and keeps its own band.
     The plan stretches an overlay over the slots it covers and records that
@@ -435,11 +436,17 @@ def _span_label_rooms(
     footprint: LinearSlotFootprint,
     referenced: Sequence[tuple[LinearResolvedTrack, LinearSlotFootprint]],
     stack_order: Mapping[str, int],
+    *,
+    anchor_id: str,
+    relative_origin: float,
 ) -> list[tuple[str, LinearSlotFootprint]]:
     """Room for a span's labels beyond the outermost slot it covers on each side.
 
     The room joins that slot's reservation, so the next slot (or the axis)
-    keeps clear of the labels instead of lying under them.
+    keeps clear of the labels instead of lying under them. A span that covers
+    no slot on this record keeps its own place (``_overlay_span``): its room
+    lies beyond its own band and joins its anchor's reservation, so it adds
+    label room only on the side with label text, no band space (OV-1159).
     """
 
     bodies = sorted(
@@ -451,7 +458,8 @@ def _span_label_rooms(
         key=lambda item: stack_order[item[0]],
     )
     if not bodies:
-        return []
+        own_band = VerticalBand(-float(overlay.top_extent), float(overlay.bottom_extent))
+        bodies = [(anchor_id, own_band.translate(relative_origin))]
     # The overlay's label overhang beyond its own nominal band, on each side.
     above = -float(overlay.top_extent) - footprint.reserve_band.top_y
     below = footprint.reserve_band.bottom_y - float(overlay.bottom_extent)
@@ -643,7 +651,7 @@ def resolve_linear_record_vertical_plan(
         span = _overlay_span(annotation, tracks_by_id, footprint_map)
         span_tracks = span or ()
         # A span pushes no slot: its extent comes from the packed slots. Its labels
-        # keep room beyond the outermost slot it covers, on their side.
+        # keep room beyond the outermost slot it covers (or its own band), on their side.
         if span is None:
             overlays_by_anchor.setdefault(anchor.id, []).append((relative_origin, overlay_footprint))
         else:
@@ -652,6 +660,8 @@ def resolve_linear_record_vertical_plan(
                 overlay_footprint,
                 [(track, footprint_of(track)) for track in span_tracks],
                 stack_order,
+                anchor_id=anchor.id,
+                relative_origin=relative_origin,
             )
             for slot_id, room in rooms:
                 overlays_by_anchor.setdefault(slot_id, []).append((0.0, room))

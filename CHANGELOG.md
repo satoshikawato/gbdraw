@@ -172,7 +172,10 @@ write-up of a release.
   span's edge or beyond the part of the mark's stroke that passes it. An
   overlay with nothing to span on a record (`cover_anchor` on a record
   without feature lanes, a `to_slot` span where neither slot has a band)
-  keeps its mark's label rule, as before (OV-1158). `highlight`, `band`, and
+  keeps its own place and its mark's label rule, as before (OV-1158); such a
+  `to_slot` span now also keeps the room for its labels on the side with
+  label text, adding no other space, instead of drawing them on the next
+  slot (OV-1159). `highlight`, `band`, and
   `bracket` labels no longer touch or overlap their mark; `line` labels,
   which had 4.7 px, move 0.7 px closer. The label room grows to match;
   records grow only where nothing else already gave that room, by 0 to 7 px
