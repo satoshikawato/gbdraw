@@ -181,6 +181,57 @@ test('tobacco: a Legend position chosen without a pointer is one History step an
   }
 });
 
+// OV-1116: Enter commits a value and the field keeps focus. Each value committed
+// with Enter in the still-focused field is one History step and one apply, and
+// leaving the field with the committed value adds no step.
+test('tobacco: each value committed with Enter in a focused field is one step and redraws the Result', async ({ browser }) => {
+  test.setTimeout(900_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await generateNow(page);
+    const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    // The Gallery Session draws no plot title; draw it so its edits show.
+    const position = page.locator('select[aria-label="Plot Title Position"]');
+    for (const details of await position.locator('xpath=ancestor::details').all()) {
+      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+    }
+    await position.selectOption('top');
+    await expect.poll(async () => JSON.parse((await facts(page)).diagramOptions).output?.plotTitlePosition ?? null, {
+      timeout: APPLY_TIMEOUT
+    }).toBe('top');
+    await settleLive(page);
+    for (const [selector, values] of [
+      [PLOT_TITLE, ['Enter A', 'Enter B', 'Enter C']],
+      ['input[aria-label="Plot Title Font Size"]', ['40', '24', '36']],
+      [LEGEND_FONT, ['20', '28', '16']]
+    ]) {
+      const input = page.locator(selector);
+      for (const details of await input.locator('xpath=ancestor::details').all()) {
+        if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+      }
+      await input.focus();
+      for (const value of values) {
+        const before = await facts(page);
+        const steps = await undoCount();
+        await input.fill(value);
+        await input.press('Enter');
+        await expect.poll(async () => (await facts(page)).diagramOptions, {
+          timeout: APPLY_TIMEOUT, message: `${selector} = ${value} applies`
+        }).not.toBe(before.diagramOptions);
+        await settleLive(page);
+        expect((await facts(page)).content, `${selector} = ${value} redraws`).not.toBe(before.content);
+        expect(await undoCount(), `${selector} = ${value} is one step`).toBe(steps + 1);
+      }
+      const steps = await undoCount();
+      await input.press('Tab');
+      await settleLive(page);
+      expect(await undoCount(), `leaving ${selector} adds no step`).toBe(steps);
+    }
+  } finally {
+    await page.context().close();
+  }
+});
+
 test('a live change is one History step; Undo and Redo return the Result after their apply', async ({ browser }) => {
   test.setTimeout(900_000);
   const page = await load(browser, TOBACCO);

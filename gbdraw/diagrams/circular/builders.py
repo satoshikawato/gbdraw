@@ -28,6 +28,7 @@ from ...configurators import (
 )
 from ...render.groups.circular import (
     AxisGroup,
+    CircularDefinitionStyle,
     ConservationGroup,
     DefinitionGroup,
     DepthGroup,
@@ -361,7 +362,7 @@ def add_record_definition_group_on_canvas(
         DefinitionGroup,
         gb_record,
         canvas_config.geometry(),
-        cfg=canvas_config.profile.config,
+        style=CircularDefinitionStyle.of(canvas_config.profile.config, definition_profile),
         species=species,
         strain=strain,
         plot_title=plot_title,

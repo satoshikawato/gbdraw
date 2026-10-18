@@ -237,12 +237,8 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
         ),
         frozenset({"definition_content"}),
     ),
-    # The Circular definition reads the definition section, which holds the
-    # plot title font size (the shared-common profile draws the title in it).
-    "plot_title_font_size": frozenset({"circular_definition_content"}),
-    # Linear: the definition; Circular: the definition and the plot title, a
-    # shared-common definition that reads the definition section (section
-    # granularity; it draws in its own font size).
+    # Linear: the definition; Circular: the record definition and the plot
+    # title, whose font size defaults to the definition font size.
     "definition_font_size": frozenset(
         {"definition_content", "circular_definition_content", "circular_plot_title_content"}
     ),
@@ -424,3 +420,19 @@ def test_a_gc_toggle_rebuilds_neither_the_circular_definition_nor_the_title(tabl
     outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
     assert outcome.error is None
     assert not {"circular_definition_content", "circular_plot_title_content"} & set(outcome.stages.builds)
+
+
+def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definition(
+    tables: Path, tmp_path: Path
+) -> None:
+    """OV-1115: only the shared-common plot title draws in the plot title font size."""
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["plot_title_font_size"], first_variant_only=True)
+    outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+    assert outcome.error is None
+    assert "circular_plot_title_content" in outcome.stages.builds
+    assert "circular_definition_content" not in outcome.stages.builds

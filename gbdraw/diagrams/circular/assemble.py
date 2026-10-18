@@ -142,7 +142,7 @@ from .builders import (
     add_record_group_on_canvas,
     add_tick_group_on_canvas,
 )
-from ...render.groups.circular.definition import DefinitionGroup
+from ...render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup
 from .radial_layout import resolve_circular_radial_layout
 from .presets import (
     CircularPresetContext,
@@ -1134,7 +1134,7 @@ def _definition_reserved_radius_px(
     definition_group = DefinitionGroup(
         gb_record,
         geometry,
-        cfg=cfg,
+        style=CircularDefinitionStyle.of(cfg, definition_profile),
         species=species,
         strain=strain,
         plot_title=plot_title,
@@ -2485,7 +2485,7 @@ def add_record_on_circular_canvas(
             DefinitionGroup(
                 gb_record,
                 canvas_config.geometry(),
-                cfg=canvas_config.profile.config,
+                style=CircularDefinitionStyle.of(canvas_config.profile.config, definition_profile),
                 species=species,
                 strain=strain,
                 plot_title=plot_title,
