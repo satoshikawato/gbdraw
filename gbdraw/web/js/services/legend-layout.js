@@ -687,18 +687,21 @@ const circularGradientLayout = (gradients, measure, rect) => {
   const scaleLabelY = barY + (rect / 2) + 2;
   const labelHeight = measure('100%').height;
   const height = scaleLabelY + labelHeight + (rowHeight * SINGLE_GRADIENT_TRAILING_GAP_RATIO);
+  // A title wider than the bar centers the bar under it, so the block starts at x=0 (OV-1261).
+  const width = Math.max(barWidth, title.width);
+  const barX = (width - barWidth) / 2.0;
   return {
     compact: false,
-    width: Math.max(barWidth, title.width),
+    width,
     height: Math.max(0.0, height),
     barWidth,
-    barX: 0.0,
+    barX,
     minLabelText: minGradientLabelText(entry.row.minValue ?? 0),
     scaleY: scaleLabelY,
     compactEntries: [],
     singleEntries: [{
-      key: entry.key, row: entry.row, titleX: barWidth / 2.0, titleY: 0.0, barX: 0.0, barY,
-      minLabelX: 0.0, maxLabelX: barWidth, scaleLabelY
+      key: entry.key, row: entry.row, titleX: width / 2.0, titleY: 0.0, barX, barY,
+      minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY
     }]
   };
 };

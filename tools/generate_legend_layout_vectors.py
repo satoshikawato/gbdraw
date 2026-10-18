@@ -272,6 +272,8 @@ def _synthetic(template: dict[str, Any]) -> list[dict[str, Any]]:
                 ("solid rows and one gradient", solid + conservation),
                 ("solid rows and two gradients", solid + compact),
                 ("one gradient only", conservation),
+                # OV-1261: a title wider than the bar centers the bar under it.
+                ("one gradient with a title wider than its bar", [{**conservation[0], "key": "Conservation identity of NC_000913 against NC_002695"}]),
                 ("one very wide row", [{"key": "W" * 160, "type": "solid", "stroke": "none", "strokeWidth": 0.0}] + solid[:2]),
             ):
                 cases.append({
