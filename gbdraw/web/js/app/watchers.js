@@ -411,6 +411,12 @@ export const setupWatchers = ({
   const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => applyFileImport(key, apply, file, previousFile));
   /** @param {FileLike} file */
   const waitForAuxiliaryFileImport = (file) => pendingFileImports.get(file);
+  // Generate reads the drawing once every import still applying has settled,
+  // including one that starts meanwhile (OV-1193).
+  /** @returns {Promise<void>} */
+  const settleAuxiliaryFileImports = async () => {
+    while (pendingFileImports.size > 0) await Promise.allSettled([...pendingFileImports.values()]);
+  };
 
   watchFileImport('d_color', (text) => {
     const drawing = state.activeDrawing();
@@ -549,5 +555,5 @@ export const setupWatchers = ({
       console.warn('Could not load browser palette definitions.', normalizeUserFacingError(error, { stage: 'initialization' }));
     }
   });
-  return { waitForAuxiliaryFileImport, auxiliaryFileImportPending: () => pendingFileImports.size > 0, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi };
+  return { waitForAuxiliaryFileImport, settleAuxiliaryFileImports, auxiliaryFileImportPending: () => pendingFileImports.size > 0, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi };
 };

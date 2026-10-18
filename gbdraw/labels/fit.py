@@ -500,9 +500,18 @@ def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
     return tuple(sentences)
 
 
-def label_fit_error_counts(report: LabelFitReport) -> str:
-    """The counts sentence of the Web error over a figure that was not drawn."""
+_RADIAL_REFUSAL = "need more room than the circular tracks leave"
 
+
+def label_fit_error_counts(report: LabelFitReport) -> str:
+    """The counts sentence of the Web error over a figure that was not drawn.
+
+    A refused record's counts are those of the layout it refused, so a report
+    with one states the refusal instead (OV-1194).
+    """
+
+    if any(record.refused for record in report.records):
+        return f"Radial labels {_RADIAL_REFUSAL}."
     return f"Overlapping label pairs: {report.overlap_pairs}. Crossing leader pairs: {report.crossing_pairs}."
 
 
@@ -510,7 +519,7 @@ def label_fit_record_counts(record: LabelFitRecord) -> str:
     """A record's counts as the report states them, or why radial labels were refused."""
 
     if record.refused:
-        return "they need more room than the circular tracks leave"
+        return f"they {_RADIAL_REFUSAL}"
     return fit_counts(record.fit)
 
 

@@ -1458,7 +1458,8 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
- * @property {() => Promise<void>} [settleComparisonRecordLabels] D12: ring rows added just before Generate are named before it reads them.
+ * @property {() => Promise<void>} [settlePendingInputs] The input reads Generate waits for before it reads the drawing:
+ *   ring row names (D12) and auxiliary file imports still applying (OV-1193).
  * @property {((mode: string, state: any) => void) | null} [assertActiveModeInputs]
  * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
  *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
@@ -1505,8 +1506,8 @@ export const createRunAnalysis = ({
   prepareLinearRecordCatalog = null,
   // The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
   recordDisplayRows = null,
-  // D12: ring rows added just before Generate are named before it reads them.
-  settleComparisonRecordLabels = async () => {},
+  // D12, OV-1193: the input reads still applying settle before Generate reads the drawing.
+  settlePendingInputs = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
   assertActiveModeInputs = null,
   readDraftSignature = null,
@@ -5573,7 +5574,7 @@ export const createRunAnalysis = ({
           isCurrent: isCurrentAlert, isCurrentOperation, recovery: results.value.length ? 'preserved' : 'no-result' });
         return outcome;
       }
-      await settleComparisonRecordLabels();
+      await settlePendingInputs();
       if (!isCurrentOperation()) return { status: 'stale' };
       if (cancelBeforeRender()) return outcome;
       if (prepareGenerate) {
