@@ -9,12 +9,11 @@ used by both circular and linear diagram commands.
 
 import argparse
 import logging
-import math
 import sys
 from dataclasses import replace
 from typing import Sequence
 
-from gbdraw.core.numeric import argparse_float, argparse_integer, ascii_float
+from gbdraw.core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
@@ -654,13 +653,8 @@ def parse_arrow_head_length_ratio_arg(value: str) -> str | float:
     text = str(value).strip().lower()
     if text == "auto":
         return "auto"
-    try:
-        parsed = ascii_float(text)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            "arrow head length ratio must be 'auto' or a positive finite number"
-        ) from exc
-    if not math.isfinite(parsed) or parsed <= 0:
+    parsed = parse_ascii_finite_float(text)
+    if parsed is None or parsed <= 0:
         raise argparse.ArgumentTypeError(
             "arrow head length ratio must be 'auto' or a positive finite number"
         )
@@ -668,13 +662,8 @@ def parse_arrow_head_length_ratio_arg(value: str) -> str | float:
 
 
 def parse_arrow_shaft_width_ratio_arg(value: str) -> float:
-    try:
-        parsed = ascii_float(str(value).strip())
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            "arrow shaft width ratio must be a finite number in (0, 1]"
-        ) from exc
-    if not math.isfinite(parsed) or parsed <= 0 or parsed > 1:
+    parsed = parse_ascii_finite_float(str(value))
+    if parsed is None or parsed <= 0 or parsed > 1:
         raise argparse.ArgumentTypeError(
             "arrow shaft width ratio must be a finite number in (0, 1]"
         )

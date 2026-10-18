@@ -27,6 +27,7 @@ from gbdraw.legend.linear_layout import (
 from gbdraw.legend.table import LegendTable
 from gbdraw.legend.metrics import (
     legend_line_height,
+    legend_swatch_size,
     legend_text_x_offset,
 )
 from gbdraw.core.text import measurement_font_file
@@ -301,6 +302,7 @@ def _measured_legend(
     if not math.isfinite(wrap_width) or wrap_width < 0.0:
         raise ValueError("legend wrap width must be a finite non-negative number")
     _legend_half_stroke_width(legend_table)
+    legend_swatch_size(legend_config.color_rect_size, length_param=legend_config.length_param)
     if legend_config.mode == "circular":
         circular_layout = build_circular_legend_layout(
             legend_table,

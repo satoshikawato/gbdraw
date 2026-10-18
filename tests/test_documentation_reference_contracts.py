@@ -95,6 +95,20 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert "1, 2, 5, 6, 7, 8, and 9" in source
 
 
+def test_reference_pages_name_the_current_session_version() -> None:
+    """OV-1243: three pages named Session 46 or 47 as current after the writer moved to 48."""
+
+    current = CURRENT_SESSION_VERSION
+    statements = {
+        "command-line.md": f"Session {current} holds at most",
+        "typed-requests.md": f"The current Session version, {current}, holds",
+        "web-app.md": f"(Session {current}, [compatibility]",
+    }
+    for page, statement in statements.items():
+        assert statement in _read(page), page
+    assert f"rejects what version {current} cannot hold" in _read("typed-requests.md")
+
+
 def test_input_reference_lists_parser_owned_table_columns() -> None:
     tokens = _documented_code_tokens(_read("input-formats-and-tsv-schemas.md"))
 

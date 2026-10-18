@@ -8,7 +8,6 @@ temporary and are valid only while the materialization context is active.
 from __future__ import annotations
 
 import copy
-import json
 import logging
 import re
 import tempfile
@@ -20,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence, cas
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.table_text import legacy_table_rows
-from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
@@ -29,10 +28,9 @@ from gbdraw.session_io import (
     MODE_SCOPED_SESSION_MIN_VERSION,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SESSION_FORMAT,
-    _read_session_text,
+    _read_session_json,
     _attach_current_web_file_bindings,
     _embedded_resource_bytes,
-    _reject_duplicate_json_keys,
     _write_validated_session_json,
     expand_session_feature_catalog,
     materialize_embedded_file,
@@ -464,14 +462,7 @@ def load_session_document(
 
     path = Path(source)
     try:
-        payload = json.loads(
-            _read_session_text(path),
-            object_pairs_hook=_reject_duplicate_json_keys,
-        )
-    except json.JSONDecodeError as exc:
-        raise SessionFormatError(f"Not a valid JSON session file: {path}") from exc
-    except OSError as exc:
-        raise SessionFormatError(f"Could not read session file: {path}") from exc
+        payload = _read_session_json(path)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     if not isinstance(payload, dict):
@@ -1100,18 +1091,21 @@ def _write_session_document(
     """Write one built session document through a staged commit."""
 
     try:
-        output_path = Path(path)
-        preflight_output_paths((output_path,), overwrite=True)
-        if (output_path.exists() or output_path.is_symlink()) and not overwrite:
-            raise ValidationError(
-                f"Session output already exists: {output_path}. "
-                "Pass overwrite=True to replace it."
-            )
+        _preflight_session_output(path, overwrite=overwrite)
         # The document was validated when it was built.
         _write_validated_session_json(path, document._data, overwrite=overwrite)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     return document
+
+
+def _preflight_session_output(path: str | Path, *, overwrite: bool) -> None:
+    """Refuse a Session output path before anything is built or written."""
+
+    output_path = Path(path)
+    preflight_output_paths((output_path,), overwrite=True)
+    if (output_path.exists() or output_path.is_symlink()) and not overwrite:
+        raise OutputExistsError((output_path,), subject="Session output")
 
 
 def save_session_document(
@@ -1127,6 +1121,11 @@ def save_session_document(
 ) -> SessionDocument:
     """Build and write a current canonical session through a staged commit."""
 
+    try:
+        # A refused output is reported before the drawings are rendered.
+        _preflight_session_output(path, overwrite=overwrite)
+    except ValidationError as exc:
+        raise SessionFormatError(str(exc)) from exc
     document = build_session_document(
         request,
         drawings=drawings,

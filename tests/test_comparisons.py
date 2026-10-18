@@ -236,14 +236,24 @@ def test_linear_cli_rejects_invalid_pairwise_match_style(capsys: pytest.CaptureF
 
 
 @pytest.mark.linear
-@pytest.mark.parametrize("value", ["0", "-2", "nan", "inf", "-inf"])
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ("0", "--comparison_height must be a positive finite number"),
+        ("-2", "--comparison_height must be a positive finite number"),
+        # OV-275: the shared float option type refuses non-finite values.
+        ("nan", "argument --comparison_height: invalid float value: 'nan' (must be a finite number)"),
+        ("inf", "argument --comparison_height: invalid float value: 'inf' (must be a finite number)"),
+        ("-inf", "argument --comparison_height: invalid float value: '-inf' (must be a finite number)"),
+    ],
+)
 def test_linear_cli_rejects_invalid_comparison_height(
-    value: str, capsys: pytest.CaptureFixture[str]
+    value: str, message: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     with pytest.raises(SystemExit):
         linear_cli_module._get_args(["--gbk", "dummy.gb", f"--comparison_height={value}"])
 
-    assert "--comparison_height must be a positive finite number" in capsys.readouterr().err
+    assert message in capsys.readouterr().err
 
 
 @pytest.mark.linear

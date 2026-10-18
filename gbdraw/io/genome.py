@@ -26,6 +26,12 @@ _UNREADABLE_INPUT = {"code": "INPUT_UNREADABLE"}
 _DUPLICATE_FASTA_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UNIQUE_IDS"}
 
 
+def _parser_reason(error: BaseException) -> str:
+    """The parser's own reason, carried in the raised error (OV-1241)."""
+
+    return str(error).strip().rstrip(".")
+
+
 def genbank_absence_diagnostic(path: str) -> dict[str, str]:
     """The NO_RECORDS diagnostic of a GenBank/DDBJ file that has no record (UJ-07).
 
@@ -64,7 +70,6 @@ def load_gbks(
     logger.info("INFO: Loading GenBank file(s)...")
     for file_idx, gbk_file in enumerate(gbk_list):
         if not os.path.isfile(gbk_file):
-            logger.error(f"ERROR: File does not exist or is not accessible: {gbk_file}")
             raise InputFileError(f"File does not exist or is not accessible: {gbk_file}")
         try:
             logger.info("INFO: Loading GenBank file {}".format(gbk_file))
@@ -94,28 +99,19 @@ def load_gbks(
                 id_list.append(record.id)
         except ValueError as e:  # Catching common exception when parsing GenBank files
             if str(e).startswith("Record selector"):
-                logger.error(f"ERROR: {e}")
                 raise ValidationError(str(e)) from e
-            logger.error(
-                f"ERROR: error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format. Error: {e}"
-            )
             raise ParseError(
+                f"The GenBank parser stopped: {_parser_reason(e)}. "
                 f"Error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format.",
                 diagnostic=_UNREADABLE_INPUT,
             ) from e
         except Exception as e:  # A more generic catch-all for other unexpected issues
-            logger.error(
-                f"ERROR: an unexpected error occurred while processing {gbk_file}: {e}"
-            )
             raise ParseError(
                 f"Unexpected error while processing {gbk_file}: {e}"
             ) from e
     logger.info("INFO:              ... finished loading GenBank file(s)")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(id_list)}")
     if len(id_list) < 1:
-        logger.error(
-            "ERROR: No valid GenBank records were loaded. Please check your input files."
-        )
         raise ValidationError(
             "No valid GenBank records were loaded. Please check your input files."
         )
@@ -141,7 +137,6 @@ def merge_gff_fasta_records(
             f"FASTA file {fasta_file} has more than one sequence with the ID of GFF3 "
             f"record(s) {', '.join(duplicated_ids)}. Give each FASTA sequence a unique ID."
         )
-        logger.error(f"ERROR: {message}")
         raise ValidationError(message, diagnostic=_DUPLICATE_FASTA_IDS)
     merged_records: List[SeqRecord] = []
     fasta_dict: Dict[str, SeqRecord] = {record.id: record for record in fasta_records}
@@ -155,18 +150,12 @@ def merge_gff_fasta_records(
                 # If FASTA record exists, record.seq is FASTA sequence
                 gff_record.seq = fasta_record.seq
             except Exception as e:
-                logger.error(
-                    f"ERROR: Failed to merge sequences for record {gff_record.id} with corresponding FASTA entry: {e}"
-                )
                 raise ParseError(
                     f"Failed to merge sequences for record {gff_record.id} with corresponding FASTA entry: {e}"
                 ) from e
             merged_records.append(gff_record)
         else:
             # If no matching FASTA record, raise error and stop the process
-            logger.error(
-                f"ERROR: No matching FASTA record found for GFF record {gff_record.id}. Please ensure that all GFF records have corresponding FASTA entries."
-            )
             raise ValidationError(
                 f"No matching FASTA record found for GFF record {gff_record.id}. Please ensure that all GFF records have corresponding FASTA entries."
             )
@@ -336,21 +325,14 @@ def _gff_fasta_errors(gff_file: str, fasta_file: str):
         yield
     except ValueError as e:
         if str(e).startswith("Record selector"):
-            logger.error(f"ERROR: {e}")
             raise ValidationError(str(e)) from e
-        logger.error(
-            f"ERROR: error parsing GFF3/FASTA files ({gff_file}, {fasta_file}). Error: {e}"
-        )
         raise ParseError(
-            f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}).",
+            f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}): {_parser_reason(e)}.",
             diagnostic=_UNREADABLE_INPUT,
         ) from e
     except GbdrawError:
         raise
     except Exception as e:
-        logger.error(
-            f"ERROR: an unexpected error occurred while processing {gff_file} or {fasta_file}: {e}"
-        )
         raise ParseError(
             f"Unexpected error while processing {gff_file} or {fasta_file}: {e}"
         ) from e
@@ -371,7 +353,6 @@ def parse_gff_fasta(
     """
     for path in (gff_file, fasta_file):
         if not os.path.isfile(path):
-            logger.error(f"ERROR: File does not exist or is not accessible: {path}")
             raise InputFileError(f"File does not exist or is not accessible: {path}")
     with _gff_fasta_errors(gff_file, fasta_file):
         logger.info("INFO: Loading GFF3 file {}".format(gff_file))
@@ -406,7 +387,6 @@ def load_gff_fasta(
     logger.info("INFO: Loading GFF3/FASTA file(s)...")
 
     if len(gff_list) != len(fasta_list):
-        logger.error("ERROR: Number of GFF3 files does not match number of FASTA files.")
         raise ValidationError("Number of GFF3 files does not match number of FASTA files.")
 
     for file_idx, (gff_file, fasta_file) in enumerate(zip(gff_list, fasta_list)):
@@ -458,9 +438,6 @@ def load_gff_fasta(
     logger.info("INFO:              ... finished loading GFF3 and FASTA files")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(record_list)}")
     if len(record_list) < 1:
-        logger.error(
-            "ERROR: No valid records were loaded after merging GFF3 and FASTA files. Please check your input files."
-        )
         raise ValidationError(
             "No valid records were loaded after merging GFF3 and FASTA files. Please check your input files."
         )

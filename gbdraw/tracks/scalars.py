@@ -5,7 +5,7 @@ from math import isfinite
 import re
 from typing import Literal
 
-from gbdraw.core.numeric import JS_WHITESPACE, ascii_float
+from gbdraw.core.numeric import JS_WHITESPACE, parse_ascii_finite_float
 
 ScalarUnit = Literal["px", "factor"]
 
@@ -45,6 +45,13 @@ def parse_optional_pixel(
     return value
 
 
+def _finite_scalar(text: str, raw: object) -> float:
+    value = parse_ascii_finite_float(text)
+    if value is None:
+        raise ValueError(f"track scalar must be a finite number (px or % optional), not {raw!r}")
+    return value
+
+
 @dataclass(frozen=True)
 class ScalarSpec:
     """A scalar value with an explicit unit."""
@@ -58,10 +65,10 @@ class ScalarSpec:
         if not s:
             raise ValueError("empty scalar")
         if s.endswith("px"):
-            return cls(value=ascii_float(s[:-2]), unit="px")
+            return cls(value=_finite_scalar(s[:-2], raw), unit="px")
         if s.endswith("%"):
-            return cls(value=ascii_float(s[:-1]) / 100.0, unit="factor")
-        return cls(value=ascii_float(s), unit="factor")
+            return cls(value=_finite_scalar(s[:-1], raw) / 100.0, unit="factor")
+        return cls(value=_finite_scalar(s, raw), unit="factor")
 
     def resolve(self, reference: float) -> float:
         return self.value if self.unit == "px" else (self.value * reference)

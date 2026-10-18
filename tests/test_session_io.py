@@ -520,7 +520,10 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
     assert payload["losatDerivedCache"] == {"entries": []}
 
     sidecar.write_text("keep this session", encoding="utf-8")
-    with pytest.raises(ValidationError, match="--overwrite"):
+    from gbdraw.render.output_paths import CLI_OVERWRITE_OPTION, OutputExistsError
+
+    # OV-1240: the refusal is one error; the CLI prints it with --overwrite.
+    with pytest.raises(OutputExistsError, match="Session output already exists") as refused:
         save_session_sidecar_if_requested(
             save_session=True,
             session_output=str(sidecar),
@@ -528,6 +531,7 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
             run_result=run_result,
             cmd_args=(),
         )
+    assert "--overwrite" in refused.value.message(CLI_OVERWRITE_OPTION)
     assert sidecar.read_text(encoding="utf-8") == "keep this session"
 
     save_session_sidecar_if_requested(
@@ -2001,7 +2005,7 @@ def test_current_session_rejects_retired_circular_track_draft_paths(
     flat["version"] = 44
     flat["config"] = flat.pop("modes")["circular"]["config"]
     with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
-        session_io_module._validate_current_retired_active_config_paths(flat)
+        session_io_module._validate_current_retired_active_config_paths(flat, 44)
 
 
 def test_current_comparison_authority_validates_file_bindings() -> None:

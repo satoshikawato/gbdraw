@@ -2,12 +2,13 @@
 
 # Command line
 
-The executable has four entry points:
+The executable has five entry points:
 
 | Command | Purpose |
 |---|---|
 | `gbdraw circular` | Draw one Circular result, a multi-record canvas, or a batch of Circular results. |
 | `gbdraw linear` | Draw one ordered Linear result with optional comparisons. |
+| `gbdraw render` | Render the drawings of a saved Session. |
 | `gbdraw setup-losat` | Install the pinned native LOSAT release for protein comparisons. |
 | `gbdraw gui` | Serve the packaged web application locally. |
 
@@ -90,9 +91,13 @@ schemas](input-formats-and-tsv-schemas.md).
 
 ## Record selection and layout
 
+Linear mode selects and crops records with `--record_id`, `--region`, and
+`--reverse_complement`; `gbdraw circular` does not accept them.
 `--record_id` selects a record by ID or `#index` for each input file.
 `--region` accepts `record_id:start-end[:rc]`, `#index:start-end[:rc]`, or
 `file:record_selector:start-end[:rc]`. Coordinates are 1-based and inclusive.
+A start greater than the end selects the region from end to start and draws it
+reverse-complemented, as `:rc` does: `rec:500-100` is `rec:100-500:rc`.
 Repeated `--reverse_complement` values follow input-file order and accept the
 boolean tokens listed by `--help`. Selection, cropping, and reverse-complement
 display do not rewrite a source file.
@@ -213,7 +218,7 @@ With `--session`, only output and format overrides, session-output options,
 `--drawing`, and `--overwrite` are accepted; other diagram flags would mix
 persisted and new settings.
 
-A Session holds one or more drawings, one per diagram. Session 47 holds at most
+A Session holds one or more drawings, one per diagram. Session 48 holds at most
 a Circular drawing (ID `circular`) and a Linear drawing (ID `linear`).
 `gbdraw render --session FILE` renders every drawing with a committed render
 and skips a drawing without one (a settings-only Session) with a notice.

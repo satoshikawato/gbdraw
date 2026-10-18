@@ -595,7 +595,8 @@ def prepare_legend_table(
             ),
         )
         for gradient in gradients:
-            legend_table.add(gradient.label, {
+            # A source row: a rule captioned like it keeps its own row (OV-646).
+            legend_table.add_source(gradient.label, {
                 "type": "gradient",
                 "min_color": (
                     gradient.max_color if float(comparison.identity) >= 100 else gradient.min_color

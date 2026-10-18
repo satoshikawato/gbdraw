@@ -38,13 +38,11 @@ def load_config_toml(config_directory: str, config_file: str) -> dict:
         with open(absolute_config_path, "rb") as config_toml:
             config_dict = tomllib.load(config_toml)
     except FileNotFoundError as e:
-        logger.error(f"Failed to load configs from {absolute_config_path}: {e}")
         raise ConfigError(
             f"Configuration file missing: {absolute_config_path}. "
             "Ensure gbdraw is installed with package data."
         ) from e
     except Exception as e:
-        logger.error(f"Failed to load configs from {absolute_config_path}: {e}")
         raise ConfigError(
             f"Failed to load configuration from {absolute_config_path}: {e}"
         ) from e

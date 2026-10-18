@@ -57,7 +57,6 @@ def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
     try:
         lines = read_table_lines(filepath)
     except FileNotFoundError as e:
-        logger.error(f"ERROR: Feature visibility file not found: {e}")
         raise InputFileError(f"Feature visibility file not found: {e}") from e
 
     try:
@@ -72,12 +71,10 @@ def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
     except ParseError:
         raise
     except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in feature visibility file '{filepath}': {e}")
         raise ParseError(
             f"Malformed line in feature visibility file '{filepath}': {e}"
         ) from e
     except Exception as e:
-        logger.error(f"ERROR: Failed to read '{filepath}': {e}")
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
     null_rows = df[df.isnull().any(axis=1)]
@@ -138,9 +135,6 @@ def _normalize_visibility_action(action: str, row_idx: int) -> str:
         warnings.warn(message, DeprecationWarning, stacklevel=2)
         logger.warning("WARNING: %s", message)
         return "exclude_matching"
-    logger.error(
-        "ERROR: Invalid action in feature visibility table at row %s: '%s'", row_idx, action
-    )
     raise ValidationError(
         f"Invalid action in feature visibility table at row {row_idx}: '{action}'. "
         "Use show, off, or exclude_matching. Accepted aliases are on, hide, "
@@ -172,30 +166,18 @@ def compile_feature_visibility_rules(
             continue
 
         if not record_id:
-            logger.error(
-                f"ERROR: Missing record_id token in feature visibility table at row {idx}."
-            )
             raise ValidationError(
                 f"Missing record_id token in feature visibility table at row {idx}."
             )
         if not feature_type:
-            logger.error(
-                f"ERROR: Missing feature_type token in feature visibility table at row {idx}."
-            )
             raise ValidationError(
                 f"Missing feature_type token in feature visibility table at row {idx}."
             )
         if not qualifier:
-            logger.error(
-                f"ERROR: Missing qualifier token in feature visibility table at row {idx}."
-            )
             raise ValidationError(
                 f"Missing qualifier token in feature visibility table at row {idx}."
             )
         if not value_pattern:
-            logger.error(
-                f"ERROR: Missing value regex token in feature visibility table at row {idx}."
-            )
             raise ValidationError(
                 f"Missing value regex token in feature visibility table at row {idx}."
             )
@@ -203,9 +185,6 @@ def compile_feature_visibility_rules(
         try:
             pattern = re.compile(value_pattern, re.IGNORECASE)
         except re.error as e:
-            logger.error(
-                f"ERROR: Invalid regex in feature visibility table at row {idx}: '{value_pattern}' ({e})"
-            )
             raise ParseError(
                 f"Invalid regex in feature visibility table at row {idx}: '{value_pattern}' ({e})"
             ) from e

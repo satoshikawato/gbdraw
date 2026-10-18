@@ -11,6 +11,41 @@ from typing import Iterable, Iterator, Mapping
 
 from gbdraw.exceptions import ExportError, ValidationError
 
+# How each surface spells the permission to replace an output.
+PYTHON_OVERWRITE_OPTION = "overwrite=True"
+CLI_OVERWRITE_OPTION = "--overwrite"
+
+
+class OutputExistsError(ValidationError):
+    """Outputs exist and the caller did not allow replacing them.
+
+    The one owner of the refusal's wording. ``str()`` names Python's
+    ``overwrite=True``; another surface words it with :meth:`message` and its
+    own option (the CLI prints ``--overwrite``).
+    """
+
+    def __init__(
+        self,
+        paths: Iterable[str | Path],
+        *,
+        subject: str = "Output file",
+        written: Iterable[str | Path] = (),
+    ) -> None:
+        self.paths = tuple(str(path) for path in paths)
+        self.subject = subject
+        self.written = tuple(str(path) for path in written)
+        super().__init__(self.message(PYTHON_OVERWRITE_OPTION))
+
+    def message(self, overwrite_option: str) -> str:
+        one = len(self.paths) == 1
+        text = (
+            f"{self.subject}{'' if one else 's'} already exist{'s' if one else ''}: "
+            f"{', '.join(self.paths)}. Use {overwrite_option} to replace {'it' if one else 'them'}."
+        )
+        if self.written:
+            text += f" Already written: {', '.join(self.written)}."
+        return text
+
 _WINDOWS_DEVICE_NAMES = frozenset(
     {
         "CON",
@@ -120,11 +155,7 @@ def preflight_output_paths(
             + "."
         )
     if existing and not overwrite:
-        raise ValidationError(
-            "Output file(s) already exist: "
-            + ", ".join(str(path) for path in existing)
-            + ". Use overwrite=True to replace."
-        )
+        raise OutputExistsError(existing)
     return output_paths
 
 
@@ -216,12 +247,6 @@ def staged_output_files(output_paths: Iterable[str | Path]) -> Iterator[dict[Pat
                 directory.rmdir()
 
 
-def output_exists_message(path: str | Path) -> str:
-    """The refusal for an output that exists without overwrite permission."""
-
-    return f"Output file already exists: {path}. Use overwrite=True to replace it."
-
-
 def commit_staged_outputs(staged: Mapping[Path, Path], *, overwrite: bool) -> None:
     """Commit the staged files of :func:`staged_output_files` in order.
 
@@ -235,9 +260,9 @@ def commit_staged_outputs(staged: Mapping[Path, Path], *, overwrite: bool) -> No
         try:
             commit_staged_output_file(staged_path, output_path, overwrite=overwrite)
         except OSError as exc:
-            already = f" Already written: {', '.join(committed)}." if committed else ""
             if isinstance(exc, FileExistsError):
-                raise ValidationError(output_exists_message(output_path) + already) from exc
+                raise OutputExistsError((output_path,), written=committed) from exc
+            already = f" Already written: {', '.join(committed)}." if committed else ""
             raise ExportError(f"Could not write output file {output_path}: {exc}.{already}") from exc
         committed.append(str(output_path))
 
@@ -246,7 +271,9 @@ __all__ = [
     "commit_staged_output_file",
     "commit_staged_outputs",
     "is_windows_reserved_filename_component",
-    "output_exists_message",
+    "CLI_OVERWRITE_OPTION",
+    "OutputExistsError",
+    "PYTHON_OVERWRITE_OPTION",
     "preflight_output_paths",
     "staged_output_files",
 ]

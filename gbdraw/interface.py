@@ -37,6 +37,7 @@ from gbdraw.api.options import (
     CircularOutputOptions as _CircularOutputOptions,
     CircularRequestTrackOptions as _CircularRequestTrackOptions,
     ColorOptions as _ColorOptions,
+    validate_feature_type_names,
     LinearDiagramOptions as _LinearDiagramOptions,
     LinearMultiRecordOptions as _LinearLayout,
     LinearRecordTranslation as _LinearRecordTranslation,
@@ -52,7 +53,7 @@ from gbdraw.api.options import (
 )
 from gbdraw.render.output_paths import (
     commit_staged_outputs,
-    output_exists_message,
+    OutputExistsError,
     preflight_output_paths,
     staged_output_files,
 )
@@ -105,6 +106,9 @@ class FeatureOptions:
     visibility: TableSource | None = None
     shapes: Mapping[str, str] | None = None
     placements: TableSource | Sequence[FeaturePlacementOverride] | None = None
+
+    def __post_init__(self) -> None:
+        validate_feature_type_names(self.types, field_name="types")
 
 
 @dataclass(frozen=True)
@@ -662,7 +666,7 @@ class Diagram:
         resolved_format = format or _format_from_path(output_path)
         preflight_output_paths((output_path,), overwrite=True)
         if output_path.exists() and not overwrite:
-            raise ValidationError(output_exists_message(output_path))
+            raise OutputExistsError((output_path,))
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -705,11 +709,18 @@ def _records(value: RecordCollection) -> tuple[SeqRecord, ...]:
     return records
 
 
-def _paths(value: str | PathLike[str] | Sequence[str | PathLike[str]]) -> list[str]:
+def _paths(value: str | PathLike[str] | Sequence[str | PathLike[str]], *, field_name: str) -> list[str]:
     if isinstance(value, (str, PathLike)):
         normalized = [str(value)]
-    else:
+    elif isinstance(value, Sequence) and not isinstance(value, bytes) and all(
+        isinstance(path, (str, PathLike)) for path in value
+    ):
         normalized = [str(path) for path in value]
+    else:
+        raise ValidationError(
+            f"{field_name} must be a file path or a sequence of file paths (str or os.PathLike), "
+            f"not {type(value).__name__}; pass the path of an open file, not the file."
+        )
     if not normalized or any(not path.strip() for path in normalized):
         raise ValidationError("At least one non-empty input path is required.")
     return normalized
@@ -720,7 +731,7 @@ def read_genbank(
 ) -> list[SeqRecord]:
     """Read all records from one or more GenBank files."""
 
-    return _load_gbks(_paths(paths))
+    return _load_gbks(_paths(paths, field_name="paths"))
 
 
 def read_gff(
@@ -731,8 +742,8 @@ def read_gff(
 ) -> list[SeqRecord]:
     """Read records from paired GFF3 and FASTA files."""
 
-    normalized_gff = _paths(gff_paths)
-    normalized_fasta = _paths(fasta_paths)
+    normalized_gff = _paths(gff_paths, field_name="gff_paths")
+    normalized_fasta = _paths(fasta_paths, field_name="fasta_paths")
     if len(normalized_gff) != len(normalized_fasta):
         raise ValidationError("GFF3 and FASTA inputs must contain the same number of paths.")
     return _load_gff_fasta(
