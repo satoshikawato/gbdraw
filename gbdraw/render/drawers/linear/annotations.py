@@ -14,6 +14,7 @@ from gbdraw.annotations import (
     RegionAnnotationStyle,
     ResolvedAnnotationTrack,
     ResolvedRegionAnnotation,
+    annotation_label_font_size,
     apply_feature_underlay_dom_attributes,
     effective_annotation_style,
     is_auto_feature_underlay,
@@ -27,7 +28,6 @@ from gbdraw.render.drawers.annotation_marks import (
     cap_size,
     capped_ends,
     dom_token,
-    label_font_size,
     label_ink_offsets,
     mark_reach,
     past_span_edge,
@@ -122,7 +122,8 @@ def _label_rows(
         if not annotation.label:
             continue
         style = effective_annotation_style(annotation, params)
-        offsets = label_ink_offsets(annotation.label, font_family, label_font_size(style), _label_anchor(style))
+        size = annotation_label_font_size(style, track.label_font_size)
+        offsets = label_ink_offsets(annotation.label, font_family, size, _label_anchor(style))
         _left, _right, top, bottom = offsets
         # A Linear band fills _band_height_factor of its lane; an arrow cap is a head of two diagonals.
         reach = mark_reach(
@@ -218,7 +219,7 @@ def linear_annotation_labels(
                 x=x,
                 y=y,
                 anchor=anchor,
-                font_size=label_font_size(style),
+                font_size=annotation_label_font_size(style, track.label_font_size),
                 color=style.label_color,
                 ink=Aabb(x + left, y + top, x + right, y + bottom),
                 segments=tuple((float(start) * scale, float(end) * scale) for start, end in segments),

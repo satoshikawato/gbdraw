@@ -168,6 +168,11 @@ target. `mark` accepts `line`, `bracket`, `band`, or `highlight`.
   `hatch_angle`, `hatch_spacing`, `hatch_color`, `hatch_width`, `hatch_cross`,
   `label_color`, `label_font_size`, `label_orientation`, `label_position`, and
   `label_offset`.
+- A label without `label_font_size` takes the font size of the feature labels
+  of the same drawing: `--label_font_size` when it is set, otherwise the
+  automatic feature label size. In Linear that is one size for the whole
+  diagram, set by the longest record in label scope as for feature labels. An
+  explicit size (table column, set or slot style) wins.
 
 Coordinate targets are 1-based and inclusive. `wraps_origin=true` is
 Circular-only; split an origin-crossing Linear range into two rows. A feature

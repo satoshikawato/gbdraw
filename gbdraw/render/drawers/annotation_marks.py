@@ -11,8 +11,6 @@ from gbdraw.annotations import RegionAnnotationStyle, ResolvedRegionAnnotation, 
 from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
 from gbdraw.layout.text_geometry import TextAnchor
 
-DEFAULT_LABEL_FONT_SIZE = 10.0
-
 
 def dom_token(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(value)).strip("-") or "annotation"
@@ -100,10 +98,6 @@ def past_span_edge(reach: MarkReach, inset: float) -> float:
     return max(0.0, reach.past_lane_edge - inset)
 
 
-def label_font_size(style: RegionAnnotationStyle) -> float:
-    return float(style.label_font_size or DEFAULT_LABEL_FONT_SIZE)
-
-
 def label_ink_offsets(
     text: str, font_family: str, font_size: float, anchor: TextAnchor
 ) -> tuple[float, float, float, float]:
@@ -119,13 +113,11 @@ def label_ink_offsets(
 
 
 __all__ = [
-    "DEFAULT_LABEL_FONT_SIZE",
     "MarkReach",
     "annotation_dom_id",
     "cap_size",
     "capped_ends",
     "dom_token",
-    "label_font_size",
     "label_ink_offsets",
     "mark_reach",
     "past_span_edge",
