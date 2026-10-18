@@ -430,6 +430,19 @@ def test_radial_labels_without_room_stop_and_offer_the_font_row_only_without_inn
     )
 
 
+def test_the_web_error_of_a_refused_record_states_the_refusal_not_its_counts() -> None:
+    """OV-1194: a refused record's counts are of the layout that was refused, so the
+    Web error sentence names the refusal the dialog states, not "Crossing leader pairs: 1"."""
+
+    refused = LabelFitRecord("NC_001879.2", "circular_inner", 84, 8.0, LabelFit(0, 1, 0), refused=True)
+    error = LabelsDoNotFitError("x", report=LabelFitReport((refused,), (), drawn=False))
+
+    assert error.diagnostic == {
+        "code": "LABEL_LAYOUT",
+        "labelFitCounts": "Radial labels need more room than the circular tracks leave.",
+    }
+
+
 def test_one_budget_covers_the_switches_then_the_font_scan(monkeypatch: pytest.MonkeyPatch) -> None:
     """OD-F15: 30 s for inner labels when nothing is drawn; a verification starts only
     if one more assembly ends before the deadline; the error computes the rest."""

@@ -3316,7 +3316,11 @@ export const createAppSetup = () => {
   } = createRunAnalysis({
     state,
     rulePreparation,
-    settleComparisonRecordLabels,
+    // The watchers below own the auxiliary file imports; Generate runs after setup.
+    settlePendingInputs: async () => {
+      await settleComparisonRecordLabels();
+      await settleAuxiliaryFileImports();
+    },
     isCurrentFeature: isCurrentResultFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, drawing) => (
       serializeActiveRenderFiles(state.mode.value, state, drawing, {
@@ -3479,8 +3483,8 @@ export const createAppSetup = () => {
     }
   });
   const {
-    waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure,
-    resetModeTransientUi
+    waitForAuxiliaryFileImport, settleAuxiliaryFileImports, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure,
+    retryAuxiliaryImportFailure, resetModeTransientUi
   } = setupWatchers({
     state,
     rulePreparation,
