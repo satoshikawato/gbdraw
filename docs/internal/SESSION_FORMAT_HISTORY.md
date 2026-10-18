@@ -368,12 +368,12 @@ search intent cannot be encoded; resolve or render it first.
 
 Session version 47 and the request schema are unchanged. A Linear LOSATP run
 that writes a Session (`--session_output`, `--save_session`, a Gallery
-rebuild) stores the results it computed as the Web Save does:
-the request's `generatedProteinComparison` marker has mode `none`, and the
-request holds the `precomputedProteinComparison` tables and, for similarity
-groups or collinear blocks, the `orthogroupResult` or `collinearityResult`
-comparison (OV-1068). The first Web Generate after Load reuses them instead of
-searching again.
+rebuild) stores the results it computed: the request's
+`generatedProteinComparison` marker has mode `none`. Similarity groups stores
+the `precomputedProteinComparison` tables and the `orthogroupResult`; Collinear
+stores only the `collinearityResult` (no tables); Pairwise stores nothing, so
+its first Generate still searches (OV-1068). The first Web Generate after Load
+reuses what is stored instead of searching again.
 
 ## Unreleased: one LOSAT cache entry per raw key
 
@@ -635,10 +635,13 @@ In the Web, any derived result read from a Session (old `rows` entries
 included) is recomputed once from the raw cache.
 A zero-hit pair is accepted in either form, a header-only `canonicalTsv` or
 `rows: []`, but not both. Session version and the envelope schema are unchanged.
-A zero-hit entry (no pairs) may also hold its mode's result member,
+A zero-hit entry (no hits) may also hold its mode's result member,
 `orthogroupResult` or `collinearityResult`, as the Web writes it, when that
 member decodes as the mode's typed result; it and every other member must hold
-no values. Python Load and the Web Load admit the same entries (OV-1127).
+no values. Python Load and the Web Load admit the same entries (OV-1127), except one
+known difference (OV-1149): an `orthogroupResult` whose typed `value.fields` is
+empty is admitted by the Web Load, which checks only the envelope, and refused
+by the Python Load, which decodes the member.
 
 OV-1063 (D-90): one Python owner (`gbdraw.analysis.protein_artifacts`) builds a
 derived entry's identity, key, provenance, and pair numbering for the Web

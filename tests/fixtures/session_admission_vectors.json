@@ -1628,7 +1628,7 @@
      "value": [
       {
        "sourceUid": "circular",
-       "selector": "#1\u0663",
+       "selector": "#1٣",
        "recordId": "same",
        "topologyOverride": null,
        "startCoordinate": 25,
@@ -5777,6 +5777,41 @@
    "python": "accept",
    "web": "loaded",
    "note": "Control: the zero-hit form written before derived entries held the typed result (main from #312 to #540), admitted as before."
+  },
+  {
+   "id": "ov1149-zero-hit-orthogroup-result-empty-fields",
+   "finding": "OV-1149",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries/0/payload",
+     "value": {
+      "pairs": [
+       {
+        "pair_index": 0,
+        "query_index": 0,
+        "subject_index": 1,
+        "tsv": "",
+        "canonicalTsv": "query\tsubject\n",
+        "hit_count": 0
+       }
+      ],
+      "orthogroupResult": {
+       "kind": "orthogroupResult",
+       "schema": 3,
+       "value": {
+        "fields": {},
+        "type": "OrthogroupGraphResult"
+       }
+      }
+     }
+    }
+   ],
+   "python": "refuse",
+   "web": "loaded",
+   "note": "Known difference, hand-made input only: the Web zero-hit check reads only the result envelope, so a typed result whose fields are empty loads; Python decodes the member and refuses the Session.",
+   "pythonMessage": "contains unresolved protein references"
   }
  ]
 }

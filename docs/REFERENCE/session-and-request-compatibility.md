@@ -446,9 +446,10 @@ protein pipeline (mode `none`, no pairs). It loads with **No comparison** and
 without selecting LOSATP, so Generate draws no ribbons and starts no LOSAT run.
 A CLI Session written with `--losat losatp` and an editable protein pipeline
 loads with the adjacent LOSATP comparison it drew. It stores the protein
-results the CLI computed as the Web Save stores them: the comparison tables
-and, for similarity groups or collinear blocks, their result. The first
-Generate after Load reuses them instead of running LOSAT again.
+results the CLI computed: Similarity groups stores the comparison tables and
+the `orthogroupResult`, and Collinear stores only the `collinearityResult` (no
+tables). The first Generate after Load reuses them instead of running LOSAT
+again. Pairwise stores nothing, so its first Generate still searches.
 
 Without saved `ui.layoutPreferences`, the legend and plot-title positions come
 from the committed `diagramOptions.output` for its mode and grouping, so a CLI

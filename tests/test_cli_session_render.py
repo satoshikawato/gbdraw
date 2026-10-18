@@ -825,6 +825,17 @@ def test_a_cli_resave_tries_only_the_candidates_of_the_searches_it_plans(
     assert _resaved_legacy_artifacts(tmp_path, monkeypatch, without, "none") == (["pending"] * 34, 8)
 
 
+def test_a_non_losatp_search_tries_no_legacy_candidate() -> None:
+    """A LOSATN search is not a protein search: no record pair is attempted, so all candidates stay pending."""
+
+    from types import SimpleNamespace
+
+    from gbdraw.api.session_compat import _legacy_candidate_attempt_pairs
+
+    request = SimpleNamespace(options=SimpleNamespace(losat_search=SimpleNamespace(program="losatn")))
+    assert _legacy_candidate_attempt_pairs(request, "orthogroup") == ()  # type: ignore[arg-type]
+
+
 def test_a_cli_resave_that_promotes_the_last_candidate_drops_the_legacy_evidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
