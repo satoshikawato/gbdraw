@@ -156,6 +156,19 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
 ]);
 
 const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
+// The versions this reader takes, in words, for the refusal of another
+// version (OV-1253): "27–33, 39–42, 44, and 46–48".
+const READ_SESSION_VERSIONS = (() => {
+  /** @type {[number, number][]} */
+  const runs = [];
+  for (const version of SUPPORTED_SESSION_VERSIONS) {
+    const last = runs[runs.length - 1];
+    if (last && version === last[1] + 1) last[1] = version;
+    else runs.push([version, version]);
+  }
+  const words = runs.map(([first, end]) => (first === end ? String(first) : `${first}\u2013${end}`));
+  return words.length > 1 ? `${words.slice(0, -1).join(', ')}, and ${words[words.length - 1]}` : words.join('');
+})();
 const OLDEST_SESSION_VERSION = Math.min(...SUPPORTED_SESSION_VERSIONS);
 
 /**
@@ -177,11 +190,10 @@ export const readSessionInput = (value) => {
   }
   if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
     // OV-1253: a Session names its version, as the CLI does; another file keeps the generic refusal.
-    throw diagnosticError('INPUT_INVALID', value.format === 'gbdraw-session' ? {
-      field: 'schema',
-      reason: version > SESSION_VERSION ? 'SESSION_TOO_NEW' : 'SESSION_VERSION_UNSUPPORTED',
-      sessionVersion: version
-    } : { field: 'schema', reason: 'FIELDS' });
+    throw diagnosticError('INPUT_INVALID', value.format !== 'gbdraw-session' ? { field: 'schema', reason: 'FIELDS' }
+      : version > SESSION_VERSION
+        ? { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: version, latestSessionVersion: SESSION_VERSION }
+        : { field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: version, readSessionVersions: READ_SESSION_VERSIONS });
   }
   if (value.format !== 'gbdraw-session') throw formatInvalid();
   return /** @type {SessionEnvelope} */ (value); // `format` and `version` were checked above

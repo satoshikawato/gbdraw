@@ -1,7 +1,4 @@
 // @ts-check
-
-import { SESSION_VERSION, SUPPORTED_SESSION_VERSIONS } from '../contracts/schema.generated.js';
-
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame', 'convertStoredProteinResultFrames',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
@@ -297,6 +294,8 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [subjectRecordIndex]
  * @property {string} [labelFitCounts] Python's sentence of the label fit counts, shown as sent.
  * @property {number} [sessionVersion] The version of a Session file this app does not read.
+ * @property {number} [latestSessionVersion] The newest Session version this app reads.
+ * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
  */
 
 /**
@@ -550,6 +549,10 @@ const contextFor = (value) => {
   if (caption) context.featureCaption = caption;
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   if (Number.isSafeInteger(value.sessionVersion)) context.sessionVersion = value.sessionVersion;
+  if (Number.isSafeInteger(value.latestSessionVersion)) context.latestSessionVersion = value.latestSessionVersion;
+  if (typeof value.readSessionVersions === 'string' && /^[0-9\u2013, and]{1,200}$/.test(value.readSessionVersions)) {
+    context.readSessionVersions = value.readSessionVersions;
+  }
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
   // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
@@ -567,24 +570,16 @@ const contextFor = (value) => {
 };
 
 // OV-1253: the CLI's words for a Session version this app does not read
-// (gbdraw/session_io.py `validate_session`), with the versions it reads.
-const SUPPORTED_SESSION_VERSION_TEXT = (() => {
-  /** @type {[number, number][]} */
-  const runs = [];
-  for (const version of SUPPORTED_SESSION_VERSIONS) {
-    const last = runs[runs.length - 1];
-    if (last && version === last[1] + 1) last[1] = version;
-    else runs.push([version, version]);
-  }
-  const words = runs.map(([first, end]) => (first === end ? String(first) : `${first}\u2013${end}`));
-  return words.length > 1 ? `${words.slice(0, -1).join(', ')}, and ${words[words.length - 1]}` : words.join('');
-})();
+// (gbdraw/session_io.py `validate_session`). The Session reader
+// (services/session-authority.js) names the versions it reads.
 /** @param {UserFacingContext} context */
-const sessionVersionGuidance = ({ reason, sessionVersion }) => {
+const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, readSessionVersions }) => {
   if (sessionVersion === undefined) return '';
-  if (reason === 'SESSION_TOO_NEW') return `Session version ${sessionVersion} is newer than this gbdraw supports (${SESSION_VERSION}).`;
-  if (reason === 'SESSION_VERSION_UNSUPPORTED') {
-    return `Unsupported session version: ${sessionVersion}. This gbdraw reads Session versions ${SUPPORTED_SESSION_VERSION_TEXT}.`;
+  if (reason === 'SESSION_TOO_NEW' && latestSessionVersion !== undefined) {
+    return `Session version ${sessionVersion} is newer than this gbdraw supports (${latestSessionVersion}).`;
+  }
+  if (reason === 'SESSION_VERSION_UNSUPPORTED' && readSessionVersions) {
+    return `Unsupported session version: ${sessionVersion}. This gbdraw reads Session versions ${readSessionVersions}.`;
   }
   return '';
 };

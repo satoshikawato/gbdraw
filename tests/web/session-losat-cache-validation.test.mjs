@@ -1349,8 +1349,12 @@ for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
     const result = await importSession(event);
     assert.equal(result.status, 'error');
     assert.equal(result.error.code, 'INPUT_INVALID');
-    assert.deepEqual(result.error.context, {field:'schema',reason:'FIELDS'});
-    assert.match(result.error.summary, /supported Session file/);
+    // OV-1253: the refusal names the version and the versions this gbdraw reads.
+    assert.deepEqual(result.error.context, {
+      field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: unsupportedVersion,
+      readSessionVersions: '27–33, 39–42, 44, and 46–48'
+    });
+    assert.match(result.error.summary, new RegExp(`Unsupported session version: ${unsupportedVersion}\\.`));
     assert.deepEqual(state.errorLog.value, result.error);
     assert.deepEqual(alerts, []);
     assert.equal(event.target.value, '');

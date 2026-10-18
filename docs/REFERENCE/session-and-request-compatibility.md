@@ -320,11 +320,14 @@ The Web app refuses these files and shows an error instead:
 - A file that is not JSON, including a broken gzip file and text that is not
   UTF-8.
 - A file that is neither a gbdraw Session nor a configuration file, including
-  a Session without its `format` or `version` and the development-only
-  Sessions 34–38, 43 and 45 and request schemas 3 and 4.
+  a Session without its `format` or `version` and request schemas 3 and 4.
 - A Session of version 26 or older (gbdraw 0.11.0 or older, or gbdraw.app
   before 0.12.0). The error says that an older gbdraw saved it.
-- A Session version or request schema newer than this reader.
+- A Session of a version this reader does not read, such as the
+  development-only Sessions 34–38, 43 and 45. The error names the version and
+  the versions this gbdraw reads.
+- A Session version or request schema newer than this reader. For a Session,
+  the error names its version and the newest version this gbdraw reads.
 - A file larger than 200 MB, or larger than 512 MB after decompression.
 - A gzip file opened in a browser without gzip decompression, or any file in
   a browser without module Workers. A browser feature or Worker that fails
