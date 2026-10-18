@@ -133,7 +133,7 @@ import {
   requireCurrentCollinearColorMode,
   requireCurrentCollinearMaxConflicts,
   requireCurrentCollinearMaxDiagonalDrift,
-  requireCurrentCollinearMaxParalogLinks,
+  drawnCollinearMaxParalogLinks,
   requireCurrentCollinearMaxUnitGap,
   requireCurrentCollinearMergeOrientation,
   requireCurrentCollinearMinAnchors,
@@ -2485,12 +2485,11 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
     orthogroupMemberMaxHits: ['orthogroup', 'collinear'].includes(blastpMode)
       ? requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits)
       : integerSettingOr(blastp.orthogroupMemberMaxHits, null, 1),
-    collinearMaxParalogLinksPerOrthogroup:
-      blastpMode === 'collinear'
-        ? requireCurrentCollinearMaxParalogLinks(
-            blastp.collinearMaxParalogLinksPerOrthogroup
-          )
-        : positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2)
+    // The value the Web drew with, so a replay draws the same groups.
+    collinearMaxParalogLinksPerOrthogroup: drawnCollinearMaxParalogLinks(
+      blastpMode === 'collinear',
+      blastp.collinearMaxParalogLinksPerOrthogroup
+    )
   };
 };
 

@@ -613,13 +613,19 @@ def test_a_circular_replay_keeps_the_legacy_protein_evidence_of_its_session(
     assert json.dumps(resaved, sort_keys=True) == json.dumps(saved, sort_keys=True)
 
 
-@pytest.mark.parametrize("batch", [False, True], ids=["one-diagram", "batch"])
+@pytest.mark.parametrize("shape", ["one-diagram", "batch", "linear"])
 def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_entries_supersede(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, batch: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shape: str
 ) -> None:
-    """OV-1119: both shapes drop superseded derived evidence and keep the raw candidates."""
+    """OV-1119, OV-1129: every shape drops superseded derived evidence and keeps the raw candidates."""
 
-    source = _circular_batch_session_with_protein_artifacts(tmp_path, monkeypatch, raw_entries=True, batch=batch)
+    source = (
+        _session_with_derived_entries(tmp_path, monkeypatch)[0]
+        if shape == "linear"
+        else _circular_batch_session_with_protein_artifacts(
+            tmp_path, monkeypatch, raw_entries=True, batch=shape == "batch"
+        )
+    )
     session = json.loads(source.read_text(encoding="utf-8"))
     assert session["losatDerivedCache"]["entries"]
     legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
@@ -649,5 +655,8 @@ def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_en
     replayed = tmp_path / "replayed.gbdraw-session.json"
     _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / "out" / "replayed"),
          "-f", "svg", "--session_output", str(replayed))
-    resaved = load_session_document(replayed).to_dict().get("legacyArtifacts")
+    resaved_session = load_session_document(replayed).to_dict()
+    # The evidence goes only because the re-save writes current derived entries.
+    assert resaved_session["losatDerivedCache"]["entries"] == session["losatDerivedCache"]["entries"]
+    resaved = resaved_session.get("legacyArtifacts")
     assert resaved is not None and set(resaved) == {"proteinRawCandidates"}

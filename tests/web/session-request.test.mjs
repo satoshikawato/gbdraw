@@ -3248,6 +3248,21 @@ assert.equal(
   'Collinear rendering must use the full typed result instead of parallel pair tables'
 );
 }
+{
+// OV-1128 (D-98 A): the request records the paralog links the Web drew with. Similarity groups draws with the
+// default 2 whatever the hidden Collinear setting holds; Collinear draws with the stored setting.
+const storedParalogLinks = state.losat.blastp.collinearMaxParalogLinksPerOrthogroup;
+state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = 3;
+for (const [blastpMode, drawn] of [['orthogroup', 2], ['collinear', 3]]) {
+  state.losat.blastp.mode = blastpMode;
+  // Raw: these requests are not among the characterized ones.
+  const generated = buildCanonicalRenderRequestRaw({
+    state, filesData: linearFilesData, comparisonPlanSnapshot: comparisonSnapshotForState(state, linearFilesData)
+  }).renderRequest.comparisons.find((comparison) => comparison.kind === 'generatedProteinComparison');
+  assert.equal(generated.settings.collinearMaxParalogLinksPerOrthogroup, drawn, blastpMode);
+}
+state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = storedParalogLinks;
+}
 state.losat.blastp.mode = 'pairwise';
 state.linearComparisonPlan = selectedComparisonPlan;
 const orthogroupResourceText = '{"schema":1,"valueKind":"orthogroupResult","value":{}}\n';

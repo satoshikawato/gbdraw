@@ -1410,15 +1410,19 @@ def _adjust_migration_report(
     prepared: PreparedDiagramRequest | PreparedCircularBatchRequest,
     adapted: AdaptedSessionRequest,
 ) -> SessionMigrationReport:
-    """The report of ``adapted``; current derived entries supersede the legacy evidence."""
+    """The report of ``adapted``; current derived entries supersede the legacy evidence.
 
-    # A batch keeps no derived entries of its own: its drawings use the Session's.
-    derived = (
+    They are the Session's own, which a re-save writes back, or else the ones
+    this render built (a batch builds none).
+    """
+
+    if not (
         adapted.artifacts.losat_derived_cache_entries
-        if isinstance(prepared, PreparedCircularBatchRequest)
-        else prepared.losat_derived_cache_entries
-    )
-    if not derived:
+        or (
+            isinstance(prepared, PreparedDiagramRequest)
+            and prepared.losat_derived_cache_entries
+        )
+    ):
         return adapted.migration_report
     return replace(adapted.migration_report, protein_derived_evidence=())
 

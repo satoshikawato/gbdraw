@@ -185,9 +185,23 @@ export const requireCurrentCollinearMaxConflicts = (value) => (
   requireCurrentInteger(value, 1, 0, 'Collinear maximum conflicts in merge gap')
 );
 
+const DEFAULT_COLLINEAR_MAX_PARALOG_LINKS = 2;
+
 /** @param {unknown} value */
 export const requireCurrentCollinearMaxParalogLinks = (value) => (
-  requireCurrentInteger(value, 2, 1, 'Collinear maximum paralog links per orthogroup')
+  requireCurrentInteger(
+    value, DEFAULT_COLLINEAR_MAX_PARALOG_LINKS, 1, 'Collinear maximum paralog links per orthogroup'
+  )
+);
+
+/**
+ * The paralog links per group a Generate draws with. Only Collinear mode reads
+ * the stored setting; Similarity groups draws with the default (OV-1128).
+ * @param {boolean} collinear Whether the Generate runs protein BLASTP in Collinear mode.
+ * @param {unknown} value The stored setting.
+ */
+export const drawnCollinearMaxParalogLinks = (collinear, value) => (
+  collinear ? requireCurrentCollinearMaxParalogLinks(value) : DEFAULT_COLLINEAR_MAX_PARALOG_LINKS
 );
 
 /** @param {unknown} value */
