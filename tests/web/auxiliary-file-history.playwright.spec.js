@@ -67,7 +67,8 @@ test('a slow earlier specific table cannot overwrite a later uploaded table', as
 
 // H-GUI-16: a Specific rules import still applying keeps History's checkpoint
 // open, so a Priority File uploaded meanwhile is no History step; Generate
-// pressed at once must still wait for both imports.
+// pressed at once must still wait for both imports (OV-1193), and the Priority
+// upload must not discard the Specific rules import (OV-1205).
 test('Generate waits for the Specific rules and Priority File imports still applying (OV-1193)', async ({ browser }) => {
   const page = await load(browser);
   await page.evaluate(() => {
@@ -92,6 +93,8 @@ test('Generate waits for the Specific rules and Priority File imports still appl
   await upload('Specific rules file', 'held-rules.tsv', 'CDS\tproduct\tNADH\t#123456\tImported\n');
   await upload('Priority File (TSV)', 'held-priority.tsv', 'CDS\tgene,product\n');
   const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+  const generateStarts = () => page.evaluate(() => window.__MODE_EVENTS__.filter((event) => event.name === 'generate-start').length);
+  const startsBefore = await generateStarts();
   await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
   // The click is honoured: Generate shows its processing state while the imports apply.
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.processing)).toBe(true);
@@ -100,16 +103,21 @@ test('Generate waits for the Specific rules and Priority File imports still appl
     window.__RELEASE__['held-rules.tsv']();
     await a.waitForAuxiliaryFileImport(a.files.t_color);
   });
-  // Without the wait, Generate sends its request once the rules apply (within
-  // seconds); it must send nothing while the Priority File still applies.
-  await page.waitForFunction(() => window.__RUN_RESOURCES__.length > 0, null, { timeout: 5000 }).catch(() => {});
-  expect(await page.evaluate(() => window.__RUN_RESOURCES__)).toEqual([]);
+  // Generate starts building its request only after the Priority File applies;
+  // one that did not wait would start once the rules applied (`generate-start`).
+  await page.waitForFunction((before) => window.__MODE_EVENTS__.filter((event) => event.name === 'generate-start').length > before,
+    startsBefore, { timeout: 5000 }).catch(() => {});
+  expect(await generateStarts()).toBe(startsBefore);
   await page.evaluate(() => window.__RELEASE__['held-priority.tsv']());
   await expect.poll(() => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
   }), { timeout: 180000 }).toEqual({ key: key + 1, processing: false, error: null });
   // The first render request is the Generate's; a later rerender may follow it.
-  expect(await page.evaluate(() => window.__RUN_RESOURCES__[0])).toEqual(expect.arrayContaining(['qualifier-priority-file']));
-  expect(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.manualPriorityRules)))).toEqual([{ feat: 'CDS', order: 'gene,product' }]);
+  expect(await page.evaluate(() => window.__RUN_RESOURCES__[0]))
+    .toEqual(expect.arrayContaining(['colors-color-table-file', 'qualifier-priority-file']));
+  expect(await page.evaluate(() => {
+    const a = window.__GBDRAW_APP__;
+    return { priority: JSON.parse(JSON.stringify(a.manualPriorityRules)), rules: a.manualSpecificRules.map((rule) => rule.cap) };
+  })).toEqual({ priority: [{ feat: 'CDS', order: 'gene,product' }], rules: ['Imported'] });
 });

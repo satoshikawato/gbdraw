@@ -22,7 +22,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { setupWatchers } = await import('../../gbdraw/web/js/app/watchers.js');
+const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw/web/js/app/watchers.js');
 const APP_SETUP = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
 
 // Any port of the watcher owner: a function that does nothing.
@@ -46,6 +46,7 @@ const closedDialogs = [];
 const { resetModeTransientUi } = setupWatchers({
   state,
   rulePreparation: port(),
+  auxiliaryFileImports: createAuxiliaryFileImports((target) => target),
   ref: (value) => ({ value }),
   computed: (getter) => ({ get value() { return getter(); } }),
   watch: (source, callback) => {
