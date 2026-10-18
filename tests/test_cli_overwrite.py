@@ -23,6 +23,7 @@ from gbdraw.api.requests import (
     RecordInput,
     RenderOutputRequest,
 )
+from gbdraw.api.session_compat import SessionMigrationReport
 from gbdraw.circular import _get_args as get_circular_args
 from gbdraw.circular import circular_main
 from gbdraw.cli_utils.session import parse_session_pre_args, strip_session_output_args
@@ -764,6 +765,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
                 losat_cache_entries=(),
                 losat_derived_cache_entries=({"schema": 3},),
                 protein_identity_manifest=None,
+                migration_report=SessionMigrationReport(),
                 feature_identity_notices=(),
             )
         }

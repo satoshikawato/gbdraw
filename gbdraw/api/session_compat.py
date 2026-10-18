@@ -44,6 +44,7 @@ from gbdraw.session_io import (
     unmapped_hash_selector_warning,
 )
 
+from .migration_report import SessionMigrationReport
 from .options import LinearMultiRecordOptions, LinearRecordTranslation
 from .record_planning import (
     ResolvedRecordCollection,
@@ -89,16 +90,6 @@ _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
 _FEATURE_ANALYSIS_REFERENCE_RE = re.compile(r"f_[0-9a-f]{64}")
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class SessionMigrationReport:
-    """Compatibility evidence retained when a session enters the current core."""
-
-    protein_raw_candidates: tuple[Mapping[str, Any], ...] = ()
-    protein_derived_evidence: tuple[Mapping[str, Any], ...] = ()
-    protein_id_map: Mapping[str, str] | None = None
-    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1442,19 +1433,19 @@ def adapt_session_request(
 
 def _adjust_migration_report(
     prepared: PreparedDiagramRequest | PreparedCircularBatchRequest,
-    report: SessionMigrationReport,
+    adapted: AdaptedSessionRequest,
 ) -> SessionMigrationReport:
-    if isinstance(prepared, PreparedCircularBatchRequest):
-        return report
-    evidence = (
-        ()
-        if prepared.losat_derived_cache_entries
-        else report.protein_derived_evidence
+    """The report of ``adapted``; current derived entries supersede the legacy evidence."""
+
+    # A batch keeps no derived entries of its own: its drawings use the Session's.
+    derived = (
+        adapted.artifacts.losat_derived_cache_entries
+        if isinstance(prepared, PreparedCircularBatchRequest)
+        else prepared.losat_derived_cache_entries
     )
-    return replace(
-        report,
-        protein_derived_evidence=evidence,
-    )
+    if not derived:
+        return adapted.migration_report
+    return replace(adapted.migration_report, protein_derived_evidence=())
 
 
 def build_session_compatible_request_diagram(
@@ -1491,10 +1482,7 @@ def _build_session_compatible_plan(
         artifacts=adapted.artifacts,
         protein_extraction=extraction,
     )
-    return prepared, _adjust_migration_report(
-        prepared,
-        adapted.migration_report,
-    )
+    return prepared, _adjust_migration_report(prepared, adapted)
 
 
 def render_session_compatible_request(
@@ -1502,8 +1490,11 @@ def render_session_compatible_request(
     drawing: SessionDrawingArtifacts,
     *,
     include_feature_catalog: bool = False,
-) -> RequestRenderResult | CircularBatchRenderResult:
-    """Render one drawing of a released session through its sole compatibility adapter."""
+) -> SessionCompatibleRequestRenderResult | CircularBatchRenderResult:
+    """Render one drawing of a released session through its sole compatibility adapter.
+
+    Both result shapes carry the drawing's ``migration_report``.
+    """
 
     _require_drawing(drawing)
     plan = plan_request(request)
@@ -1519,11 +1510,8 @@ def render_session_compatible_request(
         batch_outputs_preflighted=batch_outputs_preflighted,
         include_feature_catalog=include_feature_catalog,
     )
-    if not isinstance(prepared, PreparedDiagramRequest) or not isinstance(
-        result,
-        RequestRenderResult,
-    ):
-        return result
+    if isinstance(result, CircularBatchRenderResult):
+        return replace(result, migration_report=migration_report)
     return SessionCompatibleRequestRenderResult(
         **{
             item.name: getattr(result, item.name)

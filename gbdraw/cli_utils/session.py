@@ -49,7 +49,8 @@ from gbdraw.session_migration import (
 )
 
 if TYPE_CHECKING:
-    from gbdraw.api.request_render import CircularBatchRenderResult, RequestRenderResult
+    from gbdraw.api.request_render import CircularBatchRenderResult
+    from gbdraw.api.session_compat import SessionCompatibleRequestRenderResult
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
     from gbdraw.session import SessionDocument
@@ -646,7 +647,7 @@ def _session_sidecar_path(
 
 def _rendered_drawing_build(
     plan: Any,
-    rendered: RequestRenderResult | CircularBatchRenderResult,
+    rendered: SessionCompatibleRequestRenderResult | CircularBatchRenderResult,
     *,
     source_version: int,
 ) -> tuple[Any, dict[str, Any] | None]:
@@ -665,9 +666,9 @@ def _rendered_drawing_build(
         # A replay builds none; the Session keeps the entries it was saved with.
         losat_derived_cache_entries=state.get("losatDerivedCache", {}).get("entries", ()),
         protein_identity_manifest=rendered.protein_identity_manifest,
-        legacy_protein_raw_candidates=getattr(rendered, "legacy_protein_raw_candidates", ()),
-        legacy_protein_derived_evidence=getattr(rendered, "legacy_protein_derived_evidence", ()),
-        protein_id_map=getattr(rendered, "protein_id_map", None),
+        legacy_protein_raw_candidates=rendered.migration_report.protein_raw_candidates,
+        legacy_protein_derived_evidence=rendered.migration_report.protein_derived_evidence,
+        protein_id_map=rendered.migration_report.protein_id_map,
     )
     svg_results = [
         {"name": output.stem, "content": remove_embedded_font_css(output.read_text(encoding="utf-8"))}

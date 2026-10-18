@@ -131,6 +131,7 @@ from .diagram import (
     resolve_feature_inputs,
 )
 from .io import load_gbks
+from .migration_report import SessionMigrationReport
 from .options import (
     CircularDiagramOptions,
     CircularMultiRecordOptions,
@@ -708,13 +709,20 @@ class PreparedCircularBatchRequest:
 
 @dataclass(frozen=True)
 class CircularBatchRenderResult:
-    """Saved outputs for an explicit separate-diagram Circular batch."""
+    """Saved outputs for an explicit separate-diagram Circular batch.
+
+    A Session replay fills ``migration_report`` with the Session's evidence,
+    as ``SessionCompatibleRequestRenderResult`` does for one diagram.
+    """
 
     request: CircularBatchRequest
     records: tuple[SeqRecord, ...]
     items: tuple[RequestRenderResult, ...]
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
+    migration_report: SessionMigrationReport = field(
+        default_factory=SessionMigrationReport
+    )
 
     @property
     def mode(self) -> Literal["circular"]:
