@@ -168,7 +168,11 @@ write-up of a release.
   bracket's end caps included, and the same gap beyond the letters to the
   axis line, the next slot, or the record edge; a `to_slot` or
   `cover_anchor` span's label stays outside every slot the span covers,
-  whatever its mark and its own `h` (OV-1156). `highlight`, `band`, and
+  whatever its mark and its own `h` (OV-1156), `label_offset` beyond the
+  span's edge or beyond the part of the mark's stroke that passes it. An
+  overlay with nothing to span on a record (`cover_anchor` on a record
+  without feature lanes, a `to_slot` span where neither slot has a band)
+  keeps its mark's label rule, as before (OV-1158). `highlight`, `band`, and
   `bracket` labels no longer touch or overlap their mark; `line` labels,
   which had 4.7 px, move 0.7 px closer. The label room grows to match;
   records grow only where nothing else already gave that room, by 0 to 7 px

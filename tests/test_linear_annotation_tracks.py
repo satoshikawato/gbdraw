@@ -486,11 +486,73 @@ def test_linear_to_slot_span_covers_the_nominal_lanes_of_an_underlay_only_record
     assert spans[2][0] > gc_top
 
 
+_MARKS = ("highlight", "band", "bracket", "line")
+
+
+@pytest.mark.parametrize("layer", ["underlay", "foreground"])
+@pytest.mark.parametrize("mark", _MARKS)
+def test_linear_cover_anchor_without_lanes_keeps_the_label_rule_of_its_mark(mark: str, layer: str) -> None:
+    def build(cover_anchor: bool):
+        return _build_linear_span(
+            *_FEATURES_BELOW_STACK,
+            "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,"
+            f"cover_anchor={str(cover_anchor).lower()},layer={layer},z={-1 if layer == 'underlay' else 1}",
+            features=(),
+            mark=mark,
+        )
+
+    covering, plain = build(True), build(False)
+    (label,) = _span_label_marks(covering)
+
+    # Without lanes there is nothing to span (OV-1158): the overlay keeps its own band, and its label
+    # keeps label_offset from its own painted mark, as on an overlay that covers nothing.
+    assert _ink_gap_to_mark(label) == pytest.approx(4.0, abs=1e-6)
+    assert label["ink"] == pytest.approx(_span_label_marks(plain)[0]["ink"], abs=1e-9)
+    assert _record_body(covering) == pytest.approx(_record_body(plain), abs=1e-9)
+
+
+@pytest.mark.parametrize("layer", ["underlay", "foreground"])
+@pytest.mark.parametrize("mark", _MARKS)
+def test_linear_to_slot_span_without_bodies_keeps_the_label_rule_of_its_mark(mark: str, layer: str) -> None:
+    depth = pd.DataFrame({"reference_name": ["rec1"] * 2400, "position": list(range(1, 2401)), "depth": [20.0] * 2400})
+    drawing = _build_linear_span(
+        "features:features@side=overlay",
+        "depth:depth@side=below,track_index=0",
+        "gc:dinucleotide_content@side=below",
+        "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,to_slot=depth,"
+        f"layer={layer},z={-1 if layer == 'underlay' else 1}",
+        record_count=2,
+        features=(),
+        mark=mark,
+        depth_track_tables=[[depth], [None]],
+        depth_window=100,
+        depth_step=100,
+        layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@2")),
+    )
+    labels = {label["text"]: label for label in _span_label_marks(drawing)}
+    bands = _linear_bands(drawing, 0)
+
+    # Record 1 has a Depth plot to span: its label keeps label_offset beyond it (OV-1156).
+    box = _label_box(drawing, record_index=0)
+    assert bands["depth"] is not None
+    gap = bands["depth"][0] - box[1] if layer == "underlay" else box[0] - bands["depth"][1]
+    assert gap == pytest.approx(4.0, abs=1e-6)
+    # Record 2 has neither lanes nor depth: no span (OV-1158), the label follows its own mark.
+    assert _linear_bands(drawing, 1)["depth"] is None
+    assert _ink_gap_to_mark(labels["Span 2"]) == pytest.approx(4.0, abs=1e-6)
+
+
 def _span_slot(
-    spec: str = "anchor_slot=features,to_slot=gc,layer=underlay,z=-1", *, labels: bool = False
+    spec: str = "anchor_slot=features,to_slot=gc,layer=underlay,z=-1",
+    *,
+    labels: bool = False,
+    padding_px: float | None = 0,
 ) -> str:
+    """An annotation overlay slot; ``padding_px=None`` keeps the default padding (2)."""
+
+    padding = "" if padding_px is None else f"padding_px={padding_px},"
     return (
-        "regions:annotations@side=overlay,set_id=regions,padding_px=0,"
+        f"regions:annotations@side=overlay,set_id=regions,{padding}"
         f"show_labels={str(labels).lower()},{spec}"
     )
 
@@ -509,6 +571,7 @@ def _build_linear_span(
     overrides: dict[str, object] | None = None,
     label_text: bool = True,
     mark: str = "highlight",
+    style: RegionAnnotationStyle | None = None,
     **kwargs: object,
 ):
     records = []
@@ -529,6 +592,7 @@ def _build_linear_span(
                         CoordinateSpan(parse_record_selector(f"#{index}"), 100, 300),
                         label=f"Span {index}" if label_text else None,
                         mark=mark,
+                        **({} if style is None else {"style": style}),
                     )
                     for index in range(1, record_count + 1)
                 ),
@@ -1247,33 +1311,99 @@ _COVERING_SPANS = [
 ]
 
 
-@pytest.mark.parametrize("mark", ["highlight", "band", "bracket", "line"])
+@pytest.mark.parametrize(
+    ("padding_px", "stroke_width"),
+    [
+        # The default padding holds the default stroke: the letters keep label_offset from the span edge.
+        pytest.param(None, 1.5, id="default-padding"),
+        # Without padding a highlight's stroke passes the span edge by half its width.
+        pytest.param(0, 1.5, id="no-padding"),
+        # A stroke wider than twice the padding: only a mark that paints out there passes the edge.
+        pytest.param(None, 10.0, id="wide-stroke"),
+    ],
+)
+@pytest.mark.parametrize("mark", _MARKS)
 @pytest.mark.parametrize(("stack", "spec", "next_slot"), _COVERING_SPANS)
 def test_linear_span_label_stays_outside_every_slot_it_covers(
-    stack: tuple[str, ...], spec: str, next_slot: str | None, mark: str
+    stack: tuple[str, ...],
+    spec: str,
+    next_slot: str | None,
+    mark: str,
+    padding_px: float | None,
+    stroke_width: float,
 ) -> None:
-    drawing = _build_linear_span(*stack, _span_slot(spec, labels=True), mark=mark)
+    def build(labels: bool):
+        return _build_linear_span(
+            *stack,
+            _span_slot(spec, labels=labels, padding_px=padding_px),
+            mark=mark,
+            style=RegionAnnotationStyle(stroke_width=stroke_width),
+        )
+
+    drawing = build(True)
     box = _label_box(drawing)
     bands = _linear_bands(drawing)
     covered = {
         value for key, value in (part.split("=") for part in spec.split(",")) if key in {"anchor_slot", "to_slot"}
     }
+    (label,) = _span_label_marks(drawing)
+    axis_y = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisYpx"])
+    mark_top, mark_bottom = (edge - axis_y for edge in label["mark"])
+    span_top, span_bottom = bands["regions"]
+    above = box[1] <= span_top
 
-    # Whatever the mark, the letters keep label_offset outside every covered slot (OV-1156), here
-    # label_offset plus the half stroke (0.75 px) that passes the span edge at padding_px=0.
+    # Whatever the mark, the letters keep label_offset outside every covered slot (OV-1156) ...
     for slot_id in covered:
         _assert_clear(box, bands[slot_id], slot_id)
-    span_top, span_bottom = bands["regions"]
-    gap = span_top - box[1] if box[1] <= span_top else box[0] - span_bottom
-    assert gap == pytest.approx(4.75, abs=1e-6)
+    # ... from the span edge, or from the mark's paint where it really passes that edge (review 1176):
+    # a highlight's stroke beyond the padding; never a bracket or line at the lane centre.
+    edge_gap = span_top - box[1] if above else box[0] - span_bottom
+    paint_gap = mark_top - box[1] if above else box[0] - mark_bottom
+    assert min(edge_gap, paint_gap) == pytest.approx(4.0, abs=1e-6)
+    if mark in {"bracket", "line"}:
+        assert edge_gap == pytest.approx(4.0, abs=1e-6)
+    if mark == "highlight":
+        passes = max(0.0, 0.5 * stroke_width - (2.0 if padding_px is None else padding_px))
+        assert edge_gap == pytest.approx(4.0 + passes, abs=1e-6)
     # And label_offset from what lies beyond them.
     if next_slot is not None:
         far = _slot_paint(drawing, next_slot)
         assert min(abs(far[0] - box[1]), abs(box[0] - far[1])) == pytest.approx(4.0, abs=1e-6)
     else:
         # Below the axis line: without label text the record body starts at the line.
-        axis_top = _record_body(_build_linear_span(*stack, _span_slot(spec), mark=mark))[0]
+        axis_top = _record_body(build(False))[0]
         assert box[0] == pytest.approx(-axis_top + 4.0, abs=1e-6)
+
+
+def test_linear_hmmtdna_highlight_span_labels_keep_label_offset_from_the_covered_gc_plot() -> None:
+    """The figure of review 1174: rRNA genes and Control region below a features-to-GC highlight span."""
+
+    record = SeqIO.read(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk", "genbank")
+    style = RegionAnnotationStyle(stroke_width=0.6)
+    regions = (
+        RegionAnnotation("rrna", CoordinateSpan(None, 648, 3229), label="rRNA genes", mark="highlight", style=style),
+        RegionAnnotation(
+            "control", CoordinateSpan(None, 16024, 16569), label="Control region", mark="highlight", style=style
+        ),
+    )
+    drawing = assemble_linear_diagram_from_records(
+        [record],
+        cfg=apply_config_overrides(None, {"labels.linear.scope": "all"}),
+        legend="none",
+        selected_features_set=["CDS", "rRNA", "tRNA"],
+        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+        linear_track_slots=[
+            *_SPAN_STACK,
+            _span_slot("anchor_slot=features,to_slot=gc,layer=foreground,z=5", labels=True, padding_px=None),
+        ],
+        linear_track_axis_index=0,
+    )
+    gc_bottom = _linear_bands(drawing)["gc"][1]
+    axis_y = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisYpx"])
+
+    # Before OV-1156 the letters kept label_offset from the tint inside the span, 2.3 px from the GC plot.
+    for label in _span_label_marks(drawing):
+        assert label["ink"][1] - axis_y - gc_bottom == pytest.approx(4.0, abs=1e-6), label["text"]
 
 
 @pytest.mark.parametrize("mark", ["band", "bracket"])
@@ -1345,7 +1475,7 @@ def test_linear_label_wider_than_its_region_moves_off_a_leader() -> None:
     assert label["span"][0] <= centre <= label["span"][1]
 
 
-def test_linear_moved_label_keeps_its_letters_on_the_bar() -> None:
+def test_linear_label_without_a_clear_place_keeps_its_default_place_off_the_name() -> None:
     region = RegionAnnotation(
         "control", CoordinateSpan(None, 1, 300), label="Mitochondrial control region", mark="highlight"
     )
@@ -1357,10 +1487,37 @@ def test_linear_moved_label_keeps_its_letters_on_the_bar() -> None:
     left, top, right, bottom = label["ink"]
 
     # No place with its letters on the bar clears the leader, so the label keeps its default place
-    # (OV-1155) instead of hanging past the bar's start into the record name (OV-1157).
+    # (OV-1155; its letters start before the bar there) and does not move into the record name (OV-1157).
     # (the ink centre is within half a pixel of the text anchor)
     assert 0.5 * (left + right) == pytest.approx(0.5 * sum(label["span"]), abs=0.5)
     assert right <= name[0] or left >= name[2] or bottom <= name[1] or top >= name[3]
+
+
+@pytest.mark.parametrize(
+    ("x", "segment", "hanging", "placed"),
+    [
+        # A feature label hangs past the bar start over the label's default letters (-10 to 30): the nearest
+        # clear place (x = 15) would put the letters before the bar, so they stop at its start (x = 20).
+        pytest.param(10.0, (0.0, 60.0), (-40.0, -8.0), 20.0, id="bar-start"),
+        # The same at the bar end (1000): the nearest clear place is x = 985, the letters stop at the end.
+        pytest.param(990.0, (940.0, 1000.0), (1008.0, 1040.0), 980.0, id="bar-end"),
+    ],
+)
+def test_linear_moved_label_stops_with_its_letters_at_the_bar_end(
+    x: float, segment: tuple[float, float], hanging: tuple[float, float], placed: float
+) -> None:
+    from gbdraw.diagrams.linear.annotation_labels import _place_along_span
+    from gbdraw.layout.spatial import Aabb
+    from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel
+
+    label = LinearAnnotationLabel("a", "Label", x, 0.0, "middle", 10.0, "#000", Aabb(x - 20, -4, x + 20, 4), (segment,))
+    feature_label = Aabb(hanging[0], -6.0, hanging[1], 6.0)
+
+    moved = label.moved_to(_place_along_span(label, 0.0, [feature_label], 3.0, 1000.0))
+    # Moved off the feature label, and clamped: the letters end exactly at the bar's end (OV-1157).
+    assert moved.x == pytest.approx(placed)
+    assert (moved.ink.min_x, moved.ink.max_x) == pytest.approx((0.0, 40.0) if x < 500 else (960.0, 1000.0))
+    assert moved.ink.min_x >= feature_label.max_x + 3.0 or moved.ink.max_x <= feature_label.min_x - 3.0
 
 
 def test_linear_label_search_matches_a_full_scan() -> None:

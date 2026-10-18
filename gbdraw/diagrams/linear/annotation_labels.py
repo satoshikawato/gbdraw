@@ -21,7 +21,7 @@ from gbdraw.labels.linear import calculate_label_bounds, linear_leader_polyline
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel, linear_annotation_labels
 
-from .track_slots import LinearRecordVerticalPlan, linear_overlay_covers_slots
+from .track_slots import LinearRecordVerticalPlan
 
 AnnotationLabelsBySlot = Mapping[str, tuple[LinearAnnotationLabel, ...]]
 
@@ -127,7 +127,6 @@ def place_linear_annotation_labels(
         (float(slot.origin_y) for slot in plan.slots if slot.renderer == "features"), 0.0
     )
     obstacles = _feature_label_obstacles(feature_labels, features_origin_y, 0.5 * leader_stroke_width)
-    renderers = {slot.id: slot.renderer for slot in plan.slots}
     placed: dict[str, tuple[LinearAnnotationLabel, ...]] = {}
     for slot in plan.slots:
         track = annotation_track_layouts.get(slot.id)
@@ -140,7 +139,7 @@ def place_linear_annotation_labels(
             record_length=record_length,
             bar_length_px=sequence_width,
             side=slot.side,
-            covers_slots=linear_overlay_covers_slots(params, renderers.get(params.anchor_slot or "")),
+            covers_slots=slot.spans_slots,
             height_px=float(slot.height),
             font_family=font_family,
             params=params,
