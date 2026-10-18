@@ -26,6 +26,12 @@ _UNREADABLE_INPUT = {"code": "INPUT_UNREADABLE"}
 _DUPLICATE_FASTA_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UNIQUE_IDS"}
 
 
+def _parser_reason(error: BaseException) -> str:
+    """The parser's own reason, carried in the raised error (OV-1241)."""
+
+    return str(error).strip().rstrip(".")
+
+
 def genbank_absence_diagnostic(path: str) -> dict[str, str]:
     """The NO_RECORDS diagnostic of a GenBank/DDBJ file that has no record (UJ-07).
 
@@ -94,9 +100,8 @@ def load_gbks(
         except ValueError as e:  # Catching common exception when parsing GenBank files
             if str(e).startswith("Record selector"):
                 raise ValidationError(str(e)) from e
-            # The error names the file; the parser's own message is detail.
-            logger.info(f"GenBank parser message for {gbk_file}: {e}")
             raise ParseError(
+                f"The GenBank parser stopped: {_parser_reason(e)}. "
                 f"Error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format.",
                 diagnostic=_UNREADABLE_INPUT,
             ) from e
@@ -321,10 +326,8 @@ def _gff_fasta_errors(gff_file: str, fasta_file: str):
     except ValueError as e:
         if str(e).startswith("Record selector"):
             raise ValidationError(str(e)) from e
-        # The error names the files; the parser's own message is detail.
-        logger.info(f"GFF3/FASTA parser message for {gff_file}, {fasta_file}: {e}")
         raise ParseError(
-            f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}).",
+            f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}): {_parser_reason(e)}.",
             diagnostic=_UNREADABLE_INPUT,
         ) from e
     except GbdrawError:

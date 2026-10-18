@@ -86,6 +86,27 @@ def test_cli_typed_option_error_is_not_its_own_cause(tmp_path: Path) -> None:
     assert "Traceback" not in sub.stderr
 
 
+def test_parser_reason_is_in_the_raised_error(tmp_path: Path) -> None:
+    """OV-1241: the parser's reason went to the log only; API and Web callers lost it."""
+
+    import gbdraw
+    from gbdraw.exceptions import ParseError
+
+    cut = tmp_path / "cut.gb"
+    cut.write_bytes((TEST_INPUTS / "NC_001416.gb").read_bytes()[:3000])
+    with pytest.raises(ParseError, match="Premature end of line during sequence data"):
+        gbdraw.read_genbank(cut)
+    gff = tmp_path / "bad.gff"
+    gff.write_text("##gff-version 3\nseq1\tsrc\tCDS\tabc\t10\t.\t+\t0\tID=a\n", encoding="utf-8")
+    fasta = tmp_path / "a.fa"
+    fasta.write_text(">seq1\nACGTACGTACGT\n", encoding="utf-8")
+    with pytest.raises(ParseError, match="invalid literal for int"):
+        gbdraw.read_gff(gff, fasta)
+    sub = _gbdraw("circular", "--gbk", str(cut), "-o", "out", cwd=tmp_path)
+    assert sub.returncode == 1
+    assert sub.stderr.count("Premature end of line during sequence data") == 1, sub.stderr
+
+
 def test_python_existing_output_errors_share_one_wording(tmp_path: Path) -> None:
     """OV-1240: one owner words the refusal; Python callers read ``overwrite=True``."""
 
@@ -160,6 +181,9 @@ def test_no_reader_logs_an_error_it_raises() -> None:
                         isinstance(call, ast.Call)
                         and isinstance(call.func, ast.Attribute)
                         and call.func.attr in {"error", "critical", "exception"}
+                        # a logger (``logger``, ``logging``), not ``parser.error``
+                        and isinstance(call.func.value, ast.Name)
+                        and "log" in call.func.value.id.lower()
                         and isinstance(following, ast.Raise)
                     ):
                         offenders.append(f"{path.relative_to(package)}:{statement.lineno}")
