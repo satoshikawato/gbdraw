@@ -2,16 +2,21 @@
 
 An annotation label keeps the place ``linear_annotation_labels`` gives it
 when its painted letters are clear of the record's feature labels, their
-leaders and the annotation labels placed before it. Otherwise it moves along
-its mark to the nearest clear place; with none, to the place with the fewest
-conflicts, nearest first.
+leaders and the annotation labels placed before it. Otherwise it moves, with
+its centre over one of its marks (never into a gap between them), to the
+nearest clear place; with none, to the place with the fewest conflicts,
+nearest first. A conflict that remains is drawn without a fit warning
+(OV-1155).
 """
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from collections.abc import Mapping, Sequence
+from typing import cast
 
 from gbdraw.annotations import ResolvedAnnotationTrack, annotation_track_params_from_mapping
+from gbdraw.core.text import text_ink_offsets
 from gbdraw.labels.linear import calculate_label_bounds, linear_leader_polyline
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel, linear_annotation_labels
@@ -19,6 +24,30 @@ from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel, line
 from .track_slots import LinearRecordVerticalPlan
 
 AnnotationLabelsBySlot = Mapping[str, tuple[LinearAnnotationLabel, ...]]
+
+
+def _feature_label_box(label: Mapping[str, object]) -> Aabb:
+    """A feature label's painted letters as ``LabelDrawer`` draws them (central baseline); its layout box
+    when it is rotated or the font cannot be measured."""
+
+    offsets = (
+        text_ink_offsets(
+            str(label["label_text"]),
+            str(label["font_family"]),
+            float(cast(float, label["font_size"])),
+            dominant_baseline="central",
+            text_anchor=str(label.get("text_anchor", "middle")),
+        )
+        if float(cast(float, label.get("rotation_deg", 0.0))) == 0.0
+        else None
+    )
+    if offsets is None:
+        left, right, top, bottom = calculate_label_bounds(dict(label))
+        return Aabb(left, top, right, bottom)
+    left, right, top, bottom = offsets
+    x = float(cast(float, label["middle_x"]))
+    y = float(cast(float, label["middle_y"]))
+    return Aabb(x + left, y + top, x + right, y + bottom)
 
 
 def _feature_label_obstacles(
@@ -30,8 +59,7 @@ def _feature_label_obstacles(
 
     obstacles: list[Aabb] = []
     for label in feature_labels:
-        left, right, top, bottom = calculate_label_bounds(label)
-        obstacles.append(Aabb(left, origin_y + top, right, origin_y + bottom))
+        obstacles.append(_feature_label_box(label).translated(0.0, origin_y))
         leader = linear_leader_polyline(label)
         for (x1, y1), (x2, y2) in zip(leader, leader[1:]):
             obstacles.append(
@@ -43,26 +71,37 @@ def _feature_label_obstacles(
 def _place_along_span(
     label: LinearAnnotationLabel, origin_y: float, obstacles: Sequence[Aabb], gap: float
 ) -> float:
-    """The anchor x for ``label`` (in a slot at ``origin_y``): its own when clear, else the nearest clear x over its span."""
+    """The anchor x for ``label`` (in a slot at ``origin_y``).
+
+    Its own x when its letters are clear; else, with the label's centre over
+    one of its marks, the x with the fewest conflicts, nearest its own x, the
+    smaller x on a tie. A sorted sweep keeps this O(B log B) in the B
+    obstacles in the label's row.
+    """
 
     ink = label.ink.translated(0.0, origin_y)
     left, right = ink.min_x - label.x, ink.max_x - label.x
-    # Anchor x values that put the letters within ``gap`` of an obstacle in their rows.
+    centre = 0.5 * (left + right)
+    # Open intervals of anchor x that put the letters within ``gap`` of an obstacle in their row.
     blocked = [
         (box.min_x - gap - right, box.max_x + gap - left)
         for box in obstacles
         if box.min_y < ink.max_y + gap and box.max_y > ink.min_y - gap
     ]
+    starts = sorted(start for start, _end in blocked)
+    ends = sorted(end for _start, end in blocked)
 
     def conflicts(x: float) -> int:
-        return sum(1 for start, end in blocked if start < x < end)
+        # Intervals with start < x, less those already closed (end <= x): start < x < end.
+        return bisect_left(starts, x) - bisect_right(ends, x)
 
     if conflicts(label.x) == 0:
         return label.x
-    low, high = label.span[0] - left, label.span[1] - right
-    if high < low:
-        return label.x
-    candidates = {low, high, *(value for interval in blocked for value in interval if low <= value <= high)}
+    allowed = [(low - centre, high - centre) for low, high in label.segments]
+    candidates = {label.x}
+    for low, high in allowed:
+        candidates.update((low, high))
+        candidates.update(value for value in (*starts, *ends) if low <= value <= high)
     return min(sorted(candidates), key=lambda x: (conflicts(x), abs(x - label.x)))
 
 

@@ -162,16 +162,22 @@ write-up of a release.
   only by the part of the room the gap did not already give (2 px for the
   tobacco chloroplast and AP027078). Figures without a labelled span are
   unchanged (OV-843).
-- Linear annotation labels (a labelled `highlight` row, `to_slot` span, or
-  annotation slot) no longer touch or overlap their own tint: the painted
-  letters now keep `label_offset` (4 px by default) clear of the mark's
-  stroke, and the label room grows to match (by up to 5 px; records grow
-  only where nothing else already gave that room, 2 to 3 px per record in
-  the tested figures) (OV-844). A label that crossed a feature
+- Linear annotation labels (a labelled row, `to_slot` span, or annotation
+  slot, with any mark) keep `label_offset` (4 px by default) between their
+  painted letters and the painted edge of their mark, its stroke and a
+  bracket's end caps included, and the same gap beyond the letters to the
+  axis line, the next slot, or the record edge. `highlight`, `band`, and
+  `bracket` labels no longer touch or overlap their mark; `line` labels,
+  which had 4.7 px, move 0.7 px closer. The label room grows to match;
+  records grow only where nothing else already gave that room, by 0 to 7 px
+  per record in the tested figures (OV-844). A label that crossed a feature
   label's leader line or overlapped a feature label now moves along its
-  region to the nearest clear place; labels without such a conflict stay
-  where they were, for example the tobacco chloroplast `IRb` and `IRa` labels
-  with `--track_layout above` (OV-845). The label room now also follows a
+  region, its centre over one of the region's marks (never into the gap of a
+  region across the origin), to the nearest clear place; labels without such
+  a conflict stay where they were, for example the tobacco chloroplast `IRb`
+  and `IRa` labels with `--track_layout above` (OV-845). Where no place is
+  clear, the label goes to the place with the fewest conflicts and is drawn
+  there without a fit warning (OV-1155). The label room now also follows a
   slot's `style_override` font size and offset (OV-848).
 - Web app feature popup: the header shows the gene name, the product on up to
   two lines, and the record and location with thousands separators. **Edit**

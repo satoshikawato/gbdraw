@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from svgwrite.base import BaseElement
@@ -13,6 +14,7 @@ from gbdraw.svg.elements import ClipPath, Group, Line, Path, Rect, Text
 
 from gbdraw.annotations import (
     AnnotationTrackParams,
+    RegionAnnotationStyle,
     ResolvedAnnotationTrack,
     ResolvedRegionAnnotation,
     apply_feature_underlay_dom_attributes,
@@ -21,7 +23,7 @@ from gbdraw.annotations import (
     linear_annotation_labels_above,
 )
 from gbdraw.annotations.layout import PlacedRegionAnnotation
-from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink
+from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.render.group_content import GroupContent
@@ -46,7 +48,6 @@ def annotation_dom_id(
     return f"gbdraw-annotation-{_dom_token(slot_id)}-{_dom_token(annotation_id)}-{digest}"
 
 
-_LABEL_ANCHOR_SHARE: Mapping[TextAnchor, float] = {"start": 0.0, "middle": 0.5, "end": 1.0}
 _DEFAULT_LABEL_FONT_SIZE = 10.0
 
 
@@ -55,8 +56,9 @@ class LinearAnnotationLabel:
     """One Linear annotation label as it is drawn (``dominant-baseline=central``).
 
     ``x`` and ``y`` anchor the text in record-local x and slot-local y;
-    ``ink`` is the box of its painted letters in the same frame, and ``span``
-    the x range of its mark, along which the label may move.
+    ``ink`` is the box of its painted letters in the same frame, and
+    ``segments`` the x ranges of its marks: the label's centre may move along
+    them, never into a gap between them.
     """
 
     annotation_id: str
@@ -67,55 +69,68 @@ class LinearAnnotationLabel:
     font_size: float
     color: str
     ink: Aabb
-    span: tuple[float, float]
+    segments: tuple[tuple[float, float], ...]
 
     def moved_to(self, x: float) -> LinearAnnotationLabel:
         return replace(self, x=x, ink=self.ink.translated(x - self.x, 0.0))
 
 
-def _label_ink_offsets(
-    text: str, font_family: str, font_size: float
-) -> tuple[float, float, float, float, float]:
-    """The advance of ``text`` and its ink box from the start of the advance and its central baseline:
-    advance, left, right, top, bottom."""
+def _band_height_factor(mark: str) -> float:
+    """The share of its lane a ``highlight`` or ``band`` rectangle fills."""
 
-    ink = text_ink(text, font_family)
-    metrics = get_font_vertical_metrics(font_family)
-    shift = None if metrics is None else dominant_baseline_shift_em("central", metrics)
-    if ink is None or shift is None:
-        # A font that cannot be read: an em box with the fallback width of calculate_bbox_dimensions.
-        width = 0.6 * len(text) * font_size
-        return width, 0.0, width, -0.5 * font_size, 0.5 * font_size
+    return 1.0 if mark == "highlight" else 0.84
+
+
+def _cap_size(lane_height: float) -> float:
+    """Half the height of a bracket's end caps."""
+
+    return min(5.0, 0.35 * lane_height)
+
+
+def _capped_ends(annotation: ResolvedRegionAnnotation, part_index: int) -> tuple[bool, bool]:
+    """Whether a mark part draws its start and end: a display fragment's cut ends are open."""
+
+    fragment = annotation.display_parts[part_index] if annotation.display_parts is not None else None
     return (
-        ink.advance * font_size,
-        ink.left * font_size,
-        ink.right * font_size,
-        (shift - ink.top) * font_size,
-        (shift - ink.bottom) * font_size,
+        fragment is None or not fragment.artificial_start,
+        fragment is None or not fragment.artificial_end,
     )
 
 
-def _label_clearance(annotation: ResolvedRegionAnnotation, params: AnnotationTrackParams) -> float:
-    """How far a label's letters keep from its lane edge: half the mark's stroke plus ``label_offset``."""
+def _mark_reach(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_height: float) -> float:
+    """How far a mark's paint reaches from its lane centre, stroke included (the label side's painted edge)."""
 
-    style = effective_annotation_style(annotation, params)
     half_stroke = 0.0 if is_auto_feature_underlay(annotation) else 0.5 * float(style.stroke_width)
-    return half_stroke + float(style.label_offset)
+    if annotation.mark in {"band", "highlight"}:
+        return 0.5 * _band_height_factor(annotation.mark) * lane_height + half_stroke
+    reach = half_stroke
+    if annotation.mark == "bracket" and style.line_cap != "none":
+        cap = _cap_size(lane_height)
+        ends = [_capped_ends(annotation, index) for index in range(len(annotation.geometry_segments))]
+        if any(start for start, _end in ends):
+            reach = max(reach, cap)
+        if any(end for _start, end in ends):
+            # An arrow's butt-capped diagonals reach half the stroke times cos 45 degrees past the cap.
+            reach = max(reach, cap + (half_stroke * math.sqrt(0.5) if style.line_cap == "arrow" else 0.0))
+    return reach
 
 
-def linear_annotation_label_room(
-    annotation: ResolvedRegionAnnotation,
-    params: AnnotationTrackParams,
-    font_family: str,
-) -> float:
-    """How far a label's painted letters reach beyond its lane edge (0 without a drawn label)."""
+def _label_anchor(style: RegionAnnotationStyle) -> TextAnchor:
+    return "start" if style.label_position == "start" else "end" if style.label_position == "end" else "middle"
 
-    if not (params.show_labels and annotation.label):
-        return 0.0
-    style = effective_annotation_style(annotation, params)
-    size = float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE)
-    _advance, _left, _right, top, bottom = _label_ink_offsets(annotation.label, font_family, size)
-    return _label_clearance(annotation, params) + (bottom - top)
+
+def _label_ink_offsets(
+    text: str, font_family: str, font_size: float, anchor: TextAnchor
+) -> tuple[float, float, float, float]:
+    """``text_ink_offsets`` of a central-baseline label, or an em box when the font cannot be read."""
+
+    offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline="central", text_anchor=anchor)
+    if offsets is None:
+        # The fallback width of calculate_bbox_dimensions.
+        width = 0.6 * len(text) * font_size
+        origin = -TEXT_ANCHOR_SHARE[anchor] * width
+        return origin, origin + width, -0.5 * font_size, 0.5 * font_size
+    return offsets
 
 
 def _record_lanes(
@@ -134,6 +149,66 @@ def _record_lanes(
     return placements, lane_height
 
 
+def _label_rows(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    side: str,
+    height_px: float,
+    font_family: str,
+    params: AnnotationTrackParams,
+) -> list[tuple[ResolvedRegionAnnotation, RegionAnnotationStyle, float, tuple[float, float, float, float]]]:
+    """Each labelled region of the record: its style, the label's slot-local ``y`` and its ink offsets.
+
+    The letters keep ``label_offset`` from the painted edge of the mark on the
+    side ``linear_annotation_labels_above`` picks (OV-844).
+    """
+
+    if not params.show_labels:
+        return []
+    placements, lane_height = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
+    above = linear_annotation_labels_above(side, params)
+    rows = []
+    for placement in placements:
+        annotation = placement.annotation
+        if not annotation.label:
+            continue
+        style = effective_annotation_style(annotation, params)
+        size = float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE)
+        offsets = _label_ink_offsets(annotation.label, font_family, size, _label_anchor(style))
+        _left, _right, top, bottom = offsets
+        lane_center = params.padding_px + (placement.lane + 0.5) * lane_height
+        near = _mark_reach(annotation, style, lane_height) + float(style.label_offset)
+        y = lane_center - near - bottom if above else lane_center + near - top
+        rows.append((annotation, style, y, offsets))
+    return rows
+
+
+def linear_annotation_label_room(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    side: str,
+    height_px: float,
+    font_family: str,
+    params: AnnotationTrackParams,
+) -> float:
+    """How far the record's labels reach beyond the slot's ``height_px`` on their side.
+
+    The room holds the letters and ``label_offset`` beyond them too, so the
+    axis line, the next slot or the record edge keeps that gap (OV-844).
+    """
+
+    above = linear_annotation_labels_above(side, params)
+    room = 0.0
+    for _annotation, style, y, (_left, _right, top, bottom) in _label_rows(
+        track, record_index=record_index, side=side, height_px=height_px, font_family=font_family, params=params
+    ):
+        far = -(y + top) if above else y + bottom - float(height_px)
+        room = max(room, far + float(style.label_offset))
+    return room
+
+
 def linear_annotation_labels(
     track: ResolvedAnnotationTrack,
     *,
@@ -145,39 +220,22 @@ def linear_annotation_labels(
     font_family: str,
     params: AnnotationTrackParams,
 ) -> tuple[LinearAnnotationLabel, ...]:
-    """The labels of one record's annotation track at their ``label_position`` (OV-844).
+    """The labels of one record's annotation track at their ``label_position``."""
 
-    A label lies beyond its lane on the side ``linear_annotation_labels_above``
-    picks, with its painted letters ``label_offset`` clear of the mark's
-    stroke (``linear_annotation_label_room``).
-    """
-
-    if not params.show_labels:
-        return ()
-    placements, lane_height = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
     scale = float(bar_length_px) / max(1, int(record_length))
-    above = linear_annotation_labels_above(side, params)
     labels: list[LinearAnnotationLabel] = []
-    for placement in placements:
-        annotation = placement.annotation
-        if not annotation.label:
-            continue
-        style = effective_annotation_style(annotation, params)
-        size = float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE)
-        advance, left, right, top, bottom = _label_ink_offsets(annotation.label, font_family, size)
-        lane_top = params.padding_px + placement.lane * lane_height
-        clearance = _label_clearance(annotation, params)
-        y = lane_top - clearance - bottom if above else lane_top + lane_height + clearance - top
+    for annotation, style, y, (left, right, top, bottom) in _label_rows(
+        track, record_index=record_index, side=side, height_px=height_px, font_family=font_family, params=params
+    ):
         segments = annotation.geometry_segments
-        anchor: TextAnchor
-        if style.label_position == "start":
-            label_bp, anchor = float(segments[0][0]), "start"
-        elif style.label_position == "end":
-            label_bp, anchor = float(segments[-1][1]), "end"
+        anchor = _label_anchor(style)
+        if anchor == "start":
+            label_bp = float(segments[0][0])
+        elif anchor == "end":
+            label_bp = float(segments[-1][1])
         else:
-            label_bp, anchor = float(annotation.geometry_midpoint_bp), "middle"
+            label_bp = float(annotation.geometry_midpoint_bp)
         x = label_bp * scale
-        origin = x - _LABEL_ANCHOR_SHARE[anchor] * advance
         labels.append(
             LinearAnnotationLabel(
                 annotation_id=annotation.id,
@@ -185,13 +243,10 @@ def linear_annotation_labels(
                 x=x,
                 y=y,
                 anchor=anchor,
-                font_size=size,
+                font_size=float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE),
                 color=style.label_color,
-                ink=Aabb(origin + left, y + top, origin + right, y + bottom),
-                span=(
-                    min(float(start) for start, _end in segments) * scale,
-                    max(float(end) for _start, end in segments) * scale,
-                ),
+                ink=Aabb(x + left, y + top, x + right, y + bottom),
+                segments=tuple((float(start) * scale, float(end) * scale) for start, end in segments),
             )
         )
     return tuple(labels)
@@ -263,15 +318,14 @@ def linear_annotation_track_content(
         for part_index, (start, end) in enumerate(annotation.geometry_segments, start=1):
             x1, x2 = float(start) * scale, float(end) * scale
             fragment = annotation.display_parts[part_index - 1] if annotation.display_parts is not None else None
-            cap_start = fragment is None or not fragment.artificial_start
-            cap_end = fragment is None or not fragment.artificial_end
+            cap_start, cap_end = _capped_ends(annotation, part_index - 1)
             if annotation.mark in {"band", "highlight"}:
                 if style.hatch:
                     definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
                 fill = hatch_pattern_paint(style.hatch) if style.hatch else (
                     style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
                 )
-                height_factor = 1.0 if annotation.mark == "highlight" else 0.84
+                height_factor = _band_height_factor(annotation.mark)
                 rect = Rect(
                     insert=(x1, lane_center - 0.5 * height_factor * lane_height),
                     size=(max(0.1, x2 - x1), height_factor * lane_height),
@@ -320,7 +374,7 @@ def linear_annotation_track_content(
                 line.attribs["stroke-dasharray"] = dash
             item_group.add(line)
             if annotation.mark == "bracket" and style.line_cap != "none":
-                cap = min(5.0, 0.35 * lane_height)
+                cap = _cap_size(lane_height)
                 if style.line_cap == "arrow":
                     path = Path(
                         d=f"M {x2 - cap:g},{lane_center - cap:g} L {x2:g},{lane_center:g} "

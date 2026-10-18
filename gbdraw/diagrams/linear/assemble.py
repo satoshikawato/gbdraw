@@ -947,15 +947,18 @@ def _linear_slot_footprints_for_record(
                 else []
             )
             params = annotation_track_params_from_mapping(slot.params)
-            # The labels' letters beyond the outer lane edge, which lies padding_px inside the body.
-            label_overhang = max(
-                (
-                    linear_annotation_label_room(placement.annotation, params, font_family)
-                    for placement in placements
-                ),
-                default=0.0,
+            label_overhang = (
+                linear_annotation_label_room(
+                    annotation_layout,
+                    record_index=record_index,
+                    side=slot.side,
+                    height_px=float(body_band.height),
+                    font_family=font_family,
+                    params=params,
+                )
+                if annotation_layout is not None
+                else 0.0
             )
-            label_overhang = max(0.0, label_overhang - params.padding_px)
             if linear_annotation_labels_above(slot.side, params):
                 expanded = body_band.expand(label_overhang, 0.0)
             else:

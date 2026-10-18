@@ -357,11 +357,12 @@ def test_linear_cover_anchor_covers_the_feature_lanes_and_moves_nothing(
 
 
 def _label_room(text: str, *, stroke_width: float = 1.5, label_offset: float = 4.0, font_size: float = 10.0) -> float:
-    """How far a label's letters reach beyond its lane: half the stroke, label_offset, the ink height (OV-844)."""
+    """The room a highlight's label takes beyond its lane: half the stroke, label_offset, the letters,
+    and label_offset again beyond them (OV-844, review 1170 F1)."""
 
     ink = text_ink(text, "Arial")
     assert ink is not None
-    return 0.5 * stroke_width + label_offset + (ink.top - ink.bottom) * font_size
+    return 0.5 * stroke_width + 2.0 * label_offset + (ink.top - ink.bottom) * font_size
 
 
 @pytest.mark.parametrize(
@@ -750,8 +751,12 @@ def _label_box(drawing, slot_id: str = "regions", record_index: int = 0) -> tupl
     return min(top for top, _ in boxes), max(bottom for _, bottom in boxes)
 
 
-def _assert_clear(box: tuple[float, float], band: tuple[float, float], name: str) -> None:
-    assert box[1] <= band[0] + 1e-6 or box[0] >= band[1] - 1e-6, f"labels {box} overlap {name} {band}"
+def _assert_clear(box: tuple[float, float], band: tuple[float, float], name: str, gap: float = 4.0) -> None:
+    """The letters keep at least ``gap`` (label_offset) from ``band``; touching fails."""
+
+    assert box[1] <= band[0] - gap + 1e-6 or box[0] >= band[1] + gap - 1e-6, (
+        f"labels {box} within {gap} of {name} {band}"
+    )
 
 
 def _record_body(drawing, record_index: int = 0) -> tuple[float, float]:
@@ -866,8 +871,9 @@ def test_linear_highlight_labels_keep_off_the_axis_in_the_below_layout() -> None
     axis_top = _record_body(build(None))[0]
     box = _label_box(build("CRISPR-Cas"), slot_id="annotations_1")
 
-    # The label sits below the axis line, and the lanes move only that far (default CLI path, OV-843).
-    assert box[0] == pytest.approx(-axis_top)
+    # The label sits below the axis line with label_offset (4) between them, and the lanes move only
+    # that far (default CLI path, OV-843; far side of OV-844).
+    assert box[0] == pytest.approx(-axis_top + 4.0)
 
 
 @pytest.mark.parametrize(
@@ -908,7 +914,10 @@ def test_linear_annotation_to_slot_labels_keep_room_beyond_the_outermost_slot(
         else:
             # At the record top no slot moves; the label room beyond the lane edge (padding_px 0)
             # joins the record body above an underlay span.
-            assert labelled_bands[index] == plain_bands[index]
+            assert labelled_bands[index].keys() == plain_bands[index].keys()
+            for slot_id, band in plain_bands[index].items():
+                # Float noise only: the record moves by the room, the bands come back to the same place.
+                assert labelled_bands[index][slot_id] == (None if band is None else pytest.approx(band, abs=1e-9))
             assert (top, bottom) == pytest.approx((plain_top - _label_room("Span 1"), plain_bottom))
 
 
@@ -974,19 +983,40 @@ def _span_label_marks(drawing) -> list[dict[str, object]]:
     for group in root.iter():
         if not group.attrib.get("data-gbdraw-annotation-label"):
             continue
-        rect = next(element for element in group if tag(element) == "rect")
-        dx, dy = _translation(rect, parents)
-        half_stroke = 0.5 * float(rect.attrib.get("stroke-width", 0.0))
-        top = dy + float(rect.attrib["y"]) - half_stroke
-        bottom = dy + float(rect.attrib["y"]) + float(rect.attrib["height"]) + half_stroke
-        x1 = dx + float(rect.attrib["x"])
+        dx, dy = _translation(group, parents)
+        tops: list[float] = []
+        bottoms: list[float] = []
+        spans: list[tuple[float, float]] = []
+        for element in group:
+            name = tag(element)
+            stroked = element.attrib.get("stroke", "none") != "none"
+            half_stroke = 0.5 * float(element.attrib.get("stroke-width", 0.0)) if stroked else 0.0
+            if name == "rect":
+                x, y = float(element.attrib["x"]), float(element.attrib["y"])
+                tops.append(dy + y - half_stroke)
+                bottoms.append(dy + y + float(element.attrib["height"]) + half_stroke)
+                spans.append((dx + x, dx + x + float(element.attrib["width"])))
+            elif name == "line":
+                x1, x2 = float(element.attrib["x1"]), float(element.attrib["x2"])
+                y1, y2 = float(element.attrib["y1"]), float(element.attrib["y2"])
+                # A horizontal stroke is half its width thick each way; a vertical butt-capped one ends at its ends.
+                pad = half_stroke if y1 == y2 or element.attrib.get("stroke-linecap") in {"round", "square"} else 0.0
+                tops.append(dy + min(y1, y2) - pad)
+                bottoms.append(dy + max(y1, y2) + pad)
+                if y1 == y2:
+                    spans.append((dx + min(x1, x2), dx + max(x1, x2)))
+            elif name == "path":
+                ys = [float(value) for value in re.findall(r"[-0-9.eE]+,([-0-9.eE]+)", element.attrib["d"])]
+                tops.append(dy + min(ys) - half_stroke)
+                bottoms.append(dy + max(ys) + half_stroke)
         for text in (element for element in group if tag(element) == "text"):
             labels.append(
                 {
                     "text": text.text,
                     "ink": _text_ink_box(text, parents),
-                    "mark": (top, bottom),
-                    "span": (x1, x1 + float(rect.attrib["width"])),
+                    "mark": (min(tops), max(bottoms)),
+                    "spans": sorted(spans),
+                    "span": (min(start for start, _ in spans), max(end for _, end in spans)),
                     "feature_inks": feature_inks,
                     "leaders": leaders,
                 }
@@ -1094,6 +1124,214 @@ def test_linear_span_label_without_conflicts_stays_at_its_label_position() -> No
 
     # Centred on its span, as before (LP-D41: placements without a defect stay).
     assert 0.5 * (left + right) == pytest.approx(0.5 * sum(label["span"]), abs=0.5)
+
+
+@pytest.mark.parametrize("track_layout", ["above", "below"])
+@pytest.mark.parametrize(
+    "style",
+    [
+        pytest.param(RegionAnnotationStyle(), id="bracket-tick"),
+        pytest.param(RegionAnnotationStyle(line_cap="none"), id="bracket-no-cap"),
+        pytest.param(RegionAnnotationStyle(stroke_width=3.0), id="bracket-thick"),
+    ],
+)
+@pytest.mark.parametrize("mark", ["highlight", "band", "bracket", "line"])
+def test_linear_annotation_label_keeps_label_offset_from_the_painted_mark(
+    mark: str, style: RegionAnnotationStyle, track_layout: str
+) -> None:
+    """Every mark kind: label_offset from its painted edge (rect and stroke, caps, line stroke) to the letters."""
+
+    record = SeqRecord(Seq("ACGT" * 600), id="rec1", name="rec1")
+    record.features = [SeqFeature(FeatureLocation(120, 250, strand=1), type="CDS")]
+    region = RegionAnnotation("region", CoordinateSpan(None, 100, 1300), label="rRNA genes", mark=mark, style=style)
+    drawing = assemble_linear_diagram_from_records(
+        [record],
+        cfg=apply_config_overrides(
+            None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+        ),
+        legend="none",
+        selected_features_set=["CDS"],
+        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
+    )
+
+    (label,) = _span_label_marks(drawing)
+    assert _ink_gap_to_mark(label) == pytest.approx(style.label_offset, abs=1e-6)
+
+
+def _slot_paint(drawing, slot_id: str, record_index: int = 0) -> tuple[float, float]:
+    slot = next(
+        slot
+        for slot in drawing._gbdraw_track_slot_geometry["records"][record_index]["slots"]
+        if slot["slotId"] == slot_id
+    )
+    return slot["paintBand"]["topPx"], slot["paintBand"]["bottomPx"]
+
+
+def _real_record_tint(file_name: str, start: int, end: int, label: str | None, track_layout: str):
+    record = SeqIO.read(Path(__file__).parent / "test_inputs" / file_name, "genbank")
+    tint = RegionAnnotation("tint", CoordinateSpan(None, start, end), label=label, mark="highlight")
+    return assemble_linear_diagram_from_records(
+        [record],
+        cfg=apply_config_overrides(
+            None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+        ),
+        legend="none",
+        selected_features_set=["CDS", "rRNA", "tRNA"],
+        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),)),
+    )
+
+
+@pytest.mark.parametrize("track_layout", ["above", "below"])
+@pytest.mark.parametrize(
+    ("file_name", "start", "end", "label"),
+    [
+        pytest.param("NC_001879.gbk", 86687, 112029, "IRb", id="tobacco-IRb"),
+        pytest.param("AP027078.gb", 20000, 40000, "CRISPR-Cas", id="hepatoplasma-CRISPR"),
+    ],
+)
+def test_linear_highlight_label_keeps_label_offset_on_both_sides(
+    file_name: str, start: int, end: int, label: str, track_layout: str
+) -> None:
+    labelled = _real_record_tint(file_name, start, end, label, track_layout)
+    (drawn,) = _span_label_marks(labelled)
+    box = _label_box(labelled, slot_id="annotations_1")
+
+    # Own side: the tint's stroke (OV-844).
+    assert _ink_gap_to_mark(drawn) == pytest.approx(4.0, abs=1e-6)
+    # Far side (review 1170 F1): the axis line in `below` (the record body of the unlabelled figure starts
+    # at its lower edge, mirrored), the record's top edge in `above`.
+    if track_layout == "below":
+        axis_bottom = -_record_body(_real_record_tint(file_name, start, end, None, track_layout))[0]
+        assert box[0] - axis_bottom == pytest.approx(4.0, abs=1e-6)
+    else:
+        assert box[0] - _record_body(labelled)[0] == pytest.approx(4.0, abs=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("stack", "spec", "next_slot"),
+    [
+        pytest.param(
+            _SPAN_STACK, "anchor_slot=features,to_slot=gc,layer=foreground,z=1", "skew", id="to-slot-then-skew"
+        ),
+        pytest.param(
+            _FEATURES_BELOW_STACK,
+            "anchor_slot=features,cover_anchor=true,layer=foreground,z=1",
+            "gc",
+            id="cover-anchor-then-gc",
+        ),
+    ],
+)
+def test_linear_span_label_keeps_label_offset_from_the_next_slot(
+    stack: tuple[str, ...], spec: str, next_slot: str
+) -> None:
+    drawing = _build_linear_span(*stack, _span_slot(spec, labels=True))
+    (drawn,) = _span_label_marks(drawing)
+    box = _label_box(drawing)
+
+    assert _ink_gap_to_mark(drawn) == pytest.approx(4.0, abs=1e-6)
+    # The next slot's paint starts label_offset beyond the letters (review 1170 F1).
+    assert _slot_paint(drawing, next_slot)[0] - box[1] == pytest.approx(4.0, abs=1e-6)
+
+
+def _six_kb_drawing(region: RegionAnnotation, features: tuple[tuple[int, int, str], ...]):
+    record = SeqRecord(Seq("ACGT" * 1500), id="rec1", name="rec1", annotations={"topology": "circular"})
+    record.features = [
+        SeqFeature(FeatureLocation(start, end, strand=1), type="CDS", qualifiers={"product": [name]})
+        for start, end, name in features
+    ]
+    return assemble_linear_diagram_from_records(
+        [record],
+        cfg=apply_config_overrides(None, {"labels.linear.scope": "all", "canvas.linear.track_layout": "above"}),
+        legend="none",
+        selected_features_set=["CDS"],
+        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
+    )
+
+
+def _leaders_through(label: dict[str, object]) -> list[tuple[float, float, float, float]]:
+    left, top, right, bottom = label["ink"]
+    return [
+        leader
+        for leader in label["leaders"]
+        if min(leader[0], leader[2]) <= right
+        and max(leader[0], leader[2]) >= left
+        and min(leader[1], leader[3]) < bottom
+        and max(leader[1], leader[3]) > top
+    ]
+
+
+def test_linear_label_of_an_origin_wrapping_region_stays_over_its_marks() -> None:
+    region = RegionAnnotation(
+        "origin", CoordinateSpan(None, 5800, 300, wraps_origin=True), label="Origin region", mark="highlight"
+    )
+    features = (
+        (20, 50, "photosystem II protein D1"),
+        (60, 90, "ribosomal protein S7"),
+        (5850, 5880, "tRNA-Leu"),
+        (5900, 5930, "maturase K"),
+    )
+    (label,) = _span_label_marks(_six_kb_drawing(region, features))
+    centre = 0.5 * (label["ink"][0] + label["ink"][2])
+
+    # Its centre stays over one of its two marks, never over the sequence between them (review 1170 F4).
+    assert len(label["spans"]) == 2
+    assert any(start <= centre <= end for start, end in label["spans"])
+
+
+def test_linear_label_wider_than_its_region_moves_off_a_leader() -> None:
+    region = RegionAnnotation(
+        "narrow", CoordinateSpan(None, 2900, 3200), label="A long label for a short region", mark="highlight"
+    )
+    (label,) = _span_label_marks(_six_kb_drawing(region, ((2905, 2925, "tRNA-Leu"),)))
+    centre = 0.5 * (label["ink"][0] + label["ink"][2])
+
+    # Wider than its mark, it still moves off the leader under its default place, centre over the mark (F5).
+    assert label["ink"][2] - label["ink"][0] > label["span"][1] - label["span"][0]
+    assert not _leaders_through(label)
+    assert label["span"][0] <= centre <= label["span"][1]
+
+
+def test_linear_label_search_matches_a_full_scan() -> None:
+    """The sorted sweep gives the place a scan of every candidate gives (review 1170 F6)."""
+
+    import random
+
+    from gbdraw.diagrams.linear.annotation_labels import _place_along_span
+    from gbdraw.layout.spatial import Aabb
+    from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel
+
+    generator = random.Random(1170)
+    for _ in range(200):
+        segments = tuple(
+            sorted(
+                (start, start + generator.uniform(5.0, 120.0))
+                for start in (generator.uniform(0.0, 900.0) for _ in range(generator.randint(1, 3)))
+            )
+        )
+        x = generator.uniform(segments[0][0], segments[0][1])
+        label = LinearAnnotationLabel("a", "Label", x, 0.0, "middle", 10.0, "#000", Aabb(x - 20, -4, x + 20, 4), segments)
+        obstacles = [
+            Aabb(left, generator.uniform(-12, 2), left + generator.uniform(0.0, 40.0), generator.uniform(3, 12))
+            for left in (generator.uniform(-50.0, 1000.0) for _ in range(generator.randint(0, 40)))
+        ]
+        gap = 3.0
+        blocked = [
+            (box.min_x - gap - 20, box.max_x + gap + 20)
+            for box in obstacles
+            if box.min_y < 4 + gap and box.max_y > -4 - gap
+        ]
+
+        def conflicts(value: float) -> int:
+            return sum(1 for start, end in blocked if start < value < end)
+
+        if conflicts(x) == 0:
+            expected = x
+        else:
+            candidates = {x}
+            for low, high in segments:
+                candidates |= {low, high, *(v for interval in blocked for v in interval if low <= v <= high)}
+            expected = min(sorted(candidates), key=lambda value: (conflicts(value), abs(value - x)))
+        assert _place_along_span(label, 0.0, obstacles, gap) == pytest.approx(expected, abs=1e-9)
 
 
 def test_linear_annotation_to_slot_uses_the_bands_each_record_has() -> None:

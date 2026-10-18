@@ -626,6 +626,39 @@ def _face_text_ink(face: FontFace, text: str) -> Optional[TextInk]:
     )
 
 
+# Where ``text-anchor`` puts the anchor point along a text's advance.
+TEXT_ANCHOR_SHARE: Mapping[str, float] = {"start": 0.0, "middle": 0.5, "end": 1.0}
+
+
+def text_ink_offsets(
+    text: str,
+    font_family: str,
+    font_size: float,
+    *,
+    dominant_baseline: str,
+    text_anchor: str,
+) -> Optional[tuple[float, float, float, float]]:
+    """The box ``text`` paints at ``font_size``, in px from the point it is drawn at.
+
+    Returns (left, right, top, bottom), y down, for ``dominant_baseline`` and
+    ``text_anchor``; None when the font cannot be measured.
+    """
+
+    ink = text_ink(text, font_family)
+    metrics = get_font_vertical_metrics(font_family)
+    shift = None if metrics is None else dominant_baseline_shift_em(dominant_baseline, metrics)
+    if ink is None or shift is None:
+        return None
+    size = float(font_size)
+    origin = -TEXT_ANCHOR_SHARE[text_anchor] * ink.advance * size
+    return (
+        origin + ink.left * size,
+        origin + ink.right * size,
+        (shift - ink.top) * size,
+        (shift - ink.bottom) * size,
+    )
+
+
 @dataclass(frozen=True)
 class FontVerticalMetrics:
     """Vertical font metrics as fractions of the font size (em units)."""
