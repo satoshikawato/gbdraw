@@ -22,10 +22,8 @@ const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw
 const port = () => new Proxy({}, { get: () => () => {} });
 let inputs = 0;
 const owner = { calls: 0, outcome: /** @type {number | false} */ (false) };
-/** @type {{ source: Function, callback: Function }[]} */
-const watchers = [];
 const imports = createAuxiliaryFileImports((target) => target);
-const { canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
+const { importAuxiliaryTable, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
   state,
   rulePreparation: /** @type {any} */ ({
     snapshot: () => ({ inputs, linearFiles: [], inputFiles: [] }),
@@ -34,10 +32,7 @@ const { canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWat
   trackAuxiliaryFileImport: imports.track,
   ref: (value) => ({ value }),
   computed: (getter) => ({ get value() { return getter(); } }),
-  watch: (source, callback) => {
-    watchers.push({ source: typeof source === 'function' ? source : () => source, callback });
-    return () => {};
-  },
+  watch: () => () => {},
   nextTick: async () => {},
   onMounted: () => {},
   legendActions: port(),
@@ -62,16 +57,10 @@ const { canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWat
   clearLabelBuildNotices: () => {},
   previewRuntime: port()
 });
-const specificRulesWatcher = watchers.find(({ source }) => {
-  state.files.t_color = 'probe';
-  try { return source() === 'probe'; } finally { state.files.t_color = null; }
-});
-
 test('a rules import the owner gave up on keeps Retry through later input changes, and Retry applies it', async () => {
   const file = { name: 'rules.tsv', text: async () => 'CDS\tproduct\tNADH\t#123456\tImported\n' };
   state.errorLog.value = null;
-  state.files.t_color = file;
-  const result = await specificRulesWatcher.callback(file, null);
+  const result = await importAuxiliaryTable('t_color', file);
 
   assert.deepEqual({ result, calls: owner.calls, pending: imports.isPending() }, { result: false, calls: 1, pending: false });
   assert.equal(state.errorLog.value?.code, 'RULE_INPUTS_CHANGED');
