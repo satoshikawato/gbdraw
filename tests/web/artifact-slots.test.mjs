@@ -89,7 +89,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   const registryOwner = state.matchSequenceRegistry.captureTrustedOwner();
   const rules = [...state.activeDrawing().manualSpecificRules];
 
-  const circular = snapshots.captureArtifactSlot(state.activeDrawing());
+  const circular = snapshots.captureArtifactSlot();
   assert.ok(Object.isFrozen(circular));
   assert.deepEqual(circular.legendInventory, ['CDS', 'tRNA']);
   snapshots.installArtifactSlot(null, { drawing: state.drawings.linear });
@@ -109,8 +109,8 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.deepEqual(state.activeDrawing().manualSpecificRules, rules);
   assert.equal(state.linearSeqs[0].region_reverse, true);
 
-  // The displayed artifact is the Linear drawing's now (the test installs it without a switch).
-  const linear = snapshots.captureArtifactSlot(state.drawings.linear);
+  // The displayed artifact is the Linear drawing's now (its mode is linear; the test installs it without a switch).
+  const linear = snapshots.captureArtifactSlot();
   snapshots.installArtifactSlot(circular, { drawing: state.drawings.circular });
   SWAPPED.forEach((key) => assert.strictEqual(state[key].value, values[key], key));
   assert.strictEqual(canonicalRenderArtifactOwner.capture().committedCanonicalSession, committed.committedCanonicalSession);
@@ -126,7 +126,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
 
 test('installing a slot of another drawing is refused', async () => {
   await fillCircularArtifact();
-  const circular = snapshots.captureArtifactSlot(state.activeDrawing());
+  const circular = snapshots.captureArtifactSlot();
   assert.equal(circular.drawingId, state.activeDrawing().id, 'the slot is of the drawing it was captured for');
   assert.throws(() => snapshots.installArtifactSlot(circular, { drawing: state.drawings.linear }), /drawing circular.*drawing linear/);
 });
@@ -138,7 +138,7 @@ test('installing a slot of another drawing is refused', async () => {
 test('a Generate after a switch reads no decoration of the other mode\'s Result', async () => {
   const { captureDecorationContinuity } = await import('../../gbdraw/web/js/app/legend-layout/decoration-continuity.js');
   const { values } = await fillCircularArtifact();
-  const circular = snapshots.captureArtifactSlot(state.activeDrawing());
+  const circular = snapshots.captureArtifactSlot();
   snapshots.installArtifactSlot(null, { drawing: state.drawings.linear });
   const capture = () => captureDecorationContinuity({
     canonical: { renderRequest: { mode: 'linear', records: [] }, resources: {} },

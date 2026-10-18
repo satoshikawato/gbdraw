@@ -193,6 +193,9 @@ test('the slice write scan flags a planted write and leaves reads alone', () => 
 // 4b. The shown drawing (plan-r2 A2): `state.activeDrawingId` names it, and
 // `installShownDrawing` (services/config.js) is its one writer; the shown
 // mode is the shown drawing's own (`drawing.mode`), so nothing writes `mode`.
+// The write scan sees a `.value` write through the ref's name and the
+// templates; it does not see a write through an alias held under another
+// name (`const m = state.mode; m.value = ...`).
 test('the shown drawing is drawings[activeDrawingId], mode follows it, and one writer installs it', () => {
   const shown = state.activeDrawingId.value;
   for (const id of MODES) {

@@ -88,7 +88,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/file-imports.js': 1,
   'services/gallery-session-migration.js': 12,
   'services/gallery-session-publication.js': 10,
-  'services/history-snapshot.js': 35,
+  'services/history-snapshot.js': 33,
   'services/history.js': 9,
   'services/linear-comparisons.js': 2,
   'services/losat-cache.js': 8,

@@ -46,6 +46,7 @@ import { LABEL_TABLES_SLICE } from './services/drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import { PAINT_SLICE } from './services/drawing/paint.js';
 import { SETTINGS_SLICE } from './services/drawing/settings.js';
+import { drawingIdOfMode } from './services/drawing-view.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -117,7 +118,7 @@ const canvasContainerRef = ref(null);
 // its one writer. The shown mode is the shown drawing's (`drawing.mode`), so
 // nothing writes `mode`.
 /** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
-const activeDrawingId = typedRef(/** @type {DrawingId} */ ('circular'));
+const activeDrawingId = typedRef(drawingIdOfMode('circular'));
 const mode = typedComputed(() => activeDrawing().mode);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
@@ -1113,10 +1114,10 @@ const createDrawingState = (id, drawingMode) => {
       featureEdits: featureEdits.handle, paint: paint.handle, settings: settings.handle })
   });
 };
-const circularDrawing = createDrawingState('circular', 'circular');
+const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circular');
 /** @typedef {typeof circularDrawing} DrawingState */
-/** @type {Readonly<Record<DrawingId, DrawingState>>} */
-const drawings = Object.freeze({ circular: circularDrawing, linear: createDrawingState('linear', 'linear') });
+/** @type {Readonly<Record<string, DrawingState> & { circular: DrawingState, linear: DrawingState }>} */
+const drawings = Object.freeze({ circular: circularDrawing, linear: createDrawingState(drawingIdOfMode('linear'), 'linear') });
 /** @returns {DrawingState} The shown drawing. */
 const activeDrawing = () => drawings[activeDrawingId.value];
 

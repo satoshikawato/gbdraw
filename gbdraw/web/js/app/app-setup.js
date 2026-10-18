@@ -36,6 +36,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { readArtifactOfDrawing } from '../services/artifact-slot.js';
+import { drawingIdOfMode } from '../services/drawing-view.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -3615,7 +3616,7 @@ export const createAppSetup = () => {
     },
     rollbackState: createSessionImportRollbackState({
       artifactSlots,
-      captureDisplayedArtifact: () => historySnapshots.captureArtifactSlot(state.activeDrawing()),
+      captureDisplayedArtifact: () => historySnapshots.captureArtifactSlot(),
       // The rollback restored the pan already; the install keeps it.
       installDisplayedArtifact: (slot) => historySnapshots.installArtifactSlot(slot, {
         drawing: state.drawings[slot.drawingId], ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
@@ -4211,13 +4212,15 @@ export const createAppSetup = () => {
     if (shown) legendActions.rememberResultInventory(previewRuntime.getResultIdentity(shown), [...slot.legendInventory]);
   };
   /**
-   * @param {DrawingIdentity} departingDrawing The shown drawing.
+   * The displayed artifact is kept under the drawing it belongs to, which is
+   * the arriving drawing when the shown drawing displayed the arriving one's.
    * @param {DrawingIdentity} arrivingDrawing
    * @returns {Readonly<ArtifactSlot> | null} The installed slot (null: the drawing has no artifact yet).
    */
-  const swapArtifactSlots = (departingDrawing, arrivingDrawing) => {
+  const swapArtifactSlots = (arrivingDrawing) => {
     previewRuntime.clearActiveRuntime();
-    artifactSlots.set(departingDrawing.id, historySnapshots.captureArtifactSlot(departingDrawing));
+    const departing = historySnapshots.captureArtifactSlot();
+    artifactSlots.set(departing.drawingId, departing);
     const arriving = artifactSlots.get(arrivingDrawing.id) ?? null;
     historySnapshots.installArtifactSlot(arriving, { drawing: arrivingDrawing });
     artifactSlots.delete(arrivingDrawing.id);
@@ -4254,9 +4257,9 @@ export const createAppSetup = () => {
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
     rememberDepartingResultProjection(drawing);
     // 2. Artifact slots.
-    swapArtifactSlots(drawing, state.drawings[nextMode]);
+    swapArtifactSlots(state.drawings[nextMode]);
     // 3. The shown drawing.
-    installShownDrawing(nextMode);
+    installShownDrawing(drawingIdOfMode(nextMode));
     // 4. Transient UI. "Showing the last successful result" named the
     // departing mode's Result, and the notice the departing mode's work.
     resetModeTransientUi();
@@ -4883,7 +4886,7 @@ export const createAppSetup = () => {
   let similarityAlignmentApplying = false;
   // The identity of the selected Result of the review's mode, shown or kept in its slot.
   /** @param {'circular' | 'linear'} reviewMode */
-  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(readArtifactOfDrawing(reviewMode,
+  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(readArtifactOfDrawing(drawingIdOfMode(reviewMode),
     state.activeDrawingId.value, artifactSlots, () => results.value[Number(selectedResultIndex.value) || 0],
     (slot) => slot.values.results[slot.values.selectedResultIndex]));
   // The draft no longer matches the figure. Another Result of the review's mode replaced it (a
@@ -5228,7 +5231,7 @@ export const createAppSetup = () => {
       // Reset that turns the shown Circular drawing's Multi-Record Canvas on
       // stores the toggle's smart defaults; from the canvas on, or with Linear
       // shown, the multi-record sides stay unset. The answer changes this step.
-      if (circularCanvasWasOff && state.activeDrawingId.value === 'circular') {
+      if (circularCanvasWasOff && state.activeDrawing() === state.drawings.circular) {
         storeCircularMultiRecordDefaults(state.drawings.circular);
       }
       // OV-1167 (Owner question Q-DR-7, open): today's outcome, kept as is. The

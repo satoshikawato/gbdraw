@@ -268,6 +268,7 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, clearLabelTextEdits, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE, clearFeatureOverrides } from './drawing/feature-edits.js';
+import { drawingIdOfMode } from './drawing-view.js';
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -4497,9 +4498,7 @@ const captureSessionImportSnapshot = () => ({
     circular: captureDrawingImportSnapshot(state.drawings.circular),
     linear: captureDrawingImportSnapshot(state.drawings.linear)
   },
-  // The cast: outside a Load the shown mode is a drawing's ('circular' or 'linear'), and a Load replaces
-  // the saved mode it writes first before it returns (no `await` between).
-  ui: cloneJsonData(buildUiStateData(state.drawings[/** @type {DiagramMode} */ (state.mode.value)])),
+  ui: cloneJsonData(buildUiStateData(state.drawings[state.activeDrawingId.value])),
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
   files: cloneLiveFileState(state.drawings.linear),
   results: state.results.value,
@@ -4534,7 +4533,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   try {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
-    installShownDrawing(shownMode);
+    installShownDrawing(drawingIdOfMode(shownMode));
     restoreOrder.forEach((drawingMode) => {
       const drawing = state.drawings[drawingMode];
       const saved = snapshot.drawings[drawingMode];
@@ -4611,7 +4610,7 @@ const resetSessionBaseline = () => {
   // Reset Settings keeps which records are ON (PD-OI-070); a new Session draws
   // every record its slices do not turn OFF (PD-OI-091).
   for (const drawing of Object.values(state.drawings)) SETTINGS_SLICE.install(drawing.slices.settings, { recordsOff: [] });
-  installShownDrawing('circular');
+  installShownDrawing(drawingIdOfMode('circular'));
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   state.sessionTitle.value = '';
@@ -6243,7 +6242,7 @@ const importSessionDocument = async (e, options = {}) => {
     state.sessionTitle.value = canonicalSession
       ? projectionResult.documentMetadata.title
       : (typeof data.title === 'string' ? data.title : '');
-    if (ui.mode) installShownDrawing(candidateMode);
+    if (ui.mode) installShownDrawing(drawingIdOfMode(candidateMode));
     state.cInputType.value = inputTypes.cInputType;
     state.lInputType.value = inputTypes.lInputType;
     state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;
@@ -6281,7 +6280,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
     preservedCliOptions = isPlainObject(sessionCliOptions) ? cloneJsonData(sessionCliOptions) : null;
-    installShownDrawing(displayMode);
+    installShownDrawing(drawingIdOfMode(displayMode));
     const shownDrawing = state.drawings[displayMode];
     const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;
     if (canonicalLinearLayout && state.linearRecordTranslations) {
@@ -6607,9 +6606,8 @@ export const exportSession = (titleOverride = null, options = {}) => {
     // Only mutable draft configuration/navigation is copied. Adopted biological
     // payloads, resources, catalogs, caches and Results retain their existing owner.
     // Session 46 keeps each drawing as its mode's slice (PD-OI-086); the
-    // Features-list record is the shown Result's. `drawing` is the shown mode's.
-    // The cast: outside a Load the shown mode is a drawing's (see `captureSessionImportSnapshot`).
-    const drawing = state.drawings[/** @type {DiagramMode} */ (state.mode.value)];
+    // Features-list record is the shown Result's. `drawing` is the shown one.
+    const drawing = state.drawings[state.activeDrawingId.value];
     // Each drawing's drafts are written on the rows of their records (OV-278,
     // OV-325): a Session without a Web draft loads a draft selected by record ID on '#1'.
     const recordDisplayRows = /** @type {{ recordDisplayRows?: { value?: Parameters<typeof bindRecordDisplayDrafts>[1] } }} */ (options).recordDisplayRows?.value || [];

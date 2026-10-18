@@ -3,6 +3,7 @@
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
+/** @import { CommittedCanonicalSession } from './session-request.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -996,6 +997,11 @@ export const createHistorySnapshotService = ({
    * @returns {D}
    */
   const drawingOf = (mode) => state.drawings[mode === 'linear' ? 'linear' : 'circular'];
+  // The drawing the displayed artifact belongs to: the drawing of its mode
+  // (`generatedMode`). It differs from the shown drawing after a Load of a
+  // Session with no Result whose request mode is not its `ui.mode`. Every
+  // capture of the displayed artifact names its drawing so.
+  const displayedArtifactDrawing = () => drawingOf(getGeneratedArtifactRef(state.generatedMode, null));
 
   /** @type {((intent: HistorySnapshotData, context: Record<string, any>) => unknown) | null} */
   let afterApplyHistoryIntent = null;
@@ -1036,13 +1042,13 @@ export const createHistorySnapshotService = ({
   // without a composition root (a unit test) registers its own transition.
   /** @type {((mode: 'circular' | 'linear') => unknown) | null} */
   let modeTransition = null;
-  /** @type {((drawingId: DrawingId) => Record<string, any> | null) | null} */
+  /** @type {((drawingId: DrawingId) => CommittedCanonicalSession | null) | null} */
   let drawingCommittedSession = null;
   /** @param {((mode: 'circular' | 'linear') => unknown) | null} transition */
   const registerModeTransition = (transition) => {
     modeTransition = typeof transition === 'function' ? transition : null;
   };
-  /** @param {((drawingId: DrawingId) => Record<string, any> | null) | null} reader */
+  /** @param {((drawingId: DrawingId) => CommittedCanonicalSession | null) | null} reader */
   const registerDrawingCommittedSession = (reader) => {
     drawingCommittedSession = typeof reader === 'function' ? reader : null;
   };
@@ -1096,7 +1102,7 @@ export const createHistorySnapshotService = ({
 
   /** @typedef {ReturnType<typeof captureGeneratedArtifactOwnerSet>} GeneratedArtifactOwnerSet The owners' values, by reference, key by key. */
   const captureGeneratedArtifactOwnerSet = () => {
-    const drawing = drawingOf(getGeneratedArtifactRef(state.generatedMode, null));
+    const drawing = displayedArtifactDrawing();
     const results = toRaw(getGeneratedArtifactRef(state.results, []));
     const colorRules = COLOR_RULES_SLICE.capture(drawing.slices.colorRules);
     return Object.freeze({
@@ -1258,10 +1264,9 @@ export const createHistorySnapshotService = ({
   };
 
   // E1: the displayed artifact, by reference, key by key, as the artifact of
-  // `drawing`, the shown drawing, which the caller resolves.
-  /** @param {DrawingIdentity} drawing */
-  const captureArtifactSlot = (drawing) => createArtifactSlot({
-    drawing,
+  // the drawing it belongs to (`displayedArtifactDrawing`).
+  const captureArtifactSlot = () => createArtifactSlot({
+    drawing: displayedArtifactDrawing(),
     values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
       key, toRaw(getGeneratedArtifactRef(state[key], null))
     ])),
