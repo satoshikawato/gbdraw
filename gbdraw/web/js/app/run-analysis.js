@@ -128,7 +128,7 @@ import {
   requireCurrentCollinearColorMode,
   requireCurrentCollinearMaxConflicts,
   requireCurrentCollinearMaxDiagonalDrift,
-  drawnCollinearMaxParalogLinks,
+  paralogLinksFor,
   requireCurrentCollinearMaxUnitGap,
   requireCurrentCollinearMergeOrientation,
   requireCurrentCollinearMinAnchors,
@@ -746,6 +746,8 @@ const canReuseResolvedProteinArtifacts = ({
   ) {
     return false;
   }
+  // Similarity groups and Collinear both draw with the paralog links per group (OV-1128 B).
+  if (!sameNumber(settings.collinearMaxParalogLinksPerOrthogroup ?? 2, active.maxParalogLinks)) return false;
   if (active.mode === 'orthogroup') return true;
 
   /** @type {Partial<CanonicalLosslessCollinearityParameters>} */
@@ -761,10 +763,6 @@ const canReuseResolvedProteinArtifacts = ({
     && (settings.collinearInferOrthogroups ?? true) === active.inferOrthogroups
     && String(settings.collinearitySearchScope || 'adjacent') === active.searchScope
     && String(settings.collinearityColorMode || 'orientation') === active.colorMode
-    && sameNumber(
-      settings.collinearMaxParalogLinksPerOrthogroup ?? 2,
-      active.maxParalogLinks
-    )
   );
 };
 
@@ -3599,8 +3597,8 @@ export const createRunAnalysis = ({
               drawing.losat.blastp?.collinearMaxConflictsInMergeGap
             )
           : 1;
-        const collinearMaxParalogLinksPerOrthogroup = drawnCollinearMaxParalogLinks(
-          useCollinearBlastp,
+        const collinearMaxParalogLinksPerOrthogroup = paralogLinksFor(
+          useProteinBlastp ? blastpMode : '',
           drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup
         );
         const collinearColorMode = useCollinearBlastp

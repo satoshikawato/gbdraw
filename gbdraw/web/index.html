@@ -3332,9 +3332,10 @@
                                 <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)"><i class="ph ph-trash" aria-hidden="true"></i> Clear Cache</button>
                             </section>
 
-                            <section v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
-                                <div class="linear-primary-label">Advanced collinear search</div>
+                            <section v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details') || linearComparisonUi.sectionKeys.advanced.includes('paralog-links')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
+                                <div class="linear-primary-label">{{ linearComparisonUi.sectionKeys.advanced.includes('collinear-details') ? 'Advanced collinear search' : 'Advanced similarity groups' }}</div>
                                 <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <template v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details')">
                                     <div>
                                         <span class="linear-primary-label mb-1">Unit mode <help-tip id="help-comparison-unit-mode" text="Auto resolves the current Collinear unit type; CDS and locus require that exact unit type."></help-tip></span>
                                         <select v-model="losat.blastp.collinearUnitMode" aria-label="Collinear unit mode" aria-describedby="help-comparison-unit-mode" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
@@ -3367,9 +3368,10 @@
                                         <label class="linear-primary-label mb-1">Merge conflicts</label>
                                         <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxConflictsInMergeGap" aria-label="Collinear merge conflicts" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
-                                    <div v-if="losat.blastp.collinearInferOrthogroups">
+                                    </template>
+                                    <div v-if="linearComparisonUi.sectionKeys.advanced.includes('paralog-links')">
                                         <label class="linear-primary-label mb-1">Paralog links per group</label>
-                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMaxParalogLinksPerOrthogroup" aria-label="Collinear paralog links per group" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMaxParalogLinksPerOrthogroup" aria-label="Paralog links per group" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                 </div>
                             </section>

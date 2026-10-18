@@ -799,6 +799,7 @@ export const createAppSetup = () => {
         .map(([queryUid, subjectUid]) => linearComparisonEdgeKey(queryUid, subjectUid)),
       losatProgram: drawing.losatProgram.value,
       blastpMode: drawing.losat.blastp?.mode,
+      inferOrthogroups: drawing.losat.blastp?.collinearInferOrthogroups === true,
       filters: {
         min_bitscore: drawing.adv.min_bitscore,
         evalue: drawing.adv.evalue,

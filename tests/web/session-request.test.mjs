@@ -3257,17 +3257,20 @@ assert.equal(
 );
 }
 {
-// OV-1128 (D-98 A): the request records the paralog links the Web drew with. Similarity groups draws with the
-// default 2 whatever the hidden Collinear setting holds; Collinear draws with the stored setting.
+// OV-1128 B (D-114, D-121): Similarity groups and Collinear draw and record the stored paralog links per group.
+// Pairwise hides the control and records the stored value when it is a positive integer, else 2, so a
+// Pairwise Save/Load keeps the user's value and an unusable hidden value raises nothing.
 const storedParalogLinks = state.losat.blastp.collinearMaxParalogLinksPerOrthogroup;
-state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = 3;
-for (const [blastpMode, drawn] of [['orthogroup', 2], ['collinear', 3]]) {
+for (const [blastpMode, stored, drawn] of [
+  ['orthogroup', 3, 3], ['collinear', 3, 3], ['pairwise', 3, 3], ['pairwise', 0, 2], ['pairwise', 'x', 2]
+]) {
   state.losat.blastp.mode = blastpMode;
+  state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = stored;
   // Raw: these requests are not among the characterized ones.
   const generated = buildCanonicalRenderRequestRaw({
     state, filesData: linearFilesData, comparisonPlanSnapshot: comparisonSnapshotForState(state, linearFilesData)
   }).renderRequest.comparisons.find((comparison) => comparison.kind === 'generatedProteinComparison');
-  assert.equal(generated.settings.collinearMaxParalogLinksPerOrthogroup, drawn, blastpMode);
+  assert.equal(generated.settings.collinearMaxParalogLinksPerOrthogroup, drawn, `${blastpMode} ${stored}`);
 }
 state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = storedParalogLinks;
 }

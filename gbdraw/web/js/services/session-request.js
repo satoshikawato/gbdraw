@@ -85,7 +85,7 @@ import {
 } from './track-slot-validation.js';
 /** @import { CustomTrackPlan, CustomTrackPlanInput } from './track-slot-validation.js' */
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
-import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
+import { classifyOptionalPositiveNumber, integerSettingOr, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { loadRepair } from '../utils/load-repairs.js';
 import { repairByDescription } from '../utils/contract-repair.js';
@@ -133,7 +133,7 @@ import {
   requireCurrentCollinearColorMode,
   requireCurrentCollinearMaxConflicts,
   requireCurrentCollinearMaxDiagonalDrift,
-  drawnCollinearMaxParalogLinks,
+  paralogLinksFor,
   requireCurrentCollinearMaxUnitGap,
   requireCurrentCollinearMergeOrientation,
   requireCurrentCollinearMinAnchors,
@@ -941,20 +941,6 @@ const renderOutputPayload = (prefix) => ({
 const projectComparisonThresholds = ({ evalue, bitscore, identity, alignmentLength }) => ({
   evalue: Number(evalue), bitscore, identity, alignmentLength
 });
-// An integer setting that the current request does not use for rendering
-// (a mode-inactive protein parameter or a LOSAT execution choice) keeps its
-// documented fallback; projected render values use projectOptionalNumber.
-/**
- * @template F
- * @param {unknown} value
- * @param {F} fallback
- * @param {number} minimum
- * @returns {number | F}
- */
-const integerSettingOr = (value, fallback, minimum) => {
-  const { value: numeric } = classifyOptionalNumber(value);
-  return typeof numeric === 'number' && Number.isInteger(numeric) && numeric >= minimum ? numeric : fallback;
-};
 
 // A record label or subtitle is saved resolved. Sessions written since file
 // defaults were introduced also record the per-record value, which says directly
@@ -2486,9 +2472,9 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
     orthogroupMemberMaxHits: ['orthogroup', 'collinear'].includes(blastpMode)
       ? requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits)
       : integerSettingOr(blastp.orthogroupMemberMaxHits, null, 1),
-    // The value the Web drew with, so a replay draws the same groups.
-    collinearMaxParalogLinksPerOrthogroup: drawnCollinearMaxParalogLinks(
-      blastpMode === 'collinear',
+    // The value the Generate sends, so a replay draws the same groups.
+    collinearMaxParalogLinksPerOrthogroup: paralogLinksFor(
+      blastpMode,
       blastp.collinearMaxParalogLinksPerOrthogroup
     )
   };

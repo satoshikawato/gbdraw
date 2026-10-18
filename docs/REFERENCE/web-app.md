@@ -755,7 +755,9 @@ remembers its own edited values. Blank means unbounded.
 Collinear also shows **Infer orthogroups with self-comparisons**, initially
 OFF. Enable it to add within-record searches and paralog-aware orthogroup
 inference. OFF builds blocks from comparisons between records only. **Paralog links per
-group** appears in Advanced only when inference is enabled. Shared result
+group** appears in Advanced under **Advanced collinear search** when inference is enabled,
+and under **Advanced similarity groups** in Similarity groups; both modes draw with the
+same value, initially `2`. Shared result
 filters appear in the same disclosure. LOSATN,
 TLOSATX, LOSATP Pairwise matches, and uploaded comparison files also show **Comparison
 appearance**, with **Match style** and **Match height**. Similarity groups and

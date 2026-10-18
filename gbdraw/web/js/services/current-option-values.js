@@ -2,6 +2,7 @@
 import { DEFAULT_FEATURE_RENDERINGS, normalizeFeatureRendering, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
 import { renameLegacyLinearLabelVisibility, requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { requireComparisonSetting } from './losat-normalization.js';
+import { integerSettingOr } from '../utils/optional-positive-number.js';
 
 /**
  * @param {unknown} value
@@ -195,13 +196,19 @@ export const requireCurrentCollinearMaxParalogLinks = (value) => (
 );
 
 /**
- * The paralog links per group a Generate draws with. Only Collinear mode reads
- * the stored setting; Similarity groups draws with the default (OV-1128).
- * @param {boolean} collinear Whether the Generate runs protein BLASTP in Collinear mode.
+ * The paralog links per group a Generate sends and its request records (OV-1128 B, D-114).
+ * Similarity groups and Collinear draw with the stored setting and validate it. Pairwise
+ * (and a run without LOSATP) draws no groups and hides the control, so it keeps a
+ * positive-integer stored value (a Session Load restores the draft from the recorded one)
+ * and uses the default for any other value instead of raising an error that no shown
+ * control can fix (D-121).
+ * @param {string} blastpMode The protein BLASTP mode, or '' for a run without LOSATP.
  * @param {unknown} value The stored setting.
  */
-export const drawnCollinearMaxParalogLinks = (collinear, value) => (
-  collinear ? requireCurrentCollinearMaxParalogLinks(value) : DEFAULT_COLLINEAR_MAX_PARALOG_LINKS
+export const paralogLinksFor = (blastpMode, value) => (
+  blastpMode === 'orthogroup' || blastpMode === 'collinear'
+    ? requireCurrentCollinearMaxParalogLinks(value)
+    : integerSettingOr(value, DEFAULT_COLLINEAR_MAX_PARALOG_LINKS, 1)
 );
 
 /** @param {unknown} value */
