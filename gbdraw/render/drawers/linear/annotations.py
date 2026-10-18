@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import math
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
@@ -23,32 +20,20 @@ from gbdraw.annotations import (
     linear_annotation_labels_above,
 )
 from gbdraw.annotations.layout import PlacedRegionAnnotation
-from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import TextAnchor
+from gbdraw.render.drawers.annotation_marks import (
+    annotation_dom_id,
+    cap_size,
+    capped_ends,
+    dom_token,
+    label_font_size,
+    label_ink_offsets,
+    mark_reach,
+)
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
-
-
-def _dom_token(value: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(value)).strip("-") or "annotation"
-    return cleaned[:48]
-
-
-def annotation_dom_id(
-    *,
-    record_index: int,
-    slot_id: str,
-    set_id: str,
-    annotation_id: str,
-) -> str:
-    raw = f"{record_index}|{slot_id}|{set_id}|{annotation_id}"
-    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
-    return f"gbdraw-annotation-{_dom_token(slot_id)}-{_dom_token(annotation_id)}-{digest}"
-
-
-_DEFAULT_LABEL_FONT_SIZE = 10.0
 
 
 @dataclass(frozen=True)
@@ -81,71 +66,8 @@ def _band_height_factor(mark: str) -> float:
     return 1.0 if mark == "highlight" else 0.84
 
 
-def _cap_size(lane_height: float) -> float:
-    """Half the height of a bracket's end caps."""
-
-    return min(5.0, 0.35 * lane_height)
-
-
-def _capped_ends(annotation: ResolvedRegionAnnotation, part_index: int) -> tuple[bool, bool]:
-    """Whether a mark part draws its start and end: a display fragment's cut ends are open."""
-
-    fragment = annotation.display_parts[part_index] if annotation.display_parts is not None else None
-    return (
-        fragment is None or not fragment.artificial_start,
-        fragment is None or not fragment.artificial_end,
-    )
-
-
-@dataclass(frozen=True)
-class _MarkReach:
-    """How far a mark's paint reaches on the label side, stroke included: from its lane centre, and
-    past its lane's edge (negative while the paint stays inside the lane)."""
-
-    from_centre: float
-    past_lane_edge: float
-
-
-def _mark_reach(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_height: float) -> _MarkReach:
-    """The painted edge of a mark on its label side (``_MarkReach``)."""
-
-    half_stroke = _half_stroke(annotation, style)
-    half_lane = 0.5 * lane_height
-    if annotation.mark in {"band", "highlight"}:
-        half_fill = 0.5 * _band_height_factor(annotation.mark) * lane_height
-        return _MarkReach(half_fill + half_stroke, half_stroke - (half_lane - half_fill))
-    reach = half_stroke
-    if annotation.mark == "bracket" and style.line_cap != "none":
-        cap = _cap_size(lane_height)
-        ends = [_capped_ends(annotation, index) for index in range(len(annotation.geometry_segments))]
-        if any(start for start, _end in ends):
-            reach = max(reach, cap)
-        if any(end for _start, end in ends):
-            # An arrow's butt-capped diagonals reach half the stroke times cos 45 degrees past the cap.
-            reach = max(reach, cap + (half_stroke * math.sqrt(0.5) if style.line_cap == "arrow" else 0.0))
-    return _MarkReach(reach, reach - half_lane)
-
-
-def _half_stroke(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle) -> float:
-    return 0.0 if is_auto_feature_underlay(annotation) else 0.5 * float(style.stroke_width)
-
-
 def _label_anchor(style: RegionAnnotationStyle) -> TextAnchor:
     return "start" if style.label_position == "start" else "end" if style.label_position == "end" else "middle"
-
-
-def _label_ink_offsets(
-    text: str, font_family: str, font_size: float, anchor: TextAnchor
-) -> tuple[float, float, float, float]:
-    """``text_ink_offsets`` of a central-baseline label, or an em box when the font cannot be read."""
-
-    offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline="central", text_anchor=anchor)
-    if offsets is None:
-        # The fallback width of calculate_bbox_dimensions.
-        width = 0.6 * len(text) * font_size
-        origin = -TEXT_ANCHOR_SHARE[anchor] * width
-        return origin, origin + width, -0.5 * font_size, 0.5 * font_size
-    return offsets
 
 
 def _record_lanes(
@@ -182,7 +104,7 @@ def _label_rows(
     it covers too: ``label_offset`` beyond the slot's edge, or beyond the
     mark's paint where it passes that edge, so the place does not depend on
     the overlay's own height (OV-1156, review 1176). The paint passes the edge
-    where ``_MarkReach.past_lane_edge`` exceeds ``padding_px``: with lane
+    where ``MarkReach.past_lane_edge`` exceeds ``padding_px``: with lane
     height ``h``, a stroke wider than ``2 * padding_px`` (highlight),
     ``2 * padding_px + 0.16 * h`` (band) or ``h + 2 * padding_px`` (bracket,
     line), or an arrow cap whose ``min(5, 0.35 * h) + stroke_width * sqrt(0.5) / 2``
@@ -199,10 +121,12 @@ def _label_rows(
         if not annotation.label:
             continue
         style = effective_annotation_style(annotation, params)
-        size = float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE)
-        offsets = _label_ink_offsets(annotation.label, font_family, size, _label_anchor(style))
+        offsets = label_ink_offsets(annotation.label, font_family, label_font_size(style), _label_anchor(style))
         _left, _right, top, bottom = offsets
-        reach = _mark_reach(annotation, style, lane_height)
+        # A Linear band fills _band_height_factor of its lane; an arrow cap is a head of two diagonals.
+        reach = mark_reach(
+            annotation, style, lane_height, fill_share=_band_height_factor(annotation.mark), arrow_heads=True
+        )
         if covers_slots:
             # Beyond the slot edge, or beyond the mark's paint where it passes that edge.
             inset = (
@@ -293,7 +217,7 @@ def linear_annotation_labels(
                 x=x,
                 y=y,
                 anchor=anchor,
-                font_size=float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE),
+                font_size=label_font_size(style),
                 color=style.label_color,
                 ink=Aabb(x + left, y + top, x + right, y + bottom),
                 segments=tuple((float(start) * scale, float(end) * scale) for start, end in segments),
@@ -326,7 +250,7 @@ def linear_annotation_track_content(
     """
 
     group_id = dom_group_id or (
-        f"gbdraw-annotation-track-{_dom_token(track.slot_id)}-{record_index + 1}"
+        f"gbdraw-annotation-track-{dom_token(track.slot_id)}-{record_index + 1}"
     )
     group = Group(id=group_id)
     definitions: dict[str, BaseElement] = {}
@@ -368,7 +292,7 @@ def linear_annotation_track_content(
         for part_index, (start, end) in enumerate(annotation.geometry_segments, start=1):
             x1, x2 = float(start) * scale, float(end) * scale
             fragment = annotation.display_parts[part_index - 1] if annotation.display_parts is not None else None
-            cap_start, cap_end = _capped_ends(annotation, part_index - 1)
+            cap_start, cap_end = capped_ends(annotation, part_index - 1)
             if annotation.mark in {"band", "highlight"}:
                 if style.hatch:
                     definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
@@ -424,7 +348,7 @@ def linear_annotation_track_content(
                 line.attribs["stroke-dasharray"] = dash
             item_group.add(line)
             if annotation.mark == "bracket" and style.line_cap != "none":
-                cap = _cap_size(lane_height)
+                cap = cap_size(lane_height)
                 if style.line_cap == "arrow":
                     path = Path(
                         d=f"M {x2 - cap:g},{lane_center - cap:g} L {x2:g},{lane_center:g} "
@@ -464,7 +388,7 @@ def linear_annotation_track_content(
         clip_id = (
             stable_svg_id("annotation_clip", "linear", group_id)
             if dom_group_id
-            else f"gbdraw-annotation-clip-{_dom_token(track.slot_id)}-{record_index + 1}"
+            else f"gbdraw-annotation-clip-{dom_token(track.slot_id)}-{record_index + 1}"
         )
         clip_path = ClipPath(id=clip_id)
         clip_path.add(
@@ -480,7 +404,6 @@ def linear_annotation_track_content(
 
 __all__ = [
     "LinearAnnotationLabel",
-    "annotation_dom_id",
     "linear_annotation_label_room",
     "linear_annotation_labels",
     "linear_annotation_track_content",

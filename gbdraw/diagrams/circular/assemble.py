@@ -79,6 +79,7 @@ from ...layout.circular import (
     CircularRecordRenderContext,
     CircularResolvedSlot,
     CircularTickLayout,
+    RadialBand,
 )
 from ...layout.circular_depth_axis import DepthAxisStyle, depth_axis_tick_font_size_px
 from ...layout.composition import (
@@ -121,7 +122,11 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
-from ...render.drawers.circular.annotations import circular_annotation_track_content
+from ...render.drawers.circular.annotations import (
+    CircularAnnotationLabel,
+    circular_annotation_labels,
+    circular_annotation_track_content,
+)
 from ...render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupKind, place_content
 from ...layout.linear_multi_record import record_key_at
 from ...render.composition import apply_composition_plan
@@ -681,6 +686,40 @@ def _external_label_obstacles_on_canvas(
         for label in labels
         if not label.get("is_embedded")
     )
+
+
+def _circular_annotation_labels_by_slot(
+    radial_layout: CircularRadialLayout,
+    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None,
+    *,
+    record_index: int,
+    record_length: int,
+    font_family: str,
+) -> dict[str, tuple[CircularAnnotationLabel, ...]]:
+    """The labels of each annotation slot of a record, measured once for the drawer and the canvas bounds.
+
+    The letters clear the axis circle's paint too where they would meet it.
+    """
+
+    axis = radial_layout.axis
+    axis_paint = RadialBand(axis.radius_px - 0.5 * axis.stroke_width_px, axis.radius_px + 0.5 * axis.stroke_width_px)
+    labels: dict[str, tuple[CircularAnnotationLabel, ...]] = {}
+    for slot in radial_layout.slots:
+        layout = (annotation_track_layouts or {}).get(slot.id)
+        if str(slot.renderer) != "annotations" or layout is None:
+            continue
+        labels[slot.id] = circular_annotation_labels(
+            layout,
+            record_index=record_index,
+            record_length=record_length,
+            inner_radius_px=float(slot.draw_inner_radius_px),
+            outer_radius_px=float(slot.draw_outer_radius_px),
+            side=str(slot.side),
+            font_family=font_family,
+            params=annotation_track_params_from_mapping(slot.params),
+            rings=(axis_paint,),
+        )
+    return labels
 
 
 def _primary_radial_half_stroke_px(
@@ -1462,6 +1501,7 @@ def _draw_resolved_circular_slot(
     use_slot_tick_options: bool = True,
     use_feature_anchor_override: bool = True,
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack] | None = None,
+    annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
     annotation_record_index: int = 0,
     record_transform: RecordDisplayTransform | None = None,
     record_key: str,
@@ -1493,6 +1533,7 @@ def _draw_resolved_circular_slot(
             side=str(resolved_slot.side),
             font_family=str(cfg.objects.text.font_family),
             params=params,
+            labels=annotation_labels.get(resolved_slot.id, ()),
             dom_group_id=(
                 track_slot_svg_id(
                     resolved_slot.id,
@@ -2550,10 +2591,22 @@ def add_record_on_circular_canvas(
         resolved_track_slots=resolved_track_slots,
     )
 
-    overlay_obstacles = _external_label_obstacles_on_canvas(
-        precalculated_labels or (),
-        len(gb_record.seq),
-        canvas_config,
+    # Annotation labels lie outside the radial bands too: the canvas holds them and a legend or title avoids them.
+    annotation_labels = _circular_annotation_labels_by_slot(
+        radial_layout,
+        annotation_track_layouts,
+        record_index=annotation_record_index,
+        record_length=len(gb_record.seq),
+        font_family=str(cfg.objects.text.font_family),
+    )
+    annotation_label_obstacles = tuple(
+        label.ink_bounds.translated(float(canvas_config.offset_x), float(canvas_config.offset_y))
+        for labels in annotation_labels.values()
+        for label in labels
+    )
+    overlay_obstacles = (
+        *_external_label_obstacles_on_canvas(precalculated_labels or (), len(gb_record.seq), canvas_config),
+        *annotation_label_obstacles,
     )
     source_content_bounds = _collect_circular_primary_bounds(
         radial_layout=radial_layout,
@@ -2598,10 +2651,9 @@ def add_record_on_circular_canvas(
                     ],
                     len(gb_record.seq),
                 )
-            overlay_obstacles = _external_label_obstacles_on_canvas(
-                precalculated_labels,
-                len(gb_record.seq),
-                canvas_config,
+            overlay_obstacles = (
+                *_external_label_obstacles_on_canvas(precalculated_labels, len(gb_record.seq), canvas_config),
+                *annotation_label_obstacles,
             )
             source_content_bounds = _collect_circular_primary_bounds(
                 radial_layout=radial_layout,
@@ -2667,6 +2719,7 @@ def add_record_on_circular_canvas(
             use_slot_tick_options=user_slot_mode,
             use_feature_anchor_override=user_slot_mode,
             annotation_track_layouts=annotation_track_layouts,
+            annotation_labels=annotation_labels,
             annotation_record_index=annotation_record_index,
             record_transform=record_transform,
             record_key=record_key,

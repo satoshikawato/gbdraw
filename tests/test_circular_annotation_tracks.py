@@ -1,4 +1,7 @@
+import json
+import math
 import re
+from pathlib import Path
 
 import pandas as pd
 from Bio.Seq import Seq
@@ -17,12 +20,15 @@ from gbdraw.api import (
     RegionAnnotationStyle,
     parse_record_selector,
 )
+import gbdraw.api.render as api_render
 from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
+from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink
 from gbdraw.tracks import (
     CircularTrackSlot,
     normalize_circular_track_slots,
     parse_circular_track_slot,
 )
+from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
 
 def test_circular_annotation_renderer_parses_width() -> None:
@@ -594,3 +600,175 @@ def test_circular_multi_record_annotations_bind_by_record_index() -> None:
 
     assert multi_svg.count('data-gbdraw-annotation-id="') == 2
     assert 'data-gbdraw-annotation-id="first"' in single_svg
+
+
+_PAIR = re.compile(r"(-?[0-9.]+(?:e-?[0-9]+)?),(-?[0-9.]+(?:e-?[0-9]+)?)")
+
+
+def _mark_radii(group) -> tuple[float, float]:
+    """The radial band an annotation's drawn mark paints, stroke included."""
+
+    low, high = math.inf, -math.inf
+    for element in group:
+        if element.tag.rsplit("}", 1)[-1] != "path":
+            continue
+        stroked = element.attrib.get("stroke", "none") != "none"
+        half_stroke = 0.5 * float(element.attrib.get("stroke-width", 0.0)) if stroked else 0.0
+        d = element.attrib["d"]
+        # A path with an arc is half its stroke thick each way; a straight butt-capped radial cap ends at its ends.
+        pad = half_stroke if "A" in d else 0.0
+        # Skip an arc's radii and flags ("A rx,ry rotation large sweep"); keep its end point.
+        points = _PAIR.findall(re.sub(r"A \S+ \S+ \S+ \S+ ", "A ", d))
+        radii = [math.hypot(float(x), float(y)) for x, y in points]
+        low, high = min(low, min(radii) - pad), max(high, max(radii) + pad)
+    return low, high
+
+
+def _label_ink_corners(text) -> list[tuple[float, float]]:
+    """The four corners of a drawn label's painted letters, in the annotation track's frame."""
+
+    family = text.attrib["font-family"].split(",")[0].strip("'\" ")
+    size = float(text.attrib["font-size"])
+    ink = text_ink(text.text or "", family)
+    metrics = get_font_vertical_metrics(family)
+    assert ink is not None and metrics is not None
+    shift = dominant_baseline_shift_em(text.attrib["dominant-baseline"], metrics)
+    assert shift is not None
+    x, y = float(text.attrib["x"]), float(text.attrib["y"])
+    origin = -0.5 * ink.advance * size
+    left, right = origin + ink.left * size, origin + ink.right * size
+    top, bottom = (shift - ink.top) * size, (shift - ink.bottom) * size
+    match = re.search(r"rotate\(([-0-9.e]+),([-0-9.e]+),([-0-9.e]+)\)", text.attrib.get("transform", ""))
+    angle = math.radians(float(match.group(1))) if match else 0.0
+    if match:
+        assert (float(match.group(2)), float(match.group(3))) == pytest.approx((x, y))
+    cos, sin = math.cos(angle), math.sin(angle)
+    return [
+        (x + cx * cos - cy * sin, y + cx * sin + cy * cos)
+        for cx, cy in ((left, top), (right, top), (right, bottom), (left, bottom))
+    ]
+
+
+def _nearest_distance(corners: list[tuple[float, float]]) -> float:
+    """The distance from the circle centre to the nearest point of a convex quadrilateral that excludes it."""
+
+    best = math.inf
+    for (x1, y1), (x2, y2) in zip(corners, corners[1:] + corners[:1]):
+        dx, dy = x2 - x1, y2 - y1
+        t = max(0.0, min(1.0, -(x1 * dx + y1 * dy) / (dx * dx + dy * dy)))
+        best = min(best, math.hypot(x1 + t * dx, y1 + t * dy))
+    return best
+
+
+def _circular_label_gaps(drawing) -> dict[str, tuple[str, float]]:
+    """Each drawn annotation label: the side of its mark it is on and the gap from the mark's paint to its ink."""
+
+    root = ElementTree.fromstring(drawing.tostring())
+    gaps: dict[str, tuple[str, float]] = {}
+    for group in root.iter():
+        if not group.attrib.get("data-gbdraw-annotation-label"):
+            continue
+        inner, outer = _mark_radii(group)
+        for text in (element for element in group if element.tag.rsplit("}", 1)[-1] == "text"):
+            corners = _label_ink_corners(text)
+            anchor = math.hypot(float(text.attrib["x"]), float(text.attrib["y"]))
+            if anchor > 0.5 * (inner + outer):
+                gaps[group.attrib["data-gbdraw-annotation-id"]] = ("outside", _nearest_distance(corners) - outer)
+            else:
+                farthest = max(math.hypot(x, y) for x, y in corners)
+                gaps[group.attrib["data-gbdraw-annotation-id"]] = ("inside", inner - farthest)
+    assert gaps, "no annotation labels drawn"
+    return gaps
+
+
+@pytest.mark.parametrize("side", ["outside", "inside"])
+@pytest.mark.parametrize("orientation", ["auto", "tangent", "arc", "radial", "horizontal"])
+@pytest.mark.parametrize(
+    ("mark", "line_cap"),
+    [("highlight", "tick"), ("band", "tick"), ("bracket", "tick"), ("bracket", "none"), ("line", "tick")],
+)
+def test_circular_annotation_label_ink_keeps_label_offset_clear_of_its_mark(
+    mark: str, line_cap: str, orientation: str, side: str
+) -> None:
+    style = RegionAnnotationStyle(
+        stroke_width=1.5, label_offset=4.0, label_orientation=orientation, line_cap=line_cap
+    )
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    record.annotations["topology"] = "circular"
+    # Regions around the circle, so tangent labels turn over and horizontal ones meet the ring at every slant.
+    regions = tuple(
+        RegionAnnotation(f"r{index}", CoordinateSpan(None, start, start + 700), label=text, mark=mark, style=style)
+        for index, (start, text) in enumerate(
+            ((300, "Region gyp"), (1900, "IRb"), (3500, "rRNA genes"), (5600, "Wide region label"), (8000, "LSC"))
+        )
+    )
+    drawing = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            config_overrides={"labels.circular.scope": "none"},
+            tracks=CircularRequestTrackOptions(
+                circular_track_slots=(
+                    "features:features",
+                    f"regions:annotations@side={side},set_id=regions,w=20px",
+                )
+            ),
+        ),
+    )
+
+    gaps = _circular_label_gaps(drawing)
+    assert set(gaps) == {region.id for region in regions}
+    for annotation_id, (drawn_side, gap) in gaps.items():
+        # The painted letters keep label_offset clear of the mark's paint (OV-849), on the slot's side.
+        assert drawn_side == side, annotation_id
+        # Mark paths carry six significant digits (``:g``), about 1e-3 px at these radii.
+        assert gap == pytest.approx(4.0, abs=1e-3), annotation_id
+
+
+def test_circular_annotation_labels_of_the_tobacco_gallery_figure_keep_their_label_offset(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = json.loads(
+        (Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "tobacco-chloroplast.gbdraw-session.json")
+        .read_text(encoding="utf-8")
+    )
+    drawings: list = []
+    original = api_render.write_svg_document
+
+    def capture(drawing):
+        drawings.append(drawing)
+        return original(drawing)
+
+    monkeypatch.setattr(api_render, "write_svg_document", capture)
+    render_embedded_canonical_web_request(
+        session["renderRequest"], resources=session["resources"], workspace=tmp_path / "workspace"
+    )
+
+    (drawing,) = drawings
+    gaps = _circular_label_gaps(drawing)
+    assert set(gaps) == {"lsc", "irb", "ssc", "ira"}
+    for annotation_id, (side, gap) in gaps.items():
+        # The figure's brackets draw their labels inside with label_offset 7.
+        assert side == "inside", annotation_id
+        assert gap == pytest.approx(7.0, abs=1e-3), annotation_id
+
+
+def test_circular_annotation_label_clears_the_axis_circle_on_its_way() -> None:
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    record.features = [SeqFeature(FeatureLocation(100, 900, strand=1), type="CDS")]
+    tint = RegionAnnotation("tint", CoordinateSpan(None, 300, 2000), label="rRNA genes", mark="highlight")
+    # The automatic highlight covers the feature band, just inside the axis circle.
+    drawing = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(annotations=AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),))),
+    )
+
+    root = ElementTree.fromstring(drawing.tostring())
+    axis = next(element for element in root.iter() if element.attrib.get("id") == "Axis")[0]
+    axis_outer = float(axis.attrib["r"]) + 0.5 * float(axis.attrib["stroke-width"])
+    text = next(element for element in root.iter() if element.tag.rsplit("}", 1)[-1] == "text" and element.text == "rRNA genes")
+    (side, mark_gap), = _circular_label_gaps(drawing).values()
+    assert side == "outside"
+    # The letters keep label_offset beyond the axis paint, so they keep more than that from the tint.
+    assert _nearest_distance(_label_ink_corners(text)) - axis_outer == pytest.approx(4.0, abs=1e-6)
+    assert mark_gap > 4.0

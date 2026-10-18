@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 from svgwrite.base import BaseElement
 
@@ -15,7 +17,16 @@ from gbdraw.annotations import (
     effective_annotation_style,
     is_auto_feature_underlay,
 )
-from gbdraw.render.drawers.linear.annotations import annotation_dom_id
+from gbdraw.annotations.layout import PlacedRegionAnnotation
+from gbdraw.layout.circular import RadialBand
+from gbdraw.layout.spatial import Aabb
+from gbdraw.render.drawers.annotation_marks import (
+    annotation_dom_id,
+    cap_size,
+    label_font_size,
+    label_ink_offsets,
+    mark_reach,
+)
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
@@ -54,6 +65,198 @@ def _safe_segments(start: int, end: int, total_length: int):
     return ((float(start), float(end)),)
 
 
+@dataclass(frozen=True)
+class CircularAnnotationLabel:
+    """One Circular annotation label as it is drawn (``text-anchor=middle``, ``dominant-baseline=central``).
+
+    ``x`` and ``y`` anchor the text around the circle centre, ``rotation`` turns
+    it about that point (degrees, clockwise), and ``corners`` are the corners of
+    the box of its painted letters after the turn, in the same frame.
+    """
+
+    annotation_id: str
+    text: str
+    x: float
+    y: float
+    rotation: float
+    font_size: float
+    color: str
+    corners: tuple[tuple[float, float], ...]
+
+    @property
+    def ink_bounds(self) -> Aabb:
+        xs = [x for x, _y in self.corners]
+        ys = [y for _x, y in self.corners]
+        return Aabb(min(xs), min(ys), max(xs), max(ys))
+
+
+def _record_lanes(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    inner_radius_px: float,
+    outer_radius_px: float,
+    params: AnnotationTrackParams,
+) -> tuple[list[PlacedRegionAnnotation], float]:
+    """The record's placements and the width of one lane."""
+
+    placements = [item for item in track.placements if item.annotation.record_index == record_index]
+    lane_count = max((item.lane for item in placements), default=-1) + 1
+    usable = max(1.0, outer_radius_px - inner_radius_px - 2.0 * params.padding_px)
+    return placements, 14.0 if track.clipped else usable / max(1, lane_count)
+
+
+def _lane_radii(
+    lane: int,
+    lane_width: float,
+    *,
+    side: str,
+    inner_radius_px: float,
+    outer_radius_px: float,
+    params: AnnotationTrackParams,
+) -> tuple[float, float]:
+    """The inner and outer radius of a lane: ``inside`` slots stack their lanes inward."""
+
+    if side == "inside":
+        lane_outer = outer_radius_px - params.padding_px - lane * lane_width
+        return lane_outer - lane_width, lane_outer
+    lane_inner = inner_radius_px + params.padding_px + lane * lane_width
+    return lane_inner, lane_inner + lane_width
+
+
+def _label_rotation(orientation: str, angle: float) -> float:
+    """The turn of a label at ``angle`` (degrees, clockwise from 3 o'clock): along the ring kept upright, along the
+    ray, or none."""
+
+    if orientation in {"auto", "tangent", "arc"}:
+        rotation = angle + 90.0
+        return rotation + 180.0 if 90.0 < rotation % 360.0 < 270.0 else rotation
+    return angle if orientation == "radial" else 0.0
+
+
+def _ink_extent(
+    radius: float, direction: tuple[float, float], offsets: tuple[float, float, float, float]
+) -> tuple[float, float]:
+    """How near the centre and how far from it a label's ink box comes with its anchor at ``radius``.
+
+    ``direction`` is the unit ray in the text's own frame; the box excludes the centre.
+    """
+
+    left, right, top, bottom = offsets
+    wx, wy = direction
+    # The centre lies at -radius * direction from the anchor.
+    ox, oy = -radius * wx, -radius * wy
+    near = math.hypot(max(left - ox, 0.0, ox - right), max(top - oy, 0.0, oy - bottom))
+    far = max(math.hypot(x - ox, y - oy) for x in (left, right) for y in (top, bottom))
+    return near, far
+
+
+def _label_radius(
+    target: float,
+    outward: bool,
+    direction: tuple[float, float],
+    offsets: tuple[float, float, float, float],
+) -> float:
+    """The anchor radius at which a label's ink comes nearest the centre at ``target`` (``outward``) or reaches
+    farthest from it at ``target``."""
+
+    left, right, top, bottom = offsets
+    projections = [x * direction[0] + y * direction[1] for x in (left, right) for y in (top, bottom)]
+    # The projection on the ray bounds the reach; each step closes the rest, as the reach moves almost one for one.
+    radius = target - (min(projections) if outward else max(projections))
+    for _ in range(32):
+        near, far = _ink_extent(radius, direction, offsets)
+        miss = target - (near if outward else far)
+        if abs(miss) < 1e-9 or radius + miss <= 0.0:
+            break
+        radius += miss
+    return max(radius, 0.0)
+
+
+def circular_annotation_labels(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    record_length: int,
+    inner_radius_px: float,
+    outer_radius_px: float,
+    side: str,
+    font_family: str,
+    params: AnnotationTrackParams,
+    rings: Sequence[RadialBand] = (),
+) -> tuple[CircularAnnotationLabel, ...]:
+    """The labels of one record's annotation track, around the centre of the circle.
+
+    Each label's painted letters keep ``label_offset`` from the painted edge of
+    its mark (stroke included), outward or, on an ``inside`` slot, inward, at
+    the label's own turn (OV-849, the Linear rule of OV-844). A painted ring of
+    ``rings`` (the axis circle) that the letters would meet, or come within
+    ``label_offset`` of, is cleared the same way beyond its paint.
+    """
+
+    if not params.show_labels:
+        return ()
+    placements, lane_width = _record_lanes(
+        track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
+    )
+    outward = side != "inside"
+    labels: list[CircularAnnotationLabel] = []
+    for placement in placements:
+        annotation = placement.annotation
+        if not annotation.label:
+            continue
+        style = effective_annotation_style(annotation, params)
+        lane_inner, lane_outer = _lane_radii(
+            placement.lane,
+            lane_width,
+            side=side,
+            inner_radius_px=inner_radius_px,
+            outer_radius_px=outer_radius_px,
+            params=params,
+        )
+        # A Circular band fills its whole lane; an arrow cap is drawn as a straight cap.
+        reach = mark_reach(annotation, style, lane_width, fill_share=1.0, arrow_heads=False).from_centre
+        centre = 0.5 * (lane_inner + lane_outer)
+        edge = centre + reach if outward else centre - reach
+        gap = float(style.label_offset)
+        size = label_font_size(style)
+        offsets = label_ink_offsets(annotation.label, font_family, size, "middle")
+        angle = 360.0 * annotation.geometry_midpoint_bp / max(1, record_length) - 90.0
+        rotation = _label_rotation(style.label_orientation, angle)
+        theta, turn = math.radians(angle), math.radians(rotation)
+        # The ray's direction in the text's frame: the screen direction turned back by the label's rotation.
+        direction = (math.cos(theta - turn), math.sin(theta - turn))
+        radius = _label_radius(edge + gap if outward else edge - gap, outward, direction, offsets)
+        for ring in sorted(rings, key=lambda band: band.inner_px if outward else -band.outer_px):
+            near, far = _ink_extent(radius, direction, offsets)
+            if outward and edge < ring.outer_px and ring.inner_px < far + gap:
+                edge = ring.outer_px
+            elif not outward and ring.inner_px < edge and near - gap < ring.outer_px:
+                edge = ring.inner_px
+            else:
+                continue
+            radius = _label_radius(edge + gap if outward else edge - gap, outward, direction, offsets)
+        x, y = radius * math.cos(theta), radius * math.sin(theta)
+        left, right, top, bottom = offsets
+        cos, sin = math.cos(turn), math.sin(turn)
+        labels.append(
+            CircularAnnotationLabel(
+                annotation_id=annotation.id,
+                text=annotation.label,
+                x=x,
+                y=y,
+                rotation=rotation,
+                font_size=size,
+                color=style.label_color,
+                corners=tuple(
+                    (x + cx * cos - cy * sin, y + cx * sin + cy * cos)
+                    for cx, cy in ((left, top), (right, top), (right, bottom), (left, bottom))
+                ),
+            )
+        )
+    return tuple(labels)
+
+
 def circular_annotation_track_content(
     track: ResolvedAnnotationTrack,
     *,
@@ -65,13 +268,15 @@ def circular_annotation_track_content(
     side: str,
     font_family: str,
     params: AnnotationTrackParams,
+    labels: Sequence[CircularAnnotationLabel] = (),
     dom_group_id: str | None = None,
     semantic_slot_id: str | None = None,
 ) -> GroupContent:
     """Build an annotation track around the circle centre (render stage ``annotation_content``).
 
-    The hatch patterns the marks use, in order of first use, and the clip path
-    of a clipped track are the content's definitions.
+    ``labels`` are the track's labels (``circular_annotation_labels``), drawn
+    with their annotations. The hatch patterns the marks use, in order of first
+    use, and the clip path of a clipped track are the content's definitions.
     """
 
     group_id = dom_group_id or f"gbdraw-annotation-track-{track.slot_id}-{record_index + 1}"
@@ -80,21 +285,23 @@ def circular_annotation_track_content(
     if semantic_slot_id:
         group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
         group.attribs["data-gbdraw-slot-renderer"] = "annotations"
-    placements = [item for item in track.placements if item.annotation.record_index == record_index]
-    lane_count = max((item.lane for item in placements), default=-1) + 1
-    usable = max(1.0, outer_radius_px - inner_radius_px - 2.0 * params.padding_px)
-    lane_width = 14.0 if track.clipped else usable / max(1, lane_count)
+    placements, lane_width = _record_lanes(
+        track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
+    )
+    labels_by_id = {label.annotation_id: label for label in labels}
 
     for placement in placements:
         annotation = placement.annotation
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
-        if side == "inside":
-            lane_outer = outer_radius_px - params.padding_px - placement.lane * lane_width
-            lane_inner = lane_outer - lane_width
-        else:
-            lane_inner = inner_radius_px + params.padding_px + placement.lane * lane_width
-            lane_outer = lane_inner + lane_width
+        lane_inner, lane_outer = _lane_radii(
+            placement.lane,
+            lane_width,
+            side=side,
+            inner_radius_px=inner_radius_px,
+            outer_radius_px=outer_radius_px,
+            params=params,
+        )
         radius = 0.5 * (lane_inner + lane_outer)
         item_group = Group(
             id=annotation_dom_id(
@@ -173,7 +380,7 @@ def circular_annotation_track_content(
                         border.attribs["stroke-dasharray"] = dash
                     item_group.add(border)
                 if annotation.mark == "bracket" and style.line_cap != "none":
-                    cap = min(5.0, 0.35 * lane_width)
+                    cap = cap_size(lane_width)
                     for position in (start, end):
                         if fragment is not None and (
                             (position == start and (start != raw_start or fragment.artificial_start))
@@ -190,30 +397,20 @@ def circular_annotation_track_content(
                         )
                         item_group.add(cap_path)
 
-        if params.show_labels and annotation.label:
-            label_radius = lane_outer + style.label_offset if side != "inside" else lane_inner - style.label_offset
-            x, y = _point(annotation.geometry_midpoint_bp, record_length, label_radius)
-            angle = 360.0 * annotation.geometry_midpoint_bp / max(1, record_length) - 90.0
-            orientation = style.label_orientation
-            rotation = 0.0
-            if orientation in {"auto", "tangent", "arc"}:
-                rotation = angle + 90.0
-                if 90.0 < rotation % 360.0 < 270.0:
-                    rotation += 180.0
-            elif orientation == "radial":
-                rotation = angle
+        label = labels_by_id.get(annotation.id)
+        if label is not None:
             text = Text(
-                annotation.label,
-                insert=(x, y),
-                fill=style.label_color,
+                label.text,
+                insert=(label.x, label.y),
+                fill=label.color,
                 stroke="none",
-                font_size=style.label_font_size or 10.0,
+                font_size=label.font_size,
                 font_family=font_family,
                 text_anchor="middle",
                 dominant_baseline="central",
             )
-            if rotation:
-                text.rotate(rotation, center=(x, y))
+            if label.rotation:
+                text.rotate(label.rotation, center=(label.x, label.y))
             item_group.add(text)
         group.add(item_group)
     clip_paths: list[BaseElement] = []
@@ -241,4 +438,4 @@ def circular_annotation_track_content(
     return GroupContent.of(group, (*definitions.values(), *clip_paths))
 
 
-__all__ = ["circular_annotation_track_content"]
+__all__ = ["CircularAnnotationLabel", "circular_annotation_labels", "circular_annotation_track_content"]
