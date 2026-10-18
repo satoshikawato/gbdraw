@@ -136,7 +136,7 @@ test('the Legend item of K features, whose K hash rules name a row of another co
     rules.forEach((rule) => { rule.color = '#abcdef'; });
     const preparation = createRulePreparation({ state, evaluate: evaluateHashRules });
     assert.equal(await preparation.prepare(rules), true);
-    Object.assign(state, { results: ref([]), files: { t_color: null }, fileLegendCaptions: ref(new Set()), originalLegendOrder: ref(['CDS']) });
+    Object.assign(state, { results: ref([]), files: { t_color: null }, originalLegendOrder: ref(['CDS']) });
     const actions = createFeatureRuleActions({
       ref, computed: (get) => ({ get value() { return get(); } }), watch() {}, state, rulePreparation: preparation,
       runUndoable: async (_, commit) => commit(), runUndoableCheckpoint: async (_, commit) => commit(),

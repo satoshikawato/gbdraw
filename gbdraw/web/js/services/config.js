@@ -4493,8 +4493,7 @@ const captureDrawingImportSnapshot = (drawing) => ({
   features: buildFeatureStateData(drawing),
   editorState: buildEditorStateData(drawing),
   orthogroupState: buildOrthogroupStateData(drawing),
-  importedComparisonIntent: cloneJsonData(drawing.importedComparisonIntent),
-  fileLegendCaptions: COLOR_RULES_SLICE.capture(drawing.slices.colorRules).fileLegendCaptions
+  importedComparisonIntent: cloneJsonData(drawing.importedComparisonIntent)
 });
 
 const captureSessionImportSnapshot = () => ({
@@ -4576,7 +4575,6 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       applyFeatureStateData(drawing, saved.features);
       applyOrthogroupStateData(drawing, saved.orthogroupState);
       applyEditorStateData(drawing, saved.editorState, { normalized: true });
-      COLOR_RULES_SLICE.install(drawing.slices.colorRules, { fileLegendCaptions: saved.fileLegendCaptions });
     });
     state.collinearGroups.value = snapshot.collinearGroups;
     applyRunStateData(snapshot.runState);

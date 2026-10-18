@@ -205,7 +205,7 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
 const SLICE_DIRECTORY = new URL('../../gbdraw/web/js/services/drawing/', import.meta.url);
 const NOT_WRITERS = new Set([
   'legendEntryKey', 'fillRecordOf', 'paintOf', 'captureLegendPaint', 'captureFeatureFills', 'featureEditsOf',
-  'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData', 'fileLegendCaptionsOf'
+  'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData'
 ]);
 const legendRow = (caption, originalCaption, color) => ({ caption, originalCaption, color, xPos: 0, yPos: 0, featureIds: [] });
 const SEEDS = {

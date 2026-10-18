@@ -80,7 +80,6 @@ export { cloneJsonData };
  * @property {FeatureEditsData} [features]
  * @property {EditorIntentData} [editorState]
  * @property {GroupNameIntentData} [groupNames]
- * @property {unknown} [fileLegendCaptions]
  */
 /**
  * A History intent: both drawings and the shared edits (PD-OI-086).
@@ -103,7 +102,6 @@ export { cloneJsonData };
  * @property {FilesData} [files]
  * @property {AlignmentStateData} [alignmentState]
  * @property {DraftIntentData} [drafts]
- * @property {unknown} [fileLegendCaptions]
  * @property {{ mode?: unknown, drawing?: ModeIntentData } | null} [otherMode] The other mode's drawing.
  * @property {IntentUiData} [ui]
  * @property {HistorySnapshotData[]} [results]
@@ -447,19 +445,6 @@ const buildDraftIntentData = (state) => ({
   newColorFeat: String(getRef(state.newColorFeat, '') || ''),
   newColorVal: String(getRef(state.newColorVal, '') || ''),
   newFeatureToAdd: String(getRef(state.newFeatureToAdd, '') || '')
-});
-
-/** @param {DrawingView} drawing */
-const buildFileLegendCaptionData = (drawing) => COLOR_RULES_SLICE.capture(drawing.slices.colorRules).fileLegendCaptions
-  .map((caption) => String(caption || '').trim())
-  .filter(Boolean);
-
-/**
- * @param {DrawingView} drawing
- * @param {unknown} captions
- */
-const applyFileLegendCaptionData = (drawing, captions) => COLOR_RULES_SLICE.install(drawing.slices.colorRules, {
-  fileLegendCaptions: Array.isArray(captions) ? captions.map((caption) => String(caption || '').trim()).filter(Boolean) : []
 });
 
 /**
@@ -1141,7 +1126,6 @@ export const createHistorySnapshotService = ({
       comparisonWarnings: toRaw(getGeneratedArtifactRef(state.comparisonWarnings, null)),
       labelFitReports: toRaw(getGeneratedArtifactRef(state.labelFitReports, null)),
       specificRules: colorRules.manualSpecificRules,
-      fileLegendCaptions: new Set(colorRules.fileLegendCaptions),
       trackSlotResolvedGeometry: toRaw(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
@@ -1233,10 +1217,7 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
     setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
     setGeneratedArtifactRef(state.labelFitReports, ownerSet.labelFitReports || []);
-    COLOR_RULES_SLICE.install(drawing.slices.colorRules, {
-      manualSpecificRules: ownerSet.specificRules,
-      fileLegendCaptions: ownerSet.fileLegendCaptions && [...ownerSet.fileLegendCaptions]
-    });
+    COLOR_RULES_SLICE.install(drawing.slices.colorRules, { manualSpecificRules: ownerSet.specificRules });
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null
@@ -1808,8 +1789,7 @@ export const createHistorySnapshotService = ({
         ...labelTextEditsData(drawing.slices.labelTables)
       }),
       editorState: editorIntentOf(captureLegendPaint(drawing.slices.paint)),
-      groupNames: buildGroupNameIntentData(drawing),
-      fileLegendCaptions: buildFileLegendCaptionData(drawing)
+      groupNames: buildGroupNameIntentData(drawing)
     };
   };
 
@@ -1842,7 +1822,7 @@ export const createHistorySnapshotService = ({
   };
 
   const INTENT_DOMAINS = Object.freeze(['files', 'alignmentState', 'ui', 'drafts', 'orthogroupState']);
-  const MODE_INTENT_DOMAINS = Object.freeze(['config', 'ui', 'features', 'editorState', 'groupNames', 'fileLegendCaptions']);
+  const MODE_INTENT_DOMAINS = Object.freeze(['config', 'ui', 'features', 'editorState', 'groupNames']);
   // The domains a step changed: a top-level domain, or `modes.<m>.<domain>`.
   /** @param {Record<string, any>} context */
   const intentDomains = (context) => {
@@ -1997,7 +1977,6 @@ export const createHistorySnapshotService = ({
       drawingModes.forEach((drawingMode) => {
         const drawing = drawingOf(drawingMode);
         const modeIntent = intent.modes?.[drawingMode] || {};
-        if (changed(drawingMode, 'fileLegendCaptions')) applyFileLegendCaptionData(drawing, modeIntent.fileLegendCaptions);
         if (changed(drawingMode, 'features')) applyFeatureIntentData(state, drawing, modeIntent.features || {});
         if (changed(drawingMode, 'editorState')) applyEditorIntentData(drawing, modeIntent.editorState || {});
         if (changed(drawingMode, 'groupNames')) applyGroupNameIntentData(drawing, modeIntent.groupNames || {});
@@ -2034,7 +2013,6 @@ export const createHistorySnapshotService = ({
       files: buildFilesData(state, drawingOf('linear'), fileStore),
       alignmentState: captureAlignmentState(),
       drafts: buildDraftIntentData(state),
-      fileLegendCaptions: buildFileLegendCaptionData(drawing),
       otherMode: { mode: otherMode, drawing: buildModeIntent(otherMode) },
       ...generated,
       editorState
@@ -2065,7 +2043,6 @@ export const createHistorySnapshotService = ({
         installComparisonPlan(drawing, snapshot.config.linearComparisonPlan);
       }
       applyDraftIntentData(state, snapshot.drafts || {});
-      applyFileLegendCaptionData(drawing, snapshot.fileLegendCaptions);
       const other = snapshot.otherMode;
       if (other?.drawing && (other.mode === 'circular' || other.mode === 'linear')) {
         const otherDrawing = drawingOf(other.mode);
@@ -2076,7 +2053,6 @@ export const createHistorySnapshotService = ({
         applyFeatureIntentData(state, otherDrawing, other.drawing.features || {});
         applyEditorIntentData(otherDrawing, other.drawing.editorState || {});
         applyGroupNameIntentData(otherDrawing, other.drawing.groupNames || {});
-        applyFileLegendCaptionData(otherDrawing, other.drawing.fileLegendCaptions);
       }
 
       if (typeof applyUiStateData === 'function') {

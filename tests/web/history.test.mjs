@@ -1719,7 +1719,6 @@ const createLayoutPreferences = () => ({
     newColorFeat: ref('gene'),
     newColorVal: ref('#123456'),
     newFeatureToAdd: ref('mobile_element'),
-    fileLegendCaptions: ref(new Set(['Imported legend'])),
     semanticFileWatchersSuppressed: ref(false)
   };
   const snapshots = createHistorySnapshotService({
@@ -1744,8 +1743,7 @@ const createLayoutPreferences = () => ({
     newPriorityRule: structuredClone(state.newPriorityRule),
     newColorFeat: state.newColorFeat.value,
     newColorVal: state.newColorVal.value,
-    newFeatureToAdd: state.newFeatureToAdd.value,
-    fileLegendCaptions: Array.from(state.fileLegendCaptions.value)
+    newFeatureToAdd: state.newFeatureToAdd.value
   });
   const before = draftState();
 
@@ -1758,7 +1756,6 @@ const createLayoutPreferences = () => ({
     state.newColorFeat.value = 'CDS';
     state.newColorVal.value = '#abcdef';
     state.newFeatureToAdd.value = 'repeat_region';
-    state.fileLegendCaptions.value = new Set(['Edited imported legend']);
   });
   const after = draftState();
 
@@ -1776,7 +1773,6 @@ const createLayoutPreferences = () => ({
     state.newColorFeat.value = 'gene';
     state.newColorVal.value = '#d3d3d3';
     state.newFeatureToAdd.value = 'mobile_element';
-    state.fileLegendCaptions.value = new Set();
   });
   await history.undo();
   assert.deepEqual(draftState(), after);

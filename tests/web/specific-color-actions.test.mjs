@@ -32,7 +32,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
       { type: 'CDS', svg_id: 'b', qualifiers: { gene: ['b'] } }
     ] },
     featureColorOverrides: {}, featureOverrides: {}, results: { value: [{name:'figure',content:'before'}] },
-    svgResultIdentity: { value:'before' }, fileLegendCaptions: { value:new Set() }, addedLegendCaptions: { value:new Set() },
+    svgResultIdentity: { value:'before' }, addedLegendCaptions: { value:new Set() },
     legendEntries: { value:[] }, files: {t_color:null}, legendColorOverrides: {},
     newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}, labelReflowProcessing: { value:false },
     editableLabels: { value: [] }, manualPriorityRules: []
@@ -109,7 +109,6 @@ test('rule action admits full canonical rules and legend in one transaction afte
   // A caption written in two colors stays as written (PD-OI-042 scenario revision 2).
   assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared','Shared']);
   assert.equal(s.state.manualSpecificRules[0].fromFile,true);
-  assert.deepEqual([...s.state.fileLegendCaptions.value],['Shared']);
   assert.equal(s.transactions.length,1);
   assert.deepEqual(s.legendApplies,[{transaction:'Change specific color rules',rules:['Shared','Shared']}],
     'the legend rows apply after the rule transition, inside its History step (R13)');
@@ -130,7 +129,7 @@ for (const outcome of ['stale','error']) {
     await s.actions.commitSpecificRules(() => rules);
     s.state.addedLegendCaptions.value.add('Independent manual legend');
     const before=JSON.stringify(s.state.manualSpecificRules), result=s.state.results.value;
-    const captions=[...s.state.fileLegendCaptions.value], count=s.transactions.length;
+    const count=s.transactions.length;
     let replacements=0;
     s.setLegendPreparation(async()=>{
       if(outcome==='error') throw new Error('measurement failed');
@@ -142,7 +141,6 @@ for (const outcome of ['stale','error']) {
     else assert.equal(await s.actions.commitSpecificRules(() => candidate),false);
     assert.equal(JSON.stringify(s.state.manualSpecificRules),before);
     assert.equal(s.state.results.value,result);
-    assert.deepEqual([...s.state.fileLegendCaptions.value],captions);
     assert.equal(s.transactions.length,count);
   });
 }
@@ -776,7 +774,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
     featureCatalog: { value: catalog }, generatedMode: { value: 'circular' }, selectedResultIndex: { value: 0 },
     results: { value: [{ name: 'result-0.svg', content: '<svg />' }] }, svgContainer: { value: { querySelector: () => svg } },
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
-    svgResultIdentity: { value: 'result' }, fileLegendCaptions: { value: new Set() }, addedLegendCaptions: { value: new Set() },
+    svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
     extractedFeatures: { value: [] }
   };

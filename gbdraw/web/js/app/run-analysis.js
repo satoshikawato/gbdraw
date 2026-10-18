@@ -12,7 +12,6 @@ import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
 import { keepResultNames } from '../services/result-normalization.js';
 import { regionWithinRecord } from '../services/record-options.js';
-import { fileLegendCaptionsOf } from '../services/drawing/color-rules.js';
 import {
   nameFeaturePlacementFailure,
   requestFeatureOverrides,
@@ -5290,7 +5289,6 @@ export const createRunAnalysis = ({
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         labelFitReports: canonicalExecution.labelFitReports,
         specificRules: candidateRules,
-        fileLegendCaptions: fileLegendCaptionsOf(candidateRules),
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
         legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,

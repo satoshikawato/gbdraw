@@ -309,7 +309,6 @@ const SAMPLES = {
     id: 'sample-rule', featureType: 'CDS', qualifier: 'locus_tag', value: '^A$', action: 'off'
   })] }),
   colorRules: () => ({
-    fileLegendCaptions: ['Kinase'],
     manualSpecificRules: [normalizeSpecificRule({ feat: 'CDS', qual: 'product', val: 'kinase', color: '#123456', cap: 'Kinase', fromFile: true })]
   }),
   // Load gives a palette's colors the comparison colors (`normalizePaletteColors`).

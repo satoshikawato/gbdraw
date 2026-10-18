@@ -1060,7 +1060,6 @@ Object.assign(state.newPriorityRule, { qualifier: 'product', priority: 7 });
 state.newColorFeat.value = 'repeat_region';
 state.newColorVal.value = '#123456';
 state.newFeatureToAdd.value = 'misc_feature';
-state.activeDrawing().fileLegendCaptions.value = new Set(['Keep file legend']);
 state.featureSearch.value = 'keep feature search';
 state.labelSearch.value = 'keep label search';
 state.selectedFeatureIds.value = new Set(['keep-feature-a', 'keep-feature-b']);
@@ -1194,7 +1193,6 @@ const rollbackState = () => ({
   newColorFeat: state.newColorFeat.value,
   newColorVal: state.newColorVal.value,
   newFeatureToAdd: state.newFeatureToAdd.value,
-  fileLegendCaptions: [...state.activeDrawing().fileLegendCaptions.value],
   featureSearch: state.featureSearch.value,
   labelSearch: state.labelSearch.value,
   selectedFeatureIds: [...state.selectedFeatureIds.value],
