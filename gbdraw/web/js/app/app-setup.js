@@ -5264,16 +5264,10 @@ export const createAppSetup = () => {
       const returning = state.activeDrawing().deletedLegendEntries.value
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
-      const circularCanvasWasOff = state.drawings.circular.form.multi_record_canvas === false;
       const ringSettingsBefore = ringSettingsOf(state.drawings.circular);
+      // OV-1166 (Q-DR-6 A): every drawing's multi-record layout takes a new
+      // drawing's defaults (its sides unset), whatever the canvas was before.
       resetSettingsState(state);
-      // OV-1166 (Owner question Q-DR-6, open): today's outcome, kept as is. A
-      // Reset that turns the shown Circular drawing's Multi-Record Canvas on
-      // stores the toggle's smart defaults; from the canvas on, or with Linear
-      // shown, the multi-record sides stay unset. The answer changes this step.
-      if (circularCanvasWasOff && state.activeDrawing() === state.drawings.circular) {
-        storeCircularMultiRecordDefaults(state.drawings.circular);
-      }
       // OV-1167 (Owner question Q-DR-7, open): today's outcome, kept as is. The
       // comparison rings are re-read from the kept ring files only when Reset
       // changed their source or the legacy series names; otherwise they stay

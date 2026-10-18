@@ -200,3 +200,22 @@ test('a Circular step older than the Session edits is undone after them and keep
   assert.equal(state.lInputType.value, 'gff', 'the Linear input type stays');
   assert.equal(state.sessionTitle.value, title);
 });
+
+// OV-1166 (Q-DR-6 A): Reset Settings gives every drawing's multi-record
+// layout the defaults a new drawing has, whatever the canvas was before and
+// whichever drawing is shown.
+test('Reset Settings leaves the multi-record layout of a new drawing', async () => {
+  const { createDefaultLayoutPreferences } = await import('../../gbdraw/web/js/services/layout-preferences.js');
+  const fresh = createDefaultLayoutPreferences();
+  for (const [shown, canvas] of /** @type {const} */ ([['circular', false], ['circular', true], ['linear', false]])) {
+    const app = createAppSetup();
+    if (state.activeDrawingId.value !== shown) app.selectDrawing(shown);
+    const { circular } = state.drawings;
+    circular.form.multi_record_canvas = canvas;
+    circular.layoutPreferences.circular.multi.legend = 'top';
+    await app.resetSettings();
+    assert.deepEqual(JSON.parse(JSON.stringify(circular.layoutPreferences)), fresh,
+      `the Circular layout after a Reset with ${shown} shown and the canvas ${canvas ? 'on' : 'off'}`);
+    assert.deepEqual(JSON.parse(JSON.stringify(state.drawings.linear.layoutPreferences)), fresh);
+  }
+});
