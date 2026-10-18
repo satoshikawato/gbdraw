@@ -68,7 +68,11 @@ from gbdraw.session_io import (
     migrate_session_hash_rules,
     source_hash_selector_value,
 )
-from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from gbdraw.session_request_codec import (
+    CANONICAL_REQUEST_SCHEMA,
+    CanonicalRequestEncodingError,
+    encode_canonical_request,
+)
 
 _RELEASED_SCHEMA_V2_SESSION = (
     Path(__file__).parent
@@ -2180,8 +2184,11 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
     source = _SESSION_FIXTURES / f"BGC0000708-BGC0000709-rc.{_DRAWN_ID_SESSIONS[version]}.gbdraw-session.json.gz"
     document = load_session_document(source)
     assert document.version == version
+    direct = tmp_path / "direct.gbdraw-session.json"
     with materialize_session(document, output_directory=tmp_path) as materialized:
         stored = session_to_request(materialized)
+        # A direct save writes the tables in the search frame, as an upgrade does.
+        save_session_document(direct, stored)
         [table] = stored.options.linear_comparisons
         assert table.drawn_feature_ids
         rows = table.matches
@@ -2189,6 +2196,10 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
         adapted = adapt_session_request(stored, session_drawing_artifacts(document))
         assert adapted.migration_report.unconverted_protein_results == ()
         [converted] = adapted.request.options.linear_comparisons
+        assert not converted.drawn_feature_ids
+        # A writer that skips the move is refused.
+        with pytest.raises(CanonicalRequestEncodingError, match="drawn-frame feature IDs"):
+            encode_canonical_request(plan_request(stored).request)
         plan = plan_request(adapted.request)
         length = len(plan.records[1])
         # Search frame: the reversed record's sides flip; each side names its
@@ -2223,6 +2234,11 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
         assert list(written.matches["sstart"]) == list(converted.matches["sstart"])
     # The re-save is read as F: no second conversion, the same drawing.
     assert _replay(resaved, tmp_path, "resaved") == first
+    with materialize_session(load_session_document(direct), output_directory=tmp_path) as materialized:
+        [written] = session_to_request(materialized).options.linear_comparisons
+        for column in ("qstart", "sstart", "subject_feature_svg_id", "subject_view_feature_svg_id"):
+            assert list(written.matches[column]) == list(converted.matches[column])
+    assert _replay(direct, tmp_path, "direct") == first
 
 
 @pytest.mark.linear

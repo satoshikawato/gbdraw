@@ -1718,6 +1718,28 @@ def decode_session_request(
     return adapted if legacy is None else _with_legacy_similarity_alignment(adapted, legacy)
 
 
+def resolve_session_write_request(request: DiagramRequest) -> DiagramRequest:
+    """Resolve ``request`` for a Session writer.
+
+    A table still read with the drawn-frame IDs of a Session up to 40 moves
+    to the search frame first, as an upgrade moves it, so the written table
+    holds source and view IDs (OV-1183). A row matching neither frame raises.
+    """
+
+    plan = plan_request(request)
+    resolved = plan.request
+    if not isinstance(resolved, LinearDiagramRequest) or not any(
+        comparison.drawn_feature_ids for comparison in resolved.options.linear_comparisons or ()
+    ):
+        return resolved
+    converted, unmatched = drawn_frame_protein_results_to_search_frame(plan, resolved)
+    if unmatched:
+        raise ValidationError(f"Cannot write {describe_unmatched_frame_item(unmatched[0])}.")
+    legacy = resolved._legacy_similarity_alignment
+    return converted if legacy is None or not isinstance(converted, LinearDiagramRequest) else (
+        _with_legacy_similarity_alignment(converted, legacy))
+
+
 def canonical_payload_for_session_decode(
     session_version: int,
     payload: Mapping[str, Any],
@@ -1844,6 +1866,7 @@ __all__ = [
     "decode_session_request",
     "drawn_frame_protein_results_to_search_frame",
     "replace_resource_bytes",
+    "resolve_session_write_request",
     "search_frame_protein_resources",
     "stores_protein_results",
     "project_legacy_similarity_alignment_for_current_write",

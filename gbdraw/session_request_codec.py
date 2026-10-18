@@ -3770,6 +3770,12 @@ def _encode_comparisons(
                 }
             )
             continue
+        if comparison.drawn_feature_ids:
+            raise CanonicalRequestEncodingError(
+                f"Linear comparison {index} still holds the drawn-frame feature IDs of a "
+                "Session up to 40; write it with gbdraw.session.save_session_document, "
+                "which moves it to the search frame (OV-1183)."
+            )
         comparison = reverse_unbound_endpoint_rows(comparison, *endpoint_frames)
         ref = _table_ref(
             f"comparison-explicit-{index}", comparison.matches, resources=resources

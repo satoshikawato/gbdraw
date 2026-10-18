@@ -610,8 +610,11 @@ def project_source_bound_results(
             drawn_feature_ids,
         )
 
+    # A projected table holds source and view IDs, so it is no longer read
+    # with the drawn-frame IDs of a Session up to 40.
     explicit = tuple(replace(comparison, matches=project(comparison.matches,
-        comparison.query_record_index, comparison.subject_record_index, comparison.drawn_feature_ids))
+        comparison.query_record_index, comparison.subject_record_index, comparison.drawn_feature_ids),
+        drawn_feature_ids=False)
         for comparison in options.linear_comparisons or ())
     protein = None if options.protein_comparisons is None else tuple(
         project(frame, index, index + 1) for index, frame in enumerate(options.protein_comparisons))
@@ -620,7 +623,7 @@ def project_source_bound_results(
     collinearity = (None if options.collinearity_blocks is None
                     else projector.collinearity(options.collinearity_blocks))
     changed = (
-        any(before.matches is not after.matches for before, after in
+        any(before.matches is not after.matches or before.drawn_feature_ids for before, after in
             zip(options.linear_comparisons or (), explicit, strict=True))
         or any(before is not after for before, after in
                zip(options.protein_comparisons or (), protein or (), strict=True))
