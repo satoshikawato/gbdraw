@@ -17,6 +17,7 @@ from .api.request_render import (
     RequestRenderResult,
     diagram_request_output_paths,
     render_request,
+    stored_protein_result_request,
 )
 from .api.session_compat import render_session_compatible_request
 from .features.overrides import log_feature_identity_notices
@@ -1712,7 +1713,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     render_result: RequestRenderResult
     legacy_protein_raw_candidates = None
     legacy_protein_derived_evidence = None
-    include_feature_catalog = bool(args.save_session or args.session_output)
+    writes_session = bool(args.save_session or args.session_output)
     if source_session is not None:
         # A Linear request renders to one session-compatible result, never a batch.
         render_result = cast(
@@ -1720,7 +1721,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             render_session_compatible_request(
                 canonical_request,
                 source_session,
-                include_feature_catalog=include_feature_catalog,
+                include_feature_catalog=writes_session,
             ),
         )
         legacy_protein_raw_candidates = (
@@ -1737,7 +1738,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 render_request(
                     canonical_request,
                     artifacts=CurrentRequestArtifacts(),
-                    include_feature_catalog=include_feature_catalog,
+                    include_feature_catalog=writes_session,
                 ),
             )
         except SimilarityAlignmentReferenceError as exc:
@@ -1781,7 +1782,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             mode="linear",
             records=track_slot_geometry_records,
         ),
-        canonical_request=render_result.request,
+        # A Session stores the protein results this render computed (OV-1068).
+        canonical_request=(
+            stored_protein_result_request(render_result.request, render_result.linear_metadata)
+            if writes_session
+            else render_result.request
+        ),
     )
 
 

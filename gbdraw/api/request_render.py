@@ -2189,6 +2189,45 @@ def _resolved_losat_search(
     return replace(search, losatp_mode="none", pairs=None)
 
 
+def stored_protein_result_request(
+    request: DiagramRequest,
+    metadata: LinearDiagramMetadata | None,
+) -> DiagramRequest:
+    """The request a Session stores after a render that ran a protein pipeline.
+
+    A Linear request that generated a Similarity groups or Collinear result
+    stores it as the Web Session writer does after a Generate (OV-1068): the
+    pipeline marker of mode ``"none"`` reuses the typed result; Similarity
+    groups also stores each drawn pair's table, Collinear only its typed
+    result. Any other request, Pairwise included, is stored as given.
+    ``metadata`` is the render's; nothing is computed again.
+    """
+
+    if not isinstance(request, LinearDiagramRequest):
+        return request
+    options = request.options
+    mode = losatp_analysis_mode(options.losat_search)
+    if mode not in {"orthogroup", "collinear"}:
+        return request
+    if metadata is None or (
+        metadata.collinearity_result if mode == "collinear" else metadata.orthogroups
+    ) is None:
+        raise ValueError(f"computed no {mode} result")
+    stored = replace(options, losat_search=_resolved_losat_search(options.losat_search))
+    return replace(
+        request,
+        options=(
+            replace(stored, collinearity_blocks=metadata.collinearity_result)
+            if mode == "collinear"
+            else replace(
+                stored,
+                orthogroups=metadata.orthogroups,
+                protein_comparisons=tuple(metadata.protein_comparisons or ()),
+            )
+        ),
+    )
+
+
 def _resolve_similarity_alignment_reference(
     request: DiagramRequest,
     artifacts: CurrentRequestArtifacts | None,

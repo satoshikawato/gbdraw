@@ -439,22 +439,115 @@ def _cli(monkeypatch: pytest.MonkeyPatch, *args: str) -> None:
     cli_main()
 
 
-def _fresh_protein_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def _fresh_protein_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str = "similarity_groups",
+    *extra: str,
+) -> Path:
     """A Session saved by a fresh `gbdraw linear` protein render (fake LOSATP)."""
 
     import gbdraw.analysis.protein_colinearity as protein_colinearity_module
     from tests.test_render_stage_protein_analysis import _fake_losatp, _request
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
-    request, _identities = _request("similarity_groups", tmp_path)
+    request, _identities = _request(mode, tmp_path)
     sidecar = tmp_path / "fresh.gbdraw-session.json"
     _cli(
         monkeypatch,
         "linear", "--gbk", *(str(record.source.path) for record in request.records), "--losat", "losatp",
-        "--losatp_mode", "similarity_groups", "-o", str(tmp_path / "fresh"), "-f", "svg",
+        "--losatp_mode", mode, *extra, "-o", str(tmp_path / "fresh"), "-f", "svg",
         "--session_output", str(sidecar),
     )
     return sidecar
+
+
+def _protein_comparison_kinds(session: dict[str, Any]) -> list[tuple[str, str | None]]:
+    return [
+        (comparison["kind"], comparison.get("mode"))
+        for comparison in session["renderRequest"]["comparisons"]
+    ]
+
+
+# The Web Session writer's form after a protein Generate (session-request.js):
+# the pipeline marker reuses the stored result; Similarity groups also stores
+# each drawn pair's table, Collinear only its typed result.
+_STORED_PROTEIN_FORMS = {
+    "similarity_groups": [
+        ("precomputedProteinComparison", None),
+        ("precomputedProteinComparison", None),
+        ("orthogroupResult", None),
+        ("generatedProteinComparison", "none"),
+    ],
+    "collinear": [
+        ("collinearityResult", None),
+        ("generatedProteinComparison", "none"),
+    ],
+}
+
+
+@pytest.mark.parametrize("mode", sorted(_STORED_PROTEIN_FORMS))
+def test_a_cli_protein_session_stores_the_results_the_web_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    """OV-1068: a CLI Session stores the resolved results, so its replay searches nothing."""
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _no_search
+
+    sidecar = _fresh_protein_session(tmp_path, monkeypatch, mode)
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert _protein_comparison_kinds(session) == _STORED_PROTEIN_FORMS[mode]
+    assert session["losatCache"]["entries"]
+    assert session["losatDerivedCache"] == {"entries": []}
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
+    resaved = tmp_path / "replayed.gbdraw-session.json"
+    _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replayed"),
+         "-f", "svg", "--session_output", str(resaved))
+    assert (tmp_path / "replayed.svg").read_text(encoding="utf-8") == (
+        tmp_path / "fresh.svg"
+    ).read_text(encoding="utf-8")
+    replayed = json.loads(resaved.read_text(encoding="utf-8"))
+    assert _protein_comparison_kinds(replayed) == _STORED_PROTEIN_FORMS[mode]
+
+
+def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1068: with a reversed record the CLI stores the tables the Gallery tool stores."""
+
+    from tools.refresh_gallery_sessions import (
+        _canonical_table_rows,
+        _reopen_stored_protein_comparisons,
+        _resolved_protein_comparisons,
+        _resource_bytes,
+    )
+
+    sidecar = _fresh_protein_session(
+        tmp_path, monkeypatch, "similarity_groups",
+        "--reverse_complement", "0", "--reverse_complement", "1", "--reverse_complement", "0",
+    )
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert _protein_comparison_kinds(session) == _STORED_PROTEIN_FORMS["similarity_groups"]
+    rebuild = json.loads(json.dumps(session))
+    assert _reopen_stored_protein_comparisons(rebuild, "orthogroup") == 1
+    resolved = _resolved_protein_comparisons(rebuild)
+    assert resolved is not None
+    rebuilt, descriptors = resolved
+
+    def stored(source: dict[str, Any], comparisons: list[dict[str, Any]]) -> list[object]:
+        return [
+            _canonical_table_rows(_resource_bytes(source, comparison["resourceId"]))
+            if comparison["kind"] == "precomputedProteinComparison"
+            else _resource_bytes(source, comparison["resourceId"])
+            for comparison in comparisons
+            if comparison["kind"] != "generatedProteinComparison"
+        ]
+
+    assert stored(session, session["renderRequest"]["comparisons"]) == stored(
+        {"resources": descriptors}, rebuilt
+    )
 
 
 def test_a_fresh_cli_render_builds_no_derived_protein_entries(
