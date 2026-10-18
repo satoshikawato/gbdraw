@@ -251,6 +251,40 @@ test('every writer of a feature-slot input outside the stack editors is listed (
   assert.deepEqual(found, WRITERS);
 });
 
+// A handler is an `@event` attribute, which passes its DOM event as `$event`,
+// or the `run` of an ActionMenu item in `:items`, which passes the item's click
+// as its first parameter (the track slot Row actions menus): an arrow function
+// (with or without parentheses or `async`) or a method. A `run` with no
+// parameter, or a bare function reference, has no event to pass (event '').
+const ITEM_RUN = /run(?:\s*:\s*(?:(?:async\s*)?(?:\(([^)]*)\)|(\w+))\s*=>\s*([^}]*)|([\w.$]+))|\s*\(([^)]*)\)\s*\{([^}]*)\})/g;
+const templateHandlers = (html) => [
+  ...[...html.matchAll(/@[\w.:-]+="([^"]*)"/g)].map((match) => ({ handler: match[1], index: match.index, event: '$event' })),
+  ...[...html.matchAll(/:items="([^"]*)"/g)].flatMap((match) => [...match[1].matchAll(ITEM_RUN)]
+    .map(([, params, param, body, reference, methodParams, methodBody]) => {
+      if (reference !== undefined) return { handler: `${reference}()`, index: match.index, event: '' };
+      const first = (list) => (list.split(',')[0] || '').trim();
+      return methodBody === undefined
+        ? { handler: body, index: match.index, event: param ?? first(params) }
+        : { handler: methodBody, index: match.index, event: first(methodParams) };
+    }))
+];
+
+test('the template scan reads every ActionMenu run, with or without a parameter', () => {
+  const html = `<action-menu :items="[{ label: 'A', run: (event) => removeCircularTrackSlot(entry.index, event) },
+    { label: 'B', run: () => removeCircularTrackSlot(entry.index) }, { label: 'C', run: removeCircularTrackSlot },
+    { label: 'D', run: event => removeCircularTrackSlot(entry.index, event) },
+    { label: 'E', run: async () => removeCircularTrackSlot(entry.index) },
+    { label: 'F', run(event) { removeCircularTrackSlot(entry.index, event) } }]"></action-menu>`;
+  assert.deepEqual(templateHandlers(html).map(({ handler, event }) => [handler.trim(), event]), [
+    ['removeCircularTrackSlot(entry.index, event)', 'event'],
+    ['removeCircularTrackSlot(entry.index)', ''],
+    ['removeCircularTrackSlot()', ''],
+    ['removeCircularTrackSlot(entry.index, event)', 'event'],
+    ['removeCircularTrackSlot(entry.index)', ''],
+    ['removeCircularTrackSlot(entry.index, event)', 'event']
+  ]);
+});
+
 test('templates reach the feature-slot inputs only through the transition (R10, R11)', () => {
   const html = readFileSync(`${WEB}/index.html`, 'utf8');
   const inputs = '(?:form\\.(?:track_type|linear_track_layout|separate_strands)|adv\\.(?:circular|linear)_track_slots\\w*'
@@ -270,8 +304,7 @@ test('templates reach the feature-slot inputs only through the transition (R10, 
     return html.slice(start);
   };
   const calls = [];
-  for (const match of html.matchAll(/@[\w.:-]+="([^"]*)"/g)) {
-    const handler = match[1];
+  for (const { handler, index, event } of templateHandlers(html)) {
     assert.doesNotMatch(handler, new RegExp(`(?:^|[^.\\w])${inputs}\\s*=(?!=)`),
       `${handler} assigns a feature-slot input`);
     for (const name of names) {
@@ -280,8 +313,8 @@ test('templates reach the feature-slot inputs only through the transition (R10, 
         calls.push(name);
         // The control names itself for Cancel and focus; its History adapter
         // records an edit that loses no lane (R11).
-        assert.match(args, /\$event/, `${call.trim()} passes no $event`);
-        assert.doesNotMatch(tagAt(match.index), /data-history-managed/, `${call.trim()} is data-history-managed`);
+        assert.ok(event && args.split(',').map((arg) => arg.trim()).includes(event), `${call.trim()} passes no ${event || 'event'}`);
+        assert.doesNotMatch(tagAt(index), /data-history-managed/, `${call.trim()} is data-history-managed`);
       }
     }
   }

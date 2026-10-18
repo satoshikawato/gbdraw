@@ -877,6 +877,17 @@ const answerChoicePrompt = async (page, title, action, { timeout = 120_000 } = {
   await prompt.locator(`[data-choice-prompt-action="${action}"]`).click();
 };
 
+// Save asks for a Session title in the app's dialog when the Session has none.
+// The spec answers with `title` ('' saves an untitled file) and Enter.
+const answerSessionTitle = async (page, title = '', { timeout = 120_000 } = {}) => {
+  const dialog = page.locator('[data-choice-prompt]').getByRole('dialog', { name: 'Save Session', exact: true });
+  const field = dialog.getByRole('textbox', { name: 'Session title', exact: true });
+  await expect(field).toBeFocused({ timeout });
+  await field.fill(title);
+  await field.press('Enter');
+  await expect(dialog).toHaveCount(0);
+};
+
 // BA-D25: a Load that cannot restore everything lists what it cannot in one
 // dialog before it changes anything. The spec names the lines it expects and
 // answers `load` or `cancel`.
@@ -924,6 +935,7 @@ const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', 
 
 module.exports = {
   answerChoicePrompt,
+  answerSessionTitle,
   expectNoLoadRepairDialog,
   expectSessionLoadedWithoutWarnings,
   answerLoadRepairs,

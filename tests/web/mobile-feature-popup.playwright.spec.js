@@ -63,7 +63,7 @@ for (const mode of ['circular', 'linear']) {
       await closeEditor(page);
       await generate(page);
       page.removeAllListeners('dialog');
-      page.on('dialog', dialog => dialog.type() === 'prompt' ? dialog.accept('Mobile edit') : dialog.accept());
+      page.on('dialog', dialog => dialog.accept());
       const file = info.outputPath('edited.gbdraw-session.json.gz');
       await download(page, 'Save Session', file);
       const restored = await load(browser, file, { width: 390, height: 844 });

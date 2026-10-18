@@ -19,7 +19,7 @@ for (const composite of [false, true]) {
       const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
       const page = await context.newPage();
       await context.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
-      page.on('dialog', dialog => dialog.type() === 'prompt' ? dialog.accept('CLI replay') : dialog.accept());
+      page.on('dialog', dialog => dialog.accept());
       const definitionFontSizes = () => page.evaluate(async () => (
         Array.from((await import('./js/state.js')).state.svgContainer.value
           .querySelectorAll('g[data-gbdraw-role="record-definition"]'))

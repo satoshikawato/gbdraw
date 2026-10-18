@@ -11,6 +11,7 @@ import { validateAnnotationWarnings } from '../services/session-feature-metadata
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
 import { keepResultNames } from '../services/result-normalization.js';
+import { regionWithinRecord } from '../services/record-options.js';
 import {
   nameFeaturePlacementFailure,
   requestFeatureOverrides,
@@ -1044,13 +1045,12 @@ const applyLosatSequenceTransforms = (record, regionSpec, reverseFlag) => {
   let sequence = record.sequence;
   if (String(reverseFlag).trim().toLowerCase() === '1') sequence = reverseComplementSequence(sequence);
   if (region) {
-    const start = Math.max(0, region.start - 1);
-    const end = Math.min(sequence.length, region.end);
-    if (start >= end && (region.start !== 1 || region.end !== sequence.length)) {
+    const drawn = regionWithinRecord(region.start, region.end, sequence.length);
+    if (!drawn) {
       // The region starts after the record ends, as crop_genbank.py reports it (GX-09).
       throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' });
     }
-    sequence = sequence.slice(start, end);
+    sequence = sequence.slice(drawn.start - 1, drawn.drawnEnd);
     if (region.reverse) sequence = reverseComplementSequence(sequence);
   }
   return { id: record.id, sequence };

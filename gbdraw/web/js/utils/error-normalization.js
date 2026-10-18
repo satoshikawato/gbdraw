@@ -406,12 +406,6 @@ NATIVE_VALIDATIONS.set('Normalize Record Lengths cannot be used when multiple re
   { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'SEPARATE_LINEAR_ROWS' } });
 NATIVE_VALIDATIONS.set('Current session active configuration config.form.keep_definition_left_aligned must be a boolean.',
   { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'keep_definition_left_aligned', reason: 'BOOLEAN' } });
-for (const [message, reason] of [
-  ['Circular region requires both Start and End coordinates.', 'BOTH_ENDPOINTS'],
-  ['Circular region Start and End must be positive integers.', 'POSITIVE_INTEGER'],
-  ['Circular region Start must not exceed End. Use Reverse complement to change display orientation.', 'ORDER']
-]) NATIVE_VALIDATIONS.set(message, { code: 'REGION_INVALID', stage: 'request-validation',
-  context: { field: 'region', reason } });
 NATIVE_VALIDATIONS.set('Canonical renderRequest records are required.',
   { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'RECORDS_REQUIRED' } });
 for (const message of ['The preserved comparison is missing a required resource.',
@@ -424,7 +418,6 @@ for (const message of ['The preserved comparison is missing a required resource.
  */
 const nativeValidation = (message) => {
   if (typeof message !== 'string') return null;
-  if (/^Circular region End \([0-9]+\) exceeds the selected record length \([0-9]+\)\.$/.test(message)) return { code: 'REGION_INVALID', stage: 'request-validation', context: { field: 'region', reason: 'RECORD_BOUNDS' } };
   for (const [template, reason] of /** @type {[RegExp, string][]} */ ([
     [/^Custom Track Slots use an obsolete schema\. Recreate the slots with schema version [0-9]+\.$/, 'TRACK_SCHEMA'],
     [/^Session contains unclassified top-level field\(s\): [\s\S]*$/, 'SESSION_FIELDS']

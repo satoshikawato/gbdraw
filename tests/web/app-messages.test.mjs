@@ -89,3 +89,37 @@ test('a repeated notice is announced again', () => {
   assert.notEqual(spoken[0], spoken[1]);
   assert.notEqual(spoken[1], spoken[2]);
 });
+
+test('the choice prompt asks for text with a field: OK resolves to the text, Cancel and a later question to null', async () => {
+  const { prompt, ask, askText, submitField, resolve } = createChoicePrompt({ reactive });
+  const renamed = askText({ title: 'Rename Session', label: 'Session title', value: 'HmmtDNA', actionLabel: 'Rename' });
+  assert.equal(prompt.show, true);
+  assert.equal(prompt.title, 'Rename Session');
+  assert.deepEqual(prompt.field, { label: 'Session title', value: 'HmmtDNA' });
+  assert.deepEqual(prompt.actions, [{ tone: 'primary', id: 'ok', label: 'Rename' }]);
+  prompt.field.value = 'Renamed';
+  // Enter that ends an IME composition does not answer; a plain Enter chooses the action.
+  let prevented = 0;
+  const key = (extra) => ({ key: 'Enter', keyCode: 13, isComposing: false, preventDefault: () => { prevented += 1; }, ...extra });
+  submitField(key({ isComposing: true }));
+  submitField(key({ keyCode: 229 }));
+  assert.equal(prompt.show, true);
+  submitField(key());
+  assert.equal(prevented, 1);
+  assert.equal(await renamed, 'Renamed');
+
+  const canceled = askText({ title: 'Save Session', label: 'Session title', actionLabel: 'Save' });
+  assert.equal(prompt.field.value, '');
+  resolve('cancel');
+  assert.equal(await canceled, null);
+
+  const replaced = askText({ title: 'Save Session', label: 'Session title', actionLabel: 'Save' });
+  const confirm = ask({ title: 'Reset all settings?', actions: [{ id: 'reset', label: 'Reset all settings' }] });
+  assert.equal(await replaced, null);
+  // A choice question shows no field.
+  assert.equal(prompt.field, null);
+  submitField(key());
+  assert.equal(prompt.show, true);
+  resolve('reset');
+  assert.equal(await confirm, 'reset');
+});

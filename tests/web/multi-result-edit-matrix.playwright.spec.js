@@ -170,7 +170,7 @@ test('Circular batch: edits made on Result 2 reach both Results through selectio
   expect.soft(await violations(page, 'Generate')).toEqual([]);
 
   const saved = testInfo.outputPath('batch-matrix.gbdraw-session.json');
-  await download(page, 'Save Session', saved);
+  await download(page, 'Save Session', saved, { title: '' });
   const reloaded = await load(browser, saved);
   try {
     await settle(reloaded);

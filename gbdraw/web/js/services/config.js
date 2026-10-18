@@ -6594,7 +6594,7 @@ export const disposeSessionOperations = () => {
  * @property {DownloadChoicePort} [askChoice]
  * @property {{ value?: Parameters<typeof bindRecordDisplayDrafts>[1] }} [recordDisplayRows]
  * @property {() => Readonly<ArtifactSlot> | null} [readOtherModeArtifact]
- * @property {() => string | null} [resolveTitle] Null when the person canceled the title prompt.
+ * @property {() => Promise<string | null>} [resolveTitle] Null when the person canceled the title dialog.
  * @property {(request: { draftRequest: boolean }) => Promise<Pick<ExportSessionDocumentOptions,
  *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]
  * @property {(result: Extract<SessionSaveResult, { status: 'saved' }>) => void} [onSaved]
@@ -6621,8 +6621,9 @@ export const exportSession = (titleOverride = null, options = {}) => {
     const busy = availability('save');
     if (busy) return busy;
     if (!isCurrent()) return { status: 'canceled' };
-    const title = options.resolveTitle ? options.resolveTitle() : titleOverride;
+    const title = options.resolveTitle ? await options.resolveTitle() : titleOverride;
     if (title === null && options.resolveTitle) return;
+    if (!isCurrent()) return { status: 'canceled' };
     state.sessionSavePending.value = true;
     recordSessionLifecycleEvent('session-save-pending-published');
     // Only mutable draft configuration/navigation is copied. Adopted biological

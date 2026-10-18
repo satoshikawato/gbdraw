@@ -203,7 +203,7 @@ test('an annotation of one same-coordinate feature in one copy of a record stays
   expect(shapes).toHaveLength(1);
 
   const sessionPath = testInfo.outputPath('twins.gbdraw-session.json');
-  await download(page, 'Save Session', sessionPath);
+  await download(page, 'Save Session', sessionPath, { title: '' });
   expect(await annotationShapes(page, replayOnCli(sessionPath, testInfo.outputPath('twins-replay')), 'feature_1'))
     .toEqual(shapes);
 

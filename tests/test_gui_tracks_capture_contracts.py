@@ -131,7 +131,7 @@ def test_track_flows_use_visible_accessible_controls_without_state_injection() -
         'name="Circular track slot annotations", exact=True',
         '"Circular track slot annotations Annotation set", exact=True',
         '"Circular track slot annotations Annotation placement", exact=True',
-        'get_by_title("Move outside Axis", exact=True)',
+        'run_track_slot_row_action(annotation_slot, "Move outside Axis")',
         '"Circular track slot annotations Show annotation labels", exact=True',
         'get_by_role("button", name="SVG", exact=True)',
         "page.expect_download",

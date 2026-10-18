@@ -231,7 +231,10 @@ export const createFeaturePlacementActions = ({
       change.apply();
       for (const key of lostLaneKeys(drawing, before)) delete drawing.featurePlacementOverrides[key];
     });
-    void focusAfterRender(() => change.control);
+    // A Row actions item closed its menu when it ran: focus returns to the menu's toggle.
+    void focusAfterRender(() => /** @type {HTMLElement | null | undefined} */ (
+      change.control?.closest?.('details:not([open])')?.querySelector(':scope > summary')
+    ) ?? change.control);
     return result;
   };
   /**

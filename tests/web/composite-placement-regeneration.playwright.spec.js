@@ -49,7 +49,7 @@ for (const composite of [false, true]) {
       });
       page = await context.newPage();
       page.on('pageerror', (error) => errors.push(error.message));
-      page.on('dialog', (dialog) => dialog.type() === 'prompt' ? dialog.accept('Composite placement') : dialog.accept());
+      page.on('dialog', (dialog) => dialog.accept());
       await openApp(page);
       await page.locator('input[accept^=".json,"]').setInputFiles(file);
       await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending

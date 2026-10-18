@@ -22,6 +22,10 @@ const copyModule = async (sourceRelative, targetRelative) => {
 
 await copyModule('gbdraw/web/js/services/session-feature-recovery.js', 'services/session-feature-recovery.js');
 await copyModule('gbdraw/web/js/services/feature-metadata-extraction.js', 'services/feature-metadata-extraction.js');
+// feature-metadata-extraction.js reads the Linear Region fields through record-options.js.
+for (const name of ['services/record-options.js', 'services/record-draw-selection.js', 'utils/download-names.js']) {
+  await copyModule(`gbdraw/web/js/${name}`, name);
+}
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
 // losat-normalization.js reads the comparison settings from the generated request description.
 await copyModule('gbdraw/web/js/contracts/request-shape.generated.js', 'contracts/request-shape.generated.js');

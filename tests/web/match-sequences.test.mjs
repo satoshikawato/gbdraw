@@ -49,7 +49,11 @@ await writeFile(
   await readFile('gbdraw/web/js/services/record-source-coordinates.js', 'utf8'),
   'utf8'
 );
-for (const name of ['optional-positive-number.js', 'error-normalization.js']) {
+// match-sequences.js reads the region rule of record-options.js.
+for (const name of ['record-options.js', 'record-draw-selection.js']) {
+  await writeFile(join(tempDir, 'services', name), await readFile(`gbdraw/web/js/services/${name}`, 'utf8'), 'utf8');
+}
+for (const name of ['optional-positive-number.js', 'error-normalization.js', 'download-names.js']) {
   await writeFile(
     join(tempDir, 'utils', name),
     await readFile(`gbdraw/web/js/utils/${name}`, 'utf8'),
@@ -413,6 +417,24 @@ test('builds deterministic single and combined FASTA in query-subject order', ()
   assert.equal(bundle.entries[1].fasta, '>pairwise_comparison1_match3_subject|record=subject|coords=5..3|strand=-\nGCC\n');
   assert.equal(bundle.combinedFasta, `${bundle.entries[0].fasta}${bundle.entries[1].fasta}`);
   assert.equal(bundle.combinedFilename, 'pairwise_comparison1_match3_both.fna');
+});
+
+// OV-1097 (Owner decision 2026-10-18): the restored record is the region
+// Generate draws, so an end past the record end is read to the record end, and
+// a region that starts after the record ends has no sequence.
+test('a restored region past the record end holds the record up to its end (OV-1097)', async () => {
+  const gb = () => textFile(`LOCUS       query\nACCESSION   QUERY\nVERSION     QUERY.1\nORIGIN\n        1 aaccggtt\n//\n`);
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'linear',
+    lInputType: 'gb',
+    linearSeqs: [
+      { gb: gb(), region_record_id: 'QUERY.1', region_start: 5, region_end: 20 },
+      { gb: gb(), region_record_id: 'QUERY.1', region_start: 9, region_end: 20 }
+    ]
+  });
+  assert.deepEqual(sources.map(({ key, sequence }) => ({ key, sequence })), [
+    { key: 'linear:record:0', sequence: 'GGTT' }
+  ]);
 });
 
 test('a match on a restored cropped reverse record reports source coordinates (CO-10)', async () => {

@@ -43,6 +43,8 @@ export const dialogFocus = {
     const target = element.querySelector('[data-dialog-initial-focus]')
       || dialog?.querySelector('button:not(:disabled)') || dialog;
     if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    // A text field that starts with text has it selected, so typing replaces it.
+    if (target instanceof HTMLInputElement) target.select();
   },
   /** @param {HTMLElement} element */
   beforeUnmount(element) {
@@ -543,27 +545,91 @@ export const AutoValueField = {
 
 /**
  * One item of an action menu. `live` announces a label that changes after the
- * action (Copied!, Copy failed).
- * @typedef {{ label: string, title?: string, icon?: string, disabled?: boolean, live?: boolean, describedby?: string, run: () => unknown }} ActionMenuItem
+ * action (Copied!, Copy failed); `tone: 'danger'` marks an item that removes work.
+ * @typedef {{ label: string, title?: string, icon?: string, disabled?: boolean, live?: boolean, describedby?: string,
+ *   tone?: 'danger', run: (event: MouseEvent) => unknown }} ActionMenuItem
  * @typedef {{ section: string, help?: string, helpLabel?: string, helpId?: string }} ActionMenuSection
  *   A heading that groups the items after it, with an optional help tip.
  */
 
+/** @param {Element | null | undefined} menu */
+const focusMenuToggle = (menu) => {
+  /** @type {HTMLElement | null | undefined} */ (menu?.querySelector(':scope > summary'))?.focus({ preventScroll: true });
+};
+
 // A disclosure that holds a group of secondary actions, such as the copy and
 // FASTA actions of the similarity popups (UX-B01..B03). The items open in
-// place, inside the popup's scroll area, so no item is clipped.
+// place, inside the popup's scroll area, so no item is clipped. Arrow Down and
+// Arrow Up move through the enabled items (Arrow Down on the toggle opens the
+// menu), and Escape closes it and returns to the toggle. With `closeOnRun`
+// (the rows of a list, such as the track slot rows), an item closes the menu
+// and focus returns to its toggle; when the item removed the menu's row, focus
+// goes to the menu now in its place in the `[data-action-menu-list]` around
+// it, else the one before it, else that list's `[data-action-menu-list-fallback]`.
+// `ariaLabel` names a menu repeated in a list after its row (it begins with the
+// visible label), so its toggle and the group around its items are unambiguous.
 export const ActionMenu = {
   components: { HelpTip },
   props: {
     label: { type: String, required: true },
     icon: { type: String, default: '' },
     title: { type: String, default: '' },
+    ariaLabel: { type: String, default: '' },
+    closeOnRun: { type: Boolean, default: false },
     /** @type {{ type: ArrayConstructor, default: () => (ActionMenuItem | ActionMenuSection)[] }} */
     items: { type: Array, default: () => [] }
   },
+  /** @param {{ closeOnRun: boolean }} props */
+  setup(props) {
+    /** @type {{ value: HTMLDetailsElement | null }} */
+    const root = ref(null);
+    /** @param {KeyboardEvent} event */
+    const onKeydown = (event) => {
+      const menu = root.value;
+      if (!menu) return;
+      if (event.key === 'Escape' && menu.open) {
+        event.preventDefault();
+        event.stopPropagation();
+        menu.open = false;
+        focusMenuToggle(menu);
+        return;
+      }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      menu.open = true;
+      event.preventDefault();
+      void nextTick(() => {
+        const enabled = /** @type {HTMLButtonElement[]} */ (Array.from(menu.querySelectorAll('.action-menu-item:not(:disabled)')));
+        if (!enabled.length) return;
+        const at = enabled.indexOf(/** @type {HTMLButtonElement} */ (document.activeElement));
+        enabled[at < 0 ? (step > 0 ? 0 : enabled.length - 1) : (at + step + enabled.length) % enabled.length].focus();
+      });
+    };
+    /** @param {ActionMenuItem} item @param {MouseEvent} event */
+    const runItem = (item, event) => {
+      const menu = root.value;
+      const list = menu?.closest('[data-action-menu-list]') ?? null;
+      const menusOf = () => (list ? Array.from(list.querySelectorAll('.action-menu')) : []);
+      const index = menu ? menusOf().indexOf(menu) : -1;
+      item.run(event);
+      if (!props.closeOnRun || !menu) return;
+      menu.open = false;
+      void nextTick(() => {
+        // A dialog the item opened keeps its focus.
+        const active = document.activeElement;
+        if (active && active !== document.body && !menu.contains(active)) return;
+        if (menu.isConnected) return focusMenuToggle(menu);
+        const now = menusOf();
+        const next = now[index] ?? now[index - 1];
+        if (next) return focusMenuToggle(next);
+        /** @type {HTMLElement | null | undefined} */ (list?.querySelector('[data-action-menu-list-fallback]'))?.focus({ preventScroll: true });
+      });
+    };
+    return { root, onKeydown, runItem };
+  },
   template: `
-    <details class="action-menu" data-nodrag="true">
-      <summary class="action-menu-toggle" :title="title || label">
+    <details ref="root" class="action-menu" data-nodrag="true" :aria-label="ariaLabel || null" @keydown="onKeydown">
+      <summary class="action-menu-toggle" :title="title || label" :aria-label="ariaLabel || null">
         <i v-if="icon" :class="['ph', icon]" aria-hidden="true"></i><span>{{ label }}</span>
         <i class="ph ph-caret-down action-menu-caret" aria-hidden="true"></i>
       </summary>
@@ -573,10 +639,10 @@ export const ActionMenu = {
             <span>{{ item.section }}</span>
             <help-tip v-if="item.help" :id="item.helpId" :label="item.helpLabel" :text="item.help"></help-tip>
           </div>
-          <button v-else type="button" class="action-menu-item"
+          <button v-else type="button" :class="['action-menu-item', item.tone === 'danger' && 'action-menu-item-danger']"
                   :disabled="item.disabled" :title="item.title || item.label" :aria-describedby="item.describedby || null"
                   :aria-live="item.live ? 'polite' : null" :aria-atomic="item.live ? 'true' : null"
-                  @click="item.run()">
+                  @click="runItem(item, $event)">
             <i v-if="item.icon" :class="['ph', item.icon]" aria-hidden="true"></i><span>{{ item.label }}</span>
           </button>
         </template>

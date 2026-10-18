@@ -19,8 +19,7 @@ const sessionFile = {
 
 const installSaveProbe = (page) => page.addInitScript(() => {
   window.__GBDRAW_SAVE_PROBE__ = {
-    events: [],
-    promptCalls: 0
+    events: []
   };
   window.__GBDRAW_TEST_HOOKS__ = {
     onSessionLifecycleEvent(event) {
@@ -32,8 +31,16 @@ const installSaveProbe = (page) => page.addInitScript(() => {
 const resetSaveProbe = (page) => page.evaluate(() => {
   const probe = window.__GBDRAW_SAVE_PROBE__;
   probe.events.length = 0;
-  probe.promptCalls = 0;
 });
+
+// The Session title is asked in the app's dialog, never a native prompt().
+const titleDialog = (page, name) => page.locator('[data-choice-prompt]').getByRole('dialog', { name, exact: true });
+const titleField = (dialog) => dialog.getByRole('textbox', { name: 'Session title', exact: true });
+const recordNativeDialogs = (page) => {
+  const seen = [];
+  page.on('dialog', (dialog) => { seen.push(dialog.type()); void dialog.dismiss(); });
+  return seen;
+};
 
 const saveProbe = (page) => page.evaluate(() => ({
   ...window.__GBDRAW_SAVE_PROBE__,
@@ -122,7 +129,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
 }) => {
   test.setTimeout(240_000);
   await installSaveProbe(page);
-  page.on('dialog', (dialog) => dialog.accept());
+  const nativeDialogs = recordNativeDialogs(page);
   await openApp(page);
   await page.locator(
     'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
@@ -140,18 +147,21 @@ test('Save Session is single-flight, paints pending state, and releases every se
 
   const downloadPromise = page.waitForEvent('download');
   const start = await page.evaluate(() => {
-    const probe = window.__GBDRAW_SAVE_PROBE__;
     window.__GBDRAW_APP__.sessionTitle = '';
-    window.prompt = () => {
-      probe.promptCalls += 1;
-      return 'single-flight-save';
-    };
     const first = window.__GBDRAW_APP__.saveSessionWithTitle();
     const second = window.__GBDRAW_APP__.saveSessionWithTitle();
     window.__GBDRAW_SAVE_PROMISES__ = [first, second];
     return { samePromise: first === second };
   });
   expect(start.samePromise).toBe(true);
+  // Save without a title asks for one once; Enter in the field saves.
+  const saveTitle = titleDialog(page, 'Save Session');
+  await expect(saveTitle).toHaveCount(1);
+  await expect(titleField(saveTitle)).toBeFocused();
+  await expect(titleField(saveTitle)).toHaveValue('');
+  await titleField(saveTitle).fill('single-flight-save');
+  await titleField(saveTitle).press('Enter');
+  await expect(saveTitle).toHaveCount(0);
 
   await page.waitForFunction(() => window.__GBDRAW_SAVE_PROBE__.events.some(
     (event) => event.name === 'session-save-compression-start'
@@ -179,7 +189,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
   await downloadPromise;
 
   const successProbe = await saveProbe(page);
-  expect(successProbe.promptCalls).toBe(1);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionTitle)).toBe('single-flight-save');
   await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
   expect(eventNames(successProbe).filter((name) => name === 'session-save-joined')).toHaveLength(1);
   expect(eventNames(successProbe).filter(
@@ -220,21 +230,25 @@ test('Save Session is single-flight, paints pending state, and releases every se
     redoCount: true
   });
 
-  await resetSaveProbe(page);
-  const canceledTitle = await evaluateWithRetainedPromise(page, async () => {
-    window.__GBDRAW_APP__.sessionTitle = '';
-    window.prompt = () => {
-      window.__GBDRAW_SAVE_PROBE__.promptCalls += 1;
-      return null;
-    };
-    const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
-    return { result, pending: window.__GBDRAW_APP__.sessionSavePending };
-  });
-  expect(canceledTitle).toEqual({ result: undefined, pending: false });
-  expectOrderedEvents(await saveProbe(page), [
-    'session-save-title-canceled',
-    'session-save-pending-cleared'
-  ]);
+  // Escape and Cancel in the title dialog of a Save save nothing, and focus
+  // returns to Save Session.
+  for (const answer of ['Escape', 'Cancel']) {
+    await resetSaveProbe(page);
+    await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = ''; });
+    await saveButton.click();
+    await expect(titleField(saveTitle)).toBeFocused();
+    if (answer === 'Escape') await titleField(saveTitle).press('Escape');
+    else await saveTitle.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(saveTitle).toHaveCount(0);
+    await expect(saveButton).toBeFocused();
+    await expect.poll(async () => eventNames(await saveProbe(page))).toContain('session-save-pending-cleared');
+    const canceledProbe = await saveProbe(page);
+    expectOrderedEvents(canceledProbe, ['session-save-title-canceled', 'session-save-pending-cleared']);
+    expect(eventNames(canceledProbe)).not.toContain('session-save-pending-published');
+    expect(await page.evaluate(() => ({
+      title: window.__GBDRAW_APP__.sessionTitle, pending: window.__GBDRAW_APP__.sessionSavePending
+    }))).toEqual({ title: '', pending: false });
+  }
 
   await resetSaveProbe(page);
   const compressionFailure = await evaluateWithRetainedPromise(page, async () => {
@@ -332,4 +346,87 @@ test('Save Session is single-flight, paints pending state, and releases every se
     const canceled = probe.events.filter(({ name }) => name === 'session-save-download-canceled');
     expect(canceled.map(({ reason }) => reason)).toEqual(choice === 'Download' ? [] : ['large-download']);
   }
+  expect(nativeDialogs).toEqual([]);
+});
+
+test('Rename Session asks in the app dialog with the title selected; Enter renames, Escape keeps it', async ({ page }) => {
+  test.setTimeout(240_000);
+  const nativeDialogs = recordNativeDialogs(page);
+  await openApp(page);
+  await page.locator(
+    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+  ).setInputFiles(sessionFile);
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
+  const before = await page.evaluate(() => window.__GBDRAW_APP__.sessionTitle);
+  expect(before.length).toBeGreaterThan(0);
+  const opener = page.getByRole('banner').getByRole('button', { name: before, exact: true });
+  const rename = titleDialog(page, 'Rename Session');
+  const field = titleField(rename);
+
+  await opener.click();
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue(before);
+  // The whole title is selected, so typing replaces it.
+  expect(await field.evaluate((input) => [input.selectionStart, input.selectionEnd])).toEqual([0, before.length]);
+  await page.keyboard.press('Escape');
+  await expect(rename).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionTitle)).toBe(before);
+
+  await opener.press('Enter');
+  await expect(field).toBeFocused();
+  await page.keyboard.type('  Renamed session  ');
+  await page.keyboard.press('Enter');
+  await expect(rename).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionTitle)).toBe('Renamed session');
+  const renamed = page.getByRole('banner').getByRole('button', { name: 'Renamed session', exact: true });
+  await expect(renamed).toBeFocused();
+
+  // Rename names its outcome; Cancel keeps the title.
+  await renamed.click();
+  await field.fill('Not kept');
+  await rename.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionTitle)).toBe('Renamed session');
+  await renamed.click();
+  await field.fill('Kept');
+  await rename.getByRole('button', { name: 'Rename', exact: true }).click();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionTitle)).toBe('Kept');
+  expect(nativeDialogs).toEqual([]);
+});
+
+test('Rename Session is one History step: Undo and Redo move the title apart from the setting before it', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  await page.locator(
+    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+  ).setInputFiles(sessionFile);
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
+  const read = () => page.evaluate(() => ({
+    title: window.__GBDRAW_APP__.sessionTitle, gc: window.__GBDRAW_APP__.form.show_gc
+  }));
+  const history = (method) => evaluateWithRetainedPromise(page, (name) => window.__GBDRAW_HISTORY__[name](), method);
+  const start = await read();
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.runUndoable('Change setting', () => {
+    const form = window.__GBDRAW_APP__.form;
+    form.show_gc = !form.show_gc;
+  }));
+  const changed = { ...start, gc: !start.gc };
+  expect(await read()).toEqual(changed);
+
+  await page.getByRole('banner').getByRole('button', { name: start.title, exact: true }).click();
+  const field = titleField(titleDialog(page, 'Rename Session'));
+  await expect(field).toBeFocused();
+  await field.fill('Renamed');
+  await field.press('Enter');
+  expect(await read()).toEqual({ ...changed, title: 'Renamed' });
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Rename Session');
+
+  await history('undo');
+  expect(await read()).toEqual(changed);
+  await history('undo');
+  expect(await read()).toEqual(start);
+  await history('redo');
+  expect(await read()).toEqual(changed);
+  await history('redo');
+  expect(await read()).toEqual({ ...changed, title: 'Renamed' });
 });

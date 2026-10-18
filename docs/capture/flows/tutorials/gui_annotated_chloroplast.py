@@ -30,6 +30,7 @@ from flows.web_capture import (
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
+    run_track_slot_row_action,
     toggle_disclosure,
     wait_for_app_shell,
 )
@@ -246,7 +247,7 @@ def _remove_slot_if_present(page: Page, slot_id: str) -> None:
         "group", name=f"Circular track slot {slot_id}", exact=True
     )
     if group.count():
-        group.get_by_title("Remove", exact=True).click()
+        run_track_slot_row_action(group, "Remove")
 
 
 def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:

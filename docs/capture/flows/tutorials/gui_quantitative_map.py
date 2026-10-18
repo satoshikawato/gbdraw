@@ -22,6 +22,7 @@ from flows.how_to.tracks import (
     CaptureResult,
 )
 from flows.web_capture import (
+    run_track_slot_row_action,
     toggle_disclosure,
     assert_output_paths,
     capture_screenshot,
@@ -112,9 +113,7 @@ def _number_control(section: Any, label: str) -> Any:
 
 
 def _ensure_side(slot: Any, title: str) -> None:
-    button = slot.get_by_title(title, exact=True)
-    if button.is_enabled():
-        button.click()
+    run_track_slot_row_action(slot, title, only_if_enabled=True)
 
 
 def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
