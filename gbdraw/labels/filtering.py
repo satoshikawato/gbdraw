@@ -52,6 +52,19 @@ _LABEL_OVERRIDE_HEADER = (
 )
 
 
+def _refuse_missing_values(df: DataFrame, required_cols: list[str], filepath: str) -> None:
+    """Refuse a label table row with an empty column, naming the row and its columns (OV-1241)."""
+
+    null_rows = df[df.isnull().any(axis=1)]
+    if null_rows.empty:
+        return
+    row = null_rows.iloc[0]
+    missing = [c for c in required_cols if pd.isna(row[c])]
+    raise ValidationError(
+        f"Missing values in '{filepath}' at line {int(null_rows.index[0]) + 1}. Missing columns: {missing}."
+    )
+
+
 def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     if not filepath:
         return None
@@ -76,17 +89,7 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     except Exception as e:
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
-    null_rows = df[df.isnull().any(axis=1)]
-    if not null_rows.empty:
-        for idx, row in null_rows.iterrows():
-            missing = [c for c in required_cols if pd.isna(row[c])]
-            logger.error(
-                f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
-                f"Missing columns: {missing}. Row data: {row.to_dict()}"
-            )
-        raise ValidationError(
-            f"Missing values in '{filepath}'. See log for details."
-        )
+    _refuse_missing_values(df, required_cols, filepath)
 
     logger.info(f"Successfully loaded qualifier priority from {filepath}")
     return df
@@ -117,17 +120,7 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
     except Exception as e:
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
-    null_rows = df[df.isnull().any(axis=1)]
-    if not null_rows.empty:
-        for idx, row in null_rows.iterrows():
-            missing = [c for c in required_cols if pd.isna(row[c])]
-            logger.error(
-                f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
-                f"Missing columns: {missing}. Row data: {row.to_dict()}"
-            )
-        raise ValidationError(
-            f"Missing values in '{filepath}'. See log for details."
-        )
+    _refuse_missing_values(df, required_cols, filepath)
 
     logger.info(f"Successfully loaded filter list from {filepath}")
     return df
@@ -162,17 +155,7 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
     except Exception as e:
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
-    null_rows = df[df.isnull().any(axis=1)]
-    if not null_rows.empty:
-        for idx, row in null_rows.iterrows():
-            missing = [c for c in required_cols if pd.isna(row[c])]
-            logger.error(
-                f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
-                f"Missing columns: {missing}. Row data: {row.to_dict()}"
-            )
-        raise ValidationError(
-            f"Missing values in '{filepath}'. See log for details."
-        )
+    _refuse_missing_values(df, required_cols, filepath)
 
     logger.info(f"Successfully loaded label override table from {filepath}")
     return df

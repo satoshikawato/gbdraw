@@ -101,6 +101,7 @@ def test_python_existing_output_errors_share_one_wording(tmp_path: Path) -> None
         ("default_colors_extra_column", "Malformed line in default colors file 'd3.tsv' at line 1: expected 2 columns."),
         ("missing_color_table", "Color table file not found:"),
         ("color_table_six_columns", "Malformed line in color table 't6.tsv' at line 1: expected 5 columns."),
+        ("whitelist_blank_keyword", "Missing values in 'wl.tsv' at line 1. Missing columns: ['keyword']."),
     ],
 )
 def test_cli_input_error_prints_once(case: str, message: str, tmp_path: Path) -> None:
@@ -108,12 +109,14 @@ def test_cli_input_error_prints_once(case: str, message: str, tmp_path: Path) ->
 
     (tmp_path / "d3.tsv").write_text("CDS\t#ff0000\textra\n", encoding="utf-8")
     (tmp_path / "t6.tsv").write_text("CDS\tproduct\tx\t#ff0000\tcap\textra\n", encoding="utf-8")
+    (tmp_path / "wl.tsv").write_text("CDS\tproduct\t\n", encoding="utf-8")
     gbk = str(TEST_INPUTS / "NC_001416.gb")
     argv = {
         "missing_gbk": ["--gbk", "nonexist.gb"],
         "default_colors_extra_column": ["--gbk", gbk, "-d", "d3.tsv"],
         "missing_color_table": ["--gbk", gbk, "-t", "nope.tsv"],
         "color_table_six_columns": ["--gbk", gbk, "-t", "t6.tsv"],
+        "whitelist_blank_keyword": ["--gbk", gbk, "--label_whitelist", "wl.tsv"],
     }[case]
     result = _gbdraw("circular", *argv, "-o", "out", cwd=tmp_path)
     assert result.returncode == 1
