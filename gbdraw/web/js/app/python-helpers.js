@@ -941,15 +941,21 @@ _WEB_DERIVED_SETTING_NAMES = {
     "explicitDisplayPairs": "explicit_display_pairs",
 }
 
-def _web_derived_settings(settings):
+def _normalize_web_derived_settings(**values):
+    """The owner's settings from Web values: JS null, undefined, or blank text is unset."""
     from gbdraw.analysis.protein_artifacts import normalize_derived_losatp_settings
 
+    return normalize_derived_losatp_settings(**{
+        name: None if _is_blank_or_js_nullish(value) else value for name, value in values.items()
+    })
+
+def _web_derived_settings(settings):
     if not isinstance(settings, dict):
         raise ValueError("Derived LOSATP settings must be an object.")
     unknown = sorted(set(settings).difference(_WEB_DERIVED_SETTING_NAMES))
     if unknown:
         raise ValueError(f"Unknown derived LOSATP settings: {', '.join(unknown)}")
-    return normalize_derived_losatp_settings(**{
+    return _normalize_web_derived_settings(**{
         _WEB_DERIVED_SETTING_NAMES[name]: value for name, value in settings.items()
     })
 
@@ -1150,7 +1156,6 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             derived_losatp_provenance,
             derived_pair_payload,
             effective_collinearity_unit_kinds,
-            normalize_derived_losatp_settings,
         )
         from gbdraw.analysis.protein_colinearity import (
             convert_pair_protein_hits_to_genomic_links,
@@ -1168,7 +1173,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         raw_pairs = raw_payload.get("pairs")
         if not isinstance(raw_records, list) or not isinstance(raw_pairs, list):
             raise ValueError("LOSATP blastp conversion payload must contain 'records' and 'pairs' lists.")
-        settings = normalize_derived_losatp_settings(
+        settings = _normalize_web_derived_settings(
             mode=mode,
             max_hits=max_hits,
             bitscore=bitscore,

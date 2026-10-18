@@ -116,6 +116,7 @@ _SCIENTIFIC = [
     ("the identity threshold", _set(identity=71)),
     ("the alignment length threshold", _set(alignment_length=30)),
     ("the orthogroup member max hits", _set(member_max_hits=6)),
+    ("the maximum paralog links per orthogroup", _set(max_paralog_links=1)),
 ]
 _DISPLAY_ONLY = [
     ("record input order", lambda inputs: {**inputs, "records": tuple(reversed(inputs["records"]))}),  # type: ignore[call-overload]
@@ -141,7 +142,6 @@ _COLLINEAR_TABLE = {
         ("the merge orientation", _set(merge_orientation="strand")),
         ("the maximum diagonal drift", _set(max_diagonal_drift=6)),
         ("the maximum conflicts in a merge gap", _set(max_conflicts=2)),
-        ("the maximum paralog links per orthogroup", _set(max_paralog_links=3)),
         ("orthogroup inference", _set(infer_orthogroups=False)),
         ("the search scope", _set(search_scope="all")),
         # Only the Collinear converter reads it: with the search scope 'all' it
@@ -264,12 +264,16 @@ def test_derived_settings_are_validated_once(settings: dict[str, object], messag
         normalize_derived_losatp_settings(**settings)  # type: ignore[arg-type]
 
 
-def test_blank_and_js_null_settings_take_the_defaults() -> None:
+def test_unset_settings_take_the_defaults() -> None:
+    # The Web adapter turns JS null, undefined, and blank text into None
+    # (tests/test_api_request_render.py); the owner reads only None as unset.
     defaults = normalize_derived_losatp_settings(mode="collinear")
     assert normalize_derived_losatp_settings(
-        mode="collinear", min_anchors="", max_unit_gap="null", max_conflicts=None,
-        unit_mode="undefined", member_max_hits="", max_paralog_links=" ",
+        mode="collinear", min_anchors=None, max_unit_gap=None, max_conflicts=None,
+        unit_mode=None, member_max_hits=None, max_paralog_links=None,
     ) == defaults
+    with pytest.raises(ValueError):
+        normalize_derived_losatp_settings(mode="collinear", min_anchors="")
 
 
 def test_derived_provenance_records_requested_and_effective_units() -> None:
@@ -285,5 +289,5 @@ def test_derived_provenance_records_requested_and_effective_units() -> None:
     assert provenance["upstreamRawKeys"] == identity["rawCacheKeys"]
     assert provenance["thresholds"] == identity["thresholds"]
     assert provenance["collinear"]["unitMode"] == {"requested": "auto", "effectiveKinds": ["cds", "locus"]}  # type: ignore[index]
-    assert provenance["collinear"]["parameters"]["maxParalogLinksPerOrthogroup"] == 2  # type: ignore[index]
+    assert provenance["orthogroup"]["maxParalogLinksPerOrthogroup"] == 2  # type: ignore[index]
     assert effective_collinearity_unit_kinds(None) == []

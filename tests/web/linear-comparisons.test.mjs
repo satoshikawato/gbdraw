@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -820,4 +820,28 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
     sequences, layout: square, losatProgram: 'blastp', blastpMode: 'collinear'
   });
   assert.match(selected.error, /Pairwise/);
+}
+
+{
+  // Review F2: the Web's search order and pair numbers of a 2x2 grid match
+  // the vector that the Python API test checks too.
+  const vector = JSON.parse(await readFile(join(repoRoot, 'tests', 'fixtures', 'losatp_collinear_grid_2x2.json'), 'utf8'));
+  const uids = vector.grid.map((_, index) => String.fromCharCode(97 + index));
+  const drawn = uids.map((uid) => ({ uid }));
+  const rows = vector.grid.map(([row, column], index) => ({
+    uid: uids[index], row, canonicalRow: row, canonicalColumn: column, canonicalCardinality: 'exactly_one'
+  }));
+  const resolution = resolveLinearComparisonPlan({
+    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
+    sequences: drawn, layout: rows, losatProgram: 'blastp', blastpMode: 'collinear'
+  });
+  const specs = buildLosatJobSpecs({
+    resolution, recordCount: uids.length, recordUids: uids, program: 'blastp', blastpMode: 'collinear',
+    collinearInferOrthogroups: vector.inferOrthogroups, collinearSearchScope: vector.searchScope
+  });
+  const numbers = numberLosatDisplayPairs(specs, resolution.edges, canonicalGridDisplayPairs(drawn, rows));
+  assert.deepEqual(
+    specs.map((spec, index) => [spec.queryIndex, spec.subjectIndex, numbers[index].displayPair, numbers[index].pairIndex]),
+    vector.searches
+  );
 }

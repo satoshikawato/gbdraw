@@ -3691,7 +3691,8 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(
                         strand=1,
                     )
                 },
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
                 "viewTransform": {"length": 300, "reverse": True},
             },
             {
@@ -3707,7 +3708,8 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(
                         strand=-1,
                     )
                 },
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
                 "viewTransform": {"length": 200, "reverse": False},
             },
         ],
@@ -3800,14 +3802,16 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
                 "recordIndex": 0,
                 "recordId": "record_a",
                 "proteinMap": query_map,
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
                 "viewTransform": {"length": 200, "reverse": False},
             },
             {
                 "recordIndex": 1,
                 "recordId": "record_b",
                 "proteinMap": subject_map,
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
                 "viewTransform": {"length": 200, "reverse": True},
             },
         ],
@@ -4012,7 +4016,8 @@ def _directed_display_payload(
                         end=90,
                     )
                 },
-                "proteinCacheKey": f"record-{index}-cache",
+                "runtimeBindingHash": f"record-{index}-cache-runtime",
+                "displayBindingHash": f"record-{index}-cache-display",
                 "viewTransform": {"length": 200, "reverse": False},
             }
         )

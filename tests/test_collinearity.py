@@ -2361,13 +2361,15 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
                 "recordIndex": 0,
                 "recordId": "record_a",
                 "proteinMap": query_map,
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
             },
             {
                 "recordIndex": 1,
                 "recordId": "record_b",
                 "proteinMap": subject_map,
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
             },
         ],
         "pairs": [
@@ -2441,6 +2443,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     assert result["provenance"]["orthogroup"] == {
         "membershipMode": "anchor_core_v1",
         "memberMaxHits": None,
+        "maxParalogLinksPerOrthogroup": 2,
     }
     assert result["provenance"]["collinear"]["unitMode"] == {
         "requested": "cds",
@@ -2510,13 +2513,15 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
                 "recordIndex": 0,
                 "recordId": "record_a",
                 "proteinMap": query_map,
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
             },
             {
                 "recordIndex": 1,
                 "recordId": "record_b",
                 "proteinMap": subject_map,
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
             },
         ],
         "pairs": [
@@ -2647,19 +2652,22 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
                 "recordIndex": 0,
                 "recordId": "record_a",
                 "proteinMap": a_map,
-                "proteinCacheKey": "record-a-cache",
+                "runtimeBindingHash": "record-a-cache-runtime",
+                "displayBindingHash": "record-a-cache-display",
             },
             {
                 "recordIndex": 1,
                 "recordId": "record_b",
                 "proteinMap": b_map,
-                "proteinCacheKey": "record-b-cache",
+                "runtimeBindingHash": "record-b-cache-runtime",
+                "displayBindingHash": "record-b-cache-display",
             },
             {
                 "recordIndex": 2,
                 "recordId": "record_c",
                 "proteinMap": c_map,
-                "proteinCacheKey": "record-c-cache",
+                "runtimeBindingHash": "record-c-cache-runtime",
+                "displayBindingHash": "record-c-cache-display",
             },
         ],
         "pairs": [

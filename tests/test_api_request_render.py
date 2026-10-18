@@ -58,6 +58,7 @@ from gbdraw.api.requests import (
     CircularBatchOutputPolicy,
     CircularBatchRequest,
     CircularDiagramRequest,
+    GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
@@ -183,16 +184,22 @@ _CONVERTER_ARGUMENTS = (
 )
 
 
+_GRID_2X2_VECTOR = Path(__file__).parent / "fixtures" / "losatp_collinear_grid_2x2.json"
+
+
 @pytest.mark.parametrize(
     ("mode", "rows", "display"),
     (
         # Similarity groups on the default chain: the edges number the pairs.
         ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}),
         # Collinear on a CLI row grid with search scope 'all': the grid
-        # displays (0, 1) and (0, 2), numbered in search order (OV-1069).
+        # displays (0, 1) and (0, 2), each numbered by its own adjacent-row edge.
         ("collinear", (1, 2, 2), {(0, 1): 0, (0, 2): 1}),
+        # A 2x2 grid: the search order and the numbers come from the vector
+        # that the Web test checks too (tests/web/linear-comparisons.test.mjs).
+        ("collinear", None, None),
     ),
-    ids=("orthogroup", "collinear-grid"),
+    ids=("orthogroup", "collinear-grid", "collinear-grid-2x2"),
 )
 def test_web_lookup_converter_and_api_build_one_derived_entry(
     monkeypatch: pytest.MonkeyPatch,
@@ -200,21 +207,38 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
     stage_web_losatp_transport,
     mode: str,
     rows: tuple[int, ...] | None,
-    display: dict[tuple[int, int], int],
+    display: dict[tuple[int, int], int] | None,
 ) -> None:
     import json
 
+    from Bio import SeqIO
+
     import gbdraw.analysis.protein_colinearity as protein_colinearity_module
     from gbdraw.comparisons.losat_jobs import losatp_job_specs
-    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _record, _request
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
     request, _identities = _request(mode, tmp_path)
+    vector = None
+    if display is None:
+        vector = json.loads(_GRID_2X2_VECTOR.read_text(encoding="utf-8"))
+        fourth = tmp_path / "rec3.gbk"
+        SeqIO.write(_record(3), fourth, "genbank")
+        request = replace(
+            request,
+            records=(*request.records, RecordInput(source=GenBankInputSource(fourth), record_key="record-3")),
+        )
+        rows = tuple(row for row, _column in vector["grid"])
+        display = {(query, subject): number for query, subject, shown, number in vector["searches"] if shown}
     if rows is not None:
         request = replace(
             _grid_request(request, rows),
             options=replace(request.options, collinearity_search_scope="all"),
         )
+        if vector is not None:
+            assert [
+                [record.presentation.grid_row, record.presentation.grid_column] for record in request.records
+            ] == vector["grid"]
     source_mode = "orthogroup" if mode == "similarity_groups" else mode
     explicit = rows is not None
 
@@ -256,6 +280,11 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
         {"displayPair": (query, subject) in display, "pairIndex": display.get((query, subject), min(query, subject))}
         for query, subject in specs
     ]
+    if vector is not None:
+        assert [[*spec, number["displayPair"]] for spec, number in zip(specs, numbers, strict=True)] == [
+            [query, subject, shown] for query, subject, shown, _number in vector["searches"]
+        ]
+        numbers = [{"displayPair": shown, "pairIndex": number} for _q, _s, shown, number in vector["searches"]]
     settings = _web_derived_settings(request, source_mode, explicit)
 
     # The Web lookup key: the derived key of the raw-key reply.
@@ -380,6 +409,27 @@ def test_each_active_request_option_reaches_the_derived_identity(
     )
 
 
+def test_the_web_adapter_reads_js_null_and_blank_settings_as_unset() -> None:
+    from gbdraw.analysis.protein_artifacts import normalize_derived_losatp_settings
+
+    class JsUndefined:  # The name Pyodide gives a JS undefined.
+        pass
+
+    web_settings = _load_web_helpers()["_web_derived_settings"]
+    assert web_settings({
+        "mode": "collinear", "collinearMinAnchors": "", "collinearMaxUnitGap": "null",
+        "collinearMaxConflictsInMergeGap": None, "collinearUnitMode": "undefined",
+        "orthogroupMemberMaxHits": JsUndefined(), "collinearMaxParalogLinksPerOrthogroup": " ",
+    }) == normalize_derived_losatp_settings(mode="collinear")
+
+
+def test_the_paralog_link_limit_reaches_a_similarity_groups_identity() -> None:
+    # Review F1: the Python pipeline limits paralog links in Similarity groups too.
+    assert _derived_settings_key(
+        LinearDiagramOptions(collinear_max_paralog_links_per_orthogroup=1), "orthogroup"
+    ) != _derived_settings_key(LinearDiagramOptions(), "orthogroup")
+
+
 def test_inactive_and_render_only_request_options_keep_the_derived_identity() -> None:
     collinear = _derived_settings_key(LinearDiagramOptions(), "collinear")
     assert _derived_settings_key(LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters()), "collinear") == collinear
@@ -478,6 +528,31 @@ def test_a_zero_hit_api_entry_holds_header_only_tables(
         assert pair["canonicalTsv"].count("\n") == 1
         assert pair["tsv"] == ""
         assert pair["hit_count"] == 0
+
+
+# OV-1127 (open): admission refuses a zero-hit entry ("unresolved protein
+# references"), because the strict-empty check does not allow the typed-result
+# member. The fix flips this strict xfail.
+@pytest.mark.xfail(strict=True, raises=ValidationError, reason="OV-1127: a zero-hit derived entry is refused at admission")
+@pytest.mark.parametrize("mode", ("similarity_groups", "collinear"))
+def test_a_zero_hit_api_entry_is_admitted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str) -> None:
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from gbdraw.analysis.protein_colinearity import parse_losatp_outfmt6
+    from tests.test_render_stage_protein_analysis import _request
+
+    def no_hits(_query_fasta, _subject_fasta, **kwargs):
+        kwargs["raw_output_callback"]("")
+        kwargs["runtime_callback"]({"kind": "losat", "version": "test", "program": "blastp"})
+        return parse_losatp_outfmt6("")
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", no_hits)
+    request, _identities = _request(mode, tmp_path)
+    built = build_request_diagram(request)
+    CurrentRequestArtifacts(
+        losat_cache_entries=built.losat_cache_entries,
+        losat_derived_cache_entries=built.losat_derived_cache_entries,
+        protein_identity_manifest=built.protein_identity_manifest,
+    )
 
 
 def test_current_request_artifacts_validate_the_manifest_once_for_many_raw_entries(
@@ -2178,14 +2253,15 @@ _RECORDED_DERIVED_ENTRIES = {
     # Recorded at the base (a86dd2d74) from the three-record protein fixture;
     # re-recorded when each pair's `rows` became `canonicalTsv` (D-66), and when
     # one owner built the identity, key and pairs (OV-1063: semantics v2, the
-    # write-only `orthogroups` member gone).
+    # write-only `orthogroups` member gone, the paralog-link limit in the
+    # orthogroup block).
     "similarity_groups": (
-        "e10ac6954efc9c1cd2f6ee093bfb81c3a607a4f14618ceb6f5ccb4a662436621",
-        "097d0b1c970c6b9e4a0787b8a6c5598667685b20835b5554685c7c334155946d",
+        "976d4c7d01a684f025f0f9513b340eeaf9625ef9a7308078f7c267ab8730764e",
+        "d622918a6696b52446d9c8bd54b3b8c869303aa704731bdb35b9020a081ea29c",
     ),
     "collinear": (
-        "80998de10bc21b4bda4d6fd070c65ca353227450bf7d97014379983ff602824a",
-        "6a59b52539839598e99b2421bb4f5ca8df5c7b0f7cee54cd131d52c22769d494",
+        "65970149b79afcbed2563299c8705ccc123d50c6033bcd9cdbfa7d489c83e095",
+        "a8bf088d6d436bddc991f3d28f5d38736d375072d237e8034549c8e9f7b81990",
     ),
 }
 
