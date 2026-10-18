@@ -317,11 +317,17 @@ test('alignment rings and the reference line stay transient and share the panel 
   expect(await artifactSnapshot(page)).toEqual(before);
   await align.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
-  // Another Result under the open review: the rings and the line belong to the Result
-  // the review was made on, so they go.
+  // Another Result under the open review, as a Generate of other sources draws it: its
+  // feature catalog lacks a feature the review read. The rings and the line belong to the
+  // sources the review was made on, so they go. (A Result of the same sources, as a live
+  // setting draws it, keeps them: OV-1082, OV-1120.)
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     window.__S03Result = state.results.value[state.selectedResultIndex.value];
+    const catalog = window.__S03Catalog = state.featureCatalog.value;
+    if (!catalog.items.some((item) => item.biologicalFeatures.length > 0)) throw new Error('The fixture has no catalog features.');
+    state.featureCatalog.value = { ...catalog, items: catalog.items.map((item) => ({
+      ...item, biologicalFeatures: item.biologicalFeatures.slice(1) })) };
     state.results.value = [{ ...window.__S03Result }];
   });
   await expect(overlay).toHaveCount(0);
@@ -333,8 +339,10 @@ test('alignment rings and the reference line stay transient and share the panel 
   await page.evaluate(()=>window.__GBDRAW_APP__.cancelSimilarityAlignmentDialog());
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
+    state.featureCatalog.value = window.__S03Catalog;
     state.results.value = [window.__S03Result];
     delete window.__S03Result;
+    delete window.__S03Catalog;
   });
   await expect(page.locator('.gbdraw-preview-surface svg')).toBeVisible();
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
@@ -3020,6 +3028,79 @@ test('a live setting change under an open review keeps its rings, its fit and th
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect.poll(() => recordOrientations(page)).toEqual(preApply);
   await expectCdsColorDrawn(page, '#2a9d8f');
+  expect(pageErrors).toEqual([]);
+});
+
+// The font sizes of the Legend the figure draws.
+const legendFontSizes = (page) => page.evaluate(() => [...new Set([...document.querySelectorAll(
+  '.gbdraw-preview-surface svg g[data-legend-key] text'
+)].map((text) => String(parseFloat(getComputedStyle(text).fontSize))))]);
+// A live setting row the automatic rerender draws: type the Legend font size and leave the field.
+const commitLegendFont = async (page, size) => {
+  const input = page.locator('input[aria-label="Legend font size"]');
+  for (const details of await input.locator('xpath=ancestor::details').all()) {
+    if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+  }
+  await input.fill(String(size));
+  await input.press('Tab');
+  await expect.poll(() => legendFontSizes(page), { timeout: 120000 }).toEqual([String(size)]);
+  await roomSettled(page);
+};
+
+// OV-1120: the automatic rerender draws a live setting (here the Legend font size) as a new
+// Result with a new feature catalog of the same features (PD-OI-102). The review keeps its
+// draft, as after a live color, and Apply commits onto the Session that names the new value.
+test('a live setting drawn by the automatic rerender under an open review keeps its rings and the view it gives back', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  const { before, dialog } = await openReviewOverOwnView(page);
+  const rings = page.locator('button.gbdraw-alignment-ring');
+  const ringCount = await rings.count();
+  expect(ringCount).toBeGreaterThan(0);
+  const fontBefore = await legendFontSizes(page);
+  await page.evaluate(async () => {
+    window.__OV1120Catalog = (await import('./js/state.js')).state.featureCatalog.value;
+  });
+  await commitLegendFont(page, 21);
+  expect(await page.evaluate(async () => (
+    (await import('./js/state.js')).state.featureCatalog.value !== window.__OV1120Catalog
+  )), 'the rerender installed a new feature catalog').toBe(true);
+  await expect(dialog).toBeVisible();
+  await expect(rings).toHaveCount(ringCount);
+  // Its Undo is a live change too (D-44: B), and so is the Redo.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(() => legendFontSizes(page), { timeout: 120000 }).toEqual(fontBefore);
+  await expect(rings).toHaveCount(ringCount);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await expect.poll(() => legendFontSizes(page), { timeout: 120000 }).toEqual(['21']);
+  await roomSettled(page);
+  await expect(rings).toHaveCount(ringCount);
+  // The figure is fitted again when the room changes.
+  const room = (await figureFit(page)).room;
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  await expect.poll(async () => {
+    const found = await figureFit(page);
+    return found.fitted && found.inFrame && String(found.room) !== String(room);
+  }).toBe(true);
+  // Cancel gives back the view and the Editor from before the review.
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+
+  // Apply after the change keeps the value the rerender committed.
+  const { dialog: again } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
+  await commitLegendFont(page, 23);
+  await expect(rings).toHaveCount(ringCount);
+  const preApply = await recordOrientations(page);
+  await chooseUnresolved(page, again);
+  await again.getByRole('radio', { name: 'All left', exact: true }).check();
+  await applyReview(page, again);
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await recordOrientations(page)).not.toEqual(preApply);
+  expect(await legendFontSizes(page)).toEqual(['23']);
+  await expect(page.locator('input[aria-label="Legend font size"]')).toHaveValue('23');
   expect(pageErrors).toEqual([]);
 });
 

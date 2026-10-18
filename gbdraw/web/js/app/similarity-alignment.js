@@ -16,6 +16,7 @@ import { recordsNeedingChoice } from '../services/alignment-review-view.js';
 import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { catalogNameIndex } from '../services/feature-catalog.js';
+import { toRaw } from '../utils/vue-raw.js';
 
 /**
  * @import { FeatureCatalog } from '../services/feature-catalog.js'
@@ -1271,6 +1272,26 @@ const anchorsAgree = (left, right) => {
  * @property {ReturnType<SimilarityAlignmentActionsOptions['getEnrichedOrthogroupMembers']>} members
  */
 
+// What a draft reads of a feature catalog: each item's records and their sequence lengths
+// (`recordLengths`) and the identities of the biological features (`catalogNameIndex`). The
+// automatic rerender of the same records installs a new catalog with the same key (OV-1120).
+/** @type {WeakMap<object, string>} */
+const catalogSourceKeys = new WeakMap();
+/** @param {Partial<FeatureCatalog> | null | undefined} catalog */
+const catalogSourceKey = (catalog) => {
+  const source = toRaw(catalog);
+  if (!source || typeof source !== 'object') return '';
+  const known = catalogSourceKeys.get(source);
+  if (known !== undefined) return known;
+  const key = JSON.stringify([
+    (Array.isArray(source.items) ? source.items : []).map((item) => [item?.recordKeys,
+      (Array.isArray(item?.sequenceSources) ? item.sequenceSources : []).map((row) => row?.sequence?.length ?? null)]),
+    catalogNameIndex(source).rows.map((row) => [row?.recordKey, row?.biologicalFeatureId, row?.sourceFeatureIndex])
+  ]);
+  catalogSourceKeys.set(source, key);
+  return key;
+};
+
 /**
  * One committed alignment baseline: the canonical Session that `projectCommittedAlignment`
  * returned, its render request, and the record translations it carries.
@@ -1282,13 +1303,18 @@ const anchorsAgree = (left, right) => {
 
 /**
  * What `captureArtifact` records to tell whether the sources of a draft changed: the records,
- * the Similarity Group, the feature catalog of the Generate, the translations. Not the Result: a
- * live setting change draws a new Result from the same sources (PD-OI-102).
+ * the Similarity Group, what the draft reads of the feature catalog, the committed resources the
+ * helper reads, the translations. Not the Result or the catalog object: a live setting change
+ * draws a new Result, and the automatic rerender a new catalog, from the same sources
+ * (PD-OI-102). The rerender keeps the resources object (`commitLiveSettingValues`), and a
+ * Generate, a Session load or an Undo across one installs another, which replaces the figure
+ * even from the same files (PD-OI-039).
  * @typedef {object} AlignmentArtifactStamp
  * @property {string} records
  * @property {string} group
  * @property {any} selectedGroup
- * @property {any} catalog
+ * @property {string} catalog
+ * @property {unknown} resources
  * @property {string} translations
  */
 
@@ -1392,7 +1418,8 @@ export const createSimilarityAlignmentActions = ({
     records: JSON.stringify(currentRequest()?.records || []),
     group: JSON.stringify(getOrthogroupById(groupId)),
     selectedGroup: state.selectedOrthogroupId?.value,
-    catalog: state.featureCatalog?.value,
+    catalog: catalogSourceKey(state.featureCatalog?.value),
+    resources: getCommittedSession()?.resources,
     translations: JSON.stringify(state.linearRecordTranslations?.value || [])
   });
   const artifactIsCurrent = () => {
@@ -1402,6 +1429,7 @@ export const createSimilarityAlignmentActions = ({
       && current.group === artifactStamp.group
       && current.selectedGroup === artifactStamp.selectedGroup
       && current.catalog === artifactStamp.catalog
+      && current.resources === artifactStamp.resources
       && current.translations === artifactStamp.translations;
   };
   const rejectStaleDraft = () => {
@@ -1433,20 +1461,32 @@ export const createSimilarityAlignmentActions = ({
     return svg ? materializeRecordTranslations(svg, base, recordKeys, plan) : base;
   };
 
-  const baseline = ({ materializePlan = false } = {}) => {
+  // `drafted`: the translations a draft's baseline materialized, kept as they are.
+  /** @param {{ materializePlan?: boolean, drafted?: unknown }} [options] */
+  const baseline = ({ materializePlan = false, drafted = null } = {}) => {
     const canonical = getCommittedSession();
     const request = cloneJson(canonical?.renderRequest);
     if (!request) throw new Error('Generate a Linear diagram before aligning.');
     const recordKeys = request.records.map((/** @type {CommittedRecord} */ { recordKey }) => recordKey);
-    const translations = materializePlan
-      ? materializedTranslations(recordKeys, request.layout?.similarityAlignment)
-      : cloneJson(request.layout?.recordTranslations || replacementTranslations(state, recordKeys));
+    const translations = drafted ? cloneJson(drafted)
+      : materializePlan
+        ? materializedTranslations(recordKeys, request.layout?.similarityAlignment)
+        : cloneJson(request.layout?.recordTranslations || replacementTranslations(state, recordKeys));
     const orientations = request.records.map((/** @type {CommittedRecord} */ record) => ({ recordKey: record.recordKey,
       reverseComplement: baseReverseComplement(record) }));
     const materialized = projectCommittedAlignment({ committed: canonical,
       plan: materializePlan ? null : request.layout?.similarityAlignment,
       translations, orientations });
     return { canonical: materialized, request: materialized.renderRequest, translations };
+  };
+
+  // The draft's baseline on the committed Session as it is now. The stamp keeps its records and
+  // translations; a live setting that the automatic rerender committed during the review is
+  // in the rest of that Session, so the helper, Apply and the Reset receipt read it (PD-OI-102,
+  // OV-1120). Only an open draft calls it, which has its baseline (see `applyPlan`).
+  const rebaseDraftBaseline = () => {
+    activeBaseline = baseline({ materializePlan: true,
+      drafted: /** @type {AlignmentBaseline} */ (activeBaseline).translations });
   };
 
   /** @param {AlignmentBaseline | null | undefined} value */
@@ -1547,6 +1587,7 @@ export const createSimilarityAlignmentActions = ({
     if (!projected.selectionComplete || !projected.geometryValidated) {
       throw new Error('Alignment selection or final geometry is not validated.');
     }
+    rebaseDraftBaseline();
     const orientations = projected.records.map(({ recordKey, afterReverseComplement }) => ({
       recordKey, reverseComplement: afterReverseComplement }));
     // An applying draft has its baseline: `start` and `prepareStaleTargetRepair` set it with
@@ -1705,6 +1746,7 @@ export const createSimilarityAlignmentActions = ({
     const orientations = Object.fromEntries(preview.records.map(record => [record.recordKey, record.afterReverseComplement]));
     status.value = 'applying';
     try {
+      rebaseDraftBaseline();
       // An open draft (`activeRequest`, checked above) always has its baseline (see `applyPlan`).
       const helper = await runHelperOperation(resolveOperation, { request,
         projection: { canonicalRequest: /** @type {AlignmentBaseline} */ (activeBaseline).request, orientations },
