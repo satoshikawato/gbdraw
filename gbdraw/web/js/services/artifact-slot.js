@@ -102,14 +102,13 @@ export const createArtifactSlot = ({
 
 /**
  * `slot` with `values` in place of its own, or, with no slot, `drawing`'s
- * empty slot with `values`. History and the Instant Preview toggle write the
- * slot values of a drawing that is not shown this way (OV-1168, OV-1195).
+ * empty slot with `values`.
  * @param {Readonly<ArtifactSlot> | null} slot
  * @param {DrawingIdentity} drawing
  * @param {Readonly<Record<string, unknown>>} values
  * @returns {Readonly<ArtifactSlot>}
  */
-export const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
+const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
   drawing,
   values: { ...slot?.values, ...values },
   legendInventory: slot?.legendInventory,
@@ -120,20 +119,64 @@ export const withArtifactSlotValues = (slot, drawing, values) => createArtifactS
 });
 
 /**
- * A value of drawing `drawingId`'s artifact: read from the displayed artifact while that drawing
- * is shown, otherwise from the slot that keeps it (undefined for an empty slot). Every read of
- * "this drawing's artifact, shown or kept" goes through here. A value kept in a slot is the same
- * object when the drawing is shown again.
- * @template T
- * @param {DrawingId} drawingId
- * @param {DrawingId} shownDrawingId
- * @param {ReadonlyMap<DrawingId, Readonly<ArtifactSlot>>} slots The kept artifacts, by drawing.
- * @param {() => T} readShown
- * @param {(slot: Readonly<ArtifactSlot>) => T} readKept
- * @returns {T | undefined}
+ * What `ArtifactSlotStore.snapshot` returns for `restore`.
+ * @typedef {readonly Readonly<ArtifactSlot>[]} ArtifactSlotSnapshot
  */
-export const readArtifactOfDrawing = (drawingId, shownDrawingId, slots, readShown, readKept) => {
-  if (shownDrawingId === drawingId) return readShown();
-  const kept = slots.get(drawingId);
-  return kept ? readKept(kept) : undefined;
+
+/**
+ * The kept artifacts (E1): the artifact of each drawing that is not shown,
+ * by its drawing ID and by reference, until the mode transition installs it.
+ * A drawing has no entry while it is shown or before it has an artifact, and
+ * an entry's key is its slot's `drawingId`. Only these operations change it.
+ * @typedef {object} ArtifactSlotStore
+ * @property {() => readonly Readonly<ArtifactSlot>[]} kept Every kept slot.
+ * @property {<T>(drawingId: DrawingId, shownDrawingId: DrawingId, readShown: () => T,
+ *   readKept: (slot: Readonly<ArtifactSlot>) => T) => T | undefined} readOfDrawing
+ *   A value of drawing `drawingId`'s artifact: read from the displayed artifact while that drawing
+ *   is shown, otherwise from the slot that keeps it (undefined for an empty slot). Every read of
+ *   "this drawing's artifact, shown or kept" goes through here. A value kept in a slot is the same
+ *   object when the drawing is shown again.
+ * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} swap
+ *   The mode transition: keeps the departing drawing's artifact and takes out the arriving one's
+ *   (null: it has none yet).
+ * @property {(stashed: Readonly<ArtifactSlot> | null) => void} replaceLoaded
+ *   Session Load: the loaded Session's kept artifact replaces every slot.
+ * @property {() => ArtifactSlotSnapshot} snapshot
+ * @property {(snapshot: ArtifactSlotSnapshot) => void} restore The Load rollback.
+ * @property {(drawing: DrawingIdentity, values: Readonly<Record<string, unknown>>) => void} writeValues
+ *   Writes slot values of a drawing that is not shown (History and the Instant Preview toggle;
+ *   OV-1168, OV-1195); with no slot, into the drawing's empty slot.
+ */
+
+/** @returns {ArtifactSlotStore} */
+export const createArtifactSlotStore = () => {
+  /** @type {Map<DrawingId, Readonly<ArtifactSlot>>} */
+  const slots = new Map();
+  /** @param {Readonly<ArtifactSlot>} slot */
+  const keep = (slot) => { slots.set(slot.drawingId, slot); };
+  const kept = () => Object.freeze([...slots.values()]);
+  return {
+    kept,
+    readOfDrawing: (drawingId, shownDrawingId, readShown, readKept) => {
+      if (shownDrawingId === drawingId) return readShown();
+      const kept = slots.get(drawingId);
+      return kept ? readKept(kept) : undefined;
+    },
+    swap: (departing, arrivingId) => {
+      keep(departing);
+      const arriving = slots.get(arrivingId) ?? null;
+      slots.delete(arrivingId);
+      return arriving;
+    },
+    replaceLoaded: (stashed) => {
+      slots.clear();
+      if (stashed) keep(stashed);
+    },
+    snapshot: kept,
+    restore: (snapshot) => {
+      slots.clear();
+      snapshot.forEach(keep);
+    },
+    writeValues: (drawing, values) => keep(withArtifactSlotValues(slots.get(drawing.id) ?? null, drawing, values))
+  };
 };

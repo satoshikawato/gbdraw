@@ -14,7 +14,7 @@
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { LegacyResultSvgData, LegacyResultSvgTransform, SessionFileInput } from '../services/config.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
-/** @import { ArtifactSlot, LoadedArtifactSlots } from '../services/artifact-slot.js' */
+/** @import { ArtifactSlot, ArtifactSlotSnapshot, ArtifactSlotStore, LoadedArtifactSlots } from '../services/artifact-slot.js' */
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
 /** @import { LegendRowContext } from '../services/specific-color-rules.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
@@ -35,7 +35,6 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '.
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
-import { readArtifactOfDrawing } from '../services/artifact-slot.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -333,7 +332,7 @@ const loadExportService = () => {
 
 /**
  * @typedef {object} SessionImportRollbackOptions
- * @property {Map<DrawingId, Readonly<ArtifactSlot>>} artifactSlots
+ * @property {ArtifactSlotStore} artifactSlots
  *   The kept generated artifacts of the drawings not shown (E1), held by reference.
  * @property {() => Readonly<ArtifactSlot>} captureDisplayedArtifact The History snapshot service's slot capture
  *   of the shown drawing.
@@ -350,7 +349,7 @@ const loadExportService = () => {
 /**
  * What `capture` holds for `restore`.
  * @typedef {object} SessionImportRollbackSnapshot
- * @property {ReadonlyMap<DrawingId, Readonly<ArtifactSlot>>} artifactSlots
+ * @property {ArtifactSlotSnapshot} artifactSlots
  * @property {Readonly<ArtifactSlot>} displayedArtifact
  * @property {number} circularDepthTrackUiCount
  * @property {number} featureListScrollTop
@@ -371,7 +370,7 @@ export const createSessionImportRollbackState = ({
   restoreSpecificRulePatternDrafts = null
 }) => ({
   capture: () => ({
-    artifactSlots: new Map(artifactSlots),
+    artifactSlots: artifactSlots.snapshot(),
     // The displayed artifact's parts outside state: its transport identity,
     // match-sequence owner, committed Session and CLI helper files.
     displayedArtifact: captureDisplayedArtifact(),
@@ -381,8 +380,7 @@ export const createSessionImportRollbackState = ({
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
   restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
-    artifactSlots.clear();
-    snapshot.artifactSlots.forEach((slot, id) => artifactSlots.set(id, slot));
+    artifactSlots.restore(snapshot.artifactSlots);
     installDisplayedArtifact(snapshot.displayedArtifact);
     // The restored document holds each drawing's Depth series (OV-1165).
     depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
@@ -3104,14 +3102,14 @@ export const createAppSetup = () => {
     }
     setCircularConservationSourceFiles(drawing, sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
   };
-  // E1: the artifacts of the drawings not shown, which the History snapshot
-  // service keeps (its `writeArtifactValues` writes their slot values).
+  // E1: the artifacts of the drawings not shown, in the slot store of the
+  // History snapshot service; only its named operations change it.
   const { artifactSlots } = historySnapshots;
   // The diagram Worker keeps the resources of every drawing's committed
   // request: the shown drawing's and each kept slot's.
   setDiagramResourceRetainSource(() => [
     getCommittedCanonicalSession(),
-    ...[...artifactSlots.values()].map((slot) => /** @type {ReturnType<typeof getCommittedCanonicalSession> | undefined} */ (
+    ...artifactSlots.kept().map((slot) => /** @type {ReturnType<typeof getCommittedCanonicalSession> | undefined} */ (
       slot.runtimeState?.canonical?.committedCanonicalSession))
   ].flatMap((committed) => (committed ? [{ request: committed.renderRequest, resources: committed.resources }] : [])));
   // The Results of all drawings: the shown one's and every kept one's. The
@@ -3119,13 +3117,12 @@ export const createAppSetup = () => {
   // editor state) keep a kept Result's entries while another drawing is shown.
   const liveResultIdentities = () => [
     ...results.value,
-    ...[...artifactSlots.values()].flatMap((slot) => slot.values.results || [])
+    ...artifactSlots.kept().flatMap((slot) => slot.values.results || [])
   ].map(previewRuntime.getResultIdentity);
   // The Results of one drawing: the shown one's, or those its slot keeps.
   /** @param {DrawingId} drawingId */
-  const resultIdentitiesOf = (drawingId) => (drawingId === state.activeDrawingId.value
-    ? results.value
-    : artifactSlots.get(drawingId)?.values.results || []
+  const resultIdentitiesOf = (drawingId) => (artifactSlots.readOfDrawing(drawingId, state.activeDrawingId.value,
+    () => results.value, (slot) => slot.values.results) || []
   ).map(previewRuntime.getResultIdentity);
   // R13: a moved record clears the alignment plan and keeps the aligned record
   // positions. The alignment owner runs its candidate through Generate, which
@@ -4276,11 +4273,8 @@ export const createAppSetup = () => {
    */
   const swapArtifactSlots = (arrivingDrawing) => {
     previewRuntime.clearActiveRuntime();
-    const departing = historySnapshots.captureArtifactSlot();
-    artifactSlots.set(departing.drawingId, departing);
-    const arriving = artifactSlots.get(arrivingDrawing.id) ?? null;
+    const arriving = artifactSlots.swap(historySnapshots.captureArtifactSlot(), arrivingDrawing.id);
     historySnapshots.installArtifactSlot(arriving, { drawing: arrivingDrawing });
-    artifactSlots.delete(arrivingDrawing.id);
     if (arriving) rememberShownResultInventory(arriving);
     return arriving;
   };
@@ -4352,8 +4346,7 @@ export const createAppSetup = () => {
   // the loaded Session.
   /** @param {LoadedArtifactSlots} slots */
   const installLoadedArtifactSlots = ({ opening, stashed }) => {
-    artifactSlots.clear();
-    if (stashed) artifactSlots.set(stashed.drawingId, stashed);
+    artifactSlots.replaceLoaded(stashed);
     if (!opening) return;
     historySnapshots.installArtifactSlot(opening, { drawing: state.drawingOf(opening.drawingId) });
     rememberShownResultInventory(opening);
@@ -4931,8 +4924,8 @@ export const createAppSetup = () => {
   let similarityAlignmentApplying = false;
   // The identity of the selected Result of the review's mode, shown or kept in its slot.
   /** @param {'circular' | 'linear'} reviewMode */
-  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(readArtifactOfDrawing(state.drawingOfMode(reviewMode).id,
-    state.activeDrawingId.value, artifactSlots, () => results.value[Number(selectedResultIndex.value) || 0],
+  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(artifactSlots.readOfDrawing(state.drawingOfMode(reviewMode).id,
+    state.activeDrawingId.value, () => results.value[Number(selectedResultIndex.value) || 0],
     (slot) => slot.values.results[slot.values.selectedResultIndex]));
   // The draft no longer matches the figure. Another Result of the review's mode replaced it (a
   // Session load, History, a new Generate), whichever mode is shown: the view and the drawer are
@@ -5808,7 +5801,7 @@ export const createAppSetup = () => {
     askChoice,
     recordDisplayRows: recordDisplayControls.allRows,
     // Save writes every Result: the kept artifacts of the drawings not shown go beside the shown one (E1).
-    readKeptArtifacts: () => [...artifactSlots.values()].filter((slot) => slot.drawingId !== state.activeDrawingId.value),
+    readKeptArtifacts: () => artifactSlots.kept().filter((slot) => slot.drawingId !== state.activeDrawingId.value),
     resolveTitle: async () => {
       let title = normalizeSessionTitle(sessionTitle.value);
       if (!title) {

@@ -16,7 +16,7 @@ import {
 } from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
-  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot, readArtifactOfDrawing, withArtifactSlotValues
+  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore
 } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
@@ -1278,15 +1278,6 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.labelFitReports, redrawn.labelFitReports);
   };
 
-  // E1: each drawing's generated artifact. The shown drawing's artifact is the
-  // installed state; another drawing's waits here, by its drawing ID and by
-  // reference, until the mode transition installs it (no entry: the drawing
-  // has no artifact yet, or is shown). The transition and Session Load (with
-  // its rollback) write whole slots; History and the Instant Preview toggle
-  // write a hidden drawing's slot values (`writeArtifactValues`).
-  /** @type {Map<DrawingId, Readonly<ArtifactSlot>>} */
-  const artifactSlots = new Map();
-
   // E1: the displayed artifact, by reference, key by key, as the artifact of
   // the drawing it belongs to (`displayedArtifactDrawing`).
   const captureArtifactSlot = () => createArtifactSlot({
@@ -1813,14 +1804,19 @@ export const createHistorySnapshotService = ({
 
   /** @param {DrawingId} drawingId */
   const isShown = (drawingId) => drawingId === state.activeDrawingId?.value;
+  // E1: the artifacts of the drawings not shown (the slot store). History
+  // writes a hidden drawing's slot values (`writeArtifactValues`); the mode
+  // transition and Session Load (with its rollback) use its other named
+  // operations through the service's `artifactSlots`.
+  const artifactSlots = createArtifactSlotStore();
   // OV-1168, OV-1195: the artifact slot values in a drawing's intent (the
   // applied palette in `ui`, the alignment Reset receipt) are its own
   // artifact's: the displayed one's while it is shown, else the slot that
   // keeps it. A drawing with no slot has the empty slot's (null: it takes
   // the displayed palette when it is shown).
   /** @param {DrawingId} drawingId @param {readonly (keyof typeof ARTIFACT_SLOT_EMPTY)[]} keys */
-  const readSlotValues = (drawingId, keys) => Object.fromEntries(keys.map((key) => [key, readArtifactOfDrawing(
-    drawingId, state.activeDrawingId?.value, artifactSlots,
+  const readSlotValues = (drawingId, keys) => Object.fromEntries(keys.map((key) => [key, artifactSlots.readOfDrawing(
+    drawingId, state.activeDrawingId?.value,
     () => getGeneratedArtifactRef(state[key], null), (slot) => slot.values[key]
   ) ?? null]));
   /**
@@ -1834,7 +1830,7 @@ export const createHistorySnapshotService = ({
       Object.entries(values).forEach(([key, value]) => setGeneratedArtifactRef(state[key], value));
       return;
     }
-    artifactSlots.set(drawingId, withArtifactSlotValues(artifactSlots.get(drawingId) ?? null, state.drawingOf(drawingId), values));
+    artifactSlots.writeValues(state.drawingOf(drawingId), values);
   };
   const UI_SLOT_KEYS = /** @type {const} */ (['appliedPaletteName', 'appliedPaletteColors']);
 

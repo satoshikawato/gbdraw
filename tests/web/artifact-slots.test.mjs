@@ -15,7 +15,7 @@ globalThis.window = { Vue: {
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
-const { ARTIFACT_SLOT_KEYS } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+const { ARTIFACT_SLOT_KEYS, createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { readFile } = await import('node:fs/promises');
 
@@ -178,20 +178,49 @@ test('a step whose alignment receipt does not bind fails before anything is appl
 
 // Review alignment compares its mode's own Result whichever mode is shown (OV-622, D-45).
 test('a value of a drawing\'s artifact is read from the shown one, or from the slot that keeps it', async () => {
-  const { readArtifactOfDrawing, createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+  const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
   const linearResult = { name: 'linear.svg' };
   const otherLinearResult = { name: 'other.svg' };
   const circularResult = { name: 'circular.svg' };
   const kept = createArtifactSlot({ drawing: modeDrawing(state, 'linear'), values: { results: [otherLinearResult, linearResult], selectedResultIndex: 1 } });
   assert.equal(kept.drawingId, 'linear');
   assert.equal(kept.values.generatedMode, modeDrawing(state, 'linear').mode, 'an unset value is the empty slot\'s of the drawing\'s mode');
-  const slots = new Map([[kept.drawingId, kept]]);
+  const slots = createArtifactSlotStore();
+  slots.replaceLoaded(kept);
   /** @param {'circular' | 'linear'} id @param {'circular' | 'linear'} shownId @param {unknown} shown */
-  const selected = (id, shownId, shown) => readArtifactOfDrawing(id, shownId, slots, () => shown,
+  const selected = (id, shownId, shown) => slots.readOfDrawing(id, shownId, () => shown,
     (slot) => slot.values.results[slot.values.selectedResultIndex]);
   assert.equal(selected('linear', 'linear', linearResult), linearResult);
   assert.equal(selected('linear', 'circular', circularResult), linearResult);
   assert.equal(selected('circular', 'linear', linearResult), undefined);
+});
+
+// REVIEW-1 M1: one store keeps the hidden drawings' artifacts, and only its
+// named operations change it; an entry's key is its slot's drawing.
+test('the slot store keeps a hidden drawing\'s artifact through its named operations', async () => {
+  const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
+  const store = createArtifactSlotStore();
+  const circularSlot = createArtifactSlot({ drawing: circular, values: { results: [{ name: 'c.svg' }] } });
+  assert.equal(store.swap(circularSlot, 'linear'), null, 'a drawing with no artifact yet has no slot');
+  assert.deepEqual(store.kept(), [circularSlot]);
+  const linearSlot = createArtifactSlot({ drawing: linear, values: { results: [{ name: 'l.svg' }] } });
+  assert.strictEqual(store.swap(linearSlot, 'circular'), circularSlot, 'the arriving slot, by reference');
+  assert.deepEqual(store.kept(), [linearSlot], 'the shown drawing has no slot');
+  const before = store.snapshot();
+  store.writeValues(linear, { appliedPaletteName: 'Pastel' });
+  const written = store.kept()[0];
+  assert.equal(written.drawingId, 'linear');
+  assert.equal(written.values.appliedPaletteName, 'Pastel');
+  assert.strictEqual(written.values.results, linearSlot.values.results, 'the other values stay by reference');
+  store.writeValues(circular, { appliedPaletteName: 'Vivid' });
+  assert.deepEqual(store.kept().map((slot) => slot.drawingId), ['linear', 'circular'], 'an empty slot takes the values');
+  store.replaceLoaded(null);
+  assert.deepEqual(store.kept(), []);
+  store.restore(before);
+  assert.deepEqual(store.kept(), [linearSlot]);
+  assert.ok(Object.isFrozen(store.kept()));
 });
 
 // OV-111: a label rerender installs through the artifact owner of the drawing
