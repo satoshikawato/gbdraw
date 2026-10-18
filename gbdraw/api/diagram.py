@@ -139,6 +139,7 @@ from gbdraw.diagrams.circular.assemble import (
     plan_circular_annotation_slots,
 )
 from gbdraw.diagrams.circular.positioning import _parse_svg_number
+from gbdraw.diagrams.circular.radial_layout import track_layout_reason
 from gbdraw.diagrams.linear import assemble_linear_diagram
 from gbdraw.exceptions import LabelLayoutError, LabelsDoNotFitError, ValidationError
 from gbdraw.features.colors import build_default_color_map, build_specific_color_rules
@@ -3530,6 +3531,25 @@ def _drawing_size(drawing: Drawing) -> tuple[float, float]:
     )
 
 
+# The reason of a row whose settings leave the tracks no room (OV-1266, D-07).
+_TRACKS_DO_NOT_FIT_REASON = "The tracks do not fit with this setting"
+
+
+def _unfit_row_verification(error: ValidationError) -> LabelFitVerification | None:
+    """A row's assembly error that means the row does not fit, or None when the error must be raised.
+
+    A label setting the engine cannot draw (``LabelLayoutError``) does not fit, and so do tracks that no longer fit
+    (``TRACK_LAYOUT``): the figure assembled without the row's settings, so the row's settings caused it. Any other
+    error, such as a missing file, is raised (OV-733).
+    """
+
+    if isinstance(error, LabelLayoutError):
+        return LabelFitVerification(outcome="stop", canvas_size=None, reason=str(error))
+    if track_layout_reason(error) is not None:
+        return LabelFitVerification(outcome="stop", canvas_size=None, reason=_TRACKS_DO_NOT_FIT_REASON)
+    return None
+
+
 def _checked_circular_drawing(
     assemble: Callable[[Mapping[str, LabelFitValue]], Drawing],
     *,
@@ -3550,9 +3570,11 @@ def _checked_circular_drawing(
     def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
             verified = assemble(overrides)
-        except LabelLayoutError as error:
-            # A label setting the engine cannot draw does not fit; any other error is raised.
-            return LabelFitVerification(outcome="stop", canvas_size=None, reason=str(error))
+        except ValidationError as error:
+            unfit = _unfit_row_verification(error)
+            if unfit is None:
+                raise
+            return unfit
         layouts = _circular_label_layouts(verified)
         return LabelFitVerification(
             outcome=circular_label_outcome(layouts),
@@ -3865,8 +3887,11 @@ def _checked_linear_build(
     def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
             verified = _linear_drawing(assemble(overrides))
-        except LabelLayoutError as error:
-            return LabelFitVerification(outcome="stop", canvas_size=None, reason=str(error))
+        except ValidationError as error:
+            unfit = _unfit_row_verification(error)
+            if unfit is None:
+                raise
+            return unfit
         label_fit = _linear_label_fit(verified)
         return LabelFitVerification(label_fit.outcome, _drawing_size(verified), label_fit.fit)
 

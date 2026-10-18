@@ -241,3 +241,25 @@ def test_definition_that_cannot_be_wrapped_reports_the_definition_band() -> None
     assert payload["code"] == "TRACK_LAYOUT"
     assert payload["context"]["reason"] == "DEFINITION_RESERVED"
     assert set(payload["context"]) <= {"reason", "slotIndex", "innerPx", "outerPx"}
+
+
+@pytest.mark.circular
+def test_the_definition_band_message_names_the_tracks_kept_inside(tmp_path: Path) -> None:
+    """OV-1268: the band starts above the definition text by the room kept for the tracks inside it."""
+
+    from gbdraw.circular import circular_main
+
+    with pytest.raises(ValidationError) as caught:
+        circular_main(
+            [
+                "--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"),
+                "--separate_strands", "--track_type", "tuckin", "-l", "left", "--resolve_overlaps",
+                "-o", str(tmp_path / "out"), "-f", "svg",
+            ]
+        )
+
+    assert _layout_reason(caught.value) == "DEFINITION_RESERVED"
+    message = str(caught.value)
+    assert "cannot fit inside between 189.6px and 386.1px" in message
+    assert "the center definition text reserves 122.6px" in message
+    assert "and 67.1px are kept for the tracks inside it ('gc_content', 'gc_skew')" in message
