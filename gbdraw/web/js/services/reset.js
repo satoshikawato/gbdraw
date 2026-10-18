@@ -185,12 +185,12 @@ const resetLinearComparisonPlan = (drawing) => {
 // (PD-OI-070), and the app-level LOSAT execution and popup settings.
 /**
  * The uploaded tables whose rows become settings (Default colors, Specific
- * color rules, Blacklist, Whitelist, Priority File). A Reset or a new Session
- * replaces those settings, so the cards go with them (OV-1267); a card that
- * stayed would name a table its rules no longer hold.
+ * color rules, Blacklist, Whitelist, Priority File). Reset Settings, which a
+ * Session replace also runs, clears those settings, so the cards go with them
+ * (OV-1267); a card that stayed would name a table its rules no longer hold.
  * @param {Record<'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority', unknown>} files
  */
-export const clearSettingTableFiles = (files) => {
+const clearSettingTableFiles = (files) => {
   files.d_color = null;
   files.t_color = null;
   files.blacklist = null;

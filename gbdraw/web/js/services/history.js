@@ -687,24 +687,29 @@ export const createHistoryManager = ({
   // when it alone is over the byte limit; the oldest other steps drop first.
   /** @param {HistoryEntry | null} [kept] */
   const enforceLimits = (kept = null) => {
-    let evicted = false;
+    let undoDropped = false;
+    let redoDropped = false;
     while (undoStack.length > maxActions) {
       removeEntryBytes(undoStack.shift());
-      evicted = true;
+      undoDropped = true;
     }
 
     const overLimit = () => totalEntryBytes + retainedFileBytes() > maxBytes;
     while (undoStack.length > 0 && undoStack[0] !== kept && overLimit()) {
       removeEntryBytes(undoStack.shift());
-      evicted = true;
+      undoDropped = true;
     }
     if (overLimit()) {
       const keptRedo = redoStack.filter((entry) => entry === kept);
       redoStack.filter((entry) => entry !== kept).forEach(removeEntryBytes);
+      redoDropped = keptRedo.length < redoStack.length;
       redoStack.splice(0, redoStack.length, ...keptRedo);
     }
 
-    if (evicted) onHistoryLimit('Older undo history was discarded to stay within the history limit.');
+    // Every drop is announced through the one notice path.
+    const dropped = undoDropped && redoDropped ? 'Older undo history and the redo history were'
+      : undoDropped ? 'Older undo history was' : redoDropped ? 'Redo history was' : '';
+    if (dropped) onHistoryLimit(`${dropped} discarded to stay within the history limit.`);
     releaseUnreferencedFiles();
   };
 

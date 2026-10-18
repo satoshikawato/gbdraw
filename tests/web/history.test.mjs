@@ -3082,6 +3082,36 @@ for (const previousSuppressed of [false, true]) {
   console.log('history action remainder tests passed');
 }
 
+// OV-1260: a kept rerender that grows the last step over the byte limit
+// drops the Redo steps, and the drop is announced as an Undo drop is.
+{
+  let rules = 0;
+  let figure = 'drawn-0';
+  const limitMessages = [];
+  const history = createHistoryManager({
+    maxBytes: 1000,
+    onHistoryLimit: (message) => limitMessages.push(message),
+    buildIntent: () => ({ rules }),
+    applyIntent: (intent) => { rules = intent.rules; },
+    buildCheckpoint: () => ({ rules, figure }),
+    applyCheckpoint: (checkpoint) => { rules = checkpoint.rules; figure = checkpoint.figure; }
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Change feature color', () => {
+    rules = 1;
+    figure = 'shown-1';
+  }, { drawn: { before: () => true, change: false } });
+  await history.runUndoable('Edit setting', () => { rules = 2; });
+  await history.undo();
+  assert.equal(history.getRedoCount(), 1);
+  assert.deepEqual(limitMessages, []);
+  figure = 'x'.repeat(2000);
+  assert.equal(await history.keepRedrawnResult(), true);
+  assert.equal(history.getRedoCount(), 0);
+  assert.equal(history.undoLabel(), 'Change feature color');
+  assert.deepEqual(limitMessages, ['Redo history was discarded to stay within the history limit.']);
+}
+
 // D-24 (OV-731): a checkpoint step's caller says whether the figure of each
 // side is the one its state draws, and Undo and Redo pass that on. A side not
 // yet drawn takes the figure of a rerender drawn from the current state (D-36)

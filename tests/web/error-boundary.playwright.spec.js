@@ -387,6 +387,26 @@ test('a GFF3 without features names the GFF3 file, and replacing an input ends t
   await expect(status).toContainText('The FASTA file has no sequence entry', { timeout: 120000 });
 });
 
+// UJ-08 (OV-1257): in Linear too, a Generate failure about the File cards ends
+// when every card's file is read again.
+test('a Linear Generate failure about a File card ends when its file is read again', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('linear'))).toEqual({ status: 'ok' });
+  const card = page.locator('[data-linear-source-card]').first();
+  const noSequence = (name) => card.locator('input[type="file"]').first().setInputFiles({
+    name, mimeType: 'text/plain', buffer: Buffer.from('LOCUS       X 10 bp DNA linear 01-JAN-2000\nFEATURES\nORIGIN\n//\n')
+  });
+  await noSequence('no-sequence.gb');
+  await expect(card.locator('.upload-zone.ready')).toBeVisible({ timeout: 120000 });
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', error: { code: 'INPUT_UNREADABLE', context: { reason: 'SEQUENCE_UNDEFINED' } } });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText('Sequence content is undefined');
+  await noSequence('no-sequence-again.gb');
+  await expect(alert).toHaveCount(0, { timeout: 120000 });
+});
+
 // OV-1258: a GenBank file that cannot be drawn names the cause: a gzip file at
 // inspection, a record without sequence at Generate (not an engine failure).
 test('a gzip GenBank and a GenBank record without sequence name their cause', async ({ page }) => {

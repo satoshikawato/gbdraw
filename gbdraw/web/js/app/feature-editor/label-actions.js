@@ -1567,15 +1567,18 @@ export const createFeatureLabelActions = ({
     queueLabelReflow();
   };
 
-  /** @type {NoticeHandle | null} The notice of the last Label TSV load. */
+  /** @type {{ drawing: DrawingState, notice: NoticeHandle } | null} The notice of the last Label TSV load, and the drawing it edited. */
   let labelImportNotice = null;
   const resetAllLabelTextOverrides = () => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     // D-06: the notice of the Label TSV edits this removes ends with them.
-    labelImportNotice?.dismiss();
-    labelImportNotice = null;
+    const importNotice = labelImportNotice;
+    if (importNotice && importNotice.drawing === drawing) {
+      importNotice.notice.dismiss();
+      labelImportNotice = null;
+    }
     const svg = svgContainer.value?.querySelector('svg');
     if (svg) resetLabelsToSourceText(drawing, svg);
     clearOverrides(drawing);
@@ -1758,7 +1761,8 @@ export const createFeatureLabelActions = ({
         : [];
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;
-      labelImportNotice = showNotice({ text: message, items: skipped }) || null;
+      const notice = showNotice({ text: message, items: skipped });
+      labelImportNotice = notice ? { drawing, notice } : null;
     } catch (error) {
       if (revision !== labelImportRevision || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
         || state.errorLog?.value !== previousError) return;

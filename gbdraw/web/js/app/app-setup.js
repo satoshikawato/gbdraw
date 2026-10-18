@@ -5255,7 +5255,7 @@ export const createAppSetup = () => {
         'Linear comparisons, which turn off; their uploaded tables stay',
         'The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded'
       ],
-      note: 'Genome and Depth files, the records you chose, and File defaults stay. Undo brings the settings back.',
+      note: 'Input files (genome, Depth, and Circular conservation files), the records you chose, and File defaults stay. Undo brings the settings back.',
       actions: [{ id: 'reset', label: 'Reset all settings', tone: 'danger' }],
       cancelLabel: 'Keep settings'
     });

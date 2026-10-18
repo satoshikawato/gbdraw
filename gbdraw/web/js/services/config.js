@@ -13,7 +13,7 @@ import {
   resetRightDrawerState,
   restoreRightDrawerState
 } from './right-drawer-state.js';
-import { clearSettingTableFiles, resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
+import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
@@ -4176,7 +4176,7 @@ const applyFiles = (filesData, {
   targetState.files.c_conservation_fastas = [];
   targetState.files.c_conservation_sequence_sources = [];
   targetState.files.linearCanonicalComparisons = [];
-  clearSettingTableFiles(targetState.files);
+  // The setting-table cards are cleared by Reset Settings, which every Session replace runs first.
   targetState.linearReorderNotice.value = '';
 
   if (!filesData) {

@@ -688,7 +688,7 @@ test('H1: Undo and Redo of an edit, a switch, and an edit in the other mode rest
   }
 });
 
-// H2: Reset Settings resets both drawings, and one Undo restores both modes' edits.
+// OV-1249: Reset resets settings, not the loaded records.
 test('OV-1249: Reset Settings keeps a Record Order row for each loaded record', async ({ page }) => {
   test.setTimeout(120_000);
   await openWithGenBank(page, BATCH_FIXTURE);
@@ -704,6 +704,7 @@ test('OV-1249: Reset Settings keeps a Record Order row for each loaded record', 
   await expect(page.getByText('Upload a sequence file to load records.')).toHaveCount(0);
 });
 
+// H2: Reset Settings resets both drawings, and one Undo restores both modes' edits.
 test('H2: one Undo of Reset Settings restores the edits of both modes', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
