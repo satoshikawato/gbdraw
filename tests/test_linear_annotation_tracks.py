@@ -1660,7 +1660,8 @@ def _six_kb_label_and_name(region: RegionAnnotation, features: tuple[tuple[int, 
     name = _text_ink_box(next(text for text in root.iter() if text.tag.endswith("text") and text.text == "rec1"), parents)
     record = drawing._gbdraw_track_slot_geometry["records"][0]
     bar = (float(record["axisXpx"]), float(record["axisXpx"]) + float(record["sequenceWidthPx"]))
-    return label, name, bar, float(root.attrib["viewBox"].split()[2])
+    view_x, _view_y, view_width, _view_height = (float(value) for value in root.attrib["viewBox"].split())
+    return label, name, bar, (view_x, view_x + view_width), drawing
 
 
 @pytest.mark.parametrize(
@@ -1677,7 +1678,7 @@ def test_linear_moved_label_may_hang_past_the_bar_end(
     start: int, end: int, feature: tuple[int, int, str], past: str
 ) -> None:
     region = RegionAnnotation("control", CoordinateSpan(None, start, end), label="Mitochondrial control region", mark="highlight")
-    label, name, (bar_start, bar_end), width = _six_kb_label_and_name(region, (feature,))
+    label, name, (bar_start, bar_end), (view_left, view_right), drawing = _six_kb_label_and_name(region, (feature,))
     left, top, right, bottom = label["ink"]
     centre = 0.5 * (left + right)
 
@@ -1687,7 +1688,96 @@ def test_linear_moved_label_may_hang_past_the_bar_end(
     assert (right > bar_end) if past == "end" else (left < bar_start)
     assert label["span"][0] <= centre <= label["span"][1]
     assert right <= name[0] or left >= name[2] + 3.0 or bottom <= name[1] or top >= name[3]
-    assert right <= width
+    assert view_left <= left and right <= view_right
+    # The PNG holds them too: no painted pixel in its first or last column.
+    cairosvg = pytest.importorskip("cairosvg")
+    from io import BytesIO
+
+    from PIL import Image
+
+    image = Image.open(BytesIO(cairosvg.svg2png(bytestring=drawing.tostring().encode()))).convert("RGBA")
+    alpha = image.getchannel("A")
+    for column in (0, image.width - 1):
+        assert alpha.crop((column, 0, column + 1, image.height)).getextrema()[1] == 0
+
+
+def _row_drawing(track_layout: str, separate_strands: bool, regions_of_b: bool):
+    """Two 6 kb records side by side in one row: a region at the right end of the first, whose label's default
+    place lies within the label gap of a tRNA leader, and labelled features at the left end of the second."""
+
+    def record(name: str, features: tuple[tuple[int, int, str, int], ...]) -> SeqRecord:
+        item = SeqRecord(Seq("ACGT" * 1500), id=name, name=name, annotations={"topology": "linear"})
+        item.features = [
+            SeqFeature(FeatureLocation(start - 1, end, strand=strand), type="CDS", qualifiers={"product": [product]})
+            for start, end, product, strand in features
+        ]
+        return item
+
+    first = record("recA2", ((5540, 5560, "tRNA-Leu", 1), (3000, 3300, "photosystem II protein D1", -1)))
+    second = record(
+        "recB",
+        (
+            (20, 60, "ribosomal protein S7", 1),
+            (80, 120, "maturase K", -1),
+            (200, 230, "tRNA-Gly", 1),
+            (3000, 3300, "ATP synthase subunit", 1),
+        ),
+    )
+    regions = [RegionAnnotation("a", CoordinateSpan(parse_record_selector("#1"), 5101, 6000), label="Mitochondrial control region", mark="highlight")]
+    if regions_of_b:
+        regions.append(
+            RegionAnnotation("b", CoordinateSpan(parse_record_selector("#2"), 1, 400), label="Left end region of B", mark="highlight")
+        )
+    return assemble_linear_diagram_from_records(
+        [first, second],
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "all",
+                "canvas.linear.track_layout": track_layout,
+                "canvas.strandedness": separate_strands,
+            },
+        ),
+        legend="none",
+        selected_features_set=["CDS"],
+        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", tuple(regions)),)),
+        layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
+    )
+
+
+def _boxes_overlap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+@pytest.mark.parametrize("regions_of_b", [True, False], ids=["both-regions", "first-region"])
+@pytest.mark.parametrize(
+    ("track_layout", "separate_strands"),
+    [("above", False), ("middle", False), ("above", True), ("middle", True)],
+    ids=["above", "middle", "above-separate", "middle-separate"],
+)
+def test_linear_moved_label_keeps_off_the_next_record_in_its_row(
+    track_layout: str, separate_strands: bool, regions_of_b: bool
+) -> None:
+    drawing = _row_drawing(track_layout, separate_strands, regions_of_b)
+    labels = _span_label_marks(drawing)
+    (moved,) = (label for label in labels if label["text"] == "Mitochondrial control region")
+    records = {record["recordId"]: record for record in drawing._gbdraw_track_slot_geometry["records"]}
+    second = records["recB"]
+    left, top, right, bottom = moved["ink"]
+
+    # OV-1172 (LP-D42 with LP-D69): past its bar end the label may hang into empty space only. The other record
+    # in the row (its bar, its feature labels and leaders, its region label) is an obstacle too.
+    others = [ink for _text, ink in moved["feature_inks"]] + [
+        label["ink"] for label in labels if label is not moved
+    ]
+    assert not any(_boxes_overlap(moved["ink"], ink) for ink in others)
+    assert not [
+        leader
+        for leader in moved["leaders"]
+        if min(leader[0], leader[2]) < right and max(leader[0], leader[2]) > left
+        and min(leader[1], leader[3]) < bottom and max(leader[1], leader[3]) > top
+    ]
+    assert right <= float(second["axisXpx"])
 
 
 @pytest.mark.parametrize(

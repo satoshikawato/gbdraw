@@ -2,13 +2,13 @@
 
 An annotation label keeps the place ``linear_annotation_labels`` gives it
 when its painted letters are clear of the record's feature labels, their
-leaders, the record names and definition text, and the annotation labels
-placed before it. Otherwise it moves, with its centre over one of its marks
-(never into a gap between them), to the nearest clear place; with none, to
-the place with the fewest conflicts, nearest first. Its letters may hang past
-either end of the bar (the figure's bounds follow them); only the names and
-definition text stop them there. A conflict that remains is drawn without a
-fit warning (OV-1155).
+leaders, the record names and definition text, the other records of its row
+and the annotation labels placed before it. Otherwise it moves, with its
+centre over one of its marks (never into a gap between them), to the nearest
+clear place; with none, to the place with the fewest conflicts, nearest
+first. Its letters may hang past either end of the bar into empty space (the
+figure's bounds follow them). A conflict that remains is drawn without a fit
+warning (OV-1155).
 """
 
 from __future__ import annotations
@@ -52,13 +52,15 @@ def _feature_label_box(label: Mapping[str, object]) -> Aabb:
     return Aabb(x + left, y + top, x + right, y + bottom)
 
 
-def _feature_label_obstacles(
+def linear_feature_label_obstacles(
     feature_labels: Sequence[dict[str, object]],
-    origin_y: float,
-    leader_half_width: float,
+    plan: LinearRecordVerticalPlan,
+    leader_stroke_width: float,
 ) -> list[Aabb]:
-    """The record's feature label boxes and leader lines, from the record axis."""
+    """A record's feature label boxes and leader lines, from its bar start and axis."""
 
+    origin_y = next((float(slot.origin_y) for slot in plan.slots if slot.renderer == "features"), 0.0)
+    leader_half_width = 0.5 * float(leader_stroke_width)
     obstacles: list[Aabb] = []
     for label in feature_labels:
         obstacles.append(_feature_label_box(label).translated(0.0, origin_y))
@@ -112,25 +114,18 @@ def place_linear_annotation_labels(
     sequence_width: float,
     plan: LinearRecordVerticalPlan,
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack],
-    feature_labels: Sequence[dict[str, object]],
-    name_boxes: Sequence[Aabb],
+    obstacles: Sequence[Aabb],
     font_family: str,
-    leader_stroke_width: float,
     gap: float,
 ) -> dict[str, tuple[LinearAnnotationLabel, ...]]:
     """Each annotation slot's labels on one record, placed along their spans (slot-local y).
 
-    ``name_boxes`` are the record names and definition text, from this
-    record's bar start and axis.
+    ``obstacles`` is the ink placed before these labels (the record's feature
+    labels and leaders, the record names and definition text, the other
+    records of its row), from this record's bar start and axis.
     """
 
-    features_origin_y = next(
-        (float(slot.origin_y) for slot in plan.slots if slot.renderer == "features"), 0.0
-    )
-    obstacles = [
-        *_feature_label_obstacles(feature_labels, features_origin_y, 0.5 * leader_stroke_width),
-        *name_boxes,
-    ]
+    obstacles = list(obstacles)
     placed: dict[str, tuple[LinearAnnotationLabel, ...]] = {}
     for slot in plan.slots:
         track = annotation_track_layouts.get(slot.id)
@@ -158,4 +153,19 @@ def place_linear_annotation_labels(
     return placed
 
 
-__all__ = ["AnnotationLabelsBySlot", "place_linear_annotation_labels"]
+def linear_annotation_label_inks(labels: AnnotationLabelsBySlot, plan: LinearRecordVerticalPlan) -> list[Aabb]:
+    """The painted letters of a record's placed annotation labels, from its bar start and axis."""
+
+    return [
+        label.ink.translated(0.0, float(plan.slot_by_id(slot_id).origin_y))
+        for slot_id, slot_labels in labels.items()
+        for label in slot_labels
+    ]
+
+
+__all__ = [
+    "AnnotationLabelsBySlot",
+    "linear_annotation_label_inks",
+    "linear_feature_label_obstacles",
+    "place_linear_annotation_labels",
+]

@@ -170,7 +170,12 @@ from ...render.drawers.linear.annotations import (
     linear_annotation_label_room,
     linear_annotation_track_content,
 )
-from .annotation_labels import AnnotationLabelsBySlot, place_linear_annotation_labels
+from .annotation_labels import (
+    AnnotationLabelsBySlot,
+    linear_annotation_label_inks,
+    linear_feature_label_obstacles,
+    place_linear_annotation_labels,
+)
 from ...render.groups.linear import build_linear_feature_dom_index
 from ...render.composition import apply_composition_plan
 
@@ -1613,24 +1618,62 @@ def _linear_annotation_bounds(
     return bounds
 
 
-def _definition_boxes_from(
-    placement: LinearRecordPlacement,
+def _place_linear_annotation_labels_by_record(
+    *,
+    records: Sequence[SeqRecord],
     placements: Mapping[int, LinearRecordPlacement],
+    plans: Sequence[LinearRecordVerticalPlan],
     collision_bands: Sequence[tuple[CollisionBand, ...]],
-) -> list[Aabb]:
-    """Every record's name and definition text box, from ``placement``'s bar start and axis."""
+    feature_labels: Sequence[Sequence[dict[str, object]]],
+    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack],
+    font_family: str,
+    leader_stroke_width: float,
+    gap: float,
+) -> list[AnnotationLabelsBySlot]:
+    """Each record's annotation labels, placed along their spans in record order.
 
-    return [
-        Aabb(
-            band.x_start - placement.x,
-            placements[index].axis_y - placement.axis_y + band.top_y,
-            band.x_end - placement.x,
-            placements[index].axis_y - placement.axis_y + band.bottom_y,
+    Obstacles are the record's own feature labels and leaders, every record's
+    name and definition text, and, from the other records of the same row,
+    their bars (the ``body`` collision bands the figure bounds read), feature
+    labels, leaders and the annotation labels placed before (LP-D42).
+    """
+
+    own_inks = [
+        linear_feature_label_obstacles(
+            feature_labels[index] if index < len(feature_labels) else [], plans[index], leader_stroke_width
         )
-        for index, bands in enumerate(collision_bands)
-        for band in bands
-        if band.kind == "definition" and band.x_end > band.x_start
+        for index in range(len(records))
     ]
+    placed: list[AnnotationLabelsBySlot] = []
+    for index, record in enumerate(records):
+        here = placements[index]
+        obstacles = list(own_inks[index])
+        for other, there in placements.items():
+            same_row = other != index and there.row == here.row
+            dx, dy = there.x - here.x, there.axis_y - here.axis_y
+            obstacles.extend(
+                Aabb(band.x_start - here.x, dy + band.top_y, band.x_end - here.x, dy + band.bottom_y)
+                for band in collision_bands[other]
+                if band.x_end > band.x_start and (band.kind == "definition" or (same_row and band.kind == "body"))
+            )
+            if same_row:
+                inks = own_inks[other] + (
+                    linear_annotation_label_inks(placed[other], plans[other]) if other < index else []
+                )
+                obstacles.extend(box.translated(dx, dy) for box in inks)
+        placed.append(
+            place_linear_annotation_labels(
+                record_index=index,
+                record_length=len(record.seq),
+                sequence_width=here.sequence_width,
+                plan=plans[index],
+                annotation_track_layouts=annotation_track_layouts,
+                obstacles=obstacles,
+                font_family=font_family,
+                gap=gap,
+            )
+        )
+    return placed
 
 
 def _collect_linear_primary_bounds(
@@ -2853,21 +2896,17 @@ def assemble_linear_diagram(
         [(str(record.id), labels) for record, labels in zip(records, all_labels)], label_font_size
     )
     # Annotation labels move along their spans off the feature labels and leaders (OV-845).
-    annotation_labels_by_record = [
-        place_linear_annotation_labels(
-            record_index=record_index,
-            record_length=len(record.seq),
-            sequence_width=record_placements[record_index].sequence_width,
-            plan=record_vertical_plans[record_index],
-            annotation_track_layouts=annotation_track_layouts,
-            feature_labels=all_labels[record_index] if record_index < len(all_labels) else [],
-            name_boxes=_definition_boxes_from(record_placements[record_index], record_placements, record_collision_bands),
-            font_family=str(cfg.objects.text.font_family),
-            leader_stroke_width=float(cfg.labels.stroke_width.long),
-            gap=float(cfg.labels.spacing.linear),
-        )
-        for record_index, record in enumerate(records)
-    ]
+    annotation_labels_by_record = _place_linear_annotation_labels_by_record(
+        records=records,
+        placements=record_placements,
+        plans=record_vertical_plans,
+        collision_bands=record_collision_bands,
+        feature_labels=all_labels,
+        annotation_track_layouts=annotation_track_layouts,
+        font_family=str(cfg.objects.text.font_family),
+        leader_stroke_width=float(cfg.labels.stroke_width.long),
+        gap=float(cfg.labels.spacing.linear),
+    )
 
     total_records = len(records)
     for count, record in enumerate(records, start=1):
