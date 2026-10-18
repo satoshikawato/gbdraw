@@ -493,6 +493,27 @@ def _session_with_derived_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     return source, built
 
 
+def test_a_python_api_replay_that_builds_derived_entries_drops_the_legacy_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1129: outside the CLI's switch the render's own entries supersede the evidence too."""
+
+    from gbdraw.session import render_session_drawings
+
+    sidecar = _fresh_protein_session(tmp_path, monkeypatch)
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert session["losatDerivedCache"] == {"entries": []}
+    legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
+    session["legacyArtifacts"] = {"proteinDerivedEvidence": {"schema": 1, "entries": [legacy_derived]}}
+    source = tmp_path / "with-evidence.gbdraw-session.json"
+    source.write_text(json.dumps(session), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    with materialize_session(load_session_document(source), output_directory=tmp_path / "api") as materialized:
+        (api,) = render_session_drawings(materialized, output_prefix="api", overwrite=True).values()
+    assert api.losat_derived_cache_entries
+    assert api.migration_report.protein_derived_evidence == ()
+
+
 def _derived(path: Path) -> list[dict[str, Any]]:
     return load_session_document(path).to_dict()["losatDerivedCache"]["entries"]
 

@@ -1413,7 +1413,8 @@ def _adjust_migration_report(
     """The report of ``adapted``; current derived entries supersede the legacy evidence.
 
     They are the Session's own, which a re-save writes back, or else the ones
-    this render built (a batch builds none).
+    this render built: only a Python API replay (``render_session_drawings``)
+    builds them; a CLI render and a batch build none.
     """
 
     if not (
