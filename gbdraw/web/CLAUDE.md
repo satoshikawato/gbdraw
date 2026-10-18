@@ -313,8 +313,11 @@ The edits that write it are History steps that show what they change through
 - a Legend rename, the Restore of deleted Legend rows, and the Sort and Move
   of Legend rows;
 - an edit of another owner that retires the paint edits of what it removed,
-  in that edit's step: track data that no longer names a Legend row, and
-  **Delete settings** of a record whose drawing is turned off.
+  in that edit's step: track data that no longer names a Legend row, a drawn
+  Depth, GC content, or GC skew track that the draft hides or shows again (its
+  Legend rows leave the Legend list, a renamed one waiting in
+  `dormantLegendEntries`, and return to it; PD-OI-104), and **Delete
+  settings** of a record whose drawing is turned off.
 
 Undo and Redo, a Session load or replacement, Reset Settings, Generate, and the
 binding of a Result install or rebuild it outside these steps (Python's Legend
