@@ -32,6 +32,7 @@ from .api.request_render import _without_derived_losat_entries
 from .circular import circular_main
 from .linear import linear_main
 from .exceptions import LabelLeadersCrossWarning, GbdrawError
+from .render.output_paths import CLI_OVERWRITE_OPTION, OutputExistsError
 from .version import __version_display__
 
 if TYPE_CHECKING:
@@ -134,6 +135,20 @@ def print_help_message() -> NoReturn:
     sys.exit(0)
 
 
+def _cli_error_message(error: GbdrawError) -> str:
+    """The error's message, with an existing-output refusal worded for the CLI.
+
+    A wrapper keeps the refusal as its cause (``raise ... from``).
+    """
+
+    cause: BaseException | None = error
+    while cause is not None:
+        if isinstance(cause, OutputExistsError):
+            return cause.message(CLI_OVERWRITE_OPTION)
+        cause = cause.__cause__
+    return str(error)
+
+
 def _gui_parser() -> argparse.ArgumentParser:
     """The ``gbdraw gui`` parser: it takes no options, so ``--help`` and unknown arguments stop before the server starts."""
 
@@ -223,7 +238,7 @@ def main() -> None:
                 )
                 sys.exit(1)
         except GbdrawError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
+            print(f"ERROR: {_cli_error_message(exc)}", file=sys.stderr)
             sys.exit(1)
 
 

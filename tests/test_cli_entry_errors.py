@@ -53,3 +53,42 @@ def test_version_is_a_top_level_flag_only(tmp_path: Path) -> None:
     assert sub.returncode != 0
     assert "gbdraw version" not in sub.stdout
     assert "unrecognized arguments: --version" in sub.stderr
+
+
+def test_cli_existing_output_error_names_the_overwrite_option(tmp_path: Path) -> None:
+    """OV-1240: the CLI said "Use overwrite=True", the Python spelling, instead of ``--overwrite``."""
+
+    gbk = str(TEST_INPUTS / "NC_001416.gb")
+    first = _gbdraw("circular", "--gbk", gbk, "-o", "out", "--save_session", cwd=tmp_path, timeout=300)
+    assert first.returncode == 0, first.stderr
+    again = _gbdraw("circular", "--gbk", gbk, "-o", "out", cwd=tmp_path, timeout=300)
+    assert again.returncode == 1
+    assert "ERROR: Output file already exists: " in again.stderr
+    assert "Use --overwrite to replace it." in again.stderr
+    assert "overwrite=True" not in again.stderr
+    sessions = sorted(tmp_path.glob("*.gbdraw-session.json*"))
+    assert sessions, sorted(path.name for path in tmp_path.iterdir())
+    replay = _gbdraw("render", "--session", str(sessions[0]), "-o", "replay",
+                     "--session_output", sessions[0].name, cwd=tmp_path, timeout=300)
+    assert replay.returncode == 1
+    assert "ERROR: Session output already exists: " in replay.stderr
+    assert "Use --overwrite to replace it." in replay.stderr
+    assert "overwrite=True" not in replay.stderr
+
+
+def test_python_existing_output_errors_share_one_wording(tmp_path: Path) -> None:
+    """OV-1240: one owner words the refusal; Python callers read ``overwrite=True``."""
+
+    from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
+
+    first = tmp_path / "a.svg"
+    second = tmp_path / "b.svg"
+    first.write_text("x")
+    second.write_text("x")
+    with pytest.raises(OutputExistsError) as one:
+        preflight_output_paths((first,), overwrite=False)
+    assert str(one.value) == f"Output file already exists: {first}. Use overwrite=True to replace it."
+    assert one.value.message("--overwrite") == f"Output file already exists: {first}. Use --overwrite to replace it."
+    with pytest.raises(OutputExistsError) as two:
+        preflight_output_paths((first, second), overwrite=False)
+    assert str(two.value) == f"Output files already exist: {first}, {second}. Use overwrite=True to replace them."

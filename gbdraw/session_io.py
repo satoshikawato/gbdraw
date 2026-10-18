@@ -50,7 +50,7 @@ from .exceptions import GbdrawError, ValidationError
 from .io.colors import is_user_color, named_color_hex
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
-from .render.output_paths import commit_staged_output_file
+from .render.output_paths import OutputExistsError, commit_staged_output_file
 from .session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
@@ -5631,10 +5631,7 @@ def _write_validated_session_json(
             overwrite=overwrite,
         )
     except FileExistsError as exc:
-        raise ValidationError(
-            f"Session output already exists: {output_path}. "
-            "Pass overwrite=True to replace it."
-        ) from exc
+        raise OutputExistsError((output_path,), subject="Session output") from exc
     except OSError as exc:
         raise ValidationError(f"Could not write session sidecar: {output_path}") from exc
     finally:

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence, cas
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.table_text import legacy_table_rows
-from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
@@ -1103,10 +1103,7 @@ def _write_session_document(
         output_path = Path(path)
         preflight_output_paths((output_path,), overwrite=True)
         if (output_path.exists() or output_path.is_symlink()) and not overwrite:
-            raise ValidationError(
-                f"Session output already exists: {output_path}. "
-                "Pass overwrite=True to replace it."
-            )
+            raise OutputExistsError((output_path,), subject="Session output")
         # The document was validated when it was built.
         _write_validated_session_json(path, document._data, overwrite=overwrite)
     except ValidationError as exc:

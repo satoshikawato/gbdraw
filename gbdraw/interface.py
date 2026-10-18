@@ -52,7 +52,7 @@ from gbdraw.api.options import (
 )
 from gbdraw.render.output_paths import (
     commit_staged_outputs,
-    output_exists_message,
+    OutputExistsError,
     preflight_output_paths,
     staged_output_files,
 )
@@ -662,7 +662,7 @@ class Diagram:
         resolved_format = format or _format_from_path(output_path)
         preflight_output_paths((output_path,), overwrite=True)
         if output_path.exists() and not overwrite:
-            raise ValidationError(output_exists_message(output_path))
+            raise OutputExistsError((output_path,))
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:

@@ -28,7 +28,7 @@ from gbdraw.render.formats import (
     resolve_format_output_path,
     resolve_output_paths,
 )
-from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
@@ -342,10 +342,7 @@ def preflight_session_sidecar_if_requested(
             "Choose a distinct --session_output path."
         )
     if sidecar_path.exists() and not overwrite:
-        raise ValidationError(
-            f"Session output already exists: {sidecar_path}. "
-            "Use --overwrite to replace it."
-        )
+        raise OutputExistsError((sidecar_path,), subject="Session output")
     return sidecar_path
 
 
