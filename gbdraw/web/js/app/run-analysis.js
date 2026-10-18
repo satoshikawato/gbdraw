@@ -165,7 +165,8 @@ import {
   transitionLegacyProteinCandidate,
   losatEdgeFilename,
   validateDerivedProteinReferences,
-  webLosatRuntimeRecord
+  webLosatRuntimeRecord,
+  writtenLegacyProteinArtifacts
 } from '../services/losat-cache.js';
 import {
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, LEGACY_PROTEIN_CANDIDATE_SCHEMA,
@@ -4863,18 +4864,15 @@ export const createRunAnalysis = ({
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
           if (legacyPromotionTransaction.length > 0) {
             commitProteinMigration = (candidateOwnerSet) => {
-              let nextLegacyEnvelope = candidateOwnerSet.legacyProteinRawCandidates;
+              const written = writtenLegacyProteinArtifacts({
+                candidates: candidateOwnerSet.legacyProteinRawCandidates,
+                evidence: candidateOwnerSet.legacyProteinDerivedEvidence,
+                promoted: legacyPromotionTransaction.map(({ candidateIndex }) => candidateIndex),
+                hasCurrentDerived: false
+              });
               /** @type {Record<string, unknown>} */
               const promotedProteinIdMap = {};
-              legacyPromotionTransaction.forEach(({
-                candidateIndex,
-                proteinIdMap
-              }) => {
-                nextLegacyEnvelope = transitionLegacyProteinCandidate(
-                  nextLegacyEnvelope,
-                  candidateIndex,
-                  'promoted'
-                );
+              legacyPromotionTransaction.forEach(({ proteinIdMap }) => {
                 Object.entries(proteinIdMap || {}).forEach(([oldId, runtimeHandle]) => {
                   const previous = promotedProteinIdMap[oldId];
                   if (previous && previous !== runtimeHandle) {
@@ -4883,10 +4881,6 @@ export const createRunAnalysis = ({
                   promotedProteinIdMap[oldId] = runtimeHandle;
                 });
               });
-              let nextLegacyEvidence = candidateOwnerSet.legacyProteinDerivedEvidence;
-              if (!nextLegacyEnvelope.entries.some((/** @type {LegacyProteinCandidateEnvelope['entries'][number]} */ candidate) => candidate.state === 'pending')) {
-                nextLegacyEvidence = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
-              }
               let nextOrthogroups = candidateOwnerSet.orthogroups;
               let nextExtractedFeatures = candidateOwnerSet.extractedFeatures;
               let nextBiologicalFeatures = candidateOwnerSet.biologicalFeatures;
@@ -4915,8 +4909,8 @@ export const createRunAnalysis = ({
               return {
                 ownerSet: {
                   ...candidateOwnerSet,
-                  legacyProteinRawCandidates: nextLegacyEnvelope,
-                  legacyProteinDerivedEvidence: nextLegacyEvidence,
+                  legacyProteinRawCandidates: written.candidates,
+                  legacyProteinDerivedEvidence: written.evidence,
                   orthogroups: nextOrthogroups,
                   extractedFeatures: nextExtractedFeatures,
                   biologicalFeatures: nextBiologicalFeatures

@@ -387,6 +387,22 @@ const finalized = await finalizeGallerySessionPublication({
 assert.equal(finalized.equivalence.equivalent, true);
 assert.deepEqual(finalized.session.cliInvocation, lambda.cliInvocation);
 
+// OV-1144: the published legacy protein artifacts are the replay's, also when the replay writes none.
+{
+  const evidence = (/** @type {string} */ key) => ({
+    proteinDerivedEvidence: { schema: 1, entries: [{ schema: 1, kind: 'derived-losatp-payload', key, payload: {} }] }
+  });
+  const prepared = { ...structuredClone(lambdaPrepared.session), legacyArtifacts: evidence('prepared') };
+  const withoutLegacy = await finalizeGallerySessionPublication({
+    prepared, replayed: structuredClone(lambdaPrepared.session)
+  });
+  assert.equal(Object.hasOwn(withoutLegacy.session, 'legacyArtifacts'), false);
+  const withLegacy = await finalizeGallerySessionPublication({
+    prepared, replayed: { ...structuredClone(lambdaPrepared.session), legacyArtifacts: evidence('replayed') }
+  });
+  assert.deepEqual(withLegacy.session.legacyArtifacts, evidence('replayed'));
+}
+
 const replayWithUnreferencedResource = structuredClone(lambdaPrepared.session);
 replayWithUnreferencedResource.resources['unused-replay-resource'] = {
   kind: 'canonical-tsv',

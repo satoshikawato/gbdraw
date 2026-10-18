@@ -1,0 +1,162 @@
+{
+ "description": [
+  "Which legacy protein raw candidates and derived evidence a written Session keeps (OV-1132, OV-1143).",
+  "Python written_legacy_protein_artifacts (gbdraw/api/session_compat.py; tests/test_legacy_protein_artifact_vectors.py)",
+  "and the Web writtenLegacyProteinArtifacts (gbdraw/web/js/services/losat-cache.js;",
+  "tests/web/legacy-protein-artifact-vectors.test.mjs) give the written result from the attempt outcomes.",
+  "candidates: the states before the write, after its attempts' rejections; promoted: the indexes this write promoted;",
+  "evidence: the number of legacy derived evidence entries; currentDerived: whether the written Session holds or built",
+  "current derived entries. written: the states that stay in the envelope (a promoted candidate leaves it) and the",
+  "evidence entries kept."
+ ],
+ "cases": [
+  {
+   "id": "no-attempt",
+   "candidates": [
+    "pending",
+    "pending"
+   ],
+   "promoted": [],
+   "evidence": 2,
+   "currentDerived": false,
+   "written": {
+    "candidates": [
+     "pending",
+     "pending"
+    ],
+    "evidence": 2
+   },
+   "note": "A write that attempts nothing (or whose attempts match nothing) keeps every candidate and the evidence: the lossless save before a Generate."
+  },
+  {
+   "id": "some-promoted",
+   "candidates": [
+    "pending",
+    "pending",
+    "pending"
+   ],
+   "promoted": [
+    1
+   ],
+   "evidence": 2,
+   "currentDerived": false,
+   "written": {
+    "candidates": [
+     "pending",
+     "pending"
+    ],
+    "evidence": 2
+   },
+   "note": "A promoted candidate leaves the envelope; a candidate still pending keeps the evidence, so a later Generate can promote it."
+  },
+  {
+   "id": "all-promoted",
+   "candidates": [
+    "pending",
+    "pending"
+   ],
+   "promoted": [
+    0,
+    1
+   ],
+   "evidence": 2,
+   "currentDerived": false,
+   "written": {
+    "candidates": [],
+    "evidence": 0
+   },
+   "note": "The write promoted the last pending candidate: the evidence goes (OV-1132)."
+  },
+  {
+   "id": "promoted-leaves-only-rejected",
+   "candidates": [
+    "pending",
+    "rejected"
+   ],
+   "promoted": [
+    0
+   ],
+   "evidence": 2,
+   "currentDerived": false,
+   "written": {
+    "candidates": [
+     "rejected"
+    ],
+    "evidence": 0
+   },
+   "note": "A rejected candidate is not pending and is not retried: it stays, and the evidence goes."
+  },
+  {
+   "id": "rejected-without-attempt",
+   "candidates": [
+    "rejected"
+   ],
+   "promoted": [],
+   "evidence": 2,
+   "currentDerived": false,
+   "written": {
+    "candidates": [
+     "rejected"
+    ],
+    "evidence": 2
+   },
+   "note": "Without a promotion the evidence stays, next to a rejected candidate too."
+  },
+  {
+   "id": "current-derived-entries",
+   "candidates": [
+    "pending"
+   ],
+   "promoted": [],
+   "evidence": 2,
+   "currentDerived": true,
+   "written": {
+    "candidates": [
+     "pending"
+    ],
+    "evidence": 0
+   },
+   "note": "Current derived entries supersede the evidence (OV-1129); the candidates stay."
+  },
+  {
+   "id": "evidence-only",
+   "candidates": [],
+   "promoted": [],
+   "evidence": 3,
+   "currentDerived": false,
+   "written": {
+    "candidates": [],
+    "evidence": 3
+   },
+   "note": "Evidence without candidates or current derived entries stays."
+  },
+  {
+   "id": "evidence-only-current-derived",
+   "candidates": [],
+   "promoted": [],
+   "evidence": 3,
+   "currentDerived": true,
+   "written": {
+    "candidates": [],
+    "evidence": 0
+   },
+   "note": "The same evidence next to current derived entries goes."
+  },
+  {
+   "id": "promoted-without-evidence",
+   "candidates": [
+    "pending"
+   ],
+   "promoted": [
+    0
+   ],
+   "evidence": 0,
+   "currentDerived": false,
+   "written": {
+    "candidates": [],
+    "evidence": 0
+   },
+   "note": "Promoting the last candidate of a Session without evidence writes neither."
+  }
+ ]
+}

@@ -949,6 +949,32 @@ export const transitionLegacyProteinCandidate = (
   return { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries };
 };
 
+/**
+ * The legacy protein artifacts a written Session keeps, from one write's attempts (OV-1132, OV-1143).
+ * Python `written_legacy_protein_artifacts` is the other side; both read
+ * tests/fixtures/legacy_protein_artifact_vectors.json. A promoted candidate leaves the envelope on
+ * serialization; the evidence goes when current derived entries supersede it, or when this write
+ * promoted the last pending candidate.
+ * @template {{ entries: readonly unknown[] }} E
+ * @param {{ candidates: unknown, evidence: E, promoted: readonly number[], hasCurrentDerived: boolean }} write
+ * @returns {{ candidates: LegacyProteinCandidateEnvelope,
+ *   evidence: E | { schema: number, entries: never[] } }}
+ */
+export const writtenLegacyProteinArtifacts = ({ candidates, evidence, promoted, hasCurrentDerived }) => {
+  const written = promoted.reduce(
+    (envelope, index) => transitionLegacyProteinCandidate(envelope, index, 'promoted'),
+    normalizeLegacyProteinCandidateEnvelope(candidates)
+  );
+  const promotedTheLast = promoted.length > 0
+    && !written.entries.some((candidate) => candidate.state === 'pending');
+  return {
+    candidates: written,
+    evidence: hasCurrentDerived || promotedTheLast
+      ? { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] }
+      : evidence
+  };
+};
+
 /** @param {unknown} envelope */
 export const serializableLegacyProteinCandidateEnvelope = (envelope) => {
   const normalized = normalizeLegacyProteinCandidateEnvelope(envelope);

@@ -2568,6 +2568,27 @@ def _request_derived_settings(
     )
 
 
+def _request_losatp_job_specs(
+    request: LinearDiagramRequest,
+    mode: str,
+    pairs: Sequence[tuple[int, int]] | None,
+) -> tuple[tuple[int, int], ...]:
+    """The directed record pairs that a LOSATP run of ``request`` in ``mode`` searches.
+
+    ``pairs`` are its displayed comparison edges (``None``: the consecutive
+    records); the registered job plan (``losatp_job_specs``) gives the searches.
+    """
+
+    options = request.options
+    return losatp_job_specs(
+        mode,
+        record_count=len(request.records),
+        pairs=pairs,
+        infer_orthogroups=options.collinear_infer_orthogroups,
+        search_scope=str(options.collinearity_search_scope),
+    )
+
+
 def _derived_identity_pairs(
     request: LinearDiagramRequest,
     settings: DerivedLosatpSettings,
@@ -2592,12 +2613,8 @@ def _derived_identity_pairs(
                 [],
             ).append(str(entry.get("key") or ""))
     pairs: list[DerivedLosatpPair] = []
-    for query_index, subject_index in losatp_job_specs(
-        settings.mode,
-        record_count=len(request.records),
-        pairs=tuple(displayed),
-        infer_orthogroups=settings.infer_orthogroups,
-        search_scope=settings.search_scope,
+    for query_index, subject_index in _request_losatp_job_specs(
+        request, settings.mode, tuple(displayed)
     ):
         keys = raw_keys.get((instance_keys[query_index], instance_keys[subject_index]), [])
         if len(keys) != 1 or not keys[0]:

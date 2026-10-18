@@ -920,7 +920,8 @@ def test_supported_v32_session_replays_through_compatibility_adapter(
     assert result.output_paths == (tmp_path / "session-compatible.svg",)
     assert result.output_paths[0].is_file()
     assert result.migration_report.protein_raw_candidates
-    assert result.migration_report.protein_raw_candidates[0]["state"] == "rejected"
+    # OV-1143: a request without a LOSATP search tries no candidate, which stays pending.
+    assert result.migration_report.protein_raw_candidates[0]["state"] == "pending"
     assert result.migration_report.protein_derived_evidence == (legacy_derived,)
     assert not result.migration_report.protein_id_map
 
@@ -945,7 +946,10 @@ def test_released_schema_v2_fixture_promotes_to_current_typed_artifacts(
     assert len(protein_entries) == 25
     assert {entry["schema"] for entry in protein_entries} == {4}
     assert adapted.migration_report.protein_id_map
-    assert adapted.migration_report.protein_raw_candidates == ()
+    # OV-1143: the 9 candidates no planned search matches stay pending, as after a Web Generate.
+    assert [
+        candidate["state"] for candidate in adapted.migration_report.protein_raw_candidates
+    ] == ["pending"] * 9
 
 
 def test_released_schema_v2_typed_alignment_survives_protein_artifact_promotion(
