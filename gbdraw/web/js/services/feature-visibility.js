@@ -12,6 +12,7 @@ import {
 } from './feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
 import { pythonLegendRows } from './legend-svg.js';
+import { createRuleLegendCaptions } from './specific-color-rules.js';
 /** @import { FeatureOverrideDraft, FeaturePlacementDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
 /** @import { LegendRowContext, SpecificColorRule } from './specific-color-rules.js' */
@@ -735,25 +736,22 @@ const legendRuleCaption = (rule) => String(rule?.cap ?? '').trim();
 // the color live. This is the input of the rows, not the rows: Python stays
 // their only derivation (Owner decision 2026-10-06, option A), and an edit
 // that changes a Result's source asks for the automatic rerender (OV-42).
-// The color of a rule is in it only for a batch: with one Result the
-// rows keep their captions and the Legend follows the color live
-// (`ruleLegendCaptions` gives the caption of a rule whose caption names another
-// row), while another batch Result shows the row it was drawn with until
-// Python draws it again (OV-44). A source is null while a rule match it needs
-// is unknown; null equals no source (`sameLegendSources`).
+// A rule is used by its caption and its color, as Python draws a row for each
+// (caption, color) pair a drawn feature uses: hiding the only feature of one
+// color of a caption written in several colors removes that row (OV-1236).
+// A source is null while a rule match it needs is unknown; null equals no
+// source (`sameLegendSources`).
 /**
  * @param {LegendCatalogFeatures} catalogFeatures
  * @param {FeatureDrawnContext} context
- * @param {{ asRendered: boolean, withColors: boolean }} options
+ * @param {{ asRendered: boolean }} options
  */
-const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) => {
+const legendSourceOf = (catalogFeatures, context, { asRendered }) => {
   const caption = legendRuleCaption;
   /** @param {{ color?: unknown } | null | undefined} rule */
   const colorOf = (rule) => String(rule?.color ?? '').trim().toLowerCase();
-  /** @param {{ color?: unknown } | null | undefined} rule */
-  const color = (rule) => (withColors ? colorOf(rule) : '');
   /** @param {{ cap?: unknown, color?: unknown } | null | undefined} rule */
-  const usage = (rule) => JSON.stringify([caption(rule), color(rule)]);
+  const usage = (rule) => JSON.stringify([caption(rule), colorOf(rule)]);
   const rules = context.colorRules;
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered });
   if (!drawn) return null;
@@ -797,7 +795,7 @@ const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) =>
   return JSON.stringify([
     [...typesByRecord],
     rules.filter((rule) => caption(rule) && counted(rule) && used.has(usage(rule)))
-      .map((rule) => [String(rule.feat ?? ''), caption(rule), color(rule)]),
+      .map((rule) => [String(rule.feat ?? ''), caption(rule), colorOf(rule)]),
     [...defaultTypes].sort(),
     [...plainTypes].sort(),
     [...new Set(rules.filter(counted).map(caption).filter(Boolean))].sort()
@@ -814,9 +812,7 @@ export const resultLegendSources = (state, context, { asRendered = false } = {})
   const results = Array.isArray(state?.results?.value) ? state.results.value : [];
   return results.map((_, index) => {
     const catalogFeatures = resultCatalogFeatures(state, index);
-    return catalogFeatures
-      ? legendSourceOf(catalogFeatures, context, { asRendered, withColors: results.length > 1 })
-      : '';
+    return catalogFeatures ? legendSourceOf(catalogFeatures, context, { asRendered }) : '';
   });
 };
 
@@ -825,10 +821,11 @@ export const sameLegendSources = (left, right) => left.length === right.length
   && left.every((source, index) => source !== null && source === right[index]);
 
 // U3a 1d (R14-8): the Legend row of each feature a Result draws, as Python
-// keys it (prepare_legend_table): the caption of the captioned rule that wins
-// it; else the "other <type>s" row of a type whose drawn features use a
-// captioned rule, or no row when an uncaptioned rule colors it; else its
-// type's row. This tells which rows a rule change regroups; Python still
+// keys it (prepare_legend_table): the key the whole rule table allocates to
+// the row of the captioned rule that wins it (`<caption> [<fill>]` for a
+// caption written in several colors, OV-1235); else the "other <type>s" row of
+// a type whose drawn features use a captioned rule, or no row when an
+// uncaptioned rule colors it; else its type's row. This tells which rows a rule change regroups; Python still
 // derives the rows and their order. Null while a match is unknown, when a
 // wildcard rule has a caption, or when a used caption names a row Python
 // generates (it suffixes the caption by color, PD-OI-042).
@@ -837,12 +834,14 @@ const legendRowKeysOf = (catalogFeatures, context) => {
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered: false });
   if (!drawn || context.colorRules.some((rule) => rule?.feat === '*' && legendRuleCaption(rule))) return null;
   const ruleTypes = new Set(drawn.filter(({ winner }) => legendRuleCaption(winner)).map(({ type }) => type));
+  const ruleRowKey = createRuleLegendCaptions(context.colorRules);
   /** @type {Map<string, string | null>} */
   const keys = new Map();
   const generated = new Set();
   for (const { feature, type, winner } of drawn) {
     const caption = legendRuleCaption(winner);
-    let key = caption || null;
+    /** @type {string | null} */
+    let key = caption ? ruleRowKey(winner) : null;
     if (!caption && !ruleTypes.has(type)) key = type;
     else if (!caption && !winner) key = type === 'CDS' ? 'other proteins' : `other ${type}s`;
     if (key && !caption) generated.add(key);

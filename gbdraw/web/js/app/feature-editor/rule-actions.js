@@ -437,18 +437,20 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       && resolveColorToHex(intent.color) === resolveColorToHex(legendPlacement.color))?.caption : undefined;
     /** @type {Map<PythonLegendKey, PythonLegendKey>} */
     const replaced = new Map(placedKey && legendPlacement?.replaces && placedKey !== legendPlacement.at ? [[legendPlacement.at, placedKey]] : []);
+    // The rows the Legend owner keeps in their place under a new key (OV-645, OV-1235).
+    const inPlace = new Map([...rekeyed, ...replaced]);
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
       .some((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
       isCurrent: current,
       placement: placedKey && legendPlacement && !legendPlacement.replaces ? { caption: placedKey, after: legendPlacement.at } : null,
-      rekeyed: new Map([...rekeyed, ...replaced])
+      rekeyed: inPlace
     });
     if (!legend) return false;
     const redrawsLegend = redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules, {
       rows: { add: legend.diff.add, retire: legend.diff.remove.map(({ caption }) => caption) },
-      replaced
+      replaced: inPlace
     });
     let applied = false;
     // One History step: the rule transition first, then the legend rows it
