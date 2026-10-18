@@ -1220,10 +1220,11 @@ const sortMultiRecordPositionsByRow = (positions) => {
     .map(({ __index, ...entry }) => entry);
 };
 /**
+ * The default Record Order of a Circular source's records: a near-square grid.
  * @param {unknown} selectors
  * @returns {MultiRecordPosition[]}
  */
-const buildDefaultMultiRecordPositions = (selectors) => {
+export const buildDefaultMultiRecordPositions = (selectors) => {
   const normalizedSelectors = Array.isArray(selectors)
     ? selectors.map((value) => String(value ?? '').trim()).filter(Boolean)
     : [];

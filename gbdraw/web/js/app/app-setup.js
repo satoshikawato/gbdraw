@@ -144,7 +144,7 @@ import { createPreviewFeatureSearch } from './feature-search/preview-actions.js'
 import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
-import { afterPaint, createRunAnalysis } from './run-analysis.js';
+import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -5292,6 +5292,9 @@ export const createAppSetup = () => {
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
       resetSettingsState(state);
+      // OV-1249: the loaded Circular records keep a Record Order row each, at
+      // their defaults; Reset resets settings, not the records.
+      state.drawings.circular.adv.multi_record_positions.push(...buildDefaultCircularRecordPositions());
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
       // also clears the alignment plan (D-15).
@@ -6106,19 +6109,10 @@ export const createAppSetup = () => {
     }
   }, { flush: 'sync' });
 
-  const buildDefaultCircularRecordPositions = () => {
-    const selectors = Array.isArray(circularRecordList.value)
-      ? circularRecordList.value
-          .map((/** @type {{ selector?: unknown }} */ entry) => String(entry?.selector || '').trim())
-          .filter(Boolean)
-      : [];
-    if (selectors.length === 0) return [];
-    const cols = Math.ceil(Math.sqrt(selectors.length));
-    return selectors.map((/** @type {string} */ selector, /** @type {number} */ index) => ({
-      selector,
-      row: Math.floor(index / cols) + 1
-    }));
-  };
+  const buildDefaultCircularRecordPositions = () => buildDefaultMultiRecordPositions(
+    (Array.isArray(circularRecordList.value) ? circularRecordList.value : [])
+      .map((/** @type {{ selector?: unknown }} */ entry) => entry?.selector)
+  );
 
   /** @param {MultiRecordPosition | null | undefined} position */
   const getCircularRecordRow = (position) => {
