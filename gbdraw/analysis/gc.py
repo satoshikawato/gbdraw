@@ -15,13 +15,14 @@ from gbdraw.analysis.skew import (
     _build_prefix_counts,
     _window_counts,
     counted_dinucleotide,
+    counted_sequence,
 )
 
 
 def calculate_gc_percent(seq: object) -> float:
-    """Calculate GC percentage for a sequence-like object."""
+    """Calculate GC percentage for a sequence-like object, counted as the GC track counts."""
 
-    sequence = str(seq)
+    sequence = counted_sequence(seq)
     if not sequence:
         return 0.0
     gc_count = sequence.count("G") + sequence.count("C")

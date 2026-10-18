@@ -5,10 +5,13 @@ from __future__ import annotations
 import errno
 import os
 import shutil
+import stat
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
-from typing import Iterable
+from tempfile import TemporaryDirectory
+from typing import Iterable, Iterator, Mapping
 
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import ExportError, ValidationError
 
 _WINDOWS_DEVICE_NAMES = frozenset(
     {
@@ -131,14 +134,17 @@ def _copy_staged_file_exclusively(
     staged_path: Path,
     output_path: Path,
 ) -> None:
-    """Fallback no-replace commit for filesystems without hard links."""
+    """Fallback no-replace commit for filesystems without hard links.
+
+    The copy keeps the staged file's permission bits, as a link would.
+    """
 
     output_fd: int | None = None
     try:
         output_fd = os.open(
             output_path,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-            0o600,
+            stat.S_IMODE(staged_path.stat().st_mode),
         )
         with staged_path.open("rb") as source:
             output_file = os.fdopen(output_fd, "wb")
@@ -173,6 +179,10 @@ def commit_staged_output_file(
     if os.name == "nt":
         staged.rename(output)
         return
+    if not hasattr(os, "link"):
+        # Pyodide's file system, where the Web writes its outputs, has no os.link.
+        _copy_staged_file_exclusively(staged, output)
+        return
     try:
         os.link(staged, output, follow_symlinks=False)
     except NotImplementedError:
@@ -191,8 +201,67 @@ def commit_staged_output_file(
     staged.unlink()
 
 
+@contextmanager
+def staged_output_files(output_paths: Iterable[str | Path]) -> Iterator[dict[Path, Path]]:
+    """Map each output to a staged path in its own directory, for one output set.
+
+    The staged files live in a private directory beside their outputs, so a
+    commit is a rename or link on one filesystem and each file gets the usual
+    permissions. Writers fill every staged file first and then call
+    :func:`commit_staged_outputs`; on exit, whatever was not committed is
+    removed, so a failed generation leaves no output behind.
+    """
+
+    with ExitStack() as stack:
+        directories: dict[Path, Path] = {}
+        staged: dict[Path, Path] = {}
+        for output_path in (Path(path) for path in output_paths):
+            parent = output_path.parent
+            if parent not in directories:
+                try:
+                    staging = TemporaryDirectory(
+                        prefix=".gbdraw-staged-",
+                        dir=parent,
+                        ignore_cleanup_errors=True,
+                    )
+                except OSError as exc:
+                    raise ExportError(f"Could not stage output files in {parent}: {exc}.") from exc
+                directories[parent] = Path(stack.enter_context(staging))
+            staged[output_path] = directories[parent] / output_path.name
+        yield staged
+
+
+def output_exists_message(path: str | Path) -> str:
+    """The refusal for an output that exists without overwrite permission."""
+
+    return f"Output file already exists: {path}. Use overwrite=True to replace it."
+
+
+def commit_staged_outputs(staged: Mapping[Path, Path], *, overwrite: bool) -> None:
+    """Commit the staged files of :func:`staged_output_files` in order.
+
+    A target that appeared after the preflight stops a no-replace commit
+    (``ValidationError``) and any other filesystem failure raises
+    ``ExportError``; both name the outputs committed before it.
+    """
+
+    committed: list[str] = []
+    for output_path, staged_path in staged.items():
+        try:
+            commit_staged_output_file(staged_path, output_path, overwrite=overwrite)
+        except OSError as exc:
+            already = f" Already written: {', '.join(committed)}." if committed else ""
+            if isinstance(exc, FileExistsError):
+                raise ValidationError(output_exists_message(output_path) + already) from exc
+            raise ExportError(f"Could not write output file {output_path}: {exc}.{already}") from exc
+        committed.append(str(output_path))
+
+
 __all__ = [
     "commit_staged_output_file",
+    "commit_staged_outputs",
     "is_windows_reserved_filename_component",
+    "output_exists_message",
     "preflight_output_paths",
+    "staged_output_files",
 ]

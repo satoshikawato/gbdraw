@@ -15,6 +15,7 @@ import gbdraw.circular as circular_module
 import gbdraw.cli_utils.session as cli_session
 import gbdraw.api.request_render as request_render_module
 import gbdraw.session as session_module
+import gbdraw.render.output_paths as output_paths_module
 from gbdraw.api.requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
@@ -537,6 +538,28 @@ def test_circular_rejects_unwritable_sidecar_target_before_diagram_build(
     if target_kind == "dangling-symlink":
         assert sidecar_path.is_symlink()
         assert not sidecar_path.exists()
+
+
+def test_no_replace_commit_copies_the_staged_file_without_hard_links(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Pyodide's file system has no os.link; the Web writes its outputs this way.
+    staged = tmp_path / "staged.svg"
+    staged.write_text("new", encoding="utf-8")
+    staged.chmod(0o644)
+    output = tmp_path / "out.svg"
+    monkeypatch.delattr(os, "link")
+
+    output_paths_module.commit_staged_output_file(staged, output, overwrite=False)
+
+    assert output.read_text(encoding="utf-8") == "new"
+    assert output.stat().st_mode & 0o777 == 0o644
+    assert not staged.exists()
+    staged.write_text("late", encoding="utf-8")
+    with pytest.raises(FileExistsError):
+        output_paths_module.commit_staged_output_file(staged, output, overwrite=False)
+    assert output.read_text(encoding="utf-8") == "new"
 
 
 def test_save_session_document_refuses_dangling_symlink_without_overwrite(

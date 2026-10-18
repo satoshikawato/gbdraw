@@ -3,6 +3,9 @@ from pathlib import Path
 from Bio import SeqIO
 from Bio.SeqFeature import CompoundLocation
 
+import pytest
+
+from gbdraw.exceptions import ValidationError
 from gbdraw.features.coordinates import get_exon_and_intron_coordinates
 from gbdraw.io.genome import load_gff_fasta
 
@@ -37,6 +40,49 @@ def test_load_gff_fasta_preserves_fasta_record_order(tmp_path: Path) -> None:
         ["gene_b"],
         ["gene_a"],
     ]
+
+
+def _write_two_record_gff(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "##gff-version 3",
+                "record_a\ttest\tgene\t1\t4\t.\t+\t.\tID=gene_a",
+                "record_b\ttest\tgene\t1\t4\t.\t+\t.\tID=gene_b",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_load_gff_fasta_rejects_duplicate_fasta_ids(tmp_path: Path) -> None:
+    # OV-1151: a repeated FASTA ID used to replace the earlier sequence silently.
+    gff_path = tmp_path / "records.gff3"
+    fasta_path = tmp_path / "duplicated.fasta"
+    _write_two_record_gff(gff_path)
+    fasta_path.write_text(
+        ">record_a\nAAAA\n>record_b\nCCCC\n>record_a\nGGGG\n>record_b\nTTTT\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError) as raised:
+        load_gff_fasta([str(gff_path)], [str(fasta_path)], selected_features_set={"gene"})
+
+    message = str(raised.value)
+    assert str(fasta_path) in message
+    assert "record_a, record_b" in message
+    assert raised.value.diagnostic == {"code": "INPUT_INVALID", "field": "fasta", "reason": "UNIQUE_IDS"}
+
+
+def test_load_gff_fasta_reports_a_missing_fasta_record_as_validation(tmp_path: Path) -> None:
+    gff_path = tmp_path / "records.gff3"
+    fasta_path = tmp_path / "records.fasta"
+    _write_two_record_gff(gff_path)
+    fasta_path.write_text(">record_a\nAAAA\n", encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="^No matching FASTA record found for GFF record record_b"):
+        load_gff_fasta([str(gff_path)], [str(fasta_path)], selected_features_set={"gene"})
 
 
 def test_load_gff_fasta_collapses_same_id_rows_into_compound_location(

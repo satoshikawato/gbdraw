@@ -14,7 +14,11 @@ GFF3 must be paired with FASTA from the same biological source. GFF3 column 1
 and the first token of the matching FASTA header must agree exactly. The
 records are the FASTA sequences that have GFF3 rows, including a row that only
 declares a `region`; a FASTA sequence with no GFF3 row is not a record, in the
-command line and the Web app alike.
+command line and the Web app alike. Each FASTA ID may appear only once in its
+file; a repeated ID is an error that names the file and the ID. Sequence
+letters may be upper or lower case: GC content, GC skew, and the GC percent of
+a circular definition count soft-masked (lower-case) bases like upper-case
+ones.
 Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`,
 `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the
 source annotation model.

@@ -13,6 +13,7 @@ from svgwrite import Drawing
 import gbdraw
 import gbdraw.api.request_render as request_render_module
 import gbdraw.interface as interface
+import gbdraw.render.output_paths as output_paths_module
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.api.options import (
     CircularDiagramOptions,
@@ -578,6 +579,32 @@ def test_diagram_save_does_not_follow_target_created_after_preflight(
 
     assert protected_target.read_text(encoding="utf-8") == "keep"
     assert output.is_symlink()
+
+
+def test_diagram_save_keeps_the_old_file_when_the_commit_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # OV-1152: overwrite=True replaces the file only once the new bytes are staged.
+    diagram = interface.Diagram(
+        Drawing("internal-name.svg"),
+        mode="circular",
+        records=(_record(),),
+        interactive_context=None,
+    )
+    output = tmp_path / "chosen-name.svg"
+    output.write_text("old", encoding="utf-8")
+
+    def fail_commit(staged_path, output_path, *, overwrite):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(output_paths_module, "commit_staged_output_file", fail_commit)
+
+    with pytest.raises(ExportError, match="Could not write output file"):
+        diagram.save(output, overwrite=True)
+
+    assert output.read_text(encoding="utf-8") == "old"
+    assert list(tmp_path.iterdir()) == [output]
 
 
 def test_diagram_save_rejects_windows_reserved_output_name(

@@ -15,7 +15,11 @@ from svgwrite import Drawing
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
-from gbdraw.analysis.gc import circular_dinucleotide_content_df, gc_content_percent_df
+from gbdraw.analysis.gc import (
+    calculate_gc_percent,
+    circular_dinucleotide_content_df,
+    gc_content_percent_df,
+)
 from gbdraw.analysis.skew import skew_df
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
@@ -25,6 +29,7 @@ from gbdraw.api.diagram import (
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
+from gbdraw.render.groups.circular.definition import definition_record_facts
 from gbdraw.svg.circular_tracks import (
     generate_circular_depth_path_desc,
     generate_circular_scalar_area_path_desc,
@@ -118,6 +123,25 @@ def test_gc_content_config_rejects_invalid_mode_ranges_and_ticks() -> None:
     invalid_border["objects"]["gc_content"]["percent_border_width"] = -0.1
     with pytest.raises(ValidationError, match="gc_content_percent_border_width"):
         GbdrawConfig.from_dict(invalid_border)
+
+
+@pytest.mark.parametrize(
+    ("sequence", "expected"),
+    (("gcgc", 100.0), ("GcGc", 100.0), ("atgc", 50.0), ("AUGC", 50.0), ("", 0.0)),
+)
+def test_calculate_gc_percent_counts_soft_masked_bases(sequence: str, expected: float) -> None:
+    # OV-1150: FASTA-sourced sequences keep their case; soft-masked bases count.
+    assert calculate_gc_percent(Seq(sequence)) == expected
+
+
+def test_definition_gc_percent_agrees_with_the_gc_track_for_a_mixed_case_record() -> None:
+    record = SeqRecord(Seq("gcgcATATggCCaatt"), id="soft_masked")
+    length = len(record.seq)
+
+    track_df = circular_dinucleotide_content_df(record, window=length, step=length, nt="GC")
+
+    assert definition_record_facts(record).gc_percent == 50.0
+    assert track_df.loc[0, "GC content"] * 100.0 == pytest.approx(50.0)
 
 
 def test_circular_dinucleotide_content_df_centers_window_at_origin() -> None:

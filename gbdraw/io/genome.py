@@ -4,6 +4,7 @@
 import os
 import logging
 from contextlib import contextmanager
+from collections import Counter
 from collections.abc import Set as AbstractSet
 from typing import List, Dict
 
@@ -13,7 +14,7 @@ from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
 
 from .record_select import parse_record_selector, reverse_records, select_record
-from ..exceptions import InputFileError, ParseError, ValidationError
+from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
 
 from gbdraw.core.record_metadata import _copy_source_feature_identity, _feature_source_index_map
 from gbdraw.features.source import SourceFeatureIdentity, build_source_feature_catalog
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # A file that cannot be parsed is a user-fixable input: the Web asks to replace it.
 _UNREADABLE_INPUT = {"code": "INPUT_UNREADABLE"}
+_DUPLICATE_FASTA_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UNIQUE_IDS"}
 
 
 def genbank_absence_diagnostic(path: str) -> dict[str, str]:
@@ -121,8 +123,21 @@ def load_gbks(
 
 
 def merge_gff_fasta_records(
-    gff_records: List[SeqRecord], fasta_records: List[SeqRecord]
+    gff_records: List[SeqRecord], fasta_records: List[SeqRecord], *, fasta_file: str
 ) -> List[SeqRecord]:
+    """Give each GFF3 record the sequence of the FASTA record with its ID.
+
+    The FASTA IDs are the join key, so ``fasta_file`` must not repeat one.
+    """
+    id_counts = Counter(record.id for record in fasta_records)
+    duplicated_ids = [record_id for record_id, count in id_counts.items() if count > 1]
+    if duplicated_ids:
+        message = (
+            f"FASTA file {fasta_file} repeats record ID(s): {', '.join(duplicated_ids)}. "
+            "Each FASTA record needs a unique ID to match its GFF3 record."
+        )
+        logger.error(f"ERROR: {message}")
+        raise ValidationError(message, diagnostic=_DUPLICATE_FASTA_IDS)
     merged_records: List[SeqRecord] = []
     fasta_dict: Dict[str, SeqRecord] = {record.id: record for record in fasta_records}
     fasta_order: Dict[str, int] = {
@@ -325,6 +340,8 @@ def _gff_fasta_errors(gff_file: str, fasta_file: str):
             f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}).",
             diagnostic=_UNREADABLE_INPUT,
         ) from e
+    except GbdrawError:
+        raise
     except Exception as e:
         logger.error(
             f"ERROR: an unexpected error occurred while processing {gff_file} or {fasta_file}: {e}"
@@ -359,7 +376,7 @@ def parse_gff_fasta(
         } if source_feature_catalogs is not None else {}
         logger.info("INFO: Loading FASTA file {}".format(fasta_file))
         fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
-        merged_records = merge_gff_fasta_records(gff_records, fasta_records)
+        merged_records = merge_gff_fasta_records(gff_records, fasta_records, fasta_file=fasta_file)
         if source_feature_catalogs is not None:
             source_feature_catalogs.extend(catalogs[id(record)] for record in merged_records)
         for record in merged_records:

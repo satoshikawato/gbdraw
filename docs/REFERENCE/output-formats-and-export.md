@@ -30,9 +30,11 @@ Command-line `-o` or `--output` accepts a path-like prefix, and
 is one filename component; its directory belongs in `output_directory`.
 Existing regular files are replaced only when overwrite is explicit.
 Directories, special files, dangling symlinks, unsafe parents, invalid prefix
-components, and output-target collisions are errors. A multi-format request
-writes formats sequentially; a later conversion failure does not remove files
-already written.
+components, and output-target collisions are errors. A request generates
+every format before it writes any output, so when a conversion fails, or
+CairoSVG is missing, no existing file changes and no new file is left, with or
+without overwrite. If the filesystem fails while the outputs are being written,
+the error names the files already written.
 
 ## Static, interactive, and raster output
 
