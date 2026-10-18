@@ -19,6 +19,7 @@ import os
 import re
 import sys
 import tempfile
+import zlib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -596,21 +597,32 @@ def load_session(path: str | Path) -> dict[str, Any]:
 
     from .session import _validate_document
 
-    session_path = Path(path)
-    try:
-        payload = json.loads(
-            _read_session_text(session_path),
-            object_pairs_hook=_reject_duplicate_json_keys,
-        )
-    except json.JSONDecodeError as exc:
-        raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
-    except OSError as exc:
-        raise ValidationError(f"Could not read session file: {session_path}") from exc
+    payload = _read_session_json(path)
     if not isinstance(payload, dict):
         raise ValidationError("Session JSON must be an object.")
     payload = expand_session_feature_catalog(payload)
     _validate_document(payload)
     return payload
+
+
+def _read_session_json(path: str | Path) -> object:
+    """Parse a plain or gzip Session file; every unreadable file is a ``ValidationError``.
+
+    A truncated or corrupt gzip stream and text that is not UTF-8 are "not a
+    valid JSON session file", as malformed JSON is (OV-1251); a duplicate key
+    raises its own ``ValidationError``.
+    """
+
+    session_path = Path(path)
+    try:
+        return json.loads(
+            _read_session_text(session_path),
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
+    except (json.JSONDecodeError, UnicodeDecodeError, EOFError, zlib.error, gzip.BadGzipFile) as exc:
+        raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
+    except OSError as exc:
+        raise ValidationError(f"Could not read session file: {session_path}") from exc
 
 
 def _read_session_text(path: str | Path) -> str:
@@ -686,8 +698,8 @@ def validate_session(session: Mapping[str, Any]) -> None:
     if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         _validate_current_top_level_fields(session)
         _validate_mode_scoped_fields(session, version)
-        _validate_current_retired_active_config_paths(session)
-        _validate_current_comparison_authority(session)
+        _validate_current_retired_active_config_paths(session, version)
+        _validate_current_comparison_authority(session, version)
         _validate_current_feature_catalog_authority(session, version)
         _validate_alignment_reset_receipt(session)
         _validate_other_mode_result(session, version)
@@ -1158,6 +1170,7 @@ def _validate_mode_slice_fields(value: object, mode: str, container: str = "") -
 
 def _validate_current_retired_active_config_paths(
     session: Mapping[str, Any],
+    version: int,
 ) -> None:
     """Reject the two retired v40 circular-track draft paths."""
 
@@ -1170,12 +1183,13 @@ def _validate_current_retired_active_config_paths(
     for field in ("cli_circular_track_order", "cli_circular_track_slots"):
         if field in advanced:
             raise ValidationError(
-                f"Session version 40 cannot contain config.adv.{field}."
+                f"Session version {version} cannot contain config.adv.{field}."
             )
 
 
 def _validate_current_comparison_authority(
     session: Mapping[str, Any],
+    version: int,
 ) -> None:
     """Reject retired v40 comparison fields and validate an optional Web draft."""
 
@@ -1199,15 +1213,15 @@ def _validate_current_comparison_authority(
 
     if "blastSource" in config or "blastSource" in adv:
         raise ValidationError(
-            "Session version 40 cannot contain retired blastSource state."
+            f"Session version {version} cannot contain retired blastSource state."
         )
     if "blastSource" in ui:
         raise ValidationError(
-            "Session version 40 cannot contain ui.blastSource."
+            f"Session version {version} cannot contain ui.blastSource."
         )
     if layout is not None and "comparisons" in layout:
         raise ValidationError(
-            "Session version 40 cannot contain "
+            f"Session version {version} cannot contain "
             "config.linearRecordLayout.comparisons."
         )
 
@@ -1218,11 +1232,11 @@ def _validate_current_comparison_authority(
                 continue
             if "blast" in sequence:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record BLAST bindings."
+                    f"Session version {version} cannot contain per-record BLAST bindings."
                 )
             if "losat_filename" in sequence:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record LOSAT filenames."
+                    f"Session version {version} cannot contain per-record LOSAT filenames."
                 )
     linear_metadata = web_files.get("linearRecordMetadata")
     if isinstance(linear_metadata, list):
@@ -1231,11 +1245,11 @@ def _validate_current_comparison_authority(
                 continue
             if "losatFilename" in metadata or "losat_filename" in metadata:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record LOSAT filenames."
+                    f"Session version {version} cannot contain per-record LOSAT filenames."
                 )
     if "linearCanonicalComparisons" in bindings:
         raise ValidationError(
-            "Session version 40 cannot bind comparison artifacts outside "
+            f"Session version {version} cannot bind comparison artifacts outside "
             "the committed request."
         )
 
@@ -1581,7 +1595,7 @@ def _validate_current_feature_catalog_authority(
         duplicated = CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS & set(features)
         if duplicated:
             raise ValidationError(
-                "Session version 40 cannot contain derived feature payloads in "
+                f"Session version {version} cannot contain derived feature payloads in "
                 f"features: {', '.join(sorted(duplicated))}."
             )
     elif "features" in session:
@@ -1591,7 +1605,7 @@ def _validate_current_feature_catalog_authority(
     if isinstance(orthogroup_state, Mapping):
         if "groups" in orthogroup_state:
             raise ValidationError(
-                "Session version 40 cannot contain derived orthogroupState.groups."
+                f"Session version {version} cannot contain derived orthogroupState.groups."
             )
     elif "orthogroupState" in session:
         raise ValidationError(
@@ -1600,14 +1614,14 @@ def _validate_current_feature_catalog_authority(
 
     results = session.get("results")
     if "results" not in session or not isinstance(results, list):
-        raise ValidationError("Session version 40 requires a results array.")
+        raise ValidationError(f"Session version {version} requires a results array.")
     editor_state = session.get("editorState")
     if (
         not isinstance(editor_state, Mapping)
         or "featureCatalog" not in editor_state
     ):
         raise ValidationError(
-            "Session version 40 "
+            f"Session version {version} "
             + (
                 "Results require editorState.featureCatalog."
                 if results
@@ -1631,7 +1645,7 @@ def _validate_current_feature_catalog_authority(
         return
     if not isinstance(catalog, Mapping):
         raise ValidationError(
-            "Session version 40 Results require editorState.featureCatalog."
+            f"Session version {version} Results require editorState.featureCatalog."
         )
     items = catalog.get("items")
     if (

@@ -8,7 +8,6 @@ temporary and are valid only while the materialization context is active.
 from __future__ import annotations
 
 import copy
-import json
 import logging
 import re
 import tempfile
@@ -29,10 +28,9 @@ from gbdraw.session_io import (
     MODE_SCOPED_SESSION_MIN_VERSION,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SESSION_FORMAT,
-    _read_session_text,
+    _read_session_json,
     _attach_current_web_file_bindings,
     _embedded_resource_bytes,
-    _reject_duplicate_json_keys,
     _write_validated_session_json,
     expand_session_feature_catalog,
     materialize_embedded_file,
@@ -464,14 +462,7 @@ def load_session_document(
 
     path = Path(source)
     try:
-        payload = json.loads(
-            _read_session_text(path),
-            object_pairs_hook=_reject_duplicate_json_keys,
-        )
-    except json.JSONDecodeError as exc:
-        raise SessionFormatError(f"Not a valid JSON session file: {path}") from exc
-    except OSError as exc:
-        raise SessionFormatError(f"Could not read session file: {path}") from exc
+        payload = _read_session_json(path)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     if not isinstance(payload, dict):

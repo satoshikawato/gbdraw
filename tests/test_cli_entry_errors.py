@@ -151,3 +151,57 @@ def test_no_reader_logs_an_error_it_raises() -> None:
                     ):
                         offenders.append(f"{path.relative_to(package)}:{statement.lineno}")
     assert offenders == []
+
+
+GALLERY_SESSION = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "HmmtDNA_basic_circular.gbdraw-session.json"
+
+
+@pytest.mark.parametrize("damage", ["truncated_gzip", "corrupt_gzip", "invalid_utf8"])
+def test_cli_reports_an_unreadable_session_file_without_a_traceback(damage: str, tmp_path: Path) -> None:
+    """OV-1251: a truncated or corrupt gzip Session, or text that is not UTF-8, ended in a traceback."""
+
+    import gzip
+
+    text = GALLERY_SESSION.read_bytes()
+    compressed = gzip.compress(text)
+    target = tmp_path / ("bad.json" if damage == "invalid_utf8" else "bad.json.gz")
+    target.write_bytes({
+        "truncated_gzip": compressed[: len(compressed) // 2],
+        "corrupt_gzip": compressed[:20] + bytes(64) + compressed[84:],
+        "invalid_utf8": b'{"format": "\xff\xfe"}',
+    }[damage])
+    result = _gbdraw("render", "--session", str(target), "-o", "out", cwd=tmp_path)
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert f"ERROR: Not a valid JSON session file: {target}" in result.stderr
+
+
+def test_python_session_loaders_share_the_unreadable_file_error(tmp_path: Path) -> None:
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.session import SessionFormatError, load_session_document
+    from gbdraw.session_io import load_session
+
+    target = tmp_path / "bad.json.gz"
+    target.write_bytes(b"\x1f\x8b" + bytes(10))
+    with pytest.raises(ValidationError, match="Not a valid JSON session file"):
+        load_session(target)
+    with pytest.raises(SessionFormatError, match="Not a valid JSON session file"):
+        load_session_document(target)
+
+
+def test_session_shape_errors_name_the_file_version(tmp_path: Path) -> None:
+    """OV-1252: a version-48 file was told "Session version 40 requires a results array"."""
+
+    import json
+
+    from gbdraw.session_io import CURRENT_SESSION_VERSION
+
+    payload = json.loads(GALLERY_SESSION.read_text(encoding="utf-8"))
+    assert payload["version"] == CURRENT_SESSION_VERSION
+    payload["results"] = "x"
+    target = tmp_path / "badresults.json"
+    target.write_text(json.dumps(payload), encoding="utf-8")
+    result = _gbdraw("render", "--session", str(target), "-o", "out", cwd=tmp_path)
+    assert result.returncode == 1
+    assert f"Session version {CURRENT_SESSION_VERSION} requires a results array." in result.stderr
+    assert "version 40" not in result.stderr
