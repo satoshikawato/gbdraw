@@ -3700,12 +3700,13 @@
                                         </label>
                                         <help-tip id="help-linear-align-to-center" text="Align the linear map to the center of the page."></help-tip>
                                     </div>
-                                    <div class="flex items-center text-xs">
+                                    <div data-setting="definition-column" class="flex flex-wrap items-center gap-x-2 text-xs">
                                         <label class="option-label flex flex-wrap items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                             <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox" aria-label="Lock Definition Column" aria-describedby="linear-definition-lock-help" :disabled="!semanticMutationAvailable">
                                             <span>Lock Definition Column</span>
                                         </label>
-                                        <help-tip id="linear-definition-lock-help" :text="'ON aligns Linear definitions in a common left column. OFF centers them in a common column width and follows row offsets, including center or similarity alignment. ' + settingApplicationSentence('layout')"></help-tip>
+                                        <help-tip id="linear-definition-lock-help" :text="'ON aligns Linear definitions in a common left column. OFF centers them in a common column width and follows row offsets, including center or similarity alignment. ' + settingApplicationSentence('definition-column')"></help-tip>
+                                        <setting-note setting="definition-column"></setting-note>
                                     </div>
                                     <div class="flex items-center text-xs">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">

@@ -5,7 +5,7 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, openApp, waitForAppShell, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, openApp, waitForAppShell, evaluateWithRetainedPromise, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -354,14 +354,14 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   // checkbox's accessible description instead of an always-on paragraph.
   await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help');
   await expect(lock).toHaveAccessibleDescription(new RegExp(['ON aligns Linear definitions in a common left column',
-    'OFF centers them in a common column width and follows row offsets', 'Changes apply on Generate'].join('.*')));
+    'OFF centers them in a common column width and follows row offsets'].join('.*')));
   const helpButton = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
   const tooltip = page.locator('[role="tooltip"]');
   await expect(tooltip).toHaveCount(0);
   await lock.focus();
   await page.keyboard.press('Tab');
   await expect(helpButton).toBeFocused();
-  await expect(tooltip).toContainText('Changes apply on Generate');
+  await expect(tooltip).toContainText('ON aligns Linear definitions in a common left column');
   await page.keyboard.press('Escape');
   await expect(tooltip).toHaveCount(0);
   await helpButton.hover();
@@ -393,9 +393,18 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   });
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   for (const locked of [false, true]) {
-    const before = await measureDefinitionColumns(page);
-    const requestBefore = await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
+    const shown = await measureDefinitionColumns(page);
+    const committedRequest = () => page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
     await lock.setChecked(locked);
+    // Lock is live (PD-OI-103 G1): the Result redraws without Generate, and
+    // the committed request equals the one a Generate builds from the draft.
+    await expect.poll(async () => (await committedRequest()).diagramOptions.configOverrides['canvas.linear.keep_definition_left_aligned']).toBe(locked);
+    await settleLive(page);
+    const before = await measureDefinitionColumns(page);
+    expect(before).not.toEqual(shown);
+    const requestBefore = await committedRequest();
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    expect(await committedRequest()).toEqual(requestBefore);
     expect(await measureDefinitionColumns(page)).toEqual(before);
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'definition-draft'; });
     const download = page.waitForEvent('download');
@@ -456,7 +465,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await page.setViewportSize({ width: 390, height: 844 });
   await helpButton.scrollIntoViewIfNeeded();
   await helpButton.click();
-  await expect(tooltip).toContainText('Changes apply on Generate');
+  await expect(tooltip).toContainText('ON aligns Linear definitions in a common left column');
   // The tip sits beside the checkbox label; capture the row that holds both.
   await helpButton.locator('xpath=ancestor::div[1]').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
 });

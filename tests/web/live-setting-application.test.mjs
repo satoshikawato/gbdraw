@@ -74,10 +74,12 @@ const liveCandidate = (committed, drawing) => request.projectCommittedEditorInte
 });
 const LEGEND_KEYS = ['objects.legends.color_rect_size', 'objects.legends.font_size']
   .flatMap((path) => [`${path}.short`, `${path}.long`]);
+const LOCK_KEY = 'canvas.linear.keep_definition_left_aligned';
+const LIVE_LINEAR_KEYS = [...LEGEND_KEYS, LOCK_KEY];
 const pick = (object, keys) => Object.fromEntries(keys.filter((key) => Object.hasOwn(object, key)).map((key) => [key, object[key]]));
 
 test('the G1 rows are the live setting rows, and each request path has its projector', () => {
-  assert.deepEqual(liveRows().map((row) => row.id), ['legend', 'plot-title', 'multi-record-layout']);
+  assert.deepEqual(liveRows().map((row) => row.id), ['legend', 'plot-title', 'multi-record-layout', 'definition-column']);
   for (const row of liveRows()) assert.equal(row.application, 'live', row.id);
   for (const id of ['colors', 'feature-visibility', 'legend-editor', 'features-editor', 'feature-appearance']) {
     const row = owner.SETTING_APPLICATION.find((candidate) => candidate.id === id);
@@ -86,8 +88,10 @@ test('the G1 rows are the live setting rows, and each request path has its proje
   }
   assert.deepEqual(allPaths().filter((path) => !request.LIVE_SETTING_REQUEST_PATHS.includes(path)), []);
   assert.deepEqual(request.LIVE_SETTING_REQUEST_PATHS.filter((path) => !allPaths().includes(path)), []);
-  // Lock Definition Column waits for its guard retarget (computation-ownership); Species,
-  // Strain, Default font size and Keep Full Definition stay on Generate (PD-OI-059 rev 2).
+  // Lock Definition Column is live (PD-OI-103 G1), so its help names no Generate
+  // (computation-ownership guard); Species, Strain, Default font size and Keep
+  // Full Definition stay on Generate (PD-OI-059 rev 2).
+  assert.equal(owner.settingApplicationSentence('definition-column'), '');
   assert.equal(owner.settingApplicationNote('layout').application, 'generate');
   assert.equal(owner.settingApplicationNote('titles').application, 'generate');
   assert.equal(owner.settingApplicationNote('species-strain').application, 'generate');
@@ -109,11 +113,16 @@ test('a History step names the live request paths of the shown drawing it change
   assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'adv', 'multi_record_positions', 0, 'row']), 'circular'),
     ['layout.multiRecordPositions']);
   assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'plot_title']), 'linear'), ['diagramOptions.plotTitle']);
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'linear', 'config', 'form', 'keep_definition_left_aligned']), 'linear'),
+    ['diagramOptions.configOverrides.canvas.linear.keep_definition_left_aligned']);
+  // OV-1078: Multi-Record Canvas decides which canvas's positions the draft
+  // draws, so its change requests them again.
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'config', 'form', 'multi_record_canvas']), 'circular'),
+    ['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition']);
   // The other drawing, and settings that apply on Generate, name none.
   assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'config', 'adv', 'legend_font_size']), 'linear'), []);
   assert.deepEqual(owner.liveSettingRequestPaths(step(
-    ['modes', 'linear', 'config', 'form', 'species'], ['modes', 'linear', 'config', 'adv', 'def_font_size'],
-    ['modes', 'linear', 'config', 'form', 'keep_definition_left_aligned'], ['modes', 'linear', 'config', 'form', 'multi_record_canvas']
+    ['modes', 'linear', 'config', 'form', 'species'], ['modes', 'linear', 'config', 'adv', 'def_font_size']
   ), 'linear'), []);
   // A step that replaced the whole drawing config names every live config field.
   assert.ok(owner.liveSettingRequestPaths(step(['modes', 'linear', 'config']), 'linear').includes('diagramOptions.plotTitle'));
@@ -127,6 +136,7 @@ test('a Linear live apply draws the G1 values as Generate does and keeps every o
   drawing.adv.plot_title_position = 'top';
   drawing.form.plot_title = '  Live title  ';
   drawing.form.align_center = !drawing.form.align_center;
+  drawing.form.keep_definition_left_aligned = !drawing.form.keep_definition_left_aligned;
   const draft = generate('linear').renderRequest;
   const candidate = liveCandidate(committed, drawing).renderRequest;
   const options = candidate.diagramOptions;
@@ -135,9 +145,10 @@ test('a Linear live apply draws the G1 values as Generate does and keeps every o
   assert.equal(options.plotTitle, 'Live title');
   assert.equal(options.plotTitle, draft.diagramOptions.plotTitle);
   assert.equal(options.plotTitleFontSize, draft.diagramOptions.plotTitleFontSize);
-  assert.deepEqual(pick(options.configOverrides, LEGEND_KEYS), pick(draft.diagramOptions.configOverrides, LEGEND_KEYS));
+  assert.deepEqual(pick(options.configOverrides, LIVE_LINEAR_KEYS), pick(draft.diagramOptions.configOverrides, LIVE_LINEAR_KEYS));
+  assert.notEqual(options.configOverrides[LOCK_KEY], committed.renderRequest.diagramOptions.configOverrides[LOCK_KEY]);
   // The settings that apply on Generate keep their committed values (N-16).
-  const notLive = (overrides) => Object.fromEntries(Object.entries(overrides).filter(([key]) => !LEGEND_KEYS.includes(key)));
+  const notLive = (overrides) => Object.fromEntries(Object.entries(overrides).filter(([key]) => !LIVE_LINEAR_KEYS.includes(key)));
   assert.deepEqual(notLive(options.configOverrides), notLive(committed.renderRequest.diagramOptions.configOverrides));
   assert.notDeepEqual(notLive(draft.diagramOptions.configOverrides), notLive(committed.renderRequest.diagramOptions.configOverrides));
   const { diagramOptions: _candidateOptions, ...candidateRest } = candidate;
@@ -189,6 +200,62 @@ test('a Circular live apply writes the plot title font override and the grid lay
   drawing.form.multi_record_canvas = true;
   assert.deepEqual(liveCandidate(single, drawing).renderRequest.layout, single.renderRequest.layout);
   drawing.form.multi_record_canvas = false;
+  drawing.adv.multi_record_positions = [];
+});
+
+test('Lock Definition Column OFF on a CLI-shaped request that locks yields the request a Generate builds', () => {
+  const drawing = state.drawings.linear;
+  const initialLock = drawing.form.keep_definition_left_aligned;
+  drawing.form.keep_definition_left_aligned = true;
+  const generated = generate('linear');
+  // A CLI Session: no configOverrides, the resolved config carries the lock.
+  const renderRequest = structuredClone(generated.renderRequest);
+  delete renderRequest.diagramOptions.configOverrides;
+  renderRequest.diagramOptions.config = { canvas: { linear: { keep_definition_left_aligned: true } } };
+  const committed = { ...generated, renderRequest };
+  const lock = `diagramOptions.configOverrides.${LOCK_KEY}`;
+  // Draft still locked: nothing differs, nothing is written.
+  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock] }), []);
+  drawing.form.keep_definition_left_aligned = false;
+  assert.equal(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock] }).length, 1, 'OFF writes false');
+  assert.equal(liveCandidate(committed, drawing).renderRequest.diagramOptions.configOverrides[LOCK_KEY], false);
+  assert.equal(liveCandidate(committed, drawing).renderRequest.diagramOptions.configOverrides[LOCK_KEY],
+    generate('linear').renderRequest.diagramOptions.configOverrides[LOCK_KEY]);
+  // A request that draws OFF stays untouched by an OFF draft.
+  delete renderRequest.diagramOptions.config;
+  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock] }), []);
+  drawing.form.keep_definition_left_aligned = initialLock;
+});
+
+test('Lock Definition Column applies only to a Linear Result', () => {
+  const lock = `diagramOptions.configOverrides.${LOCK_KEY}`;
+  const circular = state.drawings.circular;
+  circular.form.multi_record_canvas = false;
+  const committed = generate('circular');
+  circular.form.keep_definition_left_aligned = !circular.form.keep_definition_left_aligned;
+  assert.equal(request.liveSettingApplies(committed.renderRequest, lock, circular), false);
+  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing: circular, requestPaths: [lock] }), []);
+  delete circular.form.keep_definition_left_aligned;
+});
+
+// OV-1072: a grid of one ON record (others OFF) keeps its file position in
+// its request key; a live Row for record maps `#N` as Generate does.
+test('a live Row for record of a grid of one maps the record selector as Generate does', () => {
+  const drawing = state.drawings.circular;
+  state.circularRecordList.value = ['LIVE1', 'LIVE2', 'LIVE3'].map((id, index) => ({ selector: `#${index + 1}`, record_id: id }));
+  drawing.form.multi_record_canvas = true;
+  drawing.recordsOff.splice(0, drawing.recordsOff.length, '#1', '#2');
+  drawing.adv.multi_record_positions = [{ selector: '#3', row: 1 }];
+  const committed = generate('circular');
+  assert.equal(committed.renderRequest.grouping, 'grid');
+  assert.deepEqual(committed.renderRequest.records.map((record) => record.recordKey), ['record-3']);
+  assert.deepEqual(committed.renderRequest.layout.multiRecordPositions, ['#1@1']);
+  drawing.adv.multi_record_positions = [{ selector: '#3', row: 2 }];
+  const draft = generate('circular').renderRequest;
+  assert.deepEqual(draft.layout.multiRecordPositions, ['#1@2']);
+  assert.deepEqual(liveCandidate(committed, drawing).renderRequest.layout, draft.layout);
+  drawing.form.multi_record_canvas = false;
+  drawing.recordsOff.splice(0);
   drawing.adv.multi_record_positions = [];
 });
 
