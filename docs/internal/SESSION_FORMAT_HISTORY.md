@@ -53,7 +53,8 @@ Main's Web writers of Session 39, and of Session 40 before `3bca0e8d9`
 LOSATP table's `*_feature_svg_id` and wrote no `*_view_feature_svg_id`
 (OV-1183). A reader of a Session up to 40
 (`DRAWN_FEATURE_ID_SESSION_MAX_VERSION`, `decode_session_request`) marks a
-table without view ID columns (`LinearComparison.drawn_feature_ids`); the
+table that has rows and source feature indexes and IDs but no view ID columns
+(`LinearComparison.drawn_feature_ids`); the
 projection reads its stored IDs as views and takes each source ID from the
 feature index, so the table converts like a Session 47 one; the projection
 clears the mark. A Session writer moves a still-marked table to the search

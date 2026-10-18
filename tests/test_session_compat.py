@@ -44,6 +44,7 @@ from gbdraw.api.session_compat import (
     adapt_session_request,
     canonical_payload_for_session_decode,
     render_session_compatible_request,
+    replace_resource_bytes,
     rewrite_protein_artifact_references,
 )
 from gbdraw.exceptions import ValidationError
@@ -2239,6 +2240,30 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
         for column in ("qstart", "sstart", "subject_feature_svg_id", "subject_view_feature_svg_id"):
             assert list(written.matches[column]) == list(converted.matches[column])
     assert _replay(direct, tmp_path, "direct") == first
+
+
+@pytest.mark.linear
+def test_early_session_table_with_only_a_header_is_written_as_stored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A Session 40 table without rows holds no feature IDs to read, so it is
+    # not marked, and every Session writer takes it as before.
+    monkeypatch.chdir(tmp_path)
+    data = json.loads(gzip.decompress(
+        (_SESSION_FIXTURES / "BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz").read_bytes()))
+    entry = data["resources"]["comparison-resolved-1"]
+    header = base64.b64decode(entry["data"]).split(b"\n", 1)[0] + b"\n"
+    assert b"subject_feature_svg_id" in header
+    data["resources"]["comparison-resolved-1"] = replace_resource_bytes(entry, header)
+    source = tmp_path / "header-only.v39.gbdraw-session.json"
+    source.write_text(json.dumps(data), encoding="utf-8")
+    document = load_session_document(source)
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        save_session_document(tmp_path / "direct.gbdraw-session.json", request)
+        [table] = request.options.linear_comparisons
+        assert table.matches.empty and not table.drawn_feature_ids
+    assert upgrade_session_document(source).document.version == CURRENT_SESSION_VERSION
 
 
 @pytest.mark.linear

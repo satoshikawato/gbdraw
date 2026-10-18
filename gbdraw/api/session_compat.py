@@ -49,6 +49,7 @@ from gbdraw.session_io import (
 from .migration_report import SessionMigrationReport
 from .options import LinearMultiRecordOptions, LinearRecordTranslation, losatp_analysis_mode
 from .record_planning import (
+    _SOURCE_BINDING_COLUMNS,
     ResolvedRecordCollection,
     ResolvedRecordProvenance,
     UnmatchedFrameItem,
@@ -1676,10 +1677,10 @@ DRAWN_FEATURE_ID_SESSION_MAX_VERSION = 40
 
 
 def _stores_drawn_feature_ids(frame: DataFrame) -> bool:
-    return any(
-        f"{role}_feature_svg_id" in frame.columns and f"{role}_view_feature_svg_id" not in frame.columns
-        for role in ("query", "subject")
-    )
+    # The projection's own predicate: only rows with source bindings are projected.
+    if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
+        return False
+    return any(f"{role}_view_feature_svg_id" not in frame.columns for role in ("query", "subject"))
 
 
 def decode_session_request(
