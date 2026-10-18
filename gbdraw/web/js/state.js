@@ -37,6 +37,7 @@ import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js
 import { toRaw } from './utils/vue-raw.js';
 import { computed as typedComputed } from './utils/reactivity.js';
 import { CANVAS_SLICE } from './services/drawing/canvas.js';
+import { GROUP_NAMES_SLICE } from './services/drawing/group-names.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -1036,6 +1037,7 @@ const createDrawingState = (drawingMode) => {
   // The editor edits a slice owns (services/drawing/): the drawing shows its
   // view's members, and only the slice writes them, through its handle.
   const canvas = CANVAS_SLICE.create();
+  const groupNames = GROUP_NAMES_SLICE.create();
   return Object.freeze({
     // Settings
     form,
@@ -1086,10 +1088,8 @@ const createDrawingState = (drawingMode) => {
     pendingPaletteName,
     pendingPaletteColors: ref({ ...defaultPaletteDraftState.pendingPaletteColors }),
     annotationSets: reactive([]),
-    orthogroupNameOverrides: reactive({}),
-    orthogroupDescriptionOverrides: reactive({}),
-    // User names of groups whose members no longer form one group, keyed by member set (D-21).
-    orthogroupDormantOverrides: reactive({}),
+    // Similarity group names, and dormant names keyed by member set (D-21).
+    ...groupNames.view,
     ...canvas.view,
     // Derived from the members above
     activeLayoutPreferences,
@@ -1108,7 +1108,7 @@ const createDrawingState = (drawingMode) => {
       () => !paletteInstantPreviewEnabled.value && String(pendingPaletteName.value || '').trim() !== ''
     ),
     // The handles a slice's writers take.
-    slices: Object.freeze({ canvas: canvas.handle })
+    slices: Object.freeze({ groupNames: groupNames.handle, canvas: canvas.handle })
   });
 };
 const circularDrawing = createDrawingState('circular');

@@ -6,10 +6,11 @@
 // catalog, transient, or the drawing store. Each diagram mode has its own
 // drawing (PR-1, Session 46 `modes`).
 import { CANVAS_SLICE } from '../../../gbdraw/web/js/services/drawing/canvas.js';
+import { GROUP_NAMES_SLICE } from '../../../gbdraw/web/js/services/drawing/group-names.js';
 
 // The slices that own a drawing's editor edits (gbdraw/web/js/services/drawing/),
 // by the name of their handle in `drawing.slices`.
-export const DRAWING_SLICES = Object.freeze({ canvas: CANVAS_SLICE });
+export const DRAWING_SLICES = Object.freeze({ groupNames: GROUP_NAMES_SLICE, canvas: CANVAS_SLICE });
 
 export const DRAWING_DRAFT_KEYS = Object.freeze([
   'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',

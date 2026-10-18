@@ -19,6 +19,7 @@ import { downloadTextFile } from '../services/text-download.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { ownEntry } from '../utils/own-entry.js';
+import { GROUP_NAMES_SLICE, clearGroupRename, setGroupDescription, setGroupName } from '../services/drawing/group-names.js';
 import {
   ORTHOGROUP_ID_KEYS,
   RECORD_INDEX_KEYS,
@@ -338,12 +339,10 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * @property {() => { status: string, reason: string } | null} [sessionOperationAvailability]
  */
 
+/** @import { GroupNamesSlice, GroupNamesView } from '../services/drawing/group-names.js' */
 /**
- * The group names of a drawing (`DrawingState` of state.js); reactive objects.
- * @typedef {object} OrthogroupEditorDrawing
- * @property {Record<string, string>} orthogroupNameOverrides
- * @property {Record<string, string>} orthogroupDescriptionOverrides
- * @property {Record<string, { name?: string, description?: string }>} orthogroupDormantOverrides
+ * The group names of a drawing (`DrawingState` of state.js), and the handle their writers take.
+ * @typedef {GroupNamesView & { readonly slices: { readonly groupNames: GroupNamesSlice } }} OrthogroupEditorDrawing
  */
 
 /**
@@ -890,12 +889,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const group = getOrthogroupById(id);
     if (!group) return;
     const normalized = normalizeText(value);
-    const base = normalizeText(group?.name);
-    if (!normalized || normalized === base) {
-      delete drawing.orthogroupNameOverrides[id];
-      return;
-    }
-    drawing.orthogroupNameOverrides[id] = normalized;
+    setGroupName(drawing.slices.groupNames, id, normalized === normalizeText(group?.name) ? '' : normalized);
   };
 
   /** @param {unknown} orthogroupId @param {unknown} value */
@@ -908,12 +902,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const group = getOrthogroupById(id);
     if (!group) return;
     const normalized = normalizeText(value);
-    const base = normalizeText(group?.description);
-    if (!normalized || normalized === base) {
-      delete drawing.orthogroupDescriptionOverrides[id];
-      return;
-    }
-    drawing.orthogroupDescriptionOverrides[id] = normalized;
+    setGroupDescription(drawing.slices.groupNames, id, normalized === normalizeText(group?.description) ? '' : normalized);
   };
 
   /** @param {unknown} [orthogroupId] */
@@ -923,8 +912,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
-    delete drawing.orthogroupNameOverrides[id];
-    delete drawing.orthogroupDescriptionOverrides[id];
+    clearGroupRename(drawing.slices.groupNames, id);
   };
 
   // Dormant names are listed and cleared here (D-21).
@@ -934,7 +922,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    Object.keys(drawing.orthogroupDormantOverrides || {}).forEach((key) => delete drawing.orthogroupDormantOverrides[key]);
+    GROUP_NAMES_SLICE.install(drawing.slices.groupNames, { orthogroupDormantOverrides: {} });
   };
 
   const clearOrthogroupHighlight = () => {

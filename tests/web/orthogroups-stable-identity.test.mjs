@@ -10,7 +10,7 @@ const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-orthogroup-stable-identity-
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
 await mkdir(join(tempDir, 'app', 'feature-search'), { recursive: true });
-await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'services', 'drawing'), { recursive: true });
 await mkdir(join(tempDir, 'contracts'), { recursive: true });
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 
@@ -50,6 +50,10 @@ await copyModule(
 );
 // standalone-interactivity.js reads the bulk label table by own key.
 await copyModule('gbdraw/web/js/utils/own-entry.js', 'utils/own-entry.js');
+await copyModule('gbdraw/web/js/utils/reactivity.js', 'utils/reactivity.js');
+await copyModule('gbdraw/web/js/services/json-clone.js', 'services/json-clone.js');
+await copyModule('gbdraw/web/js/services/drawing/slice-handle.js', 'services/drawing/slice-handle.js');
+await copyModule('gbdraw/web/js/services/drawing/group-names.js', 'services/drawing/group-names.js');
 await copyModule('gbdraw/web/js/utils/vue-raw.js', 'utils/vue-raw.js');
 // It reads location-part numbers with the decimal-number owner.
 await copyModule('gbdraw/web/js/utils/optional-positive-number.js', 'utils/optional-positive-number.js');

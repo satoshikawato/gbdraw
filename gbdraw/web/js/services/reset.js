@@ -14,6 +14,7 @@ import {
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
 import { replaceBulkLabelEdits } from './label-override-table.js';
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
+import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -158,9 +159,8 @@ const resetEditorDraftState = (state, drawing) => {
   state.clickedLabel.value = null;
 
   state.selectedOrthogroupAlignmentFeature.value = '';
-  clearReactiveObject(drawing.orthogroupNameOverrides);
-  clearReactiveObject(drawing.orthogroupDescriptionOverrides);
-  clearReactiveObject(drawing.orthogroupDormantOverrides);
+  // Reset clears the dormant group names too (R15-21).
+  GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
 };
 
 /** @param {DrawingState} drawing */

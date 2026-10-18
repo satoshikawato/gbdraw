@@ -195,6 +195,7 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
+import { GROUP_NAMES_SLICE } from '../services/drawing/group-names.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   createImportedComparisonIntentState,
@@ -1989,10 +1990,10 @@ export const createRunAnalysis = ({
       descriptions: drawing.orthogroupDescriptionOverrides,
       dormant: drawing.orthogroupDormantOverrides
     });
-    [[drawing.orthogroupNameOverrides, next.names], [drawing.orthogroupDescriptionOverrides, next.descriptions],
-      [drawing.orthogroupDormantOverrides, next.dormant]].forEach(([target, values]) => {
-      Object.keys(target).forEach((key) => delete target[key]);
-      Object.assign(target, values);
+    GROUP_NAMES_SLICE.install(drawing.slices.groupNames, {
+      orthogroupNameOverrides: next.names,
+      orthogroupDescriptionOverrides: next.descriptions,
+      orthogroupDormantOverrides: next.dormant
     });
   };
 

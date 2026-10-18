@@ -3,7 +3,8 @@
 // asserts, without a member or slice literal:
 //   1. each slice's view holds exactly its members, every drawing shows each
 //      slice's view, and no member is in two slices;
-//   2. a slice imports only leaves (R13 layer 0) and other slices;
+//   2. a slice imports only leaves (R13 layer 0, or a module that imports
+//      nothing) and other slices;
 //   3. Load, a History restore, and Reset write a slice through one install:
 //      `install(capture(x))` gives back `x`, also after `reset`, on every
 //      drawing of each Session 46 fixture.
@@ -84,8 +85,10 @@ test('a slice imports only leaves and other slices', () => {
   for (const file of readdirSync(SLICE_DIRECTORY).filter((name) => name.endsWith('.js'))) {
     const path = join(SLICE_DIRECTORY, file);
     for (const target of importsOf(readFileSync(path, 'utf8'))) {
-      const module = relative(JS, join(dirname(path), target)).split('\\').join('/');
-      if (webLayerOf(module) !== 0 && !module.startsWith('services/drawing/')) found.push(`${file} imports ${module}`);
+      const targetPath = join(dirname(path), target);
+      const module = relative(JS, targetPath).split('\\').join('/');
+      const leaf = webLayerOf(module) === 0 || importsOf(readFileSync(targetPath, 'utf8')).length === 0;
+      if (!leaf && !module.startsWith('services/drawing/')) found.push(`${file} imports ${module}`);
     }
   }
   assert.deepEqual(found, []);

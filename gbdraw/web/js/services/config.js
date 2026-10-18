@@ -255,6 +255,7 @@ import {
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
+import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 
 const { nextTick, ref } = window.Vue;
 
@@ -419,6 +420,18 @@ const paletteColorsFromDefinitions = (paletteName) => {
 /** @param {unknown} source */
 const cloneStringMap = (source) => readStringMap(source).value;
 
+// A drawing's group names as a Session saves them (`config.webEdits`, the
+// History fallback's `orthogroupState`).
+/** @param {DrawingState} drawing */
+const buildGroupNamesData = (drawing) => {
+  const names = GROUP_NAMES_SLICE.capture(drawing.slices.groupNames);
+  return {
+    orthogroupNameOverrides: cloneStringMap(names.orthogroupNameOverrides),
+    orthogroupDescriptionOverrides: cloneStringMap(names.orthogroupDescriptionOverrides),
+    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(names.orthogroupDormantOverrides)
+  };
+};
+
 /** @param {unknown} rules */
 const normalizeFeatureVisibilityRulesForSession = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
@@ -467,17 +480,6 @@ const sanitizeExtractedFeatureForSession = (feature) => {
 const sanitizeExtractedFeaturesForSession = (features) => {
   if (!Array.isArray(features)) return [];
   return features.map((feature) => sanitizeExtractedFeatureForSession(feature));
-};
-
-/**
- * @param {Record<string, string>} target
- * @param {unknown} source
- */
-const replaceStringMap = (target, source) => {
-  Object.keys(target).forEach((key) => delete target[key]);
-  Object.entries(cloneStringMap(source)).forEach(([key, value]) => {
-    target[key] = value;
-  });
 };
 
 
@@ -901,11 +903,7 @@ export const buildConfigData = (drawing) => ({
     drawing.importedComparisonIntent
   ),
   unmanagedConfigOverrides: cloneJsonData(drawing.unmanagedConfigOverrides || {}),
-  webEdits: {
-    orthogroupNameOverrides: cloneStringMap(drawing.orthogroupNameOverrides),
-    orthogroupDescriptionOverrides: cloneStringMap(drawing.orthogroupDescriptionOverrides),
-    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(drawing.orthogroupDormantOverrides)
-  }
+  webEdits: buildGroupNamesData(drawing)
 });
 
 const defaultEditorStateData = () => ({
@@ -2881,15 +2879,14 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   }
   drawing.circularConservation.labels = String(drawing.circularConservation.labels || '');
   const webEdits = readPlainObject(data.webEdits).value;
-  if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupNameOverrides')) {
-    replaceStringMap(drawing.orthogroupNameOverrides, webEdits.orthogroupNameOverrides);
-  }
-  if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupDescriptionOverrides')) {
-    replaceStringMap(drawing.orthogroupDescriptionOverrides, webEdits.orthogroupDescriptionOverrides);
-  }
-  // Absent in older Sessions: no dormant names (D-21).
-  clearObject(drawing.orthogroupDormantOverrides);
-  Object.assign(drawing.orthogroupDormantOverrides, normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides));
+  GROUP_NAMES_SLICE.install(drawing.slices.groupNames, {
+    ...(Object.hasOwn(webEdits, 'orthogroupNameOverrides')
+      ? { orthogroupNameOverrides: cloneStringMap(webEdits.orthogroupNameOverrides) } : {}),
+    ...(Object.hasOwn(webEdits, 'orthogroupDescriptionOverrides')
+      ? { orthogroupDescriptionOverrides: cloneStringMap(webEdits.orthogroupDescriptionOverrides) } : {}),
+    // Absent in older Sessions: no dormant names (D-21).
+    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides)
+  });
 };
 
 /**
@@ -3533,14 +3530,15 @@ export const applyOrthogroupStateData = (
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
   state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '').trim();
 
-  replaceStringMap(drawing.orthogroupNameOverrides, orthogroupEditsOf(orthogroupState.orthogroupNameOverrides, groupIdSet).value);
-  replaceStringMap(drawing.orthogroupDescriptionOverrides,
-    orthogroupEditsOf(orthogroupState.orthogroupDescriptionOverrides, groupIdSet).value);
-  if (Object.hasOwn(orthogroupState, 'orthogroupDormantOverrides')) {
-    clearObject(drawing.orthogroupDormantOverrides);
-    Object.assign(drawing.orthogroupDormantOverrides,
-      normalizeOrthogroupDormantOverrides(orthogroupState.orthogroupDormantOverrides));
-  }
+  GROUP_NAMES_SLICE.install(drawing.slices.groupNames, {
+    orthogroupNameOverrides: cloneStringMap(orthogroupEditsOf(orthogroupState.orthogroupNameOverrides, groupIdSet).value),
+    orthogroupDescriptionOverrides: cloneStringMap(
+      orthogroupEditsOf(orthogroupState.orthogroupDescriptionOverrides, groupIdSet).value
+    ),
+    ...(Object.hasOwn(orthogroupState, 'orthogroupDormantOverrides')
+      ? { orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(orthogroupState.orthogroupDormantOverrides) }
+      : {})
+  });
 };
 
 /** @param {string} mode @param {DrawingState} drawing */
@@ -4671,9 +4669,7 @@ const resetSessionBaseline = () => {
   state.selectedFeatureRecordIdx.value = 0;
   Object.values(state.drawings).forEach((/** @type {DrawingState} */ drawing) => {
     Object.assign(drawing.importedComparisonIntent, createImportedComparisonIntentState());
-    clearObject(drawing.orthogroupNameOverrides);
-    clearObject(drawing.orthogroupDescriptionOverrides);
-    clearObject(drawing.orthogroupDormantOverrides);
+    GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
     clearObject(drawing.featureColorOverrides);
     drawing.featureVisibilityManualRules.splice(0);
     clearObject(drawing.featureOverrides);
@@ -4931,9 +4927,7 @@ const applyDrawingFeatureData = (drawing, features = {}) => {
 export const buildOrthogroupStateData = (drawing) => ({
   groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(toRaw(state.orthogroups.value)) : [],
   selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-  orthogroupNameOverrides: cloneStringMap(drawing.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: cloneStringMap(drawing.orthogroupDescriptionOverrides),
-  orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(drawing.orthogroupDormantOverrides)
+  ...buildGroupNamesData(drawing)
 });
 
 export const buildRunStateData = () => ({

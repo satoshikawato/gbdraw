@@ -16,6 +16,8 @@ import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
+import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
+/** @import { GroupNamesData } from './drawing/group-names.js' */
 /** @import { HistoryArtifactHandle } from './history.js' */
 
 export { cloneJsonData };
@@ -244,11 +246,7 @@ const buildOrthogroupIntentData = (orthogroupState = {}) => ({
 
 // A drawing's group names (its Session 46 `config.webEdits`).
 /** @param {HistorySnapshotDrawing} drawing */
-const buildGroupNameIntentData = (drawing) => ({
-  orthogroupNameOverrides: clonePlainObject(drawing.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: clonePlainObject(drawing.orthogroupDescriptionOverrides),
-  orthogroupDormantOverrides: clonePlainObject(drawing.orthogroupDormantOverrides)
-});
+const buildGroupNameIntentData = (drawing) => GROUP_NAMES_SLICE.capture(drawing.slices.groupNames);
 
 // Neither the selected Result nor the offsets read from its mounted root is
 // an edit, so neither is intent; composition offsets are recorded per Result
@@ -324,9 +322,12 @@ const applyOrthogroupIntentData = (state, orthogroupState = {}) => {
  * @param {GroupNameIntentData} [names]
  */
 const applyGroupNameIntentData = (drawing, names = {}) => {
-  replacePlainObject(drawing.orthogroupNameOverrides, clonePlainObject(names.orthogroupNameOverrides));
-  replacePlainObject(drawing.orthogroupDescriptionOverrides, clonePlainObject(names.orthogroupDescriptionOverrides));
-  replacePlainObject(drawing.orthogroupDormantOverrides, clonePlainObject(names.orthogroupDormantOverrides));
+  // An intent, checkpoint, or generated artifact holds what the slice captured; a missing map is empty.
+  GROUP_NAMES_SLICE.install(drawing.slices.groupNames, /** @type {GroupNamesData} */ ({
+    orthogroupNameOverrides: clonePlainObject(names?.orthogroupNameOverrides),
+    orthogroupDescriptionOverrides: clonePlainObject(names?.orthogroupDescriptionOverrides),
+    orthogroupDormantOverrides: clonePlainObject(names?.orthogroupDormantOverrides)
+  }));
 };
 
 /** @param {LinearComparisonPlanData | null} [plan] */
@@ -654,9 +655,7 @@ const buildFallbackOrthogroupStateData = (state, drawing) => ({
   groups: cloneJsonData(getRef(state.orthogroups, [])) || [],
   selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
   selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, ''),
-  orthogroupNameOverrides: clonePlainObject(drawing.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: clonePlainObject(drawing.orthogroupDescriptionOverrides),
-  orthogroupDormantOverrides: clonePlainObject(drawing.orthogroupDormantOverrides)
+  ...buildGroupNameIntentData(drawing)
 });
 
 /**
@@ -668,9 +667,7 @@ const applyFallbackOrthogroupStateData = (state, drawing, data = {}) => {
   setRef(state.orthogroups, cloneJsonData(data.groups) || []);
   setRef(state.selectedOrthogroupId, String(data.selectedOrthogroupId || ''));
   setRef(state.selectedOrthogroupAlignmentFeature, String(data.selectedOrthogroupAlignmentFeature || ''));
-  replacePlainObject(drawing.orthogroupNameOverrides, clonePlainObject(data.orthogroupNameOverrides));
-  replacePlainObject(drawing.orthogroupDescriptionOverrides, clonePlainObject(data.orthogroupDescriptionOverrides));
-  replacePlainObject(drawing.orthogroupDormantOverrides, clonePlainObject(data.orthogroupDormantOverrides));
+  applyGroupNameIntentData(drawing, data);
 };
 
 /** @param {HistorySnapshotState} state */
@@ -1476,11 +1473,7 @@ export const createHistorySnapshotService = ({
       selectedOrthogroupAlignmentFeature: String(
         getGeneratedArtifactRef(state.selectedOrthogroupAlignmentFeature, '') || ''
       ),
-      orthogroupNameOverrides: clonePlainObject(drawing.orthogroupNameOverrides),
-      orthogroupDescriptionOverrides: clonePlainObject(
-        drawing.orthogroupDescriptionOverrides
-      ),
-      orthogroupDormantOverrides: clonePlainObject(drawing.orthogroupDormantOverrides)
+      ...buildGroupNameIntentData(drawing)
     };
     const mutableIntent = Object.freeze({
       ui,
@@ -1590,18 +1583,7 @@ export const createHistorySnapshotService = ({
         state.selectedOrthogroupAlignmentFeature,
         String(mutableIntent.orthogroupState?.selectedOrthogroupAlignmentFeature || '')
       );
-      replacePlainObject(
-        drawing.orthogroupNameOverrides,
-        clonePlainObject(mutableIntent.orthogroupState?.orthogroupNameOverrides)
-      );
-      replacePlainObject(
-        drawing.orthogroupDescriptionOverrides,
-        clonePlainObject(mutableIntent.orthogroupState?.orthogroupDescriptionOverrides)
-      );
-      replacePlainObject(
-        drawing.orthogroupDormantOverrides,
-        clonePlainObject(mutableIntent.orthogroupState?.orthogroupDormantOverrides)
-      );
+      applyGroupNameIntentData(drawing, mutableIntent.orthogroupState);
 
       const trustedEditorState = {
         ...cloneJsonData({
