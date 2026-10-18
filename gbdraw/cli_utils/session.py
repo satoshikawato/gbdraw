@@ -49,6 +49,7 @@ from gbdraw.session_migration import (
 )
 
 if TYPE_CHECKING:
+    from gbdraw.api.request_render import CircularBatchRenderResult, RequestRenderResult
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
     from gbdraw.session import SessionDocument
@@ -645,13 +646,13 @@ def _session_sidecar_path(
 
 def _rendered_drawing_build(
     plan: Any,
-    rendered: Any,
+    rendered: RequestRenderResult | CircularBatchRenderResult,
     *,
     source_version: int,
 ) -> tuple[Any, dict[str, Any] | None]:
     """The re-save of one rendered drawing: its request, Results and artifacts."""
 
-    from gbdraw.api.requests import CircularBatchRequest
+    from gbdraw.api.request_render import CircularBatchRenderResult
     from gbdraw.session import _DrawingBuild
 
     state, web_file_inventory = project_session_adjunct_for_current_write(
@@ -660,10 +661,10 @@ def _rendered_drawing_build(
     )
     state = with_current_artifacts(
         state,
-        losat_cache_entries=getattr(rendered, "losat_cache_entries", ()),
+        losat_cache_entries=rendered.losat_cache_entries,
         # A replay builds none; the Session keeps the entries it was saved with.
         losat_derived_cache_entries=state.get("losatDerivedCache", {}).get("entries", ()),
-        protein_identity_manifest=getattr(rendered, "protein_identity_manifest", None),
+        protein_identity_manifest=rendered.protein_identity_manifest,
         legacy_protein_raw_candidates=getattr(rendered, "legacy_protein_raw_candidates", ()),
         legacy_protein_derived_evidence=getattr(rendered, "legacy_protein_derived_evidence", ()),
         protein_id_map=getattr(rendered, "protein_id_map", None),
@@ -677,26 +678,20 @@ def _rendered_drawing_build(
     ]
     if svg_results:
         state["results"] = svg_results
-    interactive_contexts = (
-        rendered.interactive_contexts
-        if hasattr(rendered, "interactive_contexts")
-        else (rendered.interactive_context,)
-    )
+    if isinstance(rendered, CircularBatchRenderResult):
+        interactive_contexts = rendered.interactive_contexts
+        svg_drawings = rendered.drawings
+        result_names = tuple(output.output_prefix for output in rendered.request.outputs)
+    else:
+        interactive_contexts = (rendered.interactive_context,)
+        svg_drawings = (rendered.drawing,)
+        result_names = (rendered.request.output.output_prefix,)
     replace_current_derived_feature_state(
         state,
         _feature_catalog_for_svg_results(
             [(str(result["name"]), str(result["content"])) for result in svg_results],
-            tuple(interactive_contexts),
+            interactive_contexts,
         ),
-    )
-    request = rendered.request
-    svg_drawings = (
-        rendered.drawings if hasattr(rendered, "drawings") else (rendered.drawing,)
-    )
-    result_names = (
-        tuple(output.output_prefix for output in request.outputs)
-        if isinstance(request, CircularBatchRequest)
-        else (request.output.output_prefix,)
     )
     run_metadata = build_track_slot_geometry_run_metadata(
         mode=plan.drawing.mode,
@@ -718,7 +713,7 @@ def _rendered_drawing_build(
         state.pop("runMetadata", None)
     build = _DrawingBuild(
         mode=plan.drawing.mode,
-        request=request,
+        request=rendered.request,
         state=state,
         id=plan.drawing.id,
     )

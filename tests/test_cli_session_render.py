@@ -508,36 +508,53 @@ def test_a_cli_replay_keeps_the_derived_entries_of_its_session(
     assert _derived(replayed) == built
 
 
-def test_a_circular_batch_replay_keeps_the_derived_entries_of_its_session(tmp_path: Path) -> None:
-    """The batch result has no derived-entry field; the re-save still keeps the Session's."""
+_PROTEIN_ARTIFACTS = ("losatCache", "losatDerivedCache", "proteinIdentityManifest")
 
-    from types import SimpleNamespace
 
-    from gbdraw.cli_utils.session import _rendered_drawing_build
-    from gbdraw.session import render_session_drawings
+def _circular_batch_session_with_protein_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, raw_entries: bool
+) -> Path:
+    """A Circular batch Session over the records of a protein Session, holding its artifacts.
 
-    source = tmp_path / "two-records.gb"
-    SeqIO.write(
-        [
-            SeqRecord(Seq("ATGCGCAT" * 40), id=record_id, annotations={"molecule_type": "DNA"})
-            for record_id in ("first", "second")
-        ],
-        source,
-        "genbank",
+    A Session keeps its LOSATP artifacts when the drawing changes mode; the
+    raw entries, the Python API's derived entries and the manifest are real.
+    """
+
+    linear_source, _built = _session_with_derived_entries(tmp_path, monkeypatch)
+    linear = json.loads(linear_source.read_text(encoding="utf-8"))
+    records = tuple(
+        RecordInput(source=GenBankInputSource(tmp_path / f"rec{index}.gbk"))
+        for index in range(3)
     )
-    record = RecordInput(source=GenBankInputSource(source), cardinality=RecordCardinality.ALL)
-    document = build_session_document(
-        CircularBatchRequest(records=(record,), output_policy=CircularBatchOutputPolicy(output_prefix="batch"))
-    )
-    kept = [{"schema": 3, "key": "kept-as-saved"}]
-    with materialize_session(document, output_directory=tmp_path / "out") as materialized:
-        (rendered,) = render_session_drawings(
-            materialized, output_prefix="batch", overwrite=True
-        ).values()
-    fields = dict(session_drawing_artifacts(document, None).fields)
-    fields["losatDerivedCache"] = {"entries": kept}
-    plan = SimpleNamespace(drawing=SimpleNamespace(artifacts=SimpleNamespace(fields=fields), mode="circular", id="d1"))
+    session = build_session_document(
+        CircularBatchRequest(records=records, output_policy=CircularBatchOutputPolicy(output_prefix="batch"))
+    ).to_dict()
+    for key in _PROTEIN_ARTIFACTS:
+        session[key] = linear[key]
+    if not raw_entries:
+        session["losatCache"] = {"entries": []}
+    source = tmp_path / "batch-protein.gbdraw-session.json"
+    write_session_json(source, session)
+    return source
 
-    build, _inventory = _rendered_drawing_build(plan, rendered, source_version=CURRENT_SESSION_VERSION)
 
-    assert build.state["losatDerivedCache"] == {"entries": kept}
+def _protein_artifacts(path: Path) -> dict[str, str]:
+    session = load_session_document(path).to_dict()
+    return {key: json.dumps(session[key], sort_keys=True) for key in _PROTEIN_ARTIFACTS}
+
+
+@pytest.mark.parametrize("raw_entries", [True, False], ids=["raw-and-derived", "derived-only"])
+def test_a_circular_batch_replay_keeps_the_protein_artifacts_of_its_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw_entries: bool
+) -> None:
+    """OV-1064: the batch re-save keeps the manifest, so its entries still resolve."""
+
+    source = _circular_batch_session_with_protein_artifacts(tmp_path, monkeypatch, raw_entries=raw_entries)
+    saved = _protein_artifacts(source)
+    assert json.loads(saved["losatDerivedCache"])["entries"]
+    assert bool(json.loads(saved["losatCache"])["entries"]) is raw_entries
+    replayed = tmp_path / "replayed.gbdraw-session.json"
+    _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / "out" / "replayed"),
+         "-f", "svg", "--session_output", str(replayed))
+    assert _svgs(tmp_path / "out") == [f"replayed_{index}.svg" for index in (1, 2, 3)]
+    assert _protein_artifacts(replayed) == saved
