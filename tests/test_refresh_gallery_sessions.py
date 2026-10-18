@@ -304,6 +304,11 @@ def test_refresh_reopens_stored_protein_results_in_the_declared_mode() -> None:
     test_input = _stored_protein_session(None)
     assert _reopen_for_publication(TEST_INPUT_SESSION_ROOT / TEST_INPUT_SESSION_FILES[0], test_input) == 0
 
+    # A public Gallery Session that shares the test input's file name is
+    # refreshed like any other: the exemption is the test input folder's.
+    same_name = _stored_protein_session(None)
+    assert _reopen_for_publication(gallery_path.parent / TEST_INPUT_SESSION_FILES[0], same_name) == 1
+
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
@@ -926,10 +931,13 @@ def test_staged_gallery_validator_allows_custom_extra_spacing(
         )
 
 
-def test_refresh_leaves_a_test_input_pipeline_unresolved(tmp_path: Path) -> None:
+def test_refresh_leaves_a_test_input_pipeline_unresolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # The Generate-pipeline specs load this input, so its orthogroup pipeline
     # stays; only public Gallery Sessions store resolved comparisons.
     name = TEST_INPUT_SESSION_FILES[0]
+    monkeypatch.setattr(refresh_gallery_sessions_module, "TEST_INPUT_SESSION_ROOT", tmp_path)
     source = tmp_path / name
     destination = tmp_path / "refreshed" / name
     destination.parent.mkdir()
@@ -1334,7 +1342,16 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
     with pytest.raises(ValueError, match="resolved protein comparison results"):
         _validate_staged_gallery_session(session_path, with_protein_mode("collinear"))
     _validate_staged_gallery_session(
-        tmp_path / TEST_INPUT_SESSION_FILES[0], with_protein_mode("orthogroup")
+        TEST_INPUT_SESSION_ROOT / TEST_INPUT_SESSION_FILES[0],
+        with_protein_mode("orthogroup"),
+    )
+    with pytest.raises(ValueError, match="resolved protein comparison results"):
+        _validate_staged_gallery_session(
+            session_path.parent / TEST_INPUT_SESSION_FILES[0],
+            with_protein_mode("orthogroup"),
+        )
+    _validate_staged_gallery_session(
+        session_path, with_protein_mode("none")
     )
 
     stale_version = dict(session, version=33)

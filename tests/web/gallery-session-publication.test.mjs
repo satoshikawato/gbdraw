@@ -365,53 +365,18 @@ const comparisonResource = (row) => ({
     data: Buffer.from(`query\tsubject\tevalue\n${row}\n`, 'utf8').toString('base64')
   }
 });
-const replayNumberSpelling = await compareCanonicalRenderRequests({
-  expectedRequest: comparisonTableRequest,
-  expectedResources: comparisonResource('q\ts\t1.1200000000000001e-132'),
-  actualRequest: comparisonTableRequest,
-  actualResources: comparisonResource('q\ts\t1.12e-132'),
-  normalizeReplayGeneratedResources: true
-});
-assert.equal(replayNumberSpelling.equivalent, true);
-// OV-413: rows the web app computed spell booleans `true`; the CLI replay
-// rewrites them through pandas as `True`.
-const booleanResource = (value) => ({
-  'comparison-table': {
-    kind: 'canonical-tsv',
-    encoding: 'base64',
-    data: Buffer.from(`query\tsubject\tquery_orthogroup_representative\nq\ts\t${value}\n`, 'utf8').toString('base64')
-  }
-});
-const replayBooleanSpelling = await compareCanonicalRenderRequests({
-  expectedRequest: comparisonTableRequest,
-  expectedResources: booleanResource('true'),
-  actualRequest: comparisonTableRequest,
-  actualResources: booleanResource('True'),
-  normalizeReplayGeneratedResources: true
-});
-assert.equal(replayBooleanSpelling.equivalent, true);
-const changedComparisonBoolean = await compareCanonicalRenderRequests({
-  expectedRequest: comparisonTableRequest,
-  expectedResources: booleanResource('true'),
-  actualRequest: comparisonTableRequest,
-  actualResources: booleanResource('False'),
-  normalizeReplayGeneratedResources: true
-});
-assert.equal(changedComparisonBoolean.equivalent, false);
 const changedComparisonValue = await compareCanonicalRenderRequests({
   expectedRequest: comparisonTableRequest,
   expectedResources: comparisonResource('q\ts\t1.12e-132'),
   actualRequest: comparisonTableRequest,
-  actualResources: comparisonResource('q\ts\t1.13e-132'),
-  normalizeReplayGeneratedResources: true
+  actualResources: comparisonResource('q\ts\t1.13e-132')
 });
 assert.equal(changedComparisonValue.equivalent, false);
 const changedComparisonIdentity = await compareCanonicalRenderRequests({
   expectedRequest: comparisonTableRequest,
   expectedResources: comparisonResource('q\ts\t1.12e-132'),
   actualRequest: comparisonTableRequest,
-  actualResources: comparisonResource('q2\ts\t1.12e-132'),
-  normalizeReplayGeneratedResources: true
+  actualResources: comparisonResource('q2\ts\t1.12e-132')
 });
 assert.equal(changedComparisonIdentity.equivalent, false);
 

@@ -4388,9 +4388,12 @@ def _read_canonical_table(
     file_path: Path, *, context: str, text_cells: bool = False
 ) -> DataFrame:
     # A text table keeps every cell as written (an empty label text stays "");
-    # the numeric tables (depth, comparisons) take pandas' inferred dtypes.
+    # the numeric tables (depth, comparisons) take pandas' inferred dtypes and
+    # read floats exactly, so an encoded table survives a read unchanged.
     text_options: dict[str, Any] = (
-        {"dtype": str, "keep_default_na": False} if text_cells else {}
+        {"dtype": str, "keep_default_na": False}
+        if text_cells
+        else {"float_precision": "round_trip"}
     )
     try:
         table = read_csv(file_path, sep="\t", **text_options)

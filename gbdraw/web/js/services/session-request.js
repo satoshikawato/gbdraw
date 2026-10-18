@@ -5756,7 +5756,6 @@ const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWith
  * What one comparison keeps while it walks a request.
  * @typedef {object} PublicationContext
  * @property {{ path: string, kind: string, decodedPayloadSha256: string }[]} bindings
- * @property {boolean} normalize
  * @property {Map<unknown, Promise<string>>} resourceIdentities Digests by a resource's base64 text.
  * @property {boolean} ignoreComparisonFilters
  */
@@ -5773,7 +5772,6 @@ const publicationBytes = async (resource, id) => {
   if (typeof resource.data === 'string') return textToBytes(resource.data);
   throw new Error(`Canonical request resource '${id}' has no decodable payload.`);
 };
-const TSV_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 // The tables a CLI Session stores with a header; the files the Web writes have
 // none (OV-266, OV-367). Each compares by kind and rows
 // without the header; default colors compare as a set, the others keep their
@@ -5792,10 +5790,9 @@ const publicationTable = (path) => PUBLICATION_TABLES[path.replace(/\.resourceId
 /**
  * @param {PublicationResource | undefined} resource
  * @param {string} id
- * @param {boolean} normalize
  * @param {string} path
  */
-const normalizedPublicationBytes = async (resource, id, normalize, path) => {
+const normalizedPublicationBytes = async (resource, id, path) => {
   const bytes = await publicationBytes(resource, id);
   const table = publicationTable(path);
   if (table) {
@@ -5804,34 +5801,23 @@ const normalizedPublicationBytes = async (resource, id, normalize, path) => {
       .filter((row) => row.trim() && row !== header);
     return textToBytes(`${(sorted ? rows.sort() : rows).join('\n')}\n`);
   }
-  if (!normalize) return bytes;
-  // `publicationBytes` above refused a missing resource.
-  if (!path.startsWith('$.comparisons') || /** @type {PublicationResource} */ (resource).kind !== 'canonical-tsv') return bytes;
-  const rows = bytesToText(bytes).trimEnd().split(/\r?\n/).map((row, index) => index === 0
-    ? row : row.split('\t').map((cell) => {
-      const number = Number(cell);
-      if (TSV_NUMBER.test(cell) && Number.isFinite(number)) return String(Number(number.toPrecision(15)));
-      // The CLI replay writes booleans through pandas as True/False (OV-413).
-      return cell === 'True' || cell === 'False' ? cell.toLowerCase() : cell;
-    }).join('\t'));
-  return textToBytes(`${rows.join('\n')}\n`);
+  return bytes;
 };
 /**
  * @param {PublicationResources} resources
  * @param {JsonValue} id
- * @param {boolean} normalize
  * @param {string} path
  * @param {PublicationContext['resourceIdentities']} cache
  */
-const publicationResourceIdentity = async (resources, id, normalize, path, cache) => {
+const publicationResourceIdentity = async (resources, id, path, cache) => {
   const resourceId = String(id || '').trim();
   if (!resourceId) throw new Error('Canonical request contains an empty resourceId.');
   const table = publicationTable(path);
   // Own key (OV-614); a resource the table lacks is refused by `publicationBytes` below.
-  const resource = ownEntry(resources, resourceId), key = resource?.encoding === 'base64' && !table && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
+  const resource = ownEntry(resources, resourceId), key = resource?.encoding === 'base64' && !table ? resource.data : null;
   const kind = table ? table[0] : String(resource?.kind || '');
   let digest = key ? cache.get(key) : null;
-  if (!digest) { digest = normalizedPublicationBytes(resource, resourceId, normalize, path).then((bytes) => sha256Hex(bytes)); if (key) cache.set(key, digest); }
+  if (!digest) { digest = normalizedPublicationBytes(resource, resourceId, path).then((bytes) => sha256Hex(bytes)); if (key) cache.set(key, digest); }
   return { kind, decodedPayloadSha256: await digest };
 };
 /**
@@ -5866,7 +5852,7 @@ const canonicalizePublicationValue = async (value, resources, context, path = '$
     if (resourceReference && ['encoding', 'representation'].includes(key)) continue;
     const childPath = `${path}.${key}`;
     if (key === 'resourceId') {
-      const identity = await publicationResourceIdentity(resources, value[key], context.normalize, childPath, context.resourceIdentities);
+      const identity = await publicationResourceIdentity(resources, value[key], childPath, context.resourceIdentities);
       context.bindings.push({ path: childPath, ...identity });
       output[key] = identity;
     } else output[key] = await canonicalizePublicationValue(value[key], resources, context, childPath);
@@ -6793,15 +6779,14 @@ const normalizePublicationRequestAliases = (request, resources) => {
 /**
  * @param {JsonValue} request
  * @param {PublicationResources} resources
- * @param {boolean} normalize
  * @param {PublicationContext['resourceIdentities']} resourceIdentities
  */
-const publicationRequestIdentity = async (request, resources, normalize, resourceIdentities) => {
+const publicationRequestIdentity = async (request, resources, resourceIdentities) => {
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Canonical request equivalence requires a renderRequest object.');
   const normalizedRequest = normalizePublicationRequestAliases(request, resources);
   const conservation = normalizedRequest.diagramOptions?.conservationBlastFiles;
   /** @type {PublicationContext} */
-  const context = { bindings: [], normalize, resourceIdentities,
+  const context = { bindings: [], resourceIdentities,
     ignoreComparisonFilters: !(normalizedRequest.comparisons?.length || (Array.isArray(conservation) ? conservation.length : conservation)) };
   const canonical = await canonicalizePublicationValue(normalizedRequest, resources, context);
   return { canonical, digest: await sha256Hex(textToBytes(JSON.stringify(canonical))),
@@ -6814,12 +6799,10 @@ const publicationRequestIdentity = async (request, resources, normalize, resourc
  * @property {PublicationResources} expectedResources
  * @property {JsonValue} actualRequest
  * @property {PublicationResources} actualResources
- * @property {boolean} [normalizeReplayGeneratedResources]
  */
 /** @param {PublicationComparisonInput} input */
 export const compareCanonicalRenderRequests = async (input) => {
-  const normalize = input.normalizeReplayGeneratedResources === true;
-  const resourceIdentities = new Map(), [expected, actual] = await Promise.all([publicationRequestIdentity(input.expectedRequest, input.expectedResources, normalize, resourceIdentities), publicationRequestIdentity(input.actualRequest, input.actualResources, normalize, resourceIdentities)]);
+  const resourceIdentities = new Map(), [expected, actual] = await Promise.all([publicationRequestIdentity(input.expectedRequest, input.expectedResources, resourceIdentities), publicationRequestIdentity(input.actualRequest, input.actualResources, resourceIdentities)]);
   const difference = firstPublicationDiff(expected.canonical, actual.canonical);
   return { equivalent: expected.digest === actual.digest, expected, actual, differences: difference ? [difference] : [] };
 };

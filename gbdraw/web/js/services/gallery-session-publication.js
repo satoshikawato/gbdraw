@@ -438,7 +438,7 @@ export const createGallerySessionPublication = (owners) => {
     validateCurrent(validateCurrentFields(prepared)); validateCurrent(validateCurrentFields(replayed));
     const resources = mergeReplayResources(prepared, replayed);
     await owners.assertRequestsEquivalent({ expectedRequest: prepared.renderRequest, expectedResources: prepared.resources, actualRequest: replayed.renderRequest,
-      actualResources: replayed.resources, normalizeReplayGeneratedResources: true });
+      actualResources: replayed.resources });
     /** @type {PublicationSession} */
     let session = { ...prepared, resources };
     for (const field of ARTIFACT_FIELDS) if (has(replayed, field)) session[field] = replayed[field];

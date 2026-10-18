@@ -3531,3 +3531,42 @@ def test_every_reachable_contract_hint_is_hashable() -> None:
         except TypeError:
             unhashable.append(where)
     assert unhashable == []
+
+
+def _reencoded(text: str, tmp_path: Path) -> str:
+    from gbdraw.session_request_codec import _read_canonical_table, encode_canonical_table
+
+    path = tmp_path / "table.tsv"
+    path.write_text(text, encoding="utf-8", newline="")
+    return encode_canonical_table(_read_canonical_table(path, context="test"))
+
+
+def test_canonical_table_read_keeps_floats_exact(tmp_path: Path) -> None:
+    # OV-1110: pandas' default float parser reads 2.7300000000000002e-64 as 2.73e-64.
+    text = "evalue\tbitscore\n2.7300000000000002e-64\t283.0\n1.81e-82\t1.5\n"
+    assert _reencoded(text, tmp_path) == text
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "BGC0000708-BGC0000713.gbdraw-session.json",
+        "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+        "majanivirus_orthogroup.gbdraw-session.json.gz",
+    ],
+)
+def test_gallery_comparison_tables_survive_a_read_unchanged(name: str, tmp_path: Path) -> None:
+    import base64
+    import gzip
+
+    path = Path(__file__).resolve().parents[1] / "gbdraw/web/gallery/sessions" / name
+    raw = path.read_bytes()
+    session = json.loads(gzip.decompress(raw) if name.endswith(".gz") else raw)
+    tables = [
+        base64.b64decode(resource["data"]).decode("utf-8")
+        for resource_id, resource in session["resources"].items()
+        if resource_id.startswith("comparison-protein-")
+    ]
+    assert tables
+    for text in tables:
+        assert _reencoded(text, tmp_path) == text

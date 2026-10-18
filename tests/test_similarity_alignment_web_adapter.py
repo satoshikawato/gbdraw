@@ -241,7 +241,7 @@ def bgc_og18(tmp_path_factory):
 
     session = json.loads(BGC_SESSION.read_text())
     resource = decode_canonical_typed_resource(
-        base64.b64decode(session["resources"]["comparison-canonical-orthogroups-1"]["data"]),
+        base64.b64decode(session["resources"]["comparison-orthogroups"]["data"]),
         value_kind="orthogroupResult", expected=OrthogroupResult | OrthogroupGraphResult,
     )
     gene = {m.protein_id: m.gene or m.label for m in resource.orthogroups["og_18"]}
