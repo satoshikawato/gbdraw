@@ -300,6 +300,25 @@ def test_lane_assignment_is_deterministic_and_separates_overlap() -> None:
     assert {item.annotation.id: item.lane for item in lanes} == {"a": 0, "c": 0, "b": 1}
 
 
+def test_explicit_lane_conflict_names_its_cause_to_the_web() -> None:
+    """OV-1262: the Web shows a classified message, not RENDER_FAILED."""
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    annotations = (
+        RegionAnnotation("first", CoordinateSpan(None, 1, 10), lane=0),
+        RegionAnnotation("second", CoordinateSpan(None, 5, 15), lane=0),
+    )
+    bundle = resolve_annotations((AnnotationSet("s", annotations),), [_record()], mode="linear")
+    with pytest.raises(ValidationError, match="Annotation s/second conflicts in explicit lane 0.") as raised:
+        assign_annotation_lanes(bundle.annotations, record_lengths={0: 100})
+    payload = serialize_web_error(raised.value, operation="generate", stage="render")
+    assert (payload["code"], payload["stage"], payload["context"]) == (
+        "TRACK_INVALID",
+        "render",
+        {"reason": "ANNOTATION_LANE_CONFLICT"},
+    )
+
+
 def test_annotation_options_reject_mixed_sources() -> None:
     with pytest.raises(ValidationError, match="not more than one"):
         AnnotationOptions(sets=(AnnotationSet("s", ()),), table=pd.DataFrame())

@@ -1017,3 +1017,55 @@ def test_circular_api_rejects_nonpositive_conservation_geometry() -> None:
             conservation_reference="subject",
             conservation_ring_gap=0,
         )
+
+
+def test_circular_single_conservation_legend_keeps_long_title_inside_legend_width() -> None:
+    """OV-1261: a ring label wider than the colorbar stays inside the legend block."""
+    canvas_config = SimpleNamespace(legend_position="left", dpi=96)
+    font_family = "'Liberation Sans', 'Arial', sans-serif"
+    legend_table = {
+        "Enterobacteria phage DE3, complete genome": {
+            "type": "gradient",
+            "min_color": "#ffffff",
+            "max_color": "#6f92b8",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 0,
+        },
+    }
+    natural = build_circular_legend_layout(
+        legend_table,
+        legend_position="left",
+        canvas_width=1000.0,
+        font_family=font_family,
+        font_size=10.0,
+        dpi=96,
+        color_rect_size=12.0,
+    )
+    title_width, _ = calculate_bbox_dimensions(
+        "Enterobacteria phage DE3, complete genome", font_family, 10.0, 96
+    )
+    assert title_width > 10 * 12.0
+    legend_config = SimpleNamespace(
+        font_family=font_family,
+        font_size=10.0,
+        color_rect_size=12.0,
+        legend_width=natural.width,
+        legend_height=natural.height,
+        pairwise_legend_width=natural.pairwise_legend_width,
+    )
+
+    drawing = Drawing(debug=False)
+    drawing.add(
+        CircularLegendGroup(
+            _circular_legend_measurement(canvas_config, legend_config, legend_table),
+            legend_table,
+        ).get_group()
+    )
+    root = ET.fromstring(drawing.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    gradient_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
+    assert gradient_legend is not None
+    left, right = _element_x_bounds(gradient_legend, canvas_config.dpi)
+    assert left >= -0.5
+    assert right <= natural.width + 0.5
