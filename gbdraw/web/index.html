@@ -6878,9 +6878,9 @@
                                         <div class="flex items-center gap-2">
                                             <div class="min-w-0 flex-1">
                                                 <div class="text-xs font-semibold text-slate-700">{{ entry.span.displayRole }} span</div>
-                                                <div class="text-[10px] font-mono text-slate-500 break-all">
-                                                    {{ entry.span.recordId }} · {{ entry.span.start }}..{{ entry.span.end }} · {{ entry.orientation }}
-                                                    <span v-if="entry.available"> · {{ entry.sequenceLength.toLocaleString() }} bp</span>
+                                                <!-- OV-1264: a long record ID may break; a span or length stays whole. -->
+                                                <div class="text-[10px] font-mono text-slate-500 break-words" data-match-span-line>
+                                                    {{ entry.span.recordId }} · <span class="whitespace-nowrap">{{ entry.span.start }}..{{ entry.span.end }}</span> · {{ entry.orientation }}<template v-if="entry.available"> · <span class="whitespace-nowrap">{{ entry.sequenceLength.toLocaleString() }} bp</span></template>
                                                 </div>
                                             </div>
                                             <button type="button"
@@ -7533,7 +7533,7 @@
                 </div>
 
                 <!-- Review alignment panel: docked below the figure, or at its right when the workspace is wide. -->
-                <section v-if="similarityAlignmentDialogOpen"
+                <section v-if="similarityAlignmentPanelShown"
                          role="dialog"
                          aria-labelledby="similarity-alignment-dialog-title"
                          aria-describedby="similarity-alignment-dialog-description similarity-alignment-application-help"

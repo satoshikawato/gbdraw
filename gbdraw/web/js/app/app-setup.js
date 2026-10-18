@@ -1775,8 +1775,6 @@ export const createAppSetup = () => {
     releasePreviewViewport,
     heldPreviewViewport
   } = createPanZoom(state);
-  // The Session writer and the artifact checkpoint save the view the pan/zoom owner holds.
-  setHeldPreviewViewportReader(heldPreviewViewport);
   const { startResizing } = createSidebarResize(state);
 
   const { ruleMatchingPending } = state;
@@ -1894,7 +1892,19 @@ export const createAppSetup = () => {
   // of a drawn element) is bound to the same computed.
   // `figure` is the identity of the Result of the review's mode (`mode`) that the review last
   // showed its draft on.
-  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, popup: unknown, mode: 'circular' | 'linear', figure: string } | null} */ (null));
+  // `drawerTab` is the Editor tab the review closed: Apply's new Result can leave a tab
+  // unavailable for a while, which moves the shown tab (OV-1255).
+  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, drawerTab: string, popup: unknown, mode: 'circular' | 'linear', figure: string } | null} */ (null));
+  // The hold belongs to the review's mode (OV-1089): while the other mode is shown, its figure
+  // is not the held one, so the end of the review gives it nothing back and its captures keep
+  // its own view.
+  const similarityAlignmentHoldShown = () => {
+    const takeover = similarityAlignmentTakeover.value;
+    return !takeover || takeover.mode === (mode.value === 'circular' ? 'circular' : 'linear');
+  };
+  // The Session writer and the artifact checkpoint save the view the pan/zoom owner holds for
+  // the shown mode. The departing mode's slot is captured before a switch changes `mode`.
+  setHeldPreviewViewportReader(() => (similarityAlignmentHoldShown() ? heldPreviewViewport() : null));
   const previewPopupsHeldNow = computed(() => similarityAlignmentTakeover.value !== null);
   const previewPopupsHeld = () => previewPopupsHeldNow.value;
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
@@ -5008,12 +5018,15 @@ export const createAppSetup = () => {
   const endSimilarityAlignmentTakeover = () => {
     const takeover = similarityAlignmentTakeover.value;
     if (!takeover || similarityAlignmentApplying) return;
+    const shown = similarityAlignmentHoldShown();
     similarityAlignmentTakeover.value = null;
-    if (takeover.drawerOpen) rightDrawerActions.openRightDrawerTab(rightDrawerTab.value);
+    // Ended while the other mode is shown, the review gives that mode's figure, Editor and
+    // popup nothing; its own mode's slot already keeps the held view (OV-1089).
+    if (shown && takeover.drawerOpen) rightDrawerActions.openRightDrawerTab(takeover.drawerTab);
     // The drawer narrows the visible frame, so the view returns after it.
-    releasePreviewViewport({ restore: true });
+    releasePreviewViewport({ restore: shown });
     // Open in the feature search row retargeted the hidden popup for the fitted view.
-    if (clickedFeature.value && clickedFeature.value !== takeover.popup) void featureActions.showFeaturePopupAtFeature();
+    if (shown && clickedFeature.value && clickedFeature.value !== takeover.popup) void featureActions.showFeaturePopupAtFeature();
   };
   watch(similarityAlignmentActions.dialogOpen, (/** @type {boolean} */ open) => {
     if (!open) {
@@ -5022,7 +5035,7 @@ export const createAppSetup = () => {
     }
     // A review shown again while an Apply is pending keeps what the first one took.
     const reviewMode = mode.value === 'circular' ? 'circular' : 'linear';
-    similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value,
+    similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, drawerTab: rightDrawerTab.value, popup: clickedFeature.value,
       mode: reviewMode, figure: reviewModeFigure(reviewMode) };
     // The figure is fitted again only while it shows the draft.
     holdPreviewViewport(similarityAlignmentActions.isDraftArtifactCurrent);
@@ -5050,9 +5063,12 @@ export const createAppSetup = () => {
     await nextTick();
     document.getElementById('similarity-alignment-dialog-title')?.focus();
   };
+  // The Review alignment panel is shown, and Escape ends it, only in the review's mode.
+  const similarityAlignmentPanelShown = computed(() => similarityAlignmentActions.dialogOpen.value
+    && similarityAlignmentHoldShown());
   /** @param {KeyboardEvent} event */
   const handleSimilarityAlignmentEscape = (event) => {
-    if (event.key !== 'Escape' || !similarityAlignmentActions.dialogOpen.value) return;
+    if (event.key !== 'Escape' || !similarityAlignmentPanelShown.value) return;
     // The target of a key press is the focused element.
     if (document.querySelector('[data-linear-source-removal-dialog]')
       || /** @type {Element | null} */ (event.target)?.closest?.('.fixed.inset-0')) return;
@@ -7154,6 +7170,7 @@ export const createAppSetup = () => {
     similarityAlignmentNotice: similarityAlignmentActions.notice,
     similarityAlignmentRepair: similarityAlignmentActions.repair,
     similarityAlignmentDialogOpen: similarityAlignmentActions.dialogOpen,
+    similarityAlignmentPanelShown,
     previewPopupsHeld: previewPopupsHeldNow,
     similarityAlignmentApplyDisabledReason: similarityAlignmentActions.applyDisabledReason,
     similarityAlignmentDrawerReferenceKey: similarityAlignmentActions.drawerReferenceKey,

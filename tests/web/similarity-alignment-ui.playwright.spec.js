@@ -3160,13 +3160,65 @@ test('a mode switch and back under an open review leaves the view the review giv
   await page.setViewportSize({ width: 1400, height: 1000 });
   await roomSettled(page);
   expect(await previewView(page)).toEqual(shown);
-  // Circular has no Similarity tab, so the switch left the Editor on its Features tab.
-  const { tab } = await editorDrawer(page);
+  // Circular has no Similarity tab, so the switch left the Editor on its Features tab; the
+  // review gives back the tab it closed (OV-1255).
+  expect((await editorDrawer(page)).tab).toBe('features');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => previewView(page)).toEqual(before);
-  expect(await editorDrawer(page)).toEqual({ open: true, tab });
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
   expect(pageErrors).toEqual([]);
+});
+
+// OV-1089: the hold is the Linear review's. While Circular is shown, Escape leaves the review
+// pending and gives Circular neither the view from before it nor the Editor; back in Linear,
+// Escape ends it there and gives both back.
+test('a Linear review stays with Linear: Escape in Circular changes neither the Circular view nor the Editor', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  const { before, dialog } = await openReviewOverOwnView(page);
+  const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
+  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
+  await expect.poll(shownMode).toBe('circular');
+  await expect(dialog).toHaveCount(0);
+  const circular = await previewView(page);
+  expect(circular).not.toEqual(before);
+  await page.keyboard.press('Escape');
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(circular);
+  expect((await editorDrawer(page)).open).toBe(false);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDialogOpen)).toBe(true);
+  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('linear'));
+  await expect.poll(shownMode).toBe('linear');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('heading', { name: 'Review alignment' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => previewView(page)).toEqual(before);
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+  expect(pageErrors).toEqual([]);
+});
+
+// OV-1255: Apply's new Result leaves the Similarity groups tab without groups for a while; the
+// review still gives back the tab it closed, as Cancel does.
+test('a successful Apply of a review opened from the Editor reopens the Similarity groups tab', async ({ page }, testInfo) => {
+  test.setTimeout(600000);
+  await loadAmbiguousSession(page, testInfo);
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  const drawer = page.locator('.right-drawer');
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
+  const reference = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
+    .find(({ anchor }) => anchor.recordKey === 'record_b').key);
+  await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
+  await drawer.getByRole('button', { name: 'Review alignment options…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
+  expect(await editorDrawer(page)).toEqual({ open: false, tab: 'orthogroups' });
+  await chooseUnresolved(page, dialog);
+  await applyReview(page, dialog);
+  await expect.poll(() => editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
 });
 
 // The majanivirus og_13 review opens with records that need a choice.

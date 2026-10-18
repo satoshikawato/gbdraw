@@ -1586,7 +1586,7 @@ export const createCircularTrackSlotEditor = ({
     return `Hidden by ${controlLabel}.`;
   };
 
-  // An Annotations row's placement select moves the row across the Axis
+  // A placement select (the Annotations row's) moves the row across the Axis
   // boundary as the row menu does; writing its side alone made the boundary
   // follow it and flipped the other rows (OV-1263).
   /** @param {CircularTrackSlot | null | undefined} slot @param {unknown} placement */
@@ -1594,7 +1594,7 @@ export const createCircularTrackSlotEditor = ({
     const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!slot || slot.renderer !== 'annotations' || normalizeOptionalText(placement) === null) return;
+    if (!slot || !SUPPORTED_RENDERERS.includes(slot.renderer) || normalizeOptionalText(placement) === null) return;
     const index = drawing.adv.circular_track_slots.indexOf(slot);
     if (index < 0 || effectiveSlotPlacement(slot, drawing.form.track_type) === normalizePlacement(placement)) return;
     return moveCircularTrackSlotToPlacement(drawing, index, placement);
