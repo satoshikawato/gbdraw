@@ -142,6 +142,11 @@ in the same change.
 | Feature-editor entry point | `js/app/feature-editor.js` |
 | Feature-editor helpers | `js/app/feature-editor/` |
 | Right-side editor drawer state and transitions | `js/services/right-drawer-state.js`; the drawer controller is `js/app/right-drawer.js` |
+| Settings sections: the catalog (key, modes, title, icon), the section index entries, and the section a click on a drawn element opens | `js/services/settings-sections.js` (`SETTINGS_SECTIONS`, `settingsEntriesOf`, `drawnElementSection`); `SettingsSectionIndex` in `js/components.js` renders the index, template in `index.html` |
+| Settings pane display (the stacked settings or the icon rail), the entry docked beside the rail, and the section in the popup beside the Result with its placement and availability | `js/services/settings-pane-state.js` (`showSettingsRail`, `showSettingsStacked`, `dockSettingsSection`, `floatSettingsSection`, `moveSettingsPopup`, `returnSettingsSection`); the controller is `js/app/settings-pane.js` (`createSettingsPaneController`; `settingsPopupAvailable` decides when the popup can open and closes it when it no longer can) |
+| Browser-local preferences (the settings pane display today; the browser remembers it, not the Session) | `js/services/browser-preferences.js` (`readSettingsPaneDisplay`, `writeSettingsPaneDisplay`) |
+| The slot renderer names and ids by which the Web app finds drawn groups of a Result (scale, Linear length bar, dinucleotide and depth tracks, plot title; Python writes them) | `js/services/drawn-groups.js` (`TICK_GROUPS`, `DINUCLEOTIDE_CONTENT_GROUPS`, `DINUCLEOTIDE_SKEW_GROUPS`, `DEPTH_GROUPS`, `LENGTH_BAR_ID`, `PLOT_TITLE_ID`, `findTrackGroups`, `trackGroupSelector`) |
+| Fold state of the Linear File cards | `js/services/linear-sources.js` (`setLinearSourceFolded`, `restoreFoldedLinearSources`); the set is `linearFoldedSources` in `js/state.js` |
 | Legend entry point | `js/app/legend.js` |
 | Legend helpers | `js/app/legend/` |
 | Legend/diagram positioning | `js/app/legend-layout.js`, `js/app/legend-layout/` |
