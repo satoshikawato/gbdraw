@@ -4040,7 +4040,7 @@
                                             <select v-model="linearTrackNewRenderer" aria-label="New linear track renderer" class="form-input py-1 text-[10px] min-w-0" :disabled="!semanticMutationAvailable">
                                                 <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
                                             </select>
-                                            <button type="button" data-action-menu-list-fallback class="btn btn-secondary text-[10px] py-1 px-2 shrink-0" @click="addLinearTrackSlot(linearTrackNewRenderer, $event)" :disabled="!semanticMutationAvailable || (!canAddLinearTrackRenderer(linearTrackNewRenderer))" :title="canAddLinearTrackRenderer(linearTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'">
+                                            <button type="button" data-action-menu-list-fallback class="btn btn-secondary text-[10px] py-1 px-2 shrink-0" @click="addLinearTrackSlot(linearTrackNewRenderer, $event)" :disabled="!semanticMutationAvailable || Boolean(linearTrackAddBlockReason(linearTrackNewRenderer))" :title="linearTrackAddBlockReason(linearTrackNewRenderer) || 'Add track'">
                                                 <i class="ph ph-plus" aria-hidden="true"></i>
                                                 Add track
                                             </button>
@@ -4436,8 +4436,8 @@
                                                     data-action-menu-list-fallback
                                                     class="btn btn-secondary text-[10px] py-1 px-2 shrink-0"
                                                     @click="addCircularTrackSlot(circularTrackNewRenderer, $event)"
-                                                    :disabled="!semanticMutationAvailable || (!canAddCircularTrackRenderer(circularTrackNewRenderer))"
-                                                    :title="canAddCircularTrackRenderer(circularTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'"
+                                                    :disabled="!semanticMutationAvailable || Boolean(circularTrackAddBlockReason(circularTrackNewRenderer))"
+                                                    :title="circularTrackAddBlockReason(circularTrackNewRenderer) || 'Add track'"
                                                 >
                                                     <i class="ph ph-plus" aria-hidden="true"></i>
                                                     Add track

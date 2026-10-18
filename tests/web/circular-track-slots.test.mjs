@@ -515,3 +515,53 @@ test('a renderer named like an inherited member keeps its own name as the label'
   assert.equal(editor.circularTrackRendererLabel('depth'), 'Depth');
   assert.equal(editor.circularTrackSlotDisplayLabel(spacerSlot()), 'Spacer');
 });
+
+const annotationSlot = (side = 'inside') => ({
+  id: 'annotations',
+  renderer: 'annotations',
+  enabled: true,
+  side,
+  z: 0,
+  params: { set_id: 'plastome_regions' }
+});
+
+// OV-1263: Outside axis on the last (inside) Annotations row moves that row
+// across the Axis; the Features, Ticks, and GC rows keep their sides, and
+// Inside axis brings the row back inside without touching them.
+test('an Annotations row placement moves only that row across the Axis (OV-1263)', () => {
+  const state = createState({
+    slots: [featureSlot(), tickSlot('overlay'), gcSlot(), annotationSlot()],
+    axisIndex: 1
+  });
+  state.annotationSets = [{ id: 'plastome_regions' }];
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const before = slotSides(state);
+  const row = state.adv.circular_track_slots[3];
+
+  editor.updateCircularTrackSlotPlacement(row, 'outside');
+  assert.deepEqual(slotSides(state), { ...before, annotations: 'outside' });
+  assert.equal(state.adv.circular_track_slots.find((slot) => slot.id === 'annotations'), row);
+
+  editor.updateCircularTrackSlotPlacement(row, 'inside');
+  assert.deepEqual(slotSides(state), before);
+
+  // A refused change (a Session operation runs) writes nothing.
+  const settled = structuredClone(state.adv.circular_track_slots);
+  state.sessionOperationAvailability = () => 'busy';
+  assert.equal(editor.updateCircularTrackSlotPlacement(row, 'outside'), 'busy');
+  assert.deepEqual(state.adv.circular_track_slots, settled);
+});
+
+// OV-1254: the disabled Add track names the missing Region annotation set,
+// not a Features-row conflict that Circular does not have.
+test('Add track names the missing source of the chosen renderer (OV-1254)', () => {
+  const state = createState();
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  assert.equal(editor.circularTrackAddBlockReason('annotations'), 'Import or add a Region annotation set in Region Annotations first');
+  assert.equal(editor.circularTrackAddBlockReason('depth'), 'Load a Depth TSV first');
+  assert.equal(editor.circularTrackAddBlockReason('spacer'), '');
+  assert.equal(editor.canAddCircularTrackRenderer('annotations'), false);
+  state.annotationSets = [{ id: 'plastome_regions' }];
+  assert.equal(editor.circularTrackAddBlockReason('annotations'), '');
+  assert.equal(editor.canAddCircularTrackRenderer('annotations'), true);
+});

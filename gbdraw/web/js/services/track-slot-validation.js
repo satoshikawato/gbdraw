@@ -266,6 +266,29 @@ const OVERLAY_SLOT_REFERENCES = Object.freeze([
 export const OVERLAY_ANNOTATION_PARAMS = Object.freeze(['anchor_slot', 'to_slot', 'cover_anchor']);
 
 /**
+ * The facts of a drawing that decide whether Add track can add a row.
+ * @typedef {object} TrackAddFacts
+ * @property {boolean} supported The mode draws this renderer.
+ * @property {number} annotationSetCount Region annotation sets loaded in the drawing.
+ * @property {number} depthSeriesCount Depth series with a loaded TSV.
+ * @property {boolean} [featuresRowEnabled] The stack already has an enabled Features row (Linear draws one).
+ */
+/**
+ * Why Add track cannot add a row of `renderer`, or '' when it can (OV-1254).
+ * Both track editors read their availability and the button title here.
+ * @param {string} renderer
+ * @param {TrackAddFacts} facts
+ * @returns {string}
+ */
+export const trackAddBlockReason = (renderer, { supported, annotationSetCount, depthSeriesCount, featuresRowEnabled = false }) => {
+  if (!supported) return 'Choose a track type this diagram can draw';
+  if (renderer === 'annotations' && annotationSetCount <= 0) return 'Import or add a Region annotation set in Region Annotations first';
+  if (renderer === 'depth' && depthSeriesCount <= 0) return 'Load a Depth TSV first';
+  if (renderer === 'features' && featuresRowEnabled) return 'The stack already has an enabled Features row; disable or delete it first';
+  return '';
+};
+
+/**
  * An annotation slot's params as both modes write them to the request: a
  * default or an empty value is left out.
  * @param {Record<string, unknown>} params

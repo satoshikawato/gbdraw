@@ -14,7 +14,7 @@ import {
   normalizeOptionalText
 } from '../services/track-slot-display.js';
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
-import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -321,21 +321,22 @@ export const createLinearTrackSlotEditor = ({
     else delete slot.params.anchor_slot;
   };
 
-  /** @param {unknown} renderer */
-  const canAddLinearTrackRenderer = (renderer) => {
+  /** Why Add track cannot add this renderer, or '' (OV-1254). @param {unknown} renderer */
+  const linearTrackAddBlockReason = (renderer) => {
     const drawing = state.drawings.linear;
     const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
-    if (normalizedRenderer === 'annotations') return annotationSetIds(drawing).length > 0;
-    if (normalizedRenderer === 'depth') {
-      return linearAvailableDepthTrackCountForState(state) > 0;
-    }
-    if (normalizedRenderer === 'features') {
-      return !drawing.adv.linear_track_slots.some((/** @type {OptionalLinearSlot} */ slot) => (
+    return trackAddBlockReason(normalizedRenderer, {
+      supported: true,
+      annotationSetCount: annotationSetIds(drawing).length,
+      depthSeriesCount: linearAvailableDepthTrackCountForState(state),
+      featuresRowEnabled: drawing.adv.linear_track_slots.some((/** @type {OptionalLinearSlot} */ slot) => (
         slot?.enabled !== false && normalizeRenderer(slot?.renderer) === 'features'
-      ));
-    }
-    return true;
+      ))
+    });
   };
+
+  /** @param {unknown} renderer */
+  const canAddLinearTrackRenderer = (renderer) => linearTrackAddBlockReason(renderer) === '';
 
   // Duplicate shares the availability of the other row controls (GX-01).
   /** @param {OptionalLinearSlot} slot */
@@ -1130,6 +1131,7 @@ export const createLinearTrackSlotEditor = ({
       updateLinearTrackSlotPlacement
     }),
     canAddLinearTrackRenderer,
+    linearTrackAddBlockReason,
     canDuplicateLinearTrackSlot,
     canMoveLinearTrackSlot,
     canMoveLinearTrackSlotAbove,
