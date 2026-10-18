@@ -464,20 +464,36 @@ export const createFeatureVisibilityActions = ({
   // Result, and reports Generate's error until a projection reads a table that
   // Generate accepts. A later projection supersedes one that still waits for
   // its matches (`superseded`: the later one shows the matches). Resolves to
-  // `projectDrawn`'s answer, or says why it projected nothing.
+  // `projectDrawn`'s answer, or says why it projected nothing. The newest run
+  // is kept with its drawing and whether it asks for the rerender itself
+  // (`legend`: an edit, a History step, a loaded table) or declines it (a
+  // Result display).
   /**
    * @typedef {{ status: 'projected', projection: DrawnProjection } | { status: 'superseded' | 'rejected' }} VisibilityProjectionOutcome
+   * @typedef {{ outcome: Promise<VisibilityProjectionOutcome>, drawing: DrawingState, asks: boolean }} VisibilityProjectionRun
    */
   let projectionRun = 0;
   let visibilityEditRun = 0;
+  /** @type {VisibilityProjectionRun | null} */
+  let newestProjection = null;
   /** @type {unknown} */
   let ruleTableError = null;
   /**
    * @param {DrawingState} drawing
    * @returns {Promise<VisibilityProjectionOutcome>}
    */
-  const runProjection = async (drawing, { legend = true, show = true } = {}) => {
-    const run = ++projectionRun;
+  const runProjection = (drawing, { legend = true, show = true } = {}) => {
+    const outcome = projectOnce(drawing, ++projectionRun, { legend, show });
+    newestProjection = { outcome, drawing, asks: legend };
+    return outcome;
+  };
+  /**
+   * @param {DrawingState} drawing
+   * @param {number} run
+   * @param {{ legend: boolean, show: boolean }} projection
+   * @returns {Promise<VisibilityProjectionOutcome>}
+   */
+  const projectOnce = async (drawing, run, { legend, show }) => {
     const prepared = /** @type {any} */ (await prepareDrawn());
     if (run !== projectionRun) return { status: prepared?.error ? 'rejected' : 'superseded' };
     if (prepared?.error) {
@@ -489,6 +505,23 @@ export const createFeatureVisibilityActions = ({
     if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
     ruleTableError = null;
     return { status: 'projected', projection: projectDrawn(drawing, displayedFeatures(), { legend, show }) };
+  };
+  // Waits for the newest run, following it while a later run replaces it.
+  // True when that run was a Result display of `drawing` that projected and
+  // the displayed Result lacks what the rules draw (the question an edit
+  // begun after the display would ask).
+  /** @param {DrawingState} drawing */
+  const displayLacksRules = async (drawing) => {
+    /** @type {VisibilityProjectionRun | null} */
+    let followed = null;
+    /** @type {VisibilityProjectionOutcome | null} */
+    let outcome = null;
+    while (newestProjection && newestProjection !== followed) {
+      followed = newestProjection;
+      outcome = await followed.outcome;
+    }
+    return Boolean(followed && !followed.asks && followed.drawing === drawing && outcome?.status === 'projected')
+      && needsRerenderFor(drawing, displayedFeatures(), { legend: true });
   };
 
   // The one projection of this domain (R3), which History apply, the display
@@ -526,9 +559,11 @@ export const createFeatureVisibilityActions = ({
   // is about to replace the Result this edit is decided against. The newest
   // edit asks for one more rerender when a rerender was running as it began,
   // or when a later projection superseded its own, as the display of that
-  // rerender's Result does (OV-330, OV-1134). An older edit does not: the
-  // newer edit asks, or projects on the newer Result. Nor does an edit of a
-  // table Generate rejects.
+  // rerender's Result does (OV-330, OV-1134). A Result display that supersedes
+  // the newest edit while no rerender runs asks for none, so the edit asks
+  // when the displayed Result lacks what the rules draw (OV-1141). An older
+  // edit does not: the newer edit asks, or projects on the newer Result. Nor
+  // does an edit of a table Generate rejects.
   /**
    * @param {DrawingState} drawing
    * @param {(rules: FeatureVisibilityRuleDraft[]) => boolean | void} edit Changes the copy; false writes nothing.
@@ -545,7 +580,10 @@ export const createFeatureVisibilityActions = ({
     const rerendering = Boolean(state.labelReflowProcessing?.value);
     const outcome = await runProjection(drawing);
     const projection = outcome.status === 'projected' ? outcome.projection : null;
-    const rerender = Boolean(projection?.needsRerender) || (rerendering && outcome.status !== 'rejected' && editRun === visibilityEditRun);
+    const newest = editRun === visibilityEditRun;
+    const rerender = Boolean(projection?.needsRerender)
+      || (rerendering && outcome.status !== 'rejected' && newest)
+      || (outcome.status === 'superseded' && newest && await displayLacksRules(drawing));
     if (projection?.updated || rerender) followLabels({ rerender });
     return true;
   };
