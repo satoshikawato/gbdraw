@@ -76,6 +76,16 @@ def test_cli_existing_output_error_names_the_overwrite_option(tmp_path: Path) ->
     assert "overwrite=True" not in replay.stderr
 
 
+def test_cli_typed_option_error_is_not_its_own_cause(tmp_path: Path) -> None:
+    """A rejected Circular option was re-raised from itself, so walking its causes never ended."""
+
+    gbk = str(TEST_INPUTS / "NC_001416.gb")
+    sub = _gbdraw("circular", "--gbk", gbk, "-o", "out", "--window", "0", cwd=tmp_path, timeout=120)
+    assert sub.returncode == 1
+    assert "window must be a positive integer or None." in sub.stderr
+    assert "Traceback" not in sub.stderr
+
+
 def test_python_existing_output_errors_share_one_wording(tmp_path: Path) -> None:
     """OV-1240: one owner words the refusal; Python callers read ``overwrite=True``."""
 

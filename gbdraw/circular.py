@@ -881,7 +881,10 @@ def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagram
     try:
         return CircularDiagramOptions(**values)
     except ValidationError as exc:
-        raise _cli_ring_error(exc, _args) from exc
+        rewritten = _cli_ring_error(exc, _args)
+        if rewritten is exc:
+            raise
+        raise rewritten from exc
 
 
 def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:

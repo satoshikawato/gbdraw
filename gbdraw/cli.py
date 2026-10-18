@@ -142,7 +142,9 @@ def _cli_error_message(error: GbdrawError) -> str:
     """
 
     cause: BaseException | None = error
-    while cause is not None:
+    seen: set[int] = set()
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
         if isinstance(cause, OutputExistsError):
             return cause.message(CLI_OVERWRITE_OPTION)
         cause = cause.__cause__
