@@ -81,6 +81,10 @@ _GC_TRACKS: Mapping[str, _GcTrack] = {
 }
 
 
+# The owner of the center reservation band among the occupied bands.
+_CENTER_RESERVATION = "definition"
+
+
 @dataclass(frozen=True)
 class _KeptInsideSlot:
     slot_id: str
@@ -97,6 +101,15 @@ class PlacementWindow:
     # The room kept below inner_px for the inside rows placed after this window's rows, and those rows.
     kept_inside_px: float = 0.0
     kept_inside_slots: tuple[_KeptInsideSlot, ...] = ()
+    # The outer edge of the center reservation (definition text or center_reserved_radius). Placement reads it from
+    # the occupied bands; a fit failure reports the window from it (OV-1276).
+    center_reserved_px: float = 0.0
+
+    @property
+    def usable_inner_px(self) -> float:
+        """The lower edge of the band the window's rows may use: inner_px, or the center reservation above it."""
+
+        return max(float(self.inner_px), float(self.center_reserved_px))
 
     @property
     def kept_gc_tracks(self) -> tuple[_GcTrack, ...]:
@@ -156,7 +169,7 @@ def _cannot_fit_diagnostic(
 
     diagnostic: dict[str, object] = {"code": "TRACK_LAYOUT", "reason": "CANNOT_FIT"}
     if window is not None and float(window.outer_px) < float("inf"):
-        diagnostic["innerPx"] = max(0, round(float(window.inner_px)))
+        diagnostic["innerPx"] = max(0, round(window.usable_inner_px))
         diagnostic["outerPx"] = max(0, round(float(window.outer_px)))
     if window is not None and window.kept_inside_px > LAYOUT_EPSILON:
         diagnostic["keptInsidePx"] = round(float(window.kept_inside_px))
@@ -1442,7 +1455,7 @@ class _InsideFitError(ValidationError):
     def _between(self) -> str:
         return (
             f"{self.subject} cannot fit inside between "
-            f"{self.placement_window.inner_px:.1f}px and {self.placement_window.outer_px:.1f}px"
+            f"{self.placement_window.usable_inner_px:.1f}px and {self.placement_window.outer_px:.1f}px"
         )
 
     def _kept_inside(self) -> str:
@@ -2030,6 +2043,9 @@ def _inside_placement_window(
 ) -> PlacementWindow:
     inner_limit = 0.0
     reserved_inner_limit: float | None = None
+    center_reserved = max(
+        (float(band.outer_px) for owner, band in occupied if owner == _CENTER_RESERVATION), default=0.0
+    )
     # A pinned row listed after the group but lying above its window, or above
     # a pinned row of the group, contradicts the stack order: no lower bound.
     future_hard = _next_future_hard_slot(
@@ -2068,7 +2084,9 @@ def _inside_placement_window(
         resolved_by_index=resolved_by_index,
     )
     if future_span <= LAYOUT_EPSILON:
-        return PlacementWindow(inner_limit, float(inside_max_outer), reserved_inner_limit)
+        return PlacementWindow(
+            inner_limit, float(inside_max_outer), reserved_inner_limit, center_reserved_px=center_reserved
+        )
     # The span kept free for the rows after this group bounds both bands.
     inner_limit = max(
         inner_limit,
@@ -2084,6 +2102,7 @@ def _inside_placement_window(
         float(inside_max_outer),
         kept_inside_px=float(future_span),
         kept_inside_slots=future_slots,
+        center_reserved_px=center_reserved,
     )
 
 
@@ -2278,7 +2297,7 @@ def _resolve_circular_radial_layout(
     )
     occupied: list[tuple[str, RadialBand]] = []
     if definition_band is not None and definition_band.width_px > LAYOUT_EPSILON:
-        occupied.append(("definition", definition_band))
+        occupied.append((_CENTER_RESERVATION, definition_band))
 
     intents = _slot_intents(
         slots,
@@ -2326,7 +2345,7 @@ def _resolve_circular_radial_layout(
             conflict = _reserved_overlap_any(pinned_band, pinned_occupied)
             if conflict is not None:
                 diagnostic = _cannot_fit_diagnostic(intent)
-                if conflict[0] == "definition":
+                if conflict[0] == _CENTER_RESERVATION:
                     diagnostic = _center_reserved_diagnostic(diagnostic, explicit_radius=center_reserved_radius_explicit)
                 raise ValidationError(
                     f"Pinned circular track slot '{intent.slot_id}' overlaps reserved circular slot '{conflict[0]}'.",

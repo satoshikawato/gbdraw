@@ -306,3 +306,17 @@ def test_the_definition_band_failure_offers_the_gc_tracks_kept_inside(tmp_path: 
     assert "Circular track slot 'ticks'" in str(error)
     assert "GC" not in str(error)
     assert "keptInsideTracks" not in serialize_web_error(error, operation="generate", stage="render")["context"]
+
+
+@pytest.mark.circular
+def test_the_definition_band_failure_starts_its_band_at_the_reserve(tmp_path: Path) -> None:
+    """OV-1276: a window with nothing kept inside it starts at the definition band, in the message and the context."""
+
+    error = _lambda_resolved_overlaps(tmp_path, "--no-gc", "--no-skew")
+    assert _layout_reason(error) == "DEFINITION_RESERVED"
+    assert (
+        "Circular track slot 'ticks' cannot fit inside between 122.6px and 386.1px "
+        "because the center definition text reserves 122.6px."
+    ) in str(error)
+    context = serialize_web_error(error, operation="generate", stage="render")["context"]
+    assert (context["innerPx"], context["outerPx"]) == (123, 386)
