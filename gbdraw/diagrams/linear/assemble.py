@@ -1212,8 +1212,12 @@ def _build_linear_record_vertical_plans(
             footprints=footprints,
         )
         # The plan decides which overlays span slots on this record (OV-1158). Their labels keep
-        # clear of the slots they cover: measure their room again on the stretched height. That
-        # height does not depend on the room, which lies beyond the slots a span covers.
+        # clear of the slots they cover: measure their room again on the stretched height. A
+        # single span's height does not depend on its room, which lies beyond the slots it covers.
+        # Where one span covers a slot that holds another span's label room, this pass changes
+        # that height and the room stays measured on the first one: only where the mark's paint
+        # passes the span's edge does the far-side gap then differ from label_offset, by at most
+        # 0.08 (band) or 0.5 (bracket, line) of the height change per lane (review 1177).
         span_heights = {slot.id: float(slot.height) for slot in plan.slots if slot.spans_slots}
         if span_heights:
             font_family = str(canvas_config._cfg.objects.text.font_family)

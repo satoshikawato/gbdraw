@@ -180,9 +180,13 @@ def _label_rows(
     side ``linear_annotation_labels_above`` picks (OV-844). A slot that
     ``covers_slots`` (the plan's ``spans_slots``) keeps them outside every slot
     it covers too: ``label_offset`` beyond the slot's edge, or beyond the
-    mark's paint where it passes that edge (a highlight stroke more than twice
-    ``padding_px`` wide; never a bracket or line at the lane centre), so the
-    place does not depend on the overlay's own height (OV-1156, review 1176).
+    mark's paint where it passes that edge, so the place does not depend on
+    the overlay's own height (OV-1156, review 1176). The paint passes the edge
+    where ``_MarkReach.past_lane_edge`` exceeds ``padding_px``: with lane
+    height ``h``, a stroke wider than ``2 * padding_px`` (highlight),
+    ``2 * padding_px + 0.16 * h`` (band) or ``h + 2 * padding_px`` (bracket,
+    line), or an arrow cap whose ``min(5, 0.35 * h) + stroke_width * sqrt(0.5) / 2``
+    exceeds ``h / 2 + padding_px``.
     """
 
     if not params.show_labels:

@@ -542,6 +542,40 @@ def test_linear_to_slot_span_without_bodies_keeps_the_label_rule_of_its_mark(mar
     assert _ink_gap_to_mark(labels["Span 2"]) == pytest.approx(4.0, abs=1e-6)
 
 
+@pytest.mark.parametrize("layer", ["underlay", "foreground"])
+@pytest.mark.parametrize("mark", _MARKS)
+def test_linear_to_slot_span_without_bodies_reserves_its_label_room(mark: str, layer: str) -> None:
+    depth = pd.DataFrame({"reference_name": ["rec1"] * 2400, "position": list(range(1, 2401)), "depth": [20.0] * 2400})
+
+    def build(span: str, label_text: bool = True):
+        return _build_linear_span(
+            "features:features@side=overlay",
+            "depth:depth@side=below,track_index=0",
+            "gc:dinucleotide_content@side=below",
+            f"regions:annotations@side=overlay,set_id=regions,anchor_slot=features,{span}"
+            f"layer={layer},z={-1 if layer == 'underlay' else 1}",
+            record_count=2,
+            features=(),
+            mark=mark,
+            label_text=label_text,
+            depth_track_tables=[[depth], [None]],
+            depth_window=100,
+            depth_step=100,
+        )
+
+    drawing = build("to_slot=depth,")
+    gc = _linear_bands(drawing, 1)["gc"]
+
+    # OV-1159 (Owner LP-D64, LP-D42): record 2 has nothing to span, so the overlay keeps its place and
+    # adds no band space, but its labels keep their room: no letters on the GC plot ...
+    _assert_clear(_label_box(drawing, record_index=1), gc, "gc")
+    # ... the same room as an overlay that covers nothing, on the side with label text only.
+    if layer == "foreground":
+        assert gc == pytest.approx(_linear_bands(build(""), 1)["gc"], abs=1e-9)
+    else:
+        assert gc == pytest.approx(_linear_bands(build("to_slot=depth,", label_text=False), 1)["gc"], abs=1e-9)
+
+
 def _span_slot(
     spec: str = "anchor_slot=features,to_slot=gc,layer=underlay,z=-1",
     *,
@@ -1318,7 +1352,9 @@ _COVERING_SPANS = [
         pytest.param(None, 1.5, id="default-padding"),
         # Without padding a highlight's stroke passes the span edge by half its width.
         pytest.param(0, 1.5, id="no-padding"),
-        # A stroke wider than twice the padding: only a mark that paints out there passes the edge.
+        # A stroke wider than twice the padding: a highlight passes the edge; a band only once the stroke
+        # is wider than 2 * padding_px + 0.16 lane heights, a bracket or line only once it is wider than
+        # a lane plus 2 * padding_px, which these spans' lanes are too tall for.
         pytest.param(None, 10.0, id="wide-stroke"),
     ],
 )
@@ -1356,7 +1392,7 @@ def test_linear_span_label_stays_outside_every_slot_it_covers(
     for slot_id in covered:
         _assert_clear(box, bands[slot_id], slot_id)
     # ... from the span edge, or from the mark's paint where it really passes that edge (review 1176):
-    # a highlight's stroke beyond the padding; never a bracket or line at the lane centre.
+    # a highlight's stroke beyond the padding; a bracket or line on these tall lanes stays inside.
     edge_gap = span_top - box[1] if above else box[0] - span_bottom
     paint_gap = mark_top - box[1] if above else box[0] - mark_bottom
     assert min(edge_gap, paint_gap) == pytest.approx(4.0, abs=1e-6)
