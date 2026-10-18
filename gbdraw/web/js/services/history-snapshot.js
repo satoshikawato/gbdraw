@@ -1801,6 +1801,18 @@ export const createHistorySnapshotService = ({
         linearComparisonPlan: cloneLinearComparisonPlanMetadata(drawing.linearComparisonPlan)
       });
 
+  // OV-1168: the `ui` values of the artifact slot (the applied palette) are
+  // the shown Result's; a drawing that is not shown keeps its own in its slot,
+  // so its intent holds none and a restore of it writes none.
+  /** @param {DrawingId} drawingId */
+  const isShown = (drawingId) => drawingId === state.activeDrawingId?.value;
+  /** @param {Record<string, unknown>} ui */
+  const withoutSlotUi = (ui) => {
+    const drawingUi = { ...ui };
+    ARTIFACT_SLOT_KEYS.forEach((key) => { delete drawingUi[key]; });
+    return drawingUi;
+  };
+
   // Synchronous: History captures it without an await (OV-922).
   /** @param {DrawingId} drawingId */
   const buildHistoryIntent = (drawingId) => {
@@ -1808,7 +1820,7 @@ export const createHistorySnapshotService = ({
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
       : buildFallbackUiStateData(state, drawing);
-    const uiIntent = buildUiIntentData(ui, drawing);
+    const uiIntent = buildUiIntentData(isShown(drawingId) ? ui : withoutSlotUi(ui), drawing);
     uiIntent.selectedFeatureRecordIdx = getRef(state.selectedFeatureRecordIdx, 0);
     // B17, D-15-50: the composition offsets of this drawing's Results.
     const compositionDeltas = captures.composition ? cloneJsonData(captures.composition(drawingId)) : null;
@@ -1887,7 +1899,7 @@ export const createHistorySnapshotService = ({
     const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
     if (domains.has('files')) setGeneratedArtifactRef(suppressRef, true);
     try {
-      const ui = intent.ui || {};
+      const ui = isShown(drawingId) ? intent.ui || {} : withoutSlotUi(intent.ui || {});
       if (domains.has('ui')) {
         const inputType = inputTypeKeyOf(drawing);
         if (ui[inputType]) setRef(state[inputType], ui[inputType]);
@@ -1935,7 +1947,7 @@ export const createHistorySnapshotService = ({
       await nextTick();
       // The mounted Result is the shown drawing's: a drawing that is not shown
       // takes the restored intent when it is shown again (D-15-51).
-      if (afterApplyHistoryIntent && drawingId === state.activeDrawingId?.value) {
+      if (afterApplyHistoryIntent && isShown(drawingId)) {
         await afterApplyHistoryIntent(intent, { ...context, domains });
       }
     } finally {

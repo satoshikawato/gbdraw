@@ -100,6 +100,12 @@ test('Reset all drawings is one project step: one Undo restores every drawing', 
   const history = window.__GBDRAW_HISTORY__;
   const { circular, linear } = state.drawings;
   if (state.activeDrawingId.value !== 'linear') app.selectDrawing('linear');
+  // The app's palette colors hold every palette key, as a palette load leaves them.
+  const { PALETTE_SLICE } = await import('../../gbdraw/web/js/services/drawing/palette.js');
+  const { normalizePaletteColors } = await import('../../gbdraw/web/js/utils/color-utils.js');
+  [circular, linear].forEach((drawing) => PALETTE_SLICE.install(drawing.slices.palette, {
+    currentColors: normalizePaletteColors(PALETTE_SLICE.capture(drawing.slices.palette).currentColors)
+  }));
   circular.form.prefix = 'circular-prefix';
   linear.form.prefix = 'linear-prefix';
   const circularBefore = hashOf('circular');
@@ -264,4 +270,19 @@ test('Reset Settings re-derives the comparison rings from the kept ring files', 
   assert.deepEqual(ringsOf(), uploaded);
   state.files.c_conservation_fastas = [];
   app.changeCircularConservationSource();
+});
+
+// OV-1168: the applied palette is the shown Result's (an artifact slot
+// value). An Undo of Reset made in Circular, from Linear, restores Circular's
+// part without writing Circular's applied palette onto the shown Linear.
+test('an Undo of Reset from the other drawing keeps the shown drawing\'s applied palette', async () => {
+  const app = createAppSetup();
+  if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
+  state.appliedPaletteName.value = 'circular-palette';
+  await app.resetSettings();
+  assert.equal(state.appliedPaletteName.value, 'default');
+  assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
+  const linearApplied = state.appliedPaletteName.value;
+  await app.undoHistory();
+  assert.equal(state.appliedPaletteName.value, linearApplied);
 });
