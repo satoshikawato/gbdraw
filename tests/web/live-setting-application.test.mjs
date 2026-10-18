@@ -98,34 +98,31 @@ test('the G1 rows are the live setting rows, and each request path has its proje
 });
 
 test('a History step names the live request paths of the shown drawing it changed', () => {
+  // Each drawing has its own History (PD-OI-090): a step's paths are relative to its drawing.
   const step = (...paths) => paths.map((path) => ({ path }));
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'linear', 'config', 'adv', 'legend_font_size']), 'linear'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'adv', 'legend_font_size'])),
     ['diagramOptions.configOverrides.objects.legends.font_size']);
   // Layout preferences are keyed by mode, and Circular ones by single or
   // multi-record canvas (`createDefaultLayoutPreferences`).
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'ui', 'layoutPreferences', 'circular', 'multi', 'plotTitlePosition']), 'circular'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['ui', 'layoutPreferences', 'circular', 'multi', 'plotTitlePosition'])),
     ['diagramOptions.output.plotTitlePosition']);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'ui', 'layoutPreferences', 'circular', 'single', 'legend']), 'circular'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['ui', 'layoutPreferences', 'circular', 'single', 'legend'])),
     ['diagramOptions.output.legend']);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'linear', 'ui', 'layoutPreferences', 'linear', 'legend']), 'linear'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['ui', 'layoutPreferences', 'linear', 'legend'])),
     ['diagramOptions.output.legend']);
-  // An Undo passes the shown drawing's paths without the mode prefix.
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'adv', 'multi_record_positions', 0, 'row']), 'circular'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'adv', 'multi_record_positions', 0, 'row'])),
     ['layout.multiRecordPositions']);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'plot_title']), 'linear'), ['diagramOptions.plotTitle']);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'linear', 'config', 'form', 'keep_definition_left_aligned']), 'linear'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'plot_title'])), ['diagramOptions.plotTitle']);
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'keep_definition_left_aligned'])),
     ['diagramOptions.configOverrides.canvas.linear.keep_definition_left_aligned']);
   // OV-1078: Multi-Record Canvas decides which canvas's positions the draft
   // draws, so its change requests them again.
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'config', 'form', 'multi_record_canvas']), 'circular'),
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'multi_record_canvas'])),
     ['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition']);
-  // The other drawing, and settings that apply on Generate, name none.
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['modes', 'circular', 'config', 'adv', 'legend_font_size']), 'linear'), []);
-  assert.deepEqual(owner.liveSettingRequestPaths(step(
-    ['modes', 'linear', 'config', 'form', 'species'], ['modes', 'linear', 'config', 'adv', 'def_font_size']
-  ), 'linear'), []);
+  // Settings that apply on Generate name none.
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'species'], ['config', 'adv', 'def_font_size'])), []);
   // A step that replaced the whole drawing config names every live config field.
-  assert.ok(owner.liveSettingRequestPaths(step(['modes', 'linear', 'config']), 'linear').includes('diagramOptions.plotTitle'));
+  assert.ok(owner.liveSettingRequestPaths(step(['config'])).includes('diagramOptions.plotTitle'));
 });
 
 test('a Linear live apply draws the G1 values as Generate does and keeps every other committed value', () => {

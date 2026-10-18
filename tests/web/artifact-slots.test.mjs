@@ -153,31 +153,26 @@ test('a Generate after a switch reads no decoration of the other mode\'s Result'
   assert.strictEqual(state.results.value, values.results);
 });
 
-// REVIEW-1 P3: a History step that switches the mode reads its alignment Reset
-// receipt against the committed Session of the step's mode before anything is
-// applied, so a receipt that does not bind it leaves the shown mode and its
-// artifact as they were.
-test('a mode-switch step whose alignment receipt does not bind fails before the switch', async () => {
+// REVIEW-1 P3: a History step reads its alignment Reset receipt against the
+// committed Session of its drawing's artifact before anything is applied, so a
+// receipt that does not bind it leaves the drawing and its artifact as they
+// were. A step is always of the shown drawing (PD-OI-090), and a step of a
+// drawing that is not shown is refused.
+test('a step whose alignment receipt does not bind fails before anything is applied', async () => {
   const { values } = await fillCircularArtifact();
   installShownDrawing('circular');
-  /** @type {string[]} */
-  const transitions = [];
-  snapshots.registerModeTransition((mode) => { transitions.push(mode); });
-  snapshots.registerDrawingCommittedSession((drawingId) => (
-    drawingId === state.drawings.circular.id ? canonicalRenderArtifactOwner.capture().committedCanonicalSession : null
-  ));
-  try {
-    await assert.rejects(snapshots.applyHistoryIntent(
-      { ui: { mode: 'linear' }, alignmentState: { receipt: { binding: 'stale', directions: [], referenceDeltaX: null }, plan: null } },
-      { changes: [{ path: ['ui', 'mode'] }, { path: ['alignmentState', 'receipt'] }] }
-    ), /ALIGNMENT_RESET_EVIDENCE|receipt/i);
-    assert.deepEqual(transitions, []);
-    assert.equal(state.mode.value, 'circular');
-    assert.strictEqual(state.results.value, values.results);
-  } finally {
-    snapshots.registerModeTransition(null);
-    snapshots.registerDrawingCommittedSession(null);
-  }
+  const prefix = state.activeDrawing().form.prefix;
+  await assert.rejects(snapshots.drawingHistory('circular').applyIntent(
+    {
+      config: { form: { ...state.activeDrawing().form, prefix: 'not applied' } },
+      alignmentState: { receipt: { binding: 'stale', directions: [], referenceDeltaX: null }, plan: null }
+    },
+    { changes: [{ path: ['config', 'form', 'prefix'] }, { path: ['alignmentState', 'receipt'] }] }
+  ), /ALIGNMENT_RESET_EVIDENCE|receipt/i);
+  assert.equal(state.activeDrawing().form.prefix, prefix);
+  assert.strictEqual(state.results.value, values.results);
+  await assert.rejects(snapshots.drawingHistory('linear').applyIntent({ config: {} }, { changes: [{ path: ['config'] }] }),
+    /drawing linear only while it is shown/);
 });
 
 // Review alignment compares its mode's own Result whichever mode is shown (OV-622, D-45).

@@ -94,7 +94,7 @@ import {
 } from '../services/alignment-review-view.js';
 import { setMainSessionComparisonFrameConverter } from '../services/main-session-comparison-frame.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
-import { createHistoryManager } from '../services/history.js';
+import { createHistoryRouter } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import {
@@ -426,10 +426,6 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
 });
 
 const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: 'Undo or Redo in progress. Retry after it finishes.' });
-// E1: a History step that switches the diagram mode; its changes name `ui.mode`.
-/** @param {unknown} changes */
-const historyStepSwitchesMode = (changes) => (Array.isArray(changes) ? changes : [])
-  .some((/** @type {{ path?: unknown[] }} */ { path } = {}) => path?.[0] === 'ui' && path[1] === 'mode');
 
 export const createAppSetup = () => {
   provide(SETTING_NOTE_APPLIES, committedLiveSettingApplies);
@@ -1666,28 +1662,36 @@ export const createAppSetup = () => {
       specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
-  const history = createHistoryManager(/** @type {HistoryManagerOptions} */ ({
-    buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: (...args) => followRuleEdits(
-      state.activeDrawing(), () => restoreWithSpecificRuleDrafts(historySnapshots.applyHistoryIntent, ...args)
-    ),
-    buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: (checkpoint, restored) => followRuleEdits(
-      state.activeDrawing(), () => restoreWithSpecificRuleDrafts(historySnapshots.applyArtifactCheckpoint, checkpoint), restored
-    ),
-    captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
-    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
-    compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
-    signatureFor: historySnapshots.snapshotSignature,
-    fileStore: historyFileStore,
-    collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
-    makeRef: ref,
-    mutationAvailability: sessionOperationAvailability,
-    // An Undo or Redo of a mode switch waits as the mode buttons do (E1).
-    stepAvailability: (/** @type {{ changes?: unknown }} */ { changes }) => (
-      historyStepSwitchesMode(changes) ? diagramModeOperationBusy() : null
-    )
-  }));
+  // PD-OI-090: one History per drawing behind the router, which keeps the
+  // manager API for the shown drawing; the drawings share one byte budget and
+  // one file retention (OV-112).
+  const history = createHistoryRouter({
+    drawingIds: Object.values(state.drawings).map((drawing) => drawing.id),
+    activeDrawingId: () => state.activeDrawingId.value,
+    estimateFileBytes: historyFileStore.estimateBytes,
+    retainOnlyFiles: historyFileStore.retainOnly,
+    managerOptions: (drawingId) => {
+      const drawing = state.drawings[/** @type {DrawingId} */ (drawingId)];
+      const ports = historySnapshots.drawingHistory(drawing.id);
+      return /** @type {HistoryManagerOptions} */ ({
+        buildIntent: ports.buildIntent,
+        applyIntent: (...args) => followRuleEdits(
+          drawing, () => restoreWithSpecificRuleDrafts(ports.applyIntent, ...args)
+        ),
+        buildCheckpoint: ports.buildCheckpoint,
+        applyCheckpoint: (checkpoint, restored) => followRuleEdits(
+          drawing, () => restoreWithSpecificRuleDrafts(ports.applyCheckpoint, checkpoint), restored
+        ),
+        captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
+        restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
+        compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
+        signatureFor: historySnapshots.snapshotSignature,
+        collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
+        makeRef: ref,
+        mutationAvailability: sessionOperationAvailability
+      });
+    }
+  });
   // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
   // Confirmations ask with the app's choice dialog, and an
@@ -3090,6 +3094,26 @@ export const createAppSetup = () => {
     }
     setCircularConservationSourceFiles(drawing, sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
   };
+  // E1: each drawing's generated artifact. The shown drawing's artifact is the
+  // installed state; another drawing's waits here, by its drawing ID and by
+  // reference, until the mode transition installs it (no entry: the drawing
+  // has no artifact yet, or is shown). Only the transition and Session Load
+  // (with its rollback) write it.
+  /** @type {Map<DrawingId, Readonly<ArtifactSlot>>} */
+  const artifactSlots = new Map();
+  // The Results of all drawings: the shown one's and every kept one's. The
+  // per-Result caches (Legend inventories, retired Legend entries, projected
+  // editor state) keep a kept Result's entries while another drawing is shown.
+  const liveResultIdentities = () => [
+    ...results.value,
+    ...[...artifactSlots.values()].flatMap((slot) => slot.values.results || [])
+  ].map(previewRuntime.getResultIdentity);
+  // The Results of one drawing: the shown one's, or those its slot keeps.
+  /** @param {DrawingId} drawingId */
+  const resultIdentitiesOf = (drawingId) => (drawingId === state.activeDrawingId.value
+    ? results.value
+    : artifactSlots.get(drawingId)?.values.results || []
+  ).map(previewRuntime.getResultIdentity);
   // R13: a moved record clears the alignment plan and keeps the aligned record
   // positions. The alignment owner runs its candidate through Generate, which
   // reads this layout owner, so the root registers both ports once the
@@ -3116,7 +3140,7 @@ export const createAppSetup = () => {
   });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   // History's capture registers once its owner exists (R13).
-  historySnapshots.registerCapture('composition', legendLayout.captureCompositionIntent);
+  historySnapshots.registerCapture('composition', (drawingId) => legendLayout.captureCompositionIntent(resultIdentitiesOf(drawingId)));
   /** @param {DrawingState} drawing */
   const shouldSyncMountedLabelEditor = (drawing) => (
     isFeatureDrawerMounted.value
@@ -3137,20 +3161,6 @@ export const createAppSetup = () => {
     || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
     || (!context.bindingOptions.isIncrementalEdit && context.sourceClass !== 'legacy-import')
   );
-  // E1: each drawing's generated artifact. The shown drawing's artifact is the
-  // installed state; another drawing's waits here, by its drawing ID and by
-  // reference, until the mode transition installs it (no entry: the drawing
-  // has no artifact yet, or is shown). Only the transition and Session Load
-  // (with its rollback) write it.
-  /** @type {Map<DrawingId, Readonly<ArtifactSlot>>} */
-  const artifactSlots = new Map();
-  // The Results of all drawings: the shown one's and every kept one's. The
-  // per-Result caches (Legend inventories, retired Legend entries, projected
-  // editor state) keep a kept Result's entries while another drawing is shown.
-  const liveResultIdentities = () => [
-    ...results.value,
-    ...[...artifactSlots.values()].flatMap((slot) => slot.values.results || [])
-  ].map(previewRuntime.getResultIdentity);
   // Each Result's bytes reflect the editor state it was committed or last
   // shown with (`createResultPaintRecord`); the binder below reads it (R13).
   const resultPaintRecord = createResultPaintRecord();
@@ -3393,9 +3403,10 @@ export const createAppSetup = () => {
   });
   // R1 (c), PD-OI-102: a History step, a checkpoint (Reset Settings, a rule
   // preset), and their Undo and Redo that change live setting rows of the
-  // shown drawing ask the automatic rerender to apply them.
+  // shown drawing ask the automatic rerender to apply them (the router passes
+  // the shown drawing's steps only).
   history.setSettingsStepListener((changes) => {
-    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes, mode.value) : allLiveSettingRequestPaths(), mode.value);
+    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value);
   });
   /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
@@ -3891,9 +3902,6 @@ export const createAppSetup = () => {
 
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string }} */ { domains, changes, direction } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
-    // E1: a step that switched the mode showed that mode's own Result through
-    // the transition, which projects the editor intent onto it on display.
-    if (historyStepSwitchesMode(changes)) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
     // B17: restore the offsets of each Result whose composition this step changed.
     const compositionResults = new Set();
@@ -4289,8 +4297,10 @@ export const createAppSetup = () => {
     rememberDepartingResultProjection(drawing);
     // 2. Artifact slots.
     swapArtifactSlots(state.drawings[nextMode]);
-    // 3. The shown drawing.
+    // 3. The shown drawing; its History takes the app-level values the other
+    // drawing's steps changed (PD-OI-090).
     installShownDrawing(drawingIdOfMode(nextMode));
+    void history.refreshCurrentIntent();
     // 4. Transient UI. "Showing the last successful result" named the
     // departing mode's Result, and the notice the departing mode's work.
     resetModeTransientUi();
@@ -4308,12 +4318,6 @@ export const createAppSetup = () => {
     previewRuntime.presentSelectedResult({ modeArrival: true });
     return true;
   };
-  historySnapshots.registerModeTransition(transitionDiagramMode);
-  // The committed Session of a drawing's artifact: the shown drawing's
-  // (`getCommittedCanonicalSession`), or the one its slot keeps.
-  historySnapshots.registerDrawingCommittedSession((drawingId) => readArtifactOfDrawing(drawingId,
-    state.activeDrawingId.value, artifactSlots, getCommittedCanonicalSession,
-    (slot) => slot.runtimeState?.canonical?.committedCanonicalSession) ?? null);
   // A switch waits for Generate, a label rerender, Save and Load, so each
   // Result lands in its own mode's slot (OIPC-C07): the mode buttons and an
   // Undo or Redo of a switch read this one predicate. The buttons also wait
@@ -5245,8 +5249,9 @@ export const createAppSetup = () => {
     // the Legend list follows the Result. The reset itself runs at once, so a
     // caller reads the reset settings right after resetSettings(). One
     // rerender follows the step: the rerender requests wait until it ends
-    // (OV-1076).
-    return holdAutomaticRerender(() => history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
+    // (OV-1076). Reset is one step in each drawing's History (D-15-50): the
+    // shown drawing's checkpoint, and an intent step in every other drawing.
+    return holdAutomaticRerender(() => history.runInEveryDrawing('Reset settings', () => history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
       const palette = { ...appliedPaletteColors.value };
@@ -5300,7 +5305,7 @@ export const createAppSetup = () => {
         legendActions.extractLegendEntries();
       }
       return true;
-    })));
+    }))));
   };
 
   const resetLayout = () => {

@@ -100,7 +100,8 @@ export const createLegendLayout = ({
   };
   /** @param {unknown} result */
   const resultIdentity = (result) => previewRuntime?.getResultIdentity?.(result) || '';
-  const captureCompositionIntent = () => {
+  /** @param {readonly string[]} identities The Results of the drawing whose History captures. */
+  const captureCompositionIntent = (identities) => {
     const runtime = previewRuntime?.getActiveRuntime?.() || null;
     // state is untyped; the container holds our own Result, so this is an SVG or null.
     const svg = /** @type {SVGSVGElement | null} */ (state.svgContainer.value?.querySelector?.('svg') || null);
@@ -119,8 +120,7 @@ export const createLegendLayout = ({
     /** @type {Record<string, CompositionRecordDeltas>} */
     const record = {};
     if (movedDeltas.size === 0) return record;
-    state.results.value.forEach((/** @type {unknown} */ result) => {
-      const identity = resultIdentity(result);
+    identities.forEach((identity) => {
       // `has` was just checked.
       if (movedDeltas.has(identity)) record[identity] = /** @type {CompositionRecordDeltas} */ (movedDeltas.get(identity));
     });

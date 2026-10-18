@@ -3,7 +3,6 @@
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
-/** @import { CommittedCanonicalSession } from './session-request.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -69,26 +68,21 @@ export { cloneJsonData };
 /** @typedef {{ name?: unknown, content?: unknown }} ResultData One generated Result, as the fallback capture and restore read it. */
 /** @typedef {{ receipt?: AlignmentResetReceipt | null, plan?: unknown, recordTranslations?: unknown }} AlignmentStateData */
 /**
- * The app-level `ui` values of an intent, checkpoint, or generated artifact: the fallback fields,
- * the shown mode, and the keys the owners of `ui` add.
+ * The `ui` values of an intent, checkpoint, or generated artifact: the fallback fields, the shown
+ * mode (a checkpoint's and a handle's only), and the keys the owners of `ui` add.
  * @typedef {FallbackUiData & Record<string, unknown> & { mode?: string, selectedFeatureRecordIdx?: unknown }} IntentUiData
  */
 /**
- * One diagram mode's drawing in an intent or checkpoint.
- * @typedef {object} ModeIntentData
+ * A History intent: one drawing's settings and edits, the file bindings of its
+ * slots, and the app-level values its steps record (PD-OI-090).
+ * @typedef {object} HistoryIntentData
  * @property {HistorySnapshotData} [config] The Settings capture.
- * @property {DrawingUiData} [ui]
+ * @property {IntentUiData} [ui]
  * @property {FeatureEditsData} [features]
  * @property {EditorIntentData} [editorState]
  * @property {GroupNameIntentData} [groupNames]
- */
-/**
- * A History intent: both drawings and the shared edits (PD-OI-086).
- * @typedef {object} HistoryIntentData
- * @property {Partial<Record<'circular' | 'linear', ModeIntentData>>} [modes]
  * @property {FilesData} [files]
- * @property {AlignmentStateData} [alignmentState]
- * @property {IntentUiData} [ui]
+ * @property {AlignmentStateData} [alignmentState] A Linear drawing's.
  * @property {DraftIntentData} [drafts]
  * @property {OrthogroupIntentData} [orthogroupState]
  */
@@ -97,13 +91,12 @@ export { cloneJsonData };
  * @typedef {{ changes?: { path?: unknown }[], [key: string]: unknown }} HistoryIntentContext
  */
 /**
- * An artifact checkpoint: the shown mode's intent and the generated Result domains.
+ * An artifact checkpoint: the shown drawing's intent and the generated Result domains.
  * @typedef {object} ArtifactCheckpointData
  * @property {HistorySnapshotData} [config]
  * @property {FilesData} [files]
  * @property {AlignmentStateData} [alignmentState]
  * @property {DraftIntentData} [drafts]
- * @property {{ mode?: unknown, drawing?: ModeIntentData } | null} [otherMode] The other mode's drawing.
  * @property {IntentUiData} [ui]
  * @property {HistorySnapshotData[]} [results]
  * @property {FeatureEditsData & { extractedFeatures?: unknown, featureRecordIds?: unknown }} [features]
@@ -255,9 +248,16 @@ const buildGroupNameIntentData = (drawing) => GROUP_NAMES_SLICE.capture(drawing.
 // Neither the selected Result nor the offsets read from its mounted root is
 // an edit, so neither is intent; composition offsets are recorded per Result
 // in `compositionUserDeltas` (B17).
-/** @param {Record<string, unknown>} [ui] */
-const buildUiIntentData = (ui = {}) => {
+// A drawing switch is no step (PD-OI-090), so the intent holds no `mode`; a
+// drawing's intent holds the input type of its own slots.
+/**
+ * @param {Record<string, unknown>} ui
+ * @param {DrawingIdentity} drawing
+ */
+const buildUiIntentData = (ui, drawing) => {
   const intent = clonePlainObject(ui);
+  delete intent.mode;
+  delete intent[drawing.mode === 'linear' ? 'cInputType' : 'lInputType'];
   delete intent.generatedLegendPosition;
   delete intent.generatedMode;
   delete intent.generatedMultiRecordCanvas;
@@ -462,20 +462,6 @@ const applyDraftIntentData = (state, drafts = {}) => {
   setRef(state.newFeatureToAdd, String(drafts.newFeatureToAdd || ''));
 };
 
-// The `ui` values that belong to a drawing (Session 46 `modes.<m>.ui`, and
-// its LOSAT program); a History intent and checkpoint keep them per mode.
-const DRAWING_UI_KEYS = Object.freeze([
-  'canvasPadding', 'layoutPreferences', 'linearTypographyLinked', 'pendingPaletteName', 'pendingPaletteColors',
-  'losatProgram'
-]);
-/** @param {Record<string, any>} ui */
-const drawingUiPart = (ui = {}) => Object.fromEntries(
-  DRAWING_UI_KEYS.filter((key) => Object.hasOwn(ui, key)).map((key) => [key, ui[key]])
-);
-/** @param {Record<string, any>} ui */
-const appUiPart = (ui = {}) => Object.fromEntries(
-  Object.entries(ui).filter(([key]) => !DRAWING_UI_KEYS.includes(key))
-);
 // A History step holds the padding the canvas slice captured (the cast).
 /**
  * @param {{ readonly slices: { readonly canvas: CanvasSlice } }} drawing
@@ -495,22 +481,6 @@ const installQueuedPalette = (drawing, { pendingPaletteName, pendingPaletteColor
   pendingPaletteColors: pendingPaletteColors && typeof pendingPaletteColors === 'object'
     ? /** @type {PaletteColors} */ (clonePlainObject(pendingPaletteColors)) : undefined
 });
-// Installs a drawing's `ui` values as captured. The shown drawing's values go
-// through the UI restore with the app-level values instead.
-/**
- * @param {DrawingView} drawing
- * @param {DrawingUiData} [ui]
- */
-const applyDrawingUiIntentData = (drawing, ui = {}) => {
-  SETTINGS_SLICE.install(drawing.slices.settings, {
-    layoutPreferences: ui.layoutPreferences ? normalizeLayoutPreferences(ui.layoutPreferences) : undefined,
-    linearTypographyLinked: typeof ui.linearTypographyLinked === 'boolean' ? ui.linearTypographyLinked : undefined,
-    losatProgram: ui.losatProgram || undefined
-  });
-  installCanvasPadding(drawing, ui);
-  installQueuedPalette(drawing, ui);
-};
-
 const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
   if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
     window.requestAnimationFrame(() => resolve());
@@ -564,7 +534,7 @@ const buildFallbackUiStateData = (state, drawing) => ({
   plotTitleUserOffset: { ...(state.plotTitleUserOffset || {}) }
 });
 
-// `mode` is restored by the mode transition (`restoreMode`), not here.
+// `mode` is not restored: a drawing switch is no History step (PD-OI-090).
 /**
  * @param {Record<string, any>} state
  * @param {DrawingView} drawing
@@ -698,74 +668,88 @@ const applyFallbackResultsData = (state, results = []) => {
   );
 };
 
-// The History intent holds every file binding by reference, including the
-// BLAST rows and comparison sequences of a LOSAT-cache replay: its ring rows and
-// managed track slots name those rows, so Undo restores them together (B23).
+// A drawing's intent holds the file bindings of its slots by reference
+// (PD-OI-090): Circular's `c_*` inputs, including the BLAST rows and comparison
+// sequences of a LOSAT-cache replay (its ring rows and managed track slots name
+// those rows, so Undo restores them together, B23), or Linear's records and
+// comparison files. The five table files stay shared until each drawing binds
+// its own; every drawing's intent holds them.
+const SHARED_TABLE_FILE_KEYS = Object.freeze(['d_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority']);
 /**
  * @param {Record<string, any>} state
  * @param {DrawingView} drawing
  * @param {HistorySnapshotFileStore} fileStore
+ * @returns {FilesData}
  */
-const buildIntentFilesData = (state, drawing, fileStore) => ({
-  c_gb: fileStore.describeValue(state.files?.c_gb),
-  c_gff: fileStore.describeValue(state.files?.c_gff),
-  c_fasta: fileStore.describeValue(state.files?.c_fasta),
-  c_depth: fileStore.describeValue(state.files?.c_depth),
-  c_conservation_blasts: fileStore.describeValue(state.files?.c_conservation_blasts || []),
-  c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
-    ? 'losat-cache'
-    : null,
-  c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
-  c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
-  d_color: fileStore.describeValue(state.files?.d_color),
-  t_color: fileStore.describeValue(state.files?.t_color),
-  blacklist: fileStore.describeValue(state.files?.blacklist),
-  whitelist: fileStore.describeValue(state.files?.whitelist),
-  qualifier_priority: fileStore.describeValue(state.files?.qualifier_priority),
-  linearSeqs: Array.from(state.linearSeqs || []).map((seq) => ({
-    uid: seq.uid,
-    gb: fileStore.describeValue(seq.gb),
-    gff: fileStore.describeValue(seq.gff),
-    fasta: fileStore.describeValue(seq.fasta),
-    depth: fileStore.describeValue(seq.depth),
-    losat_gencode: seq.losat_gencode ?? 1,
-    definition: seq.definition ?? '',
-    record_subtitle: seq.record_subtitle ?? '',
-    file_definition: seq.file_definition ?? '',
-    file_subtitle: seq.file_subtitle ?? '',
-    inferred_definition: seq.inferred_definition ?? '',
-    region_record_id: seq.region_record_id ?? '',
-    region_start: seq.region_start ?? null,
-    region_end: seq.region_end ?? null,
-    region_reverse: Boolean(seq.region_reverse)
-  })),
-  linearComparisons: Array.from(drawing.linearComparisonPlan?.edges || []).map((edge) => ({
-    id: String(edge?.id || ''),
-    file: fileStore.describeValue(edge?.file)
-  }))
-});
+const buildIntentFilesData = (state, drawing, fileStore) => {
+  const shared = Object.fromEntries(SHARED_TABLE_FILE_KEYS.map((key) => [key, fileStore.describeValue(state.files?.[key])]));
+  if (drawing.mode !== 'linear') {
+    return {
+      c_gb: fileStore.describeValue(state.files?.c_gb),
+      c_gff: fileStore.describeValue(state.files?.c_gff),
+      c_fasta: fileStore.describeValue(state.files?.c_fasta),
+      c_depth: fileStore.describeValue(state.files?.c_depth),
+      c_conservation_blasts: fileStore.describeValue(state.files?.c_conservation_blasts || []),
+      c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
+        ? 'losat-cache'
+        : null,
+      c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
+      c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
+      ...shared
+    };
+  }
+  return {
+    ...shared,
+    linearSeqs: Array.from(state.linearSeqs || []).map((seq) => ({
+      uid: seq.uid,
+      gb: fileStore.describeValue(seq.gb),
+      gff: fileStore.describeValue(seq.gff),
+      fasta: fileStore.describeValue(seq.fasta),
+      depth: fileStore.describeValue(seq.depth),
+      losat_gencode: seq.losat_gencode ?? 1,
+      definition: seq.definition ?? '',
+      record_subtitle: seq.record_subtitle ?? '',
+      file_definition: seq.file_definition ?? '',
+      file_subtitle: seq.file_subtitle ?? '',
+      inferred_definition: seq.inferred_definition ?? '',
+      region_record_id: seq.region_record_id ?? '',
+      region_start: seq.region_start ?? null,
+      region_end: seq.region_end ?? null,
+      region_reverse: Boolean(seq.region_reverse)
+    })),
+    linearComparisons: Array.from(drawing.linearComparisonPlan?.edges || []).map((edge) => ({
+      id: String(edge?.id || ''),
+      file: fileStore.describeValue(edge?.file)
+    }))
+  };
+};
 
-// An artifact checkpoint adds the generated Linear comparisons.
+// A Linear drawing's artifact checkpoint adds its generated comparisons.
 /**
  * @param {Record<string, any>} state
  * @param {DrawingView} drawing
  * @param {HistorySnapshotFileStore} fileStore
+ * @returns {FilesData}
  */
-const buildFilesData = (state, drawing, fileStore) => ({
-  ...buildIntentFilesData(state, drawing, fileStore),
-  linearCanonicalComparisons: (
-    Array.isArray(state.files?.linearCanonicalComparisons)
-      ? state.files.linearCanonicalComparisons
-      : []
-  ).map((/** @type {ResourceBackedComparison} */ comparison) => (
-    isResourceBackedCanonicalComparison(comparison)
-      ? {
-          ...mapResourceBackedCanonicalComparison(comparison),
-          file: fileStore.describeValue(comparison.file)
-        }
-      : cloneJsonData(comparison)
-  ))
-});
+const buildFilesData = (state, drawing, fileStore) => {
+  const files = buildIntentFilesData(state, drawing, fileStore);
+  if (drawing.mode !== 'linear') return files;
+  return {
+    ...files,
+    linearCanonicalComparisons: (
+      Array.isArray(state.files?.linearCanonicalComparisons)
+        ? state.files.linearCanonicalComparisons
+        : []
+    ).map((/** @type {ResourceBackedComparison} */ comparison) => (
+      isResourceBackedCanonicalComparison(comparison)
+        ? {
+            ...mapResourceBackedCanonicalComparison(comparison),
+            file: fileStore.describeValue(comparison.file)
+          }
+        : cloneJsonData(comparison)
+    ))
+  };
+};
 
 /**
  * @param {HistorySnapshotState} state
@@ -829,22 +813,28 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
   state.matchSequenceRegistry?.reset?.();
   /** @param {unknown} value */
   const restore = (value) => fileStore.restoreValue(value);
-  state.files.c_gb = restore(filesData?.c_gb);
-  state.files.c_gff = restore(filesData?.c_gff);
-  state.files.c_fasta = restore(filesData?.c_fasta);
-  state.files.c_depth = restore(filesData?.c_depth);
-  state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
-    ? restore(filesData.c_conservation_blasts).filter(Boolean)
-    : [];
-  state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
-    ? 'losat-cache'
-    : null;
-  state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
-    ? restore(filesData.c_conservation_fastas)
-    : [];
-  state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
-    ? restore(filesData.c_conservation_sequence_sources)
-    : [];
+  SHARED_TABLE_FILE_KEYS.forEach((key) => {
+    state.files[key] = restore(filesData?.[/** @type {keyof FilesData} */ (key)]);
+  });
+  if (drawing.mode !== 'linear') {
+    state.files.c_gb = restore(filesData?.c_gb);
+    state.files.c_gff = restore(filesData?.c_gff);
+    state.files.c_fasta = restore(filesData?.c_fasta);
+    state.files.c_depth = restore(filesData?.c_depth);
+    state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
+      ? restore(filesData.c_conservation_blasts).filter(Boolean)
+      : [];
+    state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
+      ? 'losat-cache'
+      : null;
+    state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
+      ? restore(filesData.c_conservation_fastas)
+      : [];
+    state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
+      ? restore(filesData.c_conservation_sequence_sources)
+      : [];
+    return;
+  }
   if (Object.prototype.hasOwnProperty.call(filesData || {}, 'linearCanonicalComparisons')) {
     state.files.linearCanonicalComparisons = Array.isArray(filesData?.linearCanonicalComparisons)
       ? filesData.linearCanonicalComparisons.map((comparison) => (
@@ -854,11 +844,6 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
         ))
       : [];
   }
-  state.files.d_color = restore(filesData?.d_color);
-  state.files.t_color = restore(filesData?.t_color);
-  state.files.blacklist = restore(filesData?.blacklist);
-  state.files.whitelist = restore(filesData?.whitelist);
-  state.files.qualifier_priority = restore(filesData?.qualifier_priority);
 
   if (!state.linearSeqs || typeof state.linearSeqs.splice !== 'function') return;
   const rows = Array.isArray(filesData?.linearSeqs)
@@ -1028,52 +1013,15 @@ export const createHistorySnapshotService = ({
   // Intent captures of owners created after this service (R13): the
   // composition root registers each once its owner exists. An unregistered
   // capture adds nothing to the intent, as for a service without that owner.
-  /** @type {Record<string, (() => unknown) | null>} */
+  /** @type {Record<string, ((drawingId: DrawingId) => unknown) | null>} */
   const captures = { composition: null };
   /**
    * @param {string} name The capture's name; an unknown name throws.
-   * @param {(() => unknown) | null} capture
+   * @param {((drawingId: DrawingId) => unknown) | null} capture The capture of one drawing's part.
    */
   const registerCapture = (name, capture) => {
     if (!Object.hasOwn(captures, name)) throw new Error(`Unknown History intent capture: ${name}`);
     captures[name] = typeof capture === 'function' ? capture : null;
-  };
-
-  // E1: the composition root's mode transition and the committed Session of
-  // each drawing's artifact, by drawing ID, registered once they exist (R13). A History restore
-  // of a mode switch runs the transition, so Undo and Redo swap the modes'
-  // artifact slots. `restoreMode` is the one mode writer of the History
-  // restores, through the registered transition only: the shown drawing has
-  // one writer (`installShownDrawing`, services/config.js), so a service
-  // without a composition root (a unit test) registers its own transition.
-  /** @type {((mode: 'circular' | 'linear') => unknown) | null} */
-  let modeTransition = null;
-  /** @type {((drawingId: DrawingId) => CommittedCanonicalSession | null) | null} */
-  let drawingCommittedSession = null;
-  /** @param {((mode: 'circular' | 'linear') => unknown) | null} transition */
-  const registerModeTransition = (transition) => {
-    modeTransition = typeof transition === 'function' ? transition : null;
-  };
-  /** @param {((drawingId: DrawingId) => CommittedCanonicalSession | null) | null} reader */
-  const registerDrawingCommittedSession = (reader) => {
-    drawingCommittedSession = typeof reader === 'function' ? reader : null;
-  };
-  /** @param {string} mode */
-  const restoreMode = async (mode) => {
-    const next = mode === 'linear' ? 'linear' : 'circular';
-    if (getGeneratedArtifactRef(state.mode, 'circular') === next) return;
-    if (!modeTransition) throw new Error('A History restore of another mode needs the registered mode transition.');
-    modeTransition(next);
-    await nextTick();
-  };
-  // An artifact handle or checkpoint restores the displayed mode's artifact.
-  // History is last in, first out, so it finds the mode it was captured in; a
-  // mismatch is counted, and the transition shows that mode first.
-  /** @param {string} mode */
-  const restoreArtifactMode = async (mode) => {
-    if (getGeneratedArtifactRef(state.mode, 'circular') === (mode === 'linear' ? 'linear' : 'circular')) return;
-    recordStructuralMetric('artifactRestoreModeMismatchCount', 1);
-    await restoreMode(mode);
   };
 
   /** @param {HistorySnapshotRuntimeOwner | null} owner */
@@ -1594,7 +1542,6 @@ export const createHistorySnapshotService = ({
       closeTransientState(state);
       const mutableIntent = handle.mutableIntent || {};
       const ui = mutableIntent.ui || {};
-      if (ui.mode) await restoreArtifactMode(ui.mode);
       const drawing = drawingOf(getRef(state.mode, 'circular'));
       if (ui.cInputType) setGeneratedArtifactRef(state.cInputType, ui.cInputType);
       if (ui.lInputType) setGeneratedArtifactRef(state.lInputType, ui.lInputType);
@@ -1797,25 +1744,50 @@ export const createHistorySnapshotService = ({
     }
   };
 
-  // A History intent holds both drawings (PD-OI-086): an edit changes the
-  // shown mode's drawing only, while Reset Settings and Session Load change
-  // both, so Undo restores each drawing as captured.
-  /** @param {'circular' | 'linear'} drawingMode */
-  const buildModeIntent = (drawingMode) => {
-    const drawing = drawingOf(drawingMode);
-    const config = typeof buildConfigData === 'function'
-      ? buildConfigData(drawing)
-      : {
-          form: drawing.form,
-          adv: drawing.adv,
-          linearComparisonPlan: cloneLinearComparisonPlanMetadata(drawing.linearComparisonPlan)
-        };
+  // PD-OI-090: each drawing has its own History, so an intent and a checkpoint
+  // hold one drawing: its settings and edits, the bindings of its slots
+  // (`buildIntentFilesData`), and the app-level values the shown drawing's
+  // steps record (D-15-50). A restore installs into the shown drawing only:
+  // Undo and Redo walk the shown drawing's History.
+  /** @param {DrawingId} drawingId */
+  const drawingOfId = (drawingId) => {
+    const drawing = /** @type {D | undefined} */ (state.drawings[drawingId]);
+    if (!drawing) throw new Error(`History has no drawing ${drawingId}.`);
+    return drawing;
+  };
+  /** @param {DrawingId} drawingId */
+  const shownDrawingOf = (drawingId) => {
+    const drawing = drawingOfId(drawingId);
+    if (drawing !== state.activeDrawing()) {
+      throw new Error(`History restores drawing ${drawingId} only while it is shown.`);
+    }
+    return drawing;
+  };
+  /** @param {D} drawing */
+  const buildDrawingConfig = (drawing) => (typeof buildConfigData === 'function'
+    ? buildConfigData(drawing)
+    : {
+        form: drawing.form,
+        adv: drawing.adv,
+        linearComparisonPlan: cloneLinearComparisonPlanMetadata(drawing.linearComparisonPlan)
+      });
+
+  // Synchronous: History captures it without an await (OV-922).
+  /** @param {DrawingId} drawingId */
+  const buildHistoryIntent = (drawingId) => {
+    const drawing = drawingOfId(drawingId);
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
       : buildFallbackUiStateData(state, drawing);
-    return {
-      config,
-      ui: drawingUiPart(ui),
+    const uiIntent = buildUiIntentData(ui, drawing);
+    uiIntent.selectedFeatureRecordIdx = getRef(state.selectedFeatureRecordIdx, 0);
+    // B17, D-15-50: the composition offsets of this drawing's Results.
+    const compositionDeltas = captures.composition ? cloneJsonData(captures.composition(drawingId)) : null;
+    if (compositionDeltas) uiIntent.compositionUserDeltas = compositionDeltas;
+
+    return cloneJsonData({
+      config: buildDrawingConfig(drawing),
+      ui: uiIntent,
       features: buildFeatureIntentData({
         featureColorOverrides: captureFeatureFills(drawing.slices.paint),
         featureVisibilityManualRules: VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules,
@@ -1823,30 +1795,9 @@ export const createHistorySnapshotService = ({
         ...labelTextEditsData(drawing.slices.labelTables)
       }),
       editorState: editorIntentOf(captureLegendPaint(drawing.slices.paint)),
-      groupNames: buildGroupNameIntentData(drawing)
-    };
-  };
-
-  // Synchronous: History captures it without an await (OV-922).
-  const buildHistoryIntent = () => {
-    const shownMode = getRef(state.mode, 'circular') === 'linear' ? 'linear' : 'circular';
-    const drawing = drawingOf(shownMode);
-    const ui = typeof buildUiStateData === 'function'
-      ? buildUiStateData(drawing, { includePreviewNavigation: false })
-      : buildFallbackUiStateData(state, drawing);
-    const uiIntent = buildUiIntentData(appUiPart(ui));
-    uiIntent.selectedFeatureRecordIdx = getRef(state.selectedFeatureRecordIdx, 0);
-    const compositionDeltas = captures.composition ? cloneJsonData(captures.composition()) : null;
-    if (compositionDeltas) uiIntent.compositionUserDeltas = compositionDeltas;
-
-    return cloneJsonData({
-      modes: {
-        circular: buildModeIntent('circular'),
-        linear: buildModeIntent('linear')
-      },
-      files: buildIntentFilesData(state, drawingOf('linear'), fileStore),
-      alignmentState: captureAlignmentState(),
-      ui: uiIntent,
+      groupNames: buildGroupNameIntentData(drawing),
+      files: buildIntentFilesData(state, drawing, fileStore),
+      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState() } : {}),
       drafts: buildDraftIntentData(state),
       orthogroupState: buildOrthogroupIntentData({
         selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
@@ -1855,79 +1806,38 @@ export const createHistorySnapshotService = ({
     });
   };
 
-  const INTENT_DOMAINS = Object.freeze(['files', 'alignmentState', 'ui', 'drafts', 'orthogroupState']);
-  const MODE_INTENT_DOMAINS = Object.freeze(['config', 'ui', 'features', 'editorState', 'groupNames']);
-  // The domains a step changed: a top-level domain, or `modes.<m>.<domain>`.
-  /** @param {Record<string, any>} context */
+  const INTENT_DOMAINS = Object.freeze([
+    'config', 'ui', 'features', 'editorState', 'groupNames', 'files', 'alignmentState', 'drafts', 'orthogroupState'
+  ]);
+  // The domains a step changed: the first key of each change path.
+  /** @param {HistoryIntentContext} context */
   const intentDomains = (context) => {
     const changes = Array.isArray(context.changes) && context.changes.length > 0 ? context.changes : null;
-    if (!changes) {
-      return new Set([...INTENT_DOMAINS, ...['circular', 'linear'].flatMap((drawingMode) => (
-        MODE_INTENT_DOMAINS.map((domain) => `modes.${drawingMode}.${domain}`)
-      ))]);
-    }
+    if (!changes) return new Set(INTENT_DOMAINS);
     /** @type {Set<string>} */
     const domains = new Set();
     changes.forEach((change) => {
       const path = Array.isArray(change?.path) ? change.path : [];
-      if (path[0] !== 'modes') {
-        if (path[0]) domains.add(path[0]);
-        return;
-      }
-      const drawingModes = path.length > 1 ? [path[1]] : ['circular', 'linear'];
-      drawingModes.forEach((drawingMode) => {
-        (path.length > 2 ? [path[2]] : MODE_INTENT_DOMAINS)
-          .forEach((domain) => domains.add(`modes.${drawingMode}.${domain}`));
-      });
+      if (path[0]) domains.add(String(path[0]));
     });
     return domains;
   };
-  // The shown mode's part of a step as the composition root reads it: its
-  // domains and change paths without the `modes.<mode>` prefix.
-  /**
-   * @param {Record<string, any>} intent
-   * @param {Set<string>} domains
-   * @param {any[] | undefined} changes
-   * @param {'circular' | 'linear'} shownMode
-   */
-  const shownModeStep = (intent, domains, changes, shownMode) => {
-    const prefix = `modes.${shownMode}.`;
-    const shownDomains = new Set([...domains].flatMap((domain) => (
-      domain.startsWith('modes.')
-        ? (domain.startsWith(prefix) ? [domain.slice(prefix.length)] : [])
-        : [domain]
-    )));
-    const shownChanges = Array.isArray(changes)
-      ? changes.flatMap((change) => {
-          const path = Array.isArray(change?.path) ? change.path : [];
-          if (path[0] !== 'modes') return [change];
-          return path[1] === shownMode ? [{ ...change, path: path.slice(2) }] : [];
-        })
-      : changes;
-    const shownIntent = { ...intent, ...(intent.modes?.[shownMode] || {}), ui: intent.ui };
-    return { shownIntent, shownDomains, shownChanges };
-  };
 
   /**
+   * @param {DrawingId} drawingId
    * @param {HistoryIntentData | null | undefined} intent
    * @param {HistoryIntentContext} [context]
    */
-  const applyHistoryIntent = async (intent, context = {}) => {
+  const applyHistoryIntent = async (drawingId, intent, context = {}) => {
     if (!intent || typeof intent !== 'object') return;
+    const drawing = shownDrawingOf(drawingId);
     closeTransientState(state);
 
     const domains = intentDomains(context);
     // The alignment receipt is read against the committed Session of the
-    // step's mode before anything is applied; a mode switch then shows that
-    // mode with its own artifact.
-    const currentMode = getGeneratedArtifactRef(state.mode, 'circular') === 'linear' ? 'linear' : 'circular';
-    const stepMode = domains.has('ui') && intent.ui?.mode
-      ? (intent.ui.mode === 'linear' ? 'linear' : 'circular')
-      : currentMode;
+    // drawing's artifact before anything is applied.
     if (domains.has('alignmentState')) {
-      const canonical = stepMode === currentMode || !drawingCommittedSession
-        ? generatedArtifactRuntimeOwner?.capture?.()?.canonical?.committedCanonicalSession
-        : drawingCommittedSession(drawingOf(stepMode).id);
+      const canonical = generatedArtifactRuntimeOwner?.capture?.()?.canonical?.committedCanonicalSession;
       await validateSimilarityAlignmentResetReceipt(intent.alignmentState?.receipt, canonical && {
         ...canonical,
         renderRequest: { ...canonical.renderRequest, layout: {
@@ -1935,16 +1845,10 @@ export const createHistorySnapshotService = ({
         } }
       });
     }
-    await restoreMode(stepMode);
-    const shownMode = getGeneratedArtifactRef(state.mode, 'circular') === 'linear' ? 'linear' : 'circular';
-    const drawingModes = /** @type {const} */ (['circular', 'linear']);
-    /** @param {'circular' | 'linear'} drawingMode @param {string} domain */
-    const changed = (drawingMode, domain) => domains.has(`modes.${drawingMode}.${domain}`);
-    const linearDrawing = drawingOf('linear');
-    const retainedComparisonFiles = changed('linear', 'config') && !domains.has('files')
+    const retainedComparisonFiles = domains.has('config') && !domains.has('files')
       ? new Map(
-          (Array.isArray(linearDrawing.linearComparisonPlan?.edges)
-            ? linearDrawing.linearComparisonPlan.edges
+          (Array.isArray(drawing.linearComparisonPlan?.edges)
+            ? drawing.linearComparisonPlan.edges
             : []
           )
             .map((edge) => /** @type {[string, unknown]} */ ([String(edge?.id || ''), edge?.file ?? null]))
@@ -1955,26 +1859,24 @@ export const createHistorySnapshotService = ({
     const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
     if (domains.has('files')) setGeneratedArtifactRef(suppressRef, true);
     try {
+      const ui = intent.ui || {};
       if (domains.has('ui')) {
-        const ui = intent.ui || {};
         if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
         if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
         await nextTick();
       }
 
-      drawingModes.forEach((drawingMode) => {
-        if (!changed(drawingMode, 'config')) return;
-        const drawing = drawingOf(drawingMode);
-        const config = intent.modes?.[drawingMode]?.config;
+      if (domains.has('config')) {
+        const config = intent.config;
         if (typeof applyConfigData === 'function' && config) {
           // The alignmentState domain below owns the plan and translations (OV-383).
           applyConfigData(drawing, config, { resolveTrackPlacements: false, applyAlignment: false });
         } else if (config?.linearComparisonPlan) {
           installComparisonPlan(drawing, config.linearComparisonPlan);
         }
-      });
+      }
       if (retainedComparisonFiles) {
-        (linearDrawing.linearComparisonPlan?.edges || []).forEach((edge) => {
+        (drawing.linearComparisonPlan?.edges || []).forEach((edge) => {
           const edgeId = String(edge?.id || '');
           if (edgeId && retainedComparisonFiles.has(edgeId)) {
             edge.file = retainedComparisonFiles.get(edgeId);
@@ -1982,72 +1884,45 @@ export const createHistorySnapshotService = ({
         });
       }
 
-      // The shown drawing's `ui` values are restored with the app-level ones.
-      if (domains.has('ui') || changed(shownMode, 'ui')) {
-        const shownUi = { ...(intent.ui || {}), ...(intent.modes?.[shownMode]?.ui || {}) };
+      if (domains.has('ui')) {
         if (typeof applyUiStateData === 'function') {
-          applyUiStateData(drawingOf(shownMode), shownUi, { restorePreviewNavigation: false });
+          applyUiStateData(drawing, ui, { restorePreviewNavigation: false });
         } else {
-          applyFallbackUiStateData(state, drawingOf(shownMode), shownUi);
+          applyFallbackUiStateData(state, drawing, ui);
+        }
+        if (Object.hasOwn(ui, 'selectedFeatureRecordIdx')) {
+          setRef(state.selectedFeatureRecordIdx, Number.isInteger(ui.selectedFeatureRecordIdx)
+            ? ui.selectedFeatureRecordIdx : 0);
         }
       }
-      if (domains.has('ui') && Object.hasOwn(intent.ui || {}, 'selectedFeatureRecordIdx')) {
-        // `hasOwn` is true only when `intent.ui` exists.
-        const ownUi = /** @type {IntentUiData} */ (intent.ui);
-        setRef(state.selectedFeatureRecordIdx, Number.isInteger(ownUi.selectedFeatureRecordIdx)
-          ? ownUi.selectedFeatureRecordIdx : 0);
-      }
-      drawingModes.forEach((drawingMode) => {
-        if (drawingMode !== shownMode && changed(drawingMode, 'ui')) {
-          applyDrawingUiIntentData(drawingOf(drawingMode), intent.modes?.[drawingMode]?.ui || {});
-        }
-      });
 
       if (domains.has('files')) {
-        applyFilesData(state, linearDrawing, intent.files || {}, fileStore, normalizeLinearSeqList);
+        applyFilesData(state, drawing, intent.files || {}, fileStore, normalizeLinearSeqList);
       }
       if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState);
       if (domains.has('drafts')) applyDraftIntentData(state, intent.drafts || {});
-      drawingModes.forEach((drawingMode) => {
-        const drawing = drawingOf(drawingMode);
-        const modeIntent = intent.modes?.[drawingMode] || {};
-        if (changed(drawingMode, 'features')) applyFeatureIntentData(state, drawing, modeIntent.features || {});
-        if (changed(drawingMode, 'editorState')) applyEditorIntentData(drawing, modeIntent.editorState || {});
-        if (changed(drawingMode, 'groupNames')) applyGroupNameIntentData(drawing, modeIntent.groupNames || {});
-      });
+      if (domains.has('features')) applyFeatureIntentData(state, drawing, intent.features || {});
+      if (domains.has('editorState')) applyEditorIntentData(drawing, intent.editorState || {});
+      if (domains.has('groupNames')) applyGroupNameIntentData(drawing, intent.groupNames || {});
       if (domains.has('orthogroupState')) applyOrthogroupIntentData(state, intent.orthogroupState || {});
       await nextTick();
-      if (afterApplyHistoryIntent) {
-        const { shownIntent, shownDomains, shownChanges } = shownModeStep(intent, domains, context.changes, shownMode);
-        await afterApplyHistoryIntent(shownIntent, { ...context, changes: shownChanges, domains: shownDomains });
-      }
+      if (afterApplyHistoryIntent) await afterApplyHistoryIntent(intent, { ...context, domains });
     } finally {
       if (domains.has('files')) setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
   };
 
-  // A checkpoint holds the shown mode's artifact with its drawing, and the
-  // other mode's drawing as an intent does (Reset Settings resets both).
-  const buildArtifactCheckpoint = () => {
-    const shownMode = getRef(state.mode, 'circular') === 'linear' ? 'linear' : 'circular';
-    const otherMode = shownMode === 'linear' ? 'circular' : 'linear';
-    const drawing = drawingOf(shownMode);
-    const config = typeof buildConfigData === 'function'
-      ? buildConfigData(drawing)
-      : {
-          form: drawing.form,
-          adv: drawing.adv,
-          linearComparisonPlan: cloneLinearComparisonPlanMetadata(drawing.linearComparisonPlan)
-        };
-
+  // A checkpoint holds the shown drawing's artifact with the drawing.
+  /** @param {DrawingId} drawingId */
+  const buildArtifactCheckpoint = (drawingId) => {
+    const drawing = shownDrawingOf(drawingId);
     const generated = buildGeneratedArtifactSnapshot(drawing);
     const { featureCatalog = null, ...editorState } = generated.editorState || {};
     const checkpoint = cloneJsonData({
-      config,
-      files: buildFilesData(state, drawingOf('linear'), fileStore),
-      alignmentState: captureAlignmentState(),
+      config: buildDrawingConfig(drawing),
+      files: buildFilesData(state, drawing, fileStore),
+      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState() } : {}),
       drafts: buildDraftIntentData(state),
-      otherMode: { mode: otherMode, drawing: buildModeIntent(otherMode) },
       ...generated,
       editorState
     });
@@ -2055,9 +1930,13 @@ export const createHistorySnapshotService = ({
     return checkpoint;
   };
 
-  /** @param {ArtifactCheckpointData | null | undefined} snapshot */
-  const applyArtifactCheckpoint = async (snapshot) => {
+  /**
+   * @param {DrawingId} drawingId
+   * @param {ArtifactCheckpointData | null | undefined} snapshot
+   */
+  const applyArtifactCheckpoint = async (drawingId, snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
+    const drawing = shownDrawingOf(drawingId);
     const suppressRef = state.semanticFileWatchersSuppressed;
     const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
     setGeneratedArtifactRef(suppressRef, true);
@@ -2065,8 +1944,6 @@ export const createHistorySnapshotService = ({
       closeTransientState(state);
 
       const ui = snapshot.ui || {};
-      if (ui.mode) await restoreArtifactMode(ui.mode);
-      const drawing = drawingOf(getRef(state.mode, 'circular'));
       if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
       if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
       await nextTick();
@@ -2077,17 +1954,6 @@ export const createHistorySnapshotService = ({
         installComparisonPlan(drawing, snapshot.config.linearComparisonPlan);
       }
       applyDraftIntentData(state, snapshot.drafts || {});
-      const other = snapshot.otherMode;
-      if (other?.drawing && (other.mode === 'circular' || other.mode === 'linear')) {
-        const otherDrawing = drawingOf(other.mode);
-        if (typeof applyConfigData === 'function' && other.drawing.config) {
-          applyConfigData(otherDrawing, other.drawing.config, { resolveTrackPlacements: false });
-        }
-        applyDrawingUiIntentData(otherDrawing, other.drawing.ui || {});
-        applyFeatureIntentData(state, otherDrawing, other.drawing.features || {});
-        applyEditorIntentData(otherDrawing, other.drawing.editorState || {});
-        applyGroupNameIntentData(otherDrawing, other.drawing.groupNames || {});
-      }
 
       if (typeof applyUiStateData === 'function') {
         applyUiStateData(drawing, ui, { restorePreviewNavigation: false });
@@ -2096,8 +1962,8 @@ export const createHistorySnapshotService = ({
       }
       await nextTick();
 
-      applyFilesData(state, drawingOf('linear'), snapshot.files || {}, fileStore, normalizeLinearSeqList);
-      installAlignmentState(snapshot.alignmentState);
+      applyFilesData(state, drawing, snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState);
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
       if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
@@ -2116,26 +1982,32 @@ export const createHistorySnapshotService = ({
     }
   };
 
+  // The History ports of one drawing (`createHistoryRouter`'s managers).
+  /** @param {DrawingId} drawingId */
+  const drawingHistory = (drawingId) => ({
+    buildIntent: () => buildHistoryIntent(drawingId),
+    /** @param {HistoryIntentData | null | undefined} intent @param {HistoryIntentContext} [context] */
+    applyIntent: (intent, context) => applyHistoryIntent(drawingId, intent, context),
+    buildCheckpoint: () => buildArtifactCheckpoint(drawingId),
+    /** @param {ArtifactCheckpointData | null | undefined} snapshot */
+    applyCheckpoint: (snapshot) => applyArtifactCheckpoint(drawingId, snapshot)
+  });
+
   /** @param {unknown} snapshot */
   const snapshotSignature = (snapshot) => JSON.stringify(snapshot);
 
   return {
-    applyArtifactCheckpoint,
-    applyHistoryIntent,
-    buildArtifactCheckpoint,
     captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet,
     clearGeneratedArtifactIdentity,
     collectCurrentFileIds: () => collectCurrentFileIds(state, fileStore),
     compareGeneratedArtifactHandles,
-    buildHistoryIntent,
+    drawingHistory,
     captureArtifactSlot,
     installArtifactSlot,
     installGeneratedArtifactOwnerSet,
     installRedrawnArtifact,
     registerCapture,
-    registerDrawingCommittedSession,
-    registerModeTransition,
     restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity,
     setGeneratedArtifactRuntimeOwner,

@@ -1855,6 +1855,10 @@ export const createHistoryManager = ({
     markSavePoint,
     redo,
     redoLabel,
+    // PD-OI-090: a drawing that is shown again takes the app-level values the
+    // other drawings' steps changed as its current intent, so its Undo and
+    // Redo restore only what its own steps changed.
+    refreshCurrentIntent,
     restoring,
     capturing,
     revision,
@@ -1879,10 +1883,12 @@ export const createHistoryManager = ({
  */
 
 // PD-OI-090: each drawing has its own History. The router keeps the manager
-// API and routes it to the shown drawing's manager; a save point, a baseline,
-// and the settings-step listener cover every drawing, and a mutation or
-// traversal pending in any drawing is pending. The managers share one byte
-// budget and one file retention (`createHistoryBudget`).
+// API and routes it to the shown drawing's manager; a step that a call opened
+// closes in the manager that opened it, also after a drawing switch. A save
+// point and the baselines cover every drawing; the settings-step listener
+// hears the shown drawing's steps; a mutation or traversal pending in any
+// drawing is pending. The managers share one byte budget and one file
+// retention (`createHistoryBudget`).
 /** @param {HistoryRouterOptions} options */
 export const createHistoryRouter = ({
   drawingIds,
@@ -1902,25 +1908,51 @@ export const createHistoryRouter = ({
     return manager;
   };
   const every = () => [...managers.values()];
+  const others = () => [...managers].filter(([drawingId]) => drawingId !== activeDrawingId()).map(([, manager]) => manager);
+  const template = managerOf(drawingIds[0]);
+  /** @typedef {typeof template} DrawingHistory */
+  /** @type {WeakMap<object, DrawingHistory>} The manager that opened each step. */
+  const openedBy = new WeakMap();
+  /** @param {DrawingHistory} manager @param {string} key */
+  const memberOf = (manager, key) => /** @type {(...args: unknown[]) => unknown} */ (
+    /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (manager))[key]);
   /** @param {string} key */
   const activeMember = (key) => (
     /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (managerOf(activeDrawingId()))))[key];
-  const template = managerOf(drawingIds[0]);
+  const OPENERS = new Set(['begin', 'beginCheckpoint', 'beginArtifactReplacement']);
+  const CLOSERS = new Set(['commit', 'cancel', 'commitCheckpoint', 'commitAppliedArtifactReplacement']);
   /** @type {Record<string, unknown>} */
   const routed = {};
   Object.entries(template).forEach(([key, value]) => {
-    if (typeof value === 'function') {
+    if (OPENERS.has(key)) {
+      routed[key] = (/** @type {unknown[]} */ ...args) => {
+        const manager = managerOf(activeDrawingId());
+        const opened = memberOf(manager, key)(...args);
+        /** @param {unknown} step */
+        const note = (step) => { if (step && typeof step === 'object') openedBy.set(step, manager); };
+        if (isPromiseLike(opened)) opened.then(note, () => {}); else note(opened);
+        return opened;
+      };
+    } else if (CLOSERS.has(key)) {
+      routed[key] = (/** @type {unknown} */ step, /** @type {unknown[]} */ ...rest) => {
+        const opener = step && typeof step === 'object' ? openedBy.get(step) : undefined;
+        return memberOf(opener ?? managerOf(activeDrawingId()), key)(step, ...rest);
+      };
+    } else if (typeof value === 'function') {
       routed[key] = (/** @type {unknown[]} */ ...args) => (
         /** @type {(...args: unknown[]) => unknown} */ (activeMember(key)))(...args);
     } else {
       Object.defineProperty(routed, key, { enumerable: true, get: () => activeMember(key) });
     }
   });
-  const router = /** @type {typeof template} */ (/** @type {unknown} */ (routed));
+  const router = /** @type {DrawingHistory} */ (/** @type {unknown} */ (routed));
   return Object.assign(router, {
     managerOf,
+    // A drawing that is not shown has no artifact installed, so its baseline
+    // is its intent only.
     captureBaseline: async (/** @type {string} */ label = 'Baseline') => {
-      for (const manager of every()) await manager.captureBaseline(label);
+      await managerOf(activeDrawingId()).captureBaseline(label);
+      for (const manager of others()) await manager.initializeIntentBaseline(label);
     },
     initializeIntentBaseline: async (
       /** @type {string} */ label = 'Intent baseline',
@@ -1931,13 +1963,53 @@ export const createHistoryRouter = ({
       }
       return true;
     },
+    // D-15-50 (1): an action that resets every drawing (Reset Settings) is one
+    // step in each drawing's History: `fn` makes the shown drawing's step, and
+    // each other drawing records what `fn` changed in it as a step of its own,
+    // so each drawing's Undo restores its own part. `fn` runs in this task, as
+    // a caller of the action expects; each other step captured its state first.
+    /**
+     * @template R
+     * @param {string} label
+     * @param {() => R} fn
+     * @returns {R}
+     */
+    runInEveryDrawing: (label, fn) => {
+      const hidden = others();
+      const opening = hidden.map((manager) => manager.begin(label, { source: 'every-drawing' }));
+      /** @param {boolean} applied */
+      const settle = async (applied) => {
+        const steps = await Promise.all(opening);
+        for (const [index, manager] of hidden.entries()) {
+          if (applied) await manager.commit(steps[index]); else manager.cancel(steps[index]);
+        }
+      };
+      /** @type {R} */
+      let result;
+      try {
+        result = fn();
+      } catch (error) {
+        void settle(false);
+        throw error;
+      }
+      if (!isPromiseLike(result)) {
+        void settle(true);
+        return result;
+      }
+      return /** @type {R} */ (/** @type {unknown} */ (Promise.resolve(result).then(
+        async (value) => { await settle(true); return value; },
+        async (error) => { await settle(false); throw error; }
+      )));
+    },
     markSavePoint: () => every().forEach((manager) => manager.markSavePoint()),
     hasChangesSinceSavePoint: async () => {
       for (const manager of every()) if (await manager.hasChangesSinceSavePoint()) return true;
       return false;
     },
     /** @param {Parameters<typeof template.setSettingsStepListener>[0]} listener */
-    setSettingsStepListener: (listener) => every().forEach((manager) => manager.setSettingsStepListener(listener)),
+    setSettingsStepListener: (listener) => managers.forEach((manager, drawingId) => manager.setSettingsStepListener(
+      (changes) => { if (drawingId === activeDrawingId()) listener(changes); }
+    )),
     mutationPending: () => every().some((manager) => manager.mutationPending()),
     traversalPending: () => every().some((manager) => manager.traversalPending())
   });

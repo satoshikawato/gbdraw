@@ -3,7 +3,14 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
+
+// The fixture as both drawings (PD-OI-090: one History per drawing), with a
+// Linear view whose own `mode` is 'linear', so each drawing's intent holds the
+// bindings of its own slots; `state.mode` picks the shown drawing.
+const withTwoDrawings = (state) => withModeDrawings(state, {
+  circular: state, linear: Object.create(state, { mode: { value: 'linear' } })
+});
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
@@ -1048,7 +1055,7 @@ const createLayoutPreferences = () => ({
     skipExtractOnSvgChange: ref(false)
   };
   const snapshots = createHistorySnapshotService({
-    state: withDrawings(state),
+    state: withTwoDrawings(state),
     fileStore,
     nextTick: async () => {},
     buildConfigData: () => ({
@@ -1078,7 +1085,14 @@ const createLayoutPreferences = () => ({
     }
   });
 
-  const snapshot = await snapshots.buildArtifactCheckpoint();
+  // Each drawing's checkpoint holds its own slots' files: Circular's inputs, and
+  // Linear's comparison files and generated comparisons.
+  const snapshot = await snapshots.drawingHistory('circular').buildCheckpoint();
+  state.mode.value = 'linear';
+  const linearSnapshot = await snapshots.drawingHistory('linear').buildCheckpoint();
+  state.mode.value = 'circular';
+  assert.equal(Object.hasOwn(snapshot.files, 'linearComparisons'), false);
+  assert.equal(Object.hasOwn(linearSnapshot.files, 'c_gb'), false);
   state.form.prefix = 'after';
   state.form.show_scale = false;
   state.adv.arrow_head_length_ratio = null;
@@ -1095,7 +1109,10 @@ const createLayoutPreferences = () => ({
 
   assert.equal(snapshot.config.form.prefix, 'before');
   assert.equal(snapshot.files.c_gb.name, 'restore.gb');
-  await snapshots.applyArtifactCheckpoint(snapshot);
+  await snapshots.drawingHistory('circular').applyCheckpoint(snapshot);
+  state.mode.value = 'linear';
+  await snapshots.drawingHistory('linear').applyCheckpoint(linearSnapshot);
+  state.mode.value = 'circular';
   assert.equal(state.form.prefix, 'before');
   assert.equal(state.form.show_scale, true);
   assert.equal(state.adv.feature_shapes.CDS, 'arrow');
@@ -1143,12 +1160,11 @@ const createLayoutPreferences = () => ({
   assert.deepEqual(state.featureVisibilityManualRules, []);
   assert.equal(state.canvasPadding.top, 1);
 
+  // The comparison files are the Linear drawing's: its History records them.
+  state.mode.value = 'linear';
   const history = createHistoryManager({
     fileStore,
-    buildIntent: snapshots.buildHistoryIntent,
-    applyIntent: snapshots.applyHistoryIntent,
-    buildCheckpoint: snapshots.buildArtifactCheckpoint,
-    applyCheckpoint: snapshots.applyArtifactCheckpoint
+    ...snapshots.drawingHistory('linear')
   });
   await history.captureBaseline('P3 baseline');
   const stableResults = state.results.value;
@@ -1162,7 +1178,7 @@ const createLayoutPreferences = () => ({
   assert.equal(state.results.value, stableResults);
   assert.equal(state.extractedFeatures.value, stableExtractedFeatures);
   assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
-  const serializedAfterConfigUndo = await snapshots.buildArtifactCheckpoint();
+  const serializedAfterConfigUndo = await snapshots.drawingHistory('linear').buildCheckpoint();
   assert.equal(
     fileStore.restoreValue(serializedAfterConfigUndo.files.linearComparisons[0].file),
     comparisonUpload
@@ -1334,10 +1350,9 @@ const createLayoutPreferences = () => ({
       state.adv = { ...state.adv, ...config.adv };
     }
   });
-  // The composition root's mode transition, which this fixture stands in for.
-  snapshots.registerModeTransition((next) => { mode.value = next; });
-
-  await snapshots.applyArtifactCheckpoint({
+  // PD-OI-090: a checkpoint restores its own drawing, the shown one; the
+  // `mode` it holds is not written (a drawing switch is no History step).
+  await snapshots.drawingHistory('circular').applyCheckpoint({
     config: { form: { prefix: 'restored', legend: 'bottom' }, adv: { features: ['CDS'] } },
     ui: { mode: 'linear', lInputType: 'gb', selectedResultIndex: 0 },
     files: { linearSeqs: [] },
@@ -1355,7 +1370,8 @@ const createLayoutPreferences = () => ({
     runState: {}
   });
 
-  assert.equal(state.mode.value, 'linear');
+  assert.equal(state.mode.value, 'circular');
+  assert.equal(pendingModeReset, false);
   assert.equal(state.extractedFeatures.value.length, 1);
   assert.equal(state.featureRecordIds.value.length, 1);
   assert.equal(state.orthogroups.value.length, 1);
@@ -1523,28 +1539,28 @@ const createLayoutPreferences = () => ({
   // registers its capture once it exists. Until then the intent holds no
   // capture, as a service without that owner. U3b: the Legend list is intent,
   // so History captures no Legend row owners.
-  const unregisteredIntent = await snapshots.buildHistoryIntent();
+  const unregisteredIntent = await snapshots.drawingHistory('circular').buildIntent();
   assert.equal(Object.hasOwn(unregisteredIntent.ui, 'compositionUserDeltas'), false);
   assert.throws(() => snapshots.registerCapture('legendOrder', () => []), /Unknown History intent capture: legendOrder/);
   assert.throws(() => snapshots.registerCapture('legend', () => []), /Unknown History intent capture: legend/);
   const compositionRecord = { 'result-2': { primary: [[4, 5]] } };
   snapshots.registerCapture('composition', () => compositionRecord);
-  const intent = await snapshots.buildHistoryIntent();
-  assert.deepEqual(intent.modes.circular.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
+  const intent = await snapshots.drawingHistory('circular').buildIntent();
+  assert.deepEqual(intent.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
   assert.deepEqual(intent.ui.compositionUserDeltas, compositionRecord);
   compositionRecord['result-2'].primary[0][0] = 9;
   assert.deepEqual(intent.ui.compositionUserDeltas['result-2'].primary, [[4, 5]], 'the intent holds a copy of the capture');
   snapshots.registerCapture('composition', null);
-  assert.equal(Object.hasOwn((await snapshots.buildHistoryIntent()).ui, 'compositionUserDeltas'), false);
+  assert.equal(Object.hasOwn((await snapshots.drawingHistory('circular').buildIntent()).ui, 'compositionUserDeltas'), false);
   state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
-  await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['modes', 'circular', 'editorState'] }] });
+  await snapshots.drawingHistory('circular').applyIntent(intent, { changes: [{ path: ['editorState'] }] });
   assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);
-  assert.equal(Object.hasOwn(intent.modes.circular.editorState.legend, 'entryOwners'), false);
+  assert.equal(Object.hasOwn(intent.editorState.legend, 'entryOwners'), false);
   assert.equal(forbiddenArtifactBuilds, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.modes.circular.features, 'extractedFeatures'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.modes.circular.editorState, 'featureCatalog'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.features, 'extractedFeatures'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.editorState, 'featureCatalog'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.orthogroupState, 'groups'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'linearCanonicalComparisons'), false);
   // B23: a LOSAT-cache replay's comparison sequences are held by reference only.
@@ -1557,10 +1573,10 @@ const createLayoutPreferences = () => ({
   // B21: with uploaded BLAST rows, the optional comparison sequence is a user
   // choice, so the intent holds it and Undo restores it.
   state.files.c_conservation_blasts_source = null;
-  const uploadIntent = await snapshots.buildHistoryIntent();
+  const uploadIntent = await snapshots.drawingHistory('circular').buildIntent();
   assert.equal(uploadIntent.files.c_conservation_sequence_sources.length, 1);
   state.files.c_conservation_sequence_sources = [];
-  await snapshots.applyHistoryIntent(uploadIntent, { changes: [{ path: ['files'] }] });
+  await snapshots.drawingHistory('circular').applyIntent(uploadIntent, { changes: [{ path: ['files'] }] });
   assert.deepEqual(state.files.c_conservation_sequence_sources.map((file) => file?.name), ['generated-source.fa']);
 
   // B23: in a LOSAT-cache replay the ring rows and managed track slots name the
@@ -1578,12 +1594,11 @@ const createLayoutPreferences = () => ({
   const replayHistory = createHistoryManager({
     fileStore,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
-    buildIntent: snapshots.buildHistoryIntent,
-    applyIntent: snapshots.applyHistoryIntent,
+    ...snapshots.drawingHistory('circular'),
     buildCheckpoint: () => {
       throw new Error('a ring removal must not build an artifact checkpoint');
     },
-    applyCheckpoint: snapshots.applyArtifactCheckpoint
+    applyCheckpoint: snapshots.drawingHistory('circular').applyCheckpoint
   });
   await replayHistory.initializeIntentBaseline('Loaded session');
   const replayRows = () => ({
@@ -1685,7 +1700,7 @@ const createLayoutPreferences = () => ({
       artifactBuilds += 1;
       throw new Error('lightweight baseline must not build an artifact checkpoint');
     },
-    applyCheckpoint: snapshots.applyArtifactCheckpoint
+    applyCheckpoint: snapshots.drawingHistory('circular').applyCheckpoint
   });
 
   await history.initializeIntentBaseline('Loaded session');
@@ -1733,10 +1748,7 @@ const createLayoutPreferences = () => ({
   });
   const history = createHistoryManager({
     fileStore,
-    buildIntent: snapshots.buildHistoryIntent,
-    applyIntent: snapshots.applyHistoryIntent,
-    buildCheckpoint: snapshots.buildArtifactCheckpoint,
-    applyCheckpoint: snapshots.applyArtifactCheckpoint
+    ...snapshots.drawingHistory('circular')
   });
   const draftState = () => ({
     selectedAnnotation: structuredClone(state.selectedAnnotation.value),
@@ -1783,20 +1795,20 @@ const createLayoutPreferences = () => ({
   // checkpoint that still carries them restores the other drafts and writes
   // nothing for them, even where a holder of the old name exists.
   const retiredDrafts = { newLegendCaption: 'Old draft', newLegendColor: '#123123' };
-  const oldIntent = { ...(await snapshots.buildHistoryIntent()) };
+  const oldIntent = { ...(await snapshots.drawingHistory('circular').buildIntent()) };
   oldIntent.drafts = { ...oldIntent.drafts, ...retiredDrafts };
-  const oldCheckpoint = { ...(await snapshots.buildArtifactCheckpoint()) };
+  const oldCheckpoint = { ...(await snapshots.drawingHistory('circular').buildCheckpoint()) };
   oldCheckpoint.drafts = { ...oldCheckpoint.drafts, ...retiredDrafts };
   state.newLegendCaption = ref('');
   state.newLegendColor = ref('#808080');
   state.newColorVal.value = '#000001';
-  await snapshots.applyHistoryIntent(oldIntent);
+  await snapshots.drawingHistory('circular').applyIntent(oldIntent);
   assert.deepEqual(draftState(), after);
   state.newColorVal.value = '#000002';
-  await snapshots.applyArtifactCheckpoint(oldCheckpoint);
+  await snapshots.drawingHistory('circular').applyCheckpoint(oldCheckpoint);
   assert.deepEqual(draftState(), after);
   assert.deepEqual([state.newLegendCaption.value, state.newLegendColor.value], ['', '#808080']);
-  assert.equal(Object.hasOwn((await snapshots.buildHistoryIntent()).drafts, 'newLegendCaption'), false);
+  assert.equal(Object.hasOwn((await snapshots.drawingHistory('circular').buildIntent()).drafts, 'newLegendCaption'), false);
 }
 
 {
@@ -2431,7 +2443,7 @@ for (const previousSuppressed of [false, true]) {
       throw new Error('restore did not settle');
     }
   });
-  await assert.rejects(snapshots.applyArtifactCheckpoint({}), /restore did not settle/);
+  await assert.rejects(snapshots.drawingHistory('circular').applyCheckpoint({}), /restore did not settle/);
   assert.equal(state.semanticFileWatchersSuppressed.value, previousSuppressed,
     'checkpoint failure restores the prior semantic file-watcher suppression');
 }
@@ -3337,10 +3349,7 @@ for (const previousSuppressed of [false, true]) {
     buildConfigData: () => ({ form: state.form, adv: state.adv })
   });
   const history = createHistoryManager({
-    buildIntent: snapshots.buildHistoryIntent,
-    applyIntent: snapshots.applyHistoryIntent,
-    buildCheckpoint: snapshots.buildArtifactCheckpoint,
-    applyCheckpoint: snapshots.applyArtifactCheckpoint
+    ...snapshots.drawingHistory('circular')
   });
   await history.initializeIntentBaseline();
   await history.runUndoable('Load label edits', () => {

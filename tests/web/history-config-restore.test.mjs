@@ -6,14 +6,19 @@ globalThis.window = { Vue: {
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { buildConfigData, applyCapturedConfigData, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
-const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+const { createHistoryManager, createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+// One History per drawing, as the app has (PD-OI-090): the router walks the shown drawing's.
+const routerOver = (snapshotService, options = {}) => createHistoryRouter({
+  drawingIds: ['circular', 'linear'],
+  activeDrawingId: () => state.activeDrawingId.value,
+  managerOptions: (drawingId) => ({ ...snapshotService.drawingHistory(drawingId), ...options })
+});
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const snapshots = createHistorySnapshotService({
   state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
 });
-const history = createHistoryManager({
-  buildIntent: snapshots.buildHistoryIntent, applyIntent: snapshots.applyHistoryIntent,
+const history = routerOver(snapshots, {
   buildCheckpoint: () => assert.fail('Form edits must use intent History'),
   applyCheckpoint: () => assert.fail('Form edits must use intent History')
 });
@@ -82,11 +87,12 @@ for (const [domain, key, first, second] of [
     buildFeatureStateData: config.buildFeatureStateData, applyFeatureStateData: config.applyFeatureStateData,
     buildEditorStateData: config.buildEditorStateData, applyEditorStateData: config.applyEditorStateData
   });
-  const editorHistory = createHistoryManager({
-    buildIntent: editorSnapshots.buildHistoryIntent, applyIntent: editorSnapshots.applyHistoryIntent,
+  const editorHistory = routerOver(editorSnapshots, {
     buildCheckpoint: () => assert.fail('Delete settings must use intent History'),
     applyCheckpoint: () => assert.fail('Delete settings must use intent History')
   });
+  // The record settings are the Linear drawing's: its History records them.
+  installShownDrawing('linear');
   const drawing = state.drawings.linear;
   const card = state.linearSeqs[0];
   const uid = card.uid;
@@ -121,6 +127,7 @@ for (const [domain, key, first, second] of [
   drawing.recordsOff.splice(0);
   drawing.annotationSets.splice(0);
   delete drawing.featureOverrides[key];
+  installShownDrawing('circular');
 }
 
 applyCapturedConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
@@ -137,6 +144,8 @@ state.similarityAlignmentPlan.value = {
   },
   records: []
 };
+// The alignment is the Linear drawing's: its History records it.
+installShownDrawing('linear');
 state.linearRecordTranslations.value = [{ recordKey: 'record-a', x: 12, y: -3 }];
 await history.initializeIntentBaseline();
 await history.runUndoable('Clear alignment', () => {
@@ -210,10 +219,7 @@ console.log('History restores nullable config values and preserves key guards.')
     buildEditorStateData, applyEditorStateData
   });
   const artifactHistory = createHistoryManager({
-    buildIntent: artifactSnapshots.buildHistoryIntent,
-    applyIntent: artifactSnapshots.applyHistoryIntent,
-    buildCheckpoint: artifactSnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: artifactSnapshots.applyArtifactCheckpoint,
+    ...artifactSnapshots.drawingHistory(state.activeDrawing().id),
     signatureFor: artifactSnapshots.snapshotSignature
   });
   await artifactHistory.captureBaseline();
@@ -279,10 +285,7 @@ console.log('History restores nullable config values and preserves key guards.')
     buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
   });
   const restoreHistory = createHistoryManager({
-    buildIntent: restoreSnapshots.buildHistoryIntent,
-    applyIntent: restoreSnapshots.applyHistoryIntent,
-    buildCheckpoint: restoreSnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: restoreSnapshots.applyArtifactCheckpoint,
+    ...restoreSnapshots.drawingHistory(state.activeDrawing().id),
     signatureFor: restoreSnapshots.snapshotSignature
   });
   await restoreHistory.captureBaseline();
@@ -338,8 +341,7 @@ console.log('History restores nullable config values and preserves key guards.')
     state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData
   });
   const preferenceHistory = createHistoryManager({
-    buildIntent: preferenceSnapshots.buildHistoryIntent,
-    applyIntent: preferenceSnapshots.applyHistoryIntent,
+    ...preferenceSnapshots.drawingHistory(state.activeDrawing().id),
     buildCheckpoint: () => assert.fail('a setting edit uses intent History'),
     applyCheckpoint: () => assert.fail('a setting edit uses intent History')
   });
@@ -347,7 +349,7 @@ console.log('History restores nullable config values and preserves key guards.')
   state.richFeaturePopup.value = true;
   drawing.form.labels_mode = 'out';
   await preferenceHistory.initializeIntentBaseline();
-  assert.equal(Object.hasOwn(preferenceSnapshots.buildHistoryIntent().ui, 'richFeaturePopup'), false,
+  assert.equal(Object.hasOwn(preferenceSnapshots.drawingHistory(state.activeDrawing().id).buildIntent().ui, 'richFeaturePopup'), false,
     'the History intent does not hold the preference');
   await preferenceHistory.runUndoable('Label Mode', () => { drawing.form.labels_mode = 'both'; });
   const steps = preferenceHistory.getUndoCount();
