@@ -98,6 +98,15 @@ export const createLegendLayout = ({
       movedDeltas.set(identity, deltas);
     }
   };
+  // OV-110: the offsets of the Results that `keep` does not name are dropped:
+  // the root keeps those of every drawing's Results and of every Result a
+  // History step names.
+  /** @param {ReadonlySet<string>} keep */
+  const releaseCompositionDeltas = (keep) => {
+    for (const map of [firstSeenDeltas, movedDeltas]) {
+      [...map.keys()].forEach((identity) => { if (!keep.has(identity)) map.delete(identity); });
+    }
+  };
   /** @param {unknown} result */
   const resultIdentity = (result) => previewRuntime?.getResultIdentity?.(result) || '';
   /** @param {readonly string[]} identities The Results of the drawing whose History captures. */
@@ -168,6 +177,7 @@ export const createLegendLayout = ({
     ...repositionActions,
     refreshDiagramDragAffordances: diagramActions.refreshDiagramDragAffordances,
     captureCompositionIntent,
+    releaseCompositionDeltas,
     reconcileCompositionUserDeltas,
     resetAllPositions,
     setupDiagramDrag: diagramActions.setupDiagramDrag

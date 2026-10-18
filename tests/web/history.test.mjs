@@ -3470,3 +3470,38 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(redoOnly.router.managerOf('linear').canRedo(), false, 'the hidden drawing loses its Redo step');
   assert.equal(redoOnly.router.managerOf('linear').historyLimitMessage.value, '', 'a Redo-only drop shows no notice');
 }
+
+// OV-110 (D-15-49): the Result identities that History holds under a map keyed
+// by identity (the composition offsets): the current intent's, an open step's,
+// and those an Undo or Redo step names. A step the budget drops no longer
+// holds its identities.
+{
+  const { createHistoryRouter } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
+  const shown = ref('circular');
+  const ui = { circular: { offsets: {} }, linear: { offsets: {} } };
+  const router = createHistoryRouter({
+    drawingIds: ['circular', 'linear'],
+    activeDrawingId: () => shown.value,
+    managerOptions: (drawingId) => {
+      const build = () => ({ ui: JSON.parse(JSON.stringify(ui[drawingId])) });
+      const apply = (snapshot) => { ui[drawingId] = JSON.parse(JSON.stringify(snapshot.ui)); };
+      return { buildIntent: build, applyIntent: apply, buildCheckpoint: build, applyCheckpoint: apply, identityMapPath: ['ui', 'offsets'], maxActions: 2 };
+    }
+  });
+  await router.captureBaseline();
+  const held = () => [...router.heldIdentities()].sort();
+  assert.deepEqual(held(), []);
+  // R1 moved, then R1 replaced by R2 (no offsets yet): an Undo step still names R1.
+  await router.runUndoable('Move R1', () => { ui.circular.offsets = { R1: [1, 2] }; });
+  await router.runUndoable('Generate R2', () => { ui.circular.offsets = {}; });
+  assert.deepEqual(held(), ['R1'], 'the Undo steps name R1');
+  shown.value = 'linear';
+  await router.runUndoable('Move L1', () => { ui.linear.offsets = { L1: [3, 4] }; });
+  assert.deepEqual(held(), ['L1', 'R1'], 'every drawing\'s History');
+  shown.value = 'circular';
+  // Two more Circular steps drop the steps that named R1 (maxActions 2).
+  await router.runUndoable('Move R2', () => { ui.circular.offsets = { R2: [5, 6] }; });
+  await router.runUndoable('Move R2 again', () => { ui.circular.offsets = { R2: [7, 8] }; });
+  assert.deepEqual(held(), ['L1', 'R2'], 'the dropped steps release R1');
+  console.log('history held identity tests passed');
+}

@@ -35,6 +35,9 @@ import { SETTINGS_SLICE } from './drawing/settings.js';
 
 export { cloneJsonData };
 
+// Where an intent holds the composition offsets, keyed by Result identity (B17).
+const COMPOSITION_INTENT_PATH = Object.freeze(['ui', 'compositionUserDeltas']);
+
 /**
  * The per-feature edits a History intent, checkpoint, or generated artifact holds.
  * @typedef {{
@@ -1982,7 +1985,9 @@ export const createHistorySnapshotService = ({
     applyIntent: (intent, context) => applyHistoryIntent(drawingId, intent, context),
     buildCheckpoint: () => buildArtifactCheckpoint(drawingId),
     /** @param {ArtifactCheckpointData | null | undefined} snapshot */
-    applyCheckpoint: (snapshot) => applyArtifactCheckpoint(drawingId, snapshot)
+    applyCheckpoint: (snapshot) => applyArtifactCheckpoint(drawingId, snapshot),
+    // OV-110: the intent's composition offsets are keyed by Result identity.
+    identityMapPath: COMPOSITION_INTENT_PATH
   });
 
   /** @param {unknown} snapshot */

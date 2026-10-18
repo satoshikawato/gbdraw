@@ -313,8 +313,10 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
  *   The Session lifecycle's busy answer (`'history'` words Undo and Redo, D-28).
  * @property {(step: { type: string, changes?: unknown }) => HistoryBusy | null} [stepAvailability]
- *   The composition root's busy answer for one Undo or Redo step (E1: a step
- *   that switches the diagram mode waits as the mode buttons do).
+ *   The composition root's busy answer for one Undo or Redo step.
+ * @property {readonly string[] | null} [identityMapPath]
+ *   The intent path of a map keyed by Result identity (the composition
+ *   offsets); `heldIdentities` lists the keys History holds there (OV-110).
  */
 
 /**
@@ -400,7 +402,8 @@ export const createHistoryManager = ({
   }),
   makeRef = makeBox,
   mutationAvailability = () => null,
-  stepAvailability = () => null
+  stepAvailability = () => null,
+  identityMapPath = null
 } = /** @type {HistoryManagerOptions} */ ({})) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
@@ -488,6 +491,37 @@ export const createHistoryManager = ({
     activeTransaction && !activeTransaction.closed ? activeTransaction : null
   );
   const intentCommitOwnedByAction = () => Boolean(openTransaction()?.deferAdapterCommit);
+
+  // OV-110: the keys under `identityMapPath` that the current intent, the open
+  // step, and the intent steps of Undo and Redo hold.
+  const heldIdentities = () => {
+    /** @type {Set<string>} */
+    const ids = new Set();
+    if (!identityMapPath) return ids;
+    const mapPath = identityMapPath;
+    /** @param {unknown} value @param {readonly (string | number)[]} rest */
+    const addKeysBelow = (value, rest) => {
+      const map = rest.reduce((/** @type {unknown} */ at, key) => (isPlainObject(at) ? /** @type {Record<string, unknown>} */ (at)[key] : undefined), value);
+      if (isPlainObject(map)) Object.keys(/** @type {object} */ (map)).forEach((key) => ids.add(key));
+    };
+    addKeysBelow(currentIntent, mapPath);
+    const open = openTransaction();
+    if (open) addKeysBelow(open.before, mapPath);
+    [...undoStack, ...redoStack].forEach((entry) => {
+      if (entry.type !== 'intent') return;
+      entry.changes.forEach(({ path, before, after }) => {
+        const shared = Math.min(path.length, mapPath.length);
+        if (!mapPath.slice(0, shared).every((key, index) => path[index] === key)) return;
+        if (path.length > mapPath.length) {
+          ids.add(String(path[mapPath.length]));
+          return;
+        }
+        addKeysBelow(before, mapPath.slice(path.length));
+        addKeysBelow(after, mapPath.slice(path.length));
+      });
+    });
+    return ids;
+  };
 
   // D-28 (PD-OI-082): an open artifact replacement or checkpoint, or an action
   // that still owns its intent commit, owns the current state. Undo, Redo, and
@@ -1868,6 +1902,7 @@ export const createHistoryManager = ({
     runUndoableCommand,
     // R11: the open step ends now, in this History (a drawing switch).
     settlePendingIntent,
+    heldIdentities,
     undo,
     undoLabel
   };
@@ -2004,6 +2039,13 @@ export const createHistoryRouter = ({
       )));
     },
     markSavePoint: () => every().forEach((manager) => manager.markSavePoint()),
+    // OV-110: the Result identities any drawing's History holds.
+    heldIdentities: () => {
+      /** @type {Set<string>} */
+      const ids = new Set();
+      every().forEach((manager) => manager.heldIdentities().forEach((id) => ids.add(id)));
+      return ids;
+    },
     hasChangesSinceSavePoint: async () => {
       for (const manager of every()) if (await manager.hasChangesSinceSavePoint()) return true;
       return false;

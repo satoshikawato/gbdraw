@@ -1688,6 +1688,7 @@ export const createAppSetup = () => {
         compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
         signatureFor: historySnapshots.snapshotSignature,
         collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
+        identityMapPath: ports.identityMapPath,
         makeRef: ref,
         mutationAvailability: sessionOperationAvailability
       });
@@ -3141,7 +3142,12 @@ export const createAppSetup = () => {
   });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   // History's capture registers once its owner exists (R13).
-  historySnapshots.registerCapture('composition', (drawingId) => legendLayout.captureCompositionIntent(resultIdentitiesOf(drawingId)));
+  // OV-110: each capture first releases the offsets of the Results that no
+  // drawing shows or keeps and no History step names.
+  historySnapshots.registerCapture('composition', (drawingId) => {
+    legendLayout.releaseCompositionDeltas(new Set([...liveResultIdentities(), ...history.heldIdentities()]));
+    return legendLayout.captureCompositionIntent(resultIdentitiesOf(drawingId));
+  });
   /** @param {DrawingState} drawing */
   const shouldSyncMountedLabelEditor = (drawing) => (
     isFeatureDrawerMounted.value
