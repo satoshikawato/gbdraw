@@ -27,6 +27,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.api import (
     CircularBatchOutputPolicy,
     CircularBatchRequest,
+    CircularDiagramRequest,
     GenBankInputSource,
     LinearDiagramRequest,
     RecordCardinality,
@@ -36,6 +37,7 @@ from gbdraw.api import (
     build_session_document,
     load_session_document,
     materialize_session,
+    save_session_document,
 )
 from gbdraw.circular import circular_main
 from gbdraw.cli import main as cli_main
@@ -558,3 +560,68 @@ def test_a_circular_batch_replay_keeps_the_protein_artifacts_of_its_session(
          "-f", "svg", "--session_output", str(replayed))
     assert _svgs(tmp_path / "out") == [f"replayed_{index}.svg" for index in (1, 2, 3)]
     assert _protein_artifacts(replayed) == saved
+
+
+@pytest.mark.parametrize("batch", [False, True], ids=["one-diagram", "batch"])
+def test_a_circular_replay_keeps_the_legacy_protein_evidence_of_its_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, batch: bool
+) -> None:
+    """OV-1118: a re-save keeps ``legacyArtifacts`` for one diagram and a batch alike."""
+
+    source = tmp_path / "records.gb"
+    SeqIO.write(
+        [
+            SeqRecord(Seq("ATGCGCAT" * 50), id=f"record{index}", annotations={"molecule_type": "DNA"})
+            for index in (1, 2)
+        ],
+        source,
+        "genbank",
+    )
+    if batch:
+        drawing: CircularDiagramRequest | CircularBatchRequest = CircularBatchRequest(
+            records=(RecordInput(source=GenBankInputSource(source), cardinality=RecordCardinality.ALL),),
+            output_policy=CircularBatchOutputPolicy(output_prefix="batch"),
+        )
+    else:
+        drawing = CircularDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source), cardinality=RecordCardinality.FIRST),)
+        )
+    legacy_raw = {"schema": 2, "kind": "raw-losat", "key": "legacy-key", "text": "p_r_old\tp_r_other\n", "program": "blastp"}
+    legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
+    # The writer quarantines both legacy entries into legacyArtifacts.
+    saved_path = tmp_path / "legacy.gbdraw-session.json"
+    save_session_document(
+        saved_path,
+        drawings=[
+            SessionDrawingSpec(
+                drawing,
+                state={"losatCache": {"entries": [legacy_raw]}, "losatDerivedCache": {"entries": [legacy_derived]}},
+            )
+        ],
+    )
+    saved = load_session_document(saved_path).to_dict()["legacyArtifacts"]
+    assert set(saved) == {"proteinRawCandidates", "proteinDerivedEvidence"}
+
+    replayed = tmp_path / "replayed.gbdraw-session.json"
+    _cli(monkeypatch, "render", "--session", str(saved_path), "-o", str(tmp_path / "out" / "replayed"),
+         "-f", "svg", "--session_output", str(replayed))
+    assert _svgs(tmp_path / "out") == (["replayed_1.svg", "replayed_2.svg"] if batch else ["replayed.svg"])
+    resaved = load_session_document(replayed).to_dict().get("legacyArtifacts")
+    assert json.dumps(resaved, sort_keys=True) == json.dumps(saved, sort_keys=True)
+
+
+def test_a_circular_batch_replay_drops_legacy_evidence_that_current_derived_entries_supersede(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1119: a batch follows the one-diagram rule for legacy derived evidence."""
+
+    source = _circular_batch_session_with_protein_artifacts(tmp_path, monkeypatch, raw_entries=True)
+    session = json.loads(source.read_text(encoding="utf-8"))
+    assert session["losatDerivedCache"]["entries"]
+    legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
+    session["legacyArtifacts"] = {"proteinDerivedEvidence": {"schema": 1, "entries": [legacy_derived]}}
+    write_session_json(source, session)
+    replayed = tmp_path / "replayed.gbdraw-session.json"
+    _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / "out" / "replayed"),
+         "-f", "svg", "--session_output", str(replayed))
+    assert "legacyArtifacts" not in load_session_document(replayed).to_dict()

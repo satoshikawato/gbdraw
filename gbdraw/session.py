@@ -56,6 +56,7 @@ if TYPE_CHECKING:
         CircularBatchRenderResult,
         RequestRenderResult,
     )
+    from gbdraw.api.session_compat import SessionCompatibleRequestRenderResult
     from gbdraw.api.requests import DiagramRequest
 
 
@@ -708,13 +709,13 @@ def _render_session_drawing_plans(
     plans: Sequence[_SessionDrawingRender],
     *,
     include_feature_catalog: bool = False,
-) -> dict[str, RequestRenderResult | CircularBatchRenderResult]:
+) -> dict[str, SessionCompatibleRequestRenderResult | CircularBatchRenderResult]:
     """Render planned drawings in one parse-cache transaction."""
 
     from gbdraw.api.session_compat import render_session_compatible_request
 
     _active_materialization(materialized)
-    results: dict[str, RequestRenderResult | CircularBatchRenderResult] = {}
+    results: dict[str, SessionCompatibleRequestRenderResult | CircularBatchRenderResult] = {}
     try:
         with _session_parse_cache(materialized):
             for plan in plans:
@@ -783,7 +784,8 @@ def render_session_drawings(
         preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
     except ValidationError as exc:
         raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
-    return _render_session_drawing_plans(materialized, plans)
+    # A copy typed as the public union (``dict`` is invariant in its values).
+    return dict(_render_session_drawing_plans(materialized, plans))
 
 
 @dataclass(frozen=True)

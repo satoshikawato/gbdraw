@@ -1498,7 +1498,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             records=track_slot_geometry_records,
         ),
         canonical_request=materialized_request,
-        losat_cache_entries=tuple(getattr(rendered, "losat_cache_entries", ()) or ()),
+        losat_cache_entries=rendered.losat_cache_entries,
     )
 
 if __name__ == "__main__":
