@@ -219,3 +219,23 @@ test('Reset Settings leaves the multi-record layout of a new drawing', async () 
     assert.deepEqual(JSON.parse(JSON.stringify(state.drawings.linear.layoutPreferences)), fresh);
   }
 });
+
+// OV-1167 (Q-DR-7 B): Reset Settings re-derives the Circular comparison rings
+// from the kept ring files, as a new drawing with those files uploaded has them.
+test('Reset Settings re-derives the comparison rings from the kept ring files', async () => {
+  const app = createAppSetup();
+  if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
+  const rings = state.drawings.circular.circularConservation;
+  const ringsOf = () => JSON.parse(JSON.stringify({ enabled: rings.enabled, series: rings.series }));
+  state.files.c_conservation_fastas = [new File(['>r\nACGT\n'], 'ring.fa')];
+  app.changeCircularConservationSource();
+  const uploaded = ringsOf();
+  assert.equal(uploaded.enabled, true);
+  assert.equal(uploaded.series.length, 1);
+  rings.series[0].label = 'renamed ring';
+  await app.resetSettings();
+  assert.equal(state.files.c_conservation_fastas.length, 1, 'the ring file stays');
+  assert.deepEqual(ringsOf(), uploaded);
+  state.files.c_conservation_fastas = [];
+  app.changeCircularConservationSource();
+});

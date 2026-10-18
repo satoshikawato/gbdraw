@@ -1,6 +1,6 @@
 // Runs the app's Generate adopt port once with a Linear canonical Session over
-// the Circular rings Reset Settings leaves (OV-1167: rings off, ring FASTA
-// kept, no rows) and prints the rings before and after as JSON. The module
+// Circular rings that are off with a ring FASTA kept and no rows, and prints
+// the rings before and after as JSON. The module
 // mocks need `--experimental-test-module-mocks`, so a test runs this file in a
 // child process (A2 review-I2, Medium 1).
 import { File } from 'node:buffer';

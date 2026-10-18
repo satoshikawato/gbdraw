@@ -2915,8 +2915,8 @@ export const createAppSetup = () => {
     refreshCircularConservationSlots(drawing);
   };
   // The settings a reconcile reads besides the ring files: the source and the
-  // legacy series names. Reset and a legacy config import reconcile only when
-  // they changed (OV-1167, today's outcome).
+  // legacy series names. A legacy config import reconciles only when they
+  // changed (D-15-47).
   /** @param {DrawingState} drawing */
   const ringSettingsOf = (drawing) => ({
     source: drawing.circularConservation.source, labels: drawing.circularConservation.labels
@@ -5264,15 +5264,12 @@ export const createAppSetup = () => {
       const returning = state.activeDrawing().deletedLegendEntries.value
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
-      const ringSettingsBefore = ringSettingsOf(state.drawings.circular);
       // OV-1166 (Q-DR-6 A): every drawing's multi-record layout takes a new
       // drawing's defaults (its sides unset), whatever the canvas was before.
       resetSettingsState(state);
-      // OV-1167 (Owner question Q-DR-7, open): today's outcome, kept as is. The
-      // comparison rings are re-read from the kept ring files only when Reset
-      // changed their source or the legacy series names; otherwise they stay
-      // off with their files kept. The answer changes this step.
-      reconcileChangedRingSettings(state.drawings.circular, ringSettingsBefore);
+      // OV-1167 (Q-DR-7 B): the comparison rings are derived again from the
+      // kept ring files, as a new drawing with those files uploaded has them.
+      reconcileCircularConservation(state.drawings.circular);
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
       // also clears the alignment plan (D-15).

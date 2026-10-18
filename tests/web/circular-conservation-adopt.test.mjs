@@ -1,12 +1,12 @@
 // A Generate reconciles the Circular comparison rings only when its adopt
 // installed Circular ring files (a Circular LOSAT-cache result). A Linear
-// Generate leaves the Circular drawing as Reset Settings left it (OV-1167)
-// (A2 review-I2, Medium 1).
+// Generate leaves the Circular rings as they are, also off with a ring file
+// kept (A2 review-I2, Medium 1).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
-test('a Linear Generate leaves the Circular rings that Reset turned off', () => {
+test('a Linear Generate leaves the Circular rings that are off', () => {
   const run = spawnSync(process.execPath, [
     '--experimental-test-module-mocks', '--no-warnings',
     new URL('./helpers/rings-after-adopt.mjs', import.meta.url).pathname
