@@ -14,7 +14,7 @@ import {
   normalizeOptionalText
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
-import { nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { nextCopyId, nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 
 import {
   applyLinearTrackOrderPlacements,
@@ -520,7 +520,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     if (!canDuplicateLinearTrackSlot(source)) return;
     const copy = {
       ...source,
-      id: nextLinearTrackSlotId(drawing, normalizeRenderer(source.renderer)),
+      id: nextCopyId(String(source.id || '') || nextLinearTrackSlotId(drawing, normalizeRenderer(source.renderer)), drawing.adv.linear_track_slots),
       params: cloneParams(source.params)
     };
     drawing.adv.linear_track_slots.splice(idx + 1, 0, copy);

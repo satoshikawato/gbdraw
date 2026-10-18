@@ -2399,15 +2399,21 @@ Retired names and their replacements are listed under
   Generate draws to the record end, as the CLI and Python already do, and a
   note under the Region fields (Circular, and Linear once the record is read)
   names the record length. A **Start** past the record end stays an error.
-- Web app, Custom Track Slots (OV-1099): **Duplicate** in Linear names the copy
-  as Circular does, with the renderer's default ID and the first unused number
-  (`gc_skew_2`, then `gc_skew_3` for a copy of either), instead of appending
-  `_copy`. A copy is named from its renderer's default ID, also when the source
-  row has an ID of its own. **Duplicate set** in Region Annotations follows the
-  same rule (OV-1139): the copy takes the ID **Add set** gives (`annotations`,
-  `annotations_2`, ...) instead of `<id>_copy`. Saved slot and set IDs are
-  unchanged. A Linear copy of an unedited Depth row is a managed Depth row, as
-  in Circular: removing the Depth files removes it with its source row.
+- Web app, Custom Track Slots (OV-1099): **Duplicate** names the copy from the
+  source row's own ID, in Linear and Circular: the ID without one trailing
+  number, then the first unused number from 2 (`my_skew` gives `my_skew_2`, and
+  a further copy of either gives `my_skew_3`). Linear appended `_copy`
+  (`my_skew_copy`); Circular named a copy from the renderer's default ID
+  (`gc_skew_2`), also when the source row had an ID of its own. A copy never
+  takes the bare base ID. **Duplicate set** in Region Annotations follows the
+  same rule (OV-1139): a copy of `review` is `review_2` instead of
+  `review_copy`. **Add track** and **Add set** still use the default ID (such
+  as `gc_skew` or `annotations`) and the first unused number. Saved slot and
+  set IDs are unchanged. A Linear copy of an unedited Depth row (`depth_2`) is
+  a managed Depth row, as in Circular: removing the Depth files removes it with
+  its source row. A copy of a Depth row with its own ID (`my_depth_2`) is a
+  manual row like its source and stays when the Depth files are removed; in
+  0.13 a Circular copy of `my_depth` was a managed `depth_<n>` row.
 - Web app (OV-1137): the **FASTA** menu of each similarity group member, in the
   feature popup, the pairwise match popup, and the **Similarity groups** drawer,
   has an accessible name that names the member, such as "FASTA of BDT61648.1",

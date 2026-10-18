@@ -28,6 +28,7 @@ import {
 import { featureSlotEdits } from './track-slot-edits.js';
 import { ownEntry } from '../utils/own-entry.js';
 import {
+  nextCopyId,
   nextNumberedId,
   paramsKeptOnRendererChange,
   parseOptionalCircularScalar,
@@ -1186,6 +1187,7 @@ export const createCircularTrackSlotEditor = ({
     if (!canDuplicateCircularTrackSlot(drawing.adv.circular_track_slots[idx])) return;
     const source = normalizeCircularTrackSlot(drawing.adv.circular_track_slots[idx], idx, drawing.adv.nt, drawing.form.track_type);
     const duplicate = createCircularTrackSlotForRenderer(source.renderer, drawing.adv.circular_track_slots, drawing.adv.nt);
+    duplicate.id = nextCopyId(String(source.id || '') || duplicate.id, drawing.adv.circular_track_slots);
     duplicate.enabled = source.enabled;
     duplicate.width = source.width;
     duplicate.radius = source.radius;
