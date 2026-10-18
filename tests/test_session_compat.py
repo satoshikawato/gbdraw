@@ -41,7 +41,6 @@ from gbdraw.api.requests import (
     RenderOutputRequest,
 )
 from gbdraw.api.session_compat import (
-    SessionCompatibleRequestRenderResult,
     adapt_session_request,
     canonical_payload_for_session_decode,
     render_session_compatible_request,
@@ -516,7 +515,7 @@ def test_session_adapter_passes_plain_prepared_request_to_current_renderer(
     result = render_session_compatible_request(request, _drawing(session_artifacts))
 
     assert captured == [PreparedDiagramRequest]
-    assert isinstance(result, SessionCompatibleRequestRenderResult)
+    assert isinstance(result, RequestRenderResult)
 
 
 def _released_canonical_session(
@@ -917,13 +916,13 @@ def test_supported_v32_session_replays_through_compatibility_adapter(
     with materialize_session(document, output_directory=tmp_path) as materialized:
         result = render_session(materialized)
 
-    assert isinstance(result, SessionCompatibleRequestRenderResult)
+    assert isinstance(result, RequestRenderResult)
     assert result.output_paths == (tmp_path / "session-compatible.svg",)
     assert result.output_paths[0].is_file()
-    assert result.legacy_protein_raw_candidates
-    assert result.legacy_protein_raw_candidates[0]["state"] == "rejected"
-    assert result.legacy_protein_derived_evidence == (legacy_derived,)
-    assert result.protein_id_map == {}
+    assert result.migration_report.protein_raw_candidates
+    assert result.migration_report.protein_raw_candidates[0]["state"] == "rejected"
+    assert result.migration_report.protein_derived_evidence == (legacy_derived,)
+    assert not result.migration_report.protein_id_map
 
 
 def test_released_schema_v2_fixture_promotes_to_current_typed_artifacts(

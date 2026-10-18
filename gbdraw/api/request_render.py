@@ -692,6 +692,9 @@ class RequestRenderResult:
     protein_identity_manifest: Mapping[str, Any] | None = None
     annotation_warnings: tuple[ResolutionWarning, ...] = ()
     feature_identity_notices: tuple[FeatureIdentityNotice, ...] = ()
+    migration_report: SessionMigrationReport = field(
+        default_factory=SessionMigrationReport
+    )
 
     @property
     def label_fit_report(self) -> LabelFitReport | None:
@@ -720,7 +723,7 @@ class CircularBatchRenderResult:
     """Saved outputs for an explicit separate-diagram Circular batch.
 
     A Session replay fills ``migration_report`` with the Session's evidence,
-    as ``SessionCompatibleRequestRenderResult`` does for one diagram.
+    as it does on ``RequestRenderResult`` for one diagram.
     """
 
     request: CircularBatchRequest

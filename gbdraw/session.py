@@ -56,7 +56,6 @@ if TYPE_CHECKING:
         CircularBatchRenderResult,
         RequestRenderResult,
     )
-    from gbdraw.api.session_compat import SessionCompatibleRequestRenderResult
     from gbdraw.api.requests import DiagramRequest
 
 
@@ -709,13 +708,13 @@ def _render_session_drawing_plans(
     plans: Sequence[_SessionDrawingRender],
     *,
     include_feature_catalog: bool = False,
-) -> dict[str, SessionCompatibleRequestRenderResult | CircularBatchRenderResult]:
+) -> dict[str, RequestRenderResult | CircularBatchRenderResult]:
     """Render planned drawings in one parse-cache transaction."""
 
     from gbdraw.api.session_compat import render_session_compatible_request
 
     _active_materialization(materialized)
-    results: dict[str, SessionCompatibleRequestRenderResult | CircularBatchRenderResult] = {}
+    results: dict[str, RequestRenderResult | CircularBatchRenderResult] = {}
     try:
         with _session_parse_cache(materialized):
             for plan in plans:

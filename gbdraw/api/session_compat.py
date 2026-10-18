@@ -6,7 +6,7 @@ import copy
 import json
 import logging
 import re
-from dataclasses import dataclass, field, fields, is_dataclass, replace
+from dataclasses import dataclass, fields, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence, cast
 
@@ -90,31 +90,6 @@ _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
 _FEATURE_ANALYSIS_REFERENCE_RE = re.compile(r"f_[0-9a-f]{64}")
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class SessionCompatibleRequestRenderResult(RequestRenderResult):
-    """A current render result paired with persisted migration evidence."""
-
-    migration_report: SessionMigrationReport = field(
-        default_factory=SessionMigrationReport
-    )
-
-    @property
-    def legacy_protein_raw_candidates(self) -> tuple[Mapping[str, Any], ...]:
-        return self.migration_report.protein_raw_candidates
-
-    @property
-    def legacy_protein_derived_evidence(self) -> tuple[Mapping[str, Any], ...]:
-        return self.migration_report.protein_derived_evidence
-
-    @property
-    def protein_id_map(self) -> Mapping[str, str]:
-        return self.migration_report.protein_id_map or {}
-
-    @property
-    def warnings(self) -> tuple[str, ...]:
-        return self.migration_report.warnings
 
 
 @dataclass(frozen=True)
@@ -1490,7 +1465,7 @@ def render_session_compatible_request(
     drawing: SessionDrawingArtifacts,
     *,
     include_feature_catalog: bool = False,
-) -> SessionCompatibleRequestRenderResult | CircularBatchRenderResult:
+) -> RequestRenderResult | CircularBatchRenderResult:
     """Render one drawing of a released session through its sole compatibility adapter.
 
     Both result shapes carry the drawing's ``migration_report``.
@@ -1510,15 +1485,7 @@ def render_session_compatible_request(
         batch_outputs_preflighted=batch_outputs_preflighted,
         include_feature_catalog=include_feature_catalog,
     )
-    if isinstance(result, CircularBatchRenderResult):
-        return replace(result, migration_report=migration_report)
-    return SessionCompatibleRequestRenderResult(
-        **{
-            item.name: getattr(result, item.name)
-            for item in fields(RequestRenderResult)
-        },
-        migration_report=migration_report,
-    )
+    return replace(result, migration_report=migration_report)
 
 
 def canonical_payload_for_session_decode(
@@ -1637,7 +1604,6 @@ def _migrate_legacy_linear_track_slot_spec(spec: str) -> str:
 
 __all__ = [
     "AdaptedSessionRequest",
-    "SessionCompatibleRequestRenderResult",
     "SessionMigrationReport",
     "adapt_session_request",
     "build_session_compatible_request_diagram",
