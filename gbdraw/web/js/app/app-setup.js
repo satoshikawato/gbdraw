@@ -648,7 +648,7 @@ export const createAppSetup = () => {
         queryIndex,
         subjectIndex,
         ordinal: Number.isInteger(Number(resolved?.ordinal))
-          ? Number(resolved.ordinal)
+          ? Number(resolved?.ordinal)
           : entry.ordinal
       }];
     });

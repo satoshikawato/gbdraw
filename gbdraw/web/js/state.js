@@ -35,6 +35,7 @@ import { createImportedComparisonIntentState } from './services/imported-compari
 import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import { toRaw } from './utils/vue-raw.js';
+import { computed as typedComputed } from './utils/reactivity.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -990,7 +991,7 @@ const createDrawingState = (drawingMode) => {
   const form = reactive(createDefaultForm());
   const adv = reactive(createDefaultAdv(drawingMode));
   const layoutPreferences = reactive(createDefaultLayoutPreferences());
-  const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
+  const activeLayoutPreferences = typedComputed(() => resolveActiveLayoutPreference(
     layoutPreferences,
     drawingMode,
     form.multi_record_canvas
@@ -1019,7 +1020,7 @@ const createDrawingState = (drawingMode) => {
   // (services/record-draw-selection.js).
   /** @type {string[]} */
   const recordsOff = reactive([]);
-  const linearComparisonResolution = computed(() => resolveLinearComparisonPlan({
+  const linearComparisonResolution = typedComputed(() => resolveLinearComparisonPlan({
     plan: linearComparisonPlan,
     sequences: linearSeqs,
     recordsOff,
@@ -1091,17 +1092,15 @@ const createDrawingState = (drawingMode) => {
     // The Linear record cards a Generate draws, in file order (read-only; the
     // cards are project inputs that both drawings read).
     // Frozen: a reader never edits the drawn list (the cards are `linearSeqs`).
-    drawnLinearSeqs: /** @type {{ readonly value: LinearSeq[] }} */ (
-      computed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff)))
-    ),
+    drawnLinearSeqs: typedComputed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff))),
     linearComparisonResolution,
-    hasLinearComparisonIntent: computed(() => linearComparisonResolution.value.hasComparisonIntent),
-    hasActiveLinearLosatIntent: computed(() => linearComparisonResolution.value.hasLosatIntent),
-    hasActiveLinearUploadIntent: computed(() => linearComparisonResolution.value.hasUploadIntent),
+    hasLinearComparisonIntent: typedComputed(() => linearComparisonResolution.value.hasComparisonIntent),
+    hasActiveLinearLosatIntent: typedComputed(() => linearComparisonResolution.value.hasLosatIntent),
+    hasActiveLinearUploadIntent: typedComputed(() => linearComparisonResolution.value.hasUploadIntent),
     // The visibility table carries rules only; per-feature edits are featureOverrides.
-    featureVisibilityRules: computed(() => featureVisibilityManualRules
+    featureVisibilityRules: typedComputed(() => featureVisibilityManualRules
       .map((rule) => normalizeFeatureVisibilityRule(rule))),
-    hasPendingPaletteDraft: computed(
+    hasPendingPaletteDraft: typedComputed(
       () => !paletteInstantPreviewEnabled.value && String(pendingPaletteName.value || '').trim() !== ''
     )
   });
@@ -1113,7 +1112,7 @@ const drawings = Object.freeze({ circular: circularDrawing, linear: createDrawin
 /** @returns {DrawingState} */
 const activeDrawing = () => drawings[mode.value === 'linear' ? 'linear' : 'circular'];
 
-export const state = {
+export const state = Object.freeze({
   processing,
   processingStatus,
   sessionSavePending,
@@ -1312,7 +1311,7 @@ export const state = {
   featureListState,
   filteredFeatures,
   filteredEditableLabels
-};
+});
 
 /**
  * The Web state, for a module that receives it as a parameter. A member whose

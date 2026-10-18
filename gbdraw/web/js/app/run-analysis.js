@@ -659,7 +659,7 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
  * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
  *   current schema (Load reads a stored one to schema 9; Generate and the rerender commit the one they built).
- * @param {LinearSeq[]} options.sequences
+ * @param {readonly LinearSeq[]} options.sequences
  * @param {ResolvedProteinReuseActive} options.active
  */
 const canReuseResolvedProteinArtifacts = ({
