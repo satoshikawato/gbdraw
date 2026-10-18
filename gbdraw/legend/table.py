@@ -165,6 +165,16 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
 
         self._add(name, entry, _unique_legend_key([*self._rows, *self._shared_keys], name))
 
+    def add_numeric_source(self, name: str, swatch: NumericLegendSource) -> None:
+        """Add a content or skew slot's rows: one when its fills are equal, else ``(+)`` and ``(-)``."""
+
+        stroke = {"stroke": swatch.stroke_color, "width": swatch.stroke_width}
+        if swatch.high_fill_color == swatch.low_fill_color:
+            self.add_source(name, {"type": "solid", "fill": swatch.high_fill_color, **stroke})
+        else:
+            self.add_source(f"{name} (+)", {"type": "solid", "fill": swatch.high_fill_color, **stroke})
+            self.add_source(f"{name} (-)", {"type": "solid", "fill": swatch.low_fill_color, **stroke})
+
     def add_default_track(self, name: str, entry: LegendEntry) -> None:
         """Add the renderer's own row of a numeric track, which explicit slots replace (``discard_default_track``)."""
 

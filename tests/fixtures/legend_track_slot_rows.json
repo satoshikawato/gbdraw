@@ -884,7 +884,7 @@
       ]
     },
     {
-      "name": "linear: the default content row stays, and three skew slots replace the default skew rows",
+      "name": "linear: a content slot draws its own row under its dinucleotide, and three skew slots replace the default skew rows",
       "mode": "linear",
       "dinucleotide": "GC",
       "palette": {
@@ -958,9 +958,9 @@
       ],
       "rows": [
         [
-          "GC content",
+          "AT content",
           "gc_content",
-          null,
+          "gc_content",
           "#a0a0a0"
         ],
         [
@@ -999,7 +999,7 @@
       ]
     },
     {
-      "name": "linear: spec strings with aliases, under a request of another dinucleotide",
+      "name": "linear: spec strings with aliases, under a request of another dinucleotide; without a content slot there is no content row",
       "mode": "linear",
       "dinucleotide": "AT",
       "palette": {
@@ -1013,12 +1013,6 @@
         "s2:gc_skew@dinucleotide=gc,high_color=Red,label=GC bias"
       ],
       "rows": [
-        [
-          "AT content",
-          "gc_content",
-          null,
-          "#a0a0a0"
-        ],
         [
           "AT skew (+)",
           "skew_high",
@@ -1042,6 +1036,42 @@
           "skew_low",
           "s2",
           "#222222"
+        ]
+      ]
+    },
+    {
+      "name": "linear: a content slot's legend_label (alias label) names its row (OV-846)",
+      "mode": "linear",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": [
+        "features:features",
+        "c1:dinucleotide_content@legend_label=Coverage of GC",
+        "c2:content@nt=AT,label=AT share",
+        "c3:content"
+      ],
+      "rows": [
+        [
+          "Coverage of GC",
+          "gc_content",
+          "c1",
+          "#a0a0a0"
+        ],
+        [
+          "AT share",
+          "gc_content",
+          "c2",
+          "#a0a0a0"
+        ],
+        [
+          "GC content",
+          "gc_content",
+          "c3",
+          "#a0a0a0"
         ]
       ]
     },

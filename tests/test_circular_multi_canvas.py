@@ -2347,7 +2347,7 @@ def test_circular_cli_track_table_validates_params_and_forwards_axis(
     valid_table.write_text(
         "id\trenderer\tside\tparams\n"
         "ticks\tticks\toutside\ttick_label_layout=tick_only\n"
-        "features\tfeatures\taxis\tlegend_label=Genes\n"
+        "features\tfeatures\taxis\tstack_preset=tuckin\n"
         "gc\tdinucleotide_content\tinside\tnt=GC\n",
         encoding="utf-8",
     )

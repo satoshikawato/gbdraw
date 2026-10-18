@@ -362,7 +362,8 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
         for key, entry in defaults.items():
             table.add_default_track(key, {"fill": entry["fill"]})
         table = _sync_legend_table_for_linear_slots(
-            table, slots=legend_slot_sources(parse_linear_track_slots(entries)), skew=skew_config, depth_tracks=None,
+            table, slots=legend_slot_sources(parse_linear_track_slots(entries)), gc=gc_config, skew=skew_config,
+            depth_tracks=None,
         )
     assert [[key, row["fill"]] for key, row in table.items()] == [[key, fill] for key, _, _, fill in case["rows"]]
     assert list(table.shared_keys) == case.get("shared", [])

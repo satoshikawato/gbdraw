@@ -256,7 +256,7 @@ def test_circular_track_table_accepts_renderer_specific_params(tmp_path: Path) -
     table.write_text(
         "id\trenderer\tside\tparams\n"
         "ticks\tticks\toutside\ttick_label_layout=tick_only\n"
-        "features\tfeatures\taxis\tlegend_label=Genes\n"
+        "features\tfeatures\taxis\tstack_preset=tuckin\n"
         "skew\tdinucleotide_skew\tinside\tnt=AT,positive_color=red,negative_color=blue\n",
         encoding="utf-8",
     )
@@ -265,7 +265,7 @@ def test_circular_track_table_accepts_renderer_specific_params(tmp_path: Path) -
 
     assert parsed.axis_index == 1
     assert "tick_label_layout=tick_only" in parsed.slot_specs[0]
-    assert "legend_label=Genes" in parsed.slot_specs[1]
+    assert "stack_preset=tuckin" in parsed.slot_specs[1]
     assert "nt=AT" in parsed.slot_specs[2]
 
 

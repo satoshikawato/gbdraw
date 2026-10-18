@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Any, Literal, Mapping, Sequence
 
 from .parsing import (
+    SHARED_SLOT_PARAM_KEYS,
     CircularTrackSlotParseError,
     normalize_dinucleotide_params,
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
     parse_nonnegative_integer,
     parse_track_slot_text,
+    reject_unread_slot_params,
     split_kv_list,
     validate_annotation_slot_side,
     validate_overlay_annotation_anchors,
@@ -117,6 +120,19 @@ _TICK_LABEL_LAYOUT_VALUES = {
 DEFAULT_TICK_LABEL_LAYOUT = "label_out_tick_in"
 _FEATURE_LANE_VALUES = {"inside", "outside", "split"}
 _SIDE_VALUES = {"inside", "outside", "overlay"}
+
+# The params keys each non-annotation Circular renderer takes (OV-477). A
+# sequence_conservation slot reads track_index and source_index and carries
+# label and color (api/diagram.py) and the Web's managed, series_key and
+# fileName (Owner LP-D66), which released Sessions hold.
+_CIRCULAR_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
+    **SHARED_SLOT_PARAM_KEYS,
+    "features": frozenset({"lane_direction", "lanes", "stack_preset", "preset"}),
+    "ticks": frozenset({"tick_label_layout", "preset", "track_preset"}),
+    "sequence_conservation": frozenset(
+        {"track_index", "source_index", "label", "color", "managed", "series_key", "fileName"}
+    ),
+})
 
 
 @dataclass(frozen=True)
@@ -403,8 +419,6 @@ def parse_circular_track_slot(
             params = normalize_dinucleotide_params(params)
         except Exception as exc:
             raise CircularTrackSlotParseError(str(exc), original) from exc
-    elif "nt" in params:
-        params["nt"] = str(params["nt"]).upper()
     if renderer == "dinucleotide_skew":
         params = _normalize_dinucleotide_skew_color_params(params)
 
@@ -596,14 +610,12 @@ def circular_track_slots_with_axis_side(
     ]
 
 
-def _normalized_tick_params(params: dict[str, Any]) -> dict[str, Any]:
-    if "axis" in {str(key).strip().lower() for key in params}:
-        raise ValueError("ticks slots no longer accept 'axis'; the circular axis is fixed and not a slot")
+def _reject_retired_tick_params(params: Mapping[str, object]) -> None:
     lowered_keys = {str(key).strip().lower() for key in params}
+    if "axis" in lowered_keys:
+        raise ValueError("ticks slots no longer accept 'axis'; the circular axis is fixed and not a slot")
     if "label_side" in lowered_keys or "tick_side" in lowered_keys:
         raise ValueError("ticks slots use tick_label_layout; label_side and tick_side are no longer supported")
-    params["tick_label_layout"] = normalize_tick_label_layout(params.get("tick_label_layout"))
-    return params
 
 
 def _normalize_circular_track_slots(
@@ -652,6 +664,12 @@ def _normalize_circular_track_slots(
                     f"circular track slot '{slot.id}' stores generic layout field '{raw_key}' in params; "
                     "use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields"
                 )
+        if renderer == "ticks":
+            _reject_retired_tick_params(raw_params)
+        if renderer != "annotations":
+            reject_unread_slot_params(
+                raw_params, mode="circular", slot_id=str(slot.id), renderer=renderer, accepted=_CIRCULAR_SLOT_PARAM_KEYS
+            )
         if not slot.enabled:
             continue
         params = dict(raw_params)
@@ -666,7 +684,7 @@ def _normalize_circular_track_slots(
         elif renderer == "ticks":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
             reserve = side == "overlay"
-            params = _normalized_tick_params(params)
+            params["tick_label_layout"] = normalize_tick_label_layout(params.get("tick_label_layout"))
         elif renderer == "sequence_conservation":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
             if side == "overlay":

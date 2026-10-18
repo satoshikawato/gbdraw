@@ -151,7 +151,7 @@ from ...tracks import (
     normalize_linear_track_slots_with_axis,
     parse_nonnegative_integer,
 )
-from ...tracks.parsing import slot_dinucleotide
+from ...tracks.parsing import slot_dinucleotide, slot_legend_label
 from ...annotations import (
     AnnotationOptions,
     ResolvedAnnotationBundle,
@@ -461,62 +461,41 @@ def _clone_gc_config_with_dinucleotide(gc_config: GcContentConfigurator, dinucle
 
 
 
-def _slot_legend_label(slot: LegendSlotSource, fallback: str) -> str:
-    raw_label = slot.params.get("legend_label", slot.params.get("label"))
-    label = str(raw_label).strip() if raw_label is not None else ""
-    return label or fallback
-
-
 def _sync_legend_table_for_linear_slots(
     legend_table: LegendTable,
     *,
     slots: Sequence[LegendSlotSource] | None,
+    gc: NumericLegendSource,
     skew: NumericLegendSource,
     depth_tracks: Sequence[DepthLegendSource] | None,
 ) -> LegendTable:
-    """Replace singleton numeric legends with slot-authoritative entries."""
+    """Replace singleton numeric legends with slot-authoritative entries.
+
+    Each content and skew slot draws its own rows, named by its
+    ``legend_label`` (alias ``label``), as in Circular (OV-846, Owner LP-D67).
+    The rows keep the Linear order: content rows, then Depth rows, then skew rows.
+    """
     if slots is None:
         return legend_table
 
-    out = sync_depth_track_legend_entries(
-        legend_table,
-        depth_tracks,
-        slots=slots,
-    )
-    default_nt = str(skew.dinucleotide).upper()
-    for key in (
-        f"{default_nt} skew",
-        f"{default_nt} skew (+)",
-        f"{default_nt} skew (-)",
-    ):
-        out.discard_default_track(key)
+    default_nt = str(gc.dinucleotide).upper()
+    for kind in ("content", "skew"):
+        for key in (f"{default_nt} {kind}", f"{default_nt} {kind} (+)", f"{default_nt} {kind} (-)"):
+            legend_table.discard_default_track(key)
 
-    for slot in slots:
-        if slot.renderer != "dinucleotide_skew":
-            continue
-        nt = slot_dinucleotide(slot.params, default_nt)
-        label = _slot_legend_label(slot, f"{nt} skew")
-        slot_skew = skew.for_skew_slot(slot, nt)
-        if slot_skew.high_fill_color == slot_skew.low_fill_color:
-            out.add_source(label, {
-                "type": "solid",
-                "fill": slot_skew.high_fill_color,
-                "stroke": slot_skew.stroke_color,
-                "width": slot_skew.stroke_width,
-            })
-        else:
-            out.add_source(f"{label} (+)", {
-                "type": "solid",
-                "fill": slot_skew.high_fill_color,
-                "stroke": slot_skew.stroke_color,
-                "width": slot_skew.stroke_width,
-            })
-            out.add_source(f"{label} (-)", {
-                "type": "solid",
-                "fill": slot_skew.low_fill_color,
-                "stroke": slot_skew.stroke_color,
-                "width": slot_skew.stroke_width,
-            })
+    def add_slot_rows(table: LegendTable, renderer: str) -> None:
+        for slot in slots:
+            if slot.renderer != renderer:
+                continue
+            nt = slot_dinucleotide(slot.params, default_nt)
+            if renderer == "dinucleotide_content":
+                table.add_numeric_source(slot_legend_label(slot, f"{nt} content"), gc)
+            else:
+                table.add_numeric_source(slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt))
+
+    add_slot_rows(legend_table, "dinucleotide_content")
+    out = sync_depth_track_legend_entries(legend_table, depth_tracks, slots=slots)
+    add_slot_rows(out, "dinucleotide_skew")
     return out
 
 
@@ -1928,6 +1907,7 @@ def build_linear_legend_table(
     legend_table = _sync_legend_table_for_linear_slots(
         legend_table,
         slots=slots,
+        gc=sources.gc,
         skew=sources.skew,
         depth_tracks=depth_tracks,
     )
