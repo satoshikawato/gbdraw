@@ -55,7 +55,7 @@ including a Generate; switching modes changes no setting and shows that mode's
 settings and Result. **Reset Settings** resets both modes, and one **Undo**
 restores both. The input files, LOSAT run settings (run mode and threads), and
 the rich feature popup are shared. A saved Session keeps each mode's settings
-(Session 47, [compatibility](session-and-request-compatibility.md)).
+(Session 48, [compatibility](session-and-request-compatibility.md)).
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
