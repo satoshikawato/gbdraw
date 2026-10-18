@@ -13,7 +13,7 @@ import {
   resetRightDrawerState,
   restoreRightDrawerState
 } from './right-drawer-state.js';
-import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
+import { clearSettingTableFiles, resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
@@ -4176,11 +4176,7 @@ const applyFiles = (filesData, {
   targetState.files.c_conservation_fastas = [];
   targetState.files.c_conservation_sequence_sources = [];
   targetState.files.linearCanonicalComparisons = [];
-  targetState.files.d_color = null;
-  targetState.files.t_color = null;
-  targetState.files.blacklist = null;
-  targetState.files.whitelist = null;
-  targetState.files.qualifier_priority = null;
+  clearSettingTableFiles(targetState.files);
   targetState.linearReorderNotice.value = '';
 
   if (!filesData) {

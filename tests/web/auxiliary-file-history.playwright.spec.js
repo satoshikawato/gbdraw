@@ -39,6 +39,39 @@ for (const sample of cases) {
   });
 }
 
+// OV-1267: Reset Settings removes the settings a table loaded, so the card
+// that names the table goes too; one Undo brings back both.
+test('Reset Settings removes each table card with the settings it loaded, and Undo restores both', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
+  const inspect = () => page.evaluate(() => {
+    const a = window.__GBDRAW_APP__;
+    const plain = (value) => JSON.parse(JSON.stringify(value));
+    return {
+      files: ['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => a.files[key]?.name || null),
+      values: plain([a.currentColors.CDS, a.manualSpecificRules, a.manualPriorityRules, a.manualWhitelist, a.manualBlacklist])
+    };
+  });
+  const defaults = await inspect();
+  for (const sample of cases) {
+    // The Whitelist and Blacklist cards show under their filter mode.
+    await page.evaluate((key) => {
+      const a = window.__GBDRAW_APP__;
+      if (key === 'whitelist') a.filterMode = 'Whitelist';
+      if (key === 'blacklist') a.filterMode = 'Blacklist';
+    }, sample.key);
+    await page.getByLabel(sample.label, { exact: true }).setInputFiles({ name: `${sample.key}.tsv`, mimeType: 'text/plain', buffer: Buffer.from(sample.text) });
+    await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files[key]); }, sample.key);
+  }
+  const loaded = await inspect();
+  expect(loaded.files).toEqual(['d_color.tsv', 't_color.tsv', 'qualifier_priority.tsv', 'whitelist.tsv', 'blacklist.tsv']);
+  expect(loaded.values).not.toEqual(defaults.values);
+  await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
+  await expect.poll(inspect).toEqual(defaults);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(inspect).toEqual(loaded);
+});
+
 test('a slow earlier specific table cannot overwrite a later uploaded table', async ({ page }) => {
   await page.addInitScript(() => {
     const read = File.prototype.arrayBuffer;

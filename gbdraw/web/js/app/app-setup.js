@@ -5252,9 +5252,10 @@ export const createAppSetup = () => {
         'Labels, Feature visibility, and Feature placements',
         'Legend names, deleted Legend rows, Similarity group names, and Region Annotations',
         'Linear record definitions, subtitles, regions, reverse complement, and alignment',
-        'Linear comparisons, which turn off; their uploaded tables stay'
+        'Linear comparisons, which turn off; their uploaded tables stay',
+        'The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded'
       ],
-      note: 'Uploaded files, the records you chose, File defaults, and Depth files stay. Undo brings the settings back.',
+      note: 'Genome and Depth files, the records you chose, and File defaults stay. Undo brings the settings back.',
       actions: [{ id: 'reset', label: 'Reset all settings', tone: 'danger' }],
       cancelLabel: 'Keep settings'
     });
