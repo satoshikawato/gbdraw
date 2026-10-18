@@ -692,3 +692,28 @@ def test_native_diagram_exposes_immutable_warnings_and_reuses_bundle(mode, monke
     assert "PRIVATE-MISSING" not in diagram.to_svg()
     assert "PRIVATE-MISSING" not in diagram.to_svg(interactive=True)
     assert count == 1
+
+
+@pytest.mark.parametrize("types", ["CDS", b"CDS", ["CDS", ""], [1]])
+def test_feature_options_types_error_names_types(types: object) -> None:
+    """OV-1245: ``FeatureOptions(types="CDS")`` named the internal ``selected_features_set``."""
+
+    with pytest.raises(ValidationError, match=r"^types must ") as raised:
+        gbdraw.FeatureOptions(types=types)  # type: ignore[arg-type]
+    assert "selected_features_set" not in str(raised.value)
+    assert gbdraw.FeatureOptions(types=["CDS", "tRNA"]).types == ["CDS", "tRNA"]
+    assert gbdraw.FeatureOptions(types=None).types is None
+
+
+def test_read_genbank_refuses_a_file_object_and_asks_for_its_path(tmp_path: Path) -> None:
+    """OV-1245: an open file was read line by line as paths."""
+
+    source = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
+    with source.open(encoding="utf-8") as handle:
+        with pytest.raises(ValidationError, match=r"^paths must be a file path or a sequence of file paths"):
+            gbdraw.read_genbank(handle)  # type: ignore[arg-type]
+        with pytest.raises(ValidationError, match=r"^fasta_paths must be a file path or a sequence of file paths"):
+            gbdraw.read_gff(str(source), handle)  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match="At least one non-empty input path is required."):
+        gbdraw.read_genbank([])
+    assert len(gbdraw.read_genbank(source)) == 1
