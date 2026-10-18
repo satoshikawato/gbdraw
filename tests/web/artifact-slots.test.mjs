@@ -171,8 +171,6 @@ test('a step whose alignment receipt does not bind fails before anything is appl
   ), /ALIGNMENT_RESET_EVIDENCE|receipt/i);
   assert.equal(state.activeDrawing().form.prefix, prefix);
   assert.strictEqual(state.results.value, values.results);
-  await assert.rejects(snapshots.drawingHistory('linear').applyIntent({ config: {} }, { changes: [{ path: ['config'] }] }),
-    /drawing linear only while it is shown/);
 });
 
 // Review alignment compares its mode's own Result whichever mode is shown (OV-622, D-45).

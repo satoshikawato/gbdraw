@@ -635,7 +635,6 @@ export const createFeatureLabelActions = ({
 }) => {
   const {
     mode,
-    generatedMode,
     results,
     selectedResultIndex,
     svgContainer,
@@ -964,9 +963,6 @@ export const createFeatureLabelActions = ({
     reuseCurrentBinding = false
   } = {}) => {
     const drawing = state.activeDrawing();
-    // The retained Result can outlive its active mode. Keep its label intent
-    // dormant until its own mode can project and reconcile those identities.
-    if (generatedMode.value !== mode.value) return;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -1087,7 +1083,6 @@ export const createFeatureLabelActions = ({
   // request.
   const applyFeatureVisibilityToLabels = ({ reflow = true, rerender = false, labels = false } = {}) => {
     const drawing = state.activeDrawing();
-    if (generatedMode.value !== mode.value) return false;
     if (labels) return reconcileLabelOverrides({ reflow, rerender });
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
@@ -1109,7 +1104,7 @@ export const createFeatureLabelActions = ({
   /** @type {WeakSet<DrawingState>} */
   const redrawOwed = new WeakSet();
   const requestAutomaticRerender = () => {
-    if (generatedMode.value !== mode.value || !svgContainer.value?.querySelector?.('svg')) return false;
+    if (!svgContainer.value?.querySelector?.('svg')) return false;
     redrawOwed.add(state.activeDrawing());
     queueLabelReflow(true);
     return true;

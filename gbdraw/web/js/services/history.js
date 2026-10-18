@@ -1866,6 +1866,8 @@ export const createHistoryManager = ({
     runUndoableArtifactReplacement,
     runUndoableCheckpoint,
     runUndoableCommand,
+    // R11: the open step ends now, in this History (a drawing switch).
+    settlePendingIntent,
     undo,
     undoLabel
   };

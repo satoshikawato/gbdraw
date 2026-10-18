@@ -3304,7 +3304,7 @@ export const createAppSetup = () => {
       // drawing's current paint, also after an edit made since its paint was
       // committed (read before that edit is shown on it, OV-346).
       // Its drawing is the shown one: a mode switch waits for a rerender
-      // (`diagramModeSwitchBusy`). D-24 (OV-731): History keeps the figure
+      // (`drawingSwitchBusy`). D-24 (OV-731): History keeps the figure
       // as the last step's.
       const drawing = state.activeDrawing();
       const drewCurrent = context.phase === 'label-reflow' && !labelReflowProcessing.value
@@ -3938,10 +3938,8 @@ export const createAppSetup = () => {
     // The restored form decides which track groups the mounted Result shows.
     // The visibility watcher is suppressed while a step restores files (a Depth
     // source), so the step applies it here once the restored container is
-    // mounted. A step that switched the mode leaves it to the mode's own
-    // restore: the mounted Result must be of the current mode (OV-66, R3).
-    if (changedDomains.has('files') && changedDomains.has('config')
-      && state.generatedMode.value === mode.value) {
+    // mounted. The mounted Result is the shown drawing's (OV-66, R3).
+    if (changedDomains.has('files') && changedDomains.has('config')) {
       svgActions.applyTrackVisibility();
     }
   });
@@ -4267,73 +4265,61 @@ export const createAppSetup = () => {
     return arriving;
   };
 
-  // E1 (R10, R13): the one transition between the diagram modes, in one task
-  // so a switch is one History step. Undo and Redo of a switch run it through
-  // the History port; no watcher writes state on a mode change. Callers check
-  // availability first (`setDiagramMode`); the History port calls it inside
-  // its own operation. Steps, each one call:
-  //   1. Settle the departing mode: pending rule-pattern work, the feature
-  //      selection, and the displayed Result's projection state (it followed
-  //      every live edit until now).
+  // PD-OI-090 (R10, R15): the one switch between the drawings, in one task.
+  // It writes no setting and records no History step: each drawing has its
+  // own History, and Undo and Redo walk the shown drawing's steps. No watcher
+  // writes state on a switch. Steps, each one call:
+  //   1. Settle the departing drawing: its open History step ends here, in its
+  //      own History; pending rule-pattern work; the feature selection; and the
+  //      displayed Result's projection state (it followed every live edit).
   //   2. Swap the artifact slots (`swapArtifactSlots`).
-  //   3. Show the arriving drawing (`installShownDrawing`). Each mode has its
-  //      own drawing (PD-OI-086), so the template now binds the arriving
-  //      drawing and no setting is written.
-  //   4. Reset the departing mode's transient UI; the Preview search is kept
-  //      per mode.
+  //   3. Show the arriving drawing (`installShownDrawing`); the template now
+  //      binds it. Its History takes the app-level values the other drawing's
+  //      steps changed.
+  //   4. Reset the departing drawing's transient UI; the Preview search is
+  //      kept per drawing.
   //   5. Show the arriving Result as a selection.
-  /**
-   * @param {'circular' | 'linear'} nextMode
-   * @returns {boolean} Whether the mode changed.
-   */
-  const transitionDiagramMode = (nextMode) => {
-    const drawing = state.activeDrawing();
-    const previousMode = mode.value;
-    if (nextMode === previousMode) return false;
-    // 1. Settle the departing mode; `drawing` is its drawing, resolved before
-    // the mode changes.
-    featureActions.suspendSpecificRulePatternDrafts();
-    featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
-    rememberDepartingResultProjection(drawing);
-    // 2. Artifact slots.
-    swapArtifactSlots(state.drawings[nextMode]);
-    // 3. The shown drawing; its History takes the app-level values the other
-    // drawing's steps changed (PD-OI-090).
-    installShownDrawing(drawingIdOfMode(nextMode));
-    void history.refreshCurrentIntent();
-    // 4. Transient UI. "Showing the last successful result" named the
-    // departing mode's Result, and the notice the departing mode's work.
-    resetModeTransientUi();
-    noticeBanner.dismiss();
-    previewFeatureSearch.switchModeSearch(previousMode, nextMode);
-    failedGeneratePreservedResult.value = false;
-    // OV-372: an operation error belongs to the mode it was raised in, except
-    // one that names the arriving mode's Result (PD-OI-079).
-    if (errorLog.value && normalizeUserFacingError(errorLog.value)?.context?.diagramMode !== nextMode) {
-      errorLog.value = null;
-    }
-    // 5. The arriving drawing's annotations, over its mode's record catalog.
-    rebindAnnotationRecords();
-    // 6. Presentation: the arriving Result is shown as a selection.
-    previewRuntime.presentSelectedResult({ modeArrival: true });
-    return true;
-  };
   // A switch waits for Generate, a label rerender, Save and Load, so each
-  // Result lands in its own mode's slot (OIPC-C07): the mode buttons and an
-  // Undo or Redo of a switch read this one predicate. The buttons also wait
-  // for a History restore or open History transaction, so a restore finds the
-  // mode it was captured in.
-  const diagramModeOperationBusy = () => sessionOperationAvailability('history');
-  const diagramModeSwitchBusy = () => diagramModeOperationBusy()
+  // Result lands in its own drawing's slot (OIPC-C07), and for a History
+  // restore or an open History transaction.
+  const drawingSwitchBusy = () => sessionOperationAvailability('history')
     || history.historyAvailability()
     || (history.restoring.value || history.traversalPending() ? HISTORY_RESTORE_BUSY : null);
-  const diagramModeSwitchAvailable = computed(() => !diagramModeSwitchBusy());
-  /** @param {string} nextMode */
-  const setDiagramMode = (nextMode) => {
-    if ((nextMode !== 'circular' && nextMode !== 'linear') || nextMode === mode.value) return false;
-    const busy = diagramModeSwitchBusy();
+  const drawingSwitchAvailable = computed(() => !drawingSwitchBusy());
+  // `false` when the drawing is unknown or already shown, the busy reason
+  // when a switch waits, else `{ status: 'ok' }`.
+  /** @param {unknown} drawingId */
+  const selectDrawing = (drawingId) => {
+    const arriving = Object.values(state.drawings).find((drawing) => drawing.id === drawingId);
+    const departing = state.activeDrawing();
+    if (!arriving || arriving === departing) return false;
+    const busy = drawingSwitchBusy();
     if (busy) return busy;
-    transitionDiagramMode(nextMode);
+    // 1. Settle the departing drawing; its capture runs in this call.
+    void history.settlePendingIntent();
+    featureActions.suspendSpecificRulePatternDrafts();
+    featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+    rememberDepartingResultProjection(departing);
+    // 2. Artifact slots.
+    swapArtifactSlots(arriving);
+    // 3. The shown drawing.
+    installShownDrawing(arriving.id);
+    void history.refreshCurrentIntent();
+    // 4. Transient UI. "Showing the last successful result" named the
+    // departing drawing's Result, and the notice the departing drawing's work.
+    resetModeTransientUi();
+    noticeBanner.dismiss();
+    previewFeatureSearch.switchModeSearch(departing.mode, arriving.mode);
+    failedGeneratePreservedResult.value = false;
+    // OV-372: an operation error belongs to the drawing it was raised in,
+    // except one that names the arriving drawing's Result (PD-OI-079).
+    if (errorLog.value && normalizeUserFacingError(errorLog.value)?.context?.diagramMode !== arriving.mode) {
+      errorLog.value = null;
+    }
+    // The arriving drawing's annotations, over its mode's record catalog.
+    rebindAnnotationRecords();
+    // 5. Presentation: the arriving Result is shown as a selection.
+    previewRuntime.presentSelectedResult({ modeArrival: true });
     return { status: 'ok' };
   };
   // Session Load (E1): the loaded Session's artifact slots, before its preview
@@ -4757,7 +4743,7 @@ export const createAppSetup = () => {
   const generateFromError = () => {
     const target = errorLog.value?.context?.diagramMode;
     if ((target === 'circular' || target === 'linear') && target !== mode.value) {
-      const switched = setDiagramMode(target);
+      const switched = selectDrawing(drawingIdOfMode(target));
       if (switched && switched.status === 'busy') return switched;
     }
     return runAnalysis();
@@ -6761,8 +6747,8 @@ export const createAppSetup = () => {
     errorDisplay,
     canRetryInteractiveSvgExport,
     reloadAfterOperationError,
-    setDiagramMode,
-    diagramModeSwitchAvailable,
+    selectDrawing,
+    drawingSwitchAvailable,
     canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
     canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,

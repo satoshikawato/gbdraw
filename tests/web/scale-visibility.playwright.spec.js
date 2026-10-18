@@ -44,7 +44,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('circular');
+    app.selectDrawing('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -112,7 +112,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -165,7 +165,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('circular');
+    app.selectDrawing('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -241,7 +241,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -335,7 +335,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     String(window.__GBDRAW_APP__.results?.[0]?.content || '').includes(expectedPath)
   ), linearGeometry.d)).toBe(true);
   await page.evaluate(async () => {
-    window.__GBDRAW_APP__.setDiagramMode('circular');
+    window.__GBDRAW_APP__.selectDrawing('circular');
     await window.Vue.nextTick();
   });
   expect(await arrowSettings()).toEqual({ shape: 'arrow', head: 1.25, shaft: 0.25 });

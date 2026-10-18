@@ -3128,7 +3128,7 @@ test('Apply of a review draws a live color changed before the review', async ({ 
 test('a Session loaded while the other mode is shown under a review keeps its own view', async ({ page }) => {
   test.setTimeout(600000);
   const { dialog } = await openReviewOverOwnView(page);
-  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
+  await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'));
   await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.mode.value)).toBe('circular');
   const session = JSON.parse(readFileSync(galleryAlignmentSession, 'utf8'));
   session.ui = { ...session.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
@@ -3151,7 +3151,7 @@ test('a mode switch and back under an open review leaves the view the review giv
   const { before, dialog } = await openReviewOverOwnView(page);
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
   for (const target of ['circular', 'linear']) {
-    await page.evaluate((next) => window.__GBDRAW_APP__.setDiagramMode(next), target);
+    await page.evaluate((next) => window.__GBDRAW_APP__.selectDrawing(next), target);
     await expect.poll(shownMode).toBe(target);
   }
   await expect(dialog).toBeVisible();

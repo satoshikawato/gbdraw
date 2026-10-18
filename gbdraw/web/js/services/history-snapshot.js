@@ -1747,20 +1747,12 @@ export const createHistorySnapshotService = ({
   // PD-OI-090: each drawing has its own History, so an intent and a checkpoint
   // hold one drawing: its settings and edits, the bindings of its slots
   // (`buildIntentFilesData`), and the app-level values the shown drawing's
-  // steps record (D-15-50). A restore installs into the shown drawing only:
-  // Undo and Redo walk the shown drawing's History.
+  // steps record (D-15-50). The History router restores only the shown
+  // drawing: Undo and Redo walk the shown drawing's History.
   /** @param {DrawingId} drawingId */
   const drawingOfId = (drawingId) => {
     const drawing = /** @type {D | undefined} */ (state.drawings[drawingId]);
     if (!drawing) throw new Error(`History has no drawing ${drawingId}.`);
-    return drawing;
-  };
-  /** @param {DrawingId} drawingId */
-  const shownDrawingOf = (drawingId) => {
-    const drawing = drawingOfId(drawingId);
-    if (drawing !== state.activeDrawing()) {
-      throw new Error(`History restores drawing ${drawingId} only while it is shown.`);
-    }
     return drawing;
   };
   /** @param {D} drawing */
@@ -1830,7 +1822,7 @@ export const createHistorySnapshotService = ({
    */
   const applyHistoryIntent = async (drawingId, intent, context = {}) => {
     if (!intent || typeof intent !== 'object') return;
-    const drawing = shownDrawingOf(drawingId);
+    const drawing = drawingOfId(drawingId);
     closeTransientState(state);
 
     const domains = intentDomains(context);
@@ -1915,7 +1907,7 @@ export const createHistorySnapshotService = ({
   // A checkpoint holds the shown drawing's artifact with the drawing.
   /** @param {DrawingId} drawingId */
   const buildArtifactCheckpoint = (drawingId) => {
-    const drawing = shownDrawingOf(drawingId);
+    const drawing = drawingOfId(drawingId);
     const generated = buildGeneratedArtifactSnapshot(drawing);
     const { featureCatalog = null, ...editorState } = generated.editorState || {};
     const checkpoint = cloneJsonData({
@@ -1936,7 +1928,7 @@ export const createHistorySnapshotService = ({
    */
   const applyArtifactCheckpoint = async (drawingId, snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
-    const drawing = shownDrawingOf(drawingId);
+    const drawing = drawingOfId(drawingId);
     const suppressRef = state.semanticFileWatchersSuppressed;
     const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
     setGeneratedArtifactRef(suppressRef, true);

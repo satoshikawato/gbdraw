@@ -437,8 +437,8 @@ test('OV-142 N3: leaving a mode before its Result is presented changes no Legend
   // Two switches in one task, then a Linear Generate left before its preview is ready.
   const switched = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
-    const there = app.setDiagramMode('circular');
-    const back = app.setDiagramMode('linear');
+    const there = app.selectDrawing('circular');
+    const back = app.selectDrawing('linear');
     return { there: there?.status ?? there, back: back?.status ?? back };
   });
   expect(switched, 'both switches run').toEqual({ there: 'ok', back: 'ok' });
@@ -446,10 +446,10 @@ test('OV-142 N3: leaving a mode before its Result is presented changes no Legend
   const left = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
-    let away = app.setDiagramMode('circular');
+    let away = app.selectDrawing('circular');
     for (let tries = 0; tries < 200 && away?.status !== 'ok'; tries += 1) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
-      away = app.setDiagramMode('circular');
+      away = app.selectDrawing('circular');
     }
     return { generate: result?.status ?? null, away: away?.status ?? away };
   });

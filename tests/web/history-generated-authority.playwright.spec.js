@@ -594,7 +594,7 @@ test('Unedited Circular Save and fresh Load keeps the committed request without 
 
 // SE-01, N-19, N-20 (R11): checkpoint Undo and Redo restore the admitted feature
 // catalog by reference; the checkpoint JSON neither copies nor signs it.
-test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode round trip', async ({ browser }, info) => {
+test('Checkpoint Undo and Redo keep the admitted feature catalog through a drawing round trip that records no step', async ({ browser }, info) => {
   test.setTimeout(300000);
   const page = await load(browser);
   const errors = [];
@@ -650,7 +650,7 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode 
     }
     // A step that comes while the color's automatic rerender (OV-43) draws
     // makes it draw again (D-24 (OV-731)); its Results come with their own
-    // catalog (R-5), and the mode switch waits for it (OIPC-C07), where dev's
+    // catalog (R-5), and the drawing switch waits for it (OIPC-C07), where dev's
     // switch dropped it. The catalog the settled Result holds is kept by reference
     // through the round trip, and nothing replaces it once the shown Result
     // settles again.
@@ -663,8 +663,12 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode 
     });
     expect(await roundTripCatalog()).toBe(true);
     expect(await catalogState()).toMatchObject({ adopted: true, features: 37 });
+    // PD-OI-090: each drawing has its own History; a switch records no step.
+    const tripCounts = (await history()).counts;
     await switchMode(page, 'linear');
+    expect((await history()).counts, 'the Linear drawing\'s own History').toEqual([0, 0]);
     await switchMode(page, 'circular');
+    expect((await history()).counts, 'a drawing round trip records no step').toEqual(tripCounts);
     expect(await roundTripCatalog(), 'the same catalog across the round trip').toBe(true);
     await settleLive(page);
     expect(await roundTripCatalog(), 'the same catalog once the Result settles').toBe(true);

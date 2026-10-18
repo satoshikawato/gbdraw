@@ -329,7 +329,7 @@ test('Linear Depth above Features generates with repeat_region underlays', async
   const outcome = await evaluateWithRetainedPromise(page, async (genbankText) => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'repeat-region.gbk', {
       type: 'text/plain',
@@ -443,7 +443,7 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
 
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.addLinearSeq();
     const first = new File(['position\tdepth\n1\t10\n'], 'sample-a.tsv', {
       type: 'text/tab-separated-values'
@@ -602,7 +602,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
 
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.addLinearSeq();
     app.addLinearSeq();
     const multiRecordFile = new File(['LOCUS       MULTI\n'], 'multi.gbk', { type: 'text/plain' });
@@ -746,7 +746,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await openApp(page, { waitForPalette: false });
   await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first, second], 'multi-depth.gbk', {
       type: 'text/plain', lastModified: 1
@@ -812,7 +812,7 @@ test('Linear custom slot panel and enable state preserve the explicit stack', as
 
   const result = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.adv.linear_track_slots.splice(
       0,
       app.adv.linear_track_slots.length,
@@ -885,7 +885,7 @@ test('Custom Track disclosure and editable IDs preserve transient row identity i
     // each part waits until its mode is shown (a switch waits while busy).
     const showMode = async (target) => {
       for (let tries = 0; tries < 300 && app.mode !== target; tries += 1) {
-        app.setDiagramMode(target);
+        app.selectDrawing(target);
         if (app.mode !== target) await new Promise((resolve) => setTimeout(resolve, 20));
       }
       if (app.mode !== target) throw new Error(`The app stays in ${app.mode}`);
@@ -1172,7 +1172,7 @@ test('Definition line colors preserve raw values and present named, Auto, and No
 
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.adv.linear_definition_line_styles.name.fill = 'red';
     app.adv.linear_definition_line_styles.subtitle.fill = null;
     app.adv.linear_definition_line_styles.replicon.fill = 'none';
@@ -1272,7 +1272,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
     });
     app.annotationSets.splice(0, app.annotationSets.length);
     app.linearComparisonPlan.mode = 'none';
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.adv.linear_track_slots.splice(
       0,
       app.adv.linear_track_slots.length,
@@ -1495,7 +1495,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
 
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     await window.Vue.nextTick();
     app.sessionTitle = 'keep-live-state';
     app.adv.linear_track_slots.splice(
@@ -1769,7 +1769,7 @@ ORIGIN
     async ({ nextMode, nextMultiRecord }) => {
       const app = window.__GBDRAW_APP__;
       const { state } = await import('./js/state.js');
-      app.setDiagramMode(nextMode);
+      app.selectDrawing(nextMode);
       if (nextMode === 'circular') app.form.multi_record_canvas = nextMultiRecord;
       await window.Vue.nextTick();
       await window.Vue.nextTick();
@@ -1790,7 +1790,7 @@ ORIGIN
   };
   const activeModeProfile = async (mode) => page.evaluate(async (nextMode) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode(nextMode);
+    app.selectDrawing(nextMode);
     await window.Vue.nextTick();
     await window.Vue.nextTick();
     return {
@@ -1810,7 +1810,7 @@ ORIGIN
   await openApp(page, { waitForPalette: false });
   await page.evaluate(async ({ genbankText }) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('circular');
+    app.selectDrawing('circular');
     app.form.multi_record_canvas = false;
     await window.Vue.nextTick();
     app.form.legend = 'right';
@@ -1823,7 +1823,7 @@ ORIGIN
     app.adv.identity = 88;
     app.adv.axis_stroke_color = '#123456';
 
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     await window.Vue.nextTick();
     app.form.legend = 'top';
     app.adv.plot_title_position = 'center';
@@ -2071,7 +2071,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     // The Linear stack belongs to the Linear drawing (PR-1); it uses its own
     // copy of the review annotation set.
     const linearDrawing = (await import('./js/state.js')).state.drawings.linear;
-    app.setDiagramMode('circular');
+    app.selectDrawing('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([genbankText], 'p3-session.gbk', {
       type: 'application/genbank',
@@ -2279,7 +2279,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
 
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     if (!app.linearTrackSlotsPanelOpen) app.toggleLinearTrackSlotsPanel();
     await window.Vue.nextTick();
     await window.Vue.nextTick();
@@ -2309,7 +2309,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     .getByRole('checkbox', { name: 'Linear track slot inactive_overlay mark highlight', exact: true })
     .click();
   await page.evaluate(async () => {
-    window.__GBDRAW_APP__.setDiagramMode('circular');
+    window.__GBDRAW_APP__.selectDrawing('circular');
     await window.Vue.nextTick();
     await window.Vue.nextTick();
   });
@@ -2659,7 +2659,7 @@ ORIGIN
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
-    app.setDiagramMode('circular');
+    app.selectDrawing('circular');
     app.sessionTitle = 'keep-after-rollback';
     app.form.legend = 'left';
     app.adv.comparison_height = 37;
@@ -2712,7 +2712,7 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
   await openApp(page, { waitForPalette: false });
   await page.evaluate((genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain', lastModified: 1
@@ -2925,7 +2925,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
 
   await page.evaluate(({ genbankAText, genbankBText, depthAText, depthBText }) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    app.selectDrawing('linear');
     app.lInputType = 'gb';
     app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankAText], 'BGC0000711.gbk', {
@@ -3086,7 +3086,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   await openApp(page, { waitForPalette: false });
   await page.evaluate(({ genbankAText, genbankBText, depthAText, depthBText }) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('circular');
+    app.selectDrawing('circular');
     app.cInputType = 'gb';
     const combinedFile = new File([`${genbankAText}\n${genbankBText}`], 'combined.gbk', {
       type: 'text/plain', lastModified: 1

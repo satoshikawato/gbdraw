@@ -73,7 +73,7 @@ test('real Python adapters retain causes through one lazy Worker and successful 
 test('Generate without input fails before the diagram Worker starts', async ({ page }) => {
   await openApp(page);
   for (const mode of ['circular', 'linear']) {
-    await page.evaluate((target) => window.__GBDRAW_APP__.setDiagramMode(target), mode);
+    await page.evaluate((target) => window.__GBDRAW_APP__.selectDrawing(target), mode);
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const outcome = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
       expect(outcome).toMatchObject({ status: 'error', error: { code: 'INPUT_REQUIRED', operation: 'generate' },

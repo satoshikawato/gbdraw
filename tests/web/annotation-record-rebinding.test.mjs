@@ -37,7 +37,7 @@ const band = (id, recordId) => ({ id, target: coordinateTarget({ start: 1, end: 
 
 test('a Linear multi-record expansion binds an annotation to its record card, and a no-op refresh binds nothing', async () => {
   const app = createAppSetup();
-  app.setDiagramMode('linear');
+  app.selectDrawing('linear');
   const drawing = state.drawings.linear;
   app.setLinearSeqPrimaryFile(0, 'gb', genbank(['chr0', 40]));
   await app.refreshLinearRecordSelectors();
@@ -55,5 +55,5 @@ test('a Linear multi-record expansion binds an annotation to its record card, an
   addAnnotations(drawing.slices.annotationSets, set, [band('on-chr0', 'chr0')]);
   await app.refreshLinearRecordSelectors();
   assert.equal(annotationRecordBinding(drawing.annotationSets[0].annotations[1]), '');
-  app.setDiagramMode('circular');
+  app.selectDrawing('circular');
 });

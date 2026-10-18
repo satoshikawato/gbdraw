@@ -426,7 +426,7 @@ test('the mode switch waits for Generate (OIPC-C07)', async ({ page }) => {
     const run = app.runAnalysis();
     await window.Vue.nextTick();
     const button = [...document.querySelectorAll('button')].find((element) => element.textContent.trim() === 'Linear');
-    const outcome = { processing: app.processing, disabled: button.disabled, result: app.setDiagramMode('linear') };
+    const outcome = { processing: app.processing, disabled: button.disabled, result: app.selectDrawing('linear') };
     await run;
     return outcome;
   });
@@ -796,7 +796,7 @@ test('the mode switch waits for Undo and Redo', async ({ page }) => {
     const outcome = {
       pending: history.restoring.value || Boolean(history.traversalPending?.()),
       disabled: button.disabled,
-      result: app.setDiagramMode('linear')
+      result: app.selectDrawing('linear')
     };
     await run;
     return outcome;

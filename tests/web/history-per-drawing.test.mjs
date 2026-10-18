@@ -46,7 +46,7 @@ test('Undo walks the shown drawing\'s History and never changes the other drawin
 
   // A switch writes no setting and records no step.
   const before = { circular: hashOf('circular'), linear: hashOf('linear') };
-  assert.deepEqual(app.setDiagramMode('linear'), { status: 'ok' });
+  assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
   assert.deepEqual({ circular: hashOf('circular'), linear: hashOf('linear') }, before);
   assert.equal(app.canUndoHistory.value, false, 'the Linear drawing has no step yet');
 
@@ -61,7 +61,7 @@ test('Undo walks the shown drawing\'s History and never changes the other drawin
   assert.equal(hashOf('linear'), linearAfterEdit);
   assert.equal(hashOf('circular'), circularAfterEdit, 'Redo in Linear leaves Circular unchanged');
 
-  assert.deepEqual(app.setDiagramMode('circular'), { status: 'ok' });
+  assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
   assert.equal(history.getUndoCount(), 1, 'the Circular drawing keeps its own step');
   await app.undoHistory();
   assert.equal(circular.unmanagedConfigOverrides['objects.circular.a'], 1, 'Undo restores the Circular edit');
@@ -72,7 +72,7 @@ test('Reset Settings is one step in each drawing\'s History', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
   const { circular, linear } = state.drawings;
-  if (state.activeDrawingId.value !== 'circular') app.setDiagramMode('circular');
+  if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
   circular.form.prefix = 'circular-prefix';
   linear.form.prefix = 'linear-prefix';
   const circularBefore = hashOf('circular');
@@ -85,8 +85,33 @@ test('Reset Settings is one step in each drawing\'s History', async () => {
   await app.undoHistory();
   assert.equal(hashOf('circular'), circularBefore, 'Undo in Circular restores its reset');
   assert.equal(hashOf('linear'), linearReset, 'and leaves the Linear reset');
-  assert.deepEqual(app.setDiagramMode('linear'), { status: 'ok' });
+  assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
   assert.equal(history.undoLabel(), 'Reset settings');
   await app.undoHistory();
   assert.equal(hashOf('linear'), linearBefore, 'Undo in Linear restores its reset');
+});
+
+test('a switch settles the departing drawing\'s open step in that drawing', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { circular } = state.drawings;
+  if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
+  const circularSteps = history.getUndoCount();
+  const before = circular.form.prefix;
+  // A text control began on focus; the switch comes before its own commit.
+  const step = await history.begin('Output prefix', { source: 'test-control' });
+  assert.ok(step, 'the control opened a step');
+  circular.form.prefix = 'typed-before-switch';
+  assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
+  const linearSteps = history.getUndoCount();
+  // The Session title is shared; it changes while Linear is shown.
+  state.sessionTitle.value = 'title set in Linear';
+  await history.commit(step);
+  assert.equal(history.getUndoCount(), linearSteps, 'the Linear History records nothing');
+  assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
+  assert.equal(history.getUndoCount(), circularSteps + 1, 'the step is the Circular drawing\'s');
+  await app.undoHistory();
+  assert.equal(circular.form.prefix, before);
+  assert.equal(state.sessionTitle.value, 'title set in Linear',
+    'the step ended at the switch, so its Undo keeps what changed after it');
 });

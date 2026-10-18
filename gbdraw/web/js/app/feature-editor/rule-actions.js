@@ -552,8 +552,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const applySpecificRulePattern = async (drawing, row, value) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    if (!drawing.manualSpecificRules.includes(row) || !isPatternEditAvailable()
-      || (state.generatedMode?.value && state.mode?.value !== state.generatedMode.value)) return false;
+    if (!drawing.manualSpecificRules.includes(row) || !isPatternEditAvailable()) return false;
     patternDrafts.suspend();
     const token = patternDrafts.begin(row, value);
     // OV-1133 (S4-Q5): the edit stays current while its draft does. A Result

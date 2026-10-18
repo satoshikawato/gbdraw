@@ -42,7 +42,7 @@ const renderRealDiagram = async (
 ) => {
   const outcome = await evaluateWithRetainedPromise(page, async ({ diagramMode, source, requestedLegendSide }) => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode(diagramMode);
+    app.selectDrawing(diagramMode);
     await window.Vue.nextTick();
     await window.Vue.nextTick();
     app.form.prefix = `wp5-real-${diagramMode}`;

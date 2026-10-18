@@ -304,7 +304,7 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
       await generateAndWaitForResult(page);
       // Settle the existing mode-keyed mount's stroke binding before freezing
       // the accepted boundary. The held edit must preserve every SVG attribute.
-      await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
+      await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.selectDrawing('linear'); a.selectDrawing('circular'); });
       await snapshot(page);
     }
     // Session: no Load takes over a held edit. A rule edit's only request is
@@ -329,7 +329,7 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
     expect(await page.evaluate(() => window.__heldKind)).toBe('color');
     expect((await draft(page)).draft.pending).toBe(true);
     if (boundary === 'drawer') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
-    if (boundary === 'mode cycle') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.setDiagramMode('linear'); a.setDiagramMode('circular'); });
+    if (boundary === 'mode cycle') await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.selectDrawing('linear'); a.selectDrawing('circular'); });
     if (boundary === 'remove') await page.evaluate(() => window.__GBDRAW_APP__.removeSpecificRule(0));
     if (boundary === 'reorder') await evaluateWithRetainedPromise(page, async () => { const a = window.__GBDRAW_APP__; Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'other', color: '#abcdef', cap: '' }); await a.addSpecificRule(); await a.moveSpecificRuleDown(0); });
     if (boundary === 'Session') expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionLoadAvailable)).toBe(false);

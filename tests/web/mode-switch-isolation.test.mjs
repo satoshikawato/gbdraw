@@ -185,8 +185,8 @@ test('the drawing-write scan sees each receiver form (A2 review-I2, Low 2)', () 
     assert.equal(writesDrawing(read), false, read);
 });
 
-test('the mode transition writes no drawing member and commits no Result edit', () => {
-  const body = functionBody('transitionDiagramMode');
+test('the drawing switch writes no drawing member and commits no Result edit', () => {
+  const body = functionBody('selectDrawing');
   assert.equal(writesDrawing(body), false);
   assert.doesNotMatch(body, /commitActiveResultEdit|recordHistory|history\.(record|commit)/);
   // The removed steps stay removed: the Show Depth repair and the profile transition.
