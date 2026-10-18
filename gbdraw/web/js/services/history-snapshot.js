@@ -1950,7 +1950,10 @@ export const createHistorySnapshotService = ({
 
       if (domains.has('ui')) {
         if (typeof applyUiStateData === 'function') {
-          applyUiStateData(drawing, ui, { restorePreviewNavigation: false, artifact: shown });
+          // A null applied palette (a drawing that had no slot) keeps the displayed one, shown or not (L1).
+          applyUiStateData(drawing, ui, {
+            restorePreviewNavigation: false, artifact: shown && intent.ui?.appliedPaletteName != null
+          });
         } else {
           applyFallbackUiStateData(state, drawing, ui);
         }

@@ -195,6 +195,34 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
   assert.equal(selected('circular', 'linear', linearResult), undefined);
 });
 
+// REVIEW-1 L1: a drawing with no slot captures a null applied palette (the
+// empty slot's "keep the displayed palette"). Restored while that drawing is
+// shown, the null keeps the displayed palette, as it does while it is hidden;
+// it does not fall back to the drawing's draft palette.
+test('a null applied palette restored in the shown drawing keeps the displayed palette', async () => {
+  const { applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
+  const service = createHistorySnapshotService({ state, fileStore: createHistoryFileStore(), applyUiStateData });
+  installShownDrawing('circular');
+  const drawing = modeDrawing(state, 'circular');
+  const draftPalette = drawing.selectedPalette.value;
+  drawing.selectedPalette.value = 'draft-palette';
+  state.appliedPaletteName.value = 'displayed-palette';
+  try {
+    await service.drawingHistory('circular').applyIntent(
+      { ui: { appliedPaletteName: null, appliedPaletteColors: null } },
+      { changes: [{ path: ['ui', 'appliedPaletteName'] }] }
+    );
+    assert.equal(state.appliedPaletteName.value, 'displayed-palette');
+    await service.drawingHistory('circular').applyIntent(
+      { ui: { appliedPaletteName: 'kept-palette', appliedPaletteColors: null } },
+      { changes: [{ path: ['ui', 'appliedPaletteName'] }] }
+    );
+    assert.equal(state.appliedPaletteName.value, 'kept-palette', 'a captured palette is restored');
+  } finally {
+    drawing.selectedPalette.value = draftPalette;
+  }
+});
+
 // REVIEW-1 M1: one store keeps the hidden drawings' artifacts, and only its
 // named operations change it; an entry's key is its slot's drawing.
 test('the slot store keeps a hidden drawing\'s artifact through its named operations', async () => {
