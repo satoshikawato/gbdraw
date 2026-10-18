@@ -624,4 +624,90 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   assert.deepEqual(follows, [], 'a superseded edit of a rejected table asks for nothing');
 }
 
+// OV-1141: with no rerender running, a Result display (`projectFeatureVisibility`
+// without `rerender`) supersedes the projection of the newest rule edit. The
+// display asks for no rerender by design, so the edit asks when the displayed
+// Result lacks what the edited rules draw, and only then. A History step that
+// supersedes it asks itself.
+{
+  const biologicalFeature = (id, start) => ({
+    recordKey: 'REC1', biologicalFeatureId: id, record_id: 'REC1', type: 'CDS', start, end: start + 30, strand: 1,
+    anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
+    qualifiers: { locus_tag: [id] }
+  });
+  const catalog = {
+    schema: 5,
+    items: [{
+      resultIndex: 0,
+      resultName: 'result-0.svg',
+      recordKeys: ['REC1'],
+      biologicalFeatures: [biologicalFeature('A', 0), biologicalFeature('B', 100)],
+      features: [{
+        svgId: 'svg-A', recordKey: 'REC1', biologicalFeatureId: 'A', fillColor: '#000000',
+        drawnSelector: { hash: 'svg-A', location: null, recordLocation: null }
+      }],
+      orthogroups: [],
+      annotations: [],
+      comparisonMatches: []
+    }]
+  };
+  const follows = [];
+  const displayState = {
+    clickedFeature: ref(null),
+    extractedFeatures: ref([]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: [],
+    featureVisibilityRules: ref([]),
+    featureOverrides: {},
+    featureVisibilityScopeDialog: {},
+    featureCatalog: ref(catalog),
+    generatedMode: ref('circular'),
+    labelReflowProcessing: ref(false),
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    errorLog: ref(null)
+  };
+  // Python's rule matches are evaluated over the catalog's biological features.
+  displayState.biologicalFeatures = ref(resultCatalogFeatures(displayState).biological);
+  const owner = createFeatureVisibilityActions({
+    state: withDrawings(displayState),
+    rulePreparation: rulePreparationFor(displayState),
+    getCommittedRequest: committedRequest(['CDS']),
+    showEditorIntent: visibilityPort(displayState, committedRequest(['CDS']), () => false,
+      () => admitFeatureCatalog(catalog, displayState.results.value, { mode: 'circular' })),
+    ports: { applyFeatureVisibilityToLabels: (options) => follows.push(options) },
+    selectResult: () => true
+  });
+  // The Result draws A and not B, which the rule hides.
+  await owner.addFeatureVisibilityRule();
+  for (const [field, value] of [['featureType', 'CDS'], ['qualifier', 'locus_tag'], ['action', 'hide'], ['value', '^B$']]) {
+    await owner.setFeatureVisibilityRuleField(0, field, value);
+  }
+  assert.deepEqual(follows, [], 'the Result draws what the rules draw');
+  const editSupersededBy = async (value, display) => {
+    follows.length = 0;
+    const edit = owner.setFeatureVisibilityRuleField(0, 'value', value);
+    await display();
+    await edit;
+    return [...follows];
+  };
+  assert.deepEqual(
+    await editSupersededBy('^C$', () => owner.projectFeatureVisibility()),
+    [{ rerender: true }],
+    'an edit that draws B, superseded by a Result display, asks for the rerender once'
+  );
+  assert.deepEqual(
+    await editSupersededBy('^B$', () => owner.projectFeatureVisibility()),
+    [],
+    'an edit that the displayed Result already draws asks for none'
+  );
+  assert.deepEqual(
+    await editSupersededBy('^C$', () => owner.projectFeatureVisibility({ rerender: true })),
+    [{ reflow: false, rerender: true, labels: false }],
+    'a History step that supersedes the edit asks; the edit asks nothing more'
+  );
+}
+
 console.log('feature visibility action tests passed');
