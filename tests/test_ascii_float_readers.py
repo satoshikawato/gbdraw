@@ -359,6 +359,10 @@ def test_every_cli_float_option_refuses_non_finite_values(mode: str, capsys: pyt
         ("circular", ["--arrow_head_length_ratio=nan"], "arrow head length ratio must be 'auto'"),
         ("circular", ["--depth_track_tick_font_size", "nan"], "values must be numbers or auto"),
         ("linear", ["--depth_track_height", "inf"], "values must be numbers or auto"),
+        # A slot scalar read nan and failed later with an unrelated overlap error.
+        ("circular", ["--circular_track_slot", "features:features@r=nan"], "must be a finite number"),
+        ("circular", ["--circular_track_slot", "features:features@w=infpx"], "must be a finite number"),
+        ("circular", ["--circular_track_slot", "features:features@r=-inf%"], "must be a finite number"),
     ],
 )
 def test_cli_text_number_options_refuse_non_finite_values(
