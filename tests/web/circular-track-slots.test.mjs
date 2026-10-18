@@ -525,31 +525,46 @@ const annotationSlot = (side = 'inside') => ({
   params: { set_id: 'plastome_regions' }
 });
 
-// OV-1263: Outside axis on the last (inside) Annotations row moves that row
-// across the Axis; the Features, Ticks, and GC rows keep their sides, and
-// Inside axis brings the row back inside without touching them.
+// OV-1263 (audit G5b-03): the default stack with an Annotations row added at
+// its end and set to Overlay, every other row inside the Axis. Outside axis
+// moves that row across the Axis (before, the select snapped back to Inside);
+// the other rows keep their sides, and Inside axis brings the row back. The
+// flip of the other rows came from Generate's Axis index; the Playwright case
+// in track-layout-transition.playwright.spec.js pins it.
 test('an Annotations row placement moves only that row across the Axis (OV-1263)', () => {
+  const inside = (slot) => ({ ...slot, side: 'inside' });
   const state = createState({
-    slots: [featureSlot(), tickSlot('overlay'), gcSlot(), annotationSlot()],
-    axisIndex: 1
+    slots: [
+      inside({ ...featureSlot(), params: { lane_direction: 'inside' } }),
+      inside(tickSlot()),
+      inside(gcSlot()),
+      { id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, side: 'inside', z: 0, params: {} },
+      { ...annotationSlot('overlay'), params: { set_id: 'plastome_regions', to_slot: 'gc_skew' } }
+    ],
+    axisIndex: 0
   });
   state.annotationSets = [{ id: 'plastome_regions' }];
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
-  const before = slotSides(state);
-  const row = state.adv.circular_track_slots[3];
+  const others = () => state.adv.circular_track_slots
+    .filter((slot) => slot.id !== 'annotations').map((slot) => [slot.id, slot.side, slot.params.lane_direction]);
+  const before = others();
+  const row = state.adv.circular_track_slots[4];
 
   editor.updateCircularTrackSlotPlacement(row, 'outside');
-  assert.deepEqual(slotSides(state), { ...before, annotations: 'outside' });
-  assert.equal(state.adv.circular_track_slots.find((slot) => slot.id === 'annotations'), row);
+  assert.deepEqual(others(), before);
+  assert.equal(state.adv.circular_track_slots.find((slot) => slot.id === 'annotations').side, 'outside');
 
   editor.updateCircularTrackSlotPlacement(row, 'inside');
-  assert.deepEqual(slotSides(state), before);
+  assert.deepEqual(others(), before);
+  assert.equal(state.adv.circular_track_slots.find((slot) => slot.id === 'annotations').side, 'inside');
 
   // A refused change (a Session operation runs) writes nothing.
   const settled = structuredClone(state.adv.circular_track_slots);
+  const settledAxis = state.adv.circular_track_slots_axis_index;
   state.sessionOperationAvailability = () => 'busy';
   assert.equal(editor.updateCircularTrackSlotPlacement(row, 'outside'), 'busy');
   assert.deepEqual(state.adv.circular_track_slots, settled);
+  assert.equal(state.adv.circular_track_slots_axis_index, settledAxis);
 });
 
 // OV-1254: the disabled Add track names the missing Region annotation set,

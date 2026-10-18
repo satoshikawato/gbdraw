@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { load, generate, switchMode } = require('./helpers/mode-transition.cjs');
 
 // R-3, Q3 (Owner, 2026-10-04): every edit that changes the direction of a
@@ -309,4 +309,41 @@ test('removing a Circular Depth series outside the Axis keeps the feature row in
   await page.evaluate(() => window.__GBDRAW_APP__.removeCircularDepthTrack(0));
   const kept = (rows) => rows.filter((row) => !row.startsWith('depth'));
   expect(kept(await stack())).toEqual(kept(before));
+});
+
+// OV-1263 (audit G5b-03): a fresh Circular custom stack (every row inside the Axis) with an
+// Annotations row set to Overlay. Generate keeps the Axis where the other rows put it; before,
+// it took the Overlay Annotations row for the track on the Axis, and Outside axis then moved
+// the Features, Ticks, and GC rows outside instead of the Annotations row.
+test('Generate with an Overlay Annotations row keeps the Axis, and Outside axis moves only that row', async ({ page }) => {
+  test.setTimeout(240000);
+  const data = 'gbdraw/web/tutorial-data/tobacco-plastome-regions/';
+  await openApp(page);
+  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).first().setInputFiles(`${data}NC_001879.gbk`);
+  await page.locator('[data-setting="region-annotations"] input[type=file]').first()
+    .setInputFiles(`${data}nicotiana-tabacum-regions.tsv`);
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().annotationSets.length)).toBe(1);
+  const stack = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { adv } = state.activeDrawing();
+    return { axis: adv.circular_track_slots_axis_index, sides: Object.fromEntries(adv.circular_track_slots.map((slot) => [slot.id, slot.side])) };
+  });
+  const place = (side) => page.evaluate(async (placement) => {
+    const { state } = await import('./js/state.js');
+    const row = state.activeDrawing().adv.circular_track_slots.find((slot) => slot.renderer === 'annotations');
+    return window.__GBDRAW_APP__.updateCircularTrackSlotPlacement(row, placement);
+  }, side);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularTrackSlotsEnabled(true);
+    app.addCircularTrackSlot('annotations');
+  });
+  await place('overlay');
+  const before = await stack();
+  expect(before.sides.annotations).toBe('overlay');
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect((await stack()).axis).toBe(before.axis);
+  await place('outside');
+  expect((await stack()).sides).toEqual({ ...before.sides, annotations: 'outside' });
 });

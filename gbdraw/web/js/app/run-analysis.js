@@ -56,7 +56,7 @@ import { applyCircularSuppressControlsToSlots } from './circular-track-slots.js'
 import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
-  inferLegacyAxisIndexFromFeature
+  enforceSingleOnAxisSlot
 } from '../services/circular-track-slot-model.js';
 import {
   normalizeFileList,
@@ -3168,17 +3168,12 @@ export const createRunAnalysis = ({
           : [];
         if (useCircularTrackSlots) {
           drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...circularTrackSlots);
-          const circularTrackOnAxisIndex = circularTrackSlots.findIndex((slot) => slot?.side === 'overlay');
-          const normalizedCircularTrackAxisIndex = circularTrackOnAxisIndex >= 0
-            ? circularTrackOnAxisIndex
-            : (
-                circularTrackAxisIndex === null
-                  ? inferLegacyAxisIndexFromFeature(circularTrackSlots, drawing.form.track_type)
-                  : circularTrackAxisIndex
-              );
-          drawing.adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
-            normalizedCircularTrackAxisIndex,
-            circularTrackSlots.length
+          // The stack editors' owner: an Overlay annotations row is not the track on the Axis,
+          // so it does not move the boundary under every other row (OV-1263).
+          drawing.adv.circular_track_slots_axis_index = enforceSingleOnAxisSlot(
+            circularTrackSlots,
+            circularTrackAxisIndex,
+            drawing.form.track_type
           );
         }
         // Numeric settings (plot title font size, center radius, label
