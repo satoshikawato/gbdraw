@@ -807,9 +807,9 @@ test('the mode switch waits for Undo and Redo', async ({ page }) => {
   await expectEmptyPreview(page, 'circular');
 });
 
-// REVIEW-2 P-a: an Undo waits for a label rerender, as the mode buttons do,
-// and never switches the drawing (PD-OI-090).
-test('an Undo waits for a label rerender and stays in the shown drawing', async ({ page }) => {
+// REVIEW-2 P-a, PD-OI-090: no History step switches the drawing now, so the
+// switch itself is what waits for a label rerender (OIPC-C07).
+test('a drawing switch waits for a label rerender', async ({ page }) => {
   test.setTimeout(300_000);
   await bothResults(page);
   await showMode(page, 'circular');
@@ -825,13 +825,13 @@ test('an Undo waits for a label rerender and stays in the shown drawing', async 
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     const rerendering = state.labelReflowProcessing.value;
-    const undo = await owner.undo();
-    return { rerendering, undo, mode: state.mode.value };
+    const switched = app.selectDrawing('linear');
+    return { rerendering, switched: switched?.status ?? switched, mode: state.mode.value };
   });
-  expect(attempt).toMatchObject({ rerendering: true, undo: { status: 'busy' }, mode: 'circular' });
+  expect(attempt).toEqual({ rerendering: true, switched: 'busy', mode: 'circular' });
   await settleLive(page);
-  await history(page, 'undo');
-  expect(await shown(page)).toMatchObject({ mode: 'circular' });
+  await showMode(page, 'linear');
+  expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
 });
 
 // REVIEW-2 R: a Load that fails inside its commit rolls back and leaves the

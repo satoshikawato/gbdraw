@@ -734,7 +734,12 @@ test('OV-1100: a switch waits for the Circular color rule being matched, which s
     const adding = app.addSpecificRule();
     const during = app.selectDrawing('linear');
     await adding;
-    const after = app.selectDrawing('linear');
+    // The rerender the rule asks for may still draw; the switch waits for it too.
+    let after = app.selectDrawing('linear');
+    for (let tries = 0; tries < 200 && after?.status === 'busy'; tries += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      after = app.selectDrawing('linear');
+    }
     return { during: during?.status ?? during, after: after?.status ?? after };
   }, SAMPLE_RULES.circular);
   expect(outcome, 'refused while matched, then switched').toEqual({ during: 'busy', after: 'ok' });
