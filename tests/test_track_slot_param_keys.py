@@ -280,3 +280,66 @@ def test_a_linear_legend_keeps_content_then_depth_then_skew_rows(tmp_path: Path)
     ])
     keys = _legend_keys((tmp_path / "lin.svg").read_text(encoding="utf-8"))
     assert keys[keys.index("GC content"):] == ["GC content", "Depth", "GC skew (+)", "GC skew (-)"]
+
+
+# OV-1186 (Owner LP-D70 a): every non-annotation renderer takes legend_label,
+# label, color and fileName and ignores them, so Sessions saved by released
+# Webs (a label left on a row whose renderer changed, REVIEW-1183 F2) and by
+# the Web's ring-row renderer change (F1) load. Other unread keys stay errors.
+CARRIED_KEYS = {"legend_label": "Genes", "label": "Query A", "color": "#ff0000", "fileName": "a.fa"}
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+def test_a_released_feature_slot_label_is_accepted(mode: str) -> None:
+    parse = parse_linear_track_slots if mode == "linear" else parse_circular_track_slots
+    slots = parse(["features:features@legend_label=Genes"])
+    assert slots[0].params["legend_label"] == "Genes"
+
+
+@pytest.mark.parametrize(("mode", "renderer"), [(m, r) for m, rs in ACCEPTED_PARAMS.items() for r in rs])
+def test_every_slot_takes_the_carried_keys_and_still_rejects_others(mode: str, renderer: str) -> None:
+    normalize = normalize_linear_track_slots if mode == "linear" else normalize_circular_track_slots
+    slots = [_slot(mode, renderer, dict(CARRIED_KEYS))]
+    if renderer != "features":
+        slots.insert(0, _features_slot(mode))
+    assert normalize(slots)[-1].renderer == renderer  # type: ignore[arg-type]
+    slots[-1] = _slot(mode, renderer, {**CARRIED_KEYS, "foo": 1})
+    with pytest.raises(ValueError, match=_expected_error(mode, renderer, "foo")):
+        normalize(slots)  # type: ignore[arg-type]
+
+
+@pytest.mark.circular
+def test_a_session_slot_left_with_ring_keys_draws_as_without_them(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ring row changed to spacer in the current Web keeps label, color and fileName (REVIEW-1183 F1)."""
+    monkeypatch.chdir(tmp_path)
+    session = json.loads(gzip.decompress(RING_SESSION.read_bytes()))
+    svgs = {}
+    for variant, extra in (("bare", {}), ("stale", {"label": "Query A", "color": "#ff0000", "fileName": "a.fa"})):
+        document = copy.deepcopy(session)
+        document["renderRequest"]["diagramOptions"]["tracks"]["circularTrackSlots"] = [
+            _slot_payload("circular", "features", "features", {}),
+            _slot_payload("circular", "ticks", "ticks", {}),
+            _slot_payload("circular", "cmp1", "spacer", extra),
+        ]
+        path = tmp_path / f"{variant}.gbdraw-session.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        circular_main(["--session", str(path), "-o", variant, "-f", "svg"])
+        svgs[variant] = (tmp_path / f"{variant}.svg").read_bytes()
+    assert svgs["stale"] == svgs["bare"]
+
+
+@pytest.mark.parametrize(
+    ("mode", "renderer", "tail"),
+    [
+        ("linear", "spacer", "it takes none"),
+        ("circular", "spacer", "it takes none"),
+        ("circular", "ticks", "it takes preset, tick_label_layout, track_preset"),
+    ],
+)
+def test_the_error_lists_only_the_keys_a_renderer_reads(mode: str, renderer: str, tail: str) -> None:
+    """The ignored carried keys are not offered as parameters the renderer takes (REVIEW-1186 F1)."""
+    normalize = normalize_linear_track_slots if mode == "linear" else normalize_circular_track_slots
+    slots = [_features_slot(mode), _slot(mode, renderer, {"foo": 1})]
+    with pytest.raises(ValueError) as excinfo:
+        normalize(slots)  # type: ignore[arg-type]
+    assert str(excinfo.value).endswith(f"has unknown parameter(s): foo; {tail}")

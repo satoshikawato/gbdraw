@@ -843,17 +843,24 @@ const paramsAllowedForRenderer = (renderer, key) => {
   return false;
 };
 
+// The params that describe a row's track: `legend_label` (a Depth row's is its
+// series title) and a comparison ring's `label`, `color` and `fileName`. Every
+// renderer takes them (Python carries them, LP-D70), so they are in no
+// PARAM_OWNER entry, and a renderer change drops them (OV-1186).
+const TRACK_DESCRIPTION_PARAMS = new Set(['legend_label', 'label', 'color', 'fileName']);
+
 /**
  * The params a row keeps when its renderer changes (TK-04): those the new
- * renderer accepts under PARAM_OWNER. `legend_label` names the previous track
- * (a Depth row's is its series title), so the new renderer starts without it.
+ * renderer accepts under PARAM_OWNER, without the params that describe the
+ * previous track (`TRACK_DESCRIPTION_PARAMS`), so the new renderer starts
+ * without them.
  * @param {unknown} params
  * @param {string} renderer
  * @returns {Record<string, unknown>}
  */
 export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntries(
   Object.entries(params && typeof params === 'object' && !Array.isArray(params) ? params : {})
-    .filter(([key]) => key !== 'legend_label' && paramsAllowedForRenderer(renderer, normalizedString(key)))
+    .filter(([key]) => !TRACK_DESCRIPTION_PARAMS.has(key) && paramsAllowedForRenderer(renderer, normalizedString(key)))
 );
 
 /**

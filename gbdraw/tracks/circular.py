@@ -121,17 +121,15 @@ DEFAULT_TICK_LABEL_LAYOUT = "label_out_tick_in"
 _FEATURE_LANE_VALUES = {"inside", "outside", "split"}
 _SIDE_VALUES = {"inside", "outside", "overlay"}
 
-# The params keys each non-annotation Circular renderer takes (OV-477). A
-# sequence_conservation slot reads track_index and source_index and carries
-# label and color (api/diagram.py) and the Web's managed, series_key and
-# fileName (Owner LP-D66), which released Sessions hold.
+# The params keys each non-annotation Circular renderer takes (OV-477), besides
+# the keys every slot carries (`CARRIED_SLOT_PARAM_KEYS`). A
+# sequence_conservation slot reads track_index and source_index and carries the
+# Web's managed and series_key (Owner LP-D66), which released Sessions hold.
 _CIRCULAR_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
     **SHARED_SLOT_PARAM_KEYS,
     "features": frozenset({"lane_direction", "lanes", "stack_preset", "preset"}),
     "ticks": frozenset({"tick_label_layout", "preset", "track_preset"}),
-    "sequence_conservation": frozenset(
-        {"track_index", "source_index", "label", "color", "managed", "series_key", "fileName"}
-    ),
+    "sequence_conservation": frozenset({"track_index", "source_index", "managed", "series_key"}),
 })
 
 

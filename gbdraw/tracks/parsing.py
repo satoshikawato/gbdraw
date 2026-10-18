@@ -161,6 +161,10 @@ SHARED_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
     "depth": frozenset({"track_index", *LEGEND_LABEL_PARAM_KEYS}),
     "spacer": frozenset(),
 })
+# Keys every non-annotation slot takes and ignores where its renderer does not
+# read them (Owner LP-D70): a legend label left on a row whose renderer changed
+# in a released Web, and a comparison ring's label, color and fileName.
+CARRIED_SLOT_PARAM_KEYS = frozenset({*LEGEND_LABEL_PARAM_KEYS, "color", "fileName"})
 
 
 def reject_unread_slot_params(
@@ -171,10 +175,10 @@ def reject_unread_slot_params(
     renderer: str,
     accepted: Mapping[str, frozenset[str]],
 ) -> None:
-    """Raise for a params key the slot's renderer neither reads nor carries (OV-477)."""
+    """Raise for a params key the slot's renderer neither reads nor carries (OV-477, OV-1186)."""
 
-    allowed = accepted[renderer]
-    unknown = sorted(str(key) for key in params if str(key) not in allowed)
+    read = accepted[renderer]
+    unknown = sorted(str(key) for key in params if str(key) not in read and str(key) not in CARRIED_SLOT_PARAM_KEYS)
     if not unknown:
         return
     references = [name for name, _role in _OVERLAY_SLOT_REFERENCES if name in unknown]
@@ -185,7 +189,7 @@ def reject_unread_slot_params(
         )
     raise ValueError(
         f"{mode} track slot '{slot_id}' ({renderer}) has unknown parameter(s): {', '.join(unknown)}; "
-        f"it takes {', '.join(sorted(allowed)) or 'none'}"
+        f"it takes {', '.join(sorted(read)) or 'none'}"
     )
 
 
@@ -290,6 +294,7 @@ def strip_inline_comment(raw: str) -> str:
 
 
 __all__ = [
+    "CARRIED_SLOT_PARAM_KEYS",
     "CircularTrackSlotParseError",
     "LEGEND_LABEL_PARAM_KEYS",
     "SHARED_SLOT_PARAM_KEYS",

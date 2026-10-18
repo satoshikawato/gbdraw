@@ -621,10 +621,14 @@ A `--circular_track_slot` takes only the parameters its renderer reads:
 `legend_label` (alias `label`); `dinucleotide_skew` takes those and
 `positive_color` and `negative_color` (aliases `high_color`, `low_color`);
 `depth` takes `track_index` and `legend_label` (alias `label`); `sequence_conservation` takes
-`track_index` and `source_index`, and keeps the `label`, `color`, `managed`,
-`series_key`, and `fileName` that saved Sessions store; `spacer` takes none.
-Any other parameter is an error that names the slot and the parameter;
-`anchor_slot` and `to_slot` belong to annotation slots only.
+`track_index` and `source_index`, and keeps the `managed` and `series_key`
+that saved Sessions store; `spacer` takes none. Every slot also accepts
+`legend_label`, `label`, and `color`, and ignores those its renderer does not
+read; saved Sessions can hold them on any row. Sessions and Python slot objects
+may also carry `fileName`, which is ignored; slot text lowercases keys, so
+`fileName` cannot be given there. Any other parameter is
+an error that names the slot and the parameter; `anchor_slot` and `to_slot`
+belong to annotation slots only.
 
 Small label defects of horizontal Circular labels, up to 100 per record
 (overlaps, crossing leader lines, and inner labels over the definition text),
@@ -1556,9 +1560,12 @@ A `--linear_track_slot` takes only the parameters its renderer reads:
 `dinucleotide_content` takes `nt` (alias `dinucleotide`) and `legend_label`
 (alias `label`); `dinucleotide_skew` takes those and `positive_color` and
 `negative_color` (aliases `high_color`, `low_color`); `depth` takes
-`track_index` and `legend_label` (alias `label`); `features` and `spacer` take none. Any other
-parameter is an error that names the slot and the parameter; `anchor_slot` and
-`to_slot` belong to annotation slots only. Each enabled content and skew slot
+`track_index` and `legend_label` (alias `label`); `features` and `spacer` take
+none. Every slot also accepts `legend_label`, `label`, and `color`, and ignores
+those its renderer does not read; saved Sessions can hold them on any row.
+Sessions and Python slot objects may also carry `fileName`, which is ignored;
+slot text lowercases keys, so `fileName` cannot be given there. Any other parameter is an error that names the slot and the parameter;
+`anchor_slot` and `to_slot` belong to annotation slots only. Each enabled content and skew slot
 draws its own legend rows, named by its `legend_label` or else by its
 dinucleotide (for example `AT content`), as in Circular.
 

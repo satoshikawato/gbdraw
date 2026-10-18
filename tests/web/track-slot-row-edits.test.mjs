@@ -28,6 +28,7 @@ for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth
 
 const { createCircularTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js')));
 const { createLinearTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js')));
+const { paramsKeptOnRendererChange } = await import(pathToFileURL(join(tempRoot, 'services', 'track-slot-validation.js')));
 
 const depthFile = { name: 'a.depth.tsv', size: 1, lastModified: 1 };
 
@@ -148,6 +149,23 @@ for (const [mode, create] of Object.entries(MODES)) {
     editor.setRenderer(editor.slots()[index], 'dinucleotide_skew');
     assert.deepEqual({ ...editor.slots()[index].params }, { nt: 'AT' }, 'nt belongs to both dinucleotide renderers');
     assert.equal(editor.issue(index), '');
+  });
+
+  // OV-1186 (LP-D70 b): a comparison-ring row's label, color and fileName
+  // describe its ring, as a legend_label names its track; a renderer change
+  // drops them with the ring's other keys.
+  test(`${mode}: a renderer change drops the ring keys of a comparison row`, () => {
+    const ring = {
+      managed: 'circular_conservation', series_key: 'k1', source_index: '0', track_index: '1',
+      label: 'Query A', color: '#ff0000', fileName: 'a.fa', legend_label: 'Ring A'
+    };
+    const renderers = mode === 'circular'
+      ? ['spacer', 'features', 'depth', 'dinucleotide_content', 'dinucleotide_skew', 'ticks', 'annotations']
+      : ['spacer', 'features', 'depth', 'dinucleotide_content', 'dinucleotide_skew', 'annotations'];
+    for (const renderer of renderers) {
+      const kept = paramsKeptOnRendererChange(ring, renderer);
+      assert.deepEqual(['label', 'color', 'fileName', 'legend_label'].filter((key) => Object.hasOwn(kept, key)), [], renderer);
+    }
   });
 
   // PR 2 of the underlay span (LP-D17, LP-D65): Extend to offers the slots the
