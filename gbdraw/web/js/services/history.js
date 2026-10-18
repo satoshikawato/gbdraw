@@ -861,13 +861,20 @@ export const createHistoryManager = ({
     return (await captureIntent()).signature !== open.beforeSignature;
   };
 
+  // OV-1169: the newest step the limit or the budget dropped from Undo.
+  let droppedThrough = -1;
+  const dropOldestUndo = () => {
+    const entry = undoStack.shift();
+    droppedThrough = Math.max(droppedThrough, entry?.sequence ?? -1);
+    removeEntryBytes(entry);
+  };
   /** @type {HistoryBudgetMember} */
   const budgetMember = {
     entryBytes: () => totalEntryBytes,
     retainedFileIds: collectRetainedFileIds,
     dropOldestStep: () => {
       if (undoStack.length > 0) {
-        removeEntryBytes(undoStack.shift());
+        dropOldestUndo();
         return 'undo';
       }
       if (redoStack.length === 0) return null;
@@ -881,7 +888,7 @@ export const createHistoryManager = ({
   const enforceLimits = () => {
     let evicted = false;
     while (undoStack.length > maxActions) {
-      removeEntryBytes(undoStack.shift());
+      dropOldestUndo();
       evicted = true;
     }
     historyLimitMessage.value = evicted ? HISTORY_LIMIT_MESSAGE : '';
@@ -1941,16 +1948,17 @@ export const createHistoryManager = ({
   // D-15-51: this drawing's part of a project step (Reset all drawings). An
   // intent part restores only the values still as the step left them (a
   // later step of this drawing on the same path is kept, OIC-030). A
-  // checkpoint part restores its checkpoint while its drawing is shown, and
-  // otherwise the intent values it changed; the Result shows them when the
-  // drawing is shown again (departed signature).
+  // checkpoint part restores its checkpoint when `whole` (its drawing is
+  // shown and kept every newer step, OV-1169), and otherwise the intent
+  // values it changed; the Result shows them when the drawing is shown again
+  // (departed signature).
   /**
    * @param {IntentEntry | CheckpointEntry} entry
    * @param {'undo' | 'redo'} direction
-   * @param {boolean} shown
+   * @param {boolean} whole
    */
-  const applyProjectPart = (entry, direction, shown) => traverse(async () => {
-    if (entry.type === 'checkpoint' && shown) {
+  const applyProjectPart = (entry, direction, whole) => traverse(async () => {
+    if (entry.type === 'checkpoint' && whole) {
       await applyCheckpointEntry(direction === 'undo' ? entry.before : entry.after);
     } else {
       await refreshCurrentIntent();
@@ -2027,6 +2035,7 @@ export const createHistoryManager = ({
     applyProjectPart,
     restoreWith,
     topSequence,
+    lostStepAfter: (/** @type {number} */ sequence) => droppedThrough > sequence,
     dropRedo,
     settleBeforeTraversal,
     // PD-OI-090: a drawing that is shown again takes the shared selections in
@@ -2250,7 +2259,7 @@ export const createHistoryRouter = ({
       }
       if (entry.session) await applySession(entry.session, direction);
       const own = entry.parts.find((part) => part.drawingId === shownId);
-      if (own) await shown.applyProjectPart(own.entry, direction, true);
+      if (own) await shown.applyProjectPart(own.entry, direction, !shown.lostStepAfter(entry.sequence));
     });
     from.pop();
     to.push(entry);

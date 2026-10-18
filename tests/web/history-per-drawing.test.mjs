@@ -411,3 +411,25 @@ test('a step past the project limit drops only the oldest project step', async (
   while (history.canUndo()) assert.equal(await app.undoHistory(), true);
   assert.equal(state.sessionTitle.value, 'T0', 'only the first title step is gone');
 });
+
+// OV-1169: a drawing that lost a step newer than a project step to the limit
+// restores its part of the project step only where still as the step left it.
+test('an Undo of Reset after the limit dropped a newer step keeps that step\'s change', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { circular } = state.drawings;
+  show(app, 'circular');
+  circular.form.prefix = 'pre-reset';
+  await history.captureBaseline();
+  await app.resetSettings();
+  await history.runUndoable('Circular prefix', () => { circular.form.prefix = 'later'; });
+  for (let index = 0; index < 30; index += 1) {
+    await history.runUndoable('Species', () => { circular.form.species = `S${index}`; });
+  }
+  while (history.undoLabel() === 'Species') await app.undoHistory();
+  assert.equal(history.undoLabel(), 'Reset settings', 'the limit dropped the prefix step');
+  await app.undoHistory();
+  assert.equal(circular.form.prefix, 'later', 'the dropped step\'s change stays');
+  await app.redoHistory();
+  assert.equal(circular.form.prefix, 'later', 'and stays on Redo');
+});
