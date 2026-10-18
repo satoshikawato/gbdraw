@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Sequence
 
 from gbdraw.core.numeric import parse_ascii_integer
-from gbdraw.render.output_paths import commit_staged_output_file
+from gbdraw.render.output_paths import commit_staged_outputs, staged_output_files
 
 
 def parse_positive_int(value: str) -> int:
@@ -26,16 +25,15 @@ def write_losat_output_files(
     *,
     overwrite: bool,
 ) -> None:
-    """Write ``--losat_output_dir`` files (name, text), each staged then committed."""
+    """Write ``--losat_output_dir`` files (name, text): all staged, then committed."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    for name, text in files:
-        target = output_dir / name
-        with TemporaryDirectory(prefix=f".{name}.", dir=target.parent) as temp_name:
-            staged_path = Path(temp_name) / name
-            with staged_path.open("w", encoding="utf-8", newline="\n") as handle:
+    targets = [output_dir / name for name, _text in files]
+    with staged_output_files(targets) as staged:
+        for target, (_name, text) in zip(targets, files):
+            with staged[target].open("w", encoding="utf-8", newline="\n") as handle:
                 handle.write(text)
-            commit_staged_output_file(staged_path, target, overwrite=overwrite)
+        commit_staged_outputs(staged, overwrite=overwrite)
 
 
 __all__ = ["parse_positive_int", "write_losat_output_files"]

@@ -30,9 +30,15 @@ Command-line `-o` or `--output` accepts a path-like prefix, and
 is one filename component; its directory belongs in `output_directory`.
 Existing regular files are replaced only when overwrite is explicit.
 Directories, special files, dangling symlinks, unsafe parents, invalid prefix
-components, and output-target collisions are errors. A multi-format request
-writes formats sequentially; a later conversion failure does not remove files
-already written.
+components, and output-target collisions are errors. Each diagram writes its
+formats all or nothing: every format is generated before any output is
+written, so when a conversion fails, no existing file changes and no new file
+is left, with or without overwrite. If the filesystem fails while the outputs
+are being written, the error names the files already written. A Circular batch
+writes record by record: when one record fails, the records before it stay
+written. Without CairoSVG, the command line skips PNG, PDF, EPS, and PS with a
+warning and still writes the SVG formats; Python `save_figure_to()`,
+`Diagram.save()`, and typed requests fail before writing anything.
 
 ## Static, interactive, and raster output
 

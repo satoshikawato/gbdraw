@@ -23,6 +23,7 @@ from gbdraw import linear as linear_cli
 from gbdraw.cli_utils import common as cli_common
 from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as export_module
+from gbdraw.render import output_paths as output_paths_module
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
     SVG_FORMAT,
@@ -1809,26 +1810,41 @@ def test_save_figure_to_raises_when_cairosvg_is_unavailable(
             output_prefix="strict",
         )
 
-    assert (tmp_path / "strict.svg").exists()
-    assert not (tmp_path / "strict.png").exists()
+    assert list(tmp_path.iterdir()) == []
 
 
-def test_save_figure_to_reports_partial_conversion_failure(
+class _PdfFailsCairoSvg:
+    @staticmethod
+    def svg2png(*, bytestring, write_to):
+        write_to.write(b"new png")
+
+    @staticmethod
+    def svg2pdf(*, bytestring, write_to):
+        write_to.write(b"%PDF-partial")
+        raise RuntimeError("converter failed")
+
+
+def _directory_bytes(directory: Path) -> dict[str, bytes]:
+    return {path.name: path.read_bytes() for path in directory.iterdir()}
+
+
+@pytest.mark.parametrize("overwrite", (False, True))
+def test_save_figure_to_conversion_failure_changes_no_output(
+    overwrite: bool,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    # OV-1152: every format is generated before any output is committed, so a
+    # failed conversion keeps the old outputs and leaves no new or staged file.
     drawing = _drawing(tmp_path / "out.svg")
-
-    class PartialCairoSvg:
-        @staticmethod
-        def svg2png(*, bytestring, write_to):
-            write_to.write(bytestring)
-
-        @staticmethod
-        def svg2pdf(*, bytestring, write_to):
-            raise RuntimeError("converter failed")
-
-    monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: PartialCairoSvg)
+    if overwrite:
+        (tmp_path / "partial.svg").write_text("old svg", encoding="utf-8")
+        (tmp_path / "partial.png").write_bytes(b"old png")
+        (tmp_path / "partial.pdf").write_bytes(b"old pdf")
+    else:
+        (tmp_path / "unrelated.txt").write_text("keep", encoding="utf-8")
+    before = _directory_bytes(tmp_path)
+    monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: _PdfFailsCairoSvg)
 
     with pytest.raises(ExportError, match="Failed to generate PDF"):
         api_render.save_figure_to(
@@ -1836,11 +1852,42 @@ def test_save_figure_to_reports_partial_conversion_failure(
             ["png", "pdf"],
             output_dir=str(tmp_path),
             output_prefix="partial",
+            overwrite=overwrite,
         )
 
-    assert (tmp_path / "partial.svg").exists()
-    assert (tmp_path / "partial.png").exists()
-    assert not (tmp_path / "partial.pdf").exists()
+    assert _directory_bytes(tmp_path) == before
+
+
+@pytest.mark.parametrize("overwrite", (False, True))
+def test_save_figure_to_reports_outputs_committed_before_a_commit_failure(
+    overwrite: bool,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    drawing = _drawing(tmp_path / "out.svg")
+    real_commit = output_paths_module.commit_staged_output_file
+
+    def fail_on_png(staged_path, output_path, *, overwrite):
+        if Path(output_path).suffix == ".png":
+            raise OSError("disk full")
+        real_commit(staged_path, output_path, overwrite=overwrite)
+
+    monkeypatch.setattr(output_paths_module, "commit_staged_output_file", fail_on_png)
+    monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: _PdfFailsCairoSvg)
+
+    with pytest.raises(ExportError) as raised:
+        api_render.save_figure_to(
+            drawing,
+            "png",
+            output_dir=str(tmp_path),
+            output_prefix="commit",
+            overwrite=overwrite,
+        )
+
+    message = str(raised.value)
+    assert f"Could not write output file {tmp_path / 'commit.png'}" in message
+    assert f"Already written: {tmp_path / 'commit.svg'}." in message
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["commit.svg"]
 
 
 def test_render_to_bytes_wraps_converter_failure(

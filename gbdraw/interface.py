@@ -50,7 +50,12 @@ from gbdraw.api.options import (
     _validate_center_reserved_radius,
     _validate_track_configuration,
 )
-from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.output_paths import (
+    commit_staged_outputs,
+    output_exists_message,
+    preflight_output_paths,
+    staged_output_files,
+)
 from gbdraw.api.request_render import (
     PreparedDiagramRequest as _PreparedDiagramRequest,
     build_prepared_interactive_context as _build_prepared_interactive_context,
@@ -657,10 +662,7 @@ class Diagram:
         resolved_format = format or _format_from_path(output_path)
         preflight_output_paths((output_path,), overwrite=True)
         if output_path.exists() and not overwrite:
-            raise ValidationError(
-                f"Output file already exists: {output_path}. "
-                "Use overwrite=True to replace it."
-            )
+            raise ValidationError(output_exists_message(output_path))
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -668,29 +670,12 @@ class Diagram:
                 f"Could not prepare output directory: {output_path.parent}"
             ) from exc
         payload = self.to_bytes(resolved_format, embed_fonts=embed_fonts)
-        if overwrite and (output_path.exists() or output_path.is_symlink()):
+        with staged_output_files((output_path,)) as staged:
             try:
-                output_path.unlink()
+                staged[output_path].write_bytes(payload)
             except OSError as exc:
-                raise ExportError(
-                    f"Could not replace existing output file: {output_path}"
-                ) from exc
-        try:
-            with output_path.open("xb") as output_file:
-                output_file.write(payload)
-        except FileExistsError as exc:
-            message = (
-                f"Output target appeared during export: {output_path}. "
-                "Refusing to replace it."
-                if overwrite
-                else (
-                    f"Output file already exists: {output_path}. "
-                    "Use overwrite=True to replace it."
-                )
-            )
-            raise ValidationError(message) from exc
-        except OSError as exc:
-            raise ExportError(f"Could not write output file: {output_path}") from exc
+                raise ExportError(f"Could not write output file {output_path}: {exc}.") from exc
+            commit_staged_outputs(staged, overwrite=overwrite)
         return output_path
 
 

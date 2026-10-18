@@ -412,9 +412,11 @@ An explicit output prefix keeps its dots. A Circular batch numbers the output
 of each record. gbdraw checks every output file before it draws, and an
 existing file is replaced only when you allow it (`--overwrite`). In Python,
 an export failure raises `ValidationError` or `ExportError` (both subclasses of
-`GbdrawError`), and `save_figure_to()` returns only the files it wrote. Formats
-are written one after another: when a later conversion fails, the files
-already written stay.
+`GbdrawError`), and `save_figure_to()` returns only the files it wrote. Each
+diagram writes its formats all or nothing: when a conversion fails, no existing
+file changes and no new file is left, with or without overwrite. A Circular
+batch writes record by record, so the records before a failing one stay
+written.
 
 ## Installation
 
