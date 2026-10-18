@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createRecordSelection } from '../../gbdraw/web/js/app/record-selection.js';
+import { ANNOTATION_SETS_SLICE, removeAnnotations } from '../../gbdraw/web/js/services/drawing/annotation-sets.js';
 import {
   RECORD_SETTINGS_DEFAULTS,
   linearCardHasSettings,
@@ -177,6 +178,12 @@ test('an upload with many records opens its list; several open one at a time (D-
 
 test('Delete settings removes the record edits, annotations, pairs, and rotation of its records only', () => {
   const featureKey = (recordKey, id) => JSON.stringify([recordKey, id]);
+  const annotations = ANNOTATION_SETS_SLICE.create({ annotationSets: [{ annotations: [
+    { id: 'bound-a', target: { kind: 'coordinateSpan' }, metadata: { binding: 'cat-a' } },
+    { id: 'feature-a', target: { kind: 'featureIdentity', recordKey: 'uid-a' }, metadata: {} },
+    { id: 'bound-b', target: { kind: 'coordinateSpan' }, metadata: { binding: 'cat-b' } },
+    { id: 'unbound', target: { kind: 'coordinateSpan' }, metadata: {} }
+  ] }] });
   const data = {
     featureOverrides: {
       [featureKey('uid-a', 'f1')]: { recordKey: 'uid-a', biologicalFeatureId: 'f1' },
@@ -187,12 +194,8 @@ test('Delete settings removes the record edits, annotations, pairs, and rotation
       [featureKey('uid-a', 'f3')]: { recordKey: 'uid-a', biologicalFeatureId: 'f3', placement: 'lane' }
     },
     featureStrokeOverrides: { 'uid-a\0f1': { color: '#000' }, 'uid-b\0f1': { color: '#111' } },
-    annotationSets: [{ annotations: [
-      { id: 'bound-a', target: { kind: 'coordinateSpan' }, metadata: { binding: 'cat-a' } },
-      { id: 'feature-a', target: { kind: 'featureIdentity', recordKey: 'uid-a' }, metadata: {} },
-      { id: 'bound-b', target: { kind: 'coordinateSpan' }, metadata: { binding: 'cat-b' } },
-      { id: 'unbound', target: { kind: 'coordinateSpan' }, metadata: {} }
-    ] }],
+    annotationSets: annotations.view.annotationSets,
+    removeAnnotation: (annotation) => removeAnnotations(annotations.handle, [annotation]),
     recordDisplayDrafts: [{ sourceUid: 'uid-a', selector: '#1' }, { sourceUid: 'uid-b', selector: '#1' }],
     comparisonEdges: [
       { queryUid: 'uid-a', subjectUid: 'uid-b' }, { queryUid: 'uid-b', subjectUid: 'uid-c' }, { queryUid: 'uid-c', subjectUid: 'uid-a' }

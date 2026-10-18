@@ -889,7 +889,7 @@ export const buildConfigData = (drawing) => ({
   blacklistText: drawing.manualBlacklist.value,
   losatProgram: drawing.losatProgram.value,
   circularConservation: drawing.circularConservation,
-  annotationSets: normalizeAnnotationSets(drawing.annotationSets),
+  annotationSets: normalizeAnnotationSets(ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets).annotationSets),
   recordDisplayDrafts: cloneJsonData(drawing.recordDisplayDrafts),
   // Written only when a record is OFF: a Session with every record ON keeps its bytes (omission = all ON).
   ...(drawing.recordsOff?.length ? { recordsOff: [...drawing.recordsOff] } : {}),
@@ -1282,7 +1282,7 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
     features: {
       featureOverrides: featureOverridesForState(drawing.featureOverrides),
       featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
-      featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(drawing.featureVisibilityManualRules),
+      featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
       labelOverrideRows: cloneJsonData(drawing.canonicalLabelOverrideRows.value),
       labelTextBulkOverrides: cloneJsonData(drawing.labelTextBulkOverrides)
     },
@@ -4871,7 +4871,7 @@ export const buildFeatureStateData = (drawing) => ({
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
-  featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(drawing.featureVisibilityManualRules),
+  featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
   featureOverrides: featureOverridesForState(drawing.featureOverrides),
   labelOverrideRows: cloneJsonData(drawing.canonicalLabelOverrideRows.value),
   labelTextBulkOverrides: cloneJsonData(drawing.labelTextBulkOverrides)

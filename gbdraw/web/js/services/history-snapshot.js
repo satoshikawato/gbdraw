@@ -16,6 +16,7 @@ import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
+/** @import { CanvasPadding, CanvasSlice } from './drawing/canvas.js' */
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 /** @import { GroupNamesData } from './drawing/group-names.js' */
@@ -483,6 +484,15 @@ const drawingUiPart = (ui = {}) => Object.fromEntries(
 const appUiPart = (ui = {}) => Object.fromEntries(
   Object.entries(ui).filter(([key]) => !DRAWING_UI_KEYS.includes(key))
 );
+// A History step holds the padding the canvas slice captured (the cast).
+/**
+ * @param {{ readonly slices: { readonly canvas: CanvasSlice } }} drawing
+ * @param {DrawingUiData} ui
+ */
+const installCanvasPadding = (drawing, ui) => {
+  if (!ui.canvasPadding || typeof ui.canvasPadding !== 'object') return;
+  CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: /** @type {CanvasPadding} */ (clonePlainObject(ui.canvasPadding)) });
+};
 // Installs a drawing's `ui` values as captured. The shown drawing's values go
 // through the UI restore with the app-level values instead.
 /**
@@ -491,7 +501,7 @@ const appUiPart = (ui = {}) => Object.fromEntries(
  */
 const applyDrawingUiIntentData = (drawing, ui = {}) => {
   if (ui.layoutPreferences) replaceLayoutPreferences(drawing.layoutPreferences, ui.layoutPreferences);
-  CANVAS_SLICE.install(drawing.slices.canvas, ui);
+  installCanvasPadding(drawing, ui);
   if (typeof ui.linearTypographyLinked === 'boolean') setRef(drawing.linearTypographyLinked, ui.linearTypographyLinked);
   if (ui.pendingPaletteName !== undefined) setRef(drawing.pendingPaletteName, String(ui.pendingPaletteName || ''));
   if (ui.pendingPaletteColors) setRef(drawing.pendingPaletteColors, clonePlainObject(ui.pendingPaletteColors));
@@ -583,7 +593,7 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
     setRef(state.generatedCircularPlotTitlePosition, ui.generatedCircularPlotTitlePosition);
   }
   replaceLayoutPreferences(drawing.layoutPreferences, ui.layoutPreferences);
-  CANVAS_SLICE.install(drawing.slices.canvas, ui);
+  installCanvasPadding(drawing, ui);
   setRef(state.autoLabelReflowEnabled, Boolean(ui.autoLabelReflow));
   setRef(state.paletteInstantPreviewEnabled, Boolean(ui.paletteInstantPreviewEnabled));
   if (ui.appliedPaletteName !== undefined) setRef(state.appliedPaletteName, String(ui.appliedPaletteName || 'default'));
@@ -622,7 +632,7 @@ const buildFallbackFeatureStateData = (state, drawing) => ({
   featureRecordIds: cloneJsonData(getRef(state.featureRecordIds, [])) || [],
   selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
   featureColorOverrides: clonePlainObject(drawing.featureColorOverrides),
-  featureVisibilityManualRules: cloneFeatureVisibilityRules(drawing.featureVisibilityManualRules),
+  featureVisibilityManualRules: cloneFeatureVisibilityRules(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
   featureOverrides: clonePlainObject(drawing.featureOverrides),
   labelOverrideRows: cloneLabelOverrideRows(getRef(drawing.canonicalLabelOverrideRows, [])),
   labelTextBulkOverrides: clonePlainObject(drawing.labelTextBulkOverrides)
@@ -1426,7 +1436,7 @@ export const createHistorySnapshotService = ({
       selectedFeatureRecordIdx: getGeneratedArtifactRef(state.selectedFeatureRecordIdx, 0),
       featureColorOverrides: clonePlainObject(drawing.featureColorOverrides),
       featureVisibilityManualRules: cloneFeatureVisibilityRules(
-        drawing.featureVisibilityManualRules
+        VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules
       ),
       featureOverrides: clonePlainObject(drawing.featureOverrides),
       labelOverrideRows: cloneLabelOverrideRows(
@@ -1785,7 +1795,7 @@ export const createHistorySnapshotService = ({
       ui: drawingUiPart(ui),
       features: buildFeatureIntentData({
         featureColorOverrides: drawing.featureColorOverrides,
-        featureVisibilityManualRules: drawing.featureVisibilityManualRules,
+        featureVisibilityManualRules: VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules,
         featureOverrides: drawing.featureOverrides,
         labelOverrideRows: getRef(drawing.canonicalLabelOverrideRows, []),
         labelTextBulkOverrides: drawing.labelTextBulkOverrides

@@ -268,8 +268,9 @@ export const linearCardHasSettings = (card) => Object.entries(RECORD_SETTINGS_DE
  * @property {Record<string, { recordKey?: unknown }>} [featureOverrides]
  * @property {Record<string, { recordKey?: unknown }>} [featurePlacementOverrides]
  * @property {Record<string, unknown>} [featureStrokeOverrides] Keyed `<recordKey>\0…`.
- * @property {readonly { annotations: { target?: { kind?: string, recordKey?: unknown },
- *   metadata?: Record<string, unknown> | null }[] }[]} [annotationSets]
+ * @property {readonly { readonly annotations: readonly { readonly target?: { readonly kind?: string, readonly recordKey?: unknown },
+ *   readonly metadata?: Readonly<Record<string, unknown>> | null }[] }[]} [annotationSets]
+ * @property {(annotation: object) => void} [removeAnnotation] Removes an annotation of `annotationSets` (the writer of their slice).
  * @property {{ sourceUid?: unknown, selector?: unknown }[]} [recordDisplayDrafts]
  * @property {{ queryUid?: unknown, subjectUid?: unknown }[]} [comparisonEdges] Linear edges, by card uid.
  * @property {string} annotationBindingField The annotation metadata field of a record binding.
@@ -338,7 +339,7 @@ const forEachRecordEdit = (owners, data, visit) => {
       const key = item?.target?.kind === 'featureIdentity'
         ? match.ofRequestKey(item.target.recordKey)
         : match.ofBinding(item?.metadata?.[data.annotationBindingField]);
-      if (key !== undefined) visit(key, () => { set.annotations.splice(set.annotations.indexOf(item), 1); });
+      if (key !== undefined) visit(key, () => data.removeAnnotation?.(item));
     });
   });
   /**

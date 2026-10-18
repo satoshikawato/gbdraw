@@ -17,7 +17,7 @@ import { createSliceHandle, sliceMembers } from './slice-handle.js';
 
 // A visibility-rules handle exists only through `create`, which gives it these members.
 /** @param {VisibilityRulesSlice} slice */
-const membersOf = (slice) => /** @type {VisibilityRulesData} */ (sliceMembers(slice));
+const membersOf = (slice) => /** @type {VisibilityRulesData} */ (sliceMembers(slice, 'visibilityRules'));
 
 /**
  * A new slice, or one over a drawing's existing members (a test fixture).
@@ -51,11 +51,14 @@ export const replaceVisibilityRules = (slice, rules) => {
   list.splice(0, list.length, ...rules);
 };
 
+// The list becomes a copy of the rules `data` holds; without them it is kept.
 /**
  * @param {VisibilityRulesSlice} slice
- * @param {{ featureVisibilityManualRules: readonly FeatureVisibilityRuleDraft[] }} data
+ * @param {{ featureVisibilityManualRules?: readonly FeatureVisibilityRuleDraft[] }} data
  */
-const install = (slice, { featureVisibilityManualRules }) => replaceVisibilityRules(slice, featureVisibilityManualRules);
+const install = (slice, { featureVisibilityManualRules }) => {
+  if (featureVisibilityManualRules) replaceVisibilityRules(slice, cloneJsonData([...featureVisibilityManualRules]));
+};
 
 /** @param {VisibilityRulesSlice} slice */
 const reset = (slice) => replaceVisibilityRules(slice, []);

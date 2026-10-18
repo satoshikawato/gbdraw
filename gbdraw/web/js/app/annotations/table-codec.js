@@ -1,6 +1,7 @@
 // @ts-check
 /**
  * @import { AnnotationHatch, AnnotationSet, AnnotationStyle, AnnotationTarget } from '../../services/annotation-state.js'
+ * @import { AnnotationSetRow } from '../../services/drawing/annotation-sets.js'
  */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from '../../services/annotation-state.js';
 import { validateAnnotationCoordinates } from './validation.js';
@@ -194,7 +195,7 @@ export const parseAnnotationTable = (text) => parseAnnotationTableWithNotice(tex
 // gives its drawn record position and feature hash, written as `record=#<n>` and
 // `feature_selector=hash=<hash>`; a target it does not place is not written.
 /**
- * @param {readonly AnnotationSet[]} sets
+ * @param {readonly AnnotationSetRow[]} sets
  * @param {AnnotationTableEncodeOptions} [options]
  */
 export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => null } = {}) => {
@@ -237,5 +238,5 @@ export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => n
   return { text: `${rows.join('\n')}\n`, placedFeatureIdentityCount, skippedFeatureIdentityCount };
 };
 
-/** @param {readonly AnnotationSet[]} sets */
+/** @param {readonly AnnotationSetRow[]} sets */
 export const encodeAnnotationTable = (sets) => encodeAnnotationTableWithNotice(sets).text;

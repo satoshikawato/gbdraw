@@ -18,7 +18,7 @@ const SIDES = /** @type {const} */ (['top', 'right', 'bottom', 'left']);
 
 // A canvas handle exists only through `create`, which gives it these members.
 /** @param {CanvasSlice} slice */
-const membersOf = (slice) => /** @type {CanvasData} */ (sliceMembers(slice));
+const membersOf = (slice) => /** @type {CanvasData} */ (sliceMembers(slice, 'canvas'));
 
 /**
  * @param {CanvasSlice} slice
@@ -45,17 +45,14 @@ const create = (members = {}) => {
  */
 const capture = (slice) => ({ canvasPadding: { ...membersOf(slice).canvasPadding } });
 
-// Writes the padding `data` holds; a side that is no number is 0. Without a
-// padding object the slice keeps its padding (a History step or a Session
-// that holds none).
+// Copies the padding `data` holds into the slice's padding; without one the
+// slice keeps its padding (a History step or a Session that holds none).
 /**
  * @param {CanvasSlice} slice
- * @param {{ canvasPadding?: unknown }} data
+ * @param {Partial<CanvasData>} data
  */
 const install = (slice, { canvasPadding }) => {
-  if (!canvasPadding || typeof canvasPadding !== 'object') return;
-  const stored = /** @type {Record<string, unknown>} */ (canvasPadding);
-  writeSides(slice, (side) => Number(stored[side]) || 0);
+  if (canvasPadding) writeSides(slice, (side) => Number(canvasPadding[side]) || 0);
 };
 
 /** @param {CanvasSlice} slice */

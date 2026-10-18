@@ -4,21 +4,27 @@ import {
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../../services/annotation-state.js';
+import { bindAnnotationRecords } from '../../services/drawing/annotation-sets.js';
 
 /**
  * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './record-catalog.js'
- * @import { AnnotationItem, AnnotationRecordSelector, AnnotationSet } from '../../services/annotation-state.js'
+ * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
+ * @import { AnnotationRecordBinding, AnnotationRow, AnnotationSetsSlice, AnnotationSetsView } from '../../services/drawing/annotation-sets.js'
+ */
+/**
+ * The annotation sets of a drawing, and the handle their writers take.
+ * @typedef {AnnotationSetsView & { readonly slices: { readonly annotationSets: AnnotationSetsSlice } }} AnnotationSetsDrawing
  */
 
 /** @param {unknown} value */
 const cleanText = (value) => String(value ?? '').trim();
 
-/** @param {AnnotationItem | null | undefined} annotation */
+/** @param {AnnotationRow | null | undefined} annotation */
 const bindingFor = (annotation) => cleanText(annotation?.metadata?.[ANNOTATION_RECORD_BINDING_KEY]);
 export const annotationRecordBinding = bindingFor;
 
 /**
- * @param {AnnotationItem | null | undefined} annotation
+ * @param {AnnotationRow | null | undefined} annotation
  * @returns {{ selector: AnnotationRecordSelector | null, error: string }}
  */
 const selectorFromTarget = (annotation) => {
@@ -54,7 +60,7 @@ const recordForSelector = (records, selector) => {
 
 /**
  * @param {AnnotationRecordCatalog | null | undefined} catalog
- * @param {AnnotationItem | null | undefined} annotation
+ * @param {AnnotationRow | null | undefined} annotation
  */
 const resolvedRecord = (catalog, annotation) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
@@ -66,21 +72,23 @@ const resolvedRecord = (catalog, annotation) => {
 export const resolveAnnotationRecord = resolvedRecord;
 
 /**
- * @param {AnnotationItem | null | undefined} annotation
+ * The annotation's metadata with the record binding `key` (none when empty).
+ * @param {AnnotationRow} annotation
  * @param {string} key
+ * @returns {Record<string, unknown>}
  */
-const setBinding = (annotation, key) => {
-  if (!annotation || typeof annotation !== 'object') return;
-  if (!annotation.metadata || typeof annotation.metadata !== 'object' || Array.isArray(annotation.metadata)) {
-    annotation.metadata = {};
-  }
-  if (key) annotation.metadata[ANNOTATION_RECORD_BINDING_KEY] = key;
-  else delete annotation.metadata[ANNOTATION_RECORD_BINDING_KEY];
+const metadataWithBinding = (annotation, key) => {
+  const { metadata } = annotation;
+  /** @type {Record<string, unknown>} */
+  const next = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? { ...metadata } : {};
+  if (key) next[ANNOTATION_RECORD_BINDING_KEY] = key;
+  else delete next[ANNOTATION_RECORD_BINDING_KEY];
+  return next;
 };
 
 /**
  * @param {AnnotationRecordCatalog | null | undefined} catalog
- * @param {AnnotationItem | null | undefined} annotation
+ * @param {AnnotationRow | null | undefined} annotation
  */
 export const annotationRecordValue = (catalog, annotation) => {
   const binding = bindingFor(annotation);
@@ -92,50 +100,54 @@ export const annotationRecordValue = (catalog, annotation) => {
 };
 
 /**
+ * Binds an annotation of the drawing to the record `value` names (none when
+ * empty); a key of no record changes nothing.
  * @param {AnnotationRecordCatalog | null | undefined} catalog
- * @param {AnnotationItem | null | undefined} annotation
+ * @param {AnnotationSetsSlice} slice
+ * @param {AnnotationRow | null | undefined} annotation
  * @param {unknown} value
  */
-export const setAnnotationRecordValue = (catalog, annotation, value) => {
+export const setAnnotationRecordValue = (catalog, slice, annotation, value) => {
   if (!annotation?.target) return;
   const key = cleanText(value);
   if (!key) {
-    annotation.target.record = null;
-    setBinding(annotation, '');
+    bindAnnotationRecords(slice, [{ annotation, record: null, metadata: metadataWithBinding(annotation, '') }]);
     return;
   }
   const record = (Array.isArray(catalog?.records) ? catalog.records : [])
     .find((candidate) => candidate.key === key);
   if (!record) return;
-  annotation.target.record = { ...record.backendSelector };
-  setBinding(annotation, record.key);
+  bindAnnotationRecords(slice, [{ annotation, record: record.backendSelector, metadata: metadataWithBinding(annotation, record.key) }]);
 };
 
 /**
- * @param {readonly AnnotationSet[] | null | undefined} sets
+ * Binds each annotation of the drawing whose record the catalog resolves to
+ * that record (a selected-feature target names its record by identity).
+ * @param {AnnotationSetsDrawing} drawing
  * @param {AnnotationRecordCatalog | null | undefined} catalog
  */
-export const reconcileAnnotationRecordBindings = (sets, catalog) => {
+export const reconcileAnnotationRecordBindings = (drawing, catalog) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
-  (Array.isArray(sets) ? sets : []).forEach((set) => {
-    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((/** @type {AnnotationItem} */ annotation) => {
+  /** @type {AnnotationRecordBinding[]} */
+  const bindings = [];
+  (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : []).forEach((set) => {
+    (Array.isArray(set?.annotations) ? set.annotations : []).forEach((/** @type {AnnotationRow} */ annotation) => {
       if (!annotation?.target || annotation.target.kind === 'featureIdentity') return;
       const binding = bindingFor(annotation);
       const record = binding
         ? records.find((candidate) => candidate.key === binding)
         : resolvedRecord(catalog, annotation);
-      if (!record) return;
-      annotation.target.record = { ...record.backendSelector };
-      setBinding(annotation, record.key);
+      if (record) bindings.push({ annotation, record: record.backendSelector, metadata: metadataWithBinding(annotation, record.key) });
     });
   });
+  bindAnnotationRecords(drawing.slices.annotationSets, bindings);
 };
 
 // The select shows only for a ready catalog (`showsSelect`), so its options
 // need no wording for a catalog that is not ready.
 /**
  * @param {AnnotationRecordCatalog | null | undefined} catalog
- * @param {AnnotationItem | null | undefined} annotation
+ * @param {AnnotationRow | null | undefined} annotation
  */
 export const annotationRecordOptions = (catalog, annotation) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
@@ -174,7 +186,7 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
   const catalog = () => getCatalog?.() || {
     status: 'error', records: [], issues: [], requiresSelection: false
   };
-  /** @param {AnnotationItem | null | undefined} annotation */
+  /** @param {AnnotationRow | null | undefined} annotation */
   const isMissing = (annotation) => {
     const current = catalog();
     if (current.status !== 'ready') return false;
@@ -186,12 +198,12 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
   // A single-record input needs no record select: the row names
   // its record in a caption, and only several records or a missing target
   // show the select.
-  /** @param {AnnotationItem} annotation */
+  /** @param {AnnotationRow} annotation */
   const showsSelect = (annotation) => {
     const current = catalog();
     return current.status === 'ready' && (current.records.length > 1 || isMissing(annotation));
   };
-  /** @param {AnnotationItem} annotation */
+  /** @param {AnnotationRow} annotation */
   const captionFor = (annotation) => {
     if (showsSelect(annotation)) return '';
     const current = catalog();
@@ -206,15 +218,16 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
   return {
     showsSelect,
     captionFor,
-    /** @param {AnnotationItem | null | undefined} annotation */
+    /** @param {AnnotationRow | null | undefined} annotation */
     optionsFor: (annotation) => annotationRecordOptions(catalog(), annotation),
-    /** @param {AnnotationItem | null | undefined} annotation */
+    /** @param {AnnotationRow | null | undefined} annotation */
     valueFor: (annotation) => annotationRecordValue(catalog(), annotation),
     /**
-     * @param {AnnotationItem | null | undefined} annotation
+     * @param {AnnotationSetsSlice} slice The handle of the annotation's drawing.
+     * @param {AnnotationRow | null | undefined} annotation
      * @param {unknown} value
      */
-    setValue: (annotation, value) => setAnnotationRecordValue(catalog(), annotation, value),
+    setValue: (slice, annotation, value) => setAnnotationRecordValue(catalog(), slice, annotation, value),
     isRequired: () => Boolean(catalog().requiresSelection),
     isMissing,
     missingMessage: () => 'Choose the record that this annotation targets.'

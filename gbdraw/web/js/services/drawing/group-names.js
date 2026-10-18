@@ -31,16 +31,18 @@ const MEMBERS = /** @type {const} */ (['orthogroupNameOverrides', 'orthogroupDes
 
 // A group-names handle exists only through `create`, which gives it these members.
 /** @param {GroupNamesSlice} slice */
-const membersOf = (slice) => /** @type {GroupNamesData} */ (sliceMembers(slice));
+const membersOf = (slice) => /** @type {GroupNamesData} */ (sliceMembers(slice, 'groupNames'));
 
+// The copy is made first, so a member installed into itself keeps its entries.
 /**
  * @template T
  * @param {Record<string, T>} target
- * @param {Record<string, T>} source
+ * @param {Readonly<Record<string, T>>} source
  */
 const replaceEntries = (target, source) => {
+  const entries = cloneJsonData({ ...source });
   Object.keys(target).forEach((key) => delete target[key]);
-  Object.assign(target, cloneJsonData(source));
+  Object.assign(target, entries);
 };
 
 /**
@@ -104,6 +106,12 @@ export const setGroupDescription = (slice, groupId, description) => {
   if (description) descriptions[groupId] = description;
   else delete descriptions[groupId];
 };
+
+/** Removes every group's user name and description (Reset Settings keeps the dormant names). @param {GroupNamesSlice} slice */
+export const clearGroupRenames = (slice) => install(slice, { orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} });
+
+/** Removes the dormant names (Clear dormant names). @param {GroupNamesSlice} slice */
+export const clearDormantGroupNames = (slice) => install(slice, { orthogroupDormantOverrides: {} });
 
 /**
  * Removes a group's user name and description.

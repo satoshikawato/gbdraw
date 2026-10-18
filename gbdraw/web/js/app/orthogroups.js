@@ -19,7 +19,7 @@ import { downloadTextFile } from '../services/text-download.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { ownEntry } from '../utils/own-entry.js';
-import { GROUP_NAMES_SLICE, clearGroupRename, setGroupDescription, setGroupName } from '../services/drawing/group-names.js';
+import { clearDormantGroupNames, clearGroupRename, setGroupDescription, setGroupName } from '../services/drawing/group-names.js';
 import {
   ORTHOGROUP_ID_KEYS,
   RECORD_INDEX_KEYS,
@@ -922,7 +922,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    GROUP_NAMES_SLICE.install(drawing.slices.groupNames, { orthogroupDormantOverrides: {} });
+    clearDormantGroupNames(drawing.slices.groupNames);
   };
 
   const clearOrthogroupHighlight = () => {

@@ -76,6 +76,7 @@ for (const [domain, key, first, second] of [
 {
   const config = await import('../../gbdraw/web/js/services/config.js');
   const { RECORD_SETTINGS_DEFAULTS, removeRecordEdits } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+  const { removeAnnotations } = await import('../../gbdraw/web/js/services/drawing/annotation-sets.js');
   const editorSnapshots = createHistorySnapshotService({
     state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildFeatureStateData: config.buildFeatureStateData, applyFeatureStateData: config.applyFeatureStateData,
@@ -103,7 +104,8 @@ for (const [domain, key, first, second] of [
   await editorHistory.initializeIntentBaseline();
   await editorHistory.runUndoable('Delete record settings', () => {
     removeRecordEdits([{ key: uid, requestKeys: [uid], ownsExpansions: true, bindingKeys: [], displaySource: uid, displaySelector: null }],
-      { featureOverrides: drawing.featureOverrides, annotationSets: drawing.annotationSets, annotationBindingField: 'binding' });
+      { featureOverrides: drawing.featureOverrides, annotationSets: drawing.annotationSets, annotationBindingField: 'binding',
+        removeAnnotation: (annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]) });
     Object.assign(card, RECORD_SETTINGS_DEFAULTS);
   });
   assert.equal(card.definition, '');

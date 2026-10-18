@@ -24,8 +24,12 @@ export const createSliceHandle = (name, members) => Object.freeze(
 );
 
 /**
- * The writable members of a handle, for the slice that made it.
- * @param {SliceHandle<string>} handle
+ * The writable members of a handle, for the slice that made it: a handle of
+ * another slice has none, so a write through it fails at once instead of
+ * writing the other slice's members.
+ * @template {string} N
+ * @param {SliceHandle<N>} handle
+ * @param {N} name The slice's name, as it made the handle.
  * @returns {unknown}
  */
-export const sliceMembers = (handle) => Reflect.get(handle, MEMBERS);
+export const sliceMembers = (handle, name) => (handle.__slice === name ? Reflect.get(handle, MEMBERS) : undefined);

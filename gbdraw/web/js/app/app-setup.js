@@ -238,6 +238,7 @@ import {
   removeRecordEdits
 } from '../services/record-draw-selection.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
+import { removeAnnotations } from '../services/drawing/annotation-sets.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
 import {
@@ -2105,7 +2106,7 @@ export const createAppSetup = () => {
       const drawing = state.activeDrawing();
       const catalog = getAnnotationRecordCatalog();
       if (catalog.status === 'ready' && !sessionOperationAvailability()) {
-        reconcileAnnotationRecordBindings(drawing.annotationSets, catalog);
+        reconcileAnnotationRecordBindings(drawing, catalog);
       }
     },
     { immediate: true }
@@ -3367,7 +3368,7 @@ export const createAppSetup = () => {
     validateAnnotationTargets: () => {
       const drawing = state.activeDrawing();
       const catalog = getAnnotationRecordCatalog();
-      reconcileAnnotationRecordBindings(drawing.annotationSets, catalog);
+      reconcileAnnotationRecordBindings(drawing, catalog);
       return validateAnnotationRecordTargets(drawing.annotationSets, catalog);
     },
     omittedAnnotationRecordKeys: () => getAnnotationRecordCatalog().omittedRecordKeys || [],
@@ -6402,6 +6403,7 @@ export const createAppSetup = () => {
     featurePlacementOverrides: drawing.featurePlacementOverrides,
     featureStrokeOverrides: drawing.featureStrokeOverrides,
     annotationSets: drawing.annotationSets,
+    removeAnnotation: (/** @type {object} */ annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]),
     recordDisplayDrafts: drawing.recordDisplayDrafts,
     comparisonEdges: drawing === state.drawings.linear ? drawing.linearComparisonPlan.edges : [],
     annotationBindingField: ANNOTATION_RECORD_BINDING_KEY
@@ -6778,6 +6780,7 @@ export const createAppSetup = () => {
     addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
+    setAnnotationField: annotationEditor.setAnnotationField,
     annotationImportNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,

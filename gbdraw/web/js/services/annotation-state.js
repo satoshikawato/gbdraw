@@ -4,6 +4,7 @@ import { nextNumberedId } from './track-slot-validation.js';
 import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.js';
 
 /** @import { FeatureRequestRecord } from './feature-placement.js' */
+/** @import { DeepReadonly } from '../utils/reactivity.js' */
 
 /**
  * A record named by a target: a 0-based position or a record ID.
@@ -115,28 +116,30 @@ const normalizeTarget = (target) => {
   };
 };
 
+// The style and set factories read their input and copy it: a JSON copy is
+// the new value's own (the casts).
 /**
- * @param {Partial<AnnotationStyle> | null} [overrides]
+ * @param {DeepReadonly<Partial<AnnotationStyle>> | null} [overrides]
  * @returns {AnnotationStyle}
  */
 export const createDefaultAnnotationStyle = (overrides = {}) => ({
   ...DEFAULT_STYLE,
-  ...(overrides && typeof overrides === 'object' ? clone(overrides) : {})
+  ...(overrides && typeof overrides === 'object' ? /** @type {Partial<AnnotationStyle>} */ (clone(overrides)) : {})
 });
 
 /**
- * @param {Partial<AnnotationSet>} [overrides] A set from a Session, a table, or the editor.
+ * @param {DeepReadonly<Partial<AnnotationSet>>} [overrides] A set from a Session, a table, or the editor.
  * @returns {AnnotationSet}
  */
 export const createAnnotationSet = (overrides = {}) => ({
   id: cleanId(overrides.id, 'annotations'),
-  annotations: Array.isArray(overrides.annotations) ? clone(overrides.annotations) : [],
+  annotations: Array.isArray(overrides.annotations) ? /** @type {AnnotationItem[]} */ (clone(overrides.annotations)) : [],
   defaultStyle: createDefaultAnnotationStyle(overrides.defaultStyle),
   legendLabel: overrides.legendLabel == null ? null : String(overrides.legendLabel)
 });
 
 /**
- * @param {readonly Partial<AnnotationSet>[] | null | undefined} sets
+ * @param {readonly DeepReadonly<Partial<AnnotationSet>>[] | null | undefined} sets
  * @returns {AnnotationSet[]}
  */
 export const normalizeAnnotationSets = (sets) => {
