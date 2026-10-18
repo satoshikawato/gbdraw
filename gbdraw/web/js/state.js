@@ -39,6 +39,7 @@ import { computed as typedComputed } from './utils/reactivity.js';
 import { CANVAS_SLICE } from './services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
+import { VISIBILITY_RULES_SLICE } from './services/drawing/visibility-rules.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -954,7 +955,7 @@ export const sessionOperationAvailability = (
 /** @typedef {ModeProfileName} DiagramMode The diagram modes; `mode-profiles.js` owns the names. */
 
 /** @import { PythonLegendKey, RenderedFeatureId } from './services/legend-svg.js' */
-/** @import { FeatureVisibilityRuleDraft, VisibilityFeature } from './services/feature-visibility.js' */
+/** @import { VisibilityFeature } from './services/feature-visibility.js' */
 /** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
 /**
  * The color a Legend row records, never its identity (OV-288): one the user
@@ -1031,8 +1032,8 @@ const createDrawingState = (drawingMode) => {
     losatProgram: losatProgram.value,
     blastpMode: losat.blastp?.mode
   }));
-  /** @type {FeatureVisibilityRuleDraft[]} */
-  const featureVisibilityManualRules = reactive([]);
+  const visibilityRules = VISIBILITY_RULES_SLICE.create();
+  const { featureVisibilityManualRules } = visibilityRules.view;
   const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
   const labelFilters = createDefaultLabelFilterState();
   // The editor edits a slice owns (services/drawing/): the drawing shows its
@@ -1067,7 +1068,7 @@ const createDrawingState = (drawingMode) => {
     featureColorOverrides: reactive({}), // {featureKey: color}
     // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
     featureStrokeOverrides: reactive({}),
-    featureVisibilityManualRules,
+    ...visibilityRules.view,
     labelTextBulkOverrides: reactive({}), // { sourceText: text }
     canonicalLabelOverrideRows: ref([]),
     legendEntries: ref([]), // LegendEntry[]; typed with its writers (OV-288 STATUS)
@@ -1110,7 +1111,8 @@ const createDrawingState = (drawingMode) => {
       () => !paletteInstantPreviewEnabled.value && String(pendingPaletteName.value || '').trim() !== ''
     ),
     // The handles a slice's writers take.
-    slices: Object.freeze({ annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle })
+    slices: Object.freeze({
+      visibilityRules: visibilityRules.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle })
   });
 };
 const circularDrawing = createDrawingState('circular');

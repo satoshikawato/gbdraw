@@ -8,11 +8,13 @@
 import { CANVAS_SLICE } from '../../../gbdraw/web/js/services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from '../../../gbdraw/web/js/services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from '../../../gbdraw/web/js/services/drawing/annotation-sets.js';
+import { VISIBILITY_RULES_SLICE } from '../../../gbdraw/web/js/services/drawing/visibility-rules.js';
 
 // The slices that own a drawing's editor edits (gbdraw/web/js/services/drawing/),
 // by the name of their handle in `drawing.slices`.
 export const DRAWING_SLICES = Object.freeze({
-  annotationSets: ANNOTATION_SETS_SLICE, groupNames: GROUP_NAMES_SLICE, canvas: CANVAS_SLICE
+  visibilityRules: VISIBILITY_RULES_SLICE, annotationSets: ANNOTATION_SETS_SLICE, groupNames: GROUP_NAMES_SLICE,
+  canvas: CANVAS_SLICE
 });
 
 export const DRAWING_DRAFT_KEYS = Object.freeze([

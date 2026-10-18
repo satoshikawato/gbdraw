@@ -17,6 +17,7 @@ import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './a
 import { toRaw } from '../utils/vue-raw.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
+import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 /** @import { GroupNamesData } from './drawing/group-names.js' */
 /** @import { HistoryArtifactHandle } from './history.js' */
 
@@ -378,13 +379,9 @@ const cloneFeatureVisibilityRules = (rules) => (
  * @param {FeatureEditsData} [features]
  */
 const replaceFeatureEditState = (drawing, features = {}) => {
-  if (Array.isArray(drawing.featureVisibilityManualRules)) {
-    drawing.featureVisibilityManualRules.splice(
-      0,
-      drawing.featureVisibilityManualRules.length,
-      ...cloneFeatureVisibilityRules(features.featureVisibilityManualRules)
-    );
-  }
+  VISIBILITY_RULES_SLICE.install(drawing.slices.visibilityRules, {
+    featureVisibilityManualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules)
+  });
   replacePlainObject(drawing.featureOverrides, clonePlainObject(features.featureOverrides));
   replaceRefArray(drawing.canonicalLabelOverrideRows, features.labelOverrideRows);
   replacePlainObject(drawing.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));

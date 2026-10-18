@@ -257,6 +257,7 @@ import {
 import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
+import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 
 const { nextTick, ref } = window.Vue;
 
@@ -4672,7 +4673,7 @@ const resetSessionBaseline = () => {
     Object.assign(drawing.importedComparisonIntent, createImportedComparisonIntentState());
     GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
     clearObject(drawing.featureColorOverrides);
-    drawing.featureVisibilityManualRules.splice(0);
+    VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
     clearObject(drawing.featureOverrides);
     clearObject(drawing.featureStrokeOverrides);
     drawing.canonicalLabelOverrideRows.value = [];
@@ -4914,11 +4915,9 @@ export const applyFeatureStateData = (drawing, features = {}) => {
 const applyDrawingFeatureData = (drawing, features = {}) => {
   // The readers Load lists what they cannot restore with (`sliceFieldRepairs`).
   replacePlainObject(drawing.featureColorOverrides, cloneJsonObject(readFeatureColorEdits(features.featureColorOverrides).value));
-  drawing.featureVisibilityManualRules.splice(
-    0,
-    drawing.featureVisibilityManualRules.length,
-    ...normalizeFeatureVisibilityRulesForSession(readList(features.featureVisibilityManualRules).value)
-  );
+  VISIBILITY_RULES_SLICE.install(drawing.slices.visibilityRules, {
+    featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(readList(features.featureVisibilityManualRules).value)
+  });
   replacePlainObject(drawing.featureOverrides, featureOverridesForState(features.featureOverrides));
   drawing.canonicalLabelOverrideRows.value = cloneJsonData(readLabelOverrideRows(features.labelOverrideRows).value);
   replacePlainObject(drawing.labelTextBulkOverrides, readStringMap(features.labelTextBulkOverrides).value);

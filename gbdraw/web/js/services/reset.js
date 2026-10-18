@@ -16,6 +16,7 @@ import { replaceBulkLabelEdits } from './label-override-table.js';
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
+import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -129,7 +130,7 @@ const resetRuleDraftState = (state, drawing) => {
 const resetEditorDraftState = (state, drawing) => {
   const editorDefaults = createDefaultEditorDraftState();
   clearReactiveObject(drawing.featureColorOverrides);
-  replaceReactiveArray(drawing.featureVisibilityManualRules);
+  VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
   clearReactiveObject(drawing.featureOverrides);
   clearReactiveObject(drawing.featureStrokeOverrides);
   clearReactiveObject(drawing.legendColorOverrides);

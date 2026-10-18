@@ -24,6 +24,7 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
+import { replaceVisibilityRules } from '../../services/drawing/visibility-rules.js';
 /** @import { DrawingState } from '../../state.js' */
 /** @import { FeatureDrawnContext, FeatureVisibilityRuleDraft, VisibilityFeature } from '../../services/feature-visibility.js' */
 
@@ -574,7 +575,7 @@ export const createFeatureVisibilityActions = ({
     const rules = [...drawing.featureVisibilityManualRules];
     if (edit(rules) === false) return false;
     const requested = JSON.stringify(requestFeatureVisibilityRules(drawing.featureVisibilityManualRules));
-    drawing.featureVisibilityManualRules.splice(0, drawing.featureVisibilityManualRules.length, ...rules);
+    replaceVisibilityRules(drawing.slices.visibilityRules, rules);
     if (JSON.stringify(requestFeatureVisibilityRules(rules)) === requested) return true;
     const editRun = ++visibilityEditRun;
     const rerendering = Boolean(state.labelReflowProcessing?.value);

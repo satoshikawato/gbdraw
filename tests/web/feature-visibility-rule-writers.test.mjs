@@ -18,9 +18,14 @@
 // Nor is a store handed on inside an object literal under another name, or a
 // ref replaced without `.value` (`drawing.legendEntries = ref([])`). A write
 // inside a shorthand method is reported under the function name ''.
+// A drawing slice (js/services/drawing/) is no owner: it writes its members
+// only for its caller, so a call of a slice function that receives the handle
+// of a slice holding one of the names (`drawing.slices.<slice>`) is a write of
+// the function that calls it, except the slice's `capture`, which reads.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { DRAWING_SLICES } from './helpers/drawing-state.mjs';
 
 const WEB_ROOT = new URL('../../gbdraw/web/', import.meta.url);
 const NAME = 'featureVisibilityManualRules';
@@ -209,10 +214,23 @@ const enclosingFunction = (functions, index) => functions
 // member, a `delete`), or a call that receives it. A name assigned without a
 // member access is a local binding. A name in `refs` is a Vue ref: its value
 // is written through `.value`, and the ref itself only by a call.
+const SLICE_READERS = /(?:^|\.)capture$/;
 export const writerSites = (source, names, refs = []) => {
   const code = codeOnly(source);
   let functions = null;
-  return [...code.matchAll(new RegExp(`(?<![\\w$])(?:${names.join('|')})\\b`, 'g'))].flatMap((match) => {
+  const at = (start) => {
+    functions ||= namedFunctions(code);
+    return `${enclosingFunction(functions, start)}:${code.slice(0, start).split('\n').length}`;
+  };
+  const handles = Object.entries(DRAWING_SLICES)
+    .filter(([, slice]) => slice.members.some((member) => names.includes(member))).map(([handle]) => handle);
+  const sliceCalls = handles.length === 0 ? [] : [...code.matchAll(
+    new RegExp(`\\bslices\\s*\\??\\.\\s*(?:${handles.join('|')})\\b`, 'g')
+  )].flatMap(({ index }) => {
+    const callee = enclosingCallee(code, index);
+    return callee && !KEYWORDS.has(callee) && !SLICE_READERS.test(callee) ? [at(index)] : [];
+  });
+  return [...sliceCalls, ...[...code.matchAll(new RegExp(`(?<![\\w$])(?:${names.join('|')})\\b`, 'g'))].flatMap((match) => {
     const start = match.index;
     const before = code.slice(0, start);
     const ref = refs.includes(match[0]);
@@ -226,9 +244,8 @@ export const writerSites = (source, names, refs = []) => {
     const writes = !/\b(?:const|let|var)\s+$/.test(before) && (handed || ((!ref || value)
       && (through || /\bdelete\s+\(?\s*(?:[\w$]+\s*\??\.\s*)*$/.test(before))));
     if (!writes) return [];
-    functions ||= namedFunctions(code);
-    return [`${enclosingFunction(functions, start)}:${before.split('\n').length}`];
-  });
+    return [at(start)];
+  })];
 };
 
 export const ruleWriters = (source) => writerSites(source, [NAME]);
@@ -303,8 +320,10 @@ const listModules = (url, prefix = '') => readdirSync(url, { withFileTypes: true
   return entry.name.endsWith('.js') ? [path] : [];
 });
 
-// The writer sites of the Web modules that have one, by module.
+// The writer sites of the Web modules that have one, by module; the slices
+// write for their callers.
 const scanModules = (writers) => Object.fromEntries(listModules(new URL('js/', WEB_ROOT), 'js/')
+  .filter((file) => !file.startsWith('js/services/drawing/'))
   .map((file) => [file, writers(readFileSync(new URL(file, WEB_ROOT), 'utf8'))])
   .filter(([, sites]) => sites.length));
 
@@ -359,6 +378,14 @@ test('the writer guard flags a direct edit and leaves reads alone', () => {
     '};'
   ].join('\n'));
   assert.deepEqual(writers, ['addRule:3', 'addRule:4', 'addRule:5']);
+  // A slice writer that receives the rules' slice handle writes; its capture reads.
+  const [handle] = Object.entries(DRAWING_SLICES).find(([, slice]) => slice.members.includes(NAME));
+  assert.deepEqual(ruleWriters([
+    'const restore = (drawing, rules) => {',
+    `  SLICE.install(drawing.slices.${handle}, rules);`,
+    `  return SLICE.capture(drawing?.slices.${handle});`,
+    '};'
+  ].join('\n')), ['restore:2']);
   assert.match(ruleWriterProblems({ 'js/app/new-import.js': ['importRules:9'] }).join('\n'),
     /js\/app\/new-import\.js: importRules:9 writes featureVisibilityManualRules/);
   assert.match(ruleWriterProblems({}).join('\n'), /editFeatureVisibilityRules no longer writes/);
