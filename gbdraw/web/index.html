@@ -3732,14 +3732,14 @@
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
                                         <div class="flex items-center text-xs">
                                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
-                                                <input type="checkbox" v-model="form.show_gc" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-content" class="form-checkbox">
+                                                <input type="checkbox" :checked="form.show_gc" @change="setTrackShown('show_gc', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-content" class="form-checkbox">
                                                 <span>Show GC Content</span>
                                             </label>
                                             <help-tip id="help-linear-show-gc-content" text="Simple mode only. Display a GC content track; use Reset to copy it into the custom stack."></help-tip>
                                         </div>
                                         <div class="flex items-center text-xs">
                                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
-                                                <input type="checkbox" v-model="form.show_skew" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-skew" class="form-checkbox">
+                                                <input type="checkbox" :checked="form.show_skew" @change="setTrackShown('show_skew', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-skew" class="form-checkbox">
                                                 <span>Show GC Skew</span>
                                             </label>
                                             <help-tip id="help-linear-show-gc-skew" text="Simple mode only. Display a GC skew track; use Reset to copy it into the custom stack."></help-tip>
@@ -3750,7 +3750,7 @@
                                                 :class="depthToggleOptionClass"
                                                 :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
                                             >
-                                                <input type="checkbox" v-model="form.show_depth" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled || !canShowDepthTrack)" aria-describedby="help-linear-show-depth" class="form-checkbox">
+                                                <input type="checkbox" :checked="form.show_depth" @change="setTrackShown('show_depth', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled || !canShowDepthTrack)" aria-describedby="help-linear-show-depth" class="form-checkbox">
                                                 <span>Show Depth</span>
                                             </label>
                                             <help-tip id="help-linear-show-depth" text="Simple mode only. Display depth coverage tracks from uploaded TSV files; use Reset to copy them into the custom stack."></help-tip>
@@ -4100,7 +4100,7 @@
                                             :class="depthToggleOptionClass"
                                             :title="adv.circular_track_slots_enabled ? 'Custom stack Depth rows control rendering. Disable the custom stack to change this simple control.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
                                         >
-                                            <input type="checkbox" v-model="form.show_depth" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled || !canShowDepthTrack)" class="form-checkbox">
+                                            <input type="checkbox" :checked="form.show_depth" @change="setTrackShown('show_depth', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled || !canShowDepthTrack)" class="form-checkbox">
                                             <span>Show Depth</span>
                                         </label>
                                         <setting-note setting="track-visibility"></setting-note>

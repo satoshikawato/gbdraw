@@ -633,6 +633,25 @@ test('a rule commit\'s Legend rows show once on the displayed Result and never a
   assert.deepEqual([generated.legendAdds, generated.legendDeletes], [[], []]);
 });
 
+// OV-1198 (PD-OI-104): the Legend row of a drawn track the draft hides leaves
+// the displayed Result with the track, as a recorded deletion; Generate
+// compiles none, and an explicit deletion is not repeated.
+test('the Legend row of a hidden drawn track leaves the displayed Result at once and never at Generate', () => {
+  const intent = {
+    catalogAdmission: admission(),
+    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' }],
+    deletedLegendEntries: [{ caption: 'Gone', originalCaption: 'Gone' }],
+    originalLegendOrder: ['CDS', 'depth', 'Gone']
+  };
+  const live = compileDirectEditorMutationPlan({
+    ...intent,
+    livePreview: { domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], hiddenTrackRows: ['depth', 'Gone'], drawnTracks: [] }
+  }).operationsByResult[0];
+  assert.deepEqual(live.legendDeletes, [{ caption: 'Gone', allowMissing: true }, { caption: 'depth', allowMissing: true }]);
+  const generated = compileDirectEditorMutationPlan(intent).operationsByResult[0];
+  assert.deepEqual(generated.legendDeletes, [{ caption: 'Gone', allowMissing: true }]);
+});
+
 // PR 3 (D-25): the Legend stores, an editor row's addition, and the order
 // address each row by its key, never by the name it shows, so two rows of one
 // name keep their own edits, live and at Generate.

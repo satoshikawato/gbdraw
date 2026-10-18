@@ -1405,7 +1405,10 @@ export const createFeatureColorActions = ({
     if (!entry) return;
 
     const requestedCaption = normalizeCaption(newCaption);
-    if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption) || legendRowIsNamed(legendEntryKey(entry), requestedCaption)) {
+    const key = legendEntryKey(entry);
+    // The row's name or drawn name is no rename; its key names a renamed row back (OV-1216).
+    if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption)
+      || (requestedCaption !== key && legendRowIsNamed(key, requestedCaption))) {
       drawing.legendEntries.value = [...drawing.legendEntries.value];
       return;
     }
@@ -1414,11 +1417,11 @@ export const createFeatureColorActions = ({
     await continueLegendRenameRequest(drawing, {
       source: 'legend',
       oldCaption: normalizeCaption(entry.caption),
-      sourceKey: legendEntryKey(entry),
+      sourceKey: key,
       newCaption: requestedCaption,
       currentColor: resolveColorToHex(shownColor) || shownColor || '#cccccc',
-      features: getFeaturesForLegendCaption(legendEntryKey(entry)),
-      sourceScope: getFeaturesForLegendCaption(legendEntryKey(entry)).length > 0 ? 'group' : 'manual'
+      features: getFeaturesForLegendCaption(key),
+      sourceScope: getFeaturesForLegendCaption(key).length > 0 ? 'group' : 'manual'
     });
   };
 

@@ -970,6 +970,16 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const otherName = build(sharedRows);
   await otherName.renameActions.renameLegendEntry(0, 'Packaging');
   assert.equal(otherName.stateLegendEntries.value[0].caption, 'Packaging');
+  // OV-1216: a renamed row's key names it back; its name is no rename.
+  for (const [typed, caption] of [['depth', 'depth'], ['Coverage', 'Coverage']]) {
+    const renamed = build({
+      entries: [{ caption: 'Coverage', originalCaption: 'depth', color: '#555555' }],
+      order: ['depth'],
+      legendRowIsNamed: (key, text) => text === key || (key === 'depth' && text === 'Coverage')
+    });
+    await renamed.renameActions.renameLegendEntry(0, typed);
+    assert.equal(renamed.stateLegendEntries.value[0].caption, caption, `"${typed}" on a row renamed Coverage`);
+  }
   // PD-OI-061 scenario revision 5: a shown numbered name (`Shared (2)`) names
   // that row, which the Legend owner finds by its drawn name; a Merge adopts
   // the row's name, never its key (OV-640).

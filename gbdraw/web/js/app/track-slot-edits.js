@@ -23,6 +23,34 @@
  */
 
 /**
+ * The Legend port a stack edit runs in: a drawn track the edit hides or shows
+ * again takes its Legend rows with it (R2, OV-1198).
+ * @typedef {<T>(change: () => T) => T} ChangeTrackVisibility
+ */
+
+/**
+ * The port a track stack editor passes to `featureSlotEdits`: each stack edit
+ * (add, renderer change, enable, disable, remove, stack switch) runs in the
+ * Legend port once. The port wraps the whole layout transition, so an edit
+ * whose lane check restores the inputs and asks retires nothing; the edit that
+ * the Reset choice of that dialog applies later runs in the port on its own,
+ * inside the Reset's History step.
+ * @param {ChangeTrackLayout} changeTrackLayout
+ * @param {ChangeTrackVisibility} changeTrackVisibility
+ * @returns {ChangeTrackLayout}
+ */
+export const trackLayoutWithVisibility = (changeTrackLayout, changeTrackVisibility) => (apply, control) => {
+  let inTransition = true;
+  try {
+    return changeTrackVisibility(() => changeTrackLayout(
+      () => (inTransition ? apply() : changeTrackVisibility(apply)), control
+    ));
+  } finally {
+    inTransition = false;
+  }
+};
+
+/**
  * @template {Record<string, (...args: any[]) => any>} Actions
  * @param {ChangeTrackLayout} changeTrackLayout
  * @param {Actions} actions

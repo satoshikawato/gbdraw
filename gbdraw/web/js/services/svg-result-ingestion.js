@@ -82,12 +82,12 @@ const text = (value) => String(value ?? '').trim();
 
 /**
  * What a Result's metadata holds once it is committed (`metadataFromCatalogAdmission`,
- * `ingestSvgResult`). A legacy import has no `drawnLegendKeys`.
+ * `ingestSvgResult`). A legacy import has no `legendRowFacts`.
  * @typedef {object} CommittedSvgResultMetadata
  * @property {RenderedIdentityCollection} renderedFeatureIdentities
  * @property {string} sourceClass
  * @property {readonly string[] | null | undefined} selectedFeatureTypes
- * @property {ReadonlySet<string> | null} [drawnLegendKeys]
+ * @property {SvgLegendRowFacts | null} [legendRowFacts]
  */
 
 /**
@@ -546,8 +546,8 @@ const resultFeatureTypes = (selectedFeatureTypes) => (
   Array.isArray(selectedFeatureTypes) ? Object.freeze(selectedFeatureTypes.map(String)) : null
 );
 
-// `drawnLegendKeys`: the Legend rows Python drew in the Result (its row facts),
-// kept in memory with the committed Result; null for a Result Load admitted.
+// `legendRowFacts`: Python's Legend row facts of the Result (the rows it drew and the
+// keys no row draws), kept in memory with the committed Result; null for a Result Load admitted.
 /**
  * @param {FeatureCatalogAdmission} catalogAdmission @param {number} resultIndex @param {string} sourceClass
  * @param {readonly string[] | null} selectedFeatureTypes
@@ -560,7 +560,7 @@ const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass
     throw new Error('The admitted feature catalog is missing Result identity metadata.');
   }
   return Object.freeze({
-    renderedFeatureIdentities, sourceClass, selectedFeatureTypes, drawnLegendKeys: legendRows?.[resultIndex]?.drawn ?? null
+    renderedFeatureIdentities, sourceClass, selectedFeatureTypes, legendRowFacts: legendRows?.[resultIndex] ?? null
   });
 };
 
