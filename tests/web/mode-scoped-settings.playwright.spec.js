@@ -162,8 +162,8 @@ const saveAndLoadFresh = async (page, browser, path) => {
 };
 
 // OV-82 G5: a switch to a mode without a Depth file and back leaves Circular
-// Show Depth on; each switch is one History step.
-test('OV-82 G5: a round trip through a mode without Depth keeps Circular Show Depth on, one History step per switch', async ({ page }) => {
+// Show Depth on; a switch records no History step (PD-OI-090).
+test('OV-82 G5: a round trip through a mode without Depth keeps Circular Show Depth on and records no History step', async ({ page }) => {
   test.setTimeout(180_000);
   await openCircular(page);
   await setDepthFile(page, 'circular', 0, 'depth.tsv', depthTsv());
@@ -171,15 +171,10 @@ test('OV-82 G5: a round trip through a mode without Depth keeps Circular Show De
 
   const before = await undoCount(page);
   await switchMode(page, 'linear');
-  expect(await undoCount(page), 'the switch to Linear is one History step').toBe(before + 1);
   await switchMode(page, 'circular');
-  expect(await undoCount(page), 'the switch back is one History step').toBe(before + 2);
+  expect(await undoCount(page), 'the round trip records no step').toBe(before);
   expect(await readDrawings(page, { showDepth: 'form.show_depth' }), 'after the round trip')
     .toMatchObject({ mode: 'circular', circular: { showDepth: true } });
-
-  await historyStep(page, 'undo');
-  expect(await readDrawings(page, { showDepth: 'form.show_depth' }), 'Undo of the last switch')
-    .toMatchObject({ mode: 'linear', circular: { showDepth: true } });
 });
 
 // OV-82 G2: clearing the Linear Depth file leaves Circular Show Depth and its
@@ -661,8 +656,9 @@ test('per-mode samples: settings, palette, color rule, annotation set, Depth min
   expect(await read(), 'each mode keeps its own values').toEqual({ mode: 'circular', circular: circularEdited, linear: linearEdited });
 });
 
-// H1: Undo and Redo across a switch restore each step's mode and both drawings.
-test('H1: Undo and Redo of an edit, a switch, and an edit in the other mode restore each step', async ({ page }) => {
+// H1 (PD-OI-090): each drawing has its own History. Undo and Redo walk the
+// shown drawing's steps, never switch the drawing, and leave the other one.
+test('H1: Undo and Redo walk the shown drawing\'s steps across an edit, a switch, and an edit in the other mode', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
   const read = async () => {
@@ -674,22 +670,31 @@ test('H1: Undo and Redo of an edit, a switch, and an edit in the other mode rest
   await editStep(page, 'Circular label font size', { 'adv.label_font_size': 13 });
   const s1 = { mode: 'circular', circular: 13, linear: s0.linear };
   expect(await read(), 'after the Circular edit').toEqual(s1);
+  expect(await undoCount(page), 'one Circular step').toBe(before + 1);
   await switchMode(page, 'linear');
   const s2 = { ...s1, mode: 'linear' };
   expect(await read(), 'after the switch').toEqual(s2);
+  const linearBefore = await undoCount(page);
   await editStep(page, 'Linear label font size', { 'adv.label_font_size': 9 });
   const s3 = { ...s2, linear: 9 };
   expect(await read(), 'after the Linear edit').toEqual(s3);
-  expect(await undoCount(page), 'three History steps').toBe(before + 3);
+  expect(await undoCount(page), 'one Linear step').toBe(linearBefore + 1);
 
-  for (const [step, expected] of [['undo', s2], ['undo', s1], ['undo', s0], ['redo', s1], ['redo', s2], ['redo', s3]]) {
+  for (const [step, expected] of [['undo', s2], ['redo', s3]]) {
     await historyStep(page, step);
-    expect(await read(), `${step} to ${JSON.stringify(expected)}`).toEqual(expected);
+    expect(await read(), `Linear ${step} to ${JSON.stringify(expected)}`).toEqual(expected);
+  }
+  await switchMode(page, 'circular');
+  const s4 = { ...s3, mode: 'circular' };
+  for (const [step, expected] of [['undo', { ...s4, circular: s0.circular }], ['redo', s4]]) {
+    await historyStep(page, step);
+    expect(await read(), `Circular ${step} to ${JSON.stringify(expected)}`).toEqual(expected);
   }
 });
 
-// H2: Reset Settings resets both drawings, and one Undo restores both modes' edits.
-test('H2: one Undo of Reset Settings restores the edits of both modes', async ({ page }) => {
+// H2 (D-15-50): Reset Settings resets both drawings and is one step in each
+// drawing's History; an Undo restores the shown drawing's edits.
+test('H2: Reset Settings is one step in each drawing\'s History', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
   const fields = { size: 'adv.label_font_size', width: 'adv.axis_stroke_width' };
@@ -707,5 +712,36 @@ test('H2: one Undo of Reset Settings restores the edits of both modes', async ({
   await settleLive(page);
   expect(await readDrawings(page, fields), 'Reset Settings').toEqual({ ...initial, mode: 'linear' });
   await historyStep(page, 'undo');
-  expect(await readDrawings(page, fields), 'one Undo of Reset Settings').toEqual(edited);
+  expect(await readDrawings(page, fields), 'a Linear Undo of Reset Settings')
+    .toEqual({ ...edited, circular: initial.circular });
+  await switchMode(page, 'circular');
+  await historyStep(page, 'undo');
+  expect(await readDrawings(page, fields), 'a Circular Undo of Reset Settings').toEqual({ ...edited, mode: 'circular' });
+});
+
+// OV-1100 (R15-19 B, OIC-030): a drawing switch waits while a color rule table
+// edit is matched; the edit is one step of its own drawing.
+test('OV-1100: a switch waits for the Circular color rule being matched, which stays in Circular', async ({ page }) => {
+  test.setTimeout(240_000);
+  await bothResults(page);
+  await switchMode(page, 'circular');
+  const fields = { rules: 'manualSpecificRules', fills: 'featureColorOverrides' };
+  const before = await readDrawings(page, fields);
+  const circularSteps = await undoCount(page);
+  const outcome = await evaluateWithRetainedPromise(page, async (rule) => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, rule);
+    const adding = app.addSpecificRule();
+    const during = app.selectDrawing('linear');
+    await adding;
+    const after = app.selectDrawing('linear');
+    return { during: during?.status ?? during, after: after?.status ?? after };
+  }, SAMPLE_RULES.circular);
+  expect(outcome, 'refused while matched, then switched').toEqual({ during: 'busy', after: 'ok' });
+  await settleLive(page);
+  const after = await readDrawings(page, fields);
+  expect(ruleSummary(after.circular.rules), 'the Circular rule').toEqual([...ruleSummary(before.circular.rules), ruleSummary([SAMPLE_RULES.circular])[0]]);
+  expect(after.linear, 'Linear unchanged').toEqual(before.linear);
+  await switchMode(page, 'circular');
+  expect(await undoCount(page), 'one Circular step').toBe(circularSteps + 1);
 });

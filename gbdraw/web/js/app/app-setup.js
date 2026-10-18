@@ -426,6 +426,7 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
 });
 
 const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: 'Undo or Redo in progress. Retry after it finishes.' });
+const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule edit is being matched. Retry after it finishes.' });
 
 export const createAppSetup = () => {
   provide(SETTING_NOTE_APPLIES, committedLiveSettingApplies);
@@ -4282,9 +4283,12 @@ export const createAppSetup = () => {
   // A switch waits for Generate, a label rerender, Save and Load, so each
   // Result lands in its own drawing's slot (OIPC-C07), and for a History
   // restore or an open History transaction.
+  // OIC-030: also while a color rule table edit is matched, so that edit is
+  // one step of its drawing.
   const drawingSwitchBusy = () => sessionOperationAvailability('history')
     || history.historyAvailability()
-    || (history.restoring.value || history.traversalPending() ? HISTORY_RESTORE_BUSY : null);
+    || (history.restoring.value || history.traversalPending() ? HISTORY_RESTORE_BUSY : null)
+    || (featureActions.ruleWritePending() ? RULE_WRITE_BUSY : null);
   const drawingSwitchAvailable = computed(() => !drawingSwitchBusy());
   // `false` when the drawing is unknown or already shown, the busy reason
   // when a switch waits, else `{ status: 'ok' }`.

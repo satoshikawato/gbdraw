@@ -14,7 +14,7 @@ import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/service
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { evaluatePythonRules } from './helpers/python-evaluator.mjs';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
 // A feature-edits slice over a draft map, so a writer writes the map.
 const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
@@ -25,7 +25,7 @@ const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_S
  *   `createHistory`: the History manager the rule owner commits through (a recorder of its steps by default);
  *   the other options go to the rule owner (`askChoice`).
  */
-const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...options } = {}) => {
+const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = null, ...options } = {}) => {
   const state = {
     manualSpecificRules: [], extractedFeatures: { value: [
       { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
@@ -45,7 +45,9 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
     [...watchers].filter(entry => entry.source === state.labelReflowProcessing).forEach(entry => entry.callback(busy));
   };
   const transactions = [], transactionScopes = [];
-  const preparation = createRulePreparation({state: withDrawings(state), evaluate});
+  // `linear`: a second drawing; `state.mode.value` picks the shown one.
+  const view = linear ? withModeDrawings(Object.assign(state, { mode: { value: 'circular' } }), { circular: state, linear }) : withDrawings(state);
+  const preparation = createRulePreparation({state: view, evaluate});
   let prepareLegend = async () => {};
   let previousIntents = [];
   let openTransaction = null;
@@ -61,7 +63,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
     }
   };
   const history = createHistory?.(state);
-  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: withDrawings(state), rulePreparation:preparation,
+  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: view, rulePreparation:preparation,
     runUndoableCheckpoint: history?.runUndoableCheckpoint || transact('checkpoint'),
     runUndoable: history?.runUndoable || transact('intent'),
     prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents}) => {
@@ -1165,4 +1167,32 @@ test('saved rules and an imported color table are read without the color IDs of 
   assert.deepEqual(read.map(createRuleLegendCaptions(read)), ['Complex IV [#ffe700]', 'Complex IV [#1f77b4]', 'Complex I [#ffe700]']);
   const text = saved.map((rule) => [rule.feat, rule.qual, rule.val, rule.color, rule.cap].join('\t')).join('\n');
   assert.deepEqual(prepareSpecificColorImport(text).nextRules.map((rule) => rule.cap), ['Complex IV', 'Complex IV', 'Complex I [#ffe700]']);
+});
+
+// OV-1100 (R15-19 B, OIC-030): a rule commit writes the drawing it was made
+// in, also when the shown drawing changes while its rules are matched, and the
+// owner reports the write as pending until it ends, so a switch waits for it.
+test('a rule commit writes its own drawing and is pending until it ends', async () => {
+  const linear = {
+    manualSpecificRules: [], featureColorOverrides: { b: { color: '#abcdef', caption: 'Linear fill' } },
+    featureOverrides: {}, addedLegendCaptions: { value: new Set() }, legendEntries: { value: [] },
+    legendColorOverrides: {}, newSpecRule: { feat: 'CDS', qual: 'gene', val: 'a', color: '#000000', cap: '' }
+  };
+  const s = setup(evaluatePythonRules, { linear });
+  let release, started;
+  const ready = new Promise(resolve => { started = resolve; });
+  s.setLegendPreparation(() => new Promise(resolve => { release = resolve; started(); }));
+  assert.equal(s.actions.ruleWritePending(), false);
+  const pending = s.actions.commitSpecificRules(() => [{ feat: 'CDS', qual: 'gene', val: 'b', color: '#112233', cap: 'B' }]);
+  await ready;
+  assert.equal(s.actions.ruleWritePending(), true, 'a switch waits for the rule being matched');
+  s.state.mode.value = 'linear';
+  s.setLegendPreparation(async () => {});
+  release();
+  await pending;
+  assert.equal(s.actions.ruleWritePending(), false);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap), ['B'], 'the Circular rules');
+  assert.equal(s.state.featureColorOverrides.b?.color, '#112233', 'the Circular fill');
+  assert.deepEqual(linear.manualSpecificRules, []);
+  assert.deepEqual(linear.featureColorOverrides, { b: { color: '#abcdef', caption: 'Linear fill' } }, 'the Linear fill is kept');
 });

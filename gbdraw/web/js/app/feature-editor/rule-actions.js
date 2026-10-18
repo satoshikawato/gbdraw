@@ -337,6 +337,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   let appliedWrites = 0;
   /** @type {Set<{ cancelled: () => boolean, leave: () => void }>} */
   const cancellableWrites = new Set();
+  // OV-1100 (R15-19 B, OIC-030): the writes on the line that have not left
+  // it. A drawing switch waits while one is matched (`ruleWritePending`).
+  const writesOnLine = ref(0);
   /**
    * @template T
    * @param {() => Promise<T>} write Runs at the write's turn.
@@ -347,7 +350,15 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (!cancelled) patternDrafts.suspend();
     const turn = writeLine.then(write);
     const entry = { cancelled: cancelled || (() => false), leave: () => {} };
-    writeLine = Promise.all([writeLine, new Promise((resolve) => { entry.leave = () => resolve(undefined); })]);
+    writesOnLine.value += 1;
+    writeLine = Promise.all([writeLine, new Promise((resolve) => {
+      let left = false;
+      entry.leave = () => {
+        if (!left) writesOnLine.value -= 1;
+        left = true;
+        resolve(undefined);
+      };
+    })]);
     cancellableWrites.add(entry);
     const settle = () => { cancellableWrites.delete(entry); entry.leave(); };
     turn.then(settle, settle);
@@ -491,7 +502,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
         ...intents.map(intent => intent.caption)
       ]);
-      refreshFeatureOverrides(extractedFeatures.value);
+      refreshFeatureOverrides(drawing, extractedFeatures.value);
       supersededLegendColors(drawing, intents, removedRuleRows).forEach((key) => setLegendColor(drawing.slices.paint, key, null));
       afterCommit(intents);
       applied = true;
@@ -957,9 +968,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     };
   };
 
-  /** @param {ColorFeature[] | null | undefined} features */
-  const refreshFeatureOverrides = (features) => {
-    const drawing = state.activeDrawing();
+  /** @param {DrawingState} drawing @param {ColorFeature[] | null | undefined} features */
+  const refreshFeatureOverrides = (drawing, features) => {
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
     if (!features || features.length === 0 || !ruleMatches.ready(features)) return;
     // Edits stored under a legacy feature key move to the feature's key first.
@@ -1077,6 +1087,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       return commitPrepared(drawing, () => [], 'Clear specific color rules');
     },
     commitSpecificRules,
+    /** Whether a rule table write is waiting or being matched (OIC-030). */
+    ruleWritePending: () => writesOnLine.value > 0,
     importSpecificRules,
     followRestoredRules,
     countFeaturesMatchingRule,

@@ -378,7 +378,9 @@ test('an added row deleted in its mode stays deleted and never reaches the other
   await expectShownAsGenerated(page, CIRCULAR_ROWS, 'the next Circular Generate');
 });
 
-test('Undo and Redo walk a Generate in each mode across the switch between them', async ({ page }) => {
+// PD-OI-090: each drawing has its own History, so Undo and Redo walk the
+// shown drawing's Generate and never switch the drawing.
+test('Undo and Redo walk the Generate of the shown drawing only', async ({ page }) => {
   test.setTimeout(240_000);
   await openBothSources(page);
   await generate(page);
@@ -391,14 +393,16 @@ test('Undo and Redo walk a Generate in each mode across the switch between them'
 
   await history(page, 'undo');
   await expectEmptyPreview(page, 'linear');
-  await history(page, 'undo');
-  expect(await shown(page)).toMatchObject({ mode: 'circular', identity: g1.identity, mounted: true });
-  await history(page, 'redo');
-  await expectEmptyPreview(page, 'linear');
   await history(page, 'redo');
   expect(await shown(page)).toMatchObject({ mode: 'linear', identity: g2.identity, mounted: true });
   await showMode(page, 'circular');
   expect(await shown(page)).toMatchObject({ mode: 'circular', identity: g1.identity, mounted: true });
+  await history(page, 'undo');
+  await expectEmptyPreview(page, 'circular');
+  await history(page, 'redo');
+  expect(await shown(page)).toMatchObject({ mode: 'circular', identity: g1.identity, mounted: true });
+  await showMode(page, 'linear');
+  expect(await shown(page)).toMatchObject({ mode: 'linear', identity: g2.identity, mounted: true });
 });
 
 test('a failed Linear Generate keeps both Results', async ({ page }) => {
@@ -691,12 +695,8 @@ test('a CLI re-saved Session opens on its shown mode with each Result in its own
   const linear = await holds('switch to Linear');
   expect(linear).toMatchObject({ mode: 'linear', count: 1, mounted: true });
   expect(await drawing(page, linear.content)).toEqual(await drawing(page, session.results[0].content));
-  await history(page, 'undo');
-  expect((await holds('Undo of the switch')).identity).toBe(circular.identity);
-  await history(page, 'redo');
-  expect((await holds('Redo of the switch')).identity).toBe(linear.identity);
   await showMode(page, 'circular');
-  await holds('switch back');
+  expect((await holds('switch back')).identity).toBe(circular.identity);
   const resaved = await save(page, info.outputPath('web-resaved.gbdraw-session.json.gz'));
   expect(resaved.ui.mode).toBe('circular');
   expect(resaved.renderRequest.mode).toBe('circular');
@@ -807,9 +807,9 @@ test('the mode switch waits for Undo and Redo', async ({ page }) => {
   await expectEmptyPreview(page, 'circular');
 });
 
-// REVIEW-2 P-a: an Undo or Redo of a mode switch waits for a label rerender,
-// as the mode buttons do.
-test('an Undo of a mode switch waits for a label rerender', async ({ page }) => {
+// REVIEW-2 P-a: an Undo waits for a label rerender, as the mode buttons do,
+// and never switches the drawing (PD-OI-090).
+test('an Undo waits for a label rerender and stays in the shown drawing', async ({ page }) => {
   test.setTimeout(300_000);
   await bothResults(page);
   await showMode(page, 'circular');
@@ -831,7 +831,7 @@ test('an Undo of a mode switch waits for a label rerender', async ({ page }) => 
   expect(attempt).toMatchObject({ rerendering: true, undo: { status: 'busy' }, mode: 'circular' });
   await settleLive(page);
   await history(page, 'undo');
-  expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
+  expect(await shown(page)).toMatchObject({ mode: 'circular' });
 });
 
 // REVIEW-2 R: a Load that fails inside its commit rolls back and leaves the

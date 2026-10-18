@@ -715,9 +715,9 @@ export const createLegendEntryActions = ({
   // The Legend color of the rows of `keys`: the drawing's override of each key
   // and the color of each listed row of them (D-35: the keys a merged row
   // stands for, `legendRowKeys`).
-  /** @param {readonly PythonLegendKey[]} keys @param {string} color */
-  const writeLegendRowColor = (keys, color) => {
-    recolorLegendRows(state.activeDrawing().slices.paint, keys, color);
+  /** @param {DrawingState} drawing @param {readonly PythonLegendKey[]} keys @param {string} color */
+  const writeLegendRowColor = (drawing, keys, color) => {
+    recolorLegendRows(drawing.slices.paint, keys, color);
   };
 
   // A Legend row color writes the editor intent only; the composition root
@@ -732,7 +732,7 @@ export const createLegendEntryActions = ({
     const entry = drawing.legendEntries.value[idx];
     if (!entry?.caption) return false;
     if (normalizedColor(readShownLegendColor(entry)) === normalizedColor(newColor)) return false;
-    writeLegendRowColor(legendRowKeys(svgContainer.value?.querySelector?.('svg'), legendEntryKey(entry)), newColor);
+    writeLegendRowColor(drawing, legendRowKeys(svgContainer.value?.querySelector?.('svg'), legendEntryKey(entry)), newColor);
     return true;
   };
 

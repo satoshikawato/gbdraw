@@ -144,7 +144,7 @@ import {
 
 /**
  * The Legend color of the rows of some keys (the Legend owner's `writeLegendRowColor`, D-35).
- * @typedef {(keys: readonly PythonLegendKey[], color: string) => void} WriteLegendRowColorPort
+ * @typedef {(drawing: DrawingState, keys: readonly PythonLegendKey[], color: string) => void} WriteLegendRowColorPort
  */
 /**
  * Whether `typed` names the Legend row that shows the key `caption`: its key, its name, or the name
@@ -1250,7 +1250,7 @@ export const createFeatureColorActions = ({
     const rowRuleSet = new Set(rowRules);
     return commitRuleWrite((current, revise) => current.filter(rule => !(rowRuleSet.has(rule) && coveredExactly(rule)))
       .map(rule => (rowRuleSet.has(rule) ? revise(rule, { color }) : rule)), 'Change legend color',
-    { drawing, afterCommit: () => { if (legendOnly.length) writeLegendRowColor(legendOnly, color); } });
+    { drawing, afterCommit: () => { if (legendOnly.length) writeLegendRowColor(drawing, legendOnly, color); } });
   };
 
   /**
@@ -1463,7 +1463,7 @@ export const createFeatureColorActions = ({
         setLegendColor(drawing.slices.paint, /** @type {PythonLegendKey} */ (defaultColorType), null);
         setDefaultColor(drawing, defaultColorType, color);
         const merged = keys.filter((key) => key !== defaultColorType);
-        if (merged.length && !(await applyColorToLegendSpecificRules(drawing, merged, color))) writeLegendRowColor(merged, color);
+        if (merged.length && !(await applyColorToLegendSpecificRules(drawing, merged, color))) writeLegendRowColor(drawing, merged, color);
       } else if (!(await applyColorToLegendSpecificRules(drawing, keys, color))) {
         const siblings = keys.flatMap((key) => findFeaturesWithSameLegendItem(feat, key));
         await applyColorToFeatureGroup(drawing, [feat, ...siblings], legendRowName(targetLegendName), color);
