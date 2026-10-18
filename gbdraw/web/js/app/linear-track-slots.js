@@ -14,7 +14,8 @@ import {
   normalizeOptionalText
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
-import { nextCopyId, nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+/** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
   applyLinearTrackOrderPlacements,
@@ -139,7 +140,7 @@ export const buildLinearTrackSlotSpec = (slot, { includeEnabled = false, include
     if (Array.isArray(params.marks) && params.marks.length > 0) {
       parts.push(`marks=${params.marks.join('|')}`);
     }
-    ['set_id', 'lane_gap_px', 'padding_px', 'overflow', 'anchor_slot', 'layer'].forEach((key) => {
+    ['set_id', 'lane_gap_px', 'padding_px', 'overflow', 'anchor_slot', 'to_slot', 'layer'].forEach((key) => {
       if (normalizeOptionalText(params[key])) parts.push(`${key}=${String(params[key]).trim()}`);
     });
     parts.push(`show_labels=${params.show_labels === false ? 'false' : 'true'}`);
@@ -277,15 +278,21 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     );
   };
 
-  /** @param {OptionalLinearSlot} [slot] */
-  const linearAnnotationAnchorOptions = (slot = null) => (
+  /**
+   * The slots an Overlay annotation row may name: for its anchor, every
+   * enabled slot with a band; for Extend to, the same without its anchor.
+   * @param {OptionalLinearSlot} [slot]
+   * @param {OverlaySlotReference} [key]
+   */
+  const linearAnnotationAnchorOptions = (slot = null, key = 'anchor_slot') => (
     state.drawings.linear.adv.linear_track_slots
       .filter((/** @type {OptionalLinearSlot} */ candidate) => (
         candidate &&
         candidate !== slot &&
         candidate.enabled !== false &&
         !['annotations', 'spacer'].includes(normalizeRenderer(candidate.renderer)) &&
-        String(candidate.id || '').trim()
+        String(candidate.id || '').trim() &&
+        (key !== 'to_slot' || String(candidate.id).trim() !== String(slot?.params?.anchor_slot || '').trim())
       ))
       .map((/** @type {LinearTrackSlot} */ candidate) => ({ // the filter above drops a missing row
         id: String(candidate.id).trim(),
@@ -293,10 +300,10 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
       }))
   );
 
-  /** @param {OptionalLinearSlot} slot */
-  const linearAnnotationAnchorIsKnown = (slot) => {
-    const anchor = String(slot?.params?.anchor_slot || '').trim();
-    return !anchor || linearAnnotationAnchorOptions(slot).some((/** @type {{ id: string }} */ option) => option.id === anchor);
+  /** @param {OptionalLinearSlot} slot @param {OverlaySlotReference} [key] */
+  const linearAnnotationAnchorIsKnown = (slot, key = 'anchor_slot') => {
+    const reference = String(slot?.params?.[key] || '').trim();
+    return !reference || linearAnnotationAnchorOptions(slot, key).some((/** @type {{ id: string }} */ option) => option.id === reference);
   };
 
   /** @param {OptionalLinearSlot} slot */
@@ -656,8 +663,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     if (targetPlacement === 'overlay' && !['features', 'annotations'].includes(movingRenderer)) return;
     if (movingRenderer === 'annotations' && targetPlacement !== 'overlay') {
       movingSlot.params = cloneParams(movingSlot.params);
-      delete movingSlot.params.anchor_slot;
-      delete movingSlot.params.cover_anchor;
+      OVERLAY_ANNOTATION_PARAMS.forEach((key) => { delete movingSlot.params[key]; });
     }
     if (targetPlacement === 'overlay' && movingRenderer === 'annotations') {
       syncLinearSlotPlacementFromSide(movingSlot, 'overlay');
@@ -785,8 +791,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
       if (normalizePlacement(placement) === 'overlay') {
         bindOnlyLinearAnnotationAnchor(slot);
       } else {
-        delete slot.params.anchor_slot;
-        delete slot.params.cover_anchor;
+        OVERLAY_ANNOTATION_PARAMS.forEach((key) => { delete slot.params[key]; });
       }
     }
     normalizeCurrentSlots();

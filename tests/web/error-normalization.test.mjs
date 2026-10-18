@@ -225,6 +225,45 @@ assert.throws(() => assertValidCustomTrackPlan(trackPlan), error => {
   return true;
 });
 assert.equal(roundtrip(new CustomTrackPlanValidationError([{ code: 'new-unmapped-issue', message: 'PRIVATE_MSG' }])).code, 'VALIDATION_UNCLASSIFIED');
+// The binding check of Session import and Generate names the row of a same-slot
+// Extend to, as the editor's row issue does (R6).
+const { validateTrackSlotBindingInvariants } = await import('../../gbdraw/web/js/services/track-slot-validation.js');
+assert.throws(() => validateTrackSlotBindingInvariants([
+  { id: 'PRIVATE_FEATURES', renderer: 'features', enabled: true, side: 'overlay', z: 0, params: {} },
+  { id: 'PRIVATE_SPAN', renderer: 'annotations', enabled: true, side: 'overlay', z: -1,
+    params: { set_id: 'PRIVATE_SET', anchor_slot: 'PRIVATE_FEATURES', to_slot: 'PRIVATE_FEATURES', layer: 'underlay' } }
+], { modeLabel: 'Linear', layoutKind: 'linear', supportedRenderers: ['features', 'annotations'],
+  supportedSides: ['above', 'below', 'overlay'], anchorlessRenderers: ['spacer'] }), error => {
+  const model = roundtrip(error);
+  assert.equal(model.code, 'TRACK_INVALID');
+  assert.deepEqual(model.context, { reason: 'OVERLAY_SPAN', field: 'to_slot', slotIndex: 1 });
+  assert.match(model.summary, /Track row 2/);
+  assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+  return true;
+});
+// Extend to (to_slot): each row issue is a classified TRACK_INVALID that names
+// the field and a correction; the slot IDs stay out of the model.
+for (const [toSlot, extra, reason, field] of [
+  ['PRIVATE_MISSING', {}, 'OVERLAY_SPAN', 'to_slot'],
+  ['PRIVATE_FEATURES', {}, 'OVERLAY_SPAN', 'to_slot'],
+  ['PRIVATE_NOTES', {}, 'OVERLAY_SPAN', 'to_slot'],
+  ['PRIVATE_GC', { side: 'below' }, 'OVERLAY_SIDE', 'side']
+]) {
+  const spanPlan = validateCustomTrackPlan({ mode: 'linear', axisIndex: 0, annotationSetIds: ['PRIVATE_SET'], slots: [
+    { id: 'PRIVATE_FEATURES', renderer: 'features', enabled: true, side: 'overlay', z: 0, params: {} },
+    { id: 'PRIVATE_GC', renderer: 'dinucleotide_content', enabled: true, side: 'below', z: 0, params: {} },
+    { id: 'PRIVATE_NOTES', renderer: 'annotations', enabled: true, side: 'below', z: 1, params: { set_id: 'PRIVATE_SET' } },
+    { id: 'PRIVATE_SPAN', renderer: 'annotations', enabled: true, side: 'overlay', z: -1, ...extra,
+      params: { set_id: 'PRIVATE_SET', ...(extra.side ? {} : { anchor_slot: 'PRIVATE_FEATURES' }), to_slot: toSlot, layer: 'underlay' } }
+  ] });
+  assert.throws(() => assertValidCustomTrackPlan(spanPlan), error => {
+    const model = roundtrip(error);
+    assert.equal(model.code, 'TRACK_INVALID', toSlot);
+    assert.deepEqual(model.context, { reason, field, slotIndex: 3 }, toSlot);
+    assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+    return true;
+  });
+}
 
 const glyphModel = roundtrip(new Error('PDF fonts do not contain U+4E00. Use SVG to retain this text.'));
 assert.equal(glyphModel.code, 'PDF_GLYPH');

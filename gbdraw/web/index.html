@@ -3916,6 +3916,14 @@
                                                             <input type="checkbox" :checked="linearAnnotationCoverAnchor(entry.slot)" :aria-label="`Linear track slot ${entry.slot.id} Cover anchor`" @change="setLinearAnnotationCoverAnchor(entry.slot, $event.target.checked)" :disabled="!semanticMutationAvailable">
                                                             Cover anchor
                                                         </label>
+                                                        <div v-if="entry.slot.side === 'overlay'" class="track-slot-field">
+                                                            <span class="track-slot-field-label">Extend to <help-tip :id="`help-linear-slot-extend-to-${entry.index}`" text="Stretch the overlay from its anchor to this slot, over every slot between them (to_slot). None: the overlay's own band."></help-tip></span>
+                                                            <select v-model="entry.slot.params.to_slot" :aria-label="`Linear track slot ${entry.slot.id} Extend to`" :aria-describedby="`help-linear-slot-extend-to-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
+                                                                <option :value="undefined">None</option>
+                                                                <option v-if="!linearAnnotationAnchorIsKnown(entry.slot, 'to_slot') && entry.slot.params.to_slot" :value="entry.slot.params.to_slot">Invalid: {{ entry.slot.params.to_slot }}</option>
+                                                                <option v-for="option in linearAnnotationAnchorOptions(entry.slot, 'to_slot')" :key="`linear-extend-to-${linearTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
+                                                            </select>
+                                                        </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">lane gap <help-tip :id="`help-linear-slot-lane-gap-${entry.index}`" text="Gap between annotation lanes in pixels. Default: 3."></help-tip></span>
                                                             <input type="number" min="0" step="0.5" :value="linearAnnotationLaneGapValue(entry.slot)" @input="setLinearAnnotationLaneGap(entry.slot, $event.target.value)" :disabled="!semanticMutationAvailable" :aria-label="`Linear track slot ${entry.slot.id} Lane gap`" :aria-describedby="`help-linear-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
@@ -4302,6 +4310,14 @@
                                                             <input type="checkbox" :checked="circularAnnotationCoverAnchor(entry.slot)" :aria-label="`Circular track slot ${entry.slot.id} Cover anchor`" @change="setCircularAnnotationCoverAnchor(entry.slot, $event.target.checked)" :disabled="!semanticMutationAvailable">
                                                             Cover anchor
                                                         </label>
+                                                        <div v-if="entry.slot.side === 'overlay'" class="track-slot-field">
+                                                            <span class="track-slot-field-label">Extend to <help-tip :id="`help-circular-slot-extend-to-${entry.index}`" text="Stretch the overlay from its anchor to this slot, over every slot between them (to_slot). None: the overlay's own band."></help-tip></span>
+                                                            <select v-model="entry.slot.params.to_slot" :aria-label="`Circular track slot ${entry.slot.id} Extend to`" :aria-describedby="`help-circular-slot-extend-to-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
+                                                                <option :value="undefined">None</option>
+                                                                <option v-if="!circularAnnotationAnchorIsKnown(entry.slot, 'to_slot') && entry.slot.params.to_slot" :value="entry.slot.params.to_slot">Invalid: {{ entry.slot.params.to_slot }}</option>
+                                                                <option v-for="option in circularAnnotationAnchorOptions(entry.slot, 'to_slot')" :key="`circular-extend-to-${circularTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
+                                                            </select>
+                                                        </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">lane gap <help-tip :id="`help-circular-slot-lane-gap-${entry.index}`" text="Gap between annotation lanes in pixels. Default: 3."></help-tip></span>
                                                             <input type="number" min="0" step="0.5" :value="circularAnnotationLaneGapValue(entry.slot)" @input="setCircularAnnotationLaneGap(entry.slot, $event.target.value)" :disabled="!semanticMutationAvailable" :aria-label="`Circular track slot ${entry.slot.id} Lane gap`" :aria-describedby="`help-circular-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">

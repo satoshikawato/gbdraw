@@ -6,7 +6,7 @@
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
-import { normalizeAnnotationSlotParams, parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
+import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
 import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -1055,37 +1055,6 @@ export const parseCircularTrackSlotSpecs = (specs, defaultNt = 'GC', preset = 't
     ? specs.map((spec, index) => parseCircularTrackSlotSpec(spec, index, defaultNt, preset))
     : []
 );
-
-/**
- * @param {Record<string, unknown>} params
- * @returns {Record<string, unknown>}
- */
-const canonicalAnnotationParams = (params) => {
-  const next = { ...params };
-  if (!Array.isArray(next.marks) || next.marks.length === 0) {
-    delete next.marks;
-  } else {
-    next.marks = Array.from(new Set(
-      next.marks.map((mark) => String(mark || '').trim().toLowerCase()).filter(Boolean)
-    ));
-  }
-  const laneGap = next.lane_gap_px === null || next.lane_gap_px === undefined || next.lane_gap_px === ''
-    ? null
-    : Number(next.lane_gap_px);
-  if (laneGap === null || laneGap === 3) delete next.lane_gap_px;
-  else next.lane_gap_px = laneGap;
-  const padding = next.padding_px === null || next.padding_px === undefined || next.padding_px === ''
-    ? null
-    : Number(next.padding_px);
-  if (padding === null || padding === 2) delete next.padding_px;
-  else next.padding_px = padding;
-  if (next.cover_anchor !== true) delete next.cover_anchor;
-  if (String(next.overflow || '').trim().toLowerCase() === 'error') delete next.overflow;
-  if (next.show_labels !== false) delete next.show_labels;
-  if (String(next.layer || '').trim().toLowerCase() === 'foreground') delete next.layer;
-  if (!String(next.anchor_slot || '').trim()) delete next.anchor_slot;
-  return next;
-};
 
 /**
  * @param {Pick<CircularTrackSlot, 'renderer' | 'params'>} slot

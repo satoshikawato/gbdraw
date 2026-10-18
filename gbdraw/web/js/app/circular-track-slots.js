@@ -28,6 +28,7 @@ import {
 import { featureSlotEdits } from './track-slot-edits.js';
 import { ownEntry } from '../utils/own-entry.js';
 import {
+  OVERLAY_ANNOTATION_PARAMS,
   nextCopyId,
   nextNumberedId,
   paramsKeptOnRendererChange,
@@ -68,7 +69,7 @@ import {
   tickLabelLayoutFromSides
 } from '../services/circular-track-slot-model.js';
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
-/** @import { TrackSlotRow } from '../services/track-slot-validation.js' */
+/** @import { OverlaySlotReference, TrackSlotRow } from '../services/track-slot-validation.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { DepthFileSlots } from '../services/depth-track-state.js' */
 
@@ -417,6 +418,7 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
     appendOption(options, 'overflow', params.overflow);
     appendOption(options, 'show_labels', params.show_labels === false ? 'false' : 'true');
     appendOption(options, 'anchor_slot', params.anchor_slot);
+    appendOption(options, 'to_slot', params.to_slot);
     appendOption(options, 'layer', params.layer);
     if (params.cover_anchor === true) {
       appendOption(options, 'cover_anchor', 'true');
@@ -765,17 +767,21 @@ export const createCircularTrackSlotEditor = ({
   };
 
   /**
+   * The slots an Overlay annotation row may name: for its anchor, every
+   * enabled slot with a band; for Extend to, the same without its anchor.
    * @param {CircularTrackSlot | null} [slot]
+   * @param {OverlaySlotReference} [key]
    * @returns {{ id: string, label: string }[]}
    */
-  const circularAnnotationAnchorOptions = (slot = null) => (
+  const circularAnnotationAnchorOptions = (slot = null, key = 'anchor_slot') => (
     state.drawings.circular.adv.circular_track_slots
       .filter((/** @type {CircularTrackSlot} */ candidate) => (
         candidate &&
         candidate !== slot &&
         candidate.enabled !== false &&
         !['annotations', 'ticks', 'spacer'].includes(String(candidate.renderer || '').trim()) &&
-        String(candidate.id || '').trim()
+        String(candidate.id || '').trim() &&
+        (key !== 'to_slot' || String(candidate.id).trim() !== String(slot?.params?.anchor_slot || '').trim())
       ))
       .map((/** @type {CircularTrackSlot} */ candidate) => ({
         id: String(candidate.id).trim(),
@@ -783,10 +789,10 @@ export const createCircularTrackSlotEditor = ({
       }))
   );
 
-  /** @param {CircularTrackSlot | null | undefined} slot */
-  const circularAnnotationAnchorIsKnown = (slot) => {
-    const anchor = String(slot?.params?.anchor_slot || '').trim();
-    return !anchor || circularAnnotationAnchorOptions(slot).some((option) => option.id === anchor);
+  /** @param {CircularTrackSlot | null | undefined} slot @param {OverlaySlotReference} [key] */
+  const circularAnnotationAnchorIsKnown = (slot, key = 'anchor_slot') => {
+    const reference = String(slot?.params?.[key] || '').trim();
+    return !reference || circularAnnotationAnchorOptions(slot, key).some((option) => option.id === reference);
   };
 
   /** @param {CircularTrackSlot | null | undefined} slot */
@@ -1316,8 +1322,7 @@ export const createCircularTrackSlotEditor = ({
     const directOverlaySlot = drawing.adv.circular_track_slots[idx];
     if (directOverlaySlot?.renderer === 'annotations' && targetPlacement !== 'overlay') {
       directOverlaySlot.params = cloneParams(directOverlaySlot.params);
-      delete directOverlaySlot.params.anchor_slot;
-      delete directOverlaySlot.params.cover_anchor;
+      OVERLAY_ANNOTATION_PARAMS.forEach((key) => { delete directOverlaySlot.params[key]; });
     }
     if (targetPlacement === 'overlay' && directOverlaySlot?.renderer === 'annotations') {
       syncSlotPlacementFromSide(directOverlaySlot, 'overlay');
@@ -1599,8 +1604,7 @@ export const createCircularTrackSlotEditor = ({
       if (normalizePlacement(placement) === 'overlay') {
         bindOnlyCircularAnnotationAnchor(slot);
       } else {
-        delete slot.params.anchor_slot;
-        delete slot.params.cover_anchor;
+        OVERLAY_ANNOTATION_PARAMS.forEach((key) => { delete slot.params[key]; });
       }
     }
     normalizeSlotsInPlace();

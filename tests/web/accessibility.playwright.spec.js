@@ -463,6 +463,40 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
+// R12 for the Extend to select of an Overlay annotation row (to_slot): its
+// name is its visible label with the slot id, and its help tip is a reachable
+// disclosure that the select references.
+for (const mode of ['circular', 'linear']) {
+  test(`${mode} Overlay annotation row names its Extend to select and help tip`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await loadMode(page, mode);
+    await page.evaluate(async (diagramMode) => {
+      const app = window.__GBDRAW_APP__;
+      const slots = app.adv[`${diagramMode}_track_slots`];
+      slots.push({ id: 'regions', renderer: 'annotations', enabled: true, side: 'overlay', z: -1,
+        params: { set_id: app.annotationSets[0].id, anchor_slot: 'features', layer: 'underlay' },
+        ...(diagramMode === 'circular'
+          ? { width: null, radius: null, inner_gap_px: null, outer_gap_px: null }
+          : { height: '', spacing: '' }) });
+      await window.Vue.nextTick();
+    }, mode);
+    const Mode = mode === 'circular' ? 'Circular' : 'Linear';
+    const select = page.getByRole('combobox', { name: `${Mode} track slot regions Extend to`, exact: true });
+    await expect(select).toHaveCount(1);
+    await expect(select).toBeVisible();
+    await expect(select).toHaveAccessibleDescription(/Stretch the overlay from its anchor to this slot/);
+    const field = select.locator('xpath=..');
+    await expect(field.locator('.track-slot-field-label')).toHaveText(/^\s*Extend to/);
+    await expect(field.getByRole('button', { name: /^Help: .*Extend to$/ })).toHaveCount(1);
+    const audit = await auditPage(page);
+    expect(audit.unnamed, 'controls without an author-provided name').toEqual([]);
+    expect(audit.tips, 'help tips that are not reachable disclosures').toEqual([]);
+    expect(audit.duplicateIds, 'duplicate ids').toEqual([]);
+    expect(audit.danglingDescriptions, 'aria-describedby without a target').toEqual([]);
+  });
+}
+
 // UI-12 (Owner decision 2026-10-07): Generate Diagram is the last stop of the
 // settings panel in Tab order, and the bar stays fixed at the bottom, in the
 // stacked settings, in the icon rail with a docked section, and in the rail alone.

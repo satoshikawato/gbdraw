@@ -7,7 +7,7 @@ import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
-import { normalizeAnnotationSlotParams, parseOptionalPixel } from './track-slot-validation.js';
+import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalPixel } from './track-slot-validation.js';
 import { noteReplacedLeaf } from '../utils/field-reading.js';
 
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
@@ -434,34 +434,6 @@ const linearScalarPayload = (value, fieldName, { allowZero }) => {
   return numeric === null ? null : { value: numeric, unit: 'px' };
 };
 
-/** @param {LinearTrackSlotParams} params */
-const canonicalLinearAnnotationParams = (params) => {
-  const next = { ...params };
-  if (!Array.isArray(next.marks) || next.marks.length === 0) {
-    delete next.marks;
-  } else {
-    next.marks = Array.from(new Set(
-      next.marks.map((mark) => String(mark || '').trim().toLowerCase()).filter(Boolean)
-    ));
-  }
-  const laneGap = next.lane_gap_px === null || next.lane_gap_px === undefined || next.lane_gap_px === ''
-    ? null
-    : Number(next.lane_gap_px);
-  if (laneGap === null || laneGap === 3) delete next.lane_gap_px;
-  else next.lane_gap_px = laneGap;
-  const padding = next.padding_px === null || next.padding_px === undefined || next.padding_px === ''
-    ? null
-    : Number(next.padding_px);
-  if (padding === null || padding === 2) delete next.padding_px;
-  else next.padding_px = padding;
-  if (next.cover_anchor !== true) delete next.cover_anchor;
-  if (String(next.overflow || '').trim().toLowerCase() === 'error') delete next.overflow;
-  if (next.show_labels !== false) delete next.show_labels;
-  if (String(next.layer || '').trim().toLowerCase() === 'foreground') delete next.layer;
-  if (!String(next.anchor_slot || '').trim()) delete next.anchor_slot;
-  return next;
-};
-
 /** @param {{ params?: unknown, renderer?: unknown } | null | undefined} slot */
 const canonicalLinearParams = (slot) => {
   const params = cloneParams(slot?.params);
@@ -470,7 +442,7 @@ const canonicalLinearParams = (slot) => {
       delete params[key];
     }
   });
-  if (slot?.renderer === 'annotations') return canonicalLinearAnnotationParams(params);
+  if (slot?.renderer === 'annotations') return canonicalAnnotationParams(params);
   return params;
 };
 

@@ -1,6 +1,7 @@
 // @ts-check
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { noteReplacedLeaf } from '../utils/field-reading.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 
@@ -243,6 +244,60 @@ export const normalizeAnnotationSlotParams = (params, at, losses = null) => {
   } else if (params.cover_anchor === false || String(params.cover_anchor).toLowerCase() === 'false') {
     delete params.cover_anchor;
   }
+};
+
+/**
+ * A slot an Overlay annotation slot names by id (Python
+ * `_OVERLAY_SLOT_REFERENCES`, gbdraw/tracks/parsing.py): `anchor_slot` is the
+ * slot it is drawn on, `to_slot` (Extend to) the slot its span reaches.
+ * @typedef {'anchor_slot' | 'to_slot'} OverlaySlotReference
+ */
+/**
+ * Each reference with its name in the binding check's messages (Python's
+ * wording), its issue codes (`annotation_<code>_unknown`, ...) and its name in
+ * the editor's row issues.
+ * @type {ReadonlyArray<{ key: OverlaySlotReference, role: string, code: string, label: string }>}
+ */
+const OVERLAY_SLOT_REFERENCES = Object.freeze([
+  { key: 'anchor_slot', role: 'anchor', code: 'anchor', label: 'anchor' },
+  { key: 'to_slot', role: 'to_slot', code: 'to_slot', label: 'Extend to slot' }
+]);
+/** The params only an Overlay annotation slot keeps: leaving Overlay drops them. */
+export const OVERLAY_ANNOTATION_PARAMS = Object.freeze(['anchor_slot', 'to_slot', 'cover_anchor']);
+
+/**
+ * An annotation slot's params as both modes write them to the request: a
+ * default or an empty value is left out.
+ * @param {Record<string, unknown>} params
+ * @returns {Record<string, unknown>}
+ */
+export const canonicalAnnotationParams = (params) => {
+  const next = { ...params };
+  if (!Array.isArray(next.marks) || next.marks.length === 0) {
+    delete next.marks;
+  } else {
+    next.marks = Array.from(new Set(
+      next.marks.map((mark) => String(mark || '').trim().toLowerCase()).filter(Boolean)
+    ));
+  }
+  const laneGap = next.lane_gap_px === null || next.lane_gap_px === undefined || next.lane_gap_px === ''
+    ? null
+    : Number(next.lane_gap_px);
+  if (laneGap === null || laneGap === 3) delete next.lane_gap_px;
+  else next.lane_gap_px = laneGap;
+  const padding = next.padding_px === null || next.padding_px === undefined || next.padding_px === ''
+    ? null
+    : Number(next.padding_px);
+  if (padding === null || padding === 2) delete next.padding_px;
+  else next.padding_px = padding;
+  if (next.cover_anchor !== true) delete next.cover_anchor;
+  if (String(next.overflow || '').trim().toLowerCase() === 'error') delete next.overflow;
+  if (next.show_labels !== false) delete next.show_labels;
+  if (String(next.layer || '').trim().toLowerCase() === 'foreground') delete next.layer;
+  OVERLAY_SLOT_REFERENCES.forEach(({ key }) => {
+    if (!String(next[key] || '').trim()) delete next[key];
+  });
+  return next;
 };
 
 /**
@@ -494,8 +549,11 @@ export const validateTrackSlotBindingInvariants = (
       if (side === 'overlay' && !anchorId) {
         throw new Error(`${modeLabel} annotation slot '${id}' with side=overlay requires anchor_slot.`);
       }
-      if (side !== 'overlay' && anchorId) {
-        throw new Error(`${modeLabel} annotation slot '${id}' uses anchor_slot without side=overlay.`);
+      const offOverlay = side === 'overlay'
+        ? undefined
+        : OVERLAY_SLOT_REFERENCES.find(({ key }) => String(params[key] || '').trim());
+      if (offOverlay) {
+        throw new Error(`${modeLabel} annotation slot '${id}' uses ${offOverlay.key} without side=overlay.`);
       }
       const layer = normalizedOptionalString(params.layer) ?? 'foreground';
       if (!['foreground', 'underlay'].includes(layer)) {
@@ -530,30 +588,37 @@ export const validateTrackSlotBindingInvariants = (
   const enabledById = new Map(
     normalized.filter((slot) => slot.enabled).map((slot) => [slot.id, slot])
   );
-  normalized.forEach((slot) => {
+  normalized.forEach((slot, slotIndex) => {
     if (!slot.enabled || slot.renderer !== 'annotations' || slot.side !== 'overlay') return;
-    const anchorId = String(slot.params.anchor_slot || '').trim();
-    const anchor = enabledById.get(anchorId);
-    if (!anchor) {
-      throw new Error(
-        `${modeLabel} annotation slot '${slot.id}' references unknown anchor_slot=${JSON.stringify(anchorId)}.`
-      );
-    }
-    if (anchor.renderer === 'annotations' || anchorlessSet.has(anchor.renderer)) {
-      throw new Error(
-        `${modeLabel} annotation slot '${slot.id}' anchor '${anchor.id}' has no eligible drawable band.`
-      );
+    const toSlot = String(slot.params.to_slot || '').trim();
+    if (toSlot && toSlot === String(slot.params.anchor_slot || '').trim()) {
+      throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_SPAN', field: 'to_slot', slotIndex });
     }
     const layer = normalizedString(slot.params.layer || 'foreground');
-    if (layer === 'underlay' && slot.z >= anchor.z) {
-      throw new Error(
-        `${modeLabel} annotation underlay slot '${slot.id}' must have z less than anchor '${anchor.id}'.`
-      );
-    }
-    if (layer === 'foreground' && slot.z <= anchor.z) {
-      throw new Error(
-        `${modeLabel} annotation foreground slot '${slot.id}' must have z greater than anchor '${anchor.id}'.`
-      );
+    for (const { key, role } of OVERLAY_SLOT_REFERENCES) {
+      const targetId = String(slot.params[key] || '').trim();
+      if (key === 'to_slot' && !targetId) continue;
+      const target = enabledById.get(targetId);
+      if (!target) {
+        throw new Error(
+          `${modeLabel} annotation slot '${slot.id}' references unknown ${key}=${JSON.stringify(targetId)}.`
+        );
+      }
+      if (target.renderer === 'annotations' || anchorlessSet.has(target.renderer)) {
+        throw new Error(
+          `${modeLabel} annotation slot '${slot.id}' ${role} '${target.id}' has no eligible drawable band.`
+        );
+      }
+      if (layer === 'underlay' && slot.z >= target.z) {
+        throw new Error(
+          `${modeLabel} annotation underlay slot '${slot.id}' must have z less than ${role} '${target.id}'.`
+        );
+      }
+      if (layer === 'foreground' && slot.z <= target.z) {
+        throw new Error(
+          `${modeLabel} annotation foreground slot '${slot.id}' must have z greater than ${role} '${target.id}'.`
+        );
+      }
     }
   });
 
@@ -616,6 +681,7 @@ const PARAM_OWNER = new Map([
   ['overflow', 'annotations'],
   ['show_labels', 'annotations'],
   ['anchor_slot', 'annotations'],
+  ['to_slot', 'annotations'],
   ['layer', 'annotations'],
   ['cover_anchor', 'annotations'],
   ['style_override', 'annotations']
@@ -1300,12 +1366,14 @@ const collectCustomTrackIssues = ({
           slotId: id || null,
           message: `${modeLabel} Annotation track ${slotLabel} requires an Overlay anchor.`
         });
-      } else if (side !== 'overlay' && anchorId) {
-        addRowIssue(rowIssues, index, {
-          code: 'annotation_anchor_without_overlay',
-          field: 'params.anchor_slot',
-          slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} has an anchor but is not Overlay.`
+      } else if (side !== 'overlay') {
+        OVERLAY_SLOT_REFERENCES.filter(({ key }) => String(params[key] || '').trim()).forEach(({ key, code, label }) => {
+          addRowIssue(rowIssues, index, {
+            code: `annotation_${code}_without_overlay`,
+            field: `params.${key}`,
+            slotId: id || null,
+            message: `${modeLabel} Annotation track ${slotLabel} has an ${label} but is not Overlay.`
+          });
         });
       }
     }
@@ -1376,40 +1444,57 @@ const collectCustomTrackIssues = ({
     const rowIndex = rowIndexByNormalizedSlot.get(slot) ?? 0;
     const anchorId = String(slot.params.anchor_slot || '').trim();
     if (!anchorId) return;
-    const anchor = enabledById.get(anchorId);
-    if (!anchor) {
+    // The checks of Python's validate_overlay_annotation_anchors, in its
+    // order; like Python, a row reports its first fault.
+    if (String(slot.params.to_slot || '').trim() === anchorId) {
       addRowIssue(rowIssues, rowIndex, {
-        code: 'annotation_anchor_unknown',
-        field: 'params.anchor_slot',
+        code: 'annotation_to_slot_same',
+        field: 'params.to_slot',
         slotId: slot.id || null,
-        message: `${modeLabel} Annotation track '${slot.id}' references missing or disabled anchor '${anchorId}'.`
-      });
-      return;
-    }
-    if (INELIGIBLE_ANCHOR_RENDERERS.has(anchor.renderer)) {
-      addRowIssue(rowIssues, rowIndex, {
-        code: 'annotation_anchor_ineligible',
-        field: 'params.anchor_slot',
-        slotId: slot.id || null,
-        message: `${modeLabel} Annotation track '${slot.id}' anchor '${anchorId}' has no eligible drawable band.`
+        message: `${modeLabel} Annotation track '${slot.id}' extends to its own anchor '${anchorId}'; choose another slot or None.`
       });
       return;
     }
     const layer = normalizedString(slot.params.layer || 'foreground');
-    if (layer === 'underlay' && slot.z >= anchor.z) {
-      addRowIssue(rowIssues, rowIndex, {
-        code: 'annotation_underlay_z',
-        field: 'z',
-        slotId: slot.id || null,
-        message: `${modeLabel} Annotation underlay '${slot.id}' must have z below anchor '${anchorId}'.`
-      });
-    } else if (layer === 'foreground' && slot.z <= anchor.z) {
-      addRowIssue(rowIssues, rowIndex, {
-        code: 'annotation_foreground_z',
-        field: 'z',
-        slotId: slot.id || null,
-        message: `${modeLabel} Annotation foreground '${slot.id}' must have z above anchor '${anchorId}'.`
-      });
+    for (const { key, code, label } of OVERLAY_SLOT_REFERENCES) {
+      const targetId = String(slot.params[key] || '').trim();
+      if (!targetId) continue;
+      const target = enabledById.get(targetId);
+      /** @type {{ code: string, field: string, message: string, slotId: string | null } | null} */
+      let issue = null;
+      if (!target) {
+        issue = {
+          code: `annotation_${code}_unknown`,
+          field: `params.${key}`,
+          slotId: slot.id || null,
+          message: `${modeLabel} Annotation track '${slot.id}' references missing or disabled ${label} '${targetId}'.`
+        };
+      } else if (INELIGIBLE_ANCHOR_RENDERERS.has(target.renderer)) {
+        issue = {
+          code: `annotation_${code}_ineligible`,
+          field: `params.${key}`,
+          slotId: slot.id || null,
+          message: `${modeLabel} Annotation track '${slot.id}' ${label} '${targetId}' has no eligible drawable band.`
+        };
+      } else if (layer === 'underlay' && slot.z >= target.z) {
+        issue = {
+          code: 'annotation_underlay_z',
+          field: 'z',
+          slotId: slot.id || null,
+          message: `${modeLabel} Annotation underlay '${slot.id}' must have z below ${label} '${targetId}'.`
+        };
+      } else if (layer === 'foreground' && slot.z <= target.z) {
+        issue = {
+          code: 'annotation_foreground_z',
+          field: 'z',
+          slotId: slot.id || null,
+          message: `${modeLabel} Annotation foreground '${slot.id}' must have z above ${label} '${targetId}'.`
+        };
+      }
+      if (issue) {
+        addRowIssue(rowIssues, rowIndex, issue);
+        return;
+      }
     }
   });
 

@@ -342,8 +342,8 @@ A region annotation drawn as an overlay can span several tracks: add
 `to_slot=<slot id>` next to `anchor_slot` on the annotation slot, and the
 overlay runs from one slot's band to the other's, for example one tint per
 region from the GC track to the feature track. It works in Circular and Linear,
-from the command line, Python, and a Session; the web app draws and saves it
-but cannot edit it yet. See
+from the command line, Python, a Session, and the web app, where the
+annotation slot's **Extend to** list sets it. See
 [Region annotations](./CLI_Reference.md#region-annotations).
 
 Small label defects of horizontal Circular labels, up to 100 per record, are
