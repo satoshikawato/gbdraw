@@ -117,7 +117,7 @@ const resetEditorDraftState = (state, drawing) => {
 export const resetSettings = (state) => {
   Object.assign(state.losatExecution, createDefaultLosatExecution());
   state.richFeaturePopup.value = true;
-  /** @type {DrawingState[]} */ (Object.values(state.drawings)).forEach((drawing) => {
+  state.drawingList().forEach((drawing) => {
     SETTINGS_SLICE.reset(drawing.slices.settings);
     ANNOTATION_SETS_SLICE.reset(drawing.slices.annotationSets);
     FEATURE_EDITS_SLICE.reset(drawing.slices.featureEdits);

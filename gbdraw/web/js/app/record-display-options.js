@@ -3,6 +3,7 @@
 /** @import { CommittedRecord, CommittedRecordRequest } from '../services/feature-identity.js' */
 /** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
+import { drawingIdOfMode } from '../services/drawing-view.js';
 import {
   bindRecordDisplayDrafts,
   buildRecordDisplayRows,
@@ -147,7 +148,7 @@ export const createRecordDisplayControls = ({
     }));
   // A row's drafts are those of its mode's drawing.
   /** @param {{ scope: string }} row @returns {DrawingState} */
-  const drawingOfRow = (row) => (row?.scope === 'linear' ? state.drawings.linear : state.drawings.circular);
+  const drawingOfRow = (row) => state.drawingOf(drawingIdOfMode(row?.scope === 'linear' ? 'linear' : 'circular'));
   // A drawing's drafts on the rows of their sources (OV-278). An edit of a
   // draft first writes them there, within its own step.
   /** @param {DrawingState} drawing */
@@ -266,7 +267,7 @@ export const createRecordDisplayControls = ({
   };
   /** @param {AlignmentOrientation[]} orientations @returns {AlignmentOrientationCheckpoint[]} */
   const captureAlignmentOrientationIntent = (orientations) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOf(drawingIdOfMode('linear'));
     // A draft names no mode (PD-OI-086): these are the Linear drawing's (OV-579).
     // On their rows first (OV-278): a draft that the capture's own settle moved would not be found.
     settleDrafts(drawing);
@@ -276,7 +277,7 @@ export const createRecordDisplayControls = ({
   };
   /** @param {AlignmentOrientationCheckpoint[]} checkpoints */
   const restoreAlignmentOrientationIntent = (checkpoints) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOf(drawingIdOfMode('linear'));
     alignmentRows(drawing, checkpoints).forEach(({sequence}, index) => {
       sequence.region_reverse = checkpoints[index].reverseComplement;
       checkpoints[index].drafts.forEach(restoreTargetDraft);
@@ -284,7 +285,7 @@ export const createRecordDisplayControls = ({
   };
   /** @param {AlignmentOrientation[]} orientations */
   const commitAlignmentOrientations = (orientations) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOf(drawingIdOfMode('linear'));
     alignmentRows(drawing, orientations).forEach(({sequence, orientation, drafts}) => {
       sequence.region_reverse = orientation.reverseComplement;
       drafts.forEach((/** @type {RecordDisplayDraft} */ draft) => { draft.reverseComplementOverride = null; });

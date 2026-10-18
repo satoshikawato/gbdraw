@@ -22,12 +22,12 @@ const describeKeys = (keys) => {
  * @property {{ value: string }} appliedPaletteName
  * @property {{ value: Record<string, string> }} appliedPaletteColors
  * @property {() => ResultsManagerDrawing} activeDrawing The shown mode's drawing.
- * @property {Readonly<Record<DrawingId, ResultsManagerDrawing>>} drawings Every drawing, by its ID.
+ * @property {() => readonly ResultsManagerDrawing[]} drawingList Every drawing, in creation order.
  * @property {() => any} [sessionOperationAvailability] The busy outcome of a Session operation, if any.
  * @property {PaletteColorsDialog} paletteColorsDialog
  */
 
-/** @typedef {PaletteDrawing} ResultsManagerDrawing The palette of a drawing (`DrawingState` of state.js). */
+/** @typedef {PaletteDrawing & { readonly id: DrawingId }} ResultsManagerDrawing The palette of a drawing (`DrawingState` of state.js). */
 
 /**
  * @param {{
@@ -113,13 +113,13 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     paletteInstantPreviewEnabled.value = Boolean(enabled);
     if (!enabled) return;
     const shown = state.activeDrawing();
-    /** @type {[DrawingId, ResultsManagerDrawing][]} */ (Object.entries(state.drawings)).forEach(([drawingId, drawing]) => {
+    state.drawingList().forEach((drawing) => {
       if (String(drawing.pendingPaletteName.value || '').trim() === '') return;
       if (drawing === shown) {
         applyPaletteDraftToPreview();
         return;
       }
-      writeArtifactValues(drawingId, {
+      writeArtifactValues(drawing.id, {
         appliedPaletteName: String(drawing.selectedPalette.value || 'default'),
         appliedPaletteColors: cloneColors(drawing.currentColors.value)
       });

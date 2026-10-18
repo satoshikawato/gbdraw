@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
+/** @import { DrawingId } from './drawing-view.js' */
+import { drawingIdOfMode } from './drawing-view.js';
 
 /**
  * A Vue ref, or the `{ value }` cell that stands in for one (a Gallery
@@ -20,9 +22,9 @@
  */
 
 /**
- * What the export capture reads of the app state: the refs it unwraps and each mode's drawing.
+ * What the export capture reads of the app state: the refs it unwraps and its drawing lookup.
  * @typedef {object} SvgExportState
- * @property {Record<'circular' | 'linear', SvgExportDrawing>} drawings
+ * @property {(id: DrawingId) => SvgExportDrawing} drawingOf
  * @property {ExportRef<string>} [generatedMode]
  * @property {ExportRef<number | string>} selectedResultIndex
  * @property {ExportRef<ReadonlyArray<{ name?: string } | undefined> | null>} results
@@ -208,7 +210,7 @@ const renderedLabelTextOverrides = (state, drawing, resultIndex) => {
  * @param {{ interactive?: boolean }} [options]
  */
 export const captureSvgExport = (state, { interactive = false } = {}) => {
-  const drawing = state.drawings[state.generatedMode?.value === 'linear' ? 'linear' : 'circular'];
+  const drawing = state.drawingOf(drawingIdOfMode(state.generatedMode?.value === 'linear' ? 'linear' : 'circular'));
   const resultIndex = Number(state.selectedResultIndex.value);
   const name = state.results.value?.[resultIndex]?.name || 'gbdraw.svg';
   return {

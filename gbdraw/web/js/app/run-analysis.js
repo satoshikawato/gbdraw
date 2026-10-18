@@ -9,6 +9,7 @@
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
+import { drawingIdOfMode } from '../services/drawing-view.js';
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
@@ -1645,7 +1646,7 @@ export const createRunAnalysis = ({
   // A target-record transform and a label reflow draw the committed Results
   // again, with the settings and edits of the committed request's mode.
   /** @param {Record<string, any> | null | undefined} committed */
-  const committedDrawing = (committed) => state.drawings[committed?.renderRequest?.mode === 'linear' ? 'linear' : 'circular'];
+  const committedDrawing = (committed) => state.drawingOf(drawingIdOfMode(committed?.renderRequest?.mode === 'linear' ? 'linear' : 'circular'));
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   // The latest request that makes the running iteration stale: an editor
@@ -2103,7 +2104,7 @@ export const createRunAnalysis = ({
    * @param {{ recordId?: string } | null} [subjectEntry]
    */
   const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOf(drawingIdOfMode('linear'));
     return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
   };
 
@@ -2189,7 +2190,7 @@ export const createRunAnalysis = ({
    * @param {unknown} customName
    */
   const downloadLosatPair = async (edgeKey, customName) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOf(drawingIdOfMode('linear'));
     const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
@@ -2221,7 +2222,7 @@ export const createRunAnalysis = ({
    * @param {unknown} customName
    */
   const setLosatPairFilename = (edgeKey, customName) => {
-    const drawing = state.drawings.linear;
+    const drawing = state.drawingOf(drawingIdOfMode('linear'));
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const entry = getLosatCacheInfoEntry(edgeKey);
@@ -2308,7 +2309,7 @@ export const createRunAnalysis = ({
   };
 
   const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
-    const drawing = state.drawings.circular;
+    const drawing = state.drawingOf(drawingIdOfMode('circular'));
     // An inactive Circular source keeps its records and Multi-Record Canvas
     // order; only a read still running for it is superseded.
     if (mode.value !== 'circular') {

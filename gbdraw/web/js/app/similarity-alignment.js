@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
+import { drawingIdOfMode } from '../services/drawing-view.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
@@ -1317,7 +1318,7 @@ export const createSimilarityAlignmentActions = ({
   clearCandidatePreview = null,
   onError = null
 }) => {
-  const drawnLinearCards = () => drawnLinearSequences(state.linearSeqs, state.drawings?.linear?.recordsOff);
+  const drawnLinearCards = () => drawnLinearSequences(state.linearSeqs, state.drawingOf(drawingIdOfMode('linear')).recordsOff);
   if (
     !state
     || typeof getOrthogroupById !== 'function'

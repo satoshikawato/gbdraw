@@ -336,7 +336,7 @@ export const createSvgStyles = ({
 
   // Each drawing's track toggles; a mode switch changes neither drawing, so it
   // applies nothing (R10).
-  /** @type {DrawingState[]} */ ([state.drawings.circular, state.drawings.linear]).forEach((drawing) => watch(
+  /** @type {readonly DrawingState[]} */ (state.drawingList()).forEach((drawing) => watch(
     () => [drawing.form.suppress_gc, drawing.form.suppress_skew, drawing.form.show_gc, drawing.form.show_skew, drawing.form.show_depth],
     () => {
       if (drawing !== state.activeDrawing()) return;

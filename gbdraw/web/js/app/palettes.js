@@ -16,7 +16,7 @@ import { queuePalette, selectPalette } from '../services/drawing/palette.js';
  * @property {{ value: string }} appliedPaletteName
  * @property {{ value: Record<string, string> }} appliedPaletteColors
  * @property {() => PaletteLoaderDrawing} activeDrawing The shown mode's drawing.
- * @property {{ circular: PaletteLoaderDrawing, linear: PaletteLoaderDrawing }} drawings
+ * @property {() => readonly PaletteLoaderDrawing[]} drawingList Every drawing, in creation order.
  */
 
 /** @typedef {PaletteDrawing} PaletteLoaderDrawing The palette of a drawing (`DrawingState` of state.js). */
@@ -80,8 +80,7 @@ export const createPaletteLoader = ({ state }) => {
     if (Object.keys(normalizedPalettes).length === 0) return false;
     paletteDefinitions.value = normalizedPalettes;
     paletteNames.value = Object.keys(normalizedPalettes).sort();
-    initializeDrawingPalette(state.drawings.circular, normalizedPalettes);
-    initializeDrawingPalette(state.drawings.linear, normalizedPalettes);
+    state.drawingList().forEach((drawing) => initializeDrawingPalette(drawing, normalizedPalettes));
     if (!hasPaletteColorEntries(appliedPaletteColors.value)) {
       const shown = state.activeDrawing();
       appliedPaletteName.value = shown.selectedPalette.value;
