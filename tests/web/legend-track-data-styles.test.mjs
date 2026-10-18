@@ -132,3 +132,80 @@ test('a data change retires a waiting Legend rename of a caption it stops naming
   assert.deepEqual(legendColorOverrides, { 'Region X': '#111111' });
   assert.deepEqual(legendStrokeOverrides, {});
 });
+
+// OV-1198, OV-1215: the rows of a drawn track the draft hides leave the list
+// with the track and return with it. The port asks the Legend list owner to
+// list them (here a stand-in that, like `listLegendRows`, lists the Result's
+// rows except the hidden ones, named by the list's rename, else a dormant one).
+const trackPort = ({ entries, dormant = [], hidden, result = ['CDS', 'depth', 'GC content'] }) => {
+  const legendEntries = { value: entries };
+  const dormantLegendEntries = { value: dormant };
+  const state = { hidden };
+  let projections = 0;
+  const keyOf = (entry) => entry.originalCaption || entry.caption;
+  const renameOf = (key, list) => list.find((entry) => keyOf(entry) === key && entry.caption !== key)?.caption;
+  const run = buildLegendStyleRetirement({
+    legendColorOverrides: {},
+    legendStrokeOverrides: {},
+    legendEntries,
+    dormantLegendEntries,
+    namedCaptions: () => new Set(),
+    hiddenRows: () => (state.hidden ? ['depth'] : []),
+    relistLegendEntries: () => {
+      const listed = new Set(legendEntries.value.map(keyOf));
+      legendEntries.value = result.filter((key) => !(state.hidden && key === 'depth')).map((key) => ({
+        caption: (listed.has(key) ? renameOf(key, legendEntries.value) : renameOf(key, dormantLegendEntries.value)) || key,
+        originalCaption: key
+      }));
+    },
+    projectLegendEntries: () => { projections += 1; }
+  });
+  const captions = () => legendEntries.value.map((entry) => entry.caption);
+  return { legendEntries, dormantLegendEntries, state, run, captions, projections: () => projections };
+};
+
+test('a hidden track\'s row leaves the list, and a renamed one waits as after a Generate (OV-120)', () => {
+  const port = trackPort({
+    entries: [
+      { caption: 'CDS', originalCaption: 'CDS' },
+      { caption: 'Coverage', originalCaption: 'depth' },
+      { caption: 'GC content', originalCaption: 'GC content' }
+    ],
+    hidden: false
+  });
+  port.run(() => { port.state.hidden = true; });
+  assert.deepEqual(port.captions(), ['CDS', 'GC content']);
+  assert.deepEqual(port.dormantLegendEntries.value, [{ caption: 'Coverage', originalCaption: 'depth' }]);
+  assert.equal(port.projections(), 1);
+  // Nothing is left to move on a later port run that hides nothing more.
+  port.run(() => undefined);
+  assert.equal(port.projections(), 1);
+});
+
+test('a track shown again returns its renamed row and leaves no dormant copy (review H1)', () => {
+  const port = trackPort({
+    entries: [
+      { caption: 'CDS', originalCaption: 'CDS' },
+      { caption: 'Coverage', originalCaption: 'depth' },
+      { caption: 'GC content', originalCaption: 'GC content' }
+    ],
+    hidden: false
+  });
+  port.run(() => { port.state.hidden = true; });
+  port.run(() => { port.state.hidden = false; });
+  assert.deepEqual(port.captions(), ['CDS', 'Coverage', 'GC content']);
+  assert.deepEqual(port.dormantLegendEntries.value, [], 'a Session saved now holds the row once');
+  assert.equal(port.projections(), 2);
+  // The user's later rename back to the key is not undone by a stale dormant entry.
+  port.legendEntries.value = port.legendEntries.value.map((entry) => ({ ...entry, caption: entry.originalCaption }));
+  port.run(() => { port.state.hidden = true; });
+  port.run(() => { port.state.hidden = false; });
+  assert.deepEqual(port.captions(), ['CDS', 'depth', 'GC content']);
+});
+
+test('a change that hides no drawn track leaves the list as it was and projects nothing', () => {
+  const port = trackPort({ entries: [{ caption: 'depth', originalCaption: 'depth' }], hidden: false });
+  port.run(() => undefined);
+  assert.deepEqual(port.legendEntries.value, [{ caption: 'depth', originalCaption: 'depth' }]);
+  assert.equal(port.projections(), 0);
+});

@@ -9,6 +9,7 @@
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
 import { keepResultNames } from '../services/result-normalization.js';
 import { regionWithinRecord } from '../services/record-options.js';
@@ -51,10 +52,7 @@ import {
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
-import {
-  applyCircularSuppressControlsToSlots,
-  hasEnabledCircularTrackRenderer
-} from './circular-track-slots.js';
+import { applyCircularSuppressControlsToSlots } from './circular-track-slots.js';
 import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
@@ -2239,13 +2237,9 @@ export const createRunAnalysis = ({
   const validateDepthInputPresence = (drawing) => {
     const linear = mode.value === 'linear';
     const slots = linear ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots;
-    const customDepthRequested = (
-      (linear ? drawing.adv.linear_track_slots_enabled : drawing.adv.circular_track_slots_enabled) === true &&
-      (Array.isArray(slots) ? slots : []).some((slot) => (
-        slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
-      ))
-    );
-    if (!drawing.form.show_depth && !customDepthRequested) return '';
+    if (!draftDrawsDepth(linear ? 'linear' : 'circular', drawing)) return '';
+    // The draft draws Depth; with the custom stack on, through an enabled Depth slot.
+    const customStack = Boolean(linear ? drawing.adv.linear_track_slots_enabled : drawing.adv.circular_track_slots_enabled);
     let rows;
     if (linear) {
       rows = drawing.drawnLinearSeqs.value.map((seq) => depthFileSlotsFromValue(seq.depth));
@@ -2268,7 +2262,7 @@ export const createRunAnalysis = ({
       }
       rows = normalizeRecordMajorDepthFileRows(files.c_depth, recordCount);
     }
-    if (customDepthRequested) {
+    if (customStack) {
       // An enabled Depth row must reference a logical series with a source in
       // some record; Generate stops on the row issue the track editor shows
       // (PD-OI-083).
@@ -3249,8 +3243,7 @@ export const createRunAnalysis = ({
           );
         }
         const hasCircularDepthFile = circularDepthEntries.length > 0;
-        const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
-        if (drawing.form.show_depth || circularSlotNeedsDepth) {
+        if (draftDrawsDepth('circular', drawing)) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
           for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
             const entry = circularDepthEntries[depthIndex];
@@ -3484,15 +3477,11 @@ export const createRunAnalysis = ({
         let linearTrackSlots = [];
         /** @type {number | null} */
         let linearTrackSlotAxisIndex = null;
-        let linearSlotNeedsDepth = false;
         if (useLinearTrackSlots) {
           linearTrackSlots = normalizeLinearTrackSlots(
             drawing.adv.linear_track_slots,
             drawing.adv.nt,
             drawing.form.linear_track_layout
-          );
-          linearSlotNeedsDepth = linearTrackSlots.some(
-            (slot) => slot.enabled !== false && slot.renderer === 'depth'
           );
           let nextDepthIndex = 0;
           linearTrackSlots.forEach((slot) => {
@@ -4994,7 +4983,7 @@ export const createRunAnalysis = ({
             )
           });
         }
-        if ((!useLinearTrackSlots && drawing.form.show_depth) || linearSlotNeedsDepth) {
+        if (draftDrawsDepth('linear', drawing)) {
           const depthRows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
           const totalDepthFiles = depthRows.reduce((sum, row) => sum + row.filter(Boolean).length, 0);
           if (totalDepthFiles === 0) {

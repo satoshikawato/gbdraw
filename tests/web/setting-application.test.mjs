@@ -246,7 +246,7 @@ test('every row renders its note or its class text', () => {
 });
 
 test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () => {
-  const toggles = settingsControls.filter((element) => /show_gc|show_skew|show_depth|setCircularGcSuppressed|setCircularSkewSuppressed/
+  const toggles = settingsControls.filter((element) => /show_gc|show_skew|setTrackShown|setCircularGcSuppressed|setCircularSkewSuppressed/
     .test(`${element.attributes.get('v-model') || ''} ${element.attributes.get('@change') || ''}`));
   assert.equal(toggles.length, 6, toggles.map(describe).join('\n'));
   for (const toggle of toggles) assert.equal(scopeOf(toggle).attributes.get('data-setting'), 'track-visibility', describe(toggle));

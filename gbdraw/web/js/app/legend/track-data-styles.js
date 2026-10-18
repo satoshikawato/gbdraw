@@ -4,6 +4,8 @@ import { getDepthTrackFallbackLabel } from '../depth-tracks.js';
 /** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
 
+/** @typedef {{ caption?: unknown, originalCaption?: unknown }} KeyedLegendRow A Legend list row: its name and its key. */
+
 /**
  * The Legend captions that a draft's track data names: the legend labels of
  * annotation sets and annotations, and the rows of Depth series that have a
@@ -56,21 +58,31 @@ export const trackDataLegendCaptions = ({
  * entries with a retired rename on the displayed Result, as Undo and Redo do.
  * The renamed rows a Generate hid (OV-120) follow the same rule: a row whose
  * data is removed leaves `dormantLegendEntries` with its styles.
+ * The rows of a drawn track the draft hides (`hiddenRows`: Show Depth off,
+ * Hide GC Content, Hide GC Skew) leave the list with the track, and a renamed
+ * one waits in `dormantLegendEntries` as after a Generate (OV-1198, OV-1215);
+ * once the track shows again, they return. The Legend list owner lists them
+ * (`relistLegendEntries`, which leaves out the hidden rows), and a returned
+ * row leaves `dormantLegendEntries`.
  * @param {{
  *   legendColorOverrides: Record<string, any>,
  *   legendStrokeOverrides: Record<string, any>,
  *   legendEntries: { value: any[] },
  *   dormantLegendEntries?: { value: any[] },
  *   namedCaptions: () => Set<string>,
+ *   hiddenRows?: () => readonly string[],
+ *   relistLegendEntries?: () => void,
  *   projectLegendEntries: () => void
  * }} options
  * @returns {<T>(change: () => T) => T}
  */
 export const buildLegendStyleRetirement = ({
-  legendColorOverrides, legendStrokeOverrides, legendEntries, dormantLegendEntries, namedCaptions, projectLegendEntries
+  legendColorOverrides, legendStrokeOverrides, legendEntries, dormantLegendEntries, namedCaptions,
+  hiddenRows = () => [], relistLegendEntries = () => {}, projectLegendEntries
 }) => (
   (change) => {
     const before = namedCaptions();
+    const hiddenBefore = new Set(hiddenRows());
     const result = change();
     const after = namedCaptions();
     /** @param {string} caption */
@@ -80,19 +92,42 @@ export const buildLegendStyleRetirement = ({
     };
     const retired = new Set([...before].filter((caption) => !after.has(caption)));
     retired.forEach(retireStyles);
-    let renameRetired = false;
+    let listChanged = false;
+    /** @param {KeyedLegendRow | null | undefined} entry */
+    const keyOf = (entry) => text(entry?.originalCaption || entry?.caption);
     const entries = (Array.isArray(legendEntries.value) ? legendEntries.value : []).map((entry) => {
       const original = text(entry?.originalCaption);
       const caption = text(entry?.caption);
       if (!retired.has(original) || !caption || caption === original) return entry;
-      renameRetired = true;
+      listChanged = true;
       return { ...entry, caption: original };
     });
-    if (dormantLegendEntries && Array.isArray(dormantLegendEntries.value)) {
-      const dormant = dormantLegendEntries.value.filter((entry) => !retired.has(text(entry?.originalCaption)));
-      if (dormant.length !== dormantLegendEntries.value.length) dormantLegendEntries.value = dormant;
+    const waiting = dormantLegendEntries && Array.isArray(dormantLegendEntries.value) ? dormantLegendEntries.value : null;
+    let dormant = waiting ? waiting.filter((entry) => !retired.has(text(entry?.originalCaption))) : null;
+    const hiddenAfter = new Set(hiddenRows());
+    const hiding = new Set([...hiddenAfter].filter((key) => !hiddenBefore.has(key)));
+    const showing = new Set([...hiddenBefore].filter((key) => !hiddenAfter.has(key)));
+    const trackShownOrHidden = hiding.size > 0 || showing.size > 0;
+    if (trackShownOrHidden) {
+      const renamed = entries.filter((entry) => hiding.has(keyOf(entry)) && text(entry?.caption) !== keyOf(entry));
+      if (dormant && renamed.length > 0) dormant = [...dormant.filter((entry) => !hiding.has(keyOf(entry))), ...renamed];
+      // The list owner names a returning row from the list, else from the
+      // waiting rename; once listed, the row no longer waits (review H1).
+      if (dormantLegendEntries && dormant) dormantLegendEntries.value = dormant;
+      legendEntries.value = entries;
+      relistLegendEntries();
+      const listed = new Set((Array.isArray(legendEntries.value) ? legendEntries.value : []).map(keyOf));
+      dormant = dormant && dormant.filter((entry) => !(showing.has(keyOf(entry)) && listed.has(keyOf(entry))));
     }
-    if (renameRetired) {
+    if (dormantLegendEntries && dormant && waiting && (dormant.length !== waiting.length
+      || dormant.some((entry, index) => entry !== waiting[index]))) {
+      dormantLegendEntries.value = dormant;
+    }
+    if (trackShownOrHidden) {
+      projectLegendEntries();
+      return result;
+    }
+    if (listChanged) {
       legendEntries.value = entries;
       projectLegendEntries();
     }

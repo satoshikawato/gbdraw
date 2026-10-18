@@ -340,7 +340,7 @@ const SIBLINGS = [
       await settleLive(page);
       await generate(page);
       await colorLegendRow(page, 'depth');
-      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+      await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', false); });
       await settleLive(page);
     }
   },
@@ -356,7 +356,7 @@ const SIBLINGS = [
       await settleLive(page);
       await generate(page);
       await colorLegendRow(page, 'depth');
-      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+      await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', false); });
       await settleLive(page);
     }
   },
@@ -432,11 +432,11 @@ for (const [mode, addDepth] of DEPTH_ADDERS) {
     await settleLive(page);
     await generate(page);
     await colorLegendRow(page, 'depth', '#7b2cbf');
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+    await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', false); });
     await settleLive(page);
     await generate(page);
     expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption)).not.toContain('depth');
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
+    await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', true); });
     await settleLive(page);
     await generate(page);
     const row = (await semanticSnapshot(page)).legend.find(({ caption }) => caption === 'depth');
@@ -456,13 +456,13 @@ for (const [mode, addDepth] of DEPTH_ADDERS) {
     await renameRow(page, 'depth', 'Coverage');
     await settleLive(page);
     await colorLegendRow(page, 'Coverage', '#7b2cbf');
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+    await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', false); });
     await settleLive(page);
     await generate(page);
     const hidden = (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
     expect(hidden).not.toContain('Coverage');
     expect(hidden).not.toContain('depth');
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
+    await page.evaluate(() => { window.__GBDRAW_APP__.setTrackShown('show_depth', true); });
     await settleLive(page);
     await generate(page);
     const returned = (await semanticSnapshot(page)).legend;

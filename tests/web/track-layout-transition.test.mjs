@@ -15,6 +15,7 @@ import {
 } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createCircularTrackSlotEditor } from '../../gbdraw/web/js/app/circular-track-slots.js';
 import { createLinearTrackSlotEditor } from '../../gbdraw/web/js/app/linear-track-slots.js';
+import { trackLayoutWithVisibility } from '../../gbdraw/web/js/app/track-slot-edits.js';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 
 const WEB = 'gbdraw/web';
@@ -326,11 +327,31 @@ test('the stack editors are created once, with the transition', () => {
   const sites = sources(`${WEB}/js`).flatMap((path) => [...readFileSync(path, 'utf8')
     .matchAll(/create(?:Circular|Linear)TrackSlotEditor\(\{([^}]*)\}\)/g)]
     .map((match) => [relative(`${WEB}/js`, path), match[1].replace(/\s+/g, ' ').trim()]));
-  // The Circular editor also takes the choice dialog and History's undoable step,
-  // which its Hide GC content / skew question uses, and the reader of the
-  // record lengths its estimates describe.
+  // Both editors take the Legend port their stack edits run in. The Circular
+  // editor also takes the choice dialog and History's undoable step, which its
+  // Hide GC content / skew question uses, and the reader of the record lengths
+  // its estimates describe.
   assert.deepEqual(sites, [
-    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths'],
-    ['app/app-setup.js', 'state, changeTrackLayout']
+    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions'],
+    ['app/app-setup.js', 'state, changeTrackLayout, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions']
   ]);
+});
+
+test('a stack edit runs in the Legend port once, and a deferred Reset apply runs in it on its own', () => {
+  const log = [];
+  const visibility = (change) => { log.push('enter'); const result = change(); log.push('leave'); return result; };
+  // No lane is lost: the layout transition applies at once.
+  const direct = trackLayoutWithVisibility((apply) => apply(), visibility);
+  assert.equal(direct(() => { log.push('apply'); return 'done'; }), 'done');
+  assert.deepEqual(log, ['enter', 'apply', 'leave']);
+  // A lane is lost: the transition applies, restores, keeps the edit for its dialog, and returns false.
+  log.length = 0;
+  let pending = null;
+  const asking = trackLayoutWithVisibility((apply) => { apply(); log.push('restore'); pending = apply; return false; }, visibility);
+  assert.equal(asking(() => { log.push('apply'); }), false);
+  assert.deepEqual(log, ['enter', 'apply', 'restore', 'leave']);
+  // The Reset choice applies the kept edit later, inside the Legend port.
+  log.length = 0;
+  pending();
+  assert.deepEqual(log, ['enter', 'apply', 'leave']);
 });

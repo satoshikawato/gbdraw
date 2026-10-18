@@ -32,6 +32,7 @@ import {
   migrateLinearTrackSlotsToCurrentSchema
 } from './linear-track-slot-model.js';
 import { depthFileSlotsFromValue, fitDepthStateToSources, padDepthFileSlots } from './depth-track-state.js';
+import { draftDrawsDepth } from './track-legend-rows.js';
 import { isUnsetValue, noteReplacedLeaf, truthy } from '../utils/field-reading.js';
 import {
   decodeDepthText,
@@ -3549,22 +3550,6 @@ export const applyOrthogroupStateData = (
   }
 };
 
-/** @param {string} mode @param {DrawingState} drawing */
-const customDepthRequested = (mode, drawing) => {
-  const adv = drawing?.adv || {};
-  const form = drawing?.form || {};
-  const customEnabled = mode === 'linear'
-    ? Boolean(adv.linear_track_slots_enabled)
-    : Boolean(adv.circular_track_slots_enabled);
-  if (!customEnabled) return Boolean(form.show_depth);
-  const slots = mode === 'linear'
-    ? adv.linear_track_slots
-    : adv.circular_track_slots;
-  return (Array.isArray(slots) ? slots : []).some(
-    (slot) => slot?.enabled !== false && slot?.renderer === 'depth'
-  );
-};
-
 /**
  * The one check that the active mode has its biological inputs; Generate and
  * Save from the draft both use it, so both explain the same missing input.
@@ -3655,7 +3640,7 @@ export const serializeActiveRenderFiles = async (
   const normalizedLinearSeqs = mode === 'linear'
     ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff))
     : [];
-  const depthRequested = customDepthRequested(mode, drawing);
+  const depthRequested = draftDrawsDepth(mode === 'linear' ? 'linear' : 'circular', drawing);
   const serializedLinearSeqs = await Promise.all(
     normalizedLinearSeqs.map(async (seq) => ({
       uid: seq.uid,

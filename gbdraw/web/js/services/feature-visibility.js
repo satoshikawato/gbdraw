@@ -15,6 +15,8 @@ import { pythonLegendRows } from './legend-svg.js';
 /** @import { FeatureOverrideDraft, FeaturePlacementDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
 /** @import { LegendRowContext, SpecificColorRule } from './specific-color-rules.js' */
+/** @import { PythonLegendKey } from './legend-svg.js' */
+/** @import { SvgLegendRowFacts } from './svg-result-ingestion.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
@@ -576,6 +578,13 @@ export const resolveFeatureDrawn = (feature, context) => {
   return colorRuleMatcher(context).matchesAny(feature);
 };
 
+/**
+ * What the Legend readers take of the displayed Result's committed metadata (svg-result-ingestion.js
+ * `CommittedSvgResultMetadata`).
+ * @typedef {{ renderedFeatureIdentities?: { renderedIds?: unknown } | null, legendRowFacts?: SvgLegendRowFacts | null }}
+ *   DisplayedResultLegendMetadata
+ */
+
 // The features the displayed Result draws, as its Legend rows are read
 // (`LegendRowContext.features`, N-06): those Python drew in it at its last
 // render (the rendered IDs of its committed metadata; every read feature for a
@@ -583,7 +592,7 @@ export const resolveFeatureDrawn = (feature, context) => {
 // answer keeps a feature). Read when iterated.
 /**
  * @param {{ extractedFeatures?: { value?: unknown },
- *   displayedResultMetadata?: () => { renderedFeatureIdentities?: { renderedIds?: unknown } | null } | null | undefined }} state
+ *   displayedResultMetadata?: () => DisplayedResultLegendMetadata | null | undefined }} state
  * @param {Parameters<typeof featureDrawnContext>[0]} drawing
  * @returns {Iterable<{ svg_id?: unknown, type?: unknown, fill_color?: unknown }>}
  */
@@ -607,19 +616,30 @@ export const displayedDrawnFeatures = (state, drawing) => ({
  * }} DisplayedLegendState
  */
 
+/** @type {ReadonlySet<PythonLegendKey>} */
+const NO_LEGEND_KEYS = new Set();
+
+/**
+ * The Legend state of the displayed Result, and Python's keys of it that no row draws (its Legend row
+ * facts' `suppressed`, which hold the shared keys `trackLegendRows` reads; none for a Result without facts).
+ * @typedef {LegendRowContext & { sharedLegendKeys: ReadonlySet<PythonLegendKey> }} DisplayedLegendRowContext
+ */
+
 // The Legend state of the displayed Result that every caller of the N-06
-// allocation (specific-color-rules.js) reads: the compile, the Legend panel, the feature popup, the
-// Legend editor and the rule commit.
+// allocation (specific-color-rules.js) and of the track rows (track-legend-rows.js) reads: the compile,
+// the Legend panel, the feature popup, the Legend editor and the rule commit.
 /**
  * @param {DisplayedLegendState} state
  * @param {Parameters<typeof displayedDrawnFeatures>[1] & { manualSpecificRules: readonly Partial<SpecificColorRule>[] }} drawing
- * @returns {LegendRowContext}
+ * @returns {DisplayedLegendRowContext}
  */
 export const displayedLegendRowContext = (state, drawing) => ({
   rules: drawing.manualSpecificRules,
   pythonRows: pythonLegendRows(state.svgContainer?.value?.querySelector?.('svg')),
   features: displayedDrawnFeatures(state, drawing),
-  originalLegendOrder: state.originalLegendOrder?.value || []
+  originalLegendOrder: state.originalLegendOrder?.value || [],
+  sharedLegendKeys: /** @type {ReadonlySet<PythonLegendKey> | undefined} */ (state.displayedResultMetadata?.()?.legendRowFacts?.suppressed)
+    ?? NO_LEGEND_KEYS
 });
 
 // Whether a Result draws a catalog feature (R-5): the resolver's answer, else

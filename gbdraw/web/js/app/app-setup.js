@@ -14,7 +14,7 @@
 /** @import { LegacyResultSvgData, LegacyResultSvgTransform, SessionFileInput } from '../services/config.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
-/** @import { LegendRowContext } from '../services/specific-color-rules.js' */
+/** @import { DisplayedLegendRowContext } from '../services/feature-visibility.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearComparisonEdge, LinearComparisonIssue, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
 /** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
@@ -41,7 +41,7 @@ import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup } from './preview-item-popup.js';
 import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
-import { drawnTracks, loadedTracks } from '../services/track-legend-rows.js';
+import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
   createFeatureRecordRotationAction,
@@ -1807,6 +1807,7 @@ export const createAppSetup = () => {
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
     readShownLegendColor: (entry) => legendEntryColor(entry),
+    readHiddenTrackRows: (drawing) => hiddenTrackLegendRows(drawing),
     legendRowNames: shallowRef(new Map()),
     showLegendStructure: () => showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendStructure })
   });
@@ -1822,6 +1823,15 @@ export const createAppSetup = () => {
   const readDrawnTracks = () => {
     const request = getCommittedCanonicalRenderRequest();
     return request ? drawnTracks(request) : loadedTracks(getLoadedTrackSettings());
+  };
+  // The keys of the displayed Result's Legend rows whose drawn track the draft
+  // hides (OV-1198, OV-1215): the live compile deletes them, and the Legend
+  // list leaves them out, so a hidden track's rows leave and return with it.
+  /** @param {DrawingState} drawing @returns {string[]} */
+  const hiddenTrackLegendRows = (drawing) => {
+    const { pythonRows, sharedLegendKeys } = displayedLegendRowContext(state, drawing);
+    return hiddenTrackLegendKeys(trackLegendRows(readDrawnTracks(), pythonRows, sharedLegendKeys),
+      drawing === state.drawings.linear ? 'linear' : 'circular', drawing);
   };
   const svgActions = createSvgStyles({
     state,
@@ -2057,8 +2067,8 @@ export const createAppSetup = () => {
   const { changeTrackLayout } = featureActions.placementActions;
   // Legend styles and names follow the captions that track data names (OV-65,
   // OV-87): the annotation editor receives this one port, and the Depth source
-  // and label transitions below run through it. A retired rename reaches the
-  // displayed Result through the one Legend projection (R3).
+  // and label transitions below run through it. A retired rename and the row of
+  // a hidden track reach the displayed Result through the one Legend projection (R3).
   /**
    * @template T
    * @param {() => T} change
@@ -2072,6 +2082,8 @@ export const createAppSetup = () => {
       legendEntries: drawing.legendEntries,
       dormantLegendEntries: drawing.dormantLegendEntries,
       projectLegendEntries: () => { showEditorIntent({ domains: [...LIVE_EDIT_DOMAINS.legendRows, ...LIVE_EDIT_DOMAINS.strokes] }); },
+      hiddenRows: () => hiddenTrackLegendRows(drawing),
+      relistLegendEntries: () => { legendActions.extractLegendEntries(); },
       namedCaptions: () => trackDataLegendCaptions({
         annotationSets: drawing.annotationSets,
         depthTracks: drawing.adv.depth_tracks,
@@ -2095,14 +2107,32 @@ export const createAppSetup = () => {
   ));
   const readCircularEstimateLengths = () => circularEstimateRecordLengths.value;
   const circularTrackSlotEditor = createCircularTrackSlotEditor({
-    state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths
+    state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths,
+    changeTrackVisibility: retireLegendStylesOfUnnamedCaptions
   });
-  const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
+  const linearTrackSlotEditor = createLinearTrackSlotEditor({
+    state, changeTrackLayout, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions
+  });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, askChoice,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
+  // The Show Depth, and Linear Show GC Content and Show GC Skew, checkboxes:
+  // the drawn tracks and their Legend rows leave and return together through
+  // the Legend port (OV-1198, OV-1215, R10).
+  /** @param {'show_depth' | 'show_gc' | 'show_skew'} key @param {unknown} checked */
+  const setTrackShown = (key, checked) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    const { form } = state.activeDrawing();
+    const shown = Boolean(checked);
+    retireLegendStylesOfUnnamedCaptions(() => {
+      if (key === 'show_gc') form.show_gc = shown;
+      else if (key === 'show_skew') form.show_skew = shown;
+      else form.show_depth = shown;
+    });
+  };
   watch(
     () => {
       const catalog = getAnnotationRecordCatalog();
@@ -2704,7 +2734,7 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     depthTrackUiCounts.circular = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular) + 1;
     ensureDepthTrackConfigCount(drawing, depthTrackUiCounts.circular);
-    if (hasCircularDepthFiles.value) drawing.form.show_depth = true;
+    retireLegendStylesOfUnnamedCaptions(() => { if (hasCircularDepthFiles.value) drawing.form.show_depth = true; });
   };
   const addLinearDepthTrack = () => {
     const drawing = state.drawings.linear;
@@ -2713,7 +2743,7 @@ export const createAppSetup = () => {
     const nextCount = linearDepthTrackUiCount() + 1;
     padLinearDepthRows(nextCount);
     ensureDepthTrackConfigCount(drawing, nextCount);
-    if (hasAnyLinearDepthFiles.value) drawing.form.show_depth = true;
+    retireLegendStylesOfUnnamedCaptions(() => { if (hasAnyLinearDepthFiles.value) drawing.form.show_depth = true; });
   };
   /** @param {number} index */
   const removeCircularDepthTrack = (index) => {
@@ -3195,6 +3225,16 @@ export const createAppSetup = () => {
       // a loaded Session show bytes already laid out.
       const drawn = !context.bindingOptions.isIncrementalEdit
         || Boolean(context.bindingOptions.replaceGeneratedLegend);
+      // An automatic rerender and a record transform draw the committed
+      // request again, so they draw a track the draft hid since (Show Depth
+      // off, its last source removed, a Reset Settings): the track and its
+      // Legend rows leave the new Result at once, as they left the one it
+      // replaces (OV-1198 H2), also when the track claims no row (R3 H-B). A
+      // selected Result was drawn before the draft hid it; its rows left with
+      // the projection above. Generate draws none, so its Result stays Python's.
+      const redrawn = context.phase === 'label-reflow' || context.phase === 'target-record-transform';
+      if (selecting || redrawn) svgActions.applyTrackVisibility();
+      if (redrawn && hiddenTrackLegendRows(drawing).length > 0) showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendRows });
       const adopt = () => {
         // It shows the Legend editor's edits laid out as Python lays the edited
         // rows out, before its entries are read (zero shift; OV-122, OV-124,
@@ -3844,7 +3884,7 @@ export const createAppSetup = () => {
   /** @param {string[]} keys The Python keys of the returning rows. */
   const drawReturningLegendRows = (keys) => {
     const svg = svgContainer.value?.querySelector?.('svg');
-    const drawn = state.displayedResultMetadata()?.drawnLegendKeys;
+    const drawn = state.displayedResultMetadata()?.legendRowFacts?.drawn;
     if (keys.some((key) => (!drawn || drawn.has(key)) && !drawsPythonLegendRow(svg, key))) {
       featureActions.requestAutomaticRerender();
     }
@@ -3961,8 +4001,8 @@ export const createAppSetup = () => {
     if (departed) departedResultIntent.set(departed, displayedIntentSignature(drawing));
   };
   // What the live compile reads of the displayed Result's Legend state.
-  /** @param {LegendRowContext} context */
-  const legendRowsOf = ({ pythonRows, features }) => ({ pythonRows, features });
+  /** @param {DisplayedLegendRowContext} context */
+  const legendRowsOf = ({ pythonRows, features, sharedLegendKeys }) => ({ pythonRows, features, sharedLegendKeys });
   /**
    * @param {DrawingState} drawing
    * @param {number} resultIndex
@@ -4006,7 +4046,8 @@ export const createAppSetup = () => {
           // The committed request may be one a Session stored (unchecked): its options are read as unvalidated.
           ? featureDrawnContext(drawing, { diagramOptions: /** @type {UnvalidatedFields<'selectedFeaturesSet'>} */ (getCommittedCanonicalRenderRequest()?.diagramOptions) })
           : null,
-        ruleRows
+        ruleRows,
+        hiddenTrackRows: hiddenTrackLegendRows(drawing)
       } : null
     });
     return plan.operationsByResult[resultIndex] || null;
@@ -6957,6 +6998,7 @@ export const createAppSetup = () => {
     resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset,
     setCircularTrackSlotsEnabled: circularTrackSlotEditor.setCircularTrackSlotsEnabled,
     setCircularGcSuppressed: circularTrackSlotEditor.setCircularGcSuppressed,
+    setTrackShown,
     setCircularSkewSuppressed: circularTrackSlotEditor.setCircularSkewSuppressed,
     setCircularDinucleotide: circularTrackSlotEditor.setCircularDinucleotide,
     setCircularTrackSlotNt: circularTrackSlotEditor.setCircularTrackSlotNt,

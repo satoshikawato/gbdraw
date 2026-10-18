@@ -36,6 +36,8 @@ import { registeredLegendFaces } from '../services/font-store.js';
  * @property {import('./legend/entry-actions.js').LegendEntryActionsOptions['legendRowNames']} [legendRowNames]
  *   The root's reactive holder of the names the displayed Result shows for its rows; the entry owner writes it.
  * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent (R1).
+ * @property {import('./legend/entry-actions.js').LegendEntryActionsOptions['readHiddenTrackRows']} [readHiddenTrackRows]
+ *   The root's keys of the rows whose drawn track a drawing hides (OV-1198), which the Legend list leaves out.
  */
 
 /** @param {LegendManagerOptions} options */
@@ -49,12 +51,13 @@ export const createLegendManager = ({
   readActiveResultIdentity = null,
   readShownLegendColor,
   legendRowNames,
-  showLegendStructure
+  showLegendStructure,
+  readHiddenTrackRows
 }) => {
   const layoutActions = createLegendLayoutActions({
     readRegisteredFontFaces: () => registeredLegendFaces(state.loadedFonts.value)
   });
-  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor, legendRowNames });
+  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor, legendRowNames, readHiddenTrackRows });
   const sortActions = createLegendSortActions({ state, showLegendStructure });
   const strokeActions = createLegendStrokeActions({ state });
   // The keys a listed row stands for on the displayed Result (D-35: its own

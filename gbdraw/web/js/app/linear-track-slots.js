@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-/** @import { ChangeTrackLayout } from './track-slot-edits.js' */
+/** @import { ChangeTrackLayout, ChangeTrackVisibility } from './track-slot-edits.js' */
 import {
   activeDepthTrackIndices,
   depthTrackMatrixWidth,
@@ -13,7 +13,7 @@ import {
   isManualSlotValue,
   normalizeOptionalText
 } from '../services/track-slot-display.js';
-import { featureSlotEdits } from './track-slot-edits.js';
+import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
 import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
@@ -213,6 +213,8 @@ const replaceObjectContents = (target, source) => {
  * @typedef {object} LinearTrackSlotEditorOptions
  * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
  * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
+ * @property {ChangeTrackVisibility} [changeTrackVisibility] The Legend port every stack edit runs in: a drawn track
+ *   the edit hides or shows again takes its Legend rows with it (OV-1198; default: apply directly).
  */
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
@@ -221,7 +223,9 @@ const replaceObjectContents = (target, source) => {
 /**
  * @param {LinearTrackSlotEditorOptions} options
  */
-export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
+export const createLinearTrackSlotEditor = ({
+  state, changeTrackLayout = (apply) => apply(), changeTrackVisibility = (change) => change()
+}) => {
   /** @type {WeakMap<LinearTrackSlot, string>} */
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
@@ -1111,7 +1115,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     linearTrackRendererLabel,
     normalizeLinearTrackSlots: normalizeCurrentSlots,
     changeLinearDepthSources,
-    ...featureSlotEdits(changeTrackLayout, {
+    ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetLinearTrackSlotsFromSimpleControls,
       setLinearTrackSlotsEnabled,
       addLinearTrackSlot,

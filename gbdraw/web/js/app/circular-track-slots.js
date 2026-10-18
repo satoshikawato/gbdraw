@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-/** @import { ChangeTrackLayout } from './track-slot-edits.js' */
+/** @import { ChangeTrackLayout, ChangeTrackVisibility } from './track-slot-edits.js' */
 /** @import { AskChoice } from './app-messages.js' */
 import {
   CONSERVATION_SLOT_MANAGER,
@@ -25,7 +25,7 @@ import {
   sizeClassForRecordLengths,
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
-import { featureSlotEdits } from './track-slot-edits.js';
+import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
 import { ownEntry } from '../utils/own-entry.js';
 import {
   OVERLAY_ANNOTATION_PARAMS,
@@ -429,10 +429,6 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
   return `${normalized.id}:${normalized.renderer}${options.length ? `@${options.join(',')}` : ''}`;
 };
 
-/** @param {unknown} slots @param {string} renderer */
-export const hasEnabledCircularTrackRenderer = (slots, renderer) =>
-  normalizeCircularTrackSlots(slots).some((slot) => slot.enabled && slot.renderer === renderer);
-
 /** @param {unknown} renderer @param {Record<string, unknown> | null | undefined} [form] */
 export const isCircularTrackRendererSuppressedByForm = (renderer, form = {}) => {
   const normalizedRenderer = String(renderer || '').trim();
@@ -655,6 +651,9 @@ const circularGeometryShortcutsForState = (drawing) => ({
  * @property {(label: string, fn: () => unknown) => unknown} [runUndoable] History's undoable step, which the chosen hide runs in.
  * @property {() => number[]} [estimateRecordLengths] The lengths of the records the estimates describe: those of the
  *   diagram of the next Generate that draws the shown Result's record (default: none known).
+ * @property {ChangeTrackVisibility} [changeTrackVisibility] The Legend port a Hide GC Content or Hide GC Skew
+ *   change and every stack edit run in: the drawn track's Legend rows leave and return with it (OV-1198, OV-1215;
+ *   default: apply directly).
  */
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
@@ -665,7 +664,7 @@ const circularGeometryShortcutsForState = (drawing) => ({
  */
 export const createCircularTrackSlotEditor = ({
   state, changeTrackLayout = (apply) => apply(), askChoice = async () => 'cancel', runUndoable = (_label, fn) => fn(),
-  estimateRecordLengths = () => []
+  estimateRecordLengths = () => [], changeTrackVisibility = (change) => change()
 }) => {
   /** @type {WeakMap<CircularTrackSlot, string>} */
   const editorKeys = new WeakMap();
@@ -1487,10 +1486,10 @@ export const createCircularTrackSlotEditor = ({
       return;
     }
 
-    const apply = () => {
+    const apply = () => changeTrackVisibility(() => {
       drawing.form[formKey] = nextChecked;
       normalizeSlotsInPlace();
-    };
+    });
     const asked = nextChecked ? askCircularSuppressOverride(drawing, renderer) : null;
     if (asked) {
       // The checkbox shows the kept value until the choice; the chosen hide is one History step.
@@ -1907,7 +1906,7 @@ export const createCircularTrackSlotEditor = ({
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,
     changeCircularDepthSources,
-    ...featureSlotEdits(changeTrackLayout, {
+    ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetCircularTrackSlotsFromSimpleControls,
       resetCircularTrackSlotsToPreset,
       setCircularTrackSlotsEnabled,
