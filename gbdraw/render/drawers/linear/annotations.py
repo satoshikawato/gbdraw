@@ -24,6 +24,7 @@ from gbdraw.annotations import (
 )
 from gbdraw.annotations.layout import PlacedRegionAnnotation
 from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
+from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.render.group_content import GroupContent
@@ -220,6 +221,21 @@ def _label_rows(
     return rows
 
 
+@dataclass(frozen=True)
+class LinearAnnotationLabelRoom:
+    """The room of a record's labels in their slot.
+
+    ``beyond`` is how far it reaches past the slot's ``height_px`` on the
+    label side (0 when it stays inside); ``band`` is the room itself from the
+    slot's top, ``None`` without label text. Both hold the letters with
+    ``label_offset`` on each side, so the axis line, the next slot or the
+    record edge keeps that gap (OV-844).
+    """
+
+    beyond: float
+    band: VerticalBand | None
+
+
 def linear_annotation_label_room(
     track: ResolvedAnnotationTrack,
     *,
@@ -229,15 +245,12 @@ def linear_annotation_label_room(
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
-) -> float:
-    """How far the record's labels reach beyond the slot's ``height_px`` on their side.
-
-    The room holds the letters and ``label_offset`` beyond them too, so the
-    axis line, the next slot or the record edge keeps that gap (OV-844).
-    """
+) -> LinearAnnotationLabelRoom:
+    """The room the record's labels take in a slot of ``height_px`` (``LinearAnnotationLabelRoom``)."""
 
     above = linear_annotation_labels_above(side, params)
     room = 0.0
+    band: VerticalBand | None = None
     for _annotation, style, y, (_left, _right, top, bottom) in _label_rows(
         track,
         record_index=record_index,
@@ -249,7 +262,9 @@ def linear_annotation_label_room(
     ):
         far = -(y + top) if above else y + bottom - float(height_px)
         room = max(room, far + float(style.label_offset))
-    return room
+        letters = VerticalBand(y + top - float(style.label_offset), y + bottom + float(style.label_offset))
+        band = letters if band is None else band.union(letters)
+    return LinearAnnotationLabelRoom(room, band)
 
 
 def linear_annotation_labels(
@@ -480,6 +495,7 @@ def linear_annotation_track_content(
 
 __all__ = [
     "LinearAnnotationLabel",
+    "LinearAnnotationLabelRoom",
     "annotation_dom_id",
     "linear_annotation_label_room",
     "linear_annotation_labels",

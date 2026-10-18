@@ -16,7 +16,7 @@ import copy
 from dataclasses import dataclass, replace
 import logging
 import math
-from typing import TYPE_CHECKING, Any, Literal, Sequence, cast
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 import pandas as pd
@@ -969,7 +969,7 @@ def _linear_annotation_slot_footprint(
 
     body_band = _slot_body_band(slot)
     params = annotation_track_params_from_mapping(slot.params)
-    label_overhang = (
+    room = (
         linear_annotation_label_room(
             annotation_layout,
             record_index=record_index,
@@ -980,8 +980,9 @@ def _linear_annotation_slot_footprint(
             params=params,
         )
         if annotation_layout is not None
-        else 0.0
+        else None
     )
+    label_overhang = 0.0 if room is None else room.beyond
     if linear_annotation_labels_above(slot.side, params):
         expanded = body_band.expand(label_overhang, 0.0)
     else:
@@ -993,6 +994,7 @@ def _linear_annotation_slot_footprint(
         paint_band=expanded if available else None,
         reserve_band=expanded,
         data_available=available,
+        label_band=(None if room is None or room.band is None else room.band.translate(body_band.top_y)),
     )
 
 
@@ -1611,6 +1613,26 @@ def _linear_annotation_bounds(
                 )
             )
     return bounds
+
+
+def _definition_boxes_from(
+    placement: LinearRecordPlacement,
+    placements: Mapping[int, LinearRecordPlacement],
+    collision_bands: Sequence[tuple[CollisionBand, ...]],
+) -> list[Aabb]:
+    """Every record's name and definition text box, from ``placement``'s bar start and axis."""
+
+    return [
+        Aabb(
+            band.x_start - placement.x,
+            placements[index].axis_y - placement.axis_y + band.top_y,
+            band.x_end - placement.x,
+            placements[index].axis_y - placement.axis_y + band.bottom_y,
+        )
+        for index, bands in enumerate(collision_bands)
+        for band in bands
+        if band.kind == "definition" and band.x_end > band.x_start
+    ]
 
 
 def _collect_linear_primary_bounds(
@@ -2841,6 +2863,7 @@ def assemble_linear_diagram(
             plan=record_vertical_plans[record_index],
             annotation_track_layouts=annotation_track_layouts,
             feature_labels=all_labels[record_index] if record_index < len(all_labels) else [],
+            name_boxes=_definition_boxes_from(record_placements[record_index], record_placements, record_collision_bands),
             font_family=str(cfg.objects.text.font_family),
             leader_stroke_width=float(cfg.labels.stroke_width.long),
             gap=float(cfg.labels.spacing.linear),
