@@ -3462,6 +3462,29 @@ test('a Circular Session keeps a Depth series without a file and a row whose fil
   expect(await depthState()).toEqual(before);
 });
 
+test('a Load takes the loaded Session\'s Depth series, not the previous document\'s (OV-1164)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  const depthTsv = 'NC_012920.1\t1\t10\nNC_012920.1\t3001\t11';
+  await page.evaluate(async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([text], 'depth_a.tsv', { type: 'text/tab-separated-values' }));
+    app.addCircularDepthTrack();
+    app.addCircularDepthTrack();
+    await window.Vue.nextTick();
+  }, depthTsv);
+  const depthState = () => page.evaluate(() => ({
+    series: window.__GBDRAW_APP__.adv.depth_tracks.length,
+    panel: window.__GBDRAW_APP__.circularDepthTrackRows.length
+  }));
+  expect(await depthState()).toEqual({ series: 3, panel: 3 });
+  await page.locator('input[accept^=".json,"]').first()
+    .setInputFiles(join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await expectSessionLoadedWithoutWarnings(page);
+  await page.evaluate(() => window.Vue.nextTick());
+  expect(await depthState()).toEqual({ series: 1, panel: 1 });
+});
+
 test('TK-03: stepping a Depth row track index past the series adds no series', async ({ page }) => {
   test.setTimeout(300_000);
   await openApp(page);

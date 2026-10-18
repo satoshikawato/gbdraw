@@ -2858,6 +2858,9 @@ export const createAppSetup = () => {
       depthTrackUiCounts.circular
     ],
     () => {
+      // OV-1164: a Load fits both drawings' series to the loaded sources and
+      // then sets the row count; the previous document's count does not pad them.
+      if (sessionImportPending.value) return;
       depthTrackUiCounts.circular = Math.max(
         depthTrackUiCounts.circular,
         sourceDepthTrackCount(files.c_depth, 1)
