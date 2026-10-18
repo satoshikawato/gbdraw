@@ -225,8 +225,63 @@ def test_undecodable_input_is_unreadable_not_unclassified_validation(helpers, tm
     gzipped = tmp_path / 'PRIVATE.gbk'
     gzipped.write_bytes(b'\x1f\x8b\x08\x00' + bytes(range(128, 256)))
     result = json.loads(helpers['list_sequence_records'](str(gzipped), 'genbank'))
+    # OV-1258: the inspection says the file is gzip-compressed.
     assert result['error'] == {'code': 'INPUT_UNREADABLE', 'operation': 'listSequenceRecords',
-                               'stage': 'helper', 'context': {}}
+                               'stage': 'helper', 'context': {'reason': 'GZIP_INPUT'}}
+
+
+HMMT_GENBANK = Path(__file__).resolve().parent / 'test_inputs' / 'HmmtDNA.gbk'
+
+
+def test_a_genbank_file_cut_off_names_the_cause_at_inspection_and_generate(helpers, tmp_path):
+    # OV-1258: a GenBank file cut off inside its feature table was "An input
+    # could not be read" with no reason.
+    path = tmp_path / 'PRIVATE.gbk'
+    path.write_bytes(HMMT_GENBANK.read_bytes()[:3000])
+    listed = json.loads(helpers['list_sequence_records'](str(path), 'genbank'))
+    assert listed['error']['code'] == 'INPUT_UNREADABLE'
+    assert listed['error']['context'] == {'reason': 'GENBANK_PARSE'}
+    from gbdraw.io.genome import load_gbks
+    with pytest.raises(ParseError) as caught:
+        load_gbks([str(path)])
+    model = serialize_web_error(caught.value, operation='generate', stage='render')
+    assert (model['code'], model['context']) == ('INPUT_UNREADABLE', {'reason': 'GENBANK_PARSE'})
+
+
+def test_a_genbank_record_without_sequence_is_an_input_error_not_an_engine_failure(helpers, tmp_path):
+    # OV-1258: a LOCUS without ORIGIN read as RENDER_FAILED "Python exception: ValueError".
+    path = tmp_path / 'PRIVATE.gbk'
+    path.write_text('LOCUS       PRIVATE 10 bp DNA linear 01-JAN-2000\nFEATURES\nORIGIN\n//\n')
+    listed = json.loads(helpers['list_sequence_records'](str(path), 'genbank'))
+    assert listed['error']['code'] == 'INPUT_UNREADABLE'
+    assert listed['error']['context'] == {'reason': 'SEQUENCE_UNDEFINED'}
+    from Bio import SeqIO
+    record = next(SeqIO.parse(str(path), 'genbank'))
+    try:
+        bytes(record.seq)
+    except ValueError as error:
+        model = serialize_web_error(error, operation='generate', stage='render')
+    assert (model['code'], model['context']) == ('INPUT_UNREADABLE', {'reason': 'SEQUENCE_UNDEFINED'})
+    assert 'PRIVATE' not in json.dumps(listed)
+
+
+GFF_INPUTS = Path(__file__).resolve().parent / 'test_inputs'
+
+
+@pytest.mark.parametrize(('gff', 'fasta', 'reason'), [
+    (b'##gff-version 3\n', None, 'GFF_NO_FEATURES'),
+    (None, b'PRIVATE plain text\n', 'FASTA_NO_ENTRIES'),
+    (None, b'', 'FASTA_NO_ENTRIES'),
+])
+def test_a_gff3_or_fasta_slot_file_without_entries_says_which(helpers, tmp_path, gff, fasta, reason):
+    # OV-1257: these read "Input validation failed" or "Supply a matching FASTA input".
+    gff_path = tmp_path / 'PRIVATE.gff3'
+    fasta_path = tmp_path / 'PRIVATE.fasta'
+    gff_path.write_bytes(gff if gff is not None else (GFF_INPUTS / 'NC_013668.gff3').read_bytes())
+    fasta_path.write_bytes(fasta if fasta is not None else (GFF_INPUTS / 'NC_013668.fasta').read_bytes())
+    listed = json.loads(helpers['list_gff_fasta_records'](str(gff_path), str(fasta_path)))
+    assert listed['error'] == {'code': 'NO_RECORDS', 'operation': 'listGffFastaRecords',
+                               'stage': 'helper', 'context': {'reason': reason}}
 
 
 @pytest.mark.parametrize(('content', 'reason'), [

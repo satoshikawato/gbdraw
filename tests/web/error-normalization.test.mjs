@@ -552,7 +552,8 @@ test('a display start beyond the record and an unparsable GenBank file are input
   assert.match(display.summary, /Use a display start between 1 and the record length\./);
   assert.deepEqual(display.actions, ['edit-input', 'retry']);
   assert.deepEqual([genbank.code, genbank.operation, genbank.stage], ['INPUT_UNREADABLE', 'generate', 'render']);
-  assert.deepEqual(genbank.context, {});
+  // OV-1258: the reason says the file is cut off or damaged.
+  assert.deepEqual(genbank.context, { reason: 'GENBANK_PARSE' });
   assert.deepEqual(genbank.actions, ['select-input', 'retry']);
   for (const model of [display, genbank]) {
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE_|RENDER_FAILED/);

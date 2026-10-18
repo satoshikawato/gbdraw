@@ -1627,7 +1627,18 @@ def list_sequence_records(path, format):
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {format}'), operation='listSequenceRecords', stage="helper")})
-        records = list(SeqIO.parse(path, format_map[format]))
+        try:
+            records = list(SeqIO.parse(path, format_map[format]))
+        except ValueError as parse_error:
+            if format != "genbank":
+                raise
+            from gbdraw.exceptions import ParseError
+            from gbdraw.io.genome import genbank_read_diagnostic
+            raise ParseError('GenBank file could not be read', diagnostic=genbank_read_diagnostic(path)) from parse_error
+        # OV-1258: a record without sequence cannot be drawn; the inspection says so.
+        if format == "genbank" and not all(getattr(record.seq, "defined", True) for record in records):
+            from gbdraw.exceptions import ValidationError
+            raise ValidationError('Sequence content is undefined', diagnostic={"code": "INPUT_UNREADABLE", "reason": "SEQUENCE_UNDEFINED"})
         if not records:
             missing = ValueError('No records found')
             if format == "genbank":

@@ -358,3 +358,55 @@ test('a Vue error in a component still throws with the production build', async 
   });
   expect(outcome).toBe('VUE_HANDLER_SENTINEL');
 });
+
+// OV-1257: a GFF3 + FASTA slot file without entries names the slot, and a
+// Generate failure about the inputs ends when the inputs are read again.
+test('a GFF3 without features names the GFF3 file, and replacing an input ends the Generate failure', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
+  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles({
+    name: 'header-only.gff3', mimeType: 'text/plain', buffer: Buffer.from('##gff-version 3\n')
+  });
+  await page.getByLabel('FASTA File', { exact: true }).setInputFiles('tests/test_inputs/NC_013668.fasta');
+  const status = page.locator('[data-circular-discovery-status]');
+  await expect(status).toContainText('The GFF3 file has no feature lines.', { timeout: 120000 });
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', error: { code: 'NO_RECORDS', context: { reason: 'GFF_NO_FEATURES' } } });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText('The GFF3 file has no feature lines.');
+  // The inputs change and are read again, still without records: the
+  // inspection line says why, and the failure of the earlier Generate ends.
+  await page.getByLabel('FASTA File', { exact: true }).setInputFiles({
+    name: 'notes.fasta', mimeType: 'text/plain', buffer: Buffer.from('plain notes\n')
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscoveryState.status), { timeout: 120000 })
+    .toBe('error');
+  await expect(alert).toHaveCount(0);
+  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles('tests/test_inputs/NC_013668.gff3');
+  await expect(status).toContainText('The FASTA file has no sequence entry', { timeout: 120000 });
+});
+
+// OV-1258: a GenBank file that cannot be drawn names the cause: a gzip file at
+// inspection, a record without sequence at Generate (not an engine failure).
+test('a gzip GenBank and a GenBank record without sequence name their cause', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  const genbank = page.getByLabel('GenBank/DDBJ File', { exact: true });
+  await genbank.setInputFiles({
+    name: 'HmmtDNA.gbk.gz', mimeType: 'application/gzip',
+    buffer: require('node:zlib').gzipSync(require('node:fs').readFileSync('tests/test_inputs/HmmtDNA.gbk'))
+  });
+  const status = page.locator('[data-circular-discovery-status]');
+  await expect(status).toContainText('The file is gzip-compressed.', { timeout: 120000 });
+  await genbank.setInputFiles({
+    name: 'no-sequence.gb', mimeType: 'text/plain',
+    buffer: Buffer.from('LOCUS       X 10 bp DNA linear 01-JAN-2000\nFEATURES\nORIGIN\n//\n')
+  });
+  await expect(status).toContainText('source record(s) inspected', { timeout: 120000 });
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', error: { code: 'INPUT_UNREADABLE', context: { reason: 'SEQUENCE_UNDEFINED' } } });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText('Sequence content is undefined');
+  await expect(alert).not.toContainText('Python exception');
+});

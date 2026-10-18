@@ -494,7 +494,8 @@ def test_unparsable_genbank_is_unreadable_input_not_a_render_failure(tmp_path: P
         load_gbks([str(broken)])
     payload = _web(caught.value)
     assert payload["code"] == "INPUT_UNREADABLE"
-    assert payload["context"] == {}
+    # OV-1258: the reason says the file is cut off or damaged.
+    assert payload["context"] == {"reason": "GENBANK_PARSE"}
     assert "PRIVATE" not in json.dumps(payload)
 
 
