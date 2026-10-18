@@ -825,10 +825,11 @@ export const sameLegendSources = (left, right) => left.length === right.length
 // the row of the captioned rule that wins it (`<caption> [<fill>]` for a
 // caption written in several colors, OV-1235); else the "other <type>s" row of
 // a type whose drawn features use a captioned rule, or no row when an
-// uncaptioned rule colors it; else its type's row. This tells which rows a rule change regroups; Python still
-// derives the rows and their order. Null while a match is unknown, when a
-// wildcard rule has a caption, or when a used caption names a row Python
-// generates (it suffixes the caption by color, PD-OI-042).
+// uncaptioned rule colors it; else its type's row. This tells which rows a
+// rule change regroups; Python still derives the rows and their order. Null
+// while a match is unknown, when a wildcard rule has a caption, or when a used
+// caption names a row Python generates (it suffixes the caption by color,
+// PD-OI-042).
 /** @param {LegendCatalogFeatures} catalogFeatures @param {FeatureDrawnContext} context */
 const legendRowKeysOf = (catalogFeatures, context) => {
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered: false });
@@ -862,10 +863,14 @@ export const resultLegendRowKeys = (state, context) => {
 };
 
 // The place of each rule row in Python's Legend: the index of the first rule
-// of its caption in the rule table (prepare_legend_table walks the rules in
-// table order and skips a caption it has drawn); -1 for a row no rule names.
-/** @param {readonly { cap?: unknown }[]} rules @returns {(key: string) => number} */
-export const legendRuleOrder = (rules) => (key) => rules.findIndex((rule) => legendRuleCaption(rule) === key);
+// drawn in the row of the key, by the key the rule table allocates to its
+// rule rows (`legendRowKeysOf`; prepare_legend_table walks the rules in table
+// order and skips a row it has drawn); -1 for a row no rule names.
+/** @param {Partial<SpecificColorRule>[]} rules @returns {(key: string) => number} */
+export const legendRuleOrder = (rules) => {
+  const ruleRowKey = createRuleLegendCaptions(rules);
+  return (key) => rules.findIndex((rule) => Boolean(legendRuleCaption(rule)) && ruleRowKey(rule) === key);
+};
 
 // Whether the displayed Result shows the Legend rows a change of the row keys
 // regroups, so Python need not draw them (R14-8). Every drawn feature stays

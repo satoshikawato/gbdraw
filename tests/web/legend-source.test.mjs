@@ -198,6 +198,23 @@ test('a merge into a row whose rule comes later asks Python; a merge into an "ot
     'alpha merged into other proteins (its rule removed)');
 });
 
+// The same order by the rows' keys when a caption is written in several
+// colors (OV-1235): a row of one color merged in from an earlier rule moves
+// the row it joins.
+test('a merge into a row of one color of a shared caption whose rule comes later asks Python (OV-1235)', () => {
+  const THREE = [[['A', 'CDS'], ['G', 'CDS'], ['B', 'CDS']]];
+  const tail = [tagRule('G', 'alpha'), tagRule('B', 'alpha', '#00ff00')];
+  // The merged row is hidden and the row it joins shown, as a merge shows them live.
+  const shows = showing(['alpha [#ff0000]', 'alpha [#00ff00]']);
+  assert.equal(showable(THREE, [tagRule('A', 'beta', '#00ff00'), ...tail], [tagRule('A', 'alpha', '#00ff00'), ...tail], { shows }), false,
+    'beta renamed alpha joins the later row alpha [#00ff00]');
+  assert.equal(showable(THREE, [tagRule('A', 'alpha', '#111111'), ...tail], [tagRule('A', 'alpha', '#00ff00'), ...tail],
+    { shows }), false,
+    'alpha [#111111] recolored joins the later row alpha [#00ff00]');
+  assert.equal(showable(THREE, [...tail, tagRule('A', 'beta', '#00ff00')], [...tail, tagRule('A', 'alpha', '#00ff00')], { shows }), true,
+    'a row of a later rule joins the earlier row alpha [#00ff00]');
+});
+
 // U3a review M1, L1: a History restore shows the bytes History kept. A
 // relabel shows only where the new row took the old row's place; the rows a
 // restore splits are exact when the restored Result shows Python's rows.
