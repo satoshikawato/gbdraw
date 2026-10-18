@@ -23,6 +23,7 @@ const {
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
+  numberLosatDisplayPairs,
   missingUploadPairsToResolve,
   normalizeLinearComparisonPlan,
   plainTextLinearRecordLabel,
@@ -768,4 +769,55 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
     [['c->a', 1], ['b->c', 0]],
     'each displayed search has its own card and number'
   );
+}
+
+{
+  // OV-1069: every displayed pair of a LOSATP Collinear grid, Search between
+  // All records, has its own number. A 2x2 grid with an uploaded a->d edge
+  // and a 1x4 grid with row 2 OFF (closed up) are the reachable layouts with
+  // several adjacent-row pairs per row boundary; each such pair is its own
+  // ADJACENT edge. A Selected plan with repeated ordinals is refused.
+  const cell = (uid, row, column = 1) => ({
+    uid, row, canonicalRow: row, canonicalColumn: column, canonicalCardinality: 'exactly_one'
+  });
+  const displayedNumbers = (drawn, rows, plan) => {
+    const resolution = resolveLinearComparisonPlan({
+      plan, sequences: drawn, layout: rows, losatProgram: 'blastp', blastpMode: 'collinear'
+    });
+    assert.equal(resolution.error, '');
+    const specs = buildLosatJobSpecs({
+      resolution, recordCount: drawn.length, recordUids: drawn.map(({ uid }) => uid), program: 'blastp',
+      blastpMode: 'collinear', collinearInferOrthogroups: true, collinearSearchScope: 'all'
+    });
+    const numbers = numberLosatDisplayPairs(specs, resolution.edges, canonicalGridDisplayPairs(drawn, rows));
+    assert.deepEqual(numbers.map(({ pairIndex }) => pairIndex), specs.map(({ ordinal }) => ordinal));
+    return specs.flatMap((spec, index) => (
+      numbers[index].displayPair ? [[`${spec.queryUid}->${spec.subjectUid}`, numbers[index].pairIndex]] : []
+    ));
+  };
+  const square = [cell('a', 1, 1), cell('b', 1, 2), cell('c', 2, 1), cell('d', 2, 2)];
+  const upload = createLinearComparisonEdge({
+    queryUid: 'a', subjectUid: 'd', source: 'upload', fileActive: true, file: file('a-d.tsv')
+  });
+  assert.deepEqual(
+    displayedNumbers(sequences, square, {
+      mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [upload]
+    }),
+    [['a->c', 0], ['a->d', 1], ['b->c', 2], ['b->d', 3]]
+  );
+  const column = [cell('a', 1), cell('b', 2), cell('c', 3), cell('d', 4)];
+  assert.deepEqual(
+    displayedNumbers([{ uid: 'a' }, { uid: 'c' }, { uid: 'd' }], column, {
+      mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: []
+    }),
+    [['a->c', 0], ['c->d', 1]]
+  );
+  const selected = resolveLinearComparisonPlan({
+    plan: {
+      mode: LINEAR_COMPARISON_MODES.SELECTED, defaultSource: 'losat',
+      edges: [createLinearComparisonEdge({ queryUid: 'a', subjectUid: 'c', source: 'losat' })]
+    },
+    sequences, layout: square, losatProgram: 'blastp', blastpMode: 'collinear'
+  });
+  assert.match(selected.error, /Pairwise/);
 }

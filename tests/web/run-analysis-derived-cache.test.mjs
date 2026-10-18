@@ -1,16 +1,13 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import {
-  buildLosatDerivedPayloadCachePayload,
-  hasRequiredCanonicalAnalysisResource,
-  resolveProteinBlastpCandidateLimit
-} from '../../gbdraw/web/js/app/run-analysis.js';
+import * as runAnalysis from '../../gbdraw/web/js/app/run-analysis.js';
 import { bindCanonicalTypedResource } from '../../gbdraw/web/js/services/session-request.js';
+
+const { hasRequiredCanonicalAnalysisResource, resolveProteinBlastpCandidateLimit } = runAnalysis;
 
 assert.equal(resolveProteinBlastpCandidateLimit(5), 5);
 assert.equal(resolveProteinBlastpCandidateLimit('7'), 7);
@@ -58,71 +55,16 @@ for (const appearanceOnly of [
   );
 }
 
-const baselineInput = {
-  mode: 'collinear',
-  maxHits: 5,
-  bitscore: 50,
-  evalue: '1e-5',
-  identity: 70,
-  alignmentLength: 0,
-  collinearMinAnchors: 1,
-  collinearMaxUnitGap: 0,
-  collinearUnitMode: 'cds',
-  collinearColorMode: 'orientation',
-  collinearAnchorMode: 'rbh',
-  collinearMergeOrientation: 'either',
-  collinearMaxDiagonalDrift: 0,
-  collinearMaxConflictsInMergeGap: 1,
-  collinearMaxParalogLinksPerOrthogroup: 2,
-  collinearSearchScope: 'adjacent',
-  orthogroupMembershipMode: 'anchor_core_v1',
-  orthogroupMemberMaxHits: 5,
-  recordPayloads: [
-    {
-      recordIndex: 1,
-      proteinCacheKey: 'protein-b',
-      runtimeBindingHash: 'runtime-b',
-      displayBindingHash: 'display-b',
-      viewTransform: { length: 200, reverse: true }
-    },
-    {
-      recordIndex: 0,
-      proteinCacheKey: 'protein-a',
-      runtimeBindingHash: 'runtime-a',
-      displayBindingHash: 'display-a',
-      viewTransform: { length: 100, reverse: false }
-    }
-  ],
-  pairPayloads: [
-    {
-      pairIndex: 0,
-      queryIndex: 0,
-      subjectIndex: 1,
-      cacheKey: 'pair-a-b'
-    }
-  ]
-};
-
-const buildIdentity = (overrides = {}) => buildLosatDerivedPayloadCachePayload({
-  ...baselineInput,
-  ...overrides
-});
-const cacheKey = (identity) => createHash('sha256')
-  .update(JSON.stringify(identity))
-  .digest('hex');
-
-const baselineIdentity = buildIdentity();
-assert.equal(baselineIdentity.featureIdentity, 'stable-source-rendered-display-v1');
-const unchangedIdentity = buildIdentity({
-  recordPayloads: baselineInput.recordPayloads.map((record) => ({
-    ...record,
-    viewTransform: { ...record.viewTransform }
-  })),
-  pairPayloads: baselineInput.pairPayloads.map((pair) => ({ ...pair }))
-});
-
-assert.deepEqual(unchangedIdentity, baselineIdentity);
-assert.equal(cacheKey(unchangedIdentity), cacheKey(baselineIdentity));
+// OV-1063: the derived identity and key have one owner, gbdraw.analysis.protein_artifacts
+// (tests/test_derived_losatp_identity.py). Generate looks a payload up by the derived key of the
+// `buildProteinLosatCacheKeys` reply, and the Web hashes no derived identity of its own.
+assert.equal(Object.hasOwn(runAnalysis, 'buildLosatDerivedPayloadCachePayload'), false);
+{
+  const source = await readFile(runAnalysisPath, 'utf8');
+  assert.match(source, /\(\{ keys: proteinCacheKeys, derivedKey: derivedCacheKey \} = requireProteinLosatCacheKeys\(/);
+  assert.match(source, /getLosatDerivedCacheEntry\(\s*derivedCacheMap,\s*derivedCacheKey,/);
+  assert.doesNotMatch(source, /derived-option-conformance/);
+}
 
 assert.equal(
   hasRequiredCanonicalAnalysisResource('collinear', {
@@ -165,81 +107,6 @@ assert.equal(
   true
 );
 
-const invalidationCases = [
-  ['orthogroupMemberMaxHits', 'memberMaxHits', 7, 'orthogroup'],
-  ['collinearMinAnchors', 'minAnchors', 2],
-  ['collinearMaxUnitGap', 'maxGeneGap', 1],
-  ['collinearUnitMode', 'unitMode', 'locus'],
-  ['collinearColorMode', 'colorMode', 'orientation_identity'],
-  ['collinearAnchorMode', 'anchorMode', 'all'],
-  ['collinearMergeOrientation', 'mergeOrientation', 'strand'],
-  ['collinearMaxDiagonalDrift', 'maxDiagonalDrift', 1],
-  ['collinearMaxConflictsInMergeGap', 'maxConflictsInMergeGap', 2],
-  ['collinearMaxParalogLinksPerOrthogroup', 'maxParalogLinksPerOrthogroup', 3],
-  ['collinearSearchScope', 'searchScope', 'all']
-];
-
-for (const [inputName, identityName, changedValue, section = 'collinear'] of invalidationCases) {
-  const changedIdentity = buildIdentity({ [inputName]: changedValue });
-  assert.deepEqual(changedIdentity, {
-    ...baselineIdentity,
-    [section]: {
-      ...baselineIdentity[section],
-      [identityName]: section === 'orthogroup' ? Number(changedValue) : String(changedValue)
-    }
-  });
-  assert.notEqual(
-    cacheKey(changedIdentity),
-    cacheKey(baselineIdentity),
-    `${inputName} must invalidate the derived cache key`
-  );
-  assert.deepEqual(changedIdentity.pairs, baselineIdentity.pairs);
-}
-
-assert.deepEqual(
-  buildIdentity({ maxHits: 99, pairwiseMatchStyle: 'curve' }),
-  baselineIdentity,
-  'Collinear derived identity must ignore Pairwise-only and match-style settings'
-);
-for (const appearanceOnly of [
-  { pairwiseMatchStyle: 'curve' },
-  { comparisonHeight: 90 },
-  { comparisonDisclosureOpen: true },
-  { scaleFontSize: 27 },
-  { rulerLabelFontSize: 11 }
-]) {
-  assert.deepEqual(
-    buildIdentity(appearanceOnly),
-    baselineIdentity,
-    'render appearance and disclosure state must not change derived scientific identity'
-  );
-}
-
-const orthogroupIdentity = buildIdentity({ mode: 'orthogroup' });
-assert.equal(Object.hasOwn(orthogroupIdentity, 'pairwise'), false);
-assert.equal(Object.hasOwn(orthogroupIdentity, 'collinear'), false);
-assert.deepEqual(
-  buildIdentity({
-    mode: 'orthogroup',
-    maxHits: 99,
-    collinearUnitMode: 'locus',
-    collinearAnchorMode: 'all',
-    collinearMergeOrientation: 'strand',
-    collinearSearchScope: 'all'
-  }),
-  orthogroupIdentity,
-  'Orthogroup derived identity must ignore Pairwise-only and Collinear-only settings'
-);
-
-const pairwiseIdentity = buildIdentity({ mode: 'pairwise' });
-assert.equal(Object.hasOwn(pairwiseIdentity, 'orthogroup'), false);
-assert.equal(Object.hasOwn(pairwiseIdentity, 'collinear'), false);
-assert.notEqual(
-  cacheKey(buildIdentity({ mode: 'pairwise', maxHits: 6 })),
-  cacheKey(pairwiseIdentity),
-  'Pairwise max hits must participate in Pairwise derived identity'
-);
-
 // Old persisted resources remain readable, but do not masquerade as new cache hits.
 for (const schema of [1, 2]) {
   assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', {
@@ -272,11 +139,6 @@ for (const schema of [1, 2]) {
     globalThis.window = previousWindow;
   }
 }
-assert.equal(baselineIdentity.pathRepresentation, 'lossless-graph-v1');
-const oldIdentity = {...baselineIdentity};
-delete oldIdentity.pathRepresentation;
-assert.notEqual(cacheKey(oldIdentity), cacheKey(baselineIdentity));
-
 // Current comparison data has one owner; stats can differ without duplicating it.
 const immutablePairs = Object.freeze([Object.freeze({ tsv: 'α\tβ\n', canonicalTsv: 'query\tsubject\n' })]);
 const immutableResource = Object.freeze({ schema: 3, kind: 'result', value: Object.freeze({

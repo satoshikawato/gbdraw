@@ -2436,7 +2436,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     assert rows[0]["query_view_feature_svg_id"] == rows[0][
         "query_feature_svg_id"
     ]
-    assert set(result) == {"pairs", "collinearityResult", "provenance", "cache"}
+    assert set(result) == {"pairs", "collinearityResult", "identity", "identityKey", "provenance", "cache"}
     assert result["provenance"]["upstreamRawKeys"] == ["pair-a-b", "pair-b-a"]
     assert result["provenance"]["orthogroup"] == {
         "membershipMode": "anchor_core_v1",
@@ -2785,8 +2785,8 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
 
     adjacent_member_sets = member_sets(adjacent)
     all_member_sets = member_sets(all_records)
-    assert set(adjacent) == {"pairs", "collinearityResult", "provenance", "cache"}
-    assert set(all_records) == {"pairs", "collinearityResult", "provenance", "cache"}
+    assert set(adjacent) == {"pairs", "collinearityResult", "identity", "identityKey", "provenance", "cache"}
+    assert set(all_records) == {"pairs", "collinearityResult", "identity", "identityKey", "provenance", "cache"}
     assert {"a0", "b0"} in adjacent_member_sets
     assert {"a0", "b0", "c0"} in all_member_sets
     assert {

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import logging
 from contextlib import contextmanager
@@ -42,7 +41,17 @@ from gbdraw.analysis.depth_tracks import (
     normalize_depth_tracks,
 )
 from gbdraw.analysis.protein_artifacts import (
+    CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
+    DerivedLosatpPair,
+    DerivedLosatpRecord,
+    DerivedLosatpSettings,
+    derived_losatp_cache_key,
+    derived_losatp_identity,
+    derived_losatp_provenance,
+    derived_pair_payload,
+    effective_collinearity_unit_kinds,
     is_current_derived_protein_artifact,
+    normalize_derived_losatp_settings,
     validate_current_derived_protein_artifacts,
 )
 from gbdraw.analysis.protein_colinearity import (
@@ -66,7 +75,7 @@ from gbdraw.annotations import (
 )
 from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat
 from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
-from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids
+from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids, losatp_job_specs
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import (
     FeatureIdentityNotice,
@@ -117,7 +126,6 @@ from gbdraw.render.interactive_context import (
     require_interactive_svg_metadata,
 )
 from gbdraw.render.interactive_svg import InteractiveSvgContext
-from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload
 
 from .diagram import (
     DEFAULT_SELECTED_FEATURES,
@@ -2294,10 +2302,7 @@ def _extract_linear_request_proteins(
     records: tuple[SeqRecord, ...],
     inputs: PreparedDiagramInputs,
 ) -> ProteinExtractionResult:
-    record_instance_keys = tuple(
-        record_input.record_key or f"record-{index + 1}"
-        for index, record_input in enumerate(request.records)
-    )
+    record_instance_keys = _request_record_instance_keys(request)
     extraction = render_stage(
         "protein_extraction",
         extract_web_stable_cds_proteins,
@@ -2402,28 +2407,6 @@ def _require_comparison_columns(frame: DataFrame) -> None:
         )
 
 
-def _comparison_frame_payload(pair: _ProteinPairFrame) -> dict[str, Any]:
-    from gbdraw.session_request_codec import encode_canonical_table
-
-    frame = pair.frame
-    tsv = frame.loc[:, list(COMPARISON_COLUMNS)].to_csv(
-        sep="\t",
-        header=False,
-        index=False,
-        lineterminator="\n",
-    )
-    return {
-        "pair_index": pair.pair_index,
-        "query_index": pair.query_index,
-        "subject_index": pair.subject_index,
-        "tsv": tsv,
-        "canonicalTsv": encode_canonical_table(
-            frame, name=f"comparison pair {pair.pair_index}"
-        ),
-        "hit_count": len(frame),
-    }
-
-
 def _resolved_protein_pair_frames(
     metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
@@ -2469,53 +2452,6 @@ def _resolved_protein_pair_frames(
     return result
 
 
-def _collinearity_parameter_identity(
-    params: LosslessCollinearityParameters | None,
-) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
-    resolved = params or LosslessCollinearityParameters()
-    snapshot = {
-        "model": "lossless",
-        "parameters": {
-            "minAnchors": int(resolved.min_anchors),
-            "maxUnitGap": int(resolved.max_unit_gap),
-            "maxDiagonalDrift": int(resolved.max_diagonal_drift),
-            "maxConflicts": int(resolved.max_conflicts),
-            "mergeOrientation": str(resolved.merge_orientation),
-        },
-    }
-    effective = {
-        "minAnchors": int(resolved.min_anchors),
-        "maxGeneGap": int(resolved.max_unit_gap),
-        "maxDiagonalDrift": int(resolved.max_diagonal_drift),
-        "maxConflictsInMergeGap": int(resolved.max_conflicts),
-        "mergeOrientation": str(resolved.merge_orientation),
-    }
-    return snapshot, effective
-
-
-def _effective_collinearity_unit_kinds(
-    result: CollinearityResult | None,
-) -> list[str]:
-    if result is None:
-        return []
-    anchors = [
-        anchor
-        for block in result.blocks
-        for anchor in block.anchors
-    ]
-    anchors.extend(result.unblocked_anchors)
-    return sorted(
-        {
-            str(unit_kind)
-            for anchor in anchors
-            for unit_kind in (
-                anchor.query_unit_kind,
-                anchor.subject_unit_kind,
-            )
-        }
-    )
-
-
 def _derived_compact_resource(
     mode: str,
     collinearity: object,
@@ -2541,6 +2477,102 @@ def _derived_compact_resource(
     return {}
 
 
+def _request_record_instance_keys(request: DiagramRequest) -> tuple[str, ...]:
+    """The record instance key of each drawn record (the Web's record keys)."""
+
+    return tuple(
+        record_input.record_key or f"record-{index + 1}"
+        for index, record_input in enumerate(request.records)
+    )
+
+
+def _request_derived_settings(
+    request: LinearDiagramRequest,
+    mode: str,
+) -> DerivedLosatpSettings:
+    """The converter settings a request's derived payload was computed with."""
+
+    options = request.options
+    params = options.collinearity_params or LosslessCollinearityParameters()
+    search = options.losat_search
+    # The Python reading of the Web's grid precondition: every drawn record
+    # holds one canonical grid cell (`canonicalGridDisplayPairs`).
+    explicit_display_pairs = len(request.records) >= 2 and all(
+        record_input.presentation.grid_row is not None
+        and record_input.presentation.grid_column is not None
+        and record_input.cardinality is RecordCardinality.EXACTLY_ONE
+        for record_input in request.records
+    )
+    return normalize_derived_losatp_settings(
+        mode=mode,
+        bitscore=options.bitscore,
+        evalue=options.evalue,
+        identity=options.identity,
+        alignment_length=options.alignment_length,
+        membership_mode=str(options.orthogroup_membership_mode),
+        member_max_hits=search.losatp_member_max_hits if search is not None else None,
+        min_anchors=params.min_anchors,
+        max_unit_gap=params.max_unit_gap,
+        max_diagonal_drift=params.max_diagonal_drift,
+        max_conflicts=params.max_conflicts,
+        merge_orientation=str(params.merge_orientation),
+        unit_mode=str(options.collinearity_unit_mode),
+        color_mode=str(options.collinearity_color_mode),
+        anchor_mode=str(options.collinearity_anchor_mode),
+        search_scope=str(options.collinearity_search_scope),
+        max_paralog_links=options.collinear_max_paralog_links_per_orthogroup,
+        infer_orthogroups=options.collinear_infer_orthogroups,
+        explicit_display_pairs=explicit_display_pairs,
+    )
+
+
+def _derived_identity_pairs(
+    request: LinearDiagramRequest,
+    settings: DerivedLosatpSettings,
+    pair_frames: Sequence[_ProteinPairFrame],
+    raw_entries: Sequence[Mapping[str, Any]],
+) -> tuple[DerivedLosatpPair, ...] | None:
+    """The searches of the run in the Web's search order, or None when one has
+    no single raw entry (the payload was not computed from raw LOSAT results)."""
+
+    instance_keys = _request_record_instance_keys(request)
+    displayed = {
+        (pair.query_index, pair.subject_index): pair.pair_index for pair in pair_frames
+    }
+    raw_keys: dict[tuple[str, str], list[str]] = {}
+    for entry in raw_entries:
+        if is_protein_losat_cache_entry(entry):
+            raw_keys.setdefault(
+                (
+                    str(entry.get("queryRecordInstanceKey") or ""),
+                    str(entry.get("subjectRecordInstanceKey") or ""),
+                ),
+                [],
+            ).append(str(entry.get("key") or ""))
+    pairs: list[DerivedLosatpPair] = []
+    for query_index, subject_index in losatp_job_specs(
+        settings.mode,
+        record_count=len(request.records),
+        pairs=tuple(displayed),
+        infer_orthogroups=settings.infer_orthogroups,
+        search_scope=settings.search_scope,
+    ):
+        keys = raw_keys.get((instance_keys[query_index], instance_keys[subject_index]), [])
+        if len(keys) != 1 or not keys[0]:
+            return None
+        number = displayed.get((query_index, subject_index))
+        pairs.append(
+            DerivedLosatpPair(
+                query_index=query_index,
+                subject_index=subject_index,
+                raw_key=keys[0],
+                display_pair=number is not None,
+                pair_index=number,
+            )
+        )
+    return tuple(pairs)
+
+
 def _build_current_derived_entries(
     metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
@@ -2564,175 +2596,61 @@ def _build_current_derived_entries(
         else request.options.orthogroups
     )
     collinearity = metadata.collinearity_result if metadata is not None else request.options.collinearity_blocks
-    if not wanted:
-        # serialize_orthogroups_payload gives one row per orthogroup.
-        if pair_frames or (orthogroups is not None and getattr(orthogroups, "orthogroups", None)):
-            _derived_compact_resource(mode, collinearity, orthogroups)
+    if not pair_frames and not (orthogroups is not None and getattr(orthogroups, "orthogroups", None)):
         return ()
-    pair_payloads = [_comparison_frame_payload(pair) for pair in pair_frames]
-    orthogroup_payload = serialize_orthogroups_payload(
-        orthogroups,
-        records=records,
-    )
-    if not pair_payloads and not orthogroup_payload:
+    # The Web switch keeps the encoding check of the computed result.
+    compact_resource = _derived_compact_resource(mode, collinearity, orthogroups)
+    # As on the Web, a derived payload holds its computed result and comes
+    # from raw LOSAT results: one owner gives its identity, key and pairs.
+    if not wanted or not compact_resource:
         return ()
-
+    settings = _request_derived_settings(request, mode)
+    pairs = _derived_identity_pairs(request, settings, pair_frames, raw_entries)
+    if pairs is None:
+        return ()
     record_instances = manifest.record_instances
-    instance_keys = tuple(
-        record_input.record_key or f"record-{index + 1}"
-        for index, record_input in enumerate(request.records)
-    )
-    protein_raw_entries = [
-        entry for entry in raw_entries if is_protein_losat_cache_entry(entry)
-    ]
-    raw_cache_keys = sorted(
-        {
-            str(entry.get("key") or "")
-            for entry in protein_raw_entries
-            if str(entry.get("key") or "")
-        }
-    )
-    identity: dict[str, Any] = {
-        "cacheSchema": 3,
-        "semantics": "derived-option-conformance-v1",
-        "pathRepresentation": "lossless-graph-v1",
-        "idEncoding": "runtime-handle-v1",
-        "converter": "convert_losatp_blastp_pairs_to_genomic_payload",
-        "mode": mode,
-        # Orthogroup and collinearity inference can consume self, reverse, and
-        # hidden non-adjacent comparisons that are not represented by the
-        # displayed pair payloads below.  Bind the derived key to every raw
-        # schema-4 entry available to that inference run.
-        "rawCacheKeys": raw_cache_keys,
-        "thresholds": {
-            "bitscore": str(request.options.bitscore),
-            "evalue": str(request.options.evalue),
-            "identity": str(request.options.identity),
-            "alignmentLength": str(request.options.alignment_length),
-        },
-        "orthogroup": {
-            "membershipMode": str(request.options.orthogroup_membership_mode),
-            "memberMaxHits": (
-                request.options.losat_search.losatp_member_max_hits
-                if request.options.losat_search is not None
-                else None
-            ),
-        },
-        "records": [
-            {
-                "recordIndex": index,
-                "recordInstanceKey": instance_key,
-                "runtimeBindingHash": str(
-                    record_instances.get(instance_key, {}).get(
-                        "runtimeBindingHash"
-                    )
-                    or ""
+    derived_records = []
+    for index, instance_key in enumerate(_request_record_instance_keys(request)):
+        binding = record_instances.get(instance_key, {})
+        region = request.records[index].region
+        derived_records.append(
+            DerivedLosatpRecord(
+                index=index,
+                runtime_binding_hash=str(binding.get("runtimeBindingHash") or ""),
+                display_binding_hash=str(binding.get("displayBindingHash") or ""),
+                length=len(records[index].seq),
+                reverse=bool(
+                    request.records[index].presentation.reverse_complement
+                    or (region is not None and region.reverse_complement)
                 ),
-                "displayBindingHash": str(
-                    record_instances.get(instance_key, {}).get(
-                        "displayBindingHash"
-                    )
-                    or ""
-                ),
-                "viewTransform": {
-                    "length": len(records[index].seq),
-                    "reverse": bool(
-                        request.records[index].presentation.reverse_complement
-                        or (
-                            (region := request.records[index].region) is not None
-                            and region.reverse_complement
-                        )
-                    ),
-                },
-            }
-            for index, instance_key in enumerate(instance_keys)
-        ],
-        "pairs": [
-            {
-                "pairIndex": int(pair["pair_index"]),
-                "queryIndex": int(pair["query_index"]),
-                "subjectIndex": int(pair["subject_index"]),
-                "rawCacheKeys": sorted(
-                    str(entry.get("key") or "")
-                    for entry in protein_raw_entries
-                    if entry.get("queryRecordInstanceKey")
-                    == instance_keys[int(pair["query_index"])]
-                    and entry.get("subjectRecordInstanceKey")
-                    == instance_keys[int(pair["subject_index"])]
-                ),
-            }
-            for pair in pair_payloads
-        ],
-    }
-    if mode == "collinear":
-        parameter_identity, effective_collinearity_params = (
-            _collinearity_parameter_identity(
-                request.options.collinearity_params
             )
         )
-        identity["collinear"] = {
-            **effective_collinearity_params,
-            "unitMode": str(request.options.collinearity_unit_mode),
-            "colorMode": str(request.options.collinearity_color_mode),
-            "anchorMode": str(request.options.collinearity_anchor_mode),
-            "searchScope": str(request.options.collinearity_search_scope),
-            "inferOrthogroups": request.options.collinear_infer_orthogroups,
-            "maxParalogLinksPerOrthogroup": int(
-                request.options.collinear_max_paralog_links_per_orthogroup
-            ),
-            "parameterIdentity": parameter_identity,
-        }
-    compact_resource = {
-        name: json.loads(encoded)
-        for name, encoded in _derived_compact_resource(mode, collinearity, orthogroups).items()
-    }
-    key = hashlib.sha256(
-        json.dumps(
-            identity,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")
-    ).hexdigest()
+    identity = derived_losatp_identity(settings, derived_records, pairs)
     entry: Mapping[str, Any] = {
-        "schema": 3,
+        "schema": CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
         "kind": "derived-losatp-payload",
         "idEncoding": "runtime-handle-v1",
-        "key": key,
+        "key": derived_losatp_cache_key(identity),
         "mode": mode,
         "payload": {
             "identity": identity,
-            "provenance": {
-                "schema": 1,
-                "upstreamRawKeys": raw_cache_keys,
-                "thresholds": copy.deepcopy(identity["thresholds"]),
-                "orthogroup": copy.deepcopy(identity["orthogroup"]),
-                **(
-                    {
-                        "collinear": {
-                            **copy.deepcopy(identity["collinear"]),
-                            "unitMode": {
-                                "requested": str(
-                                    request.options.collinearity_unit_mode
-                                ),
-                                "effectiveKinds": (
-                                    _effective_collinearity_unit_kinds(
-                                        metadata.collinearity_result
-                                        if metadata is not None
-                                        else None
-                                    )
-                                ),
-                            },
-                        }
-                    }
-                    if mode == "collinear"
-                    else {}
+            "provenance": derived_losatp_provenance(
+                identity,
+                settings,
+                effective_unit_kinds=effective_collinearity_unit_kinds(
+                    collinearity if isinstance(collinearity, CollinearityResult) else None
                 ),
+            ),
+            "pairs": [
+                derived_pair_payload(
+                    pair.pair_index, pair.query_index, pair.subject_index, pair.frame
+                )
+                for pair in pair_frames
+            ],
+            **{
+                name: json.loads(encoded)
+                for name, encoded in compact_resource.items()
             },
-            "pairs": pair_payloads,
-            "orthogroups": orthogroup_payload,
-            **compact_resource,
         },
     }
     return (entry,)

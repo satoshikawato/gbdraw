@@ -754,6 +754,9 @@ hit-limit drafts. A saved Collinear pipeline without `collinearInferOrthogroups`
 uses its historical inference behavior (ON); new Web state defaults to OFF.
 In the Web, any derived result read from a Session loads unchanged and is
 recomputed once from the raw search rows when the analysis runs again.
+The Web, the CLI, and the Python API name a derived result by one key, which
+every option that changes it enters. A derived result saved before that key
+changed is not reused: it is recomputed once, as above.
 
 **Save Raw LOSAT TSV** resolves generated protein handles to stable readable
 aliases. Uploaded comparison TSV is never rewritten. Export raw results to keep

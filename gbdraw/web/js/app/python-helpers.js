@@ -11,7 +11,7 @@ from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs as
     render_staged_canonical_web_request,
 )
-from gbdraw.session_request_codec import encode_canonical_table, encode_canonical_typed_resource
+from gbdraw.session_request_codec import encode_canonical_typed_resource
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
@@ -917,12 +917,60 @@ def resolve_legacy_protein_reference_map_json(
     except Exception as error:
         return json.dumps({'status': 'error', 'error': serialize_web_error(error, operation='resolveLegacyProteinReferences', stage="helper")})
 
+# The converter settings of a Web request, by the names of the owner's normalizer.
+_WEB_DERIVED_SETTING_NAMES = {
+    "mode": "mode",
+    "maxHits": "max_hits",
+    "bitscore": "bitscore",
+    "evalue": "evalue",
+    "identity": "identity",
+    "alignmentLength": "alignment_length",
+    "orthogroupMembershipMode": "membership_mode",
+    "orthogroupMemberMaxHits": "member_max_hits",
+    "collinearMinAnchors": "min_anchors",
+    "collinearMaxUnitGap": "max_unit_gap",
+    "collinearMaxDiagonalDrift": "max_diagonal_drift",
+    "collinearMaxConflictsInMergeGap": "max_conflicts",
+    "collinearMergeOrientation": "merge_orientation",
+    "collinearUnitMode": "unit_mode",
+    "collinearColorMode": "color_mode",
+    "collinearAnchorMode": "anchor_mode",
+    "collinearSearchScope": "search_scope",
+    "collinearMaxParalogLinksPerOrthogroup": "max_paralog_links",
+    "collinearInferOrthogroups": "infer_orthogroups",
+    "explicitDisplayPairs": "explicit_display_pairs",
+}
+
+def _web_derived_settings(settings):
+    from gbdraw.analysis.protein_artifacts import normalize_derived_losatp_settings
+
+    if not isinstance(settings, dict):
+        raise ValueError("Derived LOSATP settings must be an object.")
+    unknown = sorted(set(settings).difference(_WEB_DERIVED_SETTING_NAMES))
+    if unknown:
+        raise ValueError(f"Unknown derived LOSATP settings: {', '.join(unknown)}")
+    return normalize_derived_losatp_settings(**{
+        _WEB_DERIVED_SETTING_NAMES[name]: value for name, value in settings.items()
+    })
+
 def build_protein_losat_cache_keys_json(
     identity_manifest_json,
     pairs_json,
+    derived_json=None,
 ):
-    """Build directional schema-4 keys after validating the manifest once."""
+    """Build directional schema-4 keys after validating the manifest once.
+
+    With derived (one entry per pair: displayPair, pairIndex; the
+    converter settings; the records with their view transforms), the reply also
+    holds the key of the derived payload those raw results convert to.
+    """
     try:
+        from gbdraw.analysis.protein_artifacts import (
+            DerivedLosatpPair,
+            DerivedLosatpRecord,
+            derived_losatp_cache_key,
+            derived_losatp_identity,
+        )
         from gbdraw.analysis.protein_colinearity import (
             build_protein_losat_cache_key,
             build_protein_losat_pair_identity,
@@ -946,7 +994,41 @@ def build_protein_losat_cache_keys_json(
                 outfmt=str(options.get("outfmt") or "6"),
                 search_context=options.get("searchContext"),
             ))
-        return json.dumps({"keys": keys})
+        reply = {"keys": keys}
+        derived = None if derived_json is None else json.loads(str(derived_json))
+        if derived is not None and not isinstance(derived, dict):
+            raise ValueError("Derived LOSATP key request must be an object.")
+        if derived is not None:
+            settings = _web_derived_settings(derived.get("settings"))
+            records = []
+            record_indexes = {}
+            for record in derived["records"]:
+                instance_key = str(record["recordInstanceKey"])
+                binding = manifest.binding_for(instance_key)
+                transform = _normalize_web_view_transform(record.get("viewTransform") or {})
+                record_indexes[instance_key] = int(record["recordIndex"])
+                records.append(DerivedLosatpRecord(
+                    index=int(record["recordIndex"]),
+                    runtime_binding_hash=str(binding["runtimeBindingHash"]),
+                    display_binding_hash=str(binding["displayBindingHash"]),
+                    length=int(transform["length"]),
+                    reverse=bool(transform["reverse"]),
+                ))
+            derived_pairs = derived["pairs"]
+            if not isinstance(derived_pairs, list) or len(derived_pairs) != len(pairs):
+                raise ValueError("Derived LOSATP pairs must match the requested pairs.")
+            identity = derived_losatp_identity(settings, records, [
+                DerivedLosatpPair(
+                    query_index=record_indexes[str(pair["queryRecordInstanceKey"])],
+                    subject_index=record_indexes[str(pair["subjectRecordInstanceKey"])],
+                    raw_key=key,
+                    display_pair=item.get("displayPair") is True,
+                    pair_index=item.get("pairIndex"),
+                )
+                for pair, key, item in zip(pairs, keys, derived_pairs)
+            ])
+            reply["derived"] = {"key": derived_losatp_cache_key(identity)}
+        return json.dumps(reply)
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='buildProteinLosatCacheKeys', stage="helper")})
 
@@ -1028,26 +1110,6 @@ def _build_web_protein_extraction(protein_maps, identity_manifest=None):
         identity_manifest=identity_manifest,
     )
 
-def _converted_pair_payload(pair_index, converted):
-    """One displayed pair of the converter reply: the headerless BLAST-style
-    rows for Run info and the canonical comparison table the request uses."""
-    from io import StringIO
-    from gbdraw.io.comparisons import COMPARISON_COLUMNS
-    handle = StringIO()
-    converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
-        handle,
-        sep=chr(9),
-        header=False,
-        index=False,
-        lineterminator=chr(10),
-    )
-    return {
-        "pair_index": pair_index,
-        "tsv": handle.getvalue(),
-        "canonicalTsv": encode_canonical_table(converted, name=f"comparison pair {pair_index}"),
-        "hit_count": int(converted.shape[0]),
-    }
-
 def convert_losatp_blastp_pairs_to_genomic_payload(
     pairs_path,
     raw_tsv_path,
@@ -1075,22 +1137,24 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
 ):
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
     try:
-        import math
-        import pandas as pd
         from gbdraw.analysis.collinearity import (
-            LosslessCollinearityParameters,
             build_orthogroup_collinearity_blocks_from_hits,
             convert_collinearity_blocks_to_comparisons,
             convert_collinearity_blocks_to_pair_comparisons,
-            normalize_collinearity_anchor_mode,
-            normalize_collinearity_color_mode,
-            normalize_collinearity_search_scope,
         )
-        from gbdraw.analysis.collinearity_units import normalize_collinearity_unit_mode
+        from gbdraw.analysis.protein_artifacts import (
+            DerivedLosatpPair,
+            DerivedLosatpRecord,
+            derived_losatp_cache_key,
+            derived_losatp_identity,
+            derived_losatp_provenance,
+            derived_pair_payload,
+            effective_collinearity_unit_kinds,
+            normalize_derived_losatp_settings,
+        )
         from gbdraw.analysis.protein_colinearity import (
             convert_pair_protein_hits_to_genomic_links,
             filter_protein_hits_by_thresholds,
-            normalize_orthogroup_membership_mode,
             parse_losatp_outfmt6,
             select_rbh_orthogroup_edges_from_directional_hits,
             select_top_hits_per_query,
@@ -1104,100 +1168,29 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         raw_pairs = raw_payload.get("pairs")
         if not isinstance(raw_records, list) or not isinstance(raw_pairs, list):
             raise ValueError("LOSATP blastp conversion payload must contain 'records' and 'pairs' lists.")
-        normalized_mode = str(mode or "pairwise").strip().lower()
-        if normalized_mode not in {"pairwise", "orthogroup", "collinear"}:
-            raise ValueError(f"Unsupported LOSATP blastp mode: {mode!r}")
-        normalized_max_hits = 5
-        if normalized_mode == "pairwise":
-            normalized_max_hits = int(5 if _is_blank_or_js_nullish(max_hits) else max_hits)
-            if normalized_max_hits <= 0:
-                raise ValueError("protein_blastp_max_hits must be > 0")
-
-        normalized_membership_mode = "anchor_core_v1"
-        normalized_member_max_hits = None
-        if normalized_mode in {"orthogroup", "collinear"}:
-            normalized_membership_mode = normalize_orthogroup_membership_mode(
-                str(orthogroup_membership_mode or "anchor_core_v1")
-            )
-            normalized_member_max_hits = (
-                None
-                if _is_blank_or_js_nullish(orthogroup_member_max_hits)
-                else int(orthogroup_member_max_hits)
-            )
-            if normalized_member_max_hits is not None and normalized_member_max_hits <= 0:
-                raise ValueError("orthogroup_member_max_hits must be > 0 or None")
-
-        normalized_collinear_unit_mode = "auto"
-        normalized_collinear_color_mode = "orientation"
-        normalized_collinear_anchor_mode = "rbh"
-        normalized_collinear_search_scope = "adjacent"
-        normalized_max_paralog_links = 2
-        normalized_collinearity_params = LosslessCollinearityParameters()
-        if normalized_mode == "collinear":
-            if not isinstance(collinear_infer_orthogroups, bool):
-                raise ValueError("collinear_infer_orthogroups must be a boolean")
-            normalized_collinear_unit_mode = normalize_collinearity_unit_mode(
-                str(collinear_unit_mode or "auto")
-            )
-            normalized_collinear_color_mode = normalize_collinearity_color_mode(
-                str(collinear_color_mode or "orientation")
-            )
-            normalized_collinear_anchor_mode = normalize_collinearity_anchor_mode(
-                str(collinear_anchor_mode or "rbh")
-            )
-            normalized_collinear_search_scope = normalize_collinearity_search_scope(
-                str(collinear_search_scope or "adjacent")
-            )
-            normalized_max_paralog_links = int(
-                2
-                if _is_blank_or_js_nullish(collinear_max_paralog_links_per_orthogroup)
-                else collinear_max_paralog_links_per_orthogroup
-            )
-            if normalized_max_paralog_links <= 0:
-                raise ValueError(
-                    "collinear_max_paralog_links_per_orthogroup must be > 0"
-                )
-            normalized_collinearity_params = LosslessCollinearityParameters(
-                min_anchors=int(
-                    1
-                    if _is_blank_or_js_nullish(collinear_min_anchors)
-                    else collinear_min_anchors
-                ),
-                max_unit_gap=int(
-                    0
-                    if _is_blank_or_js_nullish(collinear_max_unit_gap)
-                    else collinear_max_unit_gap
-                ),
-                max_diagonal_drift=int(
-                    0
-                    if _is_blank_or_js_nullish(collinear_max_diagonal_drift)
-                    else collinear_max_diagonal_drift
-                ),
-                max_conflicts=int(
-                    1
-                    if _is_blank_or_js_nullish(collinear_max_conflicts_in_merge_gap)
-                    else collinear_max_conflicts_in_merge_gap
-                ),
-                merge_orientation=str(collinear_merge_orientation or "either").strip().lower(),
-            )
-            normalized_collinearity_params.validate()
-
-        normalized_bitscore = float(bitscore)
-        normalized_evalue = float(evalue)
-        normalized_identity = float(identity)
-        normalized_alignment_length = int(alignment_length)
-        if not math.isfinite(normalized_bitscore) or normalized_bitscore < 0:
-            raise ValueError("bitscore must be a finite value >= 0")
-        if not math.isfinite(normalized_evalue) or normalized_evalue < 0:
-            raise ValueError("evalue must be a finite value >= 0")
-        if (
-            not math.isfinite(normalized_identity)
-            or normalized_identity < 0
-            or normalized_identity > 100
-        ):
-            raise ValueError("identity must be a finite value between 0 and 100")
-        if normalized_alignment_length < 0:
-            raise ValueError("alignment_length must be >= 0")
+        settings = normalize_derived_losatp_settings(
+            mode=mode,
+            max_hits=max_hits,
+            bitscore=bitscore,
+            evalue=evalue,
+            identity=identity,
+            alignment_length=alignment_length,
+            membership_mode=orthogroup_membership_mode,
+            member_max_hits=orthogroup_member_max_hits,
+            min_anchors=collinear_min_anchors,
+            max_unit_gap=collinear_max_unit_gap,
+            max_diagonal_drift=collinear_max_diagonal_drift,
+            max_conflicts=collinear_max_conflicts_in_merge_gap,
+            merge_orientation=collinear_merge_orientation,
+            unit_mode=collinear_unit_mode,
+            color_mode=collinear_color_mode,
+            anchor_mode=collinear_anchor_mode,
+            search_scope=collinear_search_scope,
+            max_paralog_links=collinear_max_paralog_links_per_orthogroup,
+            infer_orthogroups=collinear_infer_orthogroups,
+            explicit_display_pairs=explicit_display_pairs,
+        )
+        normalized_mode = settings.mode
 
         record_payloads = []
         for idx, record in enumerate(raw_records):
@@ -1212,7 +1205,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "record_index": record_index,
                     "record_id": str(record.get("recordId") or ""),
                     "protein_map": record.get("proteinMap") or {},
-                    "protein_cache_key": str(record.get("proteinCacheKey") or ""),
+                    "runtime_binding_hash": str(record.get("runtimeBindingHash") or ""),
+                    "display_binding_hash": str(record.get("displayBindingHash") or ""),
                     "view_transform": _normalize_web_view_transform(record.get("viewTransform") or {}),
                 }
             )
@@ -1263,97 +1257,31 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 default=0,
             ),
         }
-        derived_provenance = {
-            "schema": 1,
-            "upstreamRawKeys": sorted(
-                {str(item["cache_key"]) for item in pair_payloads}
-            ),
-            "thresholds": {
-                "bitscore": normalized_bitscore,
-                "evalue": normalized_evalue,
-                "identity": normalized_identity,
-                "alignmentLength": normalized_alignment_length,
-            },
-        }
-        if normalized_mode == "pairwise":
-            derived_provenance["pairwise"] = {
-                "maxHits": normalized_max_hits,
-            }
-        if normalized_mode in {"orthogroup", "collinear"}:
-            derived_provenance["orthogroup"] = {
-                "membershipMode": normalized_membership_mode,
-                "memberMaxHits": normalized_member_max_hits,
-            }
-        if normalized_mode == "collinear":
-            derived_provenance["collinear"] = {
-                "unitMode": {
-                    "requested": normalized_collinear_unit_mode,
-                    "effectiveKinds": [],
-                },
-                "anchorMode": normalized_collinear_anchor_mode,
-                "searchScope": normalized_collinear_search_scope,
-                "inferOrthogroups": collinear_infer_orthogroups,
-                "colorMode": normalized_collinear_color_mode,
-                "parameters": {
-                    "minAnchors": int(normalized_collinearity_params.min_anchors),
-                    "maxUnitGap": int(normalized_collinearity_params.max_unit_gap),
-                    "maxDiagonalDrift": int(
-                        normalized_collinearity_params.max_diagonal_drift
-                    ),
-                    "maxConflicts": int(normalized_collinearity_params.max_conflicts),
-                    "mergeOrientation": str(
-                        normalized_collinearity_params.merge_orientation
-                    ),
-                    "maxParalogLinksPerOrthogroup": normalized_max_paralog_links,
-                },
-            }
-
-        conversion_cache_key = (
-            "derived-option-conformance-v1",
-            normalized_mode,
-            normalized_max_hits if normalized_mode == "pairwise" else None,
-            str(normalized_bitscore),
-            str(normalized_evalue),
-            str(normalized_identity),
-            str(normalized_alignment_length),
-            (
-                str(normalized_membership_mode),
-                normalized_member_max_hits,
-            ) if normalized_mode in {"orthogroup", "collinear"} else None,
-            (
-                int(normalized_collinearity_params.min_anchors),
-                int(normalized_collinearity_params.max_unit_gap),
-                normalized_collinear_unit_mode,
-                normalized_collinear_color_mode,
-                normalized_collinear_anchor_mode,
-                str(normalized_collinearity_params.merge_orientation),
-                int(normalized_collinearity_params.max_diagonal_drift),
-                int(normalized_collinearity_params.max_conflicts),
-                int(normalized_max_paralog_links),
-                normalized_collinear_search_scope,
-                collinear_infer_orthogroups,
-                bool(explicit_display_pairs),
-            ) if normalized_mode == "collinear" else None,
-            tuple(
-                (
-                    item["record_index"],
-                    item["protein_cache_key"],
-                    int(item["view_transform"]["length"]),
-                    bool(item["view_transform"]["reverse"]),
+        identity = derived_losatp_identity(
+            settings,
+            [
+                DerivedLosatpRecord(
+                    index=item["record_index"],
+                    runtime_binding_hash=item["runtime_binding_hash"],
+                    display_binding_hash=item["display_binding_hash"],
+                    length=int(item["view_transform"]["length"]),
+                    reverse=bool(item["view_transform"]["reverse"]),
                 )
-                for item in sorted(record_payloads, key=lambda current: current["record_index"])
-            ),
-            tuple(
-                (
-                    item["pair_index"],
-                    item["query_index"],
-                    item["subject_index"],
-                    item["display_pair"],
-                    item["cache_key"],
+                for item in record_payloads
+            ],
+            [
+                DerivedLosatpPair(
+                    query_index=item["query_index"],
+                    subject_index=item["subject_index"],
+                    raw_key=item["cache_key"],
+                    display_pair=item["display_pair"],
+                    pair_index=item["pair_index"] if item["display_pair"] else None,
                 )
                 for item in pair_payloads
-            ),
+            ],
         )
+        # The key the Web looked this payload up by; it checks the two are equal.
+        conversion_cache_key = derived_losatp_cache_key(identity)
         cached_payload = _web_losatp_cache_get("converted", conversion_cache_key)
         if cached_payload is not None:
             return _web_losatp_json_with_cache_stats(
@@ -1392,10 +1320,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 raise ValueError(f"LOSATP pair payload #{idx + 1} references missing subjectIndex {subject_index}.")
             filter_cache_key = (
                 item["cache_key"],
-                str(normalized_bitscore),
-                str(normalized_evalue),
-                str(normalized_identity),
-                str(normalized_alignment_length),
+                str(settings.bitscore),
+                str(settings.evalue),
+                str(settings.identity),
+                str(settings.alignment_length),
             )
             filtered = _web_losatp_cache_get("filtered", filter_cache_key)
             if filtered is None:
@@ -1405,10 +1333,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 hits = parse_losatp_outfmt6(blast_text)
                 filtered = filter_protein_hits_by_thresholds(
                     hits,
-                    evalue=normalized_evalue,
-                    bitscore=normalized_bitscore,
-                    identity=normalized_identity,
-                    alignment_length=normalized_alignment_length,
+                    evalue=settings.evalue,
+                    bitscore=settings.bitscore,
+                    identity=settings.identity,
+                    alignment_length=settings.alignment_length,
                 )
                 _web_losatp_cache_set("filtered", filter_cache_key, filtered.copy())
                 filtered_cache_misses += 1
@@ -1435,22 +1363,13 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         }
 
         def _finalize_losatp_payload(payload, *, collinearity_result=None, canonical_content=None, canonical_kind=None):
-            if collinearity_result is not None:
-                anchors = [
-                    anchor
-                    for block in collinearity_result.blocks
-                    for anchor in block.anchors
-                ]
-                anchors.extend(collinearity_result.unblocked_anchors)
-                derived_provenance["collinear"]["unitMode"]["effectiveKinds"] = sorted({
-                    str(unit_kind)
-                    for anchor in anchors
-                    for unit_kind in (
-                        anchor.query_unit_kind,
-                        anchor.subject_unit_kind,
-                    )
-                })
-            payload["provenance"] = derived_provenance
+            payload["identity"] = identity
+            payload["provenance"] = derived_losatp_provenance(
+                identity,
+                settings,
+                effective_unit_kinds=effective_collinearity_unit_kinds(collinearity_result),
+            )
+            payload["identityKey"] = conversion_cache_key
             payload["cache"] = cache_stats
             cached_payload = (
                 json.dumps(payload),
@@ -1466,9 +1385,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     record_ids.append(str(record_proteins[0].record_id))
                 else:
                     record_ids.append("")
-            anchor_mode = normalized_collinear_anchor_mode
-            search_scope = normalized_collinear_search_scope
-            max_paralog_links = normalized_max_paralog_links
+            anchor_mode = settings.anchor_mode
+            search_scope = settings.search_scope
+            max_paralog_links = settings.max_paralog_links
             directional_tables = {}
             for item in pair_items:
                 query_index = int(item["query_index"])
@@ -1484,18 +1403,18 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 and int(item["query_index"]) != int(item["subject_index"])
             }))
             use_display_pairs = bool(display_pairs) and (
-                search_scope == "adjacent" or explicit_display_pairs
+                search_scope == "adjacent" or settings.explicit_display_pairs
             )
             collinearity_result = build_orthogroup_collinearity_blocks_from_hits(
                 directional_tables,
                 extraction,
-                params=normalized_collinearity_params,
-                unit_mode=normalized_collinear_unit_mode,
+                params=settings.collinearity_params(),
+                unit_mode=settings.unit_mode,
                 edge_mode=anchor_mode,
                 search_scope=search_scope,
-                infer_orthogroups=collinear_infer_orthogroups,
-                orthogroup_membership_mode=normalized_membership_mode,
-                orthogroup_member_max_hits=normalized_member_max_hits,
+                infer_orthogroups=settings.infer_orthogroups,
+                orthogroup_membership_mode=settings.membership_mode,
+                orthogroup_member_max_hits=settings.member_max_hits,
                 max_paralog_links_per_orthogroup=max_paralog_links,
                 comparison_pairs=(
                     display_pairs
@@ -1503,7 +1422,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     else None
                 ),
             )
-            color_mode = normalized_collinear_color_mode
+            color_mode = settings.color_mode
             if use_display_pairs:
                 display_pair_indices = {
                     tuple(sorted((
@@ -1519,21 +1438,21 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     color_mode=color_mode,
                     search_scope=search_scope,
                 )
-                converted_frames = [
-                    (display_pair_indices[pair], converted_by_pair[pair])
+                converted_pairs = [
+                    derived_pair_payload(display_pair_indices[pair], pair[0], pair[1], converted_by_pair[pair])
                     for pair in display_pairs
                     if pair in converted_by_pair
                 ]
             else:
-                converted_frames = enumerate(convert_collinearity_blocks_to_comparisons(
-                    collinearity_result,
-                    record_ids=record_ids,
-                    color_mode=color_mode,
-                    search_scope=search_scope,
-                ))
-            converted_pairs = []
-            for pair_index, converted in converted_frames:
-                converted_pairs.append(_converted_pair_payload(pair_index, converted))
+                converted_pairs = [
+                    derived_pair_payload(pair_index, pair_index, pair_index + 1, converted)
+                    for pair_index, converted in enumerate(convert_collinearity_blocks_to_comparisons(
+                        collinearity_result,
+                        record_ids=record_ids,
+                        color_mode=color_mode,
+                        search_scope=search_scope,
+                    ))
+                ]
             canonical_content = encode_canonical_typed_resource("result", collinearity_result)
             return _finalize_losatp_payload({"pairs": converted_pairs},
                collinearity_result=collinearity_result,
@@ -1544,7 +1463,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             for item in pair_items:
                 display_hits = select_top_hits_per_query(
                     item["hits"],
-                    max_hits=normalized_max_hits,
+                    max_hits=settings.max_hits,
                 )
                 converted = convert_pair_protein_hits_to_genomic_links(
                     display_hits,
@@ -1552,7 +1471,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     item["subject_map"],
                     orthogroups=None,
                 )
-                converted_pairs.append(_converted_pair_payload(item["pair_index"], converted))
+                converted_pairs.append(derived_pair_payload(
+                    item["pair_index"], item["query_index"], item["subject_index"], converted
+                ))
             return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": []})
 
         hits_by_direction = {
@@ -1570,9 +1491,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
             directional_tables,
             combined_protein_map,
-            orthogroup_membership_mode=normalized_membership_mode,
-            orthogroup_member_max_hits=normalized_member_max_hits,
-            max_related_edges_per_orthogroup=normalized_max_paralog_links,
+            orthogroup_membership_mode=settings.membership_mode,
+            orthogroup_member_max_hits=settings.member_max_hits,
+            max_related_edges_per_orthogroup=settings.max_paralog_links,
             comparison_pairs=tuple(display_pair_indices),
         )
         orthogroups = edge_selection.orthogroups
@@ -1590,7 +1511,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 orthogroups=orthogroups,
             )
             converted_pairs.append(
-                _converted_pair_payload(display_pair_indices[(query_index, subject_index)], converted)
+                derived_pair_payload(
+                    display_pair_indices[(query_index, subject_index)], query_index, subject_index, converted
+                )
             )
         canonical_content = encode_canonical_typed_resource("orthogroupResult", orthogroups)
         return _finalize_losatp_payload({"pairs": converted_pairs},

@@ -794,14 +794,16 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     }
   },
   [DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS]: {
-    keys: ['identityManifest', 'pairs'],
+    // `derived` (optional) asks for the key of the derived payload the raw results convert to.
+    keys: ['identityManifest', 'pairs', 'derived'],
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(
       pyodide,
       'build_protein_losat_cache_keys_json',
       [
         jsonArgument(payload.identityManifest, {}),
-        jsonArgument(payload.pairs, [])
+        jsonArgument(payload.pairs, []),
+        jsonArgument(payload.derived, null)
       ]
     )
   },

@@ -1123,3 +1123,25 @@ export const buildLosatJobSpecs = ({
   }
   return Object.freeze(specs);
 };
+
+/**
+ * Which searches of a LOSAT run are displayed pairs, and the number of each
+ * search (a displayed pair's number names its payload, its `/blast_<n>.txt`
+ * file and Run info slot). Every search takes its spec ordinal. A displayed
+ * pair is its edge's search in the edge's direction or, for a complete row
+ * grid, an adjacent-row pair; each such pair is its own ADJACENT edge
+ * (`adjacentRowPairs`), so displayed numbers never repeat (OV-1069). The
+ * derived LOSATP identity owner refuses a repeated displayed number.
+ * @param {readonly LosatJobSpec[]} specs
+ * @param {readonly LinearComparisonResolvedEdge[]} edges The edges of the comparison plan.
+ * @param {((queryIndex: number, subjectIndex: number) => boolean) | null} gridPair
+ *   `canonicalGridDisplayPairs` of a drawing laid out by a complete row grid, else null.
+ * @returns {{ displayPair: boolean, pairIndex: number }[]} One per spec, in spec order.
+ */
+export const numberLosatDisplayPairs = (specs, edges, gridPair) => specs.map((spec) => {
+  const edge = edges.find((candidate) => candidate.edgeKey === spec.edgeKey);
+  const displayPair = gridPair
+    ? gridPair(spec.queryIndex, spec.subjectIndex)
+    : Boolean(edge && spec.queryIndex === edge.queryIndex && spec.subjectIndex === edge.subjectIndex);
+  return { displayPair, pairIndex: spec.ordinal };
+});

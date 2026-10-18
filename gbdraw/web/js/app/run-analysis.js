@@ -91,6 +91,7 @@ import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-i
 import {
   buildLosatJobSpecs,
   canonicalGridDisplayPairs,
+  numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import {
@@ -525,126 +526,6 @@ const pruneLosatDerivedCache = (cacheMap) => {
 };
 
 /**
- * The option values a derived protein payload depends on, as the options form holds them.
- * @typedef {object} LosatDerivedCacheMetadata
- * @property {any} [mode]
- * @property {any} [maxHits]
- * @property {any} [bitscore]
- * @property {any} [evalue]
- * @property {any} [identity]
- * @property {any} [alignmentLength]
- * @property {any} [collinearMinAnchors]
- * @property {any} [collinearMaxUnitGap]
- * @property {any} [collinearUnitMode]
- * @property {any} [collinearColorMode]
- * @property {any} [collinearAnchorMode]
- * @property {any} [collinearMergeOrientation]
- * @property {any} [collinearMaxDiagonalDrift]
- * @property {any} [collinearMaxConflictsInMergeGap]
- * @property {any} [collinearMaxParalogLinksPerOrthogroup]
- * @property {any} [collinearSearchScope]
- * @property {any} [orthogroupMembershipMode]
- * @property {any} [orthogroupMemberMaxHits]
- * @property {boolean} [collinearInferOrthogroups]
- * @property {boolean} [explicitDisplayPairs]
- * @property {Record<string, any>[]} [recordPayloads]
- * @property {Record<string, any>[]} [pairPayloads]
- */
-
-/** @param {LosatDerivedCacheMetadata} metadata */
-export const buildLosatDerivedPayloadCachePayload = ({
-  mode,
-  maxHits,
-  bitscore,
-  evalue,
-  identity,
-  alignmentLength,
-  collinearMinAnchors,
-  collinearMaxUnitGap,
-  collinearUnitMode,
-  collinearColorMode,
-  collinearAnchorMode,
-  collinearMergeOrientation,
-  collinearMaxDiagonalDrift,
-  collinearMaxConflictsInMergeGap,
-  collinearMaxParalogLinksPerOrthogroup,
-  collinearSearchScope,
-  collinearInferOrthogroups = true,
-  orthogroupMembershipMode,
-  orthogroupMemberMaxHits,
-  explicitDisplayPairs = false,
-  recordPayloads,
-  pairPayloads
-}) => {
-  const normalizedMode = String(mode || 'pairwise');
-  /** @type {Record<string, unknown>} */
-  const payload = {
-    cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
-    semantics: 'derived-option-conformance-v1',
-    idEncoding: 'runtime-handle-v1',
-    converter: 'convert_losatp_blastp_pairs_to_genomic_payload',
-    featureIdentity: 'stable-source-rendered-display-v1',
-    mode: normalizedMode,
-    thresholds: {
-      bitscore: String(bitscore),
-      evalue: String(evalue),
-      identity: String(identity),
-      alignmentLength: String(alignmentLength)
-    },
-    records: (Array.isArray(recordPayloads) ? recordPayloads : [])
-      .map((record) => ({
-        recordIndex: Number(record?.recordIndex),
-        proteinCacheKey: String(record?.proteinCacheKey || ''),
-        runtimeBindingHash: String(record?.runtimeBindingHash || ''),
-        displayBindingHash: String(record?.displayBindingHash || ''),
-        viewTransform: {
-          length: Number(record?.viewTransform?.length || 0),
-          reverse: Boolean(record?.viewTransform?.reverse)
-        }
-      }))
-      .sort((left, right) => left.recordIndex - right.recordIndex),
-    pairs: (Array.isArray(pairPayloads) ? pairPayloads : [])
-      .map((pair) => ({
-        pairIndex: Number(pair?.pairIndex),
-        queryIndex: Number(pair?.queryIndex),
-        subjectIndex: Number(pair?.subjectIndex),
-        cacheKey: String(pair?.cacheKey || ''),
-        // The converter returns the pairs flagged here, in this direction.
-        displayPair: pair?.displayPair === true
-      }))
-  };
-  if (normalizedMode === 'pairwise') {
-    payload.pairwise = { maxHits: Number(maxHits) || 5 };
-  }
-  if (['orthogroup', 'collinear'].includes(normalizedMode)) {
-    payload.pathRepresentation = 'lossless-graph-v1';
-    payload.orthogroup = {
-      membershipMode: String(orthogroupMembershipMode || ORTHOGROUP_INFERENCE_VERSION),
-      memberMaxHits: requireCurrentOrthogroupMemberMaxHits(orthogroupMemberMaxHits)
-    };
-  }
-  if (normalizedMode === 'collinear') {
-    payload.collinear = {
-      minAnchors: String(collinearMinAnchors),
-      // Persisted LOSAT derived-cache schema 3 uses this historical identity key.
-      maxGeneGap: String(collinearMaxUnitGap),
-      unitMode: String(collinearUnitMode || 'auto'),
-      colorMode: String(collinearColorMode || 'orientation'),
-      anchorMode: String(collinearAnchorMode || 'rbh'),
-      mergeOrientation: String(collinearMergeOrientation || 'either'),
-      maxDiagonalDrift: String(collinearMaxDiagonalDrift),
-      maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
-      maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
-      inferOrthogroups: requireCurrentCollinearInferOrthogroups(collinearInferOrthogroups),
-      searchScope: String(collinearSearchScope || 'adjacent'),
-      // With the search scope 'all' the CLI grid row layout limits the output to the displayed pairs.
-      explicitDisplayPairs: explicitDisplayPairs === true
-    };
-  }
-  return payload;
-};
-
-/**
  * @param {Map<string, unknown> | null | undefined} cacheMap The derived cache; an entry is read as unchecked.
  * @param {string} key
  * @param {unknown} manifest
@@ -697,26 +578,38 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
   );
 };
 
+/** @param {unknown} key */
+const isHexDigest = (key) => typeof key === 'string' && /^[0-9a-f]{64}$/.test(key);
+
+/**
+ * The keys of the `buildProteinLosatCacheKeys` reply: one raw key per pair, and the key of the derived payload
+ * they convert to when the request asked for it (`''` otherwise).
+ * @typedef {{ keys: string[], derivedKey: string }} ProteinLosatCacheKeys
+ */
 // The reply of the `buildProteinLosatCacheKeys` helper is unchecked data. Generate uses each key as a raw LOSAT
-// cache key, so the reply holds one SHA-256 hex digest per pair, as text (`RegExp.test` alone would coerce).
+// cache key (and the derived key as the derived cache key), so the reply holds SHA-256 hex digests, as text
+// (`RegExp.test` alone would coerce).
 /**
  * @param {unknown} reply
  * @param {number} pairCount
- * @returns {string[]}
+ * @param {{ derived?: boolean }} [options] Whether the request asked for the derived key.
+ * @returns {ProteinLosatCacheKeys}
  */
-export const requireProteinLosatCacheKeys = (reply, pairCount) => {
-  /** @type {{ error?: unknown, keys?: unknown }} */
+export const requireProteinLosatCacheKeys = (reply, pairCount, { derived = false } = {}) => {
+  /** @type {{ error?: unknown, keys?: unknown, derived?: { key?: unknown } | null }} */
   const result = reply !== null && typeof reply === 'object' ? reply : {};
   const keys = Array.isArray(result.keys) ? /** @type {unknown[]} */ (result.keys) : null;
+  const derivedKey = derived ? result.derived?.key : '';
   if (
     result.error || !keys
     || keys.length !== pairCount
-    || keys.some((key) => typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key))
+    || keys.some((key) => !isHexDigest(key))
+    || (derived && !isHexDigest(derivedKey))
   ) {
     throw result.error || new Error('Protein cache key generation failed.');
   }
   // Every key passed the text and pattern check above.
-  return /** @type {string[]} */ (keys);
+  return { keys: /** @type {string[]} */ (keys), derivedKey: /** @type {string} */ (derivedKey) };
 };
 
 /** @param {unknown} candidateLimit */
@@ -4445,10 +4338,59 @@ export const createRunAnalysis = ({
             if (batch.searchContext) cacheMetadata.searchContext = batch.searchContext;
             preparedJobs.push({ spec, losatArgs, cacheMetadata, batch });
           }
+          // CLI Sessions can specify a complete two-dimensional row layout.
+          // For collinearity, every pair across adjacent rows is displayed;
+          // the Web comparison-plan edges alone do not represent those pairs.
+          const canonicalGridPair = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
+            ? canonicalGridDisplayPairs(linearSeqs, drawing.linearRecordRows)
+            : null;
+          const hasCanonicalGridRows = canonicalGridPair !== null;
+          const pairNumbers = numberLosatDisplayPairs(
+            preparedJobs.map(({ spec }) => spec), comparisonResolution.edges, canonicalGridPair
+          );
+          const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
+          // The converter settings. The derived key and the converter read these same values.
+          const derivedSettings = {
+            mode: blastpMode,
+            maxHits: blastpMaxHits,
+            ...comparisonThresholds,
+            collinearMinAnchors,
+            collinearMaxUnitGap,
+            collinearUnitMode,
+            collinearColorMode,
+            collinearAnchorMode,
+            collinearMergeOrientation,
+            collinearMaxDiagonalDrift,
+            collinearMaxConflictsInMergeGap,
+            collinearMaxParalogLinksPerOrthogroup,
+            collinearSearchScope,
+            collinearInferOrthogroups,
+            orthogroupMembershipMode,
+            orthogroupMemberMaxHits,
+            explicitDisplayPairs: hasCanonicalGridRows
+          };
+          // The records the converter reads: every record for similarity groups and Collinear.
+          const converterRecordIndexes = useDerivedProteinPayloadCache
+            ? linearSeqs.map((_, index) => index)
+            : Array.from(new Set(preparedJobs.flatMap(({ spec }) => [spec.queryIndex, spec.subjectIndex])))
+              .sort((left, right) => left - right);
           /** @type {string[] | null} */
           let proteinCacheKeys = null;
+          // The key of the derived payload these raw results convert to (similarity groups and Collinear).
+          let derivedCacheKey = '';
           if (useProteinBlastp && preparedJobs.length > 0) {
             throwIfGenerationCanceled();
+            const derivedRecords = [];
+            if (useDerivedProteinPayloadCache) {
+              for (const recordIndex of converterRecordIndexes) {
+                const entry = await getSeqEntry(recordIndex);
+                derivedRecords.push({
+                  recordIndex,
+                  recordInstanceKey: entry.recordInstanceKey,
+                  viewTransform: await getViewTransform(recordIndex)
+                });
+              }
+            }
             const response = await runDiagramHelperOperation(
               DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS,
               {
@@ -4462,11 +4404,16 @@ export const createRunAnalysis = ({
                     args: normalizeLosatArgs(cacheMetadata.args),
                     ...(cacheMetadata.searchContext ? { searchContext: cacheMetadata.searchContext } : {})
                   }
-                }))
+                })),
+                ...(useDerivedProteinPayloadCache
+                  ? { derived: { settings: derivedSettings, records: derivedRecords, pairs: pairNumbers } }
+                  : {})
               }
             );
             throwIfGenerationCanceled();
-            proteinCacheKeys = requireProteinLosatCacheKeys(response.result, preparedJobs.length);
+            ({ keys: proteinCacheKeys, derivedKey: derivedCacheKey } = requireProteinLosatCacheKeys(
+              response.result, preparedJobs.length, { derived: useDerivedProteinPayloadCache }
+            ));
           }
 
           // mergeProteinIdentityManifests made a private deep copy for this run.
@@ -4479,13 +4426,6 @@ export const createRunAnalysis = ({
           if (useProteinBlastp && preparedJobs.length > 0 && !identityIndex) {
             throw new Error('Protein comparison identity manifest is invalid.');
           }
-          // CLI Sessions can specify a complete two-dimensional row layout.
-          // For collinearity, every pair across adjacent rows is displayed;
-          // the Web comparison-plan edges alone do not represent those pairs.
-          const canonicalGridPair = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
-            ? canonicalGridDisplayPairs(linearSeqs, drawing.linearRecordRows)
-            : null;
-          const hasCanonicalGridRows = canonicalGridPair !== null;
           try {
             for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
               throwIfGenerationCanceled();
@@ -4532,15 +4472,9 @@ export const createRunAnalysis = ({
               const resolvedEdge = comparisonResolution.edges.find(
                 (/** @type {LinearComparisonResolvedEdge} */ edge) => edge.edgeKey === spec.edgeKey
               );
-              const isResolvedDisplayPair = canonicalGridPair
-                ? canonicalGridPair(spec.queryIndex, spec.subjectIndex)
-                : Boolean(
-                    resolvedEdge &&
-                    spec.queryIndex === resolvedEdge.queryIndex &&
-                    spec.subjectIndex === resolvedEdge.subjectIndex
-                  );
+              const { displayPair: isResolvedDisplayPair, pairIndex } = pairNumbers[jobIndex];
               const pair = {
-                pairIndex: spec.ordinal,
+                pairIndex,
                 ordinal: spec.ordinal,
                 edgeKey: spec.edgeKey,
                 queryUid: spec.queryUid,
@@ -4572,7 +4506,7 @@ export const createRunAnalysis = ({
               if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
                 pendingJobKeys.add(cacheKey);
                 losatJobs.push({
-                  pairIndex: spec.ordinal,
+                  pairIndex,
                   ordinal: spec.ordinal,
                   edgeKey: spec.edgeKey,
                   queryUid: spec.queryUid,
@@ -4713,19 +4647,12 @@ export const createRunAnalysis = ({
           throwIfGenerationCanceled();
           if (useProteinBlastp) {
             const recordPayloads = [];
-            const recordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
-              ? linearSeqs.map((_, index) => index)
-              : Array.from(new Set(losatPairs.flatMap((pair) => [
-                  pair.queryIndex,
-                  pair.subjectIndex
-                ]))).sort((left, right) => left - right);
-            for (const i of recordIndexes) {
+            for (const i of converterRecordIndexes) {
               const entry = await getSeqEntry(i);
               recordPayloads.push({
                 recordIndex: i,
                 recordId: entry.recordId || `seq_${i + 1}`,
                 proteinMap: entry.proteinMap || {},
-                proteinCacheKey: entry.proteinCacheKey || entry.sequenceKey || `record:${i}`,
                 runtimeBindingHash: entry.runtimeBindingHash || '',
                 displayBindingHash: entry.displayBindingHash || '',
                 viewTransform: await getViewTransform(i)
@@ -4763,33 +4690,9 @@ export const createRunAnalysis = ({
                 ? 'Converting LOSAT protein links to collinear ribbons...'
                 : 'Converting LOSAT protein hits...'
             );
-            const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
-            let derivedCacheKey = '';
             /** @type {Record<string, any> | null} */
             let convertedPayload = null;
             if (useDerivedProteinPayloadCache) {
-              const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
-                mode: blastpMode,
-                maxHits: blastpMaxHits,
-                ...comparisonThresholds,
-                collinearMinAnchors,
-                collinearMaxUnitGap,
-                collinearUnitMode,
-                collinearColorMode,
-                collinearAnchorMode,
-                collinearMergeOrientation,
-                collinearMaxDiagonalDrift,
-                collinearMaxConflictsInMergeGap,
-                collinearMaxParalogLinksPerOrthogroup,
-                collinearSearchScope,
-                collinearInferOrthogroups,
-                orthogroupMembershipMode,
-                orthogroupMemberMaxHits,
-                explicitDisplayPairs: Boolean(hasCanonicalGridRows),
-                recordPayloads,
-                pairPayloads
-              });
-              derivedCacheKey = await hashText(JSON.stringify(derivedCachePayload));
               convertedPayload = getLosatDerivedCacheEntry(
                 derivedCacheMap,
                 derivedCacheKey,
@@ -4826,27 +4729,19 @@ export const createRunAnalysis = ({
                     { role: 'pairs', bytes: pairManifestBytes.buffer },
                     { role: 'rawTsv', bytes: rawTsvBuffer }
                   ],
-                  mode: blastpMode,
-                  maxHits: blastpMaxHits,
-                  ...comparisonThresholds,
-                  collinearMinAnchors,
-                  collinearMaxUnitGap,
-                  collinearUnitMode,
-                  collinearColorMode,
-                  collinearAnchorMode,
-                  collinearMergeOrientation,
-                  collinearMaxDiagonalDrift,
-                  collinearMaxConflictsInMergeGap,
-                  collinearMaxParalogLinksPerOrthogroup,
-                  collinearSearchScope,
-                  collinearInferOrthogroups,
-                  orthogroupMembershipMode,
-                  orthogroupMemberMaxHits,
-                  explicitDisplayPairs: Boolean(hasCanonicalGridRows)
+                  ...derivedSettings
                 }
               );
               // The converter returns a JSON object (convert_losatp_blastp_pairs_to_genomic_payload in python-helpers.js).
               convertedPayload = /** @type {Record<string, any>} */ (response.result);
+              const { identityKey } = convertedPayload;
+              delete convertedPayload.identityKey;
+              // The payload is stored under the key it was looked up by, so the converter must name the same identity.
+              if (useDerivedProteinPayloadCache && !convertedPayload.error && identityKey !== derivedCacheKey) {
+                throw diagnosticError('RESULT_INVALID', { reason: 'DERIVED_KEY_MISMATCH' }, {
+                  stage: 'result-admission', operation: 'convertLosatpPairsToGenomicPayload'
+                });
+              }
               if (["orthogroup", "collinear"].includes(blastpMode)) {
                 const resourceKey = blastpMode === "collinear" ? "collinearityResult" : "orthogroupResult";
                 const canonical = convertedPayload.canonicalResource;
