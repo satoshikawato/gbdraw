@@ -166,14 +166,17 @@ write-up of a release.
   slot, with any mark) keep `label_offset` (4 px by default) between their
   painted letters and the painted edge of their mark, its stroke and a
   bracket's end caps included, and the same gap beyond the letters to the
-  axis line, the next slot, or the record edge. `highlight`, `band`, and
+  axis line, the next slot, or the record edge; a `to_slot` or
+  `cover_anchor` span's label stays outside every slot the span covers,
+  whatever its mark and its own `h` (OV-1156). `highlight`, `band`, and
   `bracket` labels no longer touch or overlap their mark; `line` labels,
   which had 4.7 px, move 0.7 px closer. The label room grows to match;
   records grow only where nothing else already gave that room, by 0 to 7 px
   per record in the tested figures (OV-844). A label that crossed a feature
   label's leader line or overlapped a feature label now moves along its
   region, its centre over one of the region's marks (never into the gap of a
-  region across the origin), to the nearest clear place; labels without such
+  region across the origin) and its letters on the bar (OV-1157), to the
+  nearest clear place; labels without such
   a conflict stay where they were, for example the tobacco chloroplast `IRb`
   and `IRa` labels with `--track_layout above` (OV-845). Where no place is
   clear, the label goes to the place with the fewest conflicts and is drawn

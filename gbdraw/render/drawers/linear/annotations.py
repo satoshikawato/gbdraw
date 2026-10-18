@@ -100,7 +100,7 @@ def _capped_ends(annotation: ResolvedRegionAnnotation, part_index: int) -> tuple
 def _mark_reach(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_height: float) -> float:
     """How far a mark's paint reaches from its lane centre, stroke included (the label side's painted edge)."""
 
-    half_stroke = 0.0 if is_auto_feature_underlay(annotation) else 0.5 * float(style.stroke_width)
+    half_stroke = _half_stroke(annotation, style)
     if annotation.mark in {"band", "highlight"}:
         return 0.5 * _band_height_factor(annotation.mark) * lane_height + half_stroke
     reach = half_stroke
@@ -113,6 +113,10 @@ def _mark_reach(annotation: ResolvedRegionAnnotation, style: RegionAnnotationSty
             # An arrow's butt-capped diagonals reach half the stroke times cos 45 degrees past the cap.
             reach = max(reach, cap + (half_stroke * math.sqrt(0.5) if style.line_cap == "arrow" else 0.0))
     return reach
+
+
+def _half_stroke(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle) -> float:
+    return 0.0 if is_auto_feature_underlay(annotation) else 0.5 * float(style.stroke_width)
 
 
 def _label_anchor(style: RegionAnnotationStyle) -> TextAnchor:
@@ -154,6 +158,7 @@ def _label_rows(
     *,
     record_index: int,
     side: str,
+    covers_slots: bool,
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
@@ -161,7 +166,11 @@ def _label_rows(
     """Each labelled region of the record: its style, the label's slot-local ``y`` and its ink offsets.
 
     The letters keep ``label_offset`` from the painted edge of the mark on the
-    side ``linear_annotation_labels_above`` picks (OV-844).
+    side ``linear_annotation_labels_above`` picks (OV-844). A slot that
+    ``covers_slots`` (a ``to_slot`` or ``cover_anchor`` span) keeps them
+    outside every slot it covers: ``label_offset`` beyond the slot's edge, or
+    beyond a stroke wider than ``padding_px`` (no mark paints further out), so
+    the place does not depend on the slot's height (OV-1156).
     """
 
     if not params.show_labels:
@@ -177,9 +186,13 @@ def _label_rows(
         size = float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE)
         offsets = _label_ink_offsets(annotation.label, font_family, size, _label_anchor(style))
         _left, _right, top, bottom = offsets
-        lane_center = params.padding_px + (placement.lane + 0.5) * lane_height
-        near = _mark_reach(annotation, style, lane_height) + float(style.label_offset)
-        y = lane_center - near - bottom if above else lane_center + near - top
+        if covers_slots:
+            near = max(0.0, _half_stroke(annotation, style) - params.padding_px) + float(style.label_offset)
+            y = -near - bottom if above else float(height_px) + near - top
+        else:
+            lane_center = params.padding_px + (placement.lane + 0.5) * lane_height
+            near = _mark_reach(annotation, style, lane_height) + float(style.label_offset)
+            y = lane_center - near - bottom if above else lane_center + near - top
         rows.append((annotation, style, y, offsets))
     return rows
 
@@ -189,6 +202,7 @@ def linear_annotation_label_room(
     *,
     record_index: int,
     side: str,
+    covers_slots: bool,
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
@@ -202,7 +216,13 @@ def linear_annotation_label_room(
     above = linear_annotation_labels_above(side, params)
     room = 0.0
     for _annotation, style, y, (_left, _right, top, bottom) in _label_rows(
-        track, record_index=record_index, side=side, height_px=height_px, font_family=font_family, params=params
+        track,
+        record_index=record_index,
+        side=side,
+        covers_slots=covers_slots,
+        height_px=height_px,
+        font_family=font_family,
+        params=params,
     ):
         far = -(y + top) if above else y + bottom - float(height_px)
         room = max(room, far + float(style.label_offset))
@@ -216,6 +236,7 @@ def linear_annotation_labels(
     record_length: int,
     bar_length_px: float,
     side: str,
+    covers_slots: bool,
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
@@ -225,7 +246,13 @@ def linear_annotation_labels(
     scale = float(bar_length_px) / max(1, int(record_length))
     labels: list[LinearAnnotationLabel] = []
     for annotation, style, y, (left, right, top, bottom) in _label_rows(
-        track, record_index=record_index, side=side, height_px=height_px, font_family=font_family, params=params
+        track,
+        record_index=record_index,
+        side=side,
+        covers_slots=covers_slots,
+        height_px=height_px,
+        font_family=font_family,
+        params=params,
     ):
         segments = annotation.geometry_segments
         anchor = _label_anchor(style)

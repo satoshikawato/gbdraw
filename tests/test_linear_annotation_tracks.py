@@ -508,6 +508,7 @@ def _build_linear_span(
     features: tuple[tuple[int, int], ...] = ((120, 250),),
     overrides: dict[str, object] | None = None,
     label_text: bool = True,
+    mark: str = "highlight",
     **kwargs: object,
 ):
     records = []
@@ -527,7 +528,7 @@ def _build_linear_span(
                         f"span{index}",
                         CoordinateSpan(parse_record_selector(f"#{index}"), 100, 300),
                         label=f"Span {index}" if label_text else None,
-                        mark="highlight",
+                        mark=mark,
                     )
                     for index in range(1, record_count + 1)
                 ),
@@ -578,10 +579,11 @@ def _linear_bands(drawing, record_index: int = 0) -> dict[str, tuple[float, floa
         ]
         for slot_id in ("regions", "gc")
     )
-    rect = next(element for element in span_group.iter() if element.tag.endswith("rect"))
-    axis_y = group_y(gc_group) - float(slots["gc"]["resolvedOriginPx"])
-    top = group_y(span_group) + float(rect.attrib["y"]) - axis_y
-    bands["drawn"] = (top, top + float(rect.attrib["height"]))
+    rect = next((element for element in span_group.iter() if element.tag.endswith("rect")), None)
+    if rect is not None:
+        axis_y = group_y(gc_group) - float(slots["gc"]["resolvedOriginPx"])
+        top = group_y(span_group) + float(rect.attrib["y"]) - axis_y
+        bands["drawn"] = (top, top + float(rect.attrib["height"]))
     return bands
 
 
@@ -1233,6 +1235,58 @@ def test_linear_span_label_keeps_label_offset_from_the_next_slot(
     assert _slot_paint(drawing, next_slot)[0] - box[1] == pytest.approx(4.0, abs=1e-6)
 
 
+_COVERING_SPANS = [
+    pytest.param(_SPAN_STACK, "anchor_slot=features,to_slot=gc,layer=foreground,z=1", "skew", id="to-slot-below"),
+    pytest.param(_SPAN_STACK, "anchor_slot=gc,to_slot=skew,layer=underlay,z=-1", "features", id="to-slot-above"),
+    pytest.param(
+        _FEATURES_BELOW_STACK, "anchor_slot=features,cover_anchor=true,layer=foreground,z=1", "gc", id="cover-below"
+    ),
+    pytest.param(
+        _FEATURES_BELOW_STACK, "anchor_slot=features,cover_anchor=true,layer=underlay,z=-1", None, id="cover-above"
+    ),
+]
+
+
+@pytest.mark.parametrize("mark", ["highlight", "band", "bracket", "line"])
+@pytest.mark.parametrize(("stack", "spec", "next_slot"), _COVERING_SPANS)
+def test_linear_span_label_stays_outside_every_slot_it_covers(
+    stack: tuple[str, ...], spec: str, next_slot: str | None, mark: str
+) -> None:
+    drawing = _build_linear_span(*stack, _span_slot(spec, labels=True), mark=mark)
+    box = _label_box(drawing)
+    bands = _linear_bands(drawing)
+    covered = {
+        value for key, value in (part.split("=") for part in spec.split(",")) if key in {"anchor_slot", "to_slot"}
+    }
+
+    # Whatever the mark, the letters keep label_offset outside every covered slot (OV-1156), here
+    # label_offset plus the half stroke (0.75 px) that passes the span edge at padding_px=0.
+    for slot_id in covered:
+        _assert_clear(box, bands[slot_id], slot_id)
+    span_top, span_bottom = bands["regions"]
+    gap = span_top - box[1] if box[1] <= span_top else box[0] - span_bottom
+    assert gap == pytest.approx(4.75, abs=1e-6)
+    # And label_offset from what lies beyond them.
+    if next_slot is not None:
+        far = _slot_paint(drawing, next_slot)
+        assert min(abs(far[0] - box[1]), abs(box[0] - far[1])) == pytest.approx(4.0, abs=1e-6)
+    else:
+        # Below the axis line: without label text the record body starts at the line.
+        axis_top = _record_body(_build_linear_span(*stack, _span_slot(spec), mark=mark))[0]
+        assert box[0] == pytest.approx(-axis_top + 4.0, abs=1e-6)
+
+
+@pytest.mark.parametrize("mark", ["band", "bracket"])
+def test_linear_span_label_place_ignores_the_overlays_own_height(mark: str) -> None:
+    spec = "anchor_slot=features,to_slot=gc,layer=foreground,z=1"
+    plain = _build_linear_span(*_SPAN_STACK, _span_slot(spec, labels=True), mark=mark)
+    tall = _build_linear_span(*_SPAN_STACK, _span_slot(f"{spec},h=150", labels=True), mark=mark)
+
+    # With to_slot the overlay's own h is not read: not for the label, not for its room (OV-1156).
+    assert _label_box(tall) == pytest.approx(_label_box(plain), abs=1e-6)
+    assert _slot_paint(tall, "skew") == pytest.approx(_slot_paint(plain, "skew"), abs=1e-6)
+
+
 def _six_kb_drawing(region: RegionAnnotation, features: tuple[tuple[int, int, str], ...]):
     record = SeqRecord(Seq("ACGT" * 1500), id="rec1", name="rec1", annotations={"topology": "circular"})
     record.features = [
@@ -1291,8 +1345,26 @@ def test_linear_label_wider_than_its_region_moves_off_a_leader() -> None:
     assert label["span"][0] <= centre <= label["span"][1]
 
 
+def test_linear_moved_label_keeps_its_letters_on_the_bar() -> None:
+    region = RegionAnnotation(
+        "control", CoordinateSpan(None, 1, 300), label="Mitochondrial control region", mark="highlight"
+    )
+    drawing = _six_kb_drawing(region, ((190, 210, "tRNA-Leu"),))
+    (label,) = _span_label_marks(drawing)
+    root = ElementTree.fromstring(drawing.tostring())
+    parents = {child: parent for parent in root.iter() for child in parent}
+    name = _text_ink_box(next(text for text in root.iter() if text.tag.endswith("text") and text.text == "rec1"), parents)
+    left, top, right, bottom = label["ink"]
+
+    # No place with its letters on the bar clears the leader, so the label keeps its default place
+    # (OV-1155) instead of hanging past the bar's start into the record name (OV-1157).
+    # (the ink centre is within half a pixel of the text anchor)
+    assert 0.5 * (left + right) == pytest.approx(0.5 * sum(label["span"]), abs=0.5)
+    assert right <= name[0] or left >= name[2] or bottom <= name[1] or top >= name[3]
+
+
 def test_linear_label_search_matches_a_full_scan() -> None:
-    """The sorted sweep gives the place a scan of every candidate gives (review 1170 F6)."""
+    """The sorted sweep gives the place a scan of every candidate gives (review 1170 F6), letters on the bar."""
 
     import random
 
@@ -1328,10 +1400,12 @@ def test_linear_label_search_matches_a_full_scan() -> None:
             expected = x
         else:
             candidates = {x}
-            for low, high in segments:
-                candidates |= {low, high, *(v for interval in blocked for v in interval if low <= v <= high)}
+            # The letters (20 px each side of x) stay on a 1000 px bar.
+            for low, high in ((max(low, 20.0), min(high, 980.0)) for low, high in segments):
+                if low <= high:
+                    candidates |= {low, high, *(v for interval in blocked for v in interval if low <= v <= high)}
             expected = min(sorted(candidates), key=lambda value: (conflicts(value), abs(value - x)))
-        assert _place_along_span(label, 0.0, obstacles, gap) == pytest.approx(expected, abs=1e-9)
+        assert _place_along_span(label, 0.0, obstacles, gap, 1000.0) == pytest.approx(expected, abs=1e-9)
 
 
 def test_linear_annotation_to_slot_uses_the_bands_each_record_has() -> None:

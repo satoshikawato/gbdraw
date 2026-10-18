@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Mapping, Sequence, cast
 
-from ...annotations.models import annotation_track_params_from_mapping
+from ...annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 from ...canvas import LinearCanvasConfigurator
 from ...config.models import GbdrawConfig
 from ...layout.linear import (
@@ -392,6 +392,18 @@ def _resolved_slot(
     )
 
 
+def linear_overlay_covers_slots(params: AnnotationTrackParams, anchor_renderer: str | None) -> bool:
+    """Whether an annotation overlay spans slots: ``to_slot``, or ``cover_anchor`` on a ``features`` slot.
+
+    Its labels then keep clear of every slot it covers, so their room does
+    not depend on the overlay's own height.
+    """
+
+    return anchor_renderer is not None and (
+        params.to_slot is not None or (params.cover_anchor and anchor_renderer == "features")
+    )
+
+
 def _span_body(track: LinearResolvedTrack, footprint: LinearSlotFootprint) -> VerticalBand | None:
     if footprint.body_band is not None:
         return footprint.body_band
@@ -615,12 +627,11 @@ def resolve_linear_record_vertical_plan(
         relative_origin = float(overlay.y_offset) - float(anchor.y_offset)
         # cover_anchor on a features slot spans that slot's lanes; on a record
         # without lanes the overlay keeps its own band on the slot.
-        covers_lanes = (
-            annotation.cover_anchor
-            and anchor.renderer == "features"
-            and _span_body(anchor, footprint_of(anchor)) is not None
+        span_to = (
+            (annotation.to_slot or (anchor.id if _span_body(anchor, footprint_of(anchor)) is not None else None))
+            if linear_overlay_covers_slots(annotation, anchor.renderer)
+            else None
         )
-        span_to = annotation.to_slot or (anchor.id if covers_lanes else None)
         span_tracks = (
             ()
             if span_to is None
@@ -738,6 +749,7 @@ __all__ = [
     "LinearResolvedSlot",
     "LinearSlotFootprint",
     "LinearTrackLayout",
+    "linear_overlay_covers_slots",
     "resolve_linear_track_layout",
     "resolve_linear_record_vertical_plan",
 ]

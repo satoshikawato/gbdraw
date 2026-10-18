@@ -204,6 +204,7 @@ from ...svg.ids import (
 from .track_slots import (
     LinearRecordVerticalPlan,
     LinearSlotFootprint,
+    linear_overlay_covers_slots,
     resolve_linear_record_vertical_plan,
     resolve_linear_track_layout,
 )
@@ -863,6 +864,7 @@ def _linear_slot_footprints_for_record(
 ) -> tuple[dict[str, LinearSlotFootprint], float]:
     footprints: dict[str, LinearSlotFootprint] = {}
     font_family = str(canvas_config._cfg.objects.text.font_family)
+    renderers = {slot.id: slot.renderer for slot in layout.slots}
     label_band = measure_linear_label_band(
         labels,
         leader_stroke_width=float(canvas_config._cfg.labels.stroke_width.long),
@@ -952,6 +954,7 @@ def _linear_slot_footprints_for_record(
                     annotation_layout,
                     record_index=record_index,
                     side=slot.side,
+                    covers_slots=linear_overlay_covers_slots(params, renderers.get(params.anchor_slot or "")),
                     height_px=float(body_band.height),
                     font_family=font_family,
                     params=params,
