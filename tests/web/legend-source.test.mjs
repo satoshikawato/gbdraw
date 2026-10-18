@@ -143,14 +143,14 @@ const prepareMatches = (state, rules) => {
     });
   });
 };
-const rowKeysOf = (rows, rules, { prepared = true } = {}) => {
+const rowKeysOf = (rows, rules, { prepared = true, byColor = true } = {}) => {
   const state = batchStateOf(rows, rules);
   if (prepared) prepareMatches(state, rules);
   const context = {
     ...featureDrawnContext(state, { diagramOptions: { selectedFeaturesSet: ['CDS', 'repeat_region'] } }),
     colorRules: rules
   };
-  return resultLegendRowKeys(state, context);
+  return resultLegendRowKeys(state, context, { byColor });
 };
 /** @param {string[]} shown */
 const showing = (shown) => (key) => shown.includes(key);
@@ -270,6 +270,11 @@ test('a caption written in several colors keys each color\'s row as Python does 
     [['alpha [#ff0000]', 'repeat_region', 'alpha [#00ff00]']]);
   assert.deepEqual(rowKeysOf(ONE, [tagRule('A', 'alpha'), tagRule('B', 'alpha')]).map((keys) => [...keys.values()]),
     [['alpha', 'repeat_region', 'alpha']], 'one color: the caption is the key');
+  // D-15-38: a History restore reads the rows by caption (accepted residual OV-357).
+  assert.deepEqual(rowKeysOf(ONE, shared, { byColor: false }).map((keys) => [...keys.values()]),
+    [['alpha', 'repeat_region', 'alpha']], 'a History restore');
+  assert.equal(legendRuleOrder(shared, { byColor: false })('alpha'), 0);
+  assert.equal(legendRuleOrder(shared)('alpha [#00ff00]'), 1);
 });
 
 test('a rule color that splits the row of its caption asks Python; a row re-keyed in its place does not (OV-1235)', () => {

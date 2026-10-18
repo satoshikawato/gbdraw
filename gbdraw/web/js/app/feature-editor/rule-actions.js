@@ -225,14 +225,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const placed = rows
       ? (/** @type {string} */ key, /** @type {string} */ nextKey) => replaced.get(key) === nextKey
       : (/** @type {string} */ key, /** @type {string} */ nextKey) => legendRowTakesPlace(svg, key, nextKey);
+    // A commit keys rule rows as Python does (OV-1235); a restore by caption (D-15-38).
+    const byColor = Boolean(rows);
     return !legendRowsShowable(
-      resultLegendRowKeys(state, legendSourceContext(drawing, before)),
-      resultLegendRowKeys(state, legendSourceContext(drawing, after)),
+      resultLegendRowKeys(state, legendSourceContext(drawing, before), { byColor }),
+      resultLegendRowKeys(state, legendSourceContext(drawing, after), { byColor }),
       {
         displayed: Number(state.selectedResultIndex?.value) || 0,
         shows,
         placed,
-        firstRule: legendRuleOrder(before),
+        firstRule: legendRuleOrder(before, { byColor }),
         restored: rows ? null : (/** @type {string} */ key) => shownPythonLegendRow(svg, key)
       }
     ) || [...typeRowCaptions(before)].some(caption => !kept.has(caption) && !holdsRow(caption));

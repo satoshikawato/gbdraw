@@ -829,13 +829,18 @@ export const sameLegendSources = (left, right) => left.length === right.length
 // rule change regroups; Python still derives the rows and their order. Null
 // while a match is unknown, when a wildcard rule has a caption, or when a used
 // caption names a row Python generates (it suffixes the caption by color,
-// PD-OI-042).
-/** @param {LegendCatalogFeatures} catalogFeatures @param {FeatureDrawnContext} context */
-const legendRowKeysOf = (catalogFeatures, context) => {
+// PD-OI-042). Without `byColor`, a rule row is keyed by its caption (a History
+// restore, D-15-38: a restored table whose caption is written in several
+// colors shows its rows live, accepted residual OV-357).
+/**
+ * @param {LegendCatalogFeatures} catalogFeatures @param {FeatureDrawnContext} context
+ * @param {{ byColor: boolean }} options
+ */
+const legendRowKeysOf = (catalogFeatures, context, { byColor }) => {
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered: false });
   if (!drawn || context.colorRules.some((rule) => rule?.feat === '*' && legendRuleCaption(rule))) return null;
   const ruleTypes = new Set(drawn.filter(({ winner }) => legendRuleCaption(winner)).map(({ type }) => type));
-  const ruleRowKey = createRuleLegendCaptions(context.colorRules);
+  const ruleRowKey = byColor ? createRuleLegendCaptions(context.colorRules) : legendRuleCaption;
   /** @type {Map<string, string | null>} */
   const keys = new Map();
   const generated = new Set();
@@ -852,13 +857,16 @@ const legendRowKeysOf = (catalogFeatures, context) => {
 };
 
 // The row keys of every committed Result, in Result order (an empty map for
-// a Result without a catalog).
-/** @param {{ results?: { value?: unknown } }} state @param {FeatureDrawnContext} context */
-export const resultLegendRowKeys = (state, context) => {
+// a Result without a catalog); `byColor`: as `legendRowKeysOf`.
+/**
+ * @param {{ results?: { value?: unknown } }} state @param {FeatureDrawnContext} context
+ * @param {{ byColor?: boolean }} [options]
+ */
+export const resultLegendRowKeys = (state, context, { byColor = true } = {}) => {
   const results = Array.isArray(state?.results?.value) ? state.results.value : [];
   return results.map((_, index) => {
     const catalogFeatures = resultCatalogFeatures(state, index);
-    return catalogFeatures ? legendRowKeysOf(catalogFeatures, context) : new Map();
+    return catalogFeatures ? legendRowKeysOf(catalogFeatures, context, { byColor }) : new Map();
   });
 };
 
@@ -866,9 +874,13 @@ export const resultLegendRowKeys = (state, context) => {
 // drawn in the row of the key, by the key the rule table allocates to its
 // rule rows (`legendRowKeysOf`; prepare_legend_table walks the rules in table
 // order and skips a row it has drawn); -1 for a row no rule names.
-/** @param {Partial<SpecificColorRule>[]} rules @returns {(key: string) => number} */
-export const legendRuleOrder = (rules) => {
-  const ruleRowKey = createRuleLegendCaptions(rules);
+// `byColor`: as `legendRowKeysOf`.
+/**
+ * @param {Partial<SpecificColorRule>[]} rules @param {{ byColor?: boolean }} [options]
+ * @returns {(key: string) => number}
+ */
+export const legendRuleOrder = (rules, { byColor = true } = {}) => {
+  const ruleRowKey = byColor ? createRuleLegendCaptions(rules) : legendRuleCaption;
   return (key) => rules.findIndex((rule) => Boolean(legendRuleCaption(rule)) && ruleRowKey(rule) === key);
 };
 
