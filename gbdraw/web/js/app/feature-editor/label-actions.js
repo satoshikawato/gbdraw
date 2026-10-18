@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { ShowNotice } from '../app-messages.js' */
 /** @import { DrawingState, DiagramMode } from '../../state.js' */
-import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
+import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
 import { parseLabelOverrideTsv, replaceBulkLabelEdits, serializeLabelOverrideRows } from '../../services/label-override-table.js';
@@ -1679,7 +1679,7 @@ export const createFeatureLabelActions = ({
         : (svgContainer.value?.querySelector('svg') || null) !== sourceSvg
           ? 'the displayed diagram changed while the table loaded'
           : !rulePreparation.isCurrent(before)
-            ? "colors, color rules, the Legend, or the diagram's inputs changed while the table loaded" : '';
+            ? `${RULE_INPUT_CHANGE_WORDS} changed while the table loaded` : '';
       if (changed) {
         showNotice({ text: `Loaded ${rows.length} row(s). Not applied: ${changed}. Load the table again.`, tone: 'warning' });
         return;

@@ -70,6 +70,8 @@ test('a slow earlier specific table cannot overwrite a later uploaded table', as
 // pressed at once must still wait for both imports (OV-1193), and the Priority
 // upload must not discard the Specific rules import (OV-1205).
 test('Generate waits for the Specific rules and Priority File imports still applying (OV-1193)', async ({ browser }) => {
+  // A Session load and a Pyodide start come before the checks.
+  test.setTimeout(180_000);
   const page = await load(browser);
   await page.evaluate(() => {
     window.__RUN_RESOURCES__ = [];
@@ -120,4 +122,39 @@ test('Generate waits for the Specific rules and Priority File imports still appl
     const a = window.__GBDRAW_APP__;
     return { priority: JSON.parse(JSON.stringify(a.manualPriorityRules)), rules: a.manualSpecificRules.map((rule) => rule.cap) };
   })).toEqual({ priority: [{ feat: 'CDS', order: 'gene,product' }], rules: ['Imported'] });
+});
+
+// OV-1205: a Priority File uploaded while the Specific rules are
+// being evaluated changes the rule inputs under that evaluation; the rule
+// owner prepares the rules again, so they apply and the file stays selected.
+test('a Priority File uploaded while the Specific rules are evaluated leaves them applied (OV-1205)', async ({ browser }) => {
+  // A Session load and a Pyodide start come before the checks.
+  test.setTimeout(180_000);
+  const page = await load(browser);
+  await page.evaluate(() => {
+    window.__HOLD_EVALUATION__ = true;
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function heldEvaluation(message, ...rest) {
+      if (window.__HOLD_EVALUATION__ && message?.type === 'helper' && message.operation === 'evaluateRules'
+        && JSON.stringify(message).includes('NADH')) {
+        window.__HOLD_EVALUATION__ = false;
+        window.__RELEASE_EVALUATION__ = () => post.call(this, message, ...rest);
+        return undefined;
+      }
+      return post.call(this, message, ...rest);
+    };
+  });
+  await page.getByLabel('Specific rules file', { exact: true }).setInputFiles({ name: 'rules.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\tNADH\t#123456\tImported\n') });
+  await page.waitForFunction(() => window.__RELEASE_EVALUATION__);
+  await page.getByLabel('Priority File (TSV)', { exact: true }).setInputFiles({ name: 'priority.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tgene,product\n') });
+  const applied = await page.evaluate(async () => {
+    const a = window.__GBDRAW_APP__;
+    window.__RELEASE_EVALUATION__();
+    return [await a.waitForAuxiliaryFileImport(a.files.t_color), await a.waitForAuxiliaryFileImport(a.files.qualifier_priority)];
+  });
+  expect(applied).toEqual([true, true]);
+  expect(await page.evaluate(() => {
+    const a = window.__GBDRAW_APP__;
+    return { file: a.files.t_color?.name || null, rules: a.manualSpecificRules.map((rule) => rule.cap), error: a.errorLog };
+  })).toEqual({ file: 'rules.tsv', rules: ['Imported'], error: null });
 });

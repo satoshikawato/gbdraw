@@ -46,7 +46,7 @@ const closedDialogs = [];
 const { resetModeTransientUi } = setupWatchers({
   state,
   rulePreparation: port(),
-  auxiliaryFileImports: createAuxiliaryFileImports((target) => target),
+  trackAuxiliaryFileImport: createAuxiliaryFileImports((target) => target).track,
   ref: (value) => ({ value }),
   computed: (getter) => ({ get value() { return getter(); } }),
   watch: (source, callback) => {

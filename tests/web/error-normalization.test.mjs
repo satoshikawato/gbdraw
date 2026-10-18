@@ -737,4 +737,10 @@ test('a refused rule commit names what to change and offers no Retry (OV-644)', 
     ['LEGEND_ROW_CONFLICT', 'evaluateRules', 'rule-validation', ['edit-input']]);
   assert.equal(refused.summary, 'A color rule would draw a Legend item that already exists in another color.'
     + ' Change the rule\'s Legend name or color, or rename that Legend item.');
+  // OV-1206: the rule owner gave up on a Specific rules import whose inputs kept changing.
+  const gaveUp = normalizeUserFacingError(diagnosticError('RULE_INPUTS_CHANGED', {}, { stage: 'rule-validation', operation: 'evaluateRules' }));
+  assert.deepEqual([gaveUp.code, gaveUp.operation, gaveUp.stage, gaveUp.actions],
+    ['RULE_INPUTS_CHANGED', 'evaluateRules', 'rule-validation', ['retry']]);
+  assert.equal(gaveUp.summary, 'The Specific rules file was not applied: colors, color rules, the Legend, or the'
+    + ' diagram\'s inputs changed while it was applied. Retry the table import.');
 });
