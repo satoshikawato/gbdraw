@@ -90,12 +90,18 @@ class LinearComparison:
     when the planner produced ``matches`` from a LOSAT search or the Session
     decoder read them from a ``nucleotideBlast`` resource; the Session persists
     it as a ``nucleotideBlast`` resource, as the Web does.
+
+    ``drawn_feature_ids`` marks a table of a Session up to 40 without
+    ``*_view_feature_svg_id`` columns: main's writers before ``3bca0e8d9``
+    stored the drawn-frame feature ID there in ``*_feature_svg_id``, which is
+    read as the view ID (OV-1183).
     """
 
     query_record_index: int
     subject_record_index: int
     matches: DataFrame
     search_frame_text: str | None = field(default=None, repr=False, compare=False)
+    drawn_feature_ids: bool = field(default=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         for name in ("query_record_index", "subject_record_index"):

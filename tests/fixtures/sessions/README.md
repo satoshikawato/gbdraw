@@ -306,3 +306,18 @@ Session 48 conversion to the search frame (OV-1145): `tests/test_session_compat.
 replays each and compares it with its `.v47.replay.svg`, the SVG the dev base
 `e8b460772` drew (equal to `main`'s replay), and `tests/test_api_session.py`
 upgrades and re-saves the BGC Session.
+
+`BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and
+`BGC0000708-BGC0000709-rc.v40-early.gbdraw-session.json.gz` hold the first two
+records of the BGC Gallery Session, the second reverse complemented, with the
+pairwise LOSATP table that `main`'s Web writer computes from that pair's raw
+LOSATP entry (the Python of `python-helpers.js` and the JavaScript of
+`session-request.js` `addCanonicalTable` at `cdd310134` (Session 39) and
+`7aad9e3e0` (Session 40 before `3bca0e8d9`), run natively), stored as
+`comparison-resolved-1`, with the Result of `main`'s CLI replay.
+`tools/build_main_pairwise_rc_fixture.py` rebuilds each byte for byte (command
+in its `.provenance.json`). The table names the reversed record's drawn-frame
+features in `*_feature_svg_id` and has no `*_view_feature_svg_id` column; both
+are the positive fixtures of that reading (OV-1183) and of the Session 39 Web
+Load conversion (OV-1181): `tests/test_session_compat.py` converts and replays
+them.

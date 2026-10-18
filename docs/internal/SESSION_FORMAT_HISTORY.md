@@ -48,6 +48,19 @@ such results; `tools/refresh_gallery_sessions.py` rewrites the Gallery.
 and `majanivirus_collinear-rc.v47.gbdraw-session.json.gz` (main's converter,
 Collinear) are the positive fixtures, each with its replay SVG.
 
+Main's Web writers of Session 39, and of Session 40 before `3bca0e8d9`
+(2026-08-11), stored a reversed record's drawn-frame feature ID in a saved
+LOSATP table's `*_feature_svg_id` and wrote no `*_view_feature_svg_id`
+(OV-1183). A reader of a Session up to 40
+(`DRAWN_FEATURE_ID_SESSION_MAX_VERSION`, `decode_session_request`) marks a
+table without view ID columns (`LinearComparison.drawn_feature_ids`); the
+projection reads its stored IDs as views and takes each source ID from the
+feature index, so the table converts like a Session 47 one. A table with view
+ID columns, and every table of a later Session, is read strictly.
+`BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and
+`BGC0000708-BGC0000709-rc.v40-early.gbdraw-session.json.gz` (main's pairwise
+writer at `cdd310134` and `7aad9e3e0`) are the positive fixtures.
+
 The derived LOSATP identity token becomes `derived-option-conformance-v3`:
 derived entries written before are cache misses and are recomputed once from
 the raw cache, while the stored results are still reused, so no search runs

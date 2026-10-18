@@ -15,14 +15,13 @@ from typing import Any, Mapping
 from gbdraw.api.request_render import plan_request
 from gbdraw.api.session_compat import (
     DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION,
-    canonical_payload_for_session_decode,
+    decode_session_request,
     describe_unmatched_frame_item,
     drawn_frame_protein_results_to_search_frame,
     search_frame_protein_resources,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.session import SessionConversionError
-from gbdraw.session_request_codec import decode_canonical_request
 
 
 def stored_protein_results_to_search_frame(
@@ -44,8 +43,9 @@ def stored_protein_results_to_search_frame(
         raise ValidationError("Stored protein result conversion requires a Session version and request.")
     if version > DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION:
         return {}
-    request = decode_canonical_request(
-        canonical_payload_for_session_decode(version, request_payload),
+    request = decode_session_request(
+        version,
+        request_payload,
         resource_paths=resource_paths,
         output_directory=output_directory,
     )

@@ -1667,6 +1667,57 @@ def render_session_compatible_request(
     return replace(result, migration_report=migration_report)
 
 
+# main's Web writers of Session 39, and of Session 40 before 3bca0e8d9 (#319),
+# stored a reversed record's drawn-frame feature ID in a protein table's
+# ``*_feature_svg_id`` and wrote no ``*_view_feature_svg_id``; a later Session
+# 40 writes both, so the missing column, not the version, tells them apart
+# (OV-1183).
+DRAWN_FEATURE_ID_SESSION_MAX_VERSION = 40
+
+
+def _stores_drawn_feature_ids(frame: DataFrame) -> bool:
+    return any(
+        f"{role}_feature_svg_id" in frame.columns and f"{role}_view_feature_svg_id" not in frame.columns
+        for role in ("query", "subject")
+    )
+
+
+def decode_session_request(
+    session_version: int,
+    payload: Mapping[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+    output_directory: str | Path,
+) -> DiagramRequest:
+    """Decode one stored request of a Session of ``session_version``.
+
+    The canonical payload is migrated first; a Linear table of a Session up
+    to 40 without view ID columns is marked ``drawn_feature_ids``, so the
+    planner reads its stored IDs as views (OV-1183).
+    """
+
+    from gbdraw.session_request_codec import decode_canonical_request
+
+    request = decode_canonical_request(
+        canonical_payload_for_session_decode(session_version, payload),
+        resource_paths=resource_paths,
+        output_directory=output_directory,
+    )
+    if session_version > DRAWN_FEATURE_ID_SESSION_MAX_VERSION or not isinstance(request, LinearDiagramRequest):
+        return request
+    stored = request.options.linear_comparisons or ()
+    marked = tuple(
+        replace(comparison, drawn_feature_ids=True) if _stores_drawn_feature_ids(comparison.matches) else comparison
+        for comparison in stored
+    )
+    if all(before is after for before, after in zip(stored, marked, strict=True)):
+        return request
+    adapted = replace(request, options=replace(request.options, linear_comparisons=marked))
+    # ``replace`` drops the old-schema alignment state (an ``init=False`` field).
+    legacy = request._legacy_similarity_alignment
+    return adapted if legacy is None else _with_legacy_similarity_alignment(adapted, legacy)
+
+
 def canonical_payload_for_session_decode(
     session_version: int,
     payload: Mapping[str, Any],
@@ -1782,6 +1833,7 @@ def _migrate_legacy_linear_track_slot_spec(spec: str) -> str:
 
 
 __all__ = [
+    "DRAWN_FEATURE_ID_SESSION_MAX_VERSION",
     "DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION",
     "MAIN_DISPLAY_FRAME_SESSION_VERSION",
     "AdaptedSessionRequest",
@@ -1789,6 +1841,7 @@ __all__ = [
     "adapt_session_request",
     "build_session_compatible_request_diagram",
     "canonical_payload_for_session_decode",
+    "decode_session_request",
     "drawn_frame_protein_results_to_search_frame",
     "replace_resource_bytes",
     "search_frame_protein_resources",

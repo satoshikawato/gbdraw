@@ -28,7 +28,7 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const { exportSession, getCommittedCanonicalSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
 const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-settings.generated.js');
 const { readSessionDocument } = await import('../../gbdraw/web/js/services/session-authority.js');
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
@@ -1593,7 +1593,9 @@ const FEATURES_NEED_DIAGRAM_WORKER = new Set([
   'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz', 'cli-linear-protein.v30.gbdraw-session.json.gz', 'conservation-fasta.v39.gbdraw-session.json.gz',
   'lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz', 'scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz',
   'scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz',
-  'mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz'
+  'mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz',
+  // gui-audit-20260930-comparisons loads it in the browser (OV-1181).
+  'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz'
 ]);
 const NEEDS_DIAGRAM_WORKER = new Set([
   'feature-edits-circular.v33.gbdraw-session.json.gz', 'feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz',
@@ -1645,8 +1647,37 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
   globalThis.Worker = ImportWorker;
   setStoredProteinResultFrameConverter(null);
   assert.deepEqual([...askedProteinConversion].sort(), [
+    'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz', 'BGC0000708-BGC0000709-rc.v40-early.gbdraw-session.json.gz',
     'BGC0000708-BGC0000713.v47.gbdraw-session.json.gz', 'majanivirus_collinear-rc.v47.gbdraw-session.json.gz'
   ]);
+});
+
+// OV-1181: a Session 39 converts too. Its Load commits a detached copy of the
+// stored document, which takes the returned bytes, and the Linear draft's
+// comparisons are projected again from them.
+test('a Session 39 with a protein table of a reversed record installs the converted bytes Python returns at Load', async () => {
+  const session = fixture('BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz');
+  const tableId = 'comparison-resolved-1';
+  const converted = `${resourceText(session.resources[tableId])}# converted\n`;
+  const calls = [];
+  setStoredProteinResultFrameConverter(async (payload) => {
+    calls.push({ version: payload.version, resources: Object.keys(payload.resources).sort() });
+    return { result: { resources: { [tableId]: {
+      data: Buffer.from(converted, 'utf8').toString('base64'), size: Buffer.byteLength(converted)
+    } } } };
+  });
+  try {
+    const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual(calls, [{ version: 39, resources: Object.keys(session.resources).sort() }]);
+    const committed = getCommittedCanonicalSession();
+    assert.equal(resourceText(committed.resources[tableId]), converted, 'the committed copy holds the converted bytes');
+    assert.equal(committed.resources[tableId].size, Buffer.byteLength(converted));
+    const draft = state.files.linearCanonicalComparisons.find((item) => item.kind === 'precomputedProteinComparison');
+    assert.equal(await draft.file.text(), converted, 'the Linear draft holds the converted bytes');
+  } finally {
+    setStoredProteinResultFrameConverter(null);
+  }
 });
 
 const COLLINEAR_RC = 'majanivirus_collinear-rc.v47.gbdraw-session.json.gz';

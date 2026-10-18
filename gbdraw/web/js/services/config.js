@@ -282,6 +282,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { StoredDrawing } from './main-session-comparison-frame.js' */
 /** @import { CommittedCanonicalSession, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
@@ -2342,13 +2343,10 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
   // The settings-only decision of the request read is passed on explicitly (C-OD07).
   const settingsOnly = requestRead.settingsOnly || isSettingsOnlySessionDocument(data);
-  /** @type {SessionRequestProjection | null} */
-  const canonicalProjection = settingsOnly
-    // The cast: Load read the shown mode (`readSettingsOnlyMode`, K19) and Session authority the Web
-    // inventory; no step after replaces `ui.mode`.
-    ? projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (data), currentResourceTable)
-    : sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
-    ? projectCanonicalSessionRequest({
+  // Kept for the Load stage that projects a Session 39's draft again (OV-1181).
+  /** @type {Parameters<typeof projectCanonicalSessionRequest>[0] | null} */
+  const canonicalProjectionInput = !settingsOnly && sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
+    ? {
         renderRequest: projectionRenderRequest,
         resources: data.resources,
         webFiles: data.webFiles,
@@ -2368,8 +2366,14 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         // in the request, so Load reads them; a draft holds them already.
         deferResourceContent: currentSession && hasStoredDraft,
         adoptCanonicalPayloads: currentSession
-      })
+      }
     : null;
+  /** @type {SessionRequestProjection | null} */
+  const canonicalProjection = settingsOnly
+    // The cast: Load read the shown mode (`readSettingsOnlyMode`, K19) and Session authority the Web
+    // inventory; no step after replaces `ui.mode`.
+    ? projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (data), currentResourceTable)
+    : canonicalProjectionInput && projectCanonicalSessionRequest(canonicalProjectionInput);
   repairs.push(...(canonicalProjection?.legacyTableRepairs || []));
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
   let restoredConfig = canonicalProjection
@@ -2496,6 +2500,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     data,
     sourceSessionVersion,
     canonicalProjection,
+    canonicalProjectionInput,
     restoredConfig,
     projectionResult,
     adoptedCanonicalSession: adoptedSession?.canonical || null,
@@ -4023,6 +4028,33 @@ const convertLoadedProteinResultFrames = async (version, keptSlot) => {
   }
   return keptSlot && nextKept && nextKept !== kept
     ? createArtifactSlot({ ...keptSlot, runtimeState: { ...keptSlot.runtimeState, canonical: nextKept } }) : null;
+};
+
+/**
+ * OV-1181: the same stage for a Session 39, whose Load commits a detached
+ * copy and gives the draft detached files. The copy takes the converted
+ * bytes, and the Linear draft's comparisons are projected again from them
+ * with the input Load projected them with. A failure throws, and the Load
+ * rolls back (PD-OI-046).
+ * @template {{ renderRequest?: unknown, resources?: unknown }} T
+ * @param {number} version
+ * @param {T} committed
+ * @param {Parameters<typeof projectCanonicalSessionRequest>[0] | null} projectionInput
+ * @returns {Promise<T>} `committed` itself when nothing is converted
+ */
+const convertDetachedProteinResultFrames = async (version, committed, projectionInput) => {
+  const converted = await convertStoredProteinResultFrames(version, [/** @type {StoredDrawing} */ (committed)]);
+  if (converted.size === 0) return committed;
+  const resources = await withConvertedResources(/** @type {Record<string, unknown>} */ (committed.resources), converted);
+  const mode = /** @type {UnvalidatedFields<'mode'> | undefined} */ (committed.renderRequest)?.mode;
+  if (projectionInput && mode === 'linear') {
+    state.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
+      projectCanonicalSessionRequest({ ...projectionInput, resources }).files.linearCanonicalComparisons,
+      // Load listed the repairs of these entries when it first read them.
+      { repairs: [] }
+    );
+  }
+  return { ...committed, resources };
 };
 
 /**
@@ -5566,6 +5598,7 @@ const importSessionDocument = async (e, options = {}) => {
     const {
       sourceSessionVersion,
       canonicalProjection,
+      canonicalProjectionInput,
       restoredConfig,
       projectionResult,
       adoptedCanonicalSession,
@@ -6555,7 +6588,11 @@ const importSessionDocument = async (e, options = {}) => {
     if (!currentSchemaSession) {
       // Only a request Load read and projected is committed: a Session before
       // 31 has none (`readSessionRequests`, OV-862), whatever its file holds (OV-819).
-      const committed = canonicalSession ? cloneCanonicalSession(data) : null;
+      const stored = canonicalSession ? cloneCanonicalSession(data) : null;
+      // OV-1181 B-LOAD: after the stored figure, before History's base (`afterImport`).
+      const committed = stored && await convertDetachedProteinResultFrames(
+        sourceSessionVersion, stored, canonicalProjectionInput
+      );
       if (!committed && logicalImportedResults.length > 0) {
         const { adv } = shownDrawing;
         loadedTrackSettings = Object.freeze({

@@ -374,15 +374,16 @@ for (const scenario of ['upload', 'losatn']) {
 }
 
 // OV-1145 B-LOAD (D-128): the stored protein results of each kind, by content,
-// of the Web re-save and of the Python upgrade of the same Session 47.
+// of the Web re-save and of the Python upgrade of the same Session (the
+// comparison resources; a Session 39 re-saves its color tables in another kind).
 const PROTEIN_RESOURCES_CHECK = `
 import base64, gzip, hashlib, json, sys
 from gbdraw.session import upgrade_session_document
 web_path, source = sys.argv[1], sys.argv[2]
 def contents(document):
     return sorted((entry["kind"], hashlib.sha256(base64.b64decode(entry["data"])).hexdigest())
-                  for entry in document["resources"].values()
-                  if entry["kind"] in ("canonical-tsv", "orthogroup-result", "collinearity-result"))
+                  for name, entry in document["resources"].items() if name.startswith("comparison-")
+                  and entry["kind"] in ("canonical-tsv", "orthogroup-result", "collinearity-result"))
 web = json.loads(gzip.decompress(open(web_path, "rb").read()))
 python = upgrade_session_document(source).document.to_dict()
 print(json.dumps({"version": web["version"], "web": contents(web), "python": contents(python),
@@ -438,6 +439,29 @@ test('a Session 47 with protein results of a reversed record shows its figure, t
   await generateAndWaitForResult(page);
   const replay = await svgRibbons(page, readFileSync(path.join(sessions, 'BGC0000708-BGC0000713.v47.replay.svg'), 'utf8'));
   expect(ribbonGeometry(await committedRibbons(page))).toEqual(ribbonGeometry(replay));
+});
+
+// OV-1181: a main Session 39 stores the protein table of its reversed record in
+// the drawn frame; Load converts it the way the Python upgrade does (OV-1183).
+test('a main Session 39 with a protein table of a reversed record converts it at Load like Python', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  const directory = testInfo.outputDir;
+  mkdirSync(directory, { recursive: true });
+  const fixture = path.join(root, 'tests/fixtures/sessions/BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz');
+  await openFresh(page);
+  await loadSessionFile(page, fixture);
+  await generateAndWaitForResult(page);
+  expect((await committedRibbons(page)).length).toBeGreaterThan(0);
+  const file = path.join(directory, 'web.gbdraw-session.json.gz');
+  const download = page.waitForEvent('download', { timeout: 180_000 });
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await (await download).saveAs(file);
+  const { stdout } = await promisify(execFile)('python', ['-c', PROTEIN_RESOURCES_CHECK, file, fixture],
+    { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
+  const saved = JSON.parse(stdout.trim().split('\n').pop());
+  expect(saved.version).toBe(48);
+  expect(saved.web).toEqual(saved.python);
+  expect(saved.web).not.toEqual(saved.stored);
 });
 
 // OV-1145: Python reads the saved Session: its protein results of the cropped

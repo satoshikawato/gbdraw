@@ -322,10 +322,14 @@ def project_comparison_frame(
     frame: pd.DataFrame,
     query: ComparisonRecordBinding,
     subject: ComparisonRecordBinding,
+    drawn_feature_ids: bool = False,
 ) -> pd.DataFrame:
-    """Rows of ``frame`` in the drawn views (render stage ``comparison_rows``).
+    """Rows of ``frame`` in the views of the bindings (render stage ``comparison_rows``).
 
-    Returns ``frame`` itself when no row changes.
+    With ``drawn_feature_ids`` (``LinearComparison.drawn_feature_ids``), a side
+    without a ``*_view_feature_svg_id`` column reads its ``*_feature_svg_id``
+    as the view ID, takes the source ID of its feature index, and gets both
+    written. Returns ``frame`` itself when no row changes.
     """
 
     if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
@@ -340,8 +344,11 @@ def project_comparison_frame(
             indices = [index for index in parsed_indices if index is not None]
             if len(indices) != len(parsed_indices):
                 raise ValidationError("Comparison source feature indexes must be integers.")
-            source_ids = str(row[f"{role}_feature_svg_id"]).split(";")
-            view_ids = str(row.get(f"{role}_view_feature_svg_id", row[f"{role}_feature_svg_id"])).split(";")
+            view_column = f"{role}_view_feature_svg_id"
+            drawn_ids = drawn_feature_ids and view_column not in frame.columns
+            view_ids = str(row.get(view_column, row[f"{role}_feature_svg_id"])).split(";")
+            source_ids = ([str(binding.source.get(index, "")) for index in indices] if drawn_ids
+                          else str(row[f"{role}_feature_svg_id"]).split(";"))
             if not len(indices) == len(source_ids) == len(view_ids):
                 raise ValidationError("Comparison source feature binding has inconsistent coverage.")
             if any(binding.source.get(index) != source_id
@@ -353,17 +360,22 @@ def project_comparison_frame(
             if flip and view_ids != opposite_ids:
                 raise ValidationError("Comparison view feature IDs do not match the current source/crop binding.")
             flips.append(flip)
-            if not flip:
+            if not flip and not drawn_ids:
                 continue
             if updated is None:
                 updated = frame.copy(deep=True)
+            if drawn_ids:
+                updated.at[row_index, f"{role}_feature_svg_id"] = ";".join(source_ids)
+            if not flip:
+                updated.at[row_index, view_column] = ";".join(view_ids)
+                continue
             for coordinate_field in (f"{prefix}start", f"{prefix}end"):
                 coordinate = row[coordinate_field]
                 if not 1 <= coordinate <= binding.length or int(coordinate) != coordinate:
                     raise ValidationError("Comparison view coordinate must be a finite genomic base within its record.")
                 updated.at[row_index, coordinate_field] = binding.length + 1 - int(coordinate)
             # Every ID is present: view_ids matched opposite_ids, which has the same keys.
-            updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(
+            updated.at[row_index, view_column] = ";".join(
                 cast("list[str]", current_ids)
             )
         if updated is not None and flips[0] != flips[1] and "collinearity_orientation" in frame.columns:
@@ -585,7 +597,8 @@ def project_source_bound_results(
     unmatched typed item stays as given and is listed (OV-1145).
     """
 
-    def project(frame: pd.DataFrame, query_index: int, subject_index: int) -> pd.DataFrame:
+    def project(frame: pd.DataFrame, query_index: int, subject_index: int,
+                drawn_feature_ids: bool = False) -> pd.DataFrame:
         if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
             return frame
         return render_stage(
@@ -594,10 +607,11 @@ def project_source_bound_results(
             frame,
             _binding(bindings, query_index),
             _binding(bindings, subject_index),
+            drawn_feature_ids,
         )
 
     explicit = tuple(replace(comparison, matches=project(comparison.matches,
-        comparison.query_record_index, comparison.subject_record_index))
+        comparison.query_record_index, comparison.subject_record_index, comparison.drawn_feature_ids))
         for comparison in options.linear_comparisons or ())
     protein = None if options.protein_comparisons is None else tuple(
         project(frame, index, index + 1) for index, frame in enumerate(options.protein_comparisons))
