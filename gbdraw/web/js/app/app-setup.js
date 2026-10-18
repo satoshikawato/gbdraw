@@ -1681,7 +1681,7 @@ export const createAppSetup = () => {
         ),
         buildCheckpoint: ports.buildCheckpoint,
         applyCheckpoint: (checkpoint, restored) => followRuleEdits(
-          drawing, () => restoreWithSpecificRuleDrafts(ports.applyCheckpoint, checkpoint), restored
+          drawing, () => restoreWithSpecificRuleDrafts(ports.applyCheckpoint, checkpoint, restored), restored
         ),
         captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
         restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),

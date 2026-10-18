@@ -268,7 +268,7 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, clearLabelTextEdits, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE, clearFeatureOverrides } from './drawing/feature-edits.js';
-import { drawingIdOfMode } from './drawing-view.js';
+import { drawingIdOfMode, inputTypeKeyOf } from './drawing-view.js';
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -4725,20 +4725,22 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
  */
 export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true } = {}) => {
   if (typeof ui.title === 'string') state.sessionTitle.value = ui.title;
-  if (ui.cInputType) state.cInputType.value = ui.cInputType;
-  if (ui.lInputType) state.lInputType.value = ui.lInputType;
+  // The drawing's own input type (OIC-030); the Load rollback restores each drawing's.
+  const inputType = inputTypeKeyOf(drawing);
+  if (ui[inputType]) state[inputType].value = ui[inputType];
   if (ui.losatProgram) {
     const program = String(ui.losatProgram);
     SETTINGS_SLICE.install(drawing.slices.settings, { losatProgram: ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn' });
   }
   if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
-  state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
+  // A History checkpoint leaves out the Session values its step did not change.
+  if (Object.hasOwn(ui, 'autoLabelReflow')) state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
   reconcileImportedLinearTypographyLink({
     adv: drawing.adv,
     linked: drawing.linearTypographyLinked,
     ui
   });
-  state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
+  if (Object.hasOwn(ui, 'paletteInstantPreviewEnabled')) state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
   // The cast: a plain object, and every field of the type is an optional unknown.
   if (isPlainObject(ui.losatExecution)) applyLosatExecutionData(/** @type {SessionLosatExecution} */ (ui.losatExecution));
   if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {

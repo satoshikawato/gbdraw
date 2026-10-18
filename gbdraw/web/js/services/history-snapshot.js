@@ -4,6 +4,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
+import { inputTypeKeyOf } from './drawing-view.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
@@ -271,6 +272,14 @@ const buildUiIntentData = (ui, drawing) => {
   delete intent.plotTitleUserOffset;
   return intent;
 };
+
+// The `ui` values of the Session and the app, which no drawing owns
+// (tests/web/helpers/drawing-state.mjs PROJECT_KEYS, UI_KEYS, TRANSIENT_KEYS).
+const SESSION_UI_KEYS = Object.freeze([
+  'title', 'downloadDpi', 'autoLabelReflow', 'paletteInstantPreviewEnabled', 'losatExecution', 'featurePanelTab'
+]);
+/** @param {unknown} left @param {unknown} right */
+const sameCapturedValue = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
 // A generated artifact's features hold the Features-list record it showed;
 // an intent's per-mode features do not (the intent's `ui` holds it).
@@ -545,8 +554,8 @@ const buildFallbackUiStateData = (state, drawing) => ({
  */
 const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   if (typeof ui.title === 'string') setRef(state.sessionTitle, ui.title);
-  if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
-  if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
+  const inputType = inputTypeKeyOf(drawing);
+  if (ui[inputType]) setRef(state[inputType], ui[inputType]);
   SETTINGS_SLICE.install(drawing.slices.settings, {
     losatProgram: ui.losatProgram || undefined, layoutPreferences: normalizeLayoutPreferences(ui.layoutPreferences)
   });
@@ -1546,8 +1555,8 @@ export const createHistorySnapshotService = ({
       const mutableIntent = handle.mutableIntent || {};
       const ui = mutableIntent.ui || {};
       const drawing = drawingOf(getRef(state.mode, 'circular'));
-      if (ui.cInputType) setGeneratedArtifactRef(state.cInputType, ui.cInputType);
-      if (ui.lInputType) setGeneratedArtifactRef(state.lInputType, ui.lInputType);
+      const inputType = inputTypeKeyOf(drawing);
+      if (ui[inputType]) setGeneratedArtifactRef(state[inputType], ui[inputType]);
       await nextTick();
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
@@ -1856,8 +1865,8 @@ export const createHistorySnapshotService = ({
     try {
       const ui = intent.ui || {};
       if (domains.has('ui')) {
-        if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
-        if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
+        const inputType = inputTypeKeyOf(drawing);
+        if (ui[inputType]) setRef(state[inputType], ui[inputType]);
         await nextTick();
       }
 
@@ -1928,8 +1937,9 @@ export const createHistorySnapshotService = ({
   /**
    * @param {DrawingId} drawingId
    * @param {ArtifactCheckpointData | null | undefined} snapshot
+   * @param {ArtifactCheckpointData | null} [from] The checkpoint the restore leaves (the step's other side).
    */
-  const applyArtifactCheckpoint = async (drawingId, snapshot) => {
+  const applyArtifactCheckpoint = async (drawingId, snapshot, from = null) => {
     if (!snapshot || typeof snapshot !== 'object') return;
     const drawing = drawingOfId(drawingId);
     const suppressRef = state.semanticFileWatchersSuppressed;
@@ -1938,9 +1948,16 @@ export const createHistorySnapshotService = ({
     try {
       closeTransientState(state);
 
-      const ui = snapshot.ui || {};
-      if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
-      if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
+      // A3 review M1, M2: the checkpoint restores what its drawing owns, its
+      // own input type, and the Session-level values its step changed (equal
+      // on the two sides: another drawing's step may have changed them since).
+      const ui = { ...(snapshot.ui || {}) };
+      delete ui[inputTypeKeyOf(drawing) === 'lInputType' ? 'cInputType' : 'lInputType'];
+      SESSION_UI_KEYS.forEach((key) => {
+        if (from && sameCapturedValue(ui[key], from.ui?.[key])) delete ui[key];
+      });
+      const inputType = inputTypeKeyOf(drawing);
+      if (ui[inputType]) setRef(state[inputType], ui[inputType]);
       await nextTick();
 
       if (typeof applyConfigData === 'function' && snapshot.config) {
@@ -1948,7 +1965,7 @@ export const createHistorySnapshotService = ({
       } else if (snapshot.config?.linearComparisonPlan) {
         installComparisonPlan(drawing, snapshot.config.linearComparisonPlan);
       }
-      applyDraftIntentData(state, snapshot.drafts || {});
+      if (!from || !sameCapturedValue(snapshot.drafts, from.drafts)) applyDraftIntentData(state, snapshot.drafts || {});
 
       if (typeof applyUiStateData === 'function') {
         applyUiStateData(drawing, ui, { restorePreviewNavigation: false });
@@ -1984,8 +2001,11 @@ export const createHistorySnapshotService = ({
     /** @param {HistoryIntentData | null | undefined} intent @param {HistoryIntentContext} [context] */
     applyIntent: (intent, context) => applyHistoryIntent(drawingId, intent, context),
     buildCheckpoint: () => buildArtifactCheckpoint(drawingId),
-    /** @param {ArtifactCheckpointData | null | undefined} snapshot */
-    applyCheckpoint: (snapshot) => applyArtifactCheckpoint(drawingId, snapshot),
+    /**
+     * @param {ArtifactCheckpointData | null | undefined} snapshot
+     * @param {{ from?: ArtifactCheckpointData | null }} [restored]
+     */
+    applyCheckpoint: (snapshot, restored) => applyArtifactCheckpoint(drawingId, snapshot, restored?.from ?? null),
     // OV-110: the intent's composition offsets are keyed by Result identity.
     identityMapPath: COMPOSITION_INTENT_PATH
   });

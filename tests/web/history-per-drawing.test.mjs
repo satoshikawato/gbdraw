@@ -115,3 +115,31 @@ test('a switch settles the departing drawing\'s open step in that drawing', asyn
   assert.equal(state.sessionTitle.value, 'title set in Linear',
     'the step ended at the switch, so its Undo keeps what changed after it');
 });
+
+// A3 review M1 and M2 (checkpoint form): a checkpoint step restores what its
+// drawing owns and the Session-level values the step itself changed. Its Undo
+// keeps the other drawing's input type and the Session title and Auto Reflow
+// that a step of the other drawing changed afterwards.
+test('a checkpoint Undo keeps the other drawing\'s input type and the Session values it did not change', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { circular } = state.drawings;
+  if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
+  state.lInputType.value = 'gb';
+  const before = circular.form.prefix;
+  await history.runUndoableCheckpoint('Circular checkpoint', () => { circular.form.prefix = 'checkpoint-prefix'; return true; });
+  assert.equal(circular.form.prefix, 'checkpoint-prefix');
+
+  assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
+  const reflow = !state.autoLabelReflowEnabled.value;
+  await history.runUndoable('Linear input type', () => { state.lInputType.value = 'gff'; });
+  await history.runUndoable('Rename Session', () => { state.sessionTitle.value = 'title set in Linear'; });
+  await history.runUndoable('Auto Reflow', () => { state.autoLabelReflowEnabled.value = reflow; });
+
+  assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
+  await app.undoHistory();
+  assert.equal(circular.form.prefix, before, 'the Circular step is undone');
+  assert.equal(state.lInputType.value, 'gff', 'the Linear input type stays');
+  assert.equal(state.sessionTitle.value, 'title set in Linear', 'the Session title stays');
+  assert.equal(state.autoLabelReflowEnabled.value, reflow, 'Auto Reflow stays');
+});

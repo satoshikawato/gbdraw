@@ -3102,7 +3102,8 @@ for (const previousSuppressed of [false, true]) {
   await history.undo();
   await history.redo();
   assert.deepEqual({ rules, figure }, { rules: 1, figure: 'drawn-1' });
-  assert.deepEqual(restores, [{ drawn: true }, { drawn: true }]);
+  assert.deepEqual(restores.map(({ drawn }) => ({ drawn })), [{ drawn: true }, { drawn: true }]);
+  assert.deepEqual(restores.map(({ from }) => from.figure), ['drawn-1', 'drawn-0'], 'each restore names the side it leaves');
 
   // A later step, or an Undo of the step, keeps the figure out of it.
   await history.runUndoableCheckpoint('Change feature color again', () => {
@@ -3114,11 +3115,11 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(await history.keepRedrawnResult(), false, 'not a checkpoint step');
   await history.undo();
   await history.undo();
-  assert.deepEqual(restores.at(-1), { drawn: false }, 'the before side was not drawn');
+  assert.equal(restores.at(-1).drawn, false, 'the before side was not drawn');
   // The step before is the last one now; its after side is drawn already.
   assert.equal(await history.keepRedrawnResult(), false, 'undone');
   await history.redo();
-  assert.deepEqual(restores.at(-1), { drawn: false });
+  assert.equal(restores.at(-1).drawn, false);
   // A checkpoint step's side is kept only while nothing is open.
   let release;
   const open = history.runUndoableCheckpoint('Open step', () => new Promise((resolve) => { release = resolve; }));
@@ -3129,7 +3130,7 @@ for (const previousSuppressed of [false, true]) {
   // A step without a caller's answer restores as before.
   await history.runUndoableCheckpoint('Reset', () => { rules = 4; });
   await history.undo();
-  assert.deepEqual(restores.at(-1), { drawn: false });
+  assert.equal(restores.at(-1).drawn, false);
   // N1 (review C): the before side is drawn as History captures it, not as
   // the caller asked for the step: a step that waits for an open one reads it
   // once that one settled.
@@ -3150,9 +3151,9 @@ for (const previousSuppressed of [false, true]) {
   await recolored;
   assert.deepEqual(reads, [true], 'read once, when the before side is captured');
   await history.undo();
-  assert.deepEqual(restores.at(-1), { drawn: false }, 'owed when captured');
+  assert.equal(restores.at(-1).drawn, false, 'owed when captured');
   await history.redo();
-  assert.deepEqual(restores.at(-1), { drawn: false }, 'the after side follows the before side');
+  assert.equal(restores.at(-1).drawn, false, 'the after side follows the before side');
   console.log('history redrawn result tests passed');
 }
 
@@ -3469,6 +3470,16 @@ for (const previousSuppressed of [false, true]) {
   await redoOnly.router.runUndoable('Circular edit', () => { redoOnly.values.circular = 'y'.repeat(400); });
   assert.equal(redoOnly.router.managerOf('linear').canRedo(), false, 'the hidden drawing loses its Redo step');
   assert.equal(redoOnly.router.managerOf('linear').historyLimitMessage.value, '', 'a Redo-only drop shows no notice');
+
+  // A3 review Low 4: the order follows the shown drawing, not the drawing
+  // that commits. A step a hidden drawing records drops its own steps first.
+  const hiddenCommit = makeRouter(Math.floor(stepBytes * 1.5));
+  hiddenCommit.shown.value = 'circular';
+  await hiddenCommit.router.captureBaseline();
+  await hiddenCommit.router.runUndoable('Circular edit', () => { hiddenCommit.values.circular = 'y'.repeat(400); });
+  await hiddenCommit.router.managerOf('linear').runUndoable('Hidden Linear edit', () => { hiddenCommit.values.linear = 'x'.repeat(400); });
+  assert.equal(hiddenCommit.router.canUndo(), true, 'the shown drawing keeps its step');
+  assert.equal(hiddenCommit.router.managerOf('linear').canUndo(), false, 'the hidden drawing that committed loses its step');
 }
 
 // OV-110 (D-15-49): the Result identities that History holds under a map keyed

@@ -81,3 +81,11 @@
  * @returns {DrawingId}
  */
 export const drawingIdOfMode = (mode) => /** @type {DrawingId} */ (mode);
+
+/**
+ * The input type a drawing's slots read: the app-level ref of its mode. A
+ * History restore of one drawing writes only this one (OIC-030).
+ * @param {DrawingIdentity} drawing
+ * @returns {'cInputType' | 'lInputType'}
+ */
+export const inputTypeKeyOf = (drawing) => (drawing.mode === 'linear' ? 'lInputType' : 'cInputType');

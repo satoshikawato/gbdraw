@@ -286,9 +286,10 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The snapshot service's restore of an intent; History awaits it.
  * @property {() => HistoryCheckpoint | Promise<HistoryCheckpoint>} buildCheckpoint
  *   The snapshot service's capture of an artifact checkpoint.
- * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean }) => unknown} applyCheckpoint
+ * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean, from: HistoryCheckpoint }) => unknown} applyCheckpoint
  *   The snapshot service's restore of an artifact checkpoint; History awaits it. `restored.drawn`:
- *   whether its figure is the one its state draws.
+ *   whether its figure is the one its state draws; `restored.from`: the step's other side, which
+ *   the restore leaves.
  * @property {(() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>) | null} [captureGeneratedArtifactHandle]
  *   The snapshot service's capture of the generated artifact for a replacement step.
  * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
@@ -332,15 +333,17 @@ const checkpointSvgBytes = (checkpoint) => (
  * The byte budget and file retention of every drawing's History (OV-112).
  * @typedef {object} HistoryBudget
  * @property {(member: HistoryBudgetMember) => void} join
- * @property {(member: HistoryBudgetMember) => void} enforce
- *   Drops steps until the retained bytes fit: those of the other members first,
- *   then `member`'s, oldest first; then releases the files no member names.
+ * @property {() => void} enforce
+ *   Drops steps until the retained bytes fit, oldest first, from the members in
+ *   `evictionOrder`; then releases the files no member names.
  * @property {() => void} releaseUnreferencedFiles
  */
 
 /**
  * @typedef {object} HistoryBudgetOptions
  * @property {number} [maxBytes] Retained bytes allowed across the members.
+ * @property {(members: readonly HistoryBudgetMember[]) => HistoryBudgetMember[]} [evictionOrder]
+ *   The order in which the members lose steps; the order they joined by default.
  * @property {HistoryFileRetention['estimateBytes'] | null} [estimateFileBytes] The file store's estimate.
  * @property {HistoryFileRetention['retainOnly'] | null} [retainOnlyFiles] The file store's release.
  */
@@ -348,7 +351,9 @@ const checkpointSvgBytes = (checkpoint) => (
  * @param {HistoryBudgetOptions} [options]
  * @returns {HistoryBudget}
  */
-export const createHistoryBudget = ({ maxBytes = DEFAULT_MAX_BYTES, estimateFileBytes = null, retainOnlyFiles = null } = {}) => {
+export const createHistoryBudget = ({
+  maxBytes = DEFAULT_MAX_BYTES, estimateFileBytes = null, retainOnlyFiles = null, evictionOrder = (members) => [...members]
+} = {}) => {
   /** @type {Set<HistoryBudgetMember>} */
   const members = new Set();
   const retainedFileIds = () => {
@@ -366,9 +371,8 @@ export const createHistoryBudget = ({ maxBytes = DEFAULT_MAX_BYTES, estimateFile
   const releaseUnreferencedFiles = () => {
     if (retainOnlyFiles) retainOnlyFiles(retainedFileIds());
   };
-  /** @param {HistoryBudgetMember} member */
-  const enforce = (member) => {
-    [...[...members].filter((other) => other !== member), member].forEach((candidate) => {
+  const enforce = () => {
+    evictionOrder([...members]).forEach((candidate) => {
       let undoDropped = false;
       while (overBudget()) {
         const dropped = candidate.dropOldestStep();
@@ -805,7 +809,7 @@ export const createHistoryManager = ({
       evicted = true;
     }
     historyLimitMessage.value = evicted ? HISTORY_LIMIT_MESSAGE : '';
-    budget.enforce(budgetMember);
+    budget.enforce();
   };
 
   const captureBaseline = async (_label = 'Baseline') => {
@@ -1715,11 +1719,11 @@ export const createHistoryManager = ({
     settingsStepListener(entry.changes);
   };
 
-  /** @param {CheckpointRecord} record */
-  const applyCheckpointEntry = async (record) => {
+  /** @param {CheckpointRecord} record @param {CheckpointRecord} from The step's other side. */
+  const applyCheckpointEntry = async (record, from) => {
     restoring.value = true;
     try {
-      await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true });
+      await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true, from: from.checkpoint });
     } finally {
       restoring.value = false;
     }
@@ -1799,7 +1803,7 @@ export const createHistoryManager = ({
       }
       await refreshCurrentIntent();
     } else if (entry.type === 'checkpoint') {
-      await applyCheckpointEntry(entry.before);
+      await applyCheckpointEntry(entry.before, entry.after);
     } else if (entry.type === 'artifact-replacement') {
       await applyArtifactReplacementEntry(entry, 'undo');
     } else {
@@ -1827,7 +1831,7 @@ export const createHistoryManager = ({
       }
       await refreshCurrentIntent();
     } else if (entry.type === 'checkpoint') {
-      await applyCheckpointEntry(entry.after);
+      await applyCheckpointEntry(entry.after, entry.before);
     } else if (entry.type === 'artifact-replacement') {
       await applyArtifactReplacementEntry(entry, 'redo');
     } else {
@@ -1933,10 +1937,25 @@ export const createHistoryRouter = ({
   managerOptions,
   ...budgetOptions
 }) => {
-  const budget = createHistoryBudget(budgetOptions);
+  /** @type {Map<HistoryBudgetMember, string>} The drawing of each budget member. */
+  const memberDrawings = new Map();
+  // A3 review Low 4 (plan-r2 A3): the drawings that are not shown lose their
+  // steps first, whichever drawing committed.
+  const budget = createHistoryBudget({
+    ...budgetOptions,
+    evictionOrder: (members) => [
+      ...members.filter((member) => memberDrawings.get(member) !== activeDrawingId()),
+      ...members.filter((member) => memberDrawings.get(member) === activeDrawingId())
+    ]
+  });
+  /** @param {string} drawingId @returns {HistoryBudget} */
+  const budgetOf = (drawingId) => ({
+    ...budget,
+    join: (member) => { memberDrawings.set(member, drawingId); budget.join(member); }
+  });
   const managers = new Map(drawingIds.map((drawingId) => /** @type {const} */ ([
     drawingId,
-    createHistoryManager({ ...managerOptions(drawingId), budget })
+    createHistoryManager({ ...managerOptions(drawingId), budget: budgetOf(drawingId) })
   ])));
   /** @param {string} drawingId */
   const managerOf = (drawingId) => {
