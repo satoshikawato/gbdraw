@@ -1,8 +1,10 @@
 // Typed drawing slices (plan-r2 §3.2, R15): a drawing's editor edits belong to
-// slices (gbdraw/web/js/services/drawing/), which alone write them. The guard
+// slices (gbdraw/web/js/services/drawing/), which alone write them; its
+// settings belong to a slice too, which installs, captures, and resets them
+// while their controls keep writing them (plan-r2 §13 item 3). The guard
 // asserts, without a member or slice literal:
 //   1. each slice's view holds exactly its members, every drawing shows each
-//      slice's view, every editor member is in exactly one slice;
+//      slice's view, every editor and settings member is in exactly one slice;
 //   2. a slice imports only leaves (R13 layer 0, or a module that imports
 //      nothing) and other slices;
 //   3. Load, a History restore, and Reset write a slice through one install:
@@ -16,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { webLayerOf } from '../../tools/web-owner-graph-detectors.mjs';
-import { DRAWING_EDITOR_KEYS, DRAWING_SLICES } from './helpers/drawing-state.mjs';
+import { DRAWING_DRAFT_KEYS, DRAWING_EDITOR_KEYS, DRAWING_SLICES } from './helpers/drawing-state.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -50,6 +52,7 @@ const SLICE_DIRECTORY = join(JS, 'services', 'drawing');
 const FIXTURES = join(ROOT, 'tests', 'fixtures', 'sessions');
 const MODES = Object.keys(state.drawings);
 const SLICES = Object.entries(DRAWING_SLICES);
+const SLICED_KEYS = [...DRAWING_DRAFT_KEYS, ...DRAWING_EDITOR_KEYS];
 
 test('each slice view holds its members, every drawing shows it, and no member is in two slices', async () => {
   const sliceOf = new Map();
@@ -60,10 +63,10 @@ test('each slice view holds its members, every drawing shows it, and no member i
     for (const member of slice.members) {
       assert.ok(!sliceOf.has(member), `${member} is in ${sliceOf.get(member)} and ${name}`);
       sliceOf.set(member, name);
-      assert.ok(DRAWING_EDITOR_KEYS.includes(member), `${name}.${member} is an editor member`);
+      assert.ok(SLICED_KEYS.includes(member), `${name}.${member} is an editor or settings member`);
     }
   }
-  assert.deepEqual(DRAWING_EDITOR_KEYS.filter((member) => !sliceOf.has(member)), [], 'every editor member is in a slice');
+  assert.deepEqual(SLICED_KEYS.filter((member) => !sliceOf.has(member)), [], 'every editor and settings member is in a slice');
   const modules = readdirSync(SLICE_DIRECTORY).filter((file) => file.endsWith('.js')).sort();
   const exported = await Promise.all(modules.map((file) => import(join(SLICE_DIRECTORY, file))));
   const descriptors = new Set(exported.flatMap((module) => Object.values(module)
@@ -138,7 +141,8 @@ test('install(capture(x)) gives back x, also after reset, on the Session 46 fixt
 // alias under another name (a member or a row held in a local, a slice handle
 // held in a local) and a drawing held under another name; the type checker
 // sees those where the holder is typed.
-const MEMBERS = SLICES.flatMap(([, slice]) => slice.members);
+// The settings are not scanned: their controls write them (plan-r2 §13 item 3).
+const MEMBERS = SLICES.flatMap(([, slice]) => slice.members).filter((member) => DRAWING_EDITOR_KEYS.includes(member));
 const MUTATING_METHODS = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin', 'add', 'delete', 'clear', 'set'];
 const ASSIGNMENT = /^\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])/;
 const DRAWING_RECEIVER = /(?:[\w$]*[dD]rawing|activeDrawing\s*\(\s*\)|drawings\s*(?:\??\.\s*[\w$]+|\[[^\]]*\]))\s*\??$/;
@@ -338,6 +342,16 @@ const SAMPLES = {
     legendStrokeOverrides: { CDS: { strokeColor: '#222222', strokeWidth: 1.5 } },
     addedLegendCaptions: ['Kinase']
   }),
+  // A drawing's settings as Load gives them, with values no default holds.
+  settings: (mode) => {
+    const settings = DRAWING_SLICES.settings.capture(state.drawings[mode].slices.settings);
+    return {
+      ...settings,
+      form: { ...settings.form, plot_title: `Sample ${mode} title` },
+      losatProgram: 'tblastx',
+      linearRecordLayoutEnabled: !settings.linearRecordLayoutEnabled
+    };
+  },
   featureEdits: (mode) => ({
     featureOverrides: { '["record-1","CDS_1"]': {
       recordKey: 'record-1', biologicalFeatureId: 'CDS_1', featureVisibility: 'off', labelVisibility: null, labelText: 'Sample', labelSourceText: null
@@ -370,6 +384,7 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
     const other = MODES.find((candidate) => candidate !== mode);
     for (const [name, slice] of SLICES) {
       const drawing = state.drawings[mode];
+      const loaded = JSON.stringify(slice.capture(drawing.slices[name]));
       const sample = SAMPLES[name](mode);
       const json = JSON.stringify(sample);
       const untouched = captures(other);
@@ -381,12 +396,43 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
       const session = await saveSession();
       slice.reset(drawing.slices[name]);
       assert.notEqual(JSON.stringify(slice.capture(drawing.slices[name])), json, `${mode} ${name}: the sample is no default`);
-      const loaded = await importSession({ target: { files: [session], value: 'selected' } },
+      const reloaded = await importSession({ target: { files: [session], value: 'selected' } },
         { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
-      assert.equal(loaded?.status, 'ok', `${mode} ${name}: ${loaded?.error?.message ?? loaded?.status}`);
+      assert.equal(reloaded?.status, 'ok', `${mode} ${name}: ${reloaded?.error?.message ?? reloaded?.status}`);
       assert.equal(JSON.stringify(slice.capture(state.drawings[mode].slices[name])), json, `${mode} ${name}: Save then Load`);
       assert.equal(captures(other), untouched, `${mode} ${name}: Load leaves the ${other} drawing as saved`);
-      slice.reset(state.drawings[mode].slices[name]);
+      // Back to the loaded fixture, which a Save and Load keep as it is (Load
+      // resolves the defaults Reset gives, such as the track placements).
+      slice.install(state.drawings[mode].slices[name], JSON.parse(loaded));
     }
   }
+});
+
+// 7. Reset Settings returns the settings a Reset owns and keeps the record
+// gap and rows, the OFF records, and the comparison edges that hold a file
+// or a LOSAT file name, inactive (services/drawing/settings.js `reset`).
+test('Reset Settings keeps the record layout, the OFF records, and the comparison files, inactive', async () => {
+  const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+  const settings = DRAWING_SLICES.settings;
+  const handle = state.drawings.linear.slices.settings;
+  const before = settings.capture(handle);
+  const file = new File(['pair'], 'pair.tsv');
+  const edge = (id, fields) => ({ id, queryUid: 'a', subjectUid: 'b', source: 'upload', included: true, fileActive: true,
+    losatFilenameActive: true, file: null, losatFilename: '', ...fields });
+  settings.install(handle, {
+    form: { ...before.form, plot_title: 'Edited' }, losatProgram: 'blastp', linearRecordGap: 40,
+    linearRecordRows: [{ uid: 'card-a', row: 2 }], recordsOff: ['card-b'],
+    linearComparisonPlan: { mode: 'custom', defaultSource: 'upload', edges: [
+      edge('with-file', { file }), edge('with-name', { losatFilename: 'pair.losat' }), edge('empty', { losatFilename: ' ' })
+    ] }
+  });
+  resetSettings(state);
+  const after = settings.capture(handle);
+  assert.deepEqual([after.form.plot_title, after.losatProgram], ['', 'blastn']);
+  assert.deepEqual([after.linearRecordGap, after.linearRecordRows, after.recordsOff], [40, [{ uid: 'card-a', row: 2 }], ['card-b']]);
+  assert.deepEqual([after.linearComparisonPlan.mode, after.linearComparisonPlan.defaultSource], ['none', 'losat']);
+  assert.deepEqual(after.linearComparisonPlan.edges.map(({ id, included, fileActive, losatFilenameActive }) => (
+    [id, included, fileActive, losatFilenameActive])), [['with-file', false, false, false], ['with-name', false, false, false]]);
+  assert.equal(after.linearComparisonPlan.edges[0].file, file, 'an edge keeps its file');
+  settings.install(handle, before);
 });

@@ -20,6 +20,7 @@ globalThis.window = {
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
 const { state, createDefaultForm } = await import('../../gbdraw/web/js/state.js');
 const layout = await import('../../gbdraw/web/js/services/layout-preferences.js');
+const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
 const { LEGEND_POSITIONS } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -143,7 +144,7 @@ test('a drawing never holds a position outside its mode: the Position control an
   linear.form.legend = 'Upper_Left';
   assert.equal(linear.form.legend, 'bottom');
   assert.equal(linear.layoutPreferences.linear.legend, 'bottom');
-  layout.replaceLayoutPreferences(linear.layoutPreferences, { linear: { legend: 'Upper_Left' } });
+  SETTINGS_SLICE.install(linear.slices.settings, { layoutPreferences: layout.normalizeLayoutPreferences({ linear: { legend: 'Upper_Left' } }) });
   assert.equal(linear.form.legend, 'bottom');
   const circular = state.drawings.circular;
   circular.form.multi_record_canvas = false;

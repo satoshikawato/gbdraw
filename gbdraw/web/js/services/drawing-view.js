@@ -18,6 +18,7 @@
 /** @import { LabelTablesSlice, LabelTablesView } from './drawing/label-tables.js' */
 /** @import { PaintSlice, PaintView } from './drawing/paint.js' */
 /** @import { PaletteSlice, PaletteView } from './drawing/palette.js' */
+/** @import { SettingsSlice } from './drawing/settings.js' */
 /** @import { VisibilityRulesSlice, VisibilityRulesView } from './drawing/visibility-rules.js' */
 
 /**
@@ -31,7 +32,8 @@
  *   readonly groupNames: GroupNamesSlice,
  *   readonly canvas: CanvasSlice,
  *   readonly featureEdits: FeatureEditsSlice,
- *   readonly paint: PaintSlice
+ *   readonly paint: PaintSlice,
+ *   readonly settings: SettingsSlice
  * }} DrawingSlices
  */
 

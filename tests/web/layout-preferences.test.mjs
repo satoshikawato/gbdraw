@@ -4,7 +4,6 @@ const {
   createDefaultLayoutPreferences,
   migrateLegacyLayoutPreferences,
   normalizeLayoutPreferences,
-  replaceLayoutPreferences,
   resolveActiveLayoutPreference,
   resolveCircularLayoutPreference,
   updateActiveLayoutPreference
@@ -77,8 +76,13 @@ assert.deepEqual(migrated, {
   linear: { legend: 'left', plotTitlePosition: 'center' }
 });
 
+// A drawing's settings slice installs normalized preferences into its own objects.
+const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
 const target = createDefaultLayoutPreferences();
-replaceLayoutPreferences(target, migrated);
+const { single } = target.circular;
+const settings = SETTINGS_SLICE.create({ layoutPreferences: target });
+SETTINGS_SLICE.install(settings.handle, { layoutPreferences: normalizeLayoutPreferences(migrated) });
 assert.deepEqual(target, migrated);
+assert.equal(target.circular.single, single, 'the nested preferences stay the same objects');
 
 console.log('layout preference tests passed');

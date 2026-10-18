@@ -7,7 +7,7 @@ import { validateSimilarityAlignmentResetReceipt } from './session-active-config
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
-import { replaceLayoutPreferences } from './layout-preferences.js';
+import { normalizeLayoutPreferences } from './layout-preferences.js';
 import {
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison
@@ -24,6 +24,7 @@ import { PALETTE_SLICE, queuedPaletteData, restoreArtifactQueuedPalette } from '
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 import { PAINT_SLICE, captureFeatureFills, captureLegendPaint } from './drawing/paint.js';
+import { SETTINGS_SLICE } from './drawing/settings.js';
 /** @import { FeatureFill, KeptLegendEntry, LegendEntry } from './drawing/paint.js' */
 /** @import { StrokeOverride } from './style-overrides.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
@@ -354,20 +355,17 @@ const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
   }))
 });
 
+// A History step restores a comparison plan without its files (a later
+// files restore or the retained files give them back).
 /**
- * @param {{ mode: string, defaultSource: string, edges?: unknown[] } | null | undefined} target
+ * @param {DrawingView} drawing
  * @param {LinearComparisonPlanData} [plan]
  */
-const replaceLinearComparisonPlan = (target, plan = {}) => {
-  if (!target || typeof target !== 'object') return;
+const installComparisonPlan = (drawing, plan = {}) => {
   const cloned = cloneLinearComparisonPlanMetadata(plan);
-  target.mode = cloned.mode;
-  target.defaultSource = cloned.defaultSource;
-  if (!Array.isArray(target.edges)) target.edges = [];
-  target.edges.splice(0, target.edges.length, ...cloned.edges.map((edge) => ({
-    ...edge,
-    file: null
-  })));
+  SETTINGS_SLICE.install(drawing.slices.settings, {
+    linearComparisonPlan: { ...cloned, edges: cloned.edges.map((edge) => ({ ...edge, file: null })) }
+  });
 };
 
 /** @param {unknown} rows The saved label table (`canonicalLabelOverrideRows`). */
@@ -518,11 +516,13 @@ const installQueuedPalette = (drawing, { pendingPaletteName, pendingPaletteColor
  * @param {DrawingUiData} [ui]
  */
 const applyDrawingUiIntentData = (drawing, ui = {}) => {
-  if (ui.layoutPreferences) replaceLayoutPreferences(drawing.layoutPreferences, ui.layoutPreferences);
+  SETTINGS_SLICE.install(drawing.slices.settings, {
+    layoutPreferences: ui.layoutPreferences ? normalizeLayoutPreferences(ui.layoutPreferences) : undefined,
+    linearTypographyLinked: typeof ui.linearTypographyLinked === 'boolean' ? ui.linearTypographyLinked : undefined,
+    losatProgram: ui.losatProgram || undefined
+  });
   installCanvasPadding(drawing, ui);
-  if (typeof ui.linearTypographyLinked === 'boolean') setRef(drawing.linearTypographyLinked, ui.linearTypographyLinked);
   installQueuedPalette(drawing, ui);
-  if (ui.losatProgram) setRef(drawing.losatProgram, ui.losatProgram);
 };
 
 const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
@@ -559,7 +559,7 @@ const buildFallbackUiStateData = (state, drawing) => ({
   mode: getRef(state.mode, 'circular'),
   cInputType: getRef(state.cInputType, 'gb'),
   lInputType: getRef(state.lInputType, 'gb'),
-  losatProgram: getRef(drawing.losatProgram, 'blastn'),
+  ...SETTINGS_SLICE.capture(drawing.slices.settings, ['losatProgram', 'layoutPreferences']),
   selectedResultIndex: getRef(state.selectedResultIndex, 0),
   downloadDpi: getRef(state.downloadDpi, 300),
   canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
@@ -567,7 +567,6 @@ const buildFallbackUiStateData = (state, drawing) => ({
   generatedMode: getRef(state.generatedMode, 'circular'),
   generatedMultiRecordCanvas: Boolean(getRef(state.generatedMultiRecordCanvas, false)),
   generatedCircularPlotTitlePosition: getRef(state.generatedCircularPlotTitlePosition, 'none'),
-  layoutPreferences: clonePlainObject(drawing.layoutPreferences),
   autoLabelReflow: Boolean(getRef(state.autoLabelReflowEnabled, false)),
   paletteInstantPreviewEnabled: Boolean(getRef(state.paletteInstantPreviewEnabled, false)),
   appliedPaletteName: getRef(state.appliedPaletteName, 'default'),
@@ -589,7 +588,9 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   if (typeof ui.title === 'string') setRef(state.sessionTitle, ui.title);
   if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
   if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
-  if (ui.losatProgram) setRef(drawing.losatProgram, ui.losatProgram);
+  SETTINGS_SLICE.install(drawing.slices.settings, {
+    losatProgram: ui.losatProgram || undefined, layoutPreferences: normalizeLayoutPreferences(ui.layoutPreferences)
+  });
   if (ui.downloadDpi) setRef(state.downloadDpi, ui.downloadDpi);
   if (ui.generatedLegendPosition) setRef(state.generatedLegendPosition, ui.generatedLegendPosition);
   if (ui.generatedMode) setRef(state.generatedMode, ui.generatedMode);
@@ -599,7 +600,6 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   if (ui.generatedCircularPlotTitlePosition) {
     setRef(state.generatedCircularPlotTitlePosition, ui.generatedCircularPlotTitlePosition);
   }
-  replaceLayoutPreferences(drawing.layoutPreferences, ui.layoutPreferences);
   installCanvasPadding(drawing, ui);
   setRef(state.autoLabelReflowEnabled, Boolean(ui.autoLabelReflow));
   setRef(state.paletteInstantPreviewEnabled, Boolean(ui.paletteInstantPreviewEnabled));
@@ -1956,7 +1956,7 @@ export const createHistorySnapshotService = ({
           // The alignmentState domain below owns the plan and translations (OV-383).
           applyConfigData(drawing, config, { resolveTrackPlacements: false, applyAlignment: false });
         } else if (config?.linearComparisonPlan) {
-          replaceLinearComparisonPlan(drawing.linearComparisonPlan, config.linearComparisonPlan);
+          installComparisonPlan(drawing, config.linearComparisonPlan);
         }
       });
       if (retainedComparisonFiles) {
@@ -2062,10 +2062,7 @@ export const createHistorySnapshotService = ({
       if (typeof applyConfigData === 'function' && snapshot.config) {
         applyConfigData(drawing, snapshot.config, { resolveTrackPlacements: false });
       } else if (snapshot.config?.linearComparisonPlan) {
-        replaceLinearComparisonPlan(
-          drawing.linearComparisonPlan,
-          snapshot.config.linearComparisonPlan
-        );
+        installComparisonPlan(drawing, snapshot.config.linearComparisonPlan);
       }
       applyDraftIntentData(state, snapshot.drafts || {});
       applyFileLegendCaptionData(drawing, snapshot.fileLegendCaptions);

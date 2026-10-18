@@ -257,17 +257,6 @@ export const normalizeLayoutPreferences = (source) => {
 };
 
 /**
- * @param {LayoutPreferences} target
- * @param {unknown} source
- */
-export const replaceLayoutPreferences = (target, source) => {
-  const normalized = normalizeLayoutPreferences(source);
-  Object.assign(target.circular.single, normalized.circular.single);
-  Object.assign(target.circular.multi, normalized.circular.multi);
-  Object.assign(target.linear, normalized.linear);
-};
-
-/**
  * @param {Record<string, unknown> | null | undefined} ui
  * @param {{ mode?: string, multiRecord?: boolean, activeLegend?: string, activePlotTitlePosition?: string }} [context]
  * @returns {LayoutPreferences}

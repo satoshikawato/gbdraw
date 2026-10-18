@@ -33,6 +33,7 @@ import {
 } from '../services/feature-visibility.js';
 import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
+import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { readArtifactOfMode } from '../services/artifact-slot.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
@@ -706,13 +707,7 @@ export const createAppSetup = () => {
     if (invalidate && changed && !onlyPendingSourcesChanged(drawing, normalized)) {
       similarityAlignmentActions?.clearForMutation?.('comparison configuration changed.');
     }
-    drawing.linearComparisonPlan.mode = normalized.mode;
-    drawing.linearComparisonPlan.defaultSource = normalized.defaultSource;
-    drawing.linearComparisonPlan.edges.splice(
-      0,
-      drawing.linearComparisonPlan.edges.length,
-      ...normalized.edges
-    );
+    SETTINGS_SLICE.install(drawing.slices.settings, { linearComparisonPlan: normalized });
     if (invalidate) invalidateLinearComparisonArtifacts(drawing);
   };
 

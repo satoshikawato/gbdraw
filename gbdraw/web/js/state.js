@@ -45,6 +45,7 @@ import { PALETTE_SLICE } from './services/drawing/palette.js';
 import { LABEL_TABLES_SLICE } from './services/drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import { PAINT_SLICE } from './services/drawing/paint.js';
+import { SETTINGS_SLICE } from './services/drawing/settings.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -963,11 +964,34 @@ export const sessionOperationAvailability = (
 // writes neither (R10). A drawing holds the complete default `form` and `adv`
 // of its mode, so every reader stays valid; its `form.legend` and
 // `adv.plot_title_position` read and write its own mode's layout slot.
+// A drawing's settings as a new drawing and Reset Settings hold them, fresh
+// on each call (services/drawing/settings.js keeps those Reset does not return).
+/** @param {DiagramMode} drawingMode */
+const settingsDefaults = (drawingMode) => () => ({
+  form: createDefaultForm(),
+  adv: createDefaultAdv(drawingMode),
+  losat: createDefaultLosat(),
+  losatProgram: 'blastn', // 'blastn' | 'tblastx' | 'blastp'
+  circularConservation: createDefaultCircularConservation(),
+  linearComparisonPlan: createDefaultLinearComparisonPlan(),
+  linearRecordLayoutEnabled: WEB_UX_PROFILE.linear.arrangeInRowsByDefault,
+  linearRecordGap: DEFAULT_LINEAR_RECORD_GAP_PX,
+  linearRecordRows: [],
+  recordDisplayDrafts: [],
+  recordsOff: [],
+  unmanagedConfigOverrides: {},
+  importedComparisonIntent: createImportedComparisonIntentState(),
+  layoutPreferences: createDefaultLayoutPreferences(),
+  linearTypographyLinked: true
+});
+
 /** @param {DiagramMode} drawingMode */
 const createDrawingState = (drawingMode) => {
-  const form = reactive(createDefaultForm());
-  const adv = reactive(createDefaultAdv(drawingMode));
-  const layoutPreferences = reactive(createDefaultLayoutPreferences());
+  const defaults = settingsDefaults(drawingMode);
+  const initial = defaults();
+  const form = reactive(initial.form);
+  const adv = reactive(initial.adv);
+  const layoutPreferences = reactive(initial.layoutPreferences);
   const activeLayoutPreferences = typedComputed(() => resolveActiveLayoutPreference(
     layoutPreferences,
     drawingMode,
@@ -987,16 +1011,16 @@ const createDrawingState = (drawingMode) => {
       updateActiveLayoutPreference(layoutPreferences, drawingMode, form.multi_record_canvas, { plotTitlePosition: value });
     }
   });
-  const losat = reactive(createDefaultLosat());
-  const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
-  const linearComparisonPlan = reactive(createDefaultLinearComparisonPlan());
-  const linearRecordLayoutEnabled = ref(WEB_UX_PROFILE.linear.arrangeInRowsByDefault);
-  const linearRecordRows = reactive([]);
+  const losat = reactive(initial.losat);
+  const losatProgram = ref(initial.losatProgram);
+  const linearComparisonPlan = reactive(initial.linearComparisonPlan);
+  const linearRecordLayoutEnabled = ref(initial.linearRecordLayoutEnabled);
+  const linearRecordRows = reactive(initial.linearRecordRows);
   // The keys of the records this drawing leaves out (record-selection D-02):
   // Linear card uids or Circular source selectors `#N`
   // (services/record-draw-selection.js).
   /** @type {string[]} */
-  const recordsOff = reactive([]);
+  const recordsOff = reactive(initial.recordsOff);
   const linearComparisonResolution = typedComputed(() => resolveLinearComparisonPlan({
     plan: linearComparisonPlan,
     sequences: linearSeqs,
@@ -1005,6 +1029,25 @@ const createDrawingState = (drawingMode) => {
     losatProgram: losatProgram.value,
     blastpMode: losat.blastp?.mode
   }));
+  // The settings: the controls write them; Load, History, and Reset install
+  // them whole through their slice.
+  const settings = SETTINGS_SLICE.create({
+    form,
+    adv,
+    losat,
+    losatProgram,
+    circularConservation: reactive(initial.circularConservation),
+    linearComparisonPlan,
+    linearRecordLayoutEnabled,
+    linearRecordGap: ref(initial.linearRecordGap),
+    linearRecordRows,
+    recordDisplayDrafts: reactive(initial.recordDisplayDrafts),
+    recordsOff,
+    unmanagedConfigOverrides: reactive(initial.unmanagedConfigOverrides),
+    importedComparisonIntent: reactive(initial.importedComparisonIntent),
+    layoutPreferences,
+    linearTypographyLinked: ref(initial.linearTypographyLinked)
+  }, defaults);
   const visibilityRules = VISIBILITY_RULES_SLICE.create();
   const colorRules = COLOR_RULES_SLICE.create();
   const { featureVisibilityManualRules } = visibilityRules.view;
@@ -1020,21 +1063,7 @@ const createDrawingState = (drawingMode) => {
   const paint = PAINT_SLICE.create();
   return Object.freeze({
     // Settings
-    form,
-    adv,
-    losat,
-    losatProgram,
-    circularConservation: reactive(createDefaultCircularConservation()),
-    linearComparisonPlan,
-    linearRecordLayoutEnabled,
-    linearRecordGap: ref(DEFAULT_LINEAR_RECORD_GAP_PX),
-    linearRecordRows,
-    recordDisplayDrafts: reactive([]),
-    recordsOff,
-    unmanagedConfigOverrides: reactive({}),
-    importedComparisonIntent: reactive(createImportedComparisonIntentState()),
-    layoutPreferences,
-    linearTypographyLinked: ref(true),
+    ...settings.view,
     // Editor edits
     // Per-feature edits and Feature placements keyed by original-source
     // identity (design Q4, R2; services/feature-placement.js owns the row shape).
@@ -1083,7 +1112,7 @@ const createDrawingState = (drawingMode) => {
     // The handles a slice's writers take.
     slices: Object.freeze({
       visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, labelTables: labelTables.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle,
-      featureEdits: featureEdits.handle, paint: paint.handle })
+      featureEdits: featureEdits.handle, paint: paint.handle, settings: settings.handle })
   });
 };
 const circularDrawing = createDrawingState('circular');

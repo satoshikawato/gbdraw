@@ -1,17 +1,11 @@
 // @ts-check
 import {
-  createDefaultAdv,
-  createDefaultCircularConservation,
   createDefaultEditorDraftState,
-  createDefaultForm,
-  createDefaultLosat,
   createDefaultPaletteDraftState,
   createDefaultPriorityRule,
   createDefaultSpecificRule
 } from '../state.js';
 /** @import { DrawingState, state as AppState } from '../state.js' */
-/** @import { LinearComparisonEdge } from './linear-comparisons.js' */
-import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
@@ -20,9 +14,9 @@ import { PALETTE_SLICE, createDefaultPaletteData } from './drawing/palette.js';
 import { clearLabelTextEdits, resetLabelFilters } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 import { resetPaintEdits } from './drawing/paint.js';
+import { SETTINGS_SLICE } from './drawing/settings.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
-import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
 // Every caller passes plain data (defaults, palette colors, JSON-like rows), so
 // the copy has the shape of the value.
@@ -52,21 +46,6 @@ const replaceReactiveObject = (target, source) => {
   });
 };
 
-/**
- * @param {unknown[]} target
- * @param {readonly unknown[]} [source]
- */
-const replaceReactiveArray = (target, source = []) => {
-  target.splice(0, target.length, ...source.map((entry) => clonePlain(entry)));
-};
-
-/** @param {Record<string, unknown>} target */
-const clearReactiveObject = (target) => {
-  Object.keys(target).forEach((key) => {
-    delete target[key];
-  });
-};
-
 /** @param {Pick<typeof AppState, 'paletteDefinitions'>} state */
 const defaultPaletteColors = (state) => {
   const definitions = state.paletteDefinitions?.value || {};
@@ -91,17 +70,6 @@ const resetPaletteState = (state, drawing) => {
   state.appliedPaletteColors.value = { ...colors };
 };
 
-/**
- * @param {typeof AppState} state
- * @param {DrawingState} drawing
- */
-const resetLayoutPreferenceState = (state, drawing) => {
-  const defaults = createDefaultLayoutPreferences();
-  Object.assign(drawing.layoutPreferences.circular.single, defaults.circular.single);
-  Object.assign(drawing.layoutPreferences.circular.multi, defaults.circular.multi);
-  Object.assign(drawing.layoutPreferences.linear, defaults.linear);
-  state.suppressCircularMultiRecordDefaults.value = false;
-};
 
 /**
  * @param {typeof AppState} state
@@ -149,46 +117,18 @@ const resetEditorDraftState = (state, drawing) => {
   GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
 };
 
-/** @param {DrawingState} drawing */
-const resetLinearComparisonPlan = (drawing) => {
-  const plan = drawing.linearComparisonPlan;
-  if (!plan || typeof plan !== 'object') return;
-  const retainedEdges = (Array.isArray(plan.edges) ? plan.edges : [])
-    .filter((/** @type {LinearComparisonEdge} */ edge) => Boolean(edge?.file) || String(edge?.losatFilename || '').trim())
-    .map((/** @type {LinearComparisonEdge} */ edge) => ({
-      ...edge,
-      included: false,
-      fileActive: false,
-      losatFilenameActive: false
-    }));
-  plan.mode = 'none';
-  plan.defaultSource = 'losat';
-  if (!Array.isArray(plan.edges)) plan.edges = [];
-  plan.edges.splice(0, plan.edges.length, ...retainedEdges);
-};
-
 // Reset Settings returns both drawings to their own mode's defaults
 // (PD-OI-070), and the app-level LOSAT execution and popup settings.
 /** @param {typeof AppState} state */
 export const resetSettings = (state) => {
   Object.assign(state.losatExecution, createDefaultLosatExecution());
   state.richFeaturePopup.value = true;
-  /** @type {[string, DrawingState][]} */ (Object.entries(state.drawings)).forEach(([mode, drawing]) => {
-    replaceReactiveObject(drawing.form, createDefaultForm());
-    drawing.linearRecordLayoutEnabled.value = WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
-    replaceReactiveObject(drawing.adv, createDefaultAdv(mode));
-    drawing.linearTypographyLinked.value = true;
-    replaceReactiveObject(drawing.losat, createDefaultLosat());
-    replaceReactiveObject(drawing.circularConservation, createDefaultCircularConservation());
-    clearReactiveObject(drawing.unmanagedConfigOverrides);
+  /** @type {DrawingState[]} */ (Object.values(state.drawings)).forEach((drawing) => {
+    SETTINGS_SLICE.reset(drawing.slices.settings);
     ANNOTATION_SETS_SLICE.reset(drawing.slices.annotationSets);
-    replaceReactiveArray(drawing.recordDisplayDrafts);
     FEATURE_EDITS_SLICE.reset(drawing.slices.featureEdits);
     state.selectedAnnotation.value = null;
-    resetLinearComparisonPlan(drawing);
-    drawing.losatProgram.value = 'blastn';
-
-    resetLayoutPreferenceState(state, drawing);
+    state.suppressCircularMultiRecordDefaults.value = false;
     resetPaletteState(state, drawing);
     resetRuleDraftState(state, drawing);
     resetEditorDraftState(state, drawing);

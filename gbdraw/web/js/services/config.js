@@ -58,7 +58,6 @@ import {
   normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
   normalizeLinearPlotTitlePosition,
-  replaceLayoutPreferences,
   resolveActiveLayoutPreference,
   restoredLayoutPreferences
 } from './layout-preferences.js';
@@ -166,6 +165,8 @@ import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
 import { rekeyLegendRecords } from './legend-svg.js';
 import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, clearSessionPaint, legendEntryKey } from './drawing/paint.js';
+import { SETTINGS_SLICE } from './drawing/settings.js';
+/** @import { SettingsSlice } from './drawing/settings.js' */
 /** @import { FeatureFill } from './drawing/paint.js' */
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
@@ -299,7 +300,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
-/** @import { LinearComparisonEdge, LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
+/** @import { LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
@@ -838,16 +839,12 @@ const cloneCanonicalSession = (canonical) => {
 };
 
 /**
- * @param {LinearComparisonPlan} target
- * @param {unknown} source
+ * @param {{ readonly slices: { readonly settings: SettingsSlice } }} drawing
+ * @param {unknown} source A plan, unvalidated.
  */
-const replaceLinearComparisonPlan = (target, source) => {
-  const normalized = normalizeLinearComparisonPlan(source);
-  target.mode = normalized.mode;
-  target.defaultSource = normalized.defaultSource;
-  if (!Array.isArray(target.edges)) target.edges = [];
-  target.edges.splice(0, target.edges.length, ...normalized.edges);
-};
+const installComparisonPlan = (drawing, source) => SETTINGS_SLICE.install(drawing.slices.settings, {
+  linearComparisonPlan: normalizeLinearComparisonPlan(source)
+});
 
 /** @param {unknown} plan */
 const serializeLinearComparisonPlan = (plan) => {
@@ -1367,9 +1364,9 @@ const applyModeSliceData = (drawing, mode, slice, {
   applyDrawingEditorData(drawing, editorState);
   const ui = isPlainObject(slice.ui) ? slice.ui : {};
   if (isPlainObject(ui.layoutPreferences)) {
-    replaceLayoutPreferences(drawing.layoutPreferences, {
+    SETTINGS_SLICE.install(drawing.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
       ...cloneJsonData(drawing.layoutPreferences), [mode]: cloneJsonData(ui.layoutPreferences)
-    });
+    }) });
   }
   if (applyCanvasPadding && ui.canvasPadding !== undefined) {
     CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: readCanvasPadding(ui.canvasPadding).value });
@@ -2722,12 +2719,12 @@ const buildLoadedArtifactSlot = (set, {
  * @param {{ projected?: StoredLayoutPreferences | null }} [options] The layout projected from the committed request.
  */
 const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) => {
-  replaceLayoutPreferences(drawing.layoutPreferences, restoredLayoutPreferences(ui, {
+  SETTINGS_SLICE.install(drawing.slices.settings, { layoutPreferences: normalizeLayoutPreferences(restoredLayoutPreferences(ui, {
     mode: state.mode.value,
     multiRecord: Boolean(drawing.form.multi_record_canvas),
     projected,
     active: { legend: drawing.form.legend, plotTitlePosition: drawing.adv.plot_title_position }
-  }));
+  })) });
 };
 
 // The draft fields a label fit row may write: the fields of the config paths
@@ -2793,20 +2790,24 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   // The stored settings' merge and readers (Load lists what they cannot restore first).
   const { arrowRatios } = installStoredSettings(drawing, data, mode, { captured });
   if (arrowRatios) Object.assign(drawing.adv, arrowRatios);
-  replacePlainObject(drawing.unmanagedConfigOverrides, cloneJsonData(readPlainObject(data.unmanagedConfigOverrides).value));
-  drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(readRecordDisplayDrafts(data.recordDisplayDrafts).value));
-  // Omitted: every record is drawn.
-  drawing.recordsOff.splice(0, drawing.recordsOff.length, ...recordsOffReader(mode)(data.recordsOff).value);
+  const linearLayout = readPlainObject(data.linearRecordLayout).value;
+  SETTINGS_SLICE.install(drawing.slices.settings, {
+    unmanagedConfigOverrides: readPlainObject(data.unmanagedConfigOverrides).value,
+    recordDisplayDrafts: readRecordDisplayDrafts(data.recordDisplayDrafts).value,
+    // Omitted: every record is drawn.
+    recordsOff: recordsOffReader(mode)(data.recordsOff).value,
+    // Omission takes the fresh default in every Session version.
+    linearRecordLayoutEnabled: readLinearRecordLayoutEnabled(linearLayout.enabled).value,
+    linearRecordGap: readLinearRecordGap(linearLayout.recordGap).value,
+    linearRecordRows: readLinearRecordRows(linearLayout.rows).value,
+    linearComparisonPlan: normalizeLinearComparisonPlan(data.linearComparisonPlan || createDefaultLinearComparisonPlan()),
+    losatProgram: data.losatProgram ? readLosatProgram(data.losatProgram).value : undefined
+  });
   FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, {
     // The reader keeps the placement rows of this mode (the cast).
     featurePlacementOverrides: /** @type {FeaturePlacementDraft} */ (featurePlacementsReader(mode)(data.featurePlacementOverrides).value)
   });
   ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets: readAnnotationSets(data.annotationSets).value });
-  const linearLayout = readPlainObject(data.linearRecordLayout).value;
-  // Omission takes the fresh default in every Session version.
-  drawing.linearRecordLayoutEnabled.value = readLinearRecordLayoutEnabled(linearLayout.enabled).value;
-  drawing.linearRecordGap.value = readLinearRecordGap(linearLayout.recordGap).value;
-  drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...readLinearRecordRows(linearLayout.rows).value);
   // The record translations and alignment plan are the Linear mode's
   // artifact; only the Linear drawing's settings carry them. A History
   // config step carries neither and leaves them alone (OV-383).
@@ -2817,10 +2818,6 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   if (state.similarityAlignmentPlan && ownsAlignment) {
     state.similarityAlignmentPlan.value = cloneJsonData(readSimilarityAlignment(linearLayout.similarityAlignment).value);
   }
-  replaceLinearComparisonPlan(
-    drawing.linearComparisonPlan,
-    data.linearComparisonPlan || createDefaultLinearComparisonPlan()
-  );
   drawing.importedComparisonIntent.action = readImportedComparisonAction(readPlainObject(data.importedComparisonResolution).value.action).value;
   drawing.form.plot_title = String(drawing.form.plot_title || '');
   // `form.legend` and `adv.plot_title_position` are accessors over
@@ -2872,9 +2869,6 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
     manualWhitelist: storedWhitelist.kept ? undefined : storedWhitelist.value,
     manualBlacklist: data.blacklistText === undefined ? undefined : readBlacklistText(data.blacklistText).value
   });
-  if (data.losatProgram) {
-    drawing.losatProgram.value = readLosatProgram(data.losatProgram).value;
-  }
   drawing.circularConservation.labels = String(drawing.circularConservation.labels || '');
   const webEdits = readPlainObject(data.webEdits).value;
   GROUP_NAMES_SLICE.install(drawing.slices.groupNames, {
@@ -4061,7 +4055,7 @@ const readFileList = (stored, path, repairs) => (Array.isArray(stored) ? stored 
  * @param {Record<string, any> | null} filesData
  * @param {{
  *   adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any>,
- *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'>,
+ *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'> & { readonly slices: { readonly settings: SettingsSlice } },
  *   repairs?: LoadRepair[] | null, at?: string
  * }} options `repairs`: Load lists what it drops from the saved inputs, at
  *   `at`, where the inputs are in the file (`files`, `webFiles.bindings`).
@@ -4097,11 +4091,10 @@ const applyFiles = (filesData, {
 
   if (!filesData) {
     targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
-    targetDrawing.linearRecordRows.splice(0);
-    replaceLinearComparisonPlan(
-      targetDrawing.linearComparisonPlan,
-      reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs)
-    );
+    SETTINGS_SLICE.install(targetDrawing.slices.settings, {
+      linearRecordRows: [],
+      linearComparisonPlan: normalizeLinearComparisonPlan(reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs))
+    });
     return { collapsedLinearSeqs: false };
   }
 
@@ -4186,10 +4179,8 @@ const applyFiles = (filesData, {
     if (resolveRecordInputs) {
       // A saved row, unvalidated (OV-568): the lines below test each field they keep.
       const rowByUid = new Map(targetDrawing.linearRecordRows.map((/** @type {UnvalidatedFields<keyof LinearRecordRow>} */ entry) => [String(entry?.uid || ''), entry]));
-      targetDrawing.linearRecordRows.splice(
-        0,
-        targetDrawing.linearRecordRows.length,
-        ...targetState.linearSeqs.map((/** @type {LinearSeq} */ seq, /** @type {number} */ index) => {
+      SETTINGS_SLICE.install(targetDrawing.slices.settings, {
+        linearRecordRows: targetState.linearSeqs.map((/** @type {LinearSeq} */ seq, /** @type {number} */ index) => {
           const saved = rowByUid.get(seq.uid);
           const row = Number.isInteger(Number(saved?.row)) && Number(saved.row) > 0
             ? Number(saved.row) : index + 1;
@@ -4203,7 +4194,7 @@ const applyFiles = (filesData, {
               : {})
           };
         })
-      );
+      });
     }
     const comparisonFiles = new Map(
       /** @type {[string, any][]} */ ((Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
@@ -4221,18 +4212,12 @@ const applyFiles = (filesData, {
       if (file) edge.file = file;
       else setComparisonEdgeFile(edge, null);
     });
-    replaceLinearComparisonPlan(
-      targetDrawing.linearComparisonPlan,
-      reconcileLinearComparisonPlan(planWithFiles, targetState.linearSeqs)
-    );
+    installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(planWithFiles, targetState.linearSeqs));
     return { collapsedLinearSeqs };
   }
 
   targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
-  replaceLinearComparisonPlan(
-    targetDrawing.linearComparisonPlan,
-    reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs)
-  );
+  installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs));
   return { collapsedLinearSeqs: false };
 };
 
@@ -4346,12 +4331,10 @@ const cloneLiveFileState = (drawing) => ({
     ...seq,
     depth: Array.isArray(seq.depth) ? [...seq.depth] : seq.depth
   })),
-  linearRecordRows: drawing.linearRecordRows.map((/** @type {LinearRecordRow} */ entry) => ({ ...entry })),
-  linearComparisonPlan: {
-    mode: drawing.linearComparisonPlan.mode,
-    defaultSource: drawing.linearComparisonPlan.defaultSource,
-    edges: drawing.linearComparisonPlan.edges.map((/** @type {LinearComparisonEdge} */ edge) => ({ ...edge }))
-  }
+  // The settings slice is untyped (the cast): it copies the rows and plan as they are.
+  .../** @type {{ linearRecordRows: LinearRecordRow[], linearComparisonPlan: LinearComparisonPlan }} */ (
+    SETTINGS_SLICE.capture(drawing.slices.settings, ['linearRecordRows', 'linearComparisonPlan'])
+  )
 });
 
 /**
@@ -4369,8 +4352,10 @@ const restoreLiveFileState = (drawing, snapshot) => {
   state.circularRecordList.value = cloneJsonData(snapshot.circularRecordList);
   Object.assign(state.circularRecordDiscovery, snapshot.circularRecordDiscovery);
   state.linearSeqs.splice(0, state.linearSeqs.length, ...snapshot.linearSeqs);
-  drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...snapshot.linearRecordRows);
-  replaceLinearComparisonPlan(drawing.linearComparisonPlan, snapshot.linearComparisonPlan);
+  SETTINGS_SLICE.install(drawing.slices.settings, {
+    linearRecordRows: snapshot.linearRecordRows,
+    linearComparisonPlan: normalizeLinearComparisonPlan(snapshot.linearComparisonPlan)
+  });
 };
 
 const captureSessionImportTransientState = () => ({
@@ -4621,7 +4606,7 @@ const resetSessionBaseline = () => {
   resetRightDrawerState(state);
   // Reset Settings keeps which records are ON (PD-OI-070); a new Session draws
   // every record its slices do not turn OFF (PD-OI-091).
-  for (const drawing of Object.values(state.drawings)) drawing.recordsOff.splice(0);
+  for (const drawing of Object.values(state.drawings)) SETTINGS_SLICE.install(drawing.slices.settings, { recordsOff: [] });
   state.mode.value = 'circular';
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
@@ -4655,7 +4640,7 @@ const resetSessionBaseline = () => {
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
   Object.values(state.drawings).forEach((/** @type {DrawingState} */ drawing) => {
-    Object.assign(drawing.importedComparisonIntent, createImportedComparisonIntentState());
+    SETTINGS_SLICE.install(drawing.slices.settings, { importedComparisonIntent: createImportedComparisonIntentState() });
     GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
     VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
     clearFeatureOverrides(drawing.slices.featureEdits);
@@ -4739,7 +4724,7 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
   if (ui.lInputType) state.lInputType.value = ui.lInputType;
   if (ui.losatProgram) {
     const program = String(ui.losatProgram);
-    drawing.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
+    SETTINGS_SLICE.install(drawing.slices.settings, { losatProgram: ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn' });
   }
   if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
   state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
@@ -5566,14 +5551,21 @@ const importSessionDocument = async (e, options = {}) => {
     const inputTypes = { cInputType: inputTypeOf('cInputType'), lInputType: inputTypeOf('lInputType') };
     // Where the input files are in the file.
     const filesAt = canonicalSession ? 'webFiles.bindings' : 'files';
+    // The Linear record layout `applyFiles` reconciles, in a settings slice of
+    // its own until the Load commits it. Read as the drawing reads them (a
+    // list of another kind failed the Load).
+    const candidateLayout = SETTINGS_SLICE.create({
+      linearRecordRows: readLinearRecordRows(linearDraftConfig?.linearRecordLayout?.rows).value,
+      linearComparisonPlan: normalizeLinearComparisonPlan(linearDraftConfig?.linearComparisonPlan)
+    });
     const candidateFiles = {
       // `applyFiles` fills the file slots.
       files: /** @type {Record<string, unknown>} */ ({}), linearSeqs: [], circularRecordList: { value: [] },
       circularRecordDiscovery: {}, linearReorderNotice: { value: '' },
       cInputType: { value: inputTypes.cInputType },
-      // Read as the drawing reads them (a list of another kind failed the Load).
-      linearRecordRows: readLinearRecordRows(linearDraftConfig?.linearRecordLayout?.rows).value,
-      linearComparisonPlan: normalizeLinearComparisonPlan(linearDraftConfig?.linearComparisonPlan)
+      linearRecordRows: candidateLayout.view.linearRecordRows,
+      linearComparisonPlan: candidateLayout.view.linearComparisonPlan,
+      slices: { settings: candidateLayout.handle }
     };
     recordSessionLifecycleEvent('session-candidate-files-start');
     const { collapsedLinearSeqs } = applyFiles(
@@ -6307,10 +6299,10 @@ const importSessionDocument = async (e, options = {}) => {
     if (modeScopedSession) {
       if (projectedLayout && !isPlainObject(modeSlices[generatedMode].ui?.layoutPreferences)) {
         const drawingOfCommit = state.drawings[generatedMode];
-        replaceLayoutPreferences(drawingOfCommit.layoutPreferences, {
+        SETTINGS_SLICE.install(drawingOfCommit.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
           ...cloneJsonData(drawingOfCommit.layoutPreferences),
           [generatedMode]: normalizeLayoutPreferences(projectedLayout)[generatedMode]
-        });
+        }) });
       }
     } else {
       SLICE_MODES.forEach((mode) => restoreLayoutPreferences(state.drawings[mode], ui, { projected: projectedLayout }));
