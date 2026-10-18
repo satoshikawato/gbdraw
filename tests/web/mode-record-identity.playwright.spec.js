@@ -330,3 +330,32 @@ for (const [first, second] of [['circular', 'linear'], ['linear', 'circular']]) 
     expect(await binding(page)).toBe(picked);
   });
 }
+
+// OV-1269: a feature popup belongs to the Result it was opened on. Showing
+// another Result of a batch closes it, so Apply Label cannot change the
+// Result that is no longer shown.
+test('showing another batch Result closes the feature popup of the previous one', async ({ page }) => {
+  test.setTimeout(300000);
+  await openApp(page);
+  await loadInMode(page, 'circular');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.form.multi_record_canvas = false;
+    app.adv.circular_grouping_intent = 'batch';
+  });
+  const outcome = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(outcome?.status ?? outcome).not.toBe('error');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length), { timeout: 120000 }).toBe(2);
+  const displayed = page.getByLabel('Displayed Result');
+  await displayed.selectOption({ index: 1 });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex)).toBe(1);
+  const feature = page.locator('.gbdraw-preview-surface svg [data-gbdraw-feature-id]').first();
+  await expect(feature).toHaveCount(1, { timeout: 60000 });
+  await feature.dispatchEvent('click', { clientX: -100, clientY: -100 });
+  const popup = page.locator('.feature-popup[role="dialog"]');
+  await expect(popup).toBeVisible();
+  await displayed.selectOption({ index: 0 });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex)).toBe(0);
+  await expect(popup).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature)).toBeNull();
+});

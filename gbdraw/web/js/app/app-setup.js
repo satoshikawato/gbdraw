@@ -1981,8 +1981,11 @@ export const createAppSetup = () => {
     focusSearchToggle: () => /** @type {HTMLElement | null} */ (document.querySelector('[data-preview-search-toggle]'))?.focus()
   });
 
+  // A Result switch closes the feature popup through its close owner: the
+  // popup belongs to the Result it was opened on (OV-1269).
   watch(selectedResultIndex, () => {
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+    closeFeaturePopup();
   });
   watch(svgContent, () => {
     similarityAlignmentPorts.refreshCanvas();
