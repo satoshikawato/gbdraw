@@ -379,6 +379,22 @@ test('the feature panel tab reset at a switch is no change and no step', async (
   assert.equal(state.featurePanelTab.value, 'colors', 'the Linear Undo leaves the tab the switch set');
 });
 
+// A3 review 2 M1 (OV-1168 class): the alignment Reset receipt is an artifact
+// slot value, the shown Result's. An Undo of Reset made in Linear, from
+// Circular, neither validates nor installs a receipt for the hidden Linear.
+test('an Undo of Reset from Circular does not read Linear\'s alignment receipt', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  show(app, 'linear');
+  state.similarityAlignmentResetReceipt.value = { binding: 'fake', directions: [], referenceDeltaX: null };
+  await app.resetSettings();
+  show(app, 'circular');
+  assert.equal(history.undoLabel(), 'Reset settings');
+  assert.equal(await app.undoHistory(), true);
+  assert.notEqual(history.undoLabel(), 'Reset settings');
+  assert.equal(state.similarityAlignmentResetReceipt.value, null, 'the shown Circular slot takes no receipt');
+});
+
 // A3 review 2 Low 4: a drawing step drops no project step; only the oldest
 // title step is gone after the limit.
 test('a step past the project limit drops only the oldest project step', async () => {

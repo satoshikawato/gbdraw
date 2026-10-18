@@ -1688,18 +1688,24 @@ export const createHistorySnapshotService = ({
   );
 
   // The alignment plan, its Reset receipt, and record translations; intents
-  // and checkpoints capture and restore them together.
-  const captureAlignmentState = () => ({
-    receipt: getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null),
+  // and checkpoints capture and restore them together. The receipt is an
+  // artifact slot value, the shown Result's: a drawing that is not shown
+  // keeps its own in its slot, so its intent holds none and a restore of it
+  // writes none (OV-1168 class, A3 review 2 M1).
+  /** @param {{ receipt: boolean }} options */
+  const captureAlignmentState = ({ receipt }) => ({
+    ...(receipt ? { receipt: getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null) } : {}),
     plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
     recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
   });
-  /** @param {AlignmentStateData | null | undefined} alignmentState */
-  const installAlignmentState = (alignmentState) => {
-    setGeneratedArtifactRef(
-      state.similarityAlignmentResetReceipt,
-      cloneJsonData(alignmentState?.receipt) || null
-    );
+  /** @param {AlignmentStateData | null | undefined} alignmentState @param {{ receipt: boolean }} options */
+  const installAlignmentState = (alignmentState, { receipt }) => {
+    if (receipt) {
+      setGeneratedArtifactRef(
+        state.similarityAlignmentResetReceipt,
+        cloneJsonData(alignmentState?.receipt) || null
+      );
+    }
     setGeneratedArtifactRef(state.similarityAlignmentPlan, cloneJsonData(alignmentState?.plan) || null);
     setGeneratedArtifactRef(
       state.linearRecordTranslations,
@@ -1838,7 +1844,7 @@ export const createHistorySnapshotService = ({
       editorState: editorIntentOf(captureLegendPaint(drawing.slices.paint)),
       groupNames: buildGroupNameIntentData(drawing),
       files: buildIntentFilesData(state, drawing, fileStore),
-      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState() } : {}),
+      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState({ receipt: isShown(drawingId) }) } : {}),
       orthogroupState: buildOrthogroupIntentData({
         selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
         selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, '')
@@ -1875,8 +1881,8 @@ export const createHistorySnapshotService = ({
 
     const domains = intentDomains(context);
     // The alignment receipt is read against the committed Session of the
-    // drawing's artifact before anything is applied.
-    if (domains.has('alignmentState')) {
+    // shown drawing's artifact before anything is applied.
+    if (domains.has('alignmentState') && isShown(drawingId)) {
       const canonical = generatedArtifactRuntimeOwner?.capture?.()?.canonical?.committedCanonicalSession;
       await validateSimilarityAlignmentResetReceipt(intent.alignmentState?.receipt, canonical && {
         ...canonical,
@@ -1939,7 +1945,7 @@ export const createHistorySnapshotService = ({
       if (domains.has('files')) {
         applyFilesData(state, drawing, intent.files || {}, fileStore, normalizeLinearSeqList);
       }
-      if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState);
+      if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState, { receipt: isShown(drawingId) });
       if (domains.has('features')) applyFeatureIntentData(state, drawing, intent.features || {});
       if (domains.has('editorState')) applyEditorIntentData(drawing, intent.editorState || {});
       if (domains.has('groupNames')) applyGroupNameIntentData(drawing, intent.groupNames || {});
@@ -1964,7 +1970,7 @@ export const createHistorySnapshotService = ({
     const checkpoint = cloneJsonData({
       config: buildDrawingConfig(drawing),
       files: buildFilesData(state, drawing, fileStore),
-      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState() } : {}),
+      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState({ receipt: isShown(drawingId) }) } : {}),
       ...generated,
       ...(generated.ui ? { ui: withoutSessionUi(generated.ui) } : {}),
       editorState
@@ -2008,7 +2014,7 @@ export const createHistorySnapshotService = ({
       await nextTick();
 
       applyFilesData(state, drawing, snapshot.files || {}, fileStore, normalizeLinearSeqList);
-      if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState);
+      if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState, { receipt: isShown(drawingId) });
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
       if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
