@@ -25,12 +25,17 @@ globalThis.File = File;
 
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
+const { inputTypeKeyOf } = await import('../../gbdraw/web/js/services/drawing-view.js');
+const { DRAWING_SLICES } = await import('./helpers/drawing-state.mjs');
 
+// A3 review Low 5: every slice of the drawing and its input type.
 /** @param {'circular' | 'linear'} id */
 const hashOf = (id) => {
   const drawing = state.drawings[id];
+  const slices = Object.fromEntries(Object.entries(DRAWING_SLICES)
+    .map(([name, slice]) => [name, slice.capture(drawing.slices[name])]));
   return createHash('sha256').update(JSON.stringify({
-    form: drawing.form, adv: drawing.adv, overrides: drawing.unmanagedConfigOverrides
+    slices, inputType: state[inputTypeKeyOf(drawing)].value
   })).digest('hex');
 };
 
@@ -62,11 +67,32 @@ test('Undo walks the shown drawing\'s History and never changes the other drawin
   assert.equal(hashOf('linear'), linearAfterEdit);
   assert.equal(hashOf('circular'), circularAfterEdit, 'Redo in Linear leaves Circular unchanged');
 
+  // A checkpoint step and a Generate step of Linear walk the same way.
+  await history.runUndoableCheckpoint('Linear checkpoint', () => { state.lInputType.value = 'gff'; linear.form.prefix = 'linear-checkpoint'; return true; });
+  const linearAfterCheckpoint = hashOf('linear');
+  assert.notEqual(linearAfterCheckpoint, linearAfterEdit);
+  await history.runUndoableArtifactReplacement('Generate diagram', () => {
+    state.results.value = [{ name: 'linear.svg', content: '<svg id="linear-generate"/>' }];
+    return true;
+  });
+  const steps = [linearAfterCheckpoint, linearAfterEdit];
+  for (const expected of steps) {
+    await app.undoHistory();
+    assert.equal(hashOf('linear'), expected);
+    assert.equal(hashOf('circular'), circularAfterEdit, 'a Linear Undo leaves Circular unchanged');
+  }
+  for (const expected of [linearAfterCheckpoint, linearAfterCheckpoint]) {
+    await app.redoHistory();
+    assert.equal(hashOf('linear'), expected);
+    assert.equal(hashOf('circular'), circularAfterEdit, 'a Linear Redo leaves Circular unchanged');
+  }
+
   assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
   assert.equal(history.getUndoCount(), 1, 'the Circular drawing keeps its own step');
   await app.undoHistory();
   assert.equal(circular.unmanagedConfigOverrides['objects.circular.a'], 1, 'Undo restores the Circular edit');
-  assert.equal(hashOf('linear'), linearAfterEdit, 'Undo in Circular leaves Linear unchanged');
+  assert.equal(hashOf('linear'), linearAfterCheckpoint, 'Undo in Circular leaves Linear unchanged');
+  assert.equal(state.lInputType.value, 'gff', 'and its input type');
 });
 
 test('Reset all drawings is one project step: one Undo restores every drawing', async () => {

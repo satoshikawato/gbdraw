@@ -602,3 +602,28 @@ test('Circular batch: Undo and Redo of drags on Result 2 restore Result 2 while 
   const redone = await committed(page);
   expect.soft(redone.matchesMounted, `after Redo, Result 2: ${firstDiff(redone)}`).toBe(true);
 });
+
+// OV-110 (b) (A3 review Low 6): a Generate replaces the Results a drag was
+// made on. The drag step still names its Result, so the composition capture
+// keeps that Result's first offsets (History's held identities): Undo of the
+// Generate shows the dragged Results, and Undo of the drag returns them to
+// their first offsets.
+test('Circular batch: Undo past a Generate returns a dragged Result to its first offsets', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openBatch(page);
+  await show(page, 0);
+  const undragged = await offsets(page);
+  await dragRole('legend', 30, 20)(page);
+  await settle(page);
+  const dragged = await offsets(page);
+  expect(dragged[0].legend).not.toEqual(undragged[0].legend);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'none'; });
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect(await offsets(page), 'Undo of the Generate shows the dragged Results').toEqual(dragged);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect(await offsets(page), 'Undo of the drag returns the Result to its first offsets').toEqual(undragged);
+});
