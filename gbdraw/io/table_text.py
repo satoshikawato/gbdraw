@@ -184,7 +184,6 @@ def read_literal_table(
                 f"Malformed line in {label} '{filepath}' at line {line_no}: "
                 f"expected {len(names)} columns."
             )
-            logger.error(f"ERROR: {message}")
             raise ParseError(message)
     options.setdefault("engine", "python")
     options.setdefault("on_bad_lines", "error")

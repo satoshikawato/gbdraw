@@ -314,18 +314,12 @@ def read_default_color_overrides(user_defined_default_colors: str) -> DataFrame:
                 )
             user_df = user_df[~missing]
     except FileNotFoundError:
-        logger.error(
-            f"ERROR: override file '{user_defined_default_colors}' not found"
-        )
         raise InputFileError(
             f"Override file '{user_defined_default_colors}' not found"
         )
     except ParseError:
         raise
     except Exception as exc:
-        logger.error(
-            f"ERROR: failed to read '{user_defined_default_colors}' – {exc}"
-        )
         raise ParseError(
             f"Failed to read '{user_defined_default_colors}': {exc}"
         ) from exc
@@ -351,7 +345,6 @@ def merge_default_colors(
         with toml_path.open("rb") as fh:
             palettes_dict = tomllib.load(fh)
     except Exception as exc:
-        logger.error(f"ERROR: failed to read colour_palettes.toml – {exc}")
         raise ParseError(f"Failed to read color_palettes.toml: {exc}") from exc
 
     if palette not in palettes_dict:
@@ -378,7 +371,6 @@ def merge_default_colors(
                         first_hex[feature_type] = resolve_color_to_hex(color)
                 user_df = user_df.assign(color=[first_hex[feature_type] for feature_type in user_df.index])
             except Exception as exc:
-                logger.error(f"ERROR: failed to read '{source}' – {exc}")
                 raise ParseError(f"Failed to read '{source}': {exc}") from exc
         default_colors = user_df.combine_first(default_colors)
 
@@ -456,13 +448,10 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
     except ParseError:
         raise
     except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in '{color_table_file}': {e}")
         raise ParseError(f"Malformed line in '{color_table_file}': {e}") from e
     except FileNotFoundError as e:
-        logger.error(f"ERROR: Color table file not found: {e}")
         raise InputFileError(f"Color table file not found: {e}") from e
     except Exception as e:
-        logger.error(f"ERROR: Failed to read '{color_table_file}': {e}")
         raise ParseError(f"Failed to read '{color_table_file}': {e}") from e
 
     df["caption"] = df["caption"].fillna("")

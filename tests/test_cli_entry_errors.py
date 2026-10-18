@@ -92,3 +92,62 @@ def test_python_existing_output_errors_share_one_wording(tmp_path: Path) -> None
     with pytest.raises(OutputExistsError) as two:
         preflight_output_paths((first, second), overwrite=False)
     assert str(two.value) == f"Output files already exist: {first}, {second}. Use overwrite=True to replace them."
+
+
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("missing_gbk", "File does not exist or is not accessible: nonexist.gb"),
+        ("default_colors_extra_column", "Malformed line in default colors file 'd3.tsv' at line 1: expected 2 columns."),
+        ("missing_color_table", "Color table file not found:"),
+        ("color_table_six_columns", "Malformed line in color table 't6.tsv' at line 1: expected 5 columns."),
+    ],
+)
+def test_cli_input_error_prints_once(case: str, message: str, tmp_path: Path) -> None:
+    """OV-1241: the reader logged the error and the CLI printed it again."""
+
+    (tmp_path / "d3.tsv").write_text("CDS\t#ff0000\textra\n", encoding="utf-8")
+    (tmp_path / "t6.tsv").write_text("CDS\tproduct\tx\t#ff0000\tcap\textra\n", encoding="utf-8")
+    gbk = str(TEST_INPUTS / "NC_001416.gb")
+    argv = {
+        "missing_gbk": ["--gbk", "nonexist.gb"],
+        "default_colors_extra_column": ["--gbk", gbk, "-d", "d3.tsv"],
+        "missing_color_table": ["--gbk", gbk, "-t", "nope.tsv"],
+        "color_table_six_columns": ["--gbk", gbk, "-t", "t6.tsv"],
+    }[case]
+    result = _gbdraw("circular", *argv, "-o", "out", cwd=tmp_path)
+    assert result.returncode == 1
+    output = result.stdout + result.stderr
+    assert output.count(message) == 1, output
+    assert output.count("ERROR:") == 1, output
+
+
+def test_no_reader_logs_an_error_it_raises() -> None:
+    """OV-1241: an error a gbdraw function raises is reported once, by its caller.
+
+    A ``logger.error`` (or ``critical``/``exception``) directly before a
+    ``raise`` printed the same error twice on the CLI.
+    """
+
+    import ast
+
+    import gbdraw
+
+    offenders = []
+    package = Path(gbdraw.__file__).parent
+    for path in sorted(package.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            for field in ("body", "orelse", "finalbody"):
+                body = getattr(node, field, None)
+                if not isinstance(body, list):
+                    continue
+                for statement, following in zip(body, body[1:]):
+                    call = statement.value if isinstance(statement, ast.Expr) else None
+                    if (
+                        isinstance(call, ast.Call)
+                        and isinstance(call.func, ast.Attribute)
+                        and call.func.attr in {"error", "critical", "exception"}
+                        and isinstance(following, ast.Raise)
+                    ):
+                        offenders.append(f"{path.relative_to(package)}:{statement.lineno}")
+    assert offenders == []

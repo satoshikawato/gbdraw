@@ -68,15 +68,12 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     except ParseError:
         raise
     except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in qualifier priority file '{filepath}': {e}")
         raise ParseError(
             f"Malformed line in qualifier priority file '{filepath}': {e}"
         ) from e
     except FileNotFoundError as e:
-        logger.error(f"ERROR: Qualifier priority file not found: {e}")
         raise InputFileError(f"Qualifier priority file not found: {e}") from e
     except Exception as e:
-        logger.error(f"ERROR: Failed to read '{filepath}': {e}")
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
     null_rows = df[df.isnull().any(axis=1)]
@@ -112,15 +109,12 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
     except ParseError:
         raise
     except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in filter list file '{filepath}': {e}")
         raise ParseError(
             f"Malformed line in filter list file '{filepath}': {e}"
         ) from e
     except FileNotFoundError as e:
-        logger.error(f"ERROR: Filter list file not found: {e}")
         raise InputFileError(f"Filter list file not found: {e}") from e
     except Exception as e:
-        logger.error(f"ERROR: Failed to read '{filepath}': {e}")
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
     null_rows = df[df.isnull().any(axis=1)]
@@ -148,7 +142,6 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
     try:
         lines = read_table_lines(filepath)
     except FileNotFoundError as e:
-        logger.error(f"ERROR: Label override file not found: {e}")
         raise InputFileError(f"Label override file not found: {e}") from e
 
     try:
@@ -163,12 +156,10 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
     except ParseError:
         raise
     except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in label override file '{filepath}': {e}")
         raise ParseError(
             f"Malformed line in label override file '{filepath}': {e}"
         ) from e
     except Exception as e:
-        logger.error(f"ERROR: Failed to read '{filepath}': {e}")
         raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
     null_rows = df[df.isnull().any(axis=1)]
@@ -263,22 +254,18 @@ def _build_label_override_rules(label_override_df: Optional[DataFrame]) -> Optio
             continue
 
         if not record_id:
-            logger.error(f"ERROR: Missing record_id token in label override table at row {idx}.")
             raise ValidationError(
                 f"Missing record_id token in label override table at row {idx}."
             )
         if not feature_type:
-            logger.error(f"ERROR: Missing feature_type token in label override table at row {idx}.")
             raise ValidationError(
                 f"Missing feature_type token in label override table at row {idx}."
             )
         if not qualifier:
-            logger.error(f"ERROR: Missing qualifier token in label override table at row {idx}.")
             raise ValidationError(
                 f"Missing qualifier token in label override table at row {idx}."
             )
         if not value_pattern:
-            logger.error(f"ERROR: Missing value regex token in label override table at row {idx}.")
             raise ValidationError(
                 f"Missing value regex token in label override table at row {idx}."
             )
@@ -286,9 +273,6 @@ def _build_label_override_rules(label_override_df: Optional[DataFrame]) -> Optio
         try:
             pattern = re.compile(value_pattern, re.IGNORECASE)
         except re.error as e:
-            logger.error(
-                f"ERROR: Invalid regex in label override table at row {idx}: '{value_pattern}' ({e})"
-            )
             raise ParseError(
                 f"Invalid regex in label override table at row {idx}: '{value_pattern}' ({e})"
             ) from e
@@ -322,9 +306,6 @@ def _build_whitelist_map(whitelist_df: Optional[DataFrame]) -> Optional[dict[str
         try:
             pattern = re.compile(value_pattern, re.IGNORECASE)
         except re.error as e:
-            logger.error(
-                f"ERROR: Invalid regex in label whitelist table at row {idx}: '{value_pattern}' ({e})"
-            )
             raise ParseError(
                 f"Invalid regex in label whitelist table at row {idx}: '{value_pattern}' ({e})"
             ) from e
