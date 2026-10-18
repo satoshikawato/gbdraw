@@ -74,7 +74,7 @@ const {
 const { buildCircularTrackSlotSpec } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
 );
-const { buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec } = await import(
+const { buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec, placeCircularTrackStack } = await import(
   pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js'))
 );
 
@@ -910,4 +910,33 @@ test('invalid depth height remains editable without overwriting its last valid c
   editor.setLinearTrackSlotHeight(slot, '1e1PX');
   assert.equal(state.adv.depth_tracks[0].height, 10);
   assert.deepEqual(buildLinearTrackSlotPayload(slot).height, { value: 10, unit: 'px' });
+});
+
+// OV-1263: Generate stores the Axis index the rows' sides were set from, so an Overlay
+// Annotations row neither moves the Axis under the other rows nor leaves a row between it and
+// the split Features row in conflict with the index.
+test('Generate places a Circular stack and keeps the Axis index its sides follow (OV-1263)', () => {
+  const annotations = (anchor) => ({
+    id: 'annotations', renderer: 'annotations', enabled: true, side: 'overlay', z: 1, params: { set_id: 'r', anchor_slot: anchor }
+  });
+  const row = (id, renderer, side = 'inside', params = {}) => ({ id, renderer, enabled: true, side, z: 0, params });
+  for (const [label, slots, expectedAxis] of [
+    ['an Overlay Annotations row above a row and the split Features row', [
+      annotations('features'), row('gc_content', 'dinucleotide_content'),
+      row('features', 'features', 'overlay', { lane_direction: 'split' }), row('gc_skew', 'dinucleotide_skew')
+    ], 0],
+    ['an Overlay Annotations row after rows inside the Axis', [
+      row('features', 'features', 'inside', { lane_direction: 'inside' }), row('gc_content', 'dinucleotide_content'),
+      row('gc_skew', 'dinucleotide_skew'), annotations('gc_skew')
+    ], 0]
+  ]) {
+    const placed = placeCircularTrackStack(slots, 'GC', 'tuckin', 0);
+    assert.equal(placed.axisIndex, expectedAxis, label);
+    const plan = validateCustomTrackPlan({
+      mode: 'circular', slots: placed.slots, axisIndex: placed.axisIndex, trackType: 'tuckin',
+      depthTrackCount: 0, annotationSetIds: ['r'], conservationSeries: []
+    });
+    const codes = [...plan.rowIssues.values()].flat().map((issue) => issue.code);
+    assert.deepEqual(codes.filter((code) => code === 'axis_side_conflict'), [], label);
+  }
 });

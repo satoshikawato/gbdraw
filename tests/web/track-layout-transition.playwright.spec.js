@@ -340,9 +340,20 @@ test('Generate with an Overlay Annotations row keeps the Axis, and Outside axis 
     app.addCircularTrackSlot('annotations');
   });
   await place('overlay');
+  // An anchor under the row and Compress, so the Generate draws (two regions share a lane under Error).
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const row = state.activeDrawing().adv.circular_track_slots.find((slot) => slot.renderer === 'annotations');
+    row.z = 1;
+    Object.assign(row.params, { anchor_slot: 'features', overflow: 'compress' });
+  });
   const before = await stack();
   expect(before.sides.annotations).toBe('overlay');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { error: state.errorLog.value?.code ?? null, results: state.results.value.length };
+  })).toEqual({ error: null, results: 1 });
   expect((await stack()).axis).toBe(before.axis);
   await place('outside');
   expect((await stack()).sides).toEqual({ ...before.sides, annotations: 'outside' });

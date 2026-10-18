@@ -54,9 +54,8 @@ import {
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import { applyCircularSuppressControlsToSlots } from './circular-track-slots.js';
 import {
-  applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
-  enforceSingleOnAxisSlot
+  placeCircularTrackStack
 } from '../services/circular-track-slot-model.js';
 import {
   normalizeFileList,
@@ -3154,27 +3153,21 @@ export const createRunAnalysis = ({
           drawing.adv.circular_track_slots_axis_index,
           Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots.length : 0
         );
-        const circularTrackSlots = useCircularTrackSlots
-          ? applyCircularSuppressControlsToSlots(
-              applyCircularTrackOrderPlacements(
-                drawing.adv.circular_track_slots,
-                drawing.adv.nt,
-                drawing.form.track_type,
-                circularTrackAxisIndex
-              ),
-              drawing.form,
-              drawing.adv.nt
+        // The rows' sides follow one Axis index, and Generate stores that index (OV-1263).
+        const placedCircularTrackStack = useCircularTrackSlots
+          ? placeCircularTrackStack(
+              drawing.adv.circular_track_slots,
+              drawing.adv.nt,
+              drawing.form.track_type,
+              circularTrackAxisIndex
             )
+          : null;
+        const circularTrackSlots = placedCircularTrackStack
+          ? applyCircularSuppressControlsToSlots(placedCircularTrackStack.slots, drawing.form, drawing.adv.nt)
           : [];
-        if (useCircularTrackSlots) {
+        if (placedCircularTrackStack) {
           drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...circularTrackSlots);
-          // The stack editors' owner: an Overlay annotations row is not the track on the Axis,
-          // so it does not move the boundary under every other row (OV-1263).
-          drawing.adv.circular_track_slots_axis_index = enforceSingleOnAxisSlot(
-            circularTrackSlots,
-            circularTrackAxisIndex,
-            drawing.form.track_type
-          );
+          drawing.adv.circular_track_slots_axis_index = placedCircularTrackStack.axisIndex;
         }
         // Numeric settings (plot title font size, center radius, label
         // spacing, multi-record ratios, ring geometry) are projected literally
