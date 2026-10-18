@@ -149,7 +149,8 @@ def _render(
             resource_id,
             token_generation * 100 + index,
         )
-        cache_token = f"render-resource-{token_number}"
+        # A distinct stand-in for the sha256 hex token the Worker sends.
+        cache_token = f"{token_number:064x}"
         cache_path = cache_directory / f"{cache_token}.bin"
         if cache_path.exists():
             assert cache_path.read_bytes() == content
@@ -900,7 +901,7 @@ def test_identity_validation_rejects_paths_and_size_mismatches(tmp_path: Path) -
         path.write_bytes(content)
         resource_paths[resource_id] = path
         identities[resource_id] = {
-            "cacheToken": f"render-resource-{index}",
+            "cacheToken": f"{index:064x}",
             "size": len(content) + 1,
             "path": str(path),
         }

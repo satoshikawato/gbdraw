@@ -128,6 +128,7 @@ import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
   runDiagramHelperOperation,
+  setDiagramResourceRetainSource,
   setDiagramWorkerFontSource
 } from '../services/diagram-generation.js';
 import { createFontSettings } from './font-settings.js';
@@ -2081,6 +2082,7 @@ export const createAppSetup = () => {
     setUnmanagedConfigOverrideValidator(null);
     setMainSessionComparisonFrameConverter(null);
     setDiagramWorkerFontSource(null);
+    setDiagramResourceRetainSource(null);
     disposeSessionOperations();
     disposeDiagramGenerationWorker();
   });
@@ -3111,6 +3113,13 @@ export const createAppSetup = () => {
   // (with its rollback) write it.
   /** @type {Map<DrawingId, Readonly<ArtifactSlot>>} */
   const artifactSlots = new Map();
+  // The diagram Worker keeps the resources of every drawing's committed
+  // request: the shown drawing's and each kept slot's.
+  setDiagramResourceRetainSource(() => [
+    getCommittedCanonicalSession(),
+    ...[...artifactSlots.values()].map((slot) => /** @type {ReturnType<typeof getCommittedCanonicalSession> | undefined} */ (
+      slot.runtimeState?.canonical?.committedCanonicalSession))
+  ].flatMap((committed) => (committed ? [{ request: committed.renderRequest, resources: committed.resources }] : [])));
   // The Results of all drawings: the shown one's and every kept one's. The
   // per-Result caches (Legend inventories, retired Legend entries, projected
   // editor state) keep a kept Result's entries while another drawing is shown.

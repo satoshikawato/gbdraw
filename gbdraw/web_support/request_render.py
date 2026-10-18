@@ -100,7 +100,8 @@ def _label_fit_mode_of(request: DiagramRequest) -> LabelFitMode:
 
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
-_RESOURCE_CACHE_TOKEN_RE = re.compile(r"^render-resource-[1-9][0-9]*$")
+# The sha256 hex of the resource bytes (gbdraw/web/js/services/file-content-cache.js).
+_RESOURCE_CACHE_TOKEN_RE = re.compile(r"^[0-9a-f]{64}$")
 _STAGED_WORKSPACE_RE = re.compile(r"^gbdraw-web-render-[1-9][0-9]*$")
 _STAGED_WORKSPACE_MARKER = ".gbdraw-worker-render-workspace"
 

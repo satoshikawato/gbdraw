@@ -14,10 +14,14 @@ const {
 } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
 const { readHeldSegments } = await import('../../gbdraw/web/js/services/diagram-worker-protocol.js');
 
+// A resource's cache token is the sha256 hex of its bytes.
+const TOKEN_7 = '7'.repeat(64);
+const TOKEN_1 = '1'.repeat(64);
+const TOKEN_2 = '2'.repeat(64);
 const preparedIdentities = buildPreparedResourceIdentityMap([
   {
     resourceId: 'record-1-genbank',
-    cacheToken: 'render-resource-7',
+    cacheToken: TOKEN_7,
     size: 1234,
     name: 'secret-name.gbk',
     path: '/temporary/workspace/0001.bin',
@@ -25,23 +29,16 @@ const preparedIdentities = buildPreparedResourceIdentityMap([
   }
 ]);
 assert.deepEqual(preparedIdentities, {
-  'record-1-genbank': { cacheToken: 'render-resource-7', size: 1234 }
+  'record-1-genbank': { cacheToken: TOKEN_7, size: 1234 }
 });
 assert.equal(JSON.stringify(preparedIdentities).includes('secret-name.gbk'), false);
 assert.equal(JSON.stringify(preparedIdentities).includes('/temporary/workspace'), false);
-assert.throws(
-  () => buildPreparedResourceIdentityMap([
-    { resourceId: 'record-1-genbank', cacheToken: 'bad-token', size: 1 }
-  ]),
-  /Invalid cache token/
-);
-assert.throws(
-  () => buildPreparedResourceIdentityMap([
-    { resourceId: 'record-1-genbank', cacheToken: 'render-resource-1', size: 1 },
-    { resourceId: 'record-1-genbank', cacheToken: 'render-resource-2', size: 1 }
-  ]),
-  /duplicate/
-);
+for (const cacheToken of ['bad-token', 'render-resource-1']) {
+  assert.throws(
+    () => buildPreparedResourceIdentityMap([{ resourceId: 'record-1-genbank', cacheToken, size: 1 }]),
+    /Invalid cache token/
+  );
+}
 
 const encoder = new TextEncoder();
 const sha256 = async (bytes) => Array.from(

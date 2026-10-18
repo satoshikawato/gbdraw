@@ -180,8 +180,9 @@ test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership
     await generate('ok'); // Mandatory first recovery: no retry in the test.
     expect(await agree('first-recovery-A')).toEqual(a);
 
-    // A render the Worker rejects after staging still owns its FASTA bytes, so
-    // the first restored A restages the FASTA.
+    // A render the Worker rejects after staging still owns its FASTA bytes; the
+    // Worker also keeps A's, which the drawing's committed request names, so the
+    // restored A transfers nothing.
     await fasta.setInputFiles({ name: 'empty-sequence.fasta', mimeType: 'text/plain', buffer: emptySequence });
     await generate('error');
     expect(outcomes.at(-1).error).toMatchObject({ operation: 'generate', stage: 'render' });
@@ -199,15 +200,16 @@ test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership
     expect(recovered.runs[1].request).toEqual(a.request);
     expect(recovered.runs[3].request).toEqual(a.request);
     expect(recovered.runs.map(run => run.staged.map(r => r.resourceId))).toEqual([
-      ['record-1-gff3', 'record-1-fasta'], [], ['record-1-fasta'], ['record-1-fasta']
+      ['record-1-gff3', 'record-1-fasta'], [], ['record-1-fasta'], []
     ]);
-    expect(recovered.runs.map(run => run.staged.reduce((sum, r) => sum + r.bytes, 0))).toEqual([86047, 0, 13, 49253]);
+    expect(recovered.runs.map(run => run.staged.reduce((sum, r) => sum + r.bytes, 0))).toEqual([86047, 0, 13, 0]);
     await generate('ok');
     expect((await inspect()).runs.at(-1).staged).toEqual([]);
     expect(await agree('warm-A')).toEqual(a);
 
     // A successful Worker render changes the same GFF resource, then Result
-    // admission rejects it. The following A must restore its resource bytes.
+    // admission rejects it. The Worker kept A's GFF bytes, which the committed
+    // request names, so the following A reuses them.
     await page.getByLabel('GFF3', { exact: true }).setInputFiles({
       name: 'candidate.gff3', mimeType: 'text/plain', buffer: Buffer.concat([files[0], Buffer.from('\n# candidate\n')])
     });
@@ -221,7 +223,7 @@ test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership
     expect((await inspect()).workers).toHaveLength(1);
     await page.getByLabel('GFF3', { exact: true }).setInputFiles(gffPath);
     await generate('ok');
-    expect((await inspect()).runs.at(-1).staged.map(r => r.resourceId)).toEqual(['record-1-gff3']);
+    expect((await inspect()).runs.at(-1).staged.map(r => r.resourceId)).toEqual([]);
     expect(await agree('admission-recovery-A')).toEqual(a);
 
     await page.getByLabel('GFF3', { exact: true }).setInputFiles({

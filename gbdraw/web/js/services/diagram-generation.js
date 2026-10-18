@@ -22,7 +22,7 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 import { toRaw } from '../utils/vue-raw.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
-/** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { ReadCommittedResourceSets, ResourceDescriptor } from './diagram-resource-staging.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
@@ -453,6 +453,7 @@ let activeRequest = null;
  *   for the Worker.
  * @property {unknown[]} resourceManifest
  * @property {TransferFile[]} stagedResources
+ * @property {readonly string[]} retainedResourceTokens The tokens the Worker keeps besides the manifest's.
  * @property {() => boolean} commit Acknowledges the staging; false when a reset
  *   or another acknowledged request superseded it.
  */
@@ -461,7 +462,21 @@ const activeFeatureRequests = new Set();
 /** @type {Set<AuxiliaryRequest>} */
 const activeHelperRequests = new Set();
 let nextRequestId = 1;
-const resourceTransport = createDiagramResourceTransport();
+/** @type {ReadCommittedResourceSets} */
+const NO_COMMITTED_RESOURCES = () => [];
+let readCommittedResourceSets = NO_COMMITTED_RESOURCES;
+const resourceTransport = createDiagramResourceTransport({
+  readCommittedResourceSets: () => readCommittedResourceSets()
+});
+
+/**
+ * Name the committed request of every drawing, so the Worker keeps the
+ * resources they name across Generates of other drawings.
+ * @param {ReadCommittedResourceSets | null} read Null when the app unmounts.
+ */
+export const setDiagramResourceRetainSource = (read) => {
+  readCommittedResourceSets = read || NO_COMMITTED_RESOURCES;
+};
 
 /** @type {ReadonlySet<string>} */
 const diagramHelperOperationNames = new Set(DIAGRAM_HELPER_OPERATION_NAMES);
@@ -776,6 +791,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
         request: payload.request,
         resourceManifest: preparedResources.resourceManifest,
         stagedResources: preparedResources.stagedResources,
+        retainedResourceTokens: preparedResources.retainedResourceTokens,
         fontIdentities: requestFontIdentities(payload.request),
         heldFeatureCatalogRevision: held.catalog?.revision ?? null,
         heldSegments: heldSegmentList(held)
@@ -1001,7 +1017,8 @@ const runAuxiliaryWorkerRequest = ({
         preparedResources = await prepareResources();
         if (!activeRequests.has(request)) return;
         workerPayload = { ...payload, resourceManifest: preparedResources.resourceManifest,
-          stagedResources: preparedResources.stagedResources };
+          stagedResources: preparedResources.stagedResources,
+          retainedResourceTokens: preparedResources.retainedResourceTokens };
       }
       currentWorker.addEventListener('message', handleMessage);
       currentWorker.addEventListener('error', handleError);
