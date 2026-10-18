@@ -16,7 +16,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { serializeActiveRenderFiles } = await import('../../gbdraw/web/js/services/config.js');
+const { serializeActiveRenderFiles, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const {
   buildCanonicalRenderRequest, compareCanonicalRenderRequests, decodeCanonicalResourceText,
   projectCanonicalSessionRequest
@@ -33,7 +33,7 @@ const drawing = state.drawings.circular;
 
 // Every case starts from one Circular GenBank file and its own form values.
 const circularState = (form) => {
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.files.c_gb = genbank;
   state.circularRecordList.value = [];

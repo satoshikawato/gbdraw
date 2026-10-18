@@ -1031,8 +1031,9 @@ export const createHistorySnapshotService = ({
   // each mode's artifact, registered once they exist (R13). A History restore
   // of a mode switch runs the transition, so Undo and Redo swap the modes'
   // artifact slots. `restoreMode` is the one mode writer of the History
-  // restores; it writes `mode` itself only for a service without a
-  // composition root (unit tests).
+  // restores, through the registered transition only: the shown drawing has
+  // one writer (`installShownDrawing`, services/config.js), so a service
+  // without a composition root (a unit test) registers its own transition.
   /** @type {((mode: 'circular' | 'linear') => unknown) | null} */
   let modeTransition = null;
   /** @type {((mode: 'circular' | 'linear') => Record<string, any> | null) | null} */
@@ -1049,8 +1050,8 @@ export const createHistorySnapshotService = ({
   const restoreMode = async (mode) => {
     const next = mode === 'linear' ? 'linear' : 'circular';
     if (getGeneratedArtifactRef(state.mode, 'circular') === next) return;
-    if (modeTransition) modeTransition(next);
-    else setGeneratedArtifactRef(state.mode, next);
+    if (!modeTransition) throw new Error('A History restore of another mode needs the registered mode transition.');
+    modeTransition(next);
     await nextTick();
   };
   // An artifact handle or checkpoint restores the displayed mode's artifact.

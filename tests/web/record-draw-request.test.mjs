@@ -16,7 +16,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { serializeActiveRenderFiles } = await import('../../gbdraw/web/js/services/config.js');
+const { serializeActiveRenderFiles, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 
@@ -26,7 +26,7 @@ const genbank = (name) => {
 };
 const blast = genbank('a-to-c.tsv');
 
-state.mode.value = 'linear';
+installShownDrawing('linear');
 state.lInputType.value = 'gb';
 const drawing = state.drawings.linear;
 state.linearSeqs.splice(0, Infinity, ...['a', 'b', 'c'].map((uid) => ({

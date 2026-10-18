@@ -17,6 +17,7 @@ globalThis.window = {
 };
 
 const { state, createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/state.js');
+const { installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { downloadSafeName } = await import('../../gbdraw/web/js/utils/download-names.js');
 
@@ -44,7 +45,7 @@ const circularPrefix = ({ prefix = '', recordId = 'FL10.1' } = {}) => {
   const drawing = state.drawings.circular;
   Object.assign(drawing.form, createDefaultForm(), { prefix });
   Object.assign(drawing.adv, createDefaultAdv('circular'));
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.circularRecordList.value = [{ record_id: recordId, record_length: 40 }];
   const canonical = buildCanonicalRenderRequest({

@@ -28,7 +28,7 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const { exportSession, importSession, setUnmanagedConfigOverrideValidator, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-settings.generated.js');
 const { readSessionDocument } = await import('../../gbdraw/web/js/services/session-authority.js');
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
@@ -953,7 +953,7 @@ test('no file the Web loaded before the dialog existed is refused (BA-OD100)', a
 // the readers the dialog lists them by.
 test('a configuration file with a shape or Linear visibility that is no text, or an unknown shape of a new feature type, loads with its rows (BA-OD100)', async () => {
   const shownMode = state.mode.value;
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   try {
     const drawing = state.drawings.linear;
     const before = { CDS: drawing.adv.feature_shapes.CDS, accession: drawing.adv.linear_accession_visibility,
@@ -976,7 +976,7 @@ test('a configuration file with a shape or Linear visibility that is no text, or
       drawing.adv.linear_accession_visibility, drawing.adv.linear_length_visibility], [before.CDS, false, 'rectangle', before.accession, before.length]);
     await savedSession('BA-OD100');
   } finally {
-    state.mode.value = shownMode;
+    installShownDrawing(shownMode);
   }
 });
 
@@ -1055,7 +1055,7 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
   // `losat.blastp` is a Linear setting and `circularConservation` a Circular one: each row is its mode's.
   const shownMode = state.mode.value;
   for (const [file, , mode = 'circular'] of cases) {
-    state.mode.value = mode;
+    installShownDrawing(mode);
     assert.equal((await importSession(input(first), { confirmLoadRepairs: async () => true })).status, 'legacy');
     const drawing = state.drawings[state.mode.value];
     assert.deepEqual([held(drawing), ratios(drawing)], [firstHeld, [0.5, 0.3]]);
@@ -1065,7 +1065,7 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
     outcomes.push([JSON.stringify(file), loaded.status, asked, loaded.repairs.map(({ effect }) => effect),
       held(drawing), ratios(drawing), JSON.stringify(drawing.adv.feature_shapes) === shapes]);
   }
-  state.mode.value = shownMode;
+  installShownDrawing(shownMode);
   assert.deepEqual(outcomes, cases.map(([file, line]) => [JSON.stringify(file), 'legacy', [line], ['kept'], firstHeld, ratiosAfter(file), true]));
   // A Session's drawing is reset first: the same values are its default.
   for (const [field, value] of [['feature_shapes', 5], ['plot_title', {}]]) {

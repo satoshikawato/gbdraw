@@ -12,7 +12,7 @@ globalThis.window = { Vue: {
   computed: getter => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner } = await import('../../gbdraw/web/js/services/config.js');
+const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const { ARTIFACT_SLOT_KEYS } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
@@ -157,7 +157,7 @@ test('a Generate after a switch reads no decoration of the other mode\'s Result'
 // artifact as they were.
 test('a mode-switch step whose alignment receipt does not bind fails before the switch', async () => {
   const { values } = await fillCircularArtifact();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   /** @type {string[]} */
   const transitions = [];
   snapshots.registerModeTransition((mode) => { transitions.push(mode); });

@@ -11,6 +11,7 @@ const Vue = loadPageVue();
 globalThis.window = { Vue };
 const { watch } = Vue;
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createRulePreparation } = await import('../../gbdraw/web/js/app/rule-matching.js');
 const { setFeatureVisibilityOverride } = await import('../../gbdraw/web/js/services/feature-visibility.js');
 const { admitFeatureCatalog, resultCatalogFeatures } = await import('../../gbdraw/web/js/services/feature-catalog.js');
@@ -46,7 +47,7 @@ const resultsNamed = (...names) => {
 };
 
 const setup = () => {
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.generatedMode.value = 'circular';
   state.featureCatalog.value = catalog();
   state.results.value = resultsNamed('result-0.svg', 'result-1.svg');

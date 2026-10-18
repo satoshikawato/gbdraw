@@ -16,6 +16,7 @@ globalThis.window = {
 };
 
 const { state, createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/state.js');
+const { installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-settings.generated.js');
@@ -56,7 +57,7 @@ const resetDrawing = (mode) => {
 // Generate builds the request of the shown mode from that mode's drawing.
 const requestOf = (mode, { linearDepth = null } = {}) => {
   const drawing = state.drawings[mode];
-  state.mode.value = mode;
+  installShownDrawing(mode);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   state.circularRecordList.value = [];
@@ -150,7 +151,7 @@ test('each mode request carries its own drawing values', () => {
   const fromLinear = samples('linear', requestOf('linear'));
   assert.deepEqual([fromLinear[0], fromLinear[3], fromLinear[4]], [7, 'deviation', 2]);
   assert.deepEqual(samples('circular', requestOf('circular')), [13, 3, false, 'percent', 4]);
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   MODES.forEach(resetDrawing);
 });
 
@@ -161,11 +162,11 @@ test('two Circular Depth series and one Linear Depth file both build their reque
   state.drawings.circular.adv.depth_tracks.splice(0, state.drawings.circular.adv.depth_tracks.length,
     { label: 'Illumina', color: '#112233' }, { label: 'Nanopore', color: '#445566' });
   state.drawings.linear.form.show_depth = true;
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   const linear = requestOf('linear', { linearDepth: [depthFile('a.depth.tsv')] });
   assert.equal(linear.renderRequest.diagramOptions.depthTracks?.length, 1);
   assert.equal(state.drawings.circular.adv.depth_tracks.length, 2, 'the Linear request leaves the Circular series');
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   MODES.forEach(resetDrawing);
 });
 
@@ -173,7 +174,7 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
   MODES.forEach(resetDrawing);
   const circular = state.drawings.circular;
   const linear = state.drawings.linear;
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.circularRecordList.value = [{ selector: '#1', record_id: 'a' }, { selector: '#2', record_id: 'b' }];
   circular.form.multi_record_canvas = true;

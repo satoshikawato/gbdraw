@@ -57,6 +57,10 @@ export const DRAWING_DERIVED_KEYS = Object.freeze([
 // The handles of the drawing's slices, which a slice's writers take.
 export const DRAWING_HANDLE_KEYS = Object.freeze(['slices']);
 
+// A drawing's identity, constant: its key in `state.drawings` and its mode.
+// They hold no settings or edits, so the drawing keys leave them out.
+export const DRAWING_IDENTITY_KEYS = Object.freeze(['id', 'mode']);
+
 export const DRAWING_KEYS = Object.freeze([
   ...DRAWING_DRAFT_KEYS, ...DRAWING_EDITOR_KEYS, ...DRAWING_DERIVED_KEYS, ...DRAWING_HANDLE_KEYS
 ]);
@@ -81,11 +85,12 @@ export const PROJECT_KEYS = Object.freeze([
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
 ]);
 
-// App settings and catalogs outside any drawing, and the shown mode. LOSAT
-// execution and the rich feature popup are app settings (Session
-// `ui.losatExecution`, `ui.richFeaturePopup`).
+// App settings and catalogs outside any drawing, and the shown drawing: its ID
+// (`activeDrawingId`, which `installShownDrawing` writes) and its mode (`mode`,
+// read from the drawing). LOSAT execution and the rich feature popup are app
+// settings (Session `ui.losatExecution`, `ui.richFeaturePopup`).
 export const UI_KEYS = Object.freeze([
-  'mode', 'downloadDpi', 'autoLabelReflowEnabled', 'paletteInstantPreviewEnabled', 'paletteDefinitions',
+  'activeDrawingId', 'mode', 'downloadDpi', 'autoLabelReflowEnabled', 'paletteInstantPreviewEnabled', 'paletteDefinitions',
   'paletteNames', 'specificRulePresets', 'featureKeys', 'defaultColorKeys', 'losatExecution', 'richFeaturePopup'
 ]);
 

@@ -35,7 +35,7 @@ import { createImportedComparisonIntentState } from './services/imported-compari
 import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import { toRaw } from './utils/vue-raw.js';
-import { computed as typedComputed } from './utils/reactivity.js';
+import { computed as typedComputed, ref as typedRef } from './utils/reactivity.js';
 import { CANVAS_SLICE } from './services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
@@ -113,7 +113,12 @@ const canvasPan = reactive({ x: 0, y: 0 });
 const canvasContainerRef = ref(null);
 
 // App State
-const mode = ref('circular');
+// The shown drawing, by its ID: `installShownDrawing` (services/config.js) is
+// its one writer. The shown mode is the shown drawing's (`drawing.mode`), so
+// nothing writes `mode`.
+/** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
+const activeDrawingId = typedRef(/** @type {DrawingId} */ ('circular'));
+const mode = typedComputed(() => activeDrawing().mode);
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
@@ -951,6 +956,14 @@ export const sessionOperationAvailability = (
 
 /** @import { ModeProfileName } from './mode-profiles.js' */
 /** @typedef {ModeProfileName} DiagramMode The diagram modes; `mode-profiles.js` owns the names. */
+/**
+ * The identity of a drawing, its key in `state.drawings`. A drawing's mode is
+ * its `mode` member: code never reads a mode from an ID. Until a project holds
+ * several drawings of one mode, each mode has one drawing, whose ID is the
+ * mode's name, so a writer that knows only a mode (a mode button, a Session's
+ * `ui.mode`) names the drawing of that mode by it.
+ * @typedef {'circular' | 'linear'} DrawingId
+ */
 
 /** @import { PythonLegendKey } from './services/legend-svg.js' */
 /** @import { VisibilityFeature } from './services/feature-visibility.js' */
@@ -985,8 +998,11 @@ const settingsDefaults = (drawingMode) => () => ({
   linearTypographyLinked: true
 });
 
-/** @param {DiagramMode} drawingMode */
-const createDrawingState = (drawingMode) => {
+/**
+ * @param {DrawingId} id
+ * @param {DiagramMode} drawingMode
+ */
+const createDrawingState = (id, drawingMode) => {
   const defaults = settingsDefaults(drawingMode);
   const initial = defaults();
   const form = reactive(initial.form);
@@ -1062,6 +1078,9 @@ const createDrawingState = (drawingMode) => {
   const featureEdits = FEATURE_EDITS_SLICE.create();
   const paint = PAINT_SLICE.create();
   return Object.freeze({
+    // Identity, constant: the drawing's key in `state.drawings` and its mode.
+    id,
+    mode: drawingMode,
     // Settings
     ...settings.view,
     // Editor edits, slice by slice (services/drawing/): the visibility and
@@ -1102,12 +1121,12 @@ const createDrawingState = (drawingMode) => {
       featureEdits: featureEdits.handle, paint: paint.handle, settings: settings.handle })
   });
 };
-const circularDrawing = createDrawingState('circular');
+const circularDrawing = createDrawingState('circular', 'circular');
 /** @typedef {typeof circularDrawing} DrawingState */
-/** @type {Readonly<Record<DiagramMode, DrawingState>>} */
-const drawings = Object.freeze({ circular: circularDrawing, linear: createDrawingState('linear') });
-/** @returns {DrawingState} */
-const activeDrawing = () => drawings[mode.value === 'linear' ? 'linear' : 'circular'];
+/** @type {Readonly<Record<DrawingId, DrawingState>>} */
+const drawings = Object.freeze({ circular: circularDrawing, linear: createDrawingState('linear', 'linear') });
+/** @returns {DrawingState} The shown drawing. */
+const activeDrawing = () => drawings[activeDrawingId.value];
 
 export const state = Object.freeze({
   processing,
@@ -1144,6 +1163,7 @@ export const state = Object.freeze({
   panStart,
   canvasPan,
   canvasContainerRef,
+  activeDrawingId,
   mode,
   drawings,
   activeDrawing,

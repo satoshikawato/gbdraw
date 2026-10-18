@@ -1334,6 +1334,8 @@ const createLayoutPreferences = () => ({
       state.adv = { ...state.adv, ...config.adv };
     }
   });
+  // The composition root's mode transition, which this fixture stands in for.
+  snapshots.registerModeTransition((next) => { mode.value = next; });
 
   await snapshots.applyArtifactCheckpoint({
     config: { form: { prefix: 'restored', legend: 'bottom' }, adv: { features: ['CDS'] } },

@@ -24,7 +24,7 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
 
-const { SESSION_VERSION, assertActiveModeInputs, exportSession, importSession } = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, assertActiveModeInputs, exportSession, importSession, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -56,7 +56,7 @@ const sliceKeys = (value, container = '') => Object.entries(value).flatMap(([key
 test('Session 46 saves each drawing as its mode slice and loads it back into that drawing (S1, S6)', async () => {
   assert.equal(SESSION_VERSION, 47);
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.drawings.circular.adv.label_font_size = 13;
   state.drawings.circular.form.separate_strands = false;
   state.drawings.circular.adv.gc_content_mode = 'percent';
@@ -98,7 +98,7 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   }
 
   resetDrawings();
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   const loaded = await load(saved);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.equal(state.mode.value, 'circular');
@@ -184,7 +184,7 @@ test('Session 45 is refused; a Session 46 drops its retired homes with no row an
 // Python split writes; an unknown name loads as no color, as before.
 test('named Legend and stroke colors load as their CSS hex values (OV-160)', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const saved = await save('named colors');
   const named = structuredClone(saved);
   const legend = named.modes.circular.editorState.legend;
@@ -229,7 +229,7 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
   const kept = [{ caption: 'Y', color: '#FF0000' }, { caption: 'Z', color: '#AABBCC' }];
 
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const current = structuredClone(await save('legend colors'));
   current.modes.circular.editorState.legend.entries = structuredClone(stored);
   current.modes.circular.editorState.legend.deletedEntries = [{ caption: 'W', color: 'currentColor', featureIds: [] }];
@@ -264,7 +264,7 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
 // (tests/fixtures/sessions/legend-row-key-vectors.json).
 test('Session 47 keeps the edits of two rows of one name; a Session 46 is read by row key', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const drawing = state.drawings.circular;
   const rows = [
     { caption: 'GC', originalCaption: 'GC content', color: '#a0a0a0', featureIds: [] },
@@ -314,7 +314,7 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
 // the Depth track count only when a row holds a Depth file, as for Circular.
 test('Load and Save keep a Linear row without a Depth file as depth null (OV-337)', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   assert.equal((await load(gallery)).status, 'ok');
   const first = await save('gallery round trip');
@@ -331,7 +331,7 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
 // "Leader lines cross" notice (PD-OI-097).
 test('Session Load clears the label fit notice of the Result shown before', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   state.labelFitReports.value = [{ resultIndex: 0, resultName: 'fit.svg', rowToken: 'circular:1:0',
     report: { drawn: true, notice: ['Leader lines cross (5 pairs).'] } }];
@@ -346,7 +346,7 @@ test('Session Load clears the label fit notice of the Result shown before', asyn
 // a list of the wrong shape.
 test('a slice keeps its OFF records, and omission draws every record (record-selection D-05)', async () => {
   resetDrawings();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   assert.equal((await load(gallery)).status, 'ok');
   const uid = state.linearSeqs[0].uid;

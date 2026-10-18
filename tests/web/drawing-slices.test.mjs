@@ -21,7 +21,7 @@ import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { webLayerOf } from '../../tools/web-owner-graph-detectors.mjs';
 import { DRAWING_EDITOR_KEYS, DRAWING_SLICES } from './helpers/drawing-state.mjs';
-import { memberWriteSites, templateMemberWrites } from './helpers/drawing-writes.mjs';
+import { memberWriteSites, refValueWriteSites, templateMemberWrites } from './helpers/drawing-writes.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -40,7 +40,9 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const {
+  exportSession, importSession, installShownDrawing, setUnmanagedConfigOverrideValidator
+} = await import('../../gbdraw/web/js/services/config.js');
 const { normalizeAnnotationSets } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { normalizeFeatureVisibilityRule } = await import('../../gbdraw/web/js/services/feature-visibility.js');
 const { normalizeSpecificRule } = await import('../../gbdraw/web/js/services/specific-color-rules.js');
@@ -186,6 +188,48 @@ test('the slice write scan flags a planted write and leaves reads alone', () => 
   assert.equal(templateMemberWrites(`<color-field v-model:color="${member}.top"></color-field>`, [member]).length, 1);
   assert.equal(templateMemberWrites(`<button @click="${member}.count++"></button>`, [member]).length, 1);
   assert.equal(templateMemberWrites('<div v-for="item in list"><input v-model="item.label"></div>', [member]).length, 0);
+});
+
+// 4b. The shown drawing (plan-r2 A2): `state.activeDrawingId` names it, and
+// `installShownDrawing` (services/config.js) is its one writer; the shown
+// mode is the shown drawing's own (`drawing.mode`), so nothing writes `mode`.
+test('the shown drawing is drawings[activeDrawingId], mode follows it, and one writer installs it', () => {
+  const shown = state.activeDrawingId.value;
+  for (const id of MODES) {
+    installShownDrawing(id);
+    assert.equal(state.activeDrawingId.value, id);
+    assert.equal(state.activeDrawing(), state.drawings[id]);
+    assert.equal(state.drawings[id].id, id, 'a drawing is keyed by its ID');
+    assert.equal(state.mode.value, state.drawings[id].mode, 'the shown mode is the shown drawing\'s');
+  }
+  installShownDrawing(shown);
+  assert.throws(() => installShownDrawing('none'), /Unknown drawing/);
+  const writer = 'services/config.js';
+  const source = readFileSync(join(JS, writer), 'utf8');
+  const start = source.indexOf('export const installShownDrawing = ');
+  assert.ok(start >= 0, `${writer} exports installShownDrawing`);
+  const [first, last] = [start, source.indexOf('\n};', start)].map((index) => source.slice(0, index).split('\n').length);
+  const names = ['activeDrawingId', 'mode'];
+  const found = webModules().flatMap((file) => refValueWriteSites(readFileSync(join(JS, file), 'utf8'), names)
+    .filter((site) => !(file === writer && site.startsWith('activeDrawingId:')
+      && Number(site.split(':')[1]) >= first && Number(site.split(':')[1]) <= last))
+    .map((site) => `${file} ${site}`));
+  assert.deepEqual(found, [], 'install the shown drawing with installShownDrawing');
+  assert.ok(refValueWriteSites(source, names).length > 0, 'installShownDrawing writes the ID');
+  const html = readFileSync(join(ROOT, 'gbdraw', 'web', 'index.html'), 'utf8');
+  assert.deepEqual(templateMemberWrites(html, names), []);
+});
+
+test('the shown-drawing write scan finds each write form and leaves reads alone', () => {
+  assert.deepEqual(refValueWriteSites([
+    'state.mode.value = next;',
+    'mode.value = next; // mode.value = prose',
+    'if (state.mode.value === next || mode.value !== other) return;',
+    'state.activeDrawingId.value = id;',
+    'drawing.mode === next; linearComparisonPlan.mode = "none"; const mode = next;'
+  ].join('\n'), ['activeDrawingId', 'mode']), ['mode:1', 'mode:2', 'activeDrawingId:4']);
+  assert.equal(templateMemberWrites('<button @click="mode = \'linear\'"></button>', ['mode']).length, 1);
+  assert.equal(templateMemberWrites('<settings-section-index :mode="mode"></settings-section-index>', ['mode']).length, 0);
 });
 
 // 5. The handle's members are reachable only through slice-handle.js, which

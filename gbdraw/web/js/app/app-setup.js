@@ -85,7 +85,8 @@ import {
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
   applyLabelFitValues,
-  setHeldPreviewViewportReader
+  setHeldPreviewViewportReader,
+  installShownDrawing
 } from '../services/config.js';
 import {
   ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView
@@ -4236,8 +4237,9 @@ export const createAppSetup = () => {
   //      selection, and the displayed Result's projection state (it followed
   //      every live edit until now).
   //   2. Swap the artifact slots (`swapArtifactSlots`).
-  //   3. Set `mode`. Each mode has its own drawing (PD-OI-086), so the
-  //      template now binds the arriving drawing and no setting is written.
+  //   3. Show the arriving drawing (`installShownDrawing`). Each mode has its
+  //      own drawing (PD-OI-086), so the template now binds the arriving
+  //      drawing and no setting is written.
   //   4. Reset the departing mode's transient UI; the Preview search is kept
   //      per mode.
   //   5. Show the arriving Result as a selection.
@@ -4256,8 +4258,8 @@ export const createAppSetup = () => {
     rememberDepartingResultProjection(drawing);
     // 2. Artifact slots.
     swapArtifactSlots(nextMode);
-    // 3. Mode.
-    mode.value = nextMode;
+    // 3. The shown drawing.
+    installShownDrawing(nextMode);
     // 4. Transient UI. "Showing the last successful result" named the
     // departing mode's Result, and the notice the departing mode's work.
     resetModeTransientUi();

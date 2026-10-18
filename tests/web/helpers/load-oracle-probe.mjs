@@ -157,12 +157,12 @@ const resolveFileDigests = async () => {
 };
 
 // The document state a Load sets (state.js), by area. A drawing's derived
-// members (computed from the others) and its slice handles (no state) are
-// left out.
+// members (computed from the others), its slice handles (no state), and its
+// identity (constant: no Load sets it) are left out.
 const DERIVED_DRAWING_KEYS = new Set([
   'activeLayoutPreferences', 'drawnLinearSeqs', 'linearComparisonResolution', 'hasLinearComparisonIntent',
   'hasActiveLinearLosatIntent', 'hasActiveLinearUploadIntent', 'featureVisibilityRules', 'hasPendingPaletteDraft',
-  'slices'
+  'slices', 'id', 'mode'
 ]);
 const DOCUMENT_KEYS = [
   'mode', 'sessionTitle', 'results', 'selectedResultIndex', 'cInputType', 'lInputType', 'files', 'linearSeqs',

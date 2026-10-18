@@ -76,6 +76,17 @@ export const memberWriteSites = (source, members = MEMBERS) => {
   return [...sites, ...computedKey, ...bare].sort((left, right) => Number(left.split(':')[1]) - Number(right.split(':')[1]));
 };
 
+// The writes of the refs `names` name in a module: an assignment to a ref's
+// `.value` (or a field under it, `++`, `--`), held by its name directly
+// (`mode.value`) or through any receiver (`state.mode.value`). The sites are
+// `<name>:<line>`.
+export const refValueWriteSites = (source, names) => {
+  const code = codeOnly(source);
+  return [...code.matchAll(new RegExp(`(?<![\\w$])(${names.join('|')})\\b(?=\\s*\\??\\.\\s*value\\b)`, 'g'))]
+    .filter((match) => writesThrough(code.slice(match.index + match[0].length)))
+    .map((match) => `${match[1]}:${lineOf(code, match.index)}`);
+};
+
 // The markup of the element whose start tag holds `index` (a void element: its tag).
 const elementRange = (html, index) => {
   const start = html.lastIndexOf('<', index);

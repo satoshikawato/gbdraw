@@ -7,9 +7,10 @@
 // The guard asserts:
 //   1. every `state` key and every drawing member is in exactly one class
 //      (helpers/drawing-state.mjs);
-//   2. each mode's drawing holds exactly the drawing keys, the two drawings
-//      share no member object, `state` holds none of them, and
-//      `activeDrawing()` returns the drawing of the shown mode;
+//   2. each mode's drawing holds exactly its identity and the drawing keys,
+//      the two drawings share no member object, `state` holds no drawing
+//      key, and `activeDrawing()` returns the shown drawing
+//      (tests/web/drawing-slices.test.mjs checks its one writer);
 //   3. no module reads a drawing key from `state`;
 //   4. a service never resolves the active drawing, and Generate resolves it
 //      once, at its entry.
@@ -24,6 +25,7 @@ import {
   DRAWING_DRAFT_KEYS,
   DRAWING_EDITOR_KEYS,
   DRAWING_HANDLE_KEYS,
+  DRAWING_IDENTITY_KEYS,
   DRAWING_KEYS,
   PROJECT_KEYS,
   STORE_KEYS,
@@ -39,30 +41,30 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 
 const JS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'gbdraw', 'web', 'js');
 
-const CLASSES = {
-  DRAWING_DRAFT_KEYS,
-  DRAWING_EDITOR_KEYS,
-  DRAWING_DERIVED_KEYS,
-  DRAWING_HANDLE_KEYS,
-  ARTIFACT_KEYS,
-  PROJECT_KEYS,
-  UI_KEYS,
-  TRANSIENT_KEYS,
-  STORE_KEYS
+// The classes of the `state` keys and of the drawing members. A drawing's
+// identity names a state key too (`mode`: the shown drawing's), so the two
+// sets are classed apart; no drawing key is a state key (below).
+const STATE_CLASSES = { ARTIFACT_KEYS, PROJECT_KEYS, UI_KEYS, TRANSIENT_KEYS, STORE_KEYS };
+const DRAWING_CLASSES = {
+  DRAWING_IDENTITY_KEYS, DRAWING_DRAFT_KEYS, DRAWING_EDITOR_KEYS, DRAWING_DERIVED_KEYS, DRAWING_HANDLE_KEYS
 };
 
 test('every state key and drawing member is in exactly one class', () => {
-  const classOf = new Map();
-  for (const [name, keys] of Object.entries(CLASSES)) {
-    for (const key of keys) {
-      assert.ok(!classOf.has(key), `${key} is in ${classOf.get(key)} and ${name}`);
-      classOf.set(key, name);
+  for (const [classes, members] of [
+    [STATE_CLASSES, Object.keys(state)],
+    [DRAWING_CLASSES, Object.keys(state.drawings.circular)]
+  ]) {
+    const classOf = new Map();
+    for (const [name, keys] of Object.entries(classes)) {
+      for (const key of keys) {
+        assert.ok(!classOf.has(key), `${key} is in ${classOf.get(key)} and ${name}`);
+        classOf.set(key, name);
+      }
     }
+    const unclassified = members.filter((key) => !classOf.has(key));
+    assert.deepEqual(unclassified, [], 'classify each new state key or drawing member in tests/web/helpers/drawing-state.mjs');
+    assert.deepEqual([...classOf.keys()].filter((key) => !members.includes(key)), [], 'a classified key left state or the drawing');
   }
-  const members = [...Object.keys(state), ...Object.keys(state.drawings.circular)];
-  const unclassified = members.filter((key) => !classOf.has(key));
-  assert.deepEqual(unclassified, [], 'classify each new state key or drawing member in tests/web/helpers/drawing-state.mjs');
-  assert.deepEqual([...classOf.keys()].filter((key) => !members.includes(key)), [], 'a classified key left state and the drawing');
 });
 
 test('only the drawings hold the drawing keys, one drawing per mode', () => {
@@ -70,18 +72,15 @@ test('only the drawings hold the drawing keys, one drawing per mode', () => {
   assert.deepEqual(Object.keys(state.drawings), ['circular', 'linear']);
   assert.notEqual(circular, linear, 'each diagram mode has its own drawing');
   assert.ok(Object.isFrozen(state.drawings) && Object.isFrozen(circular) && Object.isFrozen(linear));
-  assert.deepEqual(Object.keys(circular), [...DRAWING_KEYS]);
-  assert.deepEqual(Object.keys(linear), [...DRAWING_KEYS]);
+  assert.deepEqual(Object.keys(circular), [...DRAWING_IDENTITY_KEYS, ...DRAWING_KEYS]);
+  assert.deepEqual(Object.keys(linear), [...DRAWING_IDENTITY_KEYS, ...DRAWING_KEYS]);
+  assert.deepEqual([circular.id, circular.mode, linear.id, linear.mode], ['circular', 'circular', 'linear', 'linear']);
   // A member object shared by both drawings would carry an edit across modes.
   const shared = DRAWING_KEYS.filter((key) => typeof circular[key] === 'object' && circular[key] !== null
     && circular[key] === linear[key]);
   assert.deepEqual(shared, [], 'each drawing owns its members');
   assert.deepEqual(DRAWING_KEYS.filter((key) => Object.hasOwn(state, key)), [], 'a drawing key is on state');
-  for (const mode of ['circular', 'linear']) {
-    state.mode.value = mode;
-    assert.equal(state.activeDrawing(), state.drawings[mode]);
-  }
-  state.mode.value = 'circular';
+  assert.equal(state.activeDrawing(), state.drawings[state.activeDrawingId.value]);
 });
 
 // `state.<key>`, `state?.<key>`, and `{ <key> } = state`, with comments removed.

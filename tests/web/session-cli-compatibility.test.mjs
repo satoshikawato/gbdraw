@@ -38,7 +38,8 @@ installSessionImportWorker();
 
 const {
   SESSION_VERSION, exportSession, importSession, getCommittedCanonicalRenderRequest, getCommittedCanonicalSession,
-  serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator
+  serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator,
+  installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const {
   CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, projectCommittedEditorIntent
@@ -453,9 +454,9 @@ await test('Load of a 0.13.0 Session records the track settings of its Result', 
   assert.equal(getCommittedCanonicalRenderRequest(), null);
   assert.deepEqual(getLoadedTrackSettings(), { mode: 'circular', dinucleotide: 'GC', slots: null });
   // The record is the shown mode's Result: the other mode has none.
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   assert.equal(getLoadedTrackSettings(), null);
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   // Linear Custom Track Slots of a Session 30 load (the schema 1 slots are
   // migrated). This file's Result was drawn with the slots off, so the record
   // is the saved draft: a slot added after the last Generate (the owner gives

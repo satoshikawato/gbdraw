@@ -322,10 +322,10 @@ test('the section title shows below an entry on hover and on keyboard focus, ins
   await entry(page, 'Input Genomes').focus();
   await page.keyboard.press('Tab');
   await expect(tip(page)).toHaveText('Comparison');
-  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'circular'; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.setDiagramMode('circular'); });
   await expect(index(page).getByRole('button')).toHaveCount(SECTIONS.circular.length);
   await expect(tip(page)).toBeHidden();
-  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.setDiagramMode('linear'); });
   await expect(index(page).getByRole('button')).toHaveCount(SECTIONS.linear.length);
 
   // At every pane width the text of the first and of the last entry stays 8 px inside the viewport,

@@ -5,7 +5,7 @@ globalThis.window = { Vue: {
   computed: getter => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { buildConfigData, applyCapturedConfigData } = await import('../../gbdraw/web/js/services/config.js');
+const { buildConfigData, applyCapturedConfigData, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
@@ -156,7 +156,7 @@ assert.deepEqual(state.linearRecordTranslations.value, [
 // OV-383: Undo and Redo of a Linear setting keep the active alignment. The
 // config a History step restores carries no alignment, so restoring it must
 // not clear the plan or the record translations.
-state.mode.value = 'linear';
+installShownDrawing('linear');
 const keptPlan = { schema: 1, mode: 'position', groupId: 'og-ov383',
   reference: { recordKey: 'record-a', biologicalFeatureId: 'feature-a', sourceFeatureIndex: 0, stableFeatureSvgId: 'feature-a' },
   records: [] };
@@ -199,7 +199,7 @@ console.log('History restores nullable config values and preserves key guards.')
       orthogroups: [], annotations: [], comparisonMatches: [], sequenceSources: []
     }]
   }, [{ name: 'diagram.svg', content: '<svg />' }], { adopt: true, mode: 'circular' }).catalog;
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.results.value = [{ name: 'diagram.svg', content: '<svg />' }];
   state.featureCatalog.value = catalog;
   const liveCatalog = () => window.Vue.toRaw?.(state.featureCatalog.value) ?? state.featureCatalog.value;
@@ -245,7 +245,7 @@ console.log('History restores nullable config values and preserves key guards.')
   const {
     buildEditorStateData, applyEditorStateData, buildUiStateData, applyUiStateData
   } = await import('../../gbdraw/web/js/services/config.js');
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.activeDrawing().adv.circular_track_slots.forEach((slot) => {
     slot.side = null;
     delete slot.params.lane_direction;

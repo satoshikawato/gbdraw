@@ -208,7 +208,8 @@ const {
   buildUiStateData,
   serializeActiveRenderFiles,
   serializeResults,
-  SESSION_VERSION
+  SESSION_VERSION,
+  installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
 const { createHistoryFileStore } = await import(
@@ -557,7 +558,7 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
 // One Circular GenBank input whose other slots hold files no run may read.
 /** @param {AuditFile} primary @param {AuditInactiveFile} inactive */
 const installSimpleCircularInput = (primary, inactive) => {
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.files.c_gb = primary;
   state.files.c_gff = null;
@@ -1316,10 +1317,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     discovery: { ...state.circularRecordDiscovery }
   });
   const helperRequestsBeforeRoundTrip = workerMessages.filter(({ type }) => type === 'helper').length;
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   await runner.refreshCircularRecordOrder();
   await runner.refreshCircularRecordOrder({ automatic: true });
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.deepEqual(structuredClone({
     records: state.circularRecordList.value,
@@ -1335,19 +1336,19 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   // Equal biological names on a different source cannot inherit the retired key,
   // even if replacement/removal happens while Circular is inactive.
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.files.c_gb = new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb');
   await runner.refreshCircularRecordOrder();
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   assert.equal(state.circularRecordList.value[0].recordKey, undefined);
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.files.c_gb = null;
   await runner.refreshCircularRecordOrder();
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   await runner.refreshCircularRecordOrder({ automatic: true });
   assert.deepEqual(state.circularRecordList.value, []);
   assert.deepEqual(state.activeDrawing().adv.multi_record_positions, []);
@@ -1496,7 +1497,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     lazyFields.forEach((field) => assert.equal(Object.hasOwn(file, field), false));
   }
 
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.activeDrawing().form.prefix = 'lazy-circular';
   state.activeDrawing().form.show_depth = false;
@@ -1727,7 +1728,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const multiView = createSessionResourceFileView(linearTable, 'multi');
     const middleView = createSessionResourceFileView(linearTable, 'middle');
     const thirdView = createSessionResourceFileView(linearTable, 'third');
-    state.mode.value = 'linear';
+    installShownDrawing('linear');
     state.lInputType.value = 'gb';
     state.activeDrawing().form.prefix = 'lazy-linear';
     state.activeDrawing().form.show_depth = false;
@@ -2198,7 +2199,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const dormantUpload = new AuditInactiveFile(['unused upload'], 'dormant-upload.tsv');
   const staleCanonical = new AuditInactiveFile(['unused canonical'], 'stale-canonical.tsv');
 
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   state.lInputType.value = 'gb';
   state.activeDrawing().form.prefix = 'linear-none';
   state.activeDrawing().form.show_depth = true;

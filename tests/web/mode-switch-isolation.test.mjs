@@ -25,6 +25,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw/web/js/app/watchers.js');
 const { memberWriteSites } = await import('./helpers/drawing-writes.mjs');
 const APP_SETUP = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
@@ -88,25 +89,25 @@ test('a mode switch changes the source of no drawing watcher', () => {
   state.drawings.linear.canvasPadding.top = 9;
 
   for (const [from, to] of [['circular', 'linear'], ['linear', 'circular']]) {
-    state.mode.value = from;
+    installShownDrawing(from);
     const before = watchers.map(({ source }) => snapshot(source()));
-    state.mode.value = to;
+    installShownDrawing(to);
     const changed = watchers.filter((watcher, index) => !sameSource(before[index], snapshot(watcher.source())))
       .map(({ line }) => line);
     // Only watchers of the mode itself (and of values derived from it) see a switch.
     const unexpected = changed.filter((line) => !/\bmode\.value\b|state\.mode\b|mode\b\.value/.test(line));
     assert.deepEqual(unexpected, [], `${from} -> ${to}: these watchers would fire on the switch`);
   }
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
 });
 
 test('an auxiliary table imports through its file input, into the drawing shown when it was chosen', async () => {
   assert.deepEqual(watchers.filter(({ line }) => /\bfiles(?:\[|\.(?:d_color|t_color|qualifier_priority|whitelist|blacklist)\b)/.test(line))
     .map(({ line }) => line), [], 'no watcher imports a table file');
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   const before = state.drawings.circular.manualBlacklist.value;
   const imported = importAuxiliaryTable('blacklist', new File(['M3_12_WORD\n'], 'blacklist.txt', { type: 'text/plain' }));
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   assert.equal(await imported, true);
   assert.equal(state.files.blacklist?.name, 'blacklist.txt');
   assert.match(state.drawings.linear.manualBlacklist.value, /M3_12_WORD/);

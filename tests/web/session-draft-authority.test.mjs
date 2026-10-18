@@ -35,7 +35,8 @@ const {
   buildUiStateData,
   importSession,
   restoreCurrentWriterActiveConfig,
-  serializeActiveRenderFiles
+  serializeActiveRenderFiles,
+  installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const {
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
@@ -1032,7 +1033,7 @@ assert.deepEqual(
 // gbdraw...`); the service shows no native alert.
 assert.deepEqual(alerts, []);
 
-state.mode.value = 'circular';
+installShownDrawing('circular');
 state.activeDrawing().form.multi_record_canvas = false;
 state.activeDrawing().form.legend = 'left';
 state.activeDrawing().adv.plot_title_position = 'none';

@@ -45,7 +45,7 @@ const genbank = (ids) => {
 // The request a Generate of `mode` builds from that mode's drawing now.
 const generate = (mode) => {
   const drawing = state.drawings[mode];
-  state.mode.value = mode;
+  config.installShownDrawing(mode);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   const filesData = mode === 'circular'

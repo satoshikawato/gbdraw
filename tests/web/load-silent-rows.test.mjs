@@ -24,7 +24,7 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const { exportSession, importSession, setUnmanagedConfigOverrideValidator, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
@@ -145,7 +145,7 @@ for (const [base, path, value, rows, check] of CASES) {
 test('K14: record display drafts of no list are listed before the dialog and applied as listed', async () => {
   const configFile = () => {
     const config = structuredClone(BASES.g47L().modes.linear.config);
-    state.mode.value = 'linear';
+    installShownDrawing('linear');
     return config;
   };
   const cases = [
@@ -183,7 +183,7 @@ test('K14: record display drafts of no list are listed before the dialog and app
 test('OV-892: a Label blacklist that is no text is listed and keeps its text', async () => {
   const configFile = () => {
     const config = structuredClone(BASES.g47L().modes.linear.config);
-    state.mode.value = 'linear';
+    installShownDrawing('linear');
     return config;
   };
   const cases = [
@@ -273,7 +273,7 @@ test('OV-822: a configuration file\'s null LOSAT group loads with no row, and sa
   assert.deepEqual(await load(BASES.g47L()), []);
   const config = structuredClone(BASES.g47L().modes.linear.config);
   config.losat = { blastp: null };
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   assert.deepEqual(await load(config), []);
   assert.equal(typeof state.drawings.linear.losat.blastp, 'object');
   await saved();

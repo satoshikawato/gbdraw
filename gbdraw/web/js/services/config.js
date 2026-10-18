@@ -301,7 +301,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { LinearComparisonPlan, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
-/** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DiagramMode, DrawingId, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
@@ -4538,7 +4538,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   try {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
-    state.mode.value = shownMode;
+    installShownDrawing(shownMode);
     restoreOrder.forEach((drawingMode) => {
       const drawing = state.drawings[drawingMode];
       const saved = snapshot.drawings[drawingMode];
@@ -4590,6 +4590,16 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   }
 };
 
+// The one writer of the shown drawing (`state.activeDrawingId`); the shown
+// mode follows it. Each caller installs the drawing where it shows another
+// one: the mode transition (app/app-setup.js), a new Session's baseline,
+// Session Load and its rollback. The caller installs the drawing's artifact.
+/** @param {DrawingId} id */
+export const installShownDrawing = (id) => {
+  if (!Object.hasOwn(state.drawings, id)) throw new Error(`Unknown drawing: ${id}`);
+  state.activeDrawingId.value = id;
+};
+
 // Both drawings return to their defaults before a Session installs its own.
 const resetSessionBaseline = () => {
   activePreviewRuntime?.clearActiveRuntime?.();
@@ -4605,7 +4615,7 @@ const resetSessionBaseline = () => {
   // Reset Settings keeps which records are ON (PD-OI-070); a new Session draws
   // every record its slices do not turn OFF (PD-OI-091).
   for (const drawing of Object.values(state.drawings)) SETTINGS_SLICE.install(drawing.slices.settings, { recordsOff: [] });
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   state.sessionTitle.value = '';
@@ -6235,7 +6245,7 @@ const importSessionDocument = async (e, options = {}) => {
     state.sessionTitle.value = canonicalSession
       ? projectionResult.documentMetadata.title
       : (typeof data.title === 'string' ? data.title : '');
-    if (ui.mode) state.mode.value = ui.mode;
+    if (ui.mode) installShownDrawing(candidateMode);
     state.cInputType.value = inputTypes.cInputType;
     state.lInputType.value = inputTypes.lInputType;
     state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;
@@ -6277,7 +6287,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
     preservedCliOptions = isPlainObject(sessionCliOptions) ? cloneJsonData(sessionCliOptions) : null;
-    state.mode.value = displayMode;
+    installShownDrawing(displayMode);
     const shownDrawing = state.drawings[displayMode];
     const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;
     if (canonicalLinearLayout && state.linearRecordTranslations) {

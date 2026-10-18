@@ -22,7 +22,7 @@ const { state, createDefaultForm } = await import('../../gbdraw/web/js/state.js'
 const layout = await import('../../gbdraw/web/js/services/layout-preferences.js');
 const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
 const { LEGEND_POSITIONS } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
-const { applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
+const { applyUiStateData, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 
@@ -188,7 +188,7 @@ const genbank = () => ({
 });
 // The request of `mode` from `drawing` (default: that mode's drawing), as Generate builds it.
 const requestLegend = (mode, drawing = state.drawings[mode]) => {
-  state.mode.value = mode;
+  installShownDrawing(mode);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   state.circularRecordList.value = [];

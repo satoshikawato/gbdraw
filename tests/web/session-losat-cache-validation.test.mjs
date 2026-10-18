@@ -67,7 +67,8 @@ const {
   getCommittedCanonicalSession,
   importSession,
   serializeActiveRenderFiles,
-  validateSessionLosatArtifacts
+  validateSessionLosatArtifacts,
+  installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { promoteCanonicalRenderRequestToCurrent } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -988,7 +989,7 @@ ORIGIN
   assert.equal(state.activeDrawing().circularConservation.series[1].sourceIndex, 1);
   assert.equal(state.activeDrawing().circularConservation.series[1].losat_gencode, 4);
 
-  state.mode.value = 'circular';
+  installShownDrawing('circular');
   const serialized = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
   assert.equal(serialized.c_conservation_blasts[0].data, '');
   assert.equal(serialized.c_conservation_fastas[0], null);

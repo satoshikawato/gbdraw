@@ -32,6 +32,7 @@ globalThis.document = {
 const {
   adoptCanonicalRenderArtifacts,
   exportSession,
+  installShownDrawing,
   validateSessionLosatArtifacts
 } = await import(
   '../../gbdraw/web/js/services/config.js'
@@ -42,7 +43,7 @@ const { buildCanonicalRenderRequest } = await import(
 const { state } = await import('../../gbdraw/web/js/state.js');
 
 let inputReads = 0;
-state.mode.value = 'circular';
+installShownDrawing('circular');
 state.cInputType.value = 'gb';
 state.files.c_gb = {
   name: 'legacy.gbk',

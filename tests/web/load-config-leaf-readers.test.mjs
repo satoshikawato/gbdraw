@@ -24,7 +24,7 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const { exportSession, importSession, setUnmanagedConfigOverrideValidator, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -173,7 +173,7 @@ test('E1a: a configuration file lists what its drawing cannot read, and saves', 
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [5] }
   });
   config.adv = { ...config.adv, zzz: 1, arrow_shaft_width_ratio: 2 };
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   assert.deepEqual((await load(config)).sort(), [
     'setting-entries-dropped recordsOff',
     'setting-replaced adv.arrow_shaft_width_ratio',
@@ -191,6 +191,6 @@ test('E1a: a configuration file lists what its drawing cannot read, and saves', 
 test('a configuration file lists a track slot value it cannot use (OV-788)', async () => {
   const config = structuredClone(BASES.v46().modes.linear.config);
   config.adv.linear_track_slots[0].height = -7.5;
-  state.mode.value = 'linear';
+  installShownDrawing('linear');
   assert.deepEqual(await load(config), ['setting-replaced adv.linear_track_slots[0].height']);
 });
