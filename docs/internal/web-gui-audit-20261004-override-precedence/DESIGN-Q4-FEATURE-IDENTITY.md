@@ -69,7 +69,7 @@ identity は placement と同じ組 `(record_key, biological_feature_id)` とし
 | request | `diagramOptions.featureVisibilityTableFile`（`services/session-request.js::addGeneratedTableResources`）。列は 5 つで、`featureId` は書かない | `diagramOptions.labelOverrideFile`（`addLabelOverrideResource`。`canonicalLabelOverrideRows` → `generatedLabelOverrideTsv` → 生成の順） | 同左 | `diagramOptions.annotations.sets` | `diagramOptions.featurePlacements`（schema 7 以降） |
 | Python の照合 | `gbdraw/features/visibility.py::_rule_matches_feature`: 描画した record の `get_feature_hash` / `location` / `record_location` | `gbdraw/labels/filtering.py::get_label_text`: `hash` 行は filter と scope より先。`has_forced_label_overrides` は文字のある `hash` 行を On とみなす | 同じ。`hash` 以外の行は filter の後 | `gbdraw/annotations/resolve.py::_feature_matches`（描画した record の hash） | `gbdraw/features/placement.py::resolve_placement_inputs`: 元 catalog から `source_feature_index` で解決 |
 | Session | `features.featureVisibilityOverrides`（`services/config.js::exportSessionDocument`）。読み込みは `applyFeatureStateData`、それより古い形は `splitLegacyVisibilityRules` | `features.labelVisibilityOverrides` | `features.labelTextFeatureOverrides` と `…Sources`、表は `features.labelOverrideRows` | `config.annotationSets` | `config.featurePlacementOverrides`（`session_io.py::_validate_display_placement_drafts` が key を確かめる） |
-| History | feature intent（`services/history-snapshot.js::buildFeatureIntentData`）。selector cache は generated owner set | feature intent | feature intent。`canonicalLabelOverrideRows` は artifact checkpoint だけ | config domain | config domain |
+| History | feature intent（`services/history-snapshot.js::buildFeatureIntentData`）。selector cache は generated owner set | feature intent | feature intent。`canonicalLabelOverrideRows` も feature intent が持つ（OV-1102） | config domain | config domain |
 | live の投影 | `app/feature-editor/visibility-actions.js::reconcileFeatureVisibility` は描画 ID で引く。`app/candidate-render.js::compilePlanBundle` は `resultIndexesByRenderedId` で引く | `label-actions.js::applyStoredVisibilityOverridesToSvg` は `data-label-feature-id` で引く。`compilePlanBundle` も同じ | `projectLabelTextIntent` は `data-label-feature-id` で引く | なし（Generate で描く） | なし（Generate で描く） |
 | 書き出しと読み込み | `visibility-actions.js::downloadFeatureVisibilityRulesTsv`（取り込みの UI はない） | Export Label TSV（`label-actions.js::downloadLabelOverrideTable`。生きている map から作り直す） | 同左。`loadLabelOverrideTable` は文字だけを map に戻す（visibility は戻さない） | `app/annotations.js`（`encodeAnnotationTable` / `parseAnnotationTableWithNotice`） | Run Info の `--feature_placement_table` |
 | 刈り取り（R2） | `app/run-analysis.js` が、元の source を置き換えて成功した Generate の中で `pruneUnmatchedFeatureOverrides` を呼ぶ。描画 ID から得た hash で生存を判定する | 同じ（PD-OI-065） | 同じ（bulk は残す） | なし | `app/record-display-options.js` の source watcher が、置き換えた source の行をファイルの置き換え時に全部消す |
@@ -260,7 +260,7 @@ OV-02 は identity の編集ではない。手入力の色規則（`location` / 
 
 付け足すこと:
 
-- label の map を 1 つでも移したときは `features.labelOverrideRows` を空にする。これは、その map から最後の Generate で作った表の写しである（map が変わると `app/watchers.js` が空にする不変条件と同じ）。
+- label の map を 1 つでも移したときは `features.labelOverrideRows` を空にする。これは、その map から最後の Generate で作った表の写しである（map を変える編集が `services/label-override-table.js::replaceBulkLabelEdits` で空にする不変条件と同じ）。
   map が空で表だけある Session（CLI で作ったものなど）は、今のまま表を送る。
 - 必要な fixture（positive。main の writer で作る）:
   - `tests/fixtures/sessions/` に v44 を 2 つ。上の probe の手順を `origin/main` で再生して保存する。

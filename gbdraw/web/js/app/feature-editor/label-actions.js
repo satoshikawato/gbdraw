@@ -4,7 +4,7 @@
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
-import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
+import { parseLabelOverrideTsv, replaceBulkLabelEdits, serializeLabelOverrideRows } from '../../services/label-override-table.js';
 import { escapeRegexLiteral } from '../../services/feature-selector.js';
 import {
   featureIdentityKeyOf,
@@ -652,14 +652,15 @@ export const createFeatureLabelActions = ({
   } = state;
 
   // The label edits of the identity-keyed draft: Label visibility, label text,
-  // and the label's source text (design Q4); Feature visibility stays.
+  // and the label's source text (design Q4); Feature visibility stays. The
+  // bulk label edits become `bulk`.
   const LABEL_FIELDS = Object.freeze(['labelVisibility', 'labelText', 'labelSourceText']);
-  /** @param {DrawingState} drawing */
-  const clearOverrides = (drawing) => {
+  /** @param {DrawingState} drawing @param {Record<string, string>} [bulk] */
+  const clearOverrides = (drawing, bulk = {}) => {
     Object.values(drawing.featureOverrides).forEach((row) => {
       updateFeatureOverride(drawing.featureOverrides, row, Object.fromEntries(LABEL_FIELDS.map((field) => [field, null])));
     });
-    Object.keys(drawing.labelTextBulkOverrides).forEach((key) => delete drawing.labelTextBulkOverrides[key]);
+    replaceBulkLabelEdits(drawing, bulk);
   };
 
   // A mounted label names its feature by rendered ID; the displayed Result's
@@ -1543,11 +1544,11 @@ export const createFeatureLabelActions = ({
         }
         setLabelText(textEl, newText);
       });
-      if (hasUntrackableMatch || matchedCount === 0) {
-        drawing.labelTextBulkOverrides[sourceText] = newText;
-      } else if (Object.prototype.hasOwnProperty.call(drawing.labelTextBulkOverrides, sourceText)) {
-        delete drawing.labelTextBulkOverrides[sourceText];
-      }
+      /** @type {Record<string, string>} */
+      const bulk = { ...drawing.labelTextBulkOverrides };
+      if (hasUntrackableMatch || matchedCount === 0) bulk[sourceText] = newText;
+      else delete bulk[sourceText];
+      replaceBulkLabelEdits(drawing, bulk);
     } else if (choice === 'single' && targetKey) {
       const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(targetKey)}"]`);
       if (targetEl) {
@@ -1731,13 +1732,14 @@ export const createFeatureLabelActions = ({
         ] });
         return;
       }
-      clearOverrides(drawing);
+      clearOverrides(drawing, Object.fromEntries(applicable
+        .filter(({ matchedRow }) => matchedRow.isGlobalLabelRule)
+        .map(({ entry, matchedRow }) => [entry.sourceText, String(matchedRow.labelText ?? '')])));
       applicable.forEach(({ entry, matchedRow, tracked }) => {
-        if (matchedRow.isGlobalLabelRule) {
-          drawing.labelTextBulkOverrides[entry.sourceText] = String(matchedRow.labelText ?? '');
-          if (tracked) updateFeatureOverride(drawing.featureOverrides, entry.feature, { labelSourceText: entry.sourceText || null });
-        } else {
+        if (!matchedRow.isGlobalLabelRule) {
           applyLabelTextEdit(drawing, entry.feature, matchedRow.labelText, entry.sourceText);
+        } else if (tracked) {
+          updateFeatureOverride(drawing.featureOverrides, entry.feature, { labelSourceText: entry.sourceText || null });
         }
       });
 

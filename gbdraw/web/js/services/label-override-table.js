@@ -104,6 +104,36 @@ export const serializeLabelOverrideRows = (rows) => {
 };
 
 /**
+ * A drawing's bulk label edits ({sourceText: text}) and its saved label table:
+ * the rules a loaded Session sent, which Generate sends in their place.
+ * @typedef {{
+ *   labelTextBulkOverrides: Record<string, string>,
+ *   canonicalLabelOverrideRows: { value: readonly StoredLabelOverrideRow[] }
+ * }} BulkLabelEditDrawing
+ */
+/**
+ * The one way an edit replaces a drawing's bulk label edits. A change also
+ * replaces the saved label table with the rows the editor builds, in the
+ * action's own History step, so Undo returns both (OV-1102). Session Load and
+ * History restore install both members as saved.
+ * @param {BulkLabelEditDrawing} drawing
+ * @param {Readonly<Record<string, string>>} edits
+ * @returns {boolean} Whether the bulk label edits changed.
+ */
+export const replaceBulkLabelEdits = (drawing, edits) => {
+  const current = drawing.labelTextBulkOverrides;
+  const sourceTexts = Object.keys(edits);
+  if (sourceTexts.length === Object.keys(current).length
+    && sourceTexts.every((sourceText) => Object.hasOwn(current, sourceText) && current[sourceText] === edits[sourceText])) {
+    return false;
+  }
+  Object.keys(current).forEach((sourceText) => { delete current[sourceText]; });
+  Object.assign(current, edits);
+  drawing.canonicalLabelOverrideRows.value = [];
+  return true;
+};
+
+/**
  * @typedef {object} LabelOverrideTsvRow
  * @property {number} lineNo
  * @property {string} recordId

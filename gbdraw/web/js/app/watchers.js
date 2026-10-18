@@ -285,18 +285,6 @@ export const setupWatchers = ({
     }
   );
 
-  // The saved label table is the rules a loaded Session sent; a bulk label
-  // edit replaces it with the rows the editor builds. Per-feature label edits
-  // are identity rows, which apply before the table (design Q4).
-  drawingsOfModes.forEach((drawing) => watch(
-    () => drawing.labelTextBulkOverrides,
-    () => {
-      if (semanticFileWatchersSuppressed.value) return;
-      drawing.canonicalLabelOverrideRows.value = [];
-    },
-    { deep: true }
-  ));
-
   watch(
     () => labelReflowRequestSeq.value,
     async (nextSeq, prevSeq) => {

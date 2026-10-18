@@ -3289,3 +3289,75 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(await history.hasChangesSinceSavePoint(), false, 'a Load clears the mark');
   console.log('history change outside History tests passed');
 }
+
+// OV-1102: a bulk label edit replaces the saved label table (the rules a loaded
+// Session sent) in its own step, so Undo returns both: the next Generate draws
+// the saved labels and Save writes the table again. Redo replaces it again.
+{
+  const savedRow = {
+    recordId: '*', featureType: '*', qualifier: 'product', valueRegex: '^tRNA-Phe$', labelText: 'SavedPhe'
+  };
+  const state = {
+    form: {},
+    adv: {},
+    files: {},
+    linearSeqs: [],
+    linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
+    results: ref([]),
+    selectedResultIndex: ref(0),
+    mode: ref('circular'),
+    cInputType: ref('gb'),
+    lInputType: ref('gb'),
+    downloadDpi: ref(300),
+    canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 },
+    layoutPreferences: createLayoutPreferences(),
+    extractedFeatures: ref([]),
+    selectedFeatureRecordIdx: ref(0),
+    featureColorOverrides: {},
+    featureVisibilityManualRules: [],
+    featureOverrides: {},
+    featureStrokeOverrides: {},
+    canonicalLabelOverrideRows: ref([savedRow]),
+    labelTextBulkOverrides: {},
+    orthogroups: ref([]),
+    selectedOrthogroupId: ref(''),
+    selectedOrthogroupAlignmentFeature: ref(''),
+    orthogroupNameOverrides: {},
+    orthogroupDescriptionOverrides: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    legendColorOverrides: {},
+    legendStrokeOverrides: {},
+    addedLegendCaptions: ref(new Set()),
+    semanticFileWatchersSuppressed: ref(false)
+  };
+  const snapshots = createHistorySnapshotService({
+    state: withDrawings(state),
+    fileStore: createHistoryFileStore(),
+    nextTick: async () => {},
+    buildConfigData: () => ({ form: state.form, adv: state.adv })
+  });
+  const history = createHistoryManager({
+    buildIntent: snapshots.buildHistoryIntent,
+    applyIntent: snapshots.applyHistoryIntent,
+    buildCheckpoint: snapshots.buildArtifactCheckpoint,
+    applyCheckpoint: snapshots.applyArtifactCheckpoint
+  });
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Load label edits', () => {
+    state.labelTextBulkOverrides.SavedPhe = 'MyLabel';
+    state.canonicalLabelOverrideRows.value = [];
+  });
+  await history.undo();
+  assert.deepEqual(
+    [state.labelTextBulkOverrides, state.canonicalLabelOverrideRows.value],
+    [{}, [savedRow]],
+    'Undo returns the saved label table with the bulk label edits it replaced'
+  );
+  await history.redo();
+  assert.deepEqual(
+    [state.labelTextBulkOverrides, state.canonicalLabelOverrideRows.value],
+    [{ SavedPhe: 'MyLabel' }, []]
+  );
+  console.log('history saved label table tests passed');
+}

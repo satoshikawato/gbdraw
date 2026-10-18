@@ -12,6 +12,7 @@ import {
 } from '../state.js';
 /** @import { DrawingState, LegendCaption, LegendEntry, state as AppState } from '../state.js' */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+import { replaceBulkLabelEdits } from './label-override-table.js';
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
@@ -142,7 +143,7 @@ const resetEditorDraftState = (state, drawing) => {
   drawing.addedLegendCaptions.value = new Set();
   drawing.fileLegendCaptions.value = new Set();
 
-  clearReactiveObject(drawing.labelTextBulkOverrides);
+  replaceBulkLabelEdits(drawing, {});
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
 
