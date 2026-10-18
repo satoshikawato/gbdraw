@@ -10,6 +10,7 @@ import { createPaletteLoader } from '../../gbdraw/web/js/app/palettes.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { normalizePaletteColors } from '../../gbdraw/web/js/utils/color-utils.js';
+import { PALETTE_SLICE } from '../../gbdraw/web/js/services/drawing/palette.js';
 
 const ref = (value) => ({ value });
 const PALETTES = {
@@ -23,10 +24,14 @@ const editedColors = () => ({
   ...paletteOf('default'), CDS: '#abc', tRNA: '#333333', rRNA: null, misc_feature: '#444444', gc_content: 'none'
 });
 
+// A drawing's palette slice, with its handle under `slices`.
+const drawingOf = (members) => {
+  const { handle, view } = PALETTE_SLICE.create(members);
+  return { ...view, slices: { palette: handle } };
+};
+
 const setup = ({ colors = editedColors(), instant = true } = {}) => {
-  const drawing = {
-    selectedPalette: ref('default'), currentColors: ref(colors), pendingPaletteName: ref(''), pendingPaletteColors: ref({})
-  };
+  const drawing = drawingOf({ currentColors: ref(colors) });
   const paletteColorsDialog = {
     show: false, kind: 'switch', fromPalette: '', toPalette: '', droppedPalette: '', count: 0, keysText: ''
   };
@@ -364,12 +369,8 @@ test('a palette change leaves a Legend row that a rule draws', async () => {
 // the table lookup must read own keys only, so the drawing falls back to `default`.
 test('a palette named like an inherited member falls back to the default palette', () => {
   for (const name of ['constructor', '__proto__', 'toString']) {
-    const circular = {
-      selectedPalette: ref(name), currentColors: ref({}), pendingPaletteName: ref(''), pendingPaletteColors: ref({})
-    };
-    const linear = {
-      selectedPalette: ref('default'), currentColors: ref({}), pendingPaletteName: ref(''), pendingPaletteColors: ref({})
-    };
+    const circular = drawingOf({ selectedPalette: ref(name) });
+    const linear = drawingOf();
     const state = {
       paletteDefinitions: ref({}), paletteNames: ref([]), appliedPaletteName: ref(''), appliedPaletteColors: ref({}),
       drawings: { circular, linear }, activeDrawing: () => circular

@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { PaletteColorsDialog } from '../state.js' */
 import { buildPaletteColorOverrideRows, normalizePaletteColors } from '../utils/color-utils.js';
+import { clearQueuedPalette, queuePalette, replaceDefaultColors, selectPalette as selectDrawingPalette, setDefaultColors } from '../services/drawing/palette.js';
+/** @import { PaletteDrawing } from '../services/drawing/palette.js' */
 
 // The palette dialog body names up to three keys (Q6 A, Owner 2026-10-09).
 /** @param {string[]} keys */
@@ -23,14 +25,7 @@ const describeKeys = (keys) => {
  * @property {PaletteColorsDialog} paletteColorsDialog
  */
 
-/**
- * The palette members of a drawing (`DrawingState` of state.js).
- * @typedef {object} ResultsManagerDrawing
- * @property {{ value: string }} selectedPalette
- * @property {{ value: Record<string, string> }} currentColors
- * @property {{ value: string }} pendingPaletteName
- * @property {{ value: Record<string, string> }} pendingPaletteColors
- */
+/** @typedef {PaletteDrawing} ResultsManagerDrawing The palette of a drawing (`DrawingState` of state.js). */
 
 /**
  * @param {{
@@ -96,14 +91,10 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {Record<string, string>} [colors]
    */
   const setPendingPaletteState = (drawing, paletteName, colors = drawing.currentColors.value) => {
-    drawing.pendingPaletteName.value = String(paletteName || drawing.selectedPalette.value || '');
-    drawing.pendingPaletteColors.value = cloneColors(colors);
+    queuePalette(drawing.slices.palette, String(paletteName || drawing.selectedPalette.value || ''), colors);
   };
   /** @param {ResultsManagerDrawing} drawing */
-  const clearPendingPaletteDraft = (drawing) => {
-    drawing.pendingPaletteName.value = '';
-    drawing.pendingPaletteColors.value = {};
-  };
+  const clearPendingPaletteDraft = (drawing) => clearQueuedPalette(drawing.slices.palette);
   const applyPaletteDraftToPreview = () => {
     const drawing = state.activeDrawing();
     setAppliedPaletteState(drawing, drawing.selectedPalette.value, drawing.currentColors.value);
@@ -163,8 +154,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     }
     const colors = getPaletteBaseColors(paletteName);
     if (choice === 'keep') rows.forEach(([key, color]) => { colors[key] = color; });
-    drawing.selectedPalette.value = paletteName;
-    drawing.currentColors.value = colors;
+    selectDrawingPalette(drawing.slices.palette, paletteName, colors);
     // The applied palette queues nothing: switching back to it while another
     // is queued applies its colors live (Q5 A, Owner 2026-10-09).
     if (paletteInstantPreviewEnabled.value || paletteName === appliedPaletteName.value) {
@@ -188,7 +178,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
 
   /** @param {ResultsManagerDrawing} drawing */
   const resetColors = (drawing) => {
-    drawing.currentColors.value = getPaletteBaseColors(paletteNameOf(drawing));
+    replaceDefaultColors(drawing.slices.palette, getPaletteBaseColors(paletteNameOf(drawing)));
     syncPaletteDraftState();
   };
 
@@ -232,7 +222,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    * @param {string} color
    */
   const setDefaultColor = (drawing, key, color) => {
-    drawing.currentColors.value = { ...drawing.currentColors.value, [key]: color };
+    setDefaultColors(drawing.slices.palette, { [key]: color });
     if (drawing !== state.activeDrawing()) return;
     syncPaletteDraftState();
     if (String(drawing.pendingPaletteName.value || '').trim() !== '') {

@@ -41,6 +41,7 @@ import { GROUP_NAMES_SLICE } from './services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './services/drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './services/drawing/color-rules.js';
+import { PALETTE_SLICE } from './services/drawing/palette.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -248,14 +249,12 @@ export const createDefaultPriorityRule = () => ({
   order: 'product,gene,locus_tag'
 });
 
+// The app's palette state; a drawing's palette is its palette slice's
+// (services/drawing/palette.js).
 export const createDefaultPaletteDraftState = () => ({
-  selectedPalette: 'default',
-  currentColors: {},
   paletteInstantPreviewEnabled: false,
   appliedPaletteName: 'default',
-  appliedPaletteColors: {},
-  pendingPaletteName: '',
-  pendingPaletteColors: {}
+  appliedPaletteColors: {}
 });
 
 export const createDefaultLabelFilterState = () => ({
@@ -1036,7 +1035,8 @@ const createDrawingState = (drawingMode) => {
   const visibilityRules = VISIBILITY_RULES_SLICE.create();
   const colorRules = COLOR_RULES_SLICE.create();
   const { featureVisibilityManualRules } = visibilityRules.view;
-  const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
+  const palette = PALETTE_SLICE.create();
+  const { pendingPaletteName } = palette.view;
   const labelFilters = createDefaultLabelFilterState();
   // The editor edits a slice owns (services/drawing/): the drawing shows its
   // view's members, and only the slice writes them, through its handle.
@@ -1087,10 +1087,7 @@ const createDrawingState = (drawingMode) => {
     filterMode: ref(labelFilters.filterMode),
     manualBlacklist: ref(labelFilters.manualBlacklist),
     manualWhitelist: reactive(labelFilters.manualWhitelist),
-    selectedPalette: ref(defaultPaletteDraftState.selectedPalette),
-    currentColors: ref({ ...defaultPaletteDraftState.currentColors }),
-    pendingPaletteName,
-    pendingPaletteColors: ref({ ...defaultPaletteDraftState.pendingPaletteColors }),
+    ...palette.view,
     ...annotationSets.view,
     // Similarity group names, and dormant names keyed by member set (D-21).
     ...groupNames.view,
@@ -1113,7 +1110,7 @@ const createDrawingState = (drawingMode) => {
     ),
     // The handles a slice's writers take.
     slices: Object.freeze({
-      visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle })
+      visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle })
   });
 };
 const circularDrawing = createDrawingState('circular');

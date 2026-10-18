@@ -16,6 +16,7 @@ import {
 } from '../services/layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
+import { setDefaultColors } from '../services/drawing/palette.js';
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 
 /**
@@ -466,7 +467,7 @@ export const setupWatchers = ({
     const drawing = state.activeDrawing();
     try {
       const { colors, count } = parseColorTable(text);
-      drawing.currentColors.value = { ...drawing.currentColors.value, ...colors };
+      setDefaultColors(drawing.slices.palette, colors);
       console.log(`Loaded ${count} colors from file.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });

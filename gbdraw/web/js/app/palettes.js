@@ -4,6 +4,8 @@ import {
   normalizePaletteColors,
   normalizePaletteDefinitions
 } from '../utils/color-utils.js';
+import { queuePalette, selectPalette } from '../services/drawing/palette.js';
+/** @import { PaletteDrawing } from '../services/drawing/palette.js' */
 
 /**
  * The palette fields of the Web state (`state.js`) the loader reads and writes.
@@ -17,14 +19,7 @@ import {
  * @property {{ circular: PaletteLoaderDrawing, linear: PaletteLoaderDrawing }} drawings
  */
 
-/**
- * The palette members of a drawing (`DrawingState` of state.js).
- * @typedef {object} PaletteLoaderDrawing
- * @property {{ value: string }} selectedPalette
- * @property {{ value: Record<string, string> }} currentColors
- * @property {{ value: string }} pendingPaletteName
- * @property {{ value: Record<string, string> }} pendingPaletteColors
- */
+/** @typedef {PaletteDrawing} PaletteLoaderDrawing The palette of a drawing (`DrawingState` of state.js). */
 
 /**
  * @typedef {object} PaletteLoaderOptions
@@ -69,11 +64,9 @@ export const createPaletteLoader = ({ state }) => {
     const resolvedColors = normalizePaletteColors(
       normalizedPalettes[resolvedPalette] || normalizedPalettes.default || {}
     );
-    const currentHasPaletteColors = hasPaletteColorEntries(drawing.currentColors.value);
-    drawing.selectedPalette.value = resolvedPalette;
-    if (!currentHasPaletteColors) drawing.currentColors.value = resolvedColors;
+    selectPalette(drawing.slices.palette, resolvedPalette, hasPaletteColorEntries(drawing.currentColors.value) ? undefined : resolvedColors);
     if (String(drawing.pendingPaletteName.value || '').trim() && !hasPaletteColorEntries(drawing.pendingPaletteColors.value)) {
-      drawing.pendingPaletteColors.value = { ...drawing.currentColors.value };
+      queuePalette(drawing.slices.palette, drawing.pendingPaletteName.value, drawing.currentColors.value);
     }
   };
 

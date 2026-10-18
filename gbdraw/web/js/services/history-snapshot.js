@@ -20,6 +20,8 @@ import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
+import { PALETTE_SLICE, restoreArtifactQueuedPalette } from './drawing/palette.js';
+/** @import { PaletteColors, PaletteSlice } from './drawing/palette.js' */
 /** @import { GroupNamesData } from './drawing/group-names.js' */
 /** @import { HistoryArtifactHandle } from './history.js' */
 
@@ -490,6 +492,21 @@ const installCanvasPadding = (drawing, ui) => {
   if (!ui.canvasPadding || typeof ui.canvasPadding !== 'object') return;
   CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: /** @type {CanvasPadding} */ (clonePlainObject(ui.canvasPadding)) });
 };
+// A History step holds the queued palette the palette slice captured (the cast).
+/** @param {{ readonly slices: { readonly palette: PaletteSlice } }} drawing */
+const queuedPaletteOf = (drawing) => {
+  const { pendingPaletteName, pendingPaletteColors } = PALETTE_SLICE.capture(drawing.slices.palette);
+  return { pendingPaletteName, pendingPaletteColors };
+};
+/**
+ * @param {{ readonly slices: { readonly palette: PaletteSlice } }} drawing
+ * @param {{ pendingPaletteName?: unknown, pendingPaletteColors?: unknown }} ui
+ */
+const installQueuedPalette = (drawing, { pendingPaletteName, pendingPaletteColors }) => PALETTE_SLICE.install(drawing.slices.palette, {
+  pendingPaletteName: pendingPaletteName === undefined ? undefined : String(pendingPaletteName || ''),
+  pendingPaletteColors: pendingPaletteColors && typeof pendingPaletteColors === 'object'
+    ? /** @type {PaletteColors} */ (clonePlainObject(pendingPaletteColors)) : undefined
+});
 // Installs a drawing's `ui` values as captured. The shown drawing's values go
 // through the UI restore with the app-level values instead.
 /**
@@ -500,8 +517,7 @@ const applyDrawingUiIntentData = (drawing, ui = {}) => {
   if (ui.layoutPreferences) replaceLayoutPreferences(drawing.layoutPreferences, ui.layoutPreferences);
   installCanvasPadding(drawing, ui);
   if (typeof ui.linearTypographyLinked === 'boolean') setRef(drawing.linearTypographyLinked, ui.linearTypographyLinked);
-  if (ui.pendingPaletteName !== undefined) setRef(drawing.pendingPaletteName, String(ui.pendingPaletteName || ''));
-  if (ui.pendingPaletteColors) setRef(drawing.pendingPaletteColors, clonePlainObject(ui.pendingPaletteColors));
+  installQueuedPalette(drawing, ui);
   if (ui.losatProgram) setRef(drawing.losatProgram, ui.losatProgram);
 };
 
@@ -561,8 +577,7 @@ const buildFallbackUiStateData = (state, drawing) => ({
   paletteInstantPreviewEnabled: Boolean(getRef(state.paletteInstantPreviewEnabled, false)),
   appliedPaletteName: getRef(state.appliedPaletteName, 'default'),
   appliedPaletteColors: clonePlainObject(getRef(state.appliedPaletteColors, {})),
-  pendingPaletteName: getRef(drawing.pendingPaletteName, ''),
-  pendingPaletteColors: clonePlainObject(getRef(drawing.pendingPaletteColors, {})),
+  ...queuedPaletteOf(drawing),
   legendCurrentOffset: { ...(state.legendCurrentOffset || {}) },
   diagramOffset: { ...(state.diagramOffset || {}) },
   lengthBarUserOffset: { ...(state.lengthBarUserOffset || {}) },
@@ -595,8 +610,7 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   setRef(state.paletteInstantPreviewEnabled, Boolean(ui.paletteInstantPreviewEnabled));
   if (ui.appliedPaletteName !== undefined) setRef(state.appliedPaletteName, String(ui.appliedPaletteName || 'default'));
   if (ui.appliedPaletteColors) setRef(state.appliedPaletteColors, clonePlainObject(ui.appliedPaletteColors));
-  if (ui.pendingPaletteName !== undefined) setRef(drawing.pendingPaletteName, String(ui.pendingPaletteName || ''));
-  if (ui.pendingPaletteColors) setRef(drawing.pendingPaletteColors, clonePlainObject(ui.pendingPaletteColors));
+  installQueuedPalette(drawing, ui);
   if (state.legendCurrentOffset && ui.legendCurrentOffset) {
     state.legendCurrentOffset.x = Number(ui.legendCurrentOffset.x) || 0;
     state.legendCurrentOffset.y = Number(ui.legendCurrentOffset.y) || 0;
@@ -1159,10 +1173,9 @@ export const createHistorySnapshotService = ({
       appliedPaletteColors: toRaw(
         getGeneratedArtifactRef(state.appliedPaletteColors, null)
       ),
-      pendingPaletteName: getGeneratedArtifactRef(drawing.pendingPaletteName, ''),
-      pendingPaletteColors: toRaw(
-        getGeneratedArtifactRef(drawing.pendingPaletteColors, null)
-      )
+      // By reference, as every artifact value (`restoreArtifactQueuedPalette`).
+      pendingPaletteName: drawing.pendingPaletteName.value,
+      pendingPaletteColors: toRaw(drawing.pendingPaletteColors.value)
     });
   };
 
@@ -1252,8 +1265,7 @@ export const createHistorySnapshotService = ({
     );
     setGeneratedArtifactRef(state.appliedPaletteName, ownerSet.appliedPaletteName || '');
     setGeneratedArtifactRef(state.appliedPaletteColors, ownerSet.appliedPaletteColors || {});
-    setGeneratedArtifactRef(drawing.pendingPaletteName, ownerSet.pendingPaletteName || '');
-    setGeneratedArtifactRef(drawing.pendingPaletteColors, ownerSet.pendingPaletteColors || {});
+    restoreArtifactQueuedPalette(drawing.slices.palette, ownerSet.pendingPaletteName || '', ownerSet.pendingPaletteColors || {});
     if (replacesShownResults) clearSimilarityGroupCopyFeedback?.();
   };
 

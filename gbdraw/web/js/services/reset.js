@@ -18,6 +18,7 @@ import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
+import { PALETTE_SLICE, createDefaultPaletteData } from './drawing/palette.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -82,13 +83,11 @@ const resetPaletteState = (state, drawing) => {
   const defaults = createDefaultPaletteDraftState();
   const colors = defaultPaletteColors(state);
 
-  drawing.selectedPalette.value = defaults.selectedPalette;
+  // The default palette, with its colors.
+  PALETTE_SLICE.install(drawing.slices.palette, { ...createDefaultPaletteData(), currentColors: colors });
   state.paletteInstantPreviewEnabled.value = defaults.paletteInstantPreviewEnabled;
-  drawing.currentColors.value = colors;
   state.appliedPaletteName.value = defaults.appliedPaletteName;
   state.appliedPaletteColors.value = { ...colors };
-  drawing.pendingPaletteName.value = defaults.pendingPaletteName;
-  drawing.pendingPaletteColors.value = defaults.pendingPaletteColors;
 };
 
 /**

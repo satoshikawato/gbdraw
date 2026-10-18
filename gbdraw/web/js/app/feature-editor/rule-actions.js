@@ -27,6 +27,7 @@ import {
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
 import { replaceColorRules } from '../../services/drawing/color-rules.js';
+import { setDefaultColors } from '../../services/drawing/palette.js';
 import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
@@ -689,10 +690,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!newColorFeat.value) return;
-    drawing.currentColors.value = {
-      ...drawing.currentColors.value,
-      [newColorFeat.value]: newColorVal.value
-    };
+    setDefaultColors(drawing.slices.palette, { [newColorFeat.value]: newColorVal.value });
   };
 
   /** @param {string} value */
@@ -819,7 +817,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
           isCurrent: () => selectedSpecificPreset.value === presetId,
           afterCommit: () => {
             if (presetId === 'bakta') {
-              drawing.currentColors.value = { ...drawing.currentColors.value, CDS: '#cccccc' };
+              setDefaultColors(drawing.slices.palette, { CDS: '#cccccc' });
               drawing.adv.legend_box_size = 12;
               drawing.adv.legend_font_size = 12;
             }

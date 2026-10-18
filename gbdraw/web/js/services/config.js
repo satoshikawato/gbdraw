@@ -259,6 +259,7 @@ import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
+import { PALETTE_SLICE, clearQueuedPalette, queuePalette } from './drawing/palette.js';
 
 const { nextTick, ref } = window.Vue;
 
@@ -869,6 +870,14 @@ const serializeLinearComparisonPlan = (plan) => {
 // registry rows of `config` (mode-scoped-settings.generated.js) and nothing
 // else. App-level settings (LOSAT execution, Instant Preview, the rich popup)
 // and the Session's CLI provenance are saved outside the slices.
+// The palette a drawing queued for the next Generate, as Save and a History
+// step hold it (`ui.pendingPaletteName`, `ui.pendingPaletteColors`).
+/** @param {DrawingState} drawing */
+const queuedPaletteData = (drawing) => {
+  const { pendingPaletteName, pendingPaletteColors } = PALETTE_SLICE.capture(drawing.slices.palette);
+  return { pendingPaletteName, pendingPaletteColors };
+};
+
 /** @param {DrawingState} drawing */
 export const buildConfigData = (drawing) => ({
   form: drawing.form,
@@ -881,7 +890,7 @@ export const buildConfigData = (drawing) => ({
     }
   },
   losat: cloneJsonData(drawing.losat || {}),
-  colors: drawing.currentColors.value,
+  colors: PALETTE_SLICE.capture(drawing.slices.palette).currentColors,
   palette: drawing.selectedPalette.value,
   rules: COLOR_RULES_SLICE.capture(drawing.slices.colorRules).manualSpecificRules,
   qualifierPriorityRules: readQualifierPriorityRules(drawing.manualPriorityRules).value,
@@ -1300,8 +1309,7 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
     ui: {
       layoutPreferences: cloneJsonData(drawing.layoutPreferences[mode]),
       canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
-      pendingPaletteName: drawing.pendingPaletteName.value,
-      pendingPaletteColors: cloneColors(drawing.pendingPaletteColors.value),
+      ...queuedPaletteData(drawing),
       linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
       selectedFeatureRecordIdx
     }
@@ -2839,23 +2847,15 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
     state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
   }
-  const importedPalette = readPalette(data.palette).value;
-  if (importedPalette) drawing.selectedPalette.value = importedPalette;
+  const importedPalette = readPalette(data.palette).value || undefined;
+  const paletteName = importedPalette ?? drawing.selectedPalette.value;
   const storedColors = readPlainObject(data.colors).value;
+  // Without colors of its own, the drawing takes its palette's colors.
+  let colors = paletteColorsFromDefinitions(paletteName) || undefined;
   if (hasColorEntries(storedColors)) {
-    if (data.colorsAreOverrides) {
-      const paletteColors = paletteColorsFromDefinitions(drawing.selectedPalette.value) || {};
-      drawing.currentColors.value = normalizePaletteColors({
-        ...paletteColors,
-        ...normalizeColorMap(storedColors)
-      });
-    } else {
-      drawing.currentColors.value = normalizePaletteColors(normalizeColorMap(storedColors));
-    }
-  } else {
-    const paletteColors = paletteColorsFromDefinitions(drawing.selectedPalette.value);
-    if (paletteColors) drawing.currentColors.value = paletteColors;
+    colors = normalizePaletteColors({ ...(data.colorsAreOverrides ? colors : {}), ...normalizeColorMap(storedColors) });
   }
+  PALETTE_SLICE.install(drawing.slices.palette, { selectedPalette: importedPalette, currentColors: colors });
 
   const storedRules = readColorRules(data.rules);
   if (!storedRules.kept) {
@@ -2912,13 +2912,11 @@ const restorePaletteStateAfterConfigImport = (drawing) => {
   ) {
     state.appliedPaletteName.value = draftPaletteName;
     state.appliedPaletteColors.value = draftColors;
-    drawing.pendingPaletteName.value = '';
-    drawing.pendingPaletteColors.value = {};
+    clearQueuedPalette(drawing.slices.palette);
     return;
   }
 
-  drawing.pendingPaletteName.value = draftPaletteName;
-  drawing.pendingPaletteColors.value = draftColors;
+  queuePalette(drawing.slices.palette, draftPaletteName, draftColors);
 };
 
 // The palette the shown Result was drawn with (an artifact value), or else
@@ -2949,11 +2947,9 @@ const restorePendingPaletteFromSession = (drawing, ui = {}) => {
   const savedPendingPaletteName = pendingPaletteName(ui);
   const savedPendingPaletteColors = readPaletteColors(ui.pendingPaletteColors).value ?? draftColors;
   if (!state.paletteInstantPreviewEnabled.value && savedPendingPaletteName) {
-    drawing.pendingPaletteName.value = savedPendingPaletteName;
-    drawing.pendingPaletteColors.value = normalizePaletteColors(cloneColors(savedPendingPaletteColors));
+    queuePalette(drawing.slices.palette, savedPendingPaletteName, normalizePaletteColors(cloneColors(savedPendingPaletteColors)));
   } else {
-    drawing.pendingPaletteName.value = '';
-    drawing.pendingPaletteColors.value = {};
+    clearQueuedPalette(drawing.slices.palette);
   }
 };
 
@@ -4729,8 +4725,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     losatExecution: buildLosatExecutionData(),
     appliedPaletteName: state.appliedPaletteName.value,
     appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
-    pendingPaletteName: drawing.pendingPaletteName.value,
-    pendingPaletteColors: cloneColors(drawing.pendingPaletteColors.value),
+    ...queuedPaletteData(drawing),
     legendCurrentOffset: { ...state.legendCurrentOffset },
     diagramOffset: { ...state.diagramOffset },
     lengthBarUserOffset: { ...state.lengthBarUserOffset },

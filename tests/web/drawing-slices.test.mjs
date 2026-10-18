@@ -39,6 +39,7 @@ const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = aw
 const { normalizeAnnotationSets } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { normalizeFeatureVisibilityRule } = await import('../../gbdraw/web/js/services/feature-visibility.js');
 const { normalizeSpecificRule } = await import('../../gbdraw/web/js/services/specific-color-rules.js');
+const { normalizePaletteColors } = await import('../../gbdraw/web/js/utils/color-utils.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -142,7 +143,8 @@ const DRAWING_RECEIVER = /(?:[\w$]*[dD]rawing|activeDrawing\s*\(\s*\)|drawings\s
 // The template writes M3.13 replaces by writer ports; this list only shrinks.
 const TEMPLATE_WRITES_BEFORE_M3_13 = Object.freeze([
   'v-model.number="canvasPadding.top"', 'v-model.number="canvasPadding.left"',
-  'v-model.number="canvasPadding.right"', 'v-model.number="canvasPadding.bottom"'
+  'v-model.number="canvasPadding.right"', 'v-model.number="canvasPadding.bottom"',
+  'v-model="currentColors[feat]"'
 ]);
 
 // Comments and quoted strings blanked, so offsets stay and prose is no writer.
@@ -273,6 +275,11 @@ const SAMPLES = {
   colorRules: () => ({
     fileLegendCaptions: ['Kinase'],
     manualSpecificRules: [normalizeSpecificRule({ feat: 'CDS', qual: 'product', val: 'kinase', color: '#123456', cap: 'Kinase', fromFile: true })]
+  }),
+  // Load gives a palette's colors the comparison colors (`normalizePaletteColors`).
+  palette: () => ({
+    selectedPalette: 'default', currentColors: normalizePaletteColors({ CDS: '#123456', tRNA: '#654321' }),
+    pendingPaletteName: 'queued', pendingPaletteColors: normalizePaletteColors({ CDS: '#abcdef' })
   }),
   annotationSets: () => ({ annotationSets: normalizeAnnotationSets([{ id: 'sample-set', legendLabel: 'Sample', annotations: [
     { id: 'region_1', target: { kind: 'coordinateSpan', start: 10, end: 20 }, label: 'Sample region' }
