@@ -1122,7 +1122,10 @@ or rules that draw the row, the feature type's default color, or colors set on
 individual features. **Color** and **Legend name** edit the row as the Legend
 tab does, with the same **Merge into "<name>"**, **Keep both**, or **Cancel**
 choice for a name another row uses, and **Remove from legend** moves the row to the Legend tab's
-**Deleted items**. A click on a record definition (the Linear record label on
+**Deleted items**. The popup of a GC content, GC skew, or Depth row names its
+plot (**Content plot**, **Skew plot**, **Depth plot**) instead of a feature
+count; its **Color** changes the legend swatch only, and the plot keeps the
+color set in Settings. A click on a record definition (the Linear record label on
 the left, or the Circular center text) opens the record popup. Its heading
 shows the name lines of the definition as the Result draws them. It lists the
 **Accession**, **Length**, **Reverse complement**, **Display start**, and
