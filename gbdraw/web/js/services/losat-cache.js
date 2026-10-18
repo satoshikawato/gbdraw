@@ -599,25 +599,68 @@ const hasOneEmptyTableForm = (pair) => {
   return typeof pair.canonicalTsv === 'string' && /^[^\n]*\n$/.test(pair.canonicalTsv);
 };
 
+// The typed analysis result a derived payload of each mode carries: its payload member, the kind of its typed
+// resource and the type of its value. The Python twin is `_DERIVED_RESULT_MEMBERS` in
+// `gbdraw/analysis/protein_artifacts.py`.
+/** @type {Readonly<Record<string, { member: string, kind: string, type: string }>>} */
+const DERIVED_RESULT_MEMBERS = Object.freeze({
+  orthogroup: { member: 'orthogroupResult', kind: 'orthogroupResult', type: 'OrthogroupGraphResult' },
+  collinear: { member: 'collinearityResult', kind: 'result', type: 'CollinearityResult' }
+});
+
 /**
+ * Whether `resource` is a typed analysis result of `mode` as the Python typed codec writes it: schema 3, the mode's
+ * kind and value type, and an object of fields.
+ * @param {unknown} mode
+ * @param {unknown} resource
+ * @returns {boolean}
+ */
+export const isDerivedAnalysisResult = (mode, resource) => {
+  const expected = typeof mode === 'string' && Object.hasOwn(DERIVED_RESULT_MEMBERS, mode)
+    ? DERIVED_RESULT_MEMBERS[mode]
+    : null;
+  if (!expected || !isPlainObject(resource)) return false;
+  const value = resource.value;
+  return resource.schema === 3
+    && resource.kind === expected.kind
+    && isPlainObject(value)
+    && value.type === expected.type
+    && isPlainObject(value.fields);
+};
+
+/**
+ * Whether a JSON value names nothing: every array and object in it is empty. A typed object (`{ type, fields }`) is
+ * read through its fields, so a typed result whose collections are all empty, nested results included, holds no
+ * value. The Python twin is `_holds_no_value`.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+const holdsNoValue = (value) => {
+  if (Array.isArray(value)) return value.length === 0;
+  if (!isPlainObject(value)) return true;
+  const keys = Object.keys(value);
+  if (keys.length === 2 && Object.hasOwn(value, 'type') && isPlainObject(value.fields)) {
+    return Object.values(value.fields).every(holdsNoValue);
+  }
+  return keys.length === 0;
+};
+
+/**
+ * Whether a derived entry is the result of zero-hit searches, which names no protein (OV-1127): its mode computes a
+ * result, its identity (if present) is current, every pair is a zero-hit pair, its typed result (if present) is the
+ * mode's, and every other member holds no value: the typed result and the members of the form written before it
+ * (`orthogroups: []`) are empty. The Python twin is `_is_zero_hit_result` in `gbdraw/analysis/protein_artifacts.py`;
+ * `tests/fixtures/session_admission_vectors.json` pins both.
  * @param {LosatDerivedCacheEntry} entry A derived entry that `isLosatDerivedCacheEntry` accepted.
  * @returns {boolean}
  */
-const isStrictEmptyDerivedResult = (entry) => {
+const isZeroHitDerivedResult = (entry) => {
   const mode = entry?.mode;
-  if (!(/** @type {readonly unknown[]} */ (['orthogroup', 'collinear'])).includes(mode) || !isPlainObject(entry?.payload)) {
-    return false;
-  }
+  const result = typeof mode === 'string' && Object.hasOwn(DERIVED_RESULT_MEMBERS, mode)
+    ? DERIVED_RESULT_MEMBERS[mode]
+    : null;
+  if (!result || !isPlainObject(entry?.payload)) return false;
   const payload = entry.payload;
-  const allowedKeys = new Set(['identity', 'provenance', 'pairs', 'orthogroups']);
-  if (mode === 'collinear') {
-    [
-      'collinearGroups',
-      'collinearGroupScope',
-      'collinearityBlocks'
-    ].forEach((key) => allowedKeys.add(key));
-  }
-  if (Object.keys(payload).some((key) => !allowedKeys.has(key))) return false;
 
   if (Object.prototype.hasOwnProperty.call(payload, 'identity')) {
     const identity = payload.identity;
@@ -631,14 +674,7 @@ const isStrictEmptyDerivedResult = (entry) => {
     ) return false;
   }
 
-  if (
-    !Array.isArray(payload.pairs) ||
-    payload.pairs.length === 0 ||
-    !Array.isArray(payload.orthogroups)
-  ) {
-    return false;
-  }
-  if (payload.orthogroups.length !== 0) return false;
+  if (!Array.isArray(payload.pairs) || payload.pairs.length === 0) return false;
   const allowedPairKeys = new Set([
     'pair_index',
     'query_index',
@@ -674,19 +710,11 @@ const isStrictEmptyDerivedResult = (entry) => {
     ) return false;
   }
 
-  if (mode === 'collinear') {
-    for (const key of ['collinearGroups', 'collinearityBlocks']) {
-      if (
-        Object.prototype.hasOwnProperty.call(payload, key) &&
-        (!Array.isArray(payload[key]) || payload[key].length !== 0)
-      ) return false;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(payload, 'collinearGroupScope') &&
-      !(/** @type {readonly unknown[]} */ (['adjacent_local', 'global_collinear'])).includes(payload.collinearGroupScope)
-    ) return false;
-  }
-  return true;
+  if (Object.hasOwn(payload, result.member) && !isDerivedAnalysisResult(mode, payload[result.member])) return false;
+  return Object.entries(payload).every(([key, value]) => (
+    ['identity', 'provenance', 'pairs'].includes(key)
+    || holdsNoValue(key === result.member && isPlainObject(value) ? value.value : value)
+  ));
 };
 
 /**
@@ -793,7 +821,7 @@ export const validateDerivedProteinReferences = (
     (
       sawReference ||
       Object.keys(entry.payload).length === 0 ||
-      isStrictEmptyDerivedResult(entry)
+      isZeroHitDerivedResult(entry)
     )
   );
 };

@@ -1628,7 +1628,7 @@
      "value": [
       {
        "sourceUid": "circular",
-       "selector": "#1٣",
+       "selector": "#1\u0663",
        "recordId": "same",
        "topologyOverride": null,
        "startCoordinate": 25,
@@ -5591,6 +5591,192 @@
    "pythonMessage": "Session modes.circular must be an object.",
    "web": "refused",
    "webClass": "R4"
+  },
+  {
+   "id": "ov1127-zero-hit-orthogroup-result",
+   "finding": "OV-1127",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries/0/payload",
+     "value": {
+      "pairs": [
+       {
+        "pair_index": 0,
+        "query_index": 0,
+        "subject_index": 1,
+        "tsv": "",
+        "canonicalTsv": "query\tsubject\n",
+        "hit_count": 0
+       }
+      ],
+      "orthogroupResult": {
+       "kind": "orthogroupResult",
+       "schema": 3,
+       "value": {
+        "fields": {
+         "confidenceByOrthogroupId": {},
+         "descriptionsByOrthogroupId": {},
+         "memberByProteinId": {},
+         "nameCandidatesByOrthogroupId": {},
+         "namesByOrthogroupId": {},
+         "orthogroups": {},
+         "orthologEdgesByOrthogroupId": {},
+         "pathIndexesByOrthogroupId": {},
+         "rbhOrthogroups": {},
+         "relatedEdgesByOrthogroupId": {},
+         "scopeByOrthogroupId": {},
+         "sourceRecordIndexByOrthogroupId": {}
+        },
+        "type": "OrthogroupGraphResult"
+       }
+      }
+     }
+    }
+   ],
+   "python": "accept",
+   "web": "loaded",
+   "note": "A Similarity groups result of zero-hit searches: every pair is empty and its typed result holds no member, so it names no protein to resolve."
+  },
+  {
+   "id": "ov1127-zero-hit-collinear-result",
+   "finding": "OV-1127",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries/0/mode",
+     "value": "collinear"
+    },
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries/0/payload",
+     "value": {
+      "pairs": [
+       {
+        "pair_index": 0,
+        "query_index": 0,
+        "subject_index": 1,
+        "tsv": "",
+        "canonicalTsv": "query\tsubject\n",
+        "hit_count": 0
+       }
+      ],
+      "collinearityResult": {
+       "kind": "result",
+       "schema": 3,
+       "value": {
+        "fields": {
+         "blocks": [],
+         "orthogroups": {
+          "fields": {
+           "confidenceByOrthogroupId": {},
+           "descriptionsByOrthogroupId": {},
+           "memberByProteinId": {},
+           "nameCandidatesByOrthogroupId": {},
+           "namesByOrthogroupId": {},
+           "orthogroups": {},
+           "orthologEdgesByOrthogroupId": {},
+           "pathIndexesByOrthogroupId": {},
+           "rbhOrthogroups": {},
+           "relatedEdgesByOrthogroupId": {},
+           "scopeByOrthogroupId": {},
+           "sourceRecordIndexByOrthogroupId": {}
+          },
+          "type": "OrthogroupGraphResult"
+         },
+         "unblockedAnchors": []
+        },
+        "type": "CollinearityResult"
+       }
+      }
+     }
+    }
+   ],
+   "python": "accept",
+   "web": "loaded",
+   "note": "The same for a Collinear result: no block, no unblocked anchor, an empty nested orthogroup graph."
+  },
+  {
+   "id": "ov1127-zero-hit-pairs-with-a-result-member",
+   "finding": "OV-1127",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries/0/payload",
+     "value": {
+      "pairs": [
+       {
+        "pair_index": 0,
+        "query_index": 0,
+        "subject_index": 1,
+        "tsv": "",
+        "canonicalTsv": "query\tsubject\n",
+        "hit_count": 0
+       }
+      ],
+      "orthogroupResult": {
+       "kind": "orthogroupResult",
+       "schema": 3,
+       "value": {
+        "fields": {
+         "confidenceByOrthogroupId": {},
+         "descriptionsByOrthogroupId": {},
+         "memberByProteinId": {},
+         "nameCandidatesByOrthogroupId": {},
+         "namesByOrthogroupId": {
+          "og1": "x"
+         },
+         "orthogroups": {},
+         "orthologEdgesByOrthogroupId": {},
+         "pathIndexesByOrthogroupId": {},
+         "rbhOrthogroups": {},
+         "relatedEdgesByOrthogroupId": {},
+         "scopeByOrthogroupId": {},
+         "sourceRecordIndexByOrthogroupId": {}
+        },
+        "type": "OrthogroupGraphResult"
+       }
+      }
+     }
+    }
+   ],
+   "python": "refuse",
+   "pythonMessage": "contains unresolved protein references",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ],
+   "note": "Zero-hit pairs with a typed result that holds a member: a member ID that is no runtime handle is not resolved, so the entry is refused."
+  },
+  {
+   "id": "ov1127-zero-hit-pre-typed-result",
+   "finding": "OV-1127",
+   "base": "web-39",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/losatDerivedCache/entries/0/payload",
+     "value": {
+      "pairs": [
+       {
+        "pair_index": 0,
+        "query_index": 0,
+        "subject_index": 1,
+        "tsv": "",
+        "canonicalTsv": "query\tsubject\n",
+        "hit_count": 0
+       }
+      ],
+      "orthogroups": []
+     }
+    }
+   ],
+   "python": "accept",
+   "web": "loaded",
+   "note": "Control: the zero-hit form written before derived entries held the typed result (main from #312 to #540), admitted as before."
   }
  ]
 }

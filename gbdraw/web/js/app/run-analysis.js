@@ -156,6 +156,7 @@ import {
   emptyProteinIdentityManifest,
   getCurrentRawLosatCacheEntry,
   isCurrentRawLosatCacheEntry,
+  isDerivedAnalysisResult,
   isLosatDerivedCacheEntry,
   mergeProteinIdentityManifests,
   normalizeLosatArgs,
@@ -553,25 +554,11 @@ const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
 export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
   const normalizedMode = String(mode || '').trim().toLowerCase();
   if (!['orthogroup', 'collinear'].includes(normalizedMode)) return true;
-  const rawResource = normalizedMode === 'collinear'
+  const resource = normalizedMode === 'collinear'
     ? payload?.collinearityResult
     : payload?.orthogroupResult;
-  // The checks below test that `resource` is a non-array object before they read its fields.
-  const resource = /** @type {{ schema?: unknown, kind?: unknown, value?: { type?: unknown, fields?: unknown } | null } | null | undefined} */ (
-    rawResource
-  );
-  const expectedKind = normalizedMode === 'collinear' ? 'result' : 'orthogroupResult';
-  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupGraphResult';
   return Boolean(
-    resource
-    && typeof resource === 'object'
-    && !Array.isArray(resource)
-    && resource.schema === 3
-    && resource.kind === expectedKind
-    && resource.value?.type === expectedType
-    && resource.value.fields
-    && typeof resource.value.fields === 'object'
-    && !Array.isArray(resource.value.fields)
+    isDerivedAnalysisResult(normalizedMode, resource)
     && isCanonicalTypedResourceBound(resource)
     && Array.isArray(payload?.pairs)
     && payload.pairs.every((pair) => typeof pair?.canonicalTsv === 'string')
