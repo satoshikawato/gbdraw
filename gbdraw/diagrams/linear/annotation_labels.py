@@ -21,7 +21,7 @@ from gbdraw.labels.linear import calculate_label_bounds, linear_leader_polyline
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel, linear_annotation_labels
 
-from .track_slots import LinearRecordVerticalPlan
+from .track_slots import LinearRecordVerticalPlan, linear_overlay_covers_slots
 
 AnnotationLabelsBySlot = Mapping[str, tuple[LinearAnnotationLabel, ...]]
 
@@ -69,14 +69,15 @@ def _feature_label_obstacles(
 
 
 def _place_along_span(
-    label: LinearAnnotationLabel, origin_y: float, obstacles: Sequence[Aabb], gap: float
+    label: LinearAnnotationLabel, origin_y: float, obstacles: Sequence[Aabb], gap: float, bar_length: float
 ) -> float:
     """The anchor x for ``label`` (in a slot at ``origin_y``).
 
     Its own x when its letters are clear; else, with the label's centre over
-    one of its marks, the x with the fewest conflicts, nearest its own x, the
-    smaller x on a tie. A sorted sweep keeps this O(B log B) in the B
-    obstacles in the label's row.
+    one of its marks and its letters on the bar (``0`` to ``bar_length``,
+    OV-1157), the x with the fewest conflicts, nearest its own x, the smaller
+    x on a tie. A sorted sweep keeps this O(B log B) in the B obstacles in
+    the label's row.
     """
 
     ink = label.ink.translated(0.0, origin_y)
@@ -97,7 +98,10 @@ def _place_along_span(
 
     if conflicts(label.x) == 0:
         return label.x
-    allowed = [(low - centre, high - centre) for low, high in label.segments]
+    allowed = [
+        (max(low - centre, -left), min(high - centre, bar_length - right)) for low, high in label.segments
+    ]
+    allowed = [(low, high) for low, high in allowed if low <= high]
     candidates = {label.x}
     for low, high in allowed:
         candidates.update((low, high))
@@ -123,25 +127,28 @@ def place_linear_annotation_labels(
         (float(slot.origin_y) for slot in plan.slots if slot.renderer == "features"), 0.0
     )
     obstacles = _feature_label_obstacles(feature_labels, features_origin_y, 0.5 * leader_stroke_width)
+    renderers = {slot.id: slot.renderer for slot in plan.slots}
     placed: dict[str, tuple[LinearAnnotationLabel, ...]] = {}
     for slot in plan.slots:
         track = annotation_track_layouts.get(slot.id)
         if slot.renderer != "annotations" or track is None:
             continue
+        params = annotation_track_params_from_mapping(slot.params)
         labels = linear_annotation_labels(
             track,
             record_index=record_index,
             record_length=record_length,
             bar_length_px=sequence_width,
             side=slot.side,
+            covers_slots=linear_overlay_covers_slots(params, renderers.get(params.anchor_slot or "")),
             height_px=float(slot.height),
             font_family=font_family,
-            params=annotation_track_params_from_mapping(slot.params),
+            params=params,
         )
         slot_labels: list[LinearAnnotationLabel] = []
         origin_y = float(slot.origin_y)
         for label in labels:
-            moved = label.moved_to(_place_along_span(label, origin_y, obstacles, gap))
+            moved = label.moved_to(_place_along_span(label, origin_y, obstacles, gap, sequence_width))
             obstacles.append(moved.ink.translated(0.0, origin_y))
             slot_labels.append(moved)
         placed[slot.id] = tuple(slot_labels)
