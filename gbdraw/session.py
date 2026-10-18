@@ -1017,8 +1017,8 @@ def _drawing_builds(
 ) -> tuple[_DrawingBuild, ...]:
     """Resolve the requests of ``request`` or ``drawings`` (exactly one)."""
 
-    from gbdraw.api.request_render import resolve_request
     from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest, LinearDiagramRequest
+    from gbdraw.api.session_compat import resolve_session_write_request
 
     if (request is None) == (drawings is None):
         raise SessionFormatError("Pass either request or drawings.")
@@ -1047,7 +1047,7 @@ def _drawing_builds(
                 f"Session drawing mode {spec.mode!r} does not match its {mode} request."
             )
         try:
-            resolved = resolve_request(spec.request) if spec.request is not None else None
+            resolved = resolve_session_write_request(spec.request) if spec.request is not None else None
         except ValidationError as exc:
             raise SessionConversionError(str(exc)) from exc
         builds.append(

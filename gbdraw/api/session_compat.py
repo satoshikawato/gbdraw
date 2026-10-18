@@ -10,7 +10,7 @@ import logging
 import re
 from dataclasses import dataclass, fields, is_dataclass, replace
 from pathlib import Path
-from typing import Any, Collection, Mapping, Sequence, cast
+from typing import Any, Callable, Collection, Mapping, Sequence, cast
 
 from pandas import DataFrame
 
@@ -49,6 +49,7 @@ from gbdraw.session_io import (
 from .migration_report import SessionMigrationReport
 from .options import LinearMultiRecordOptions, LinearRecordTranslation, losatp_analysis_mode
 from .record_planning import (
+    _SOURCE_BINDING_COLUMNS,
     ResolvedRecordCollection,
     ResolvedRecordProvenance,
     UnmatchedFrameItem,
@@ -83,6 +84,7 @@ from .requests import (
     _with_legacy_similarity_alignment,
 )
 from ..linear_comparison import (
+    LinearComparison,
     _endpoint_frame,
     project_search_frame_comparisons,
     reverse_endpoint_table_text,
@@ -1224,7 +1226,10 @@ def search_frame_protein_resources(
 
     stored = [item for item in payload.get("comparisons") or () if isinstance(item, Mapping)
               and item.get("kind") in _STORED_PROTEIN_RESULT_KINDS]
-    (before, before_resources), (after, after_resources) = protein_items(request), protein_items(converted)
+    # ``request`` as stored: its tables encode to the bytes they were read from.
+    as_stored = (_with_drawn_feature_id_marks(request, lambda _comparison: False)
+                 if isinstance(request, LinearDiagramRequest) else request)
+    (before, before_resources), (after, after_resources) = protein_items(as_stored), protein_items(converted)
     if not len(stored) == len(before) == len(after):
         raise ValidationError("Stored protein results do not match their decoded request.")
     changed: dict[str, bytes] = {}
@@ -1676,10 +1681,10 @@ DRAWN_FEATURE_ID_SESSION_MAX_VERSION = 40
 
 
 def _stores_drawn_feature_ids(frame: DataFrame) -> bool:
-    return any(
-        f"{role}_feature_svg_id" in frame.columns and f"{role}_view_feature_svg_id" not in frame.columns
-        for role in ("query", "subject")
-    )
+    # The projection's own predicate: only rows with source bindings are projected.
+    if frame.empty or not _SOURCE_BINDING_COLUMNS <= set(frame.columns):
+        return False
+    return any(f"{role}_view_feature_svg_id" not in frame.columns for role in ("query", "subject"))
 
 
 def decode_session_request(
@@ -1705,17 +1710,49 @@ def decode_session_request(
     )
     if session_version > DRAWN_FEATURE_ID_SESSION_MAX_VERSION or not isinstance(request, LinearDiagramRequest):
         return request
+    return _with_drawn_feature_id_marks(request, lambda comparison: _stores_drawn_feature_ids(comparison.matches))
+
+
+def _with_drawn_feature_id_marks(
+    request: LinearDiagramRequest,
+    marked: Callable[[LinearComparison], bool],
+) -> LinearDiagramRequest:
+    """``request`` whose comparisons carry ``drawn_feature_ids`` where ``marked`` says so."""
+
     stored = request.options.linear_comparisons or ()
-    marked = tuple(
-        replace(comparison, drawn_feature_ids=True) if _stores_drawn_feature_ids(comparison.matches) else comparison
+    comparisons = tuple(
+        comparison if comparison.drawn_feature_ids == marked(comparison)
+        else replace(comparison, drawn_feature_ids=marked(comparison))
         for comparison in stored
     )
-    if all(before is after for before, after in zip(stored, marked, strict=True)):
+    if all(before is after for before, after in zip(stored, comparisons, strict=True)):
         return request
-    adapted = replace(request, options=replace(request.options, linear_comparisons=marked))
+    adapted = replace(request, options=replace(request.options, linear_comparisons=comparisons))
     # ``replace`` drops the old-schema alignment state (an ``init=False`` field).
     legacy = request._legacy_similarity_alignment
     return adapted if legacy is None else _with_legacy_similarity_alignment(adapted, legacy)
+
+
+def resolve_session_write_request(request: DiagramRequest) -> DiagramRequest:
+    """Resolve ``request`` for a Session writer.
+
+    A table still read with the drawn-frame IDs of a Session up to 40 moves
+    to the search frame first, as an upgrade moves it, so the written table
+    holds source and view IDs (OV-1183). A row matching neither frame raises.
+    """
+
+    plan = plan_request(request)
+    resolved = plan.request
+    if not isinstance(resolved, LinearDiagramRequest) or not any(
+        comparison.drawn_feature_ids for comparison in resolved.options.linear_comparisons or ()
+    ):
+        return resolved
+    converted, unmatched = drawn_frame_protein_results_to_search_frame(plan, resolved)
+    if unmatched:
+        raise ValidationError(f"Cannot write {describe_unmatched_frame_item(unmatched[0])}.")
+    legacy = resolved._legacy_similarity_alignment
+    return converted if legacy is None or not isinstance(converted, LinearDiagramRequest) else (
+        _with_legacy_similarity_alignment(converted, legacy))
 
 
 def canonical_payload_for_session_decode(
@@ -1844,6 +1881,7 @@ __all__ = [
     "decode_session_request",
     "drawn_frame_protein_results_to_search_frame",
     "replace_resource_bytes",
+    "resolve_session_write_request",
     "search_frame_protein_resources",
     "stores_protein_results",
     "project_legacy_similarity_alignment_for_current_write",
