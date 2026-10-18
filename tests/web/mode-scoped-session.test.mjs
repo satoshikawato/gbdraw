@@ -420,6 +420,25 @@ test('Reset Settings keeps the OFF records of both drawings (record selection)',
   state.drawings.circular.recordsOff.splice(0);
 });
 
+// R15-21 (OV-1107, OV-1108): Reset Settings removes a loaded Session's saved
+// label table (also when the bulk label edits are empty) and the dormant
+// Similarity group names, in both drawings.
+test('Reset Settings removes the saved label table and the dormant Similarity group names of both drawings', async () => {
+  const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+  const row = { recordId: '*', featureType: '*', qualifier: 'product', valueRegex: '^a$', labelText: 'A' };
+  MODES.forEach((mode) => {
+    const drawing = state.drawings[mode];
+    drawing.canonicalLabelOverrideRows.value = [row];
+    drawing.orthogroupDormantOverrides.OG_1 = { name: 'Saved name' };
+  });
+  resetSettings(state);
+  MODES.forEach((mode) => {
+    const drawing = state.drawings[mode];
+    assert.deepEqual(drawing.canonicalLabelOverrideRows.value, [], `${mode} label table`);
+    assert.deepEqual({ ...drawing.orthogroupDormantOverrides }, {}, `${mode} dormant group names`);
+  });
+});
+
 // Record selection 2.5: a Linear drawing with every card OFF (only a
 // hand-edited Session reaches it) fails Generate and Save with NONE_DRAWN.
 test('a Linear drawing with no ON record names the fix', () => {

@@ -143,7 +143,10 @@ const resetEditorDraftState = (state, drawing) => {
   drawing.addedLegendCaptions.value = new Set();
   drawing.fileLegendCaptions.value = new Set();
 
+  // The saved label table of a loaded Session goes with the bulk label edits,
+  // also when the bulk map is already empty (R15-21).
   replaceBulkLabelEdits(drawing, {});
+  drawing.canonicalLabelOverrideRows.value = [];
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
 
@@ -157,6 +160,7 @@ const resetEditorDraftState = (state, drawing) => {
   state.selectedOrthogroupAlignmentFeature.value = '';
   clearReactiveObject(drawing.orthogroupNameOverrides);
   clearReactiveObject(drawing.orthogroupDescriptionOverrides);
+  clearReactiveObject(drawing.orthogroupDormantOverrides);
 };
 
 /** @param {DrawingState} drawing */
