@@ -84,7 +84,8 @@ const MODES = {
       setRenderer: (slot, renderer) => editor.updateCircularTrackSlotRenderer(slot, renderer),
       issue: (index) => editor.circularTrackSlotIssue(state.adv.circular_track_slots[index], index),
       reset: () => editor.resetCircularTrackSlotsFromSimpleControls(),
-      canDuplicate: (slot) => editor.canDuplicateCircularTrackSlot(slot)
+      canDuplicate: (slot) => editor.canDuplicateCircularTrackSlot(slot),
+      duplicate: (index) => editor.duplicateCircularTrackSlot(index)
     };
   },
   linear: (slots, options) => {
@@ -97,7 +98,8 @@ const MODES = {
       setRenderer: (slot, renderer) => editor.updateLinearTrackSlotRenderer(slot, renderer),
       issue: (index) => editor.linearTrackSlotIssue(state.adv.linear_track_slots[index], index),
       reset: () => editor.resetLinearTrackSlotsFromSimpleControls(),
-      canDuplicate: (slot) => editor.canDuplicateLinearTrackSlot(slot)
+      canDuplicate: (slot) => editor.canDuplicateLinearTrackSlot(slot),
+      duplicate: (index) => editor.duplicateLinearTrackSlot(index)
     };
   }
 };
@@ -147,6 +149,19 @@ for (const [mode, create] of Object.entries(MODES)) {
     assert.equal(editor.canDuplicate(slot), true);
     editor.state.sessionOperationAvailability = () => ({ code: 'SESSION_BUSY' });
     assert.equal(editor.canDuplicate(slot), false);
+  });
+
+  // OV-1099: both modes name a copy by its renderer's default ID and the first
+  // unused number, so a copy of a copy is numbered on, not suffixed again.
+  test(`${mode}: Duplicate names the copy with the next unused number`, () => {
+    const editor = create(ROWS[mode]());
+    const ids = () => editor.slots().map((slot) => slot.id);
+    editor.duplicate(ids().indexOf('gc_skew'));
+    assert.deepEqual(ids().slice(-2), ['gc_skew', 'gc_skew_2']);
+    editor.duplicate(ids().indexOf('gc_skew_2'));
+    assert.deepEqual(ids().slice(-3), ['gc_skew', 'gc_skew_2', 'gc_skew_3']);
+    const copy = editor.slots().at(-1);
+    assert.equal(copy.params.positive_color, '#ff0000', 'the copy keeps the source params');
   });
 
   // TK-10: Reset rebuilds from the loaded Depth series; Show Depth is not an

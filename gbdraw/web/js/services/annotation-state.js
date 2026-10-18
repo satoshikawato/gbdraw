@@ -1,5 +1,6 @@
 // @ts-check
 import { diagnosticError } from '../utils/error-normalization.js';
+import { nextNumberedId } from './track-slot-validation.js';
 import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.js';
 
 /** @import { FeatureRequestRecord } from './feature-placement.js' */
@@ -176,17 +177,9 @@ export const normalizeAnnotationSets = (sets) => {
  * @param {ReadonlyArray<{ id?: unknown } | null | undefined> | null | undefined} sets
  * @param {string} [base]
  */
-export const uniqueAnnotationSetId = (sets, base = 'annotations') => {
-  const ids = new Set((Array.isArray(sets) ? sets : []).map((set) => String(set?.id || '')));
-  const stem = cleanId(base, 'annotations');
-  let id = stem;
-  let suffix = 2;
-  while (ids.has(id)) {
-    id = `${stem}_${suffix}`;
-    suffix += 1;
-  }
-  return id;
-};
+export const uniqueAnnotationSetId = (sets, base = 'annotations') => (
+  nextNumberedId(cleanId(base, 'annotations'), Array.isArray(sets) ? sets : [])
+);
 
 // The annotation metadata field that binds a target to a record-catalog key.
 export const ANNOTATION_RECORD_BINDING_KEY = '_gbdraw_web_target_record_key';

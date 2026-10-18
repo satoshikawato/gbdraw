@@ -130,7 +130,8 @@ const MODES = {
           // PD-OI-025: clearing a source keeps the logical series width.
           state.linearSeqs[0].depth = sourceRow(nextSourced, nextWidth);
         }),
-        issue: (index) => editor.linearTrackSlotIssue(state.adv.linear_track_slots[index], index)
+        issue: (index) => editor.linearTrackSlotIssue(state.adv.linear_track_slots[index], index),
+        duplicate: (index) => editor.duplicateLinearTrackSlot(index)
       };
     }
   }
@@ -177,6 +178,22 @@ const CASES = [
     name: 'only the series that loses its last source loses its managed row',
     rows: [{ id: 'depth_1', track: 0 }, { id: 'depth_2', track: 1 }], before: [0, 1], after: [1], width: 2,
     expected: ['depth_2:1:on']
+  },
+  {
+    // A new managed row takes its preferred ID, then that ID numbered with the
+    // first unused number, as Add track and Duplicate do.
+    name: 'a gained series whose preferred ID is taken takes the first unused number',
+    rows: [{ id: 'depth_2', track: 0, manual: true }, { id: 'depth_2_2', track: 0, manual: true }], before: [0], after: [0, 1],
+    expected: ['depth_2:0:on:manual', 'depth_2_2:0:on:manual', 'depth_2_3:1:on']
+  },
+  {
+    // Circular gives the first series `depth` when `depth_1` is taken; Linear numbers `depth_1`.
+    name: 'the first series whose preferred ID is taken',
+    rows: [{ id: 'depth_1', track: 1, manual: true }], before: [1], after: [0, 1],
+    expected: {
+      circular: ['depth_1:1:on:manual', 'depth:0:on'],
+      linear: ['depth_1:1:on:manual', 'depth_1_2:0:on']
+    }
   }
 ];
 
@@ -187,7 +204,8 @@ for (const [mode, adapter] of Object.entries(MODES)) {
       const editor = adapter.create(testCase.rows, testCase.before, width ?? undefined);
       const before = otherRows(editor.slots());
       editor.change(testCase.after, width ?? undefined);
-      assert.deepEqual(depthRows(editor.slots()), testCase.expected);
+      const expected = Array.isArray(testCase.expected) ? testCase.expected : testCase.expected[mode];
+      assert.deepEqual(depthRows(editor.slots()), expected);
       assert.deepEqual(otherRows(editor.slots()), before, 'non-Depth rows keep their order and contents');
       if (testCase.issueFor) {
         const index = editor.slots().findIndex((slot) => slot.id === testCase.issueFor);
@@ -196,6 +214,18 @@ for (const [mode, adapter] of Object.entries(MODES)) {
     });
   }
 }
+
+// OV-1099: a Linear copy of an unedited Depth row is named `depth_2`, so it is
+// a managed row like its source and leaves with the last Depth source, as a
+// Circular copy does. (On the base it was `depth_copy`, a manual row that
+// stayed with a row issue.) Flip this case if the Owner keeps copies manual.
+test('linear: a Duplicate of an unedited Depth row is managed and leaves with the last source', () => {
+  const editor = MODES.linear.create([{ id: 'depth', track: 0 }], [0], 1);
+  editor.duplicate(editor.slots().findIndex((slot) => slot.id === 'depth'));
+  assert.deepEqual(depthRows(editor.slots()), ['depth:0:on', 'depth_2:0:on']);
+  editor.change([], 1);
+  assert.deepEqual(depthRows(editor.slots()), []);
+});
 
 // TK-08: a row's Depth legend label is the series name (setDepthTrackLegendLabelForSlot
 // renames the series), so its help and the series card's say so and give the

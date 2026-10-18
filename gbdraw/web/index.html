@@ -6431,7 +6431,7 @@
                                                         <div class="match-cell-sub">{{ member.displayProteinId || '' }}</div>
                                                     </td>
                                                     <td>
-                                                        <action-menu label="FASTA" :title="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`"
+                                                        <action-menu label="FASTA" :title="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`" :aria-label="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`"
                                                                      :items="[
                                                                        { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'Copy nt', member, 'feature-popup'), title: 'Copy nucleotide FASTA', icon: 'ph-copy', live: true, disabled: !hasOrthogroupMemberSequence(member, 'nt'), run: () => copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id, 'feature-popup') },
                                                                        { label: orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'Copy aa', member, 'feature-popup'), title: 'Copy amino-acid FASTA', icon: 'ph-copy', live: true, disabled: !hasOrthogroupMemberSequence(member, 'aa'), run: () => copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id, 'feature-popup') },
@@ -7001,7 +7001,7 @@
                                                     <div class="match-cell-sub" :title="member.assignmentReason">{{ member.proteinId }}<span v-if="member.roleNote"> · {{ member.roleNote }}</span></div>
                                                 </td>
                                                 <td>
-                                                    <action-menu label="FASTA" :title="`FASTA of ${member.proteinId || member.record}`"
+                                                    <action-menu label="FASTA" :title="`FASTA of ${member.proteinId || member.record}`" :aria-label="`FASTA of ${member.proteinId || member.record}`"
                                                                  :items="[
                                                                    { label: 'Copy nt', title: 'Copy nucleotide FASTA', icon: 'ph-copy', disabled: !member.ntFasta, run: () => copyText(member.ntFasta) },
                                                                    { label: 'Copy aa', title: 'Copy amino-acid FASTA', icon: 'ph-copy', disabled: !member.aaFasta, run: () => copyText(member.aaFasta) },
@@ -8190,7 +8190,7 @@
                                                     <span class="font-mono">{{ orthogroupMemberRangeText(member, 'en-US') }}<template v-if="member.strand"> ({{ member.strand }})</template></span><template v-if="member.displayProteinId"> · <span class="font-mono">{{ member.displayProteinId }}</span></template><template v-if="member.product || member.note"> · {{ member.product || member.note }}</template>
                                                 </div>
                                             </div>
-                                            <action-menu class="shrink-0" label="FASTA" :title="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`"
+                                            <action-menu class="shrink-0" label="FASTA" :title="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`" :aria-label="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`"
                                                          :items="[
                                                            { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', 'Copy nt', member), title: 'Copy nucleotide FASTA', icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'nt'), run: () => copyOrthogroupMemberSequence(member, 'nt', selectedOrthogroup) },
                                                            { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', 'Copy aa', member), title: 'Copy amino-acid FASTA', icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'aa'), run: () => copyOrthogroupMemberSequence(member, 'aa', selectedOrthogroup) },

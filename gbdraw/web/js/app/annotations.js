@@ -153,7 +153,7 @@ export const createAnnotationEditor = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const copy = createAnnotationSet(JSON.parse(JSON.stringify(set)));
-    copy.id = uniqueAnnotationSetId(drawing.annotationSets, `${set.id}_copy`);
+    copy.id = uniqueAnnotationSetId(drawing.annotationSets);
     drawing.annotationSets.push(copy);
     return copy;
   };
