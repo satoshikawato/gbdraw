@@ -81,6 +81,8 @@ const REASONS = Object.freeze({
   // A Selected plan with a LOSATP mode that compares every adjacent pair.
   SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs. Choose Run LOSAT for all pairs, or choose Pairwise matches.',
   LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
+  // The LOSATP converter named another derived identity than Generate looked up (run-analysis.js).
+  DERIVED_KEY_MISMATCH: 'The converted LOSATP comparison does not match the settings it was looked up with. If Retry fails the same way, save the Session and report the problem.',
   RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for similarity rings.',
   RING_LOSAT_INPUT: 'Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.',
   SEQUENCE_MISSING: 'Use a comparison file that contains the sequence (FASTA, or GenBank or DDBJ with an ORIGIN sequence).',

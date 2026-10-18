@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "Shared LOSAT job plan and nucleotide raw-key vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs and Web planLosatSourceJobs/prepareLosatSourceBatches/buildLosatCachePayload must give the same jobs, batch FASTA hashes, searchContext, and raw keys. proteinCases are LOSATP plans (D7): Python losatp_job_specs and Web buildLosatJobSpecs give the same specs, prepare_losat_batches(protein=True) and prepareLosatSourceBatches({protein: true}) the same jobs, and build_protein_losat_cache_key (which the Web calls through its Python helper) the raw keys. Batch sides order records by record key (Web sequence uid); keys are ASCII so code-point and localeCompare order agree.",
+  "description": "Shared LOSAT job plan and nucleotide raw-key vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs and Web planLosatSourceJobs/prepareLosatSourceBatches/buildLosatCachePayload must give the same jobs, batch FASTA hashes, searchContext, and raw keys. proteinCases are LOSATP plans (D7): Python losatp_job_specs and Web buildLosatJobSpecs give the same specs, prepare_losat_batches(protein=True) and prepareLosatSourceBatches({protein: true}) the same jobs, and build_protein_losat_cache_key (which the Web calls through its Python helper) the raw keys. Batch sides order records by record key (Web sequence uid); keys are ASCII so code-point and localeCompare order agree. proteinGridCases hold LOSATP 2x2 grid search-order and pair-index vectors that tests/web/linear-comparisons.test.mjs and tests/test_api_request_render.py check.",
   "cases": [
     {
       "name": "two single-record files, LOSATN megablast (lambda/DE3 shape)",
@@ -2005,6 +2005,129 @@
           ]
         ]
       }
+    }
+  ],
+  "proteinGridCases": [
+    {
+      "description": "LOSATP Collinear, Search between All records, orthogroup inference on, records a b / c d in a 2x2 CLI row grid. Each search is [queryIndex, subjectIndex, displayPair, pairIndex] in search order; a displayed pair's pairIndex names its payload. The Web (tests/web/linear-comparisons.test.mjs) and the Python API (tests/test_api_request_render.py) both check this case in proteinGridCases of tests/fixtures/losat_job_plan_cases.json.",
+      "grid": [
+        [
+          1,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "searchScope": "all",
+      "inferOrthogroups": true,
+      "searches": [
+        [
+          0,
+          0,
+          false,
+          0
+        ],
+        [
+          1,
+          1,
+          false,
+          1
+        ],
+        [
+          2,
+          2,
+          false,
+          2
+        ],
+        [
+          3,
+          3,
+          false,
+          3
+        ],
+        [
+          0,
+          1,
+          false,
+          0
+        ],
+        [
+          1,
+          0,
+          false,
+          0
+        ],
+        [
+          0,
+          2,
+          true,
+          0
+        ],
+        [
+          2,
+          0,
+          false,
+          0
+        ],
+        [
+          0,
+          3,
+          true,
+          1
+        ],
+        [
+          3,
+          0,
+          false,
+          1
+        ],
+        [
+          1,
+          2,
+          true,
+          2
+        ],
+        [
+          2,
+          1,
+          false,
+          2
+        ],
+        [
+          1,
+          3,
+          true,
+          3
+        ],
+        [
+          3,
+          1,
+          false,
+          3
+        ],
+        [
+          2,
+          3,
+          false,
+          2
+        ],
+        [
+          3,
+          2,
+          false,
+          2
+        ]
+      ]
     }
   ]
 }

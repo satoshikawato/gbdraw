@@ -430,23 +430,12 @@ class DerivedLosatpPair:
     pair_index: int | None = None
 
 
-def _is_unset(value: object) -> bool:
-    if value is None or type(value).__name__ in {"JsNull", "JsUndefined"}:
-        return True
-    return isinstance(value, str) and value.strip().lower() in {
-        "",
-        "null",
-        "undefined",
-        "none",
-    }
-
-
 def _setting_int(value: DerivedSettingValue, default: int) -> int:
-    return default if _is_unset(value) else int(cast(Union[str, int, float], value))
+    return default if value is None else int(cast(Union[str, int, float], value))
 
 
 def _setting_text(value: DerivedSettingValue, default: str) -> str:
-    return default if _is_unset(value) else str(value)
+    return default if value is None else str(value)
 
 
 def normalize_derived_losatp_settings(
@@ -475,7 +464,8 @@ def normalize_derived_losatp_settings(
     """Validate and normalize the settings of one LOSATP conversion.
 
     Numbers normalize to numbers, so ``0``, ``0.0`` and ``"0"`` give one
-    identity; spellings normalize through their mode owners.
+    identity; spellings normalize through their mode owners. ``None`` is an
+    unset setting, which takes its default.
     """
 
     from .collinearity import (
@@ -501,16 +491,20 @@ def normalize_derived_losatp_settings(
         normalized_membership_mode = normalize_orthogroup_membership_mode(
             _setting_text(membership_mode, "anchor_core_v1")
         )
-        if not _is_unset(member_max_hits):
+        if member_max_hits is not None:
             normalized_member_max_hits = _setting_int(member_max_hits, 0)
             if normalized_member_max_hits <= 0:
                 raise ValueError("orthogroup_member_max_hits must be > 0 or None")
+    paralog_links = 2
+    if normalized_mode in {"orthogroup", "collinear"}:
+        paralog_links = _setting_int(max_paralog_links, 2)
+        if paralog_links <= 0:
+            raise ValueError("collinear_max_paralog_links_per_orthogroup must be > 0")
     params = LosslessCollinearityParameters()
     unit = "auto"
     color = "orientation"
     anchor = "rbh"
     scope = "adjacent"
-    paralog_links = 2
     infer = True
     explicit = False
     if normalized_mode == "collinear":
@@ -522,9 +516,6 @@ def normalize_derived_losatp_settings(
         color = normalize_collinearity_color_mode(_setting_text(color_mode, "orientation"))
         anchor = normalize_collinearity_anchor_mode(_setting_text(anchor_mode, "rbh"))
         scope = normalize_collinearity_search_scope(_setting_text(search_scope, "adjacent"))
-        paralog_links = _setting_int(max_paralog_links, 2)
-        if paralog_links <= 0:
-            raise ValueError("collinear_max_paralog_links_per_orthogroup must be > 0")
         params = LosslessCollinearityParameters(
             min_anchors=_setting_int(min_anchors, 1),
             max_unit_gap=_setting_int(max_unit_gap, 0),
@@ -593,6 +584,7 @@ def _derived_mode_settings(settings: DerivedLosatpSettings) -> dict[str, object]
         blocks["orthogroup"] = {
             "membershipMode": settings.membership_mode,
             "memberMaxHits": settings.member_max_hits,
+            "maxParalogLinksPerOrthogroup": settings.max_paralog_links,
         }
     return blocks
 
@@ -609,7 +601,6 @@ def _derived_collinear_settings(settings: DerivedLosatpSettings) -> dict[str, ob
             "maxDiagonalDrift": settings.max_diagonal_drift,
             "maxConflicts": settings.max_conflicts,
             "mergeOrientation": settings.merge_orientation,
-            "maxParalogLinksPerOrthogroup": settings.max_paralog_links,
         },
     }
 

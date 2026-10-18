@@ -309,7 +309,6 @@ const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
  * @property {number} canonicalLength
  * @property {Record<string, unknown>} [proteinMap]
  * @property {number} [proteinCount]
- * @property {string} [proteinCacheKey]
  * @property {string} [proteinSetHash]
  * @property {string} [recordAnalysisId]
  * @property {string} [recordInstanceKey]
@@ -3886,14 +3885,12 @@ export const createRunAnalysis = ({
               const res = response.result;
               if (res.error) throw res.error;
               const fastaHash = await hashText(res.fasta || '');
-              const proteinCacheKey = String(res.display_binding_hash || '');
               entry = {
                 fasta: res.fasta,
                 recordId: res.record_id || `seq_${idx + 1}`,
                 canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta),
                 proteinMap: res.protein_map || {},
                 proteinCount: res.protein_count || 0,
-                proteinCacheKey,
                 proteinSetHash: String(res.protein_set_hash || ''),
                 recordAnalysisId: String(res.record_analysis_id || ''),
                 recordInstanceKey: String(res.record_instance_key || recordInstanceKey),

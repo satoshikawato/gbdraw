@@ -66,6 +66,34 @@ assert.equal(Object.hasOwn(runAnalysis, 'buildLosatDerivedPayloadCachePayload'),
   assert.doesNotMatch(source, /derived-option-conformance/);
 }
 
+// Review F3: a converter whose identity key differs from the looked-up key is
+// a classified Result failure that names its reason. The check runs as written
+// in run-analysis.js, on the converter's reply.
+{
+  const { diagnosticError, normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  const source = await readFile(runAnalysisPath, 'utf8');
+  const start = source.indexOf('              convertedPayload = /** @type {Record<string, any>} */ (response.result);');
+  const end = source.indexOf('              if (["orthogroup", "collinear"].includes(blastpMode)) {', start);
+  assert.ok(start > 0 && end > start);
+  const admit = new Function(
+    'response', 'useDerivedProteinPayloadCache', 'derivedCacheKey', 'diagnosticError',
+    `let convertedPayload;\n${source.slice(start, end)}\nreturn convertedPayload;`
+  );
+  assert.deepEqual(admit({ result: { pairs: [], identityKey: 'a'.repeat(64) } }, true, 'a'.repeat(64), diagnosticError), { pairs: [] });
+  let thrown = null;
+  try {
+    admit({ result: { pairs: [], identityKey: 'b'.repeat(64) } }, true, 'a'.repeat(64), diagnosticError);
+  } catch (error) {
+    thrown = error;
+  }
+  const failure = normalizeUserFacingError(thrown);
+  assert.equal(failure.code, 'RESULT_INVALID');
+  assert.equal(failure.stage, 'result-admission');
+  assert.equal(failure.operation, 'convertLosatpPairsToGenomicPayload');
+  assert.equal(failure.context.reason, 'DERIVED_KEY_MISMATCH');
+  assert.match(failure.summary, /does not match the settings it was looked up with/);
+}
+
 assert.equal(
   hasRequiredCanonicalAnalysisResource('collinear', {
     pairs: [],
