@@ -3736,8 +3736,8 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
-      circular: state.drawings.circular.form.multi_record_canvas,
-      linear: state.drawings.linear.linearRecordLayoutEnabled.value
+      circular: state.drawingOf('circular').form.multi_record_canvas,
+      linear: state.drawingOf('linear').linearRecordLayoutEnabled.value
     };
   })).toEqual({ circular: true, linear: true });
   await page.evaluate((content) => {
@@ -3760,7 +3760,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
-    state.drawings.circular.form.multi_record_canvas = false;
+    state.drawingOf('circular').form.multi_record_canvas = false;
     await app.setLinearRecordLayoutEnabled(false);
     app.sessionTitle = 'explicit-layout-opt-outs';
   });
@@ -3774,16 +3774,16 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
-      circular: state.drawings.circular.form.multi_record_canvas,
-      linear: state.drawings.linear.linearRecordLayoutEnabled.value
+      circular: state.drawingOf('circular').form.multi_record_canvas,
+      linear: state.drawingOf('linear').linearRecordLayoutEnabled.value
     };
   })).toEqual({ circular: false, linear: false });
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
-      circular: state.drawings.circular.form.multi_record_canvas,
-      linear: state.drawings.linear.linearRecordLayoutEnabled.value
+      circular: state.drawingOf('circular').form.multi_record_canvas,
+      linear: state.drawingOf('linear').linearRecordLayoutEnabled.value
     };
   })).toEqual({ circular: true, linear: true });
 });

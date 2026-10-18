@@ -1534,7 +1534,7 @@ test('the similarity-group name fields are named by their visible labels', async
   const groupId = await page.evaluate(() => window.__GBDRAW_APP__.selectedOrthogroupId);
   const savedDescription = () => page.evaluate(async (id) => {
     const { state } = await import('./js/state.js');
-    return state.drawings.linear.orthogroupDescriptionOverrides[id] ?? null;
+    return state.drawingOf('linear').orthogroupDescriptionOverrides[id] ?? null;
   }, groupId);
   expect(await savedDescription()).toBeNull();
   await description.fill('Written by me');

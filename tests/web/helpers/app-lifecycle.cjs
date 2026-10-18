@@ -516,7 +516,7 @@ const snapshotUserOwnedState = (page, { mode = null } = {}) => page.evaluate(asy
   const { state } = await import('/gbdraw/web/js/state.js');
   const config = await import('/gbdraw/web/js/services/config.js');
   const drawingMode = requestedMode || state.mode.value;
-  const drawing = state.drawings[drawingMode];
+  const drawing = state.drawingOf(drawingMode);
   const editor = config.buildEditorStateData(drawing);
   delete editor.featureCatalog;
   const features = config.buildFeatureStateData(drawing);
@@ -663,8 +663,8 @@ const readWarmBaseline = async (page) => ({
     const config = await import('/gbdraw/web/js/services/config.js');
     return JSON.parse(JSON.stringify({
       drawings: Object.fromEntries(['circular', 'linear'].map((mode) => [mode, {
-        config: config.buildConfigData(state.drawings[mode]),
-        ui: config.buildUiStateData(state.drawings[mode], { includePreviewNavigation: false })
+        config: config.buildConfigData(state.drawingOf(mode)),
+        ui: config.buildUiStateData(state.drawingOf(mode), { includePreviewNavigation: false })
       }])),
       // The test-owned lists an init script starts (`__AUDIT_LIFECYCLE__`).
       testLists: Object.fromEntries(Object.keys(window)
@@ -703,11 +703,11 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
     }
     await app.resetSettings();
     for (const [mode, { config: settings }] of Object.entries(drawings)) {
-      config.applyCapturedConfigData(state.drawings[mode], settings, { resolveTrackPlacements: false });
+      config.applyCapturedConfigData(state.drawingOf(mode), settings, { resolveTrackPlacements: false });
     }
     await window.Vue.nextTick();
     for (const [mode, { ui }] of Object.entries(drawings)) {
-      config.applyUiStateData(state.drawings[mode], ui, { restorePreviewNavigation: false });
+      config.applyUiStateData(state.drawingOf(mode), ui, { restorePreviewNavigation: false });
     }
   }, restorePoint.drawings);
   await settleLive(page);

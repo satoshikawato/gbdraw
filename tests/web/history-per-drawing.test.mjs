@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { File } from 'node:buffer';
 import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -31,7 +32,7 @@ const { DRAWING_SLICES } = await import('./helpers/drawing-state.mjs');
 // A3 review Low 5: every slice of the drawing and its input type.
 /** @param {'circular' | 'linear'} id */
 const hashOf = (id) => {
-  const drawing = state.drawings[id];
+  const drawing = modeDrawing(state, id);
   const slices = Object.fromEntries(Object.entries(DRAWING_SLICES)
     .map(([name, slice]) => [name, slice.capture(drawing.slices[name])]));
   return createHash('sha256').update(JSON.stringify({
@@ -42,7 +43,8 @@ const hashOf = (id) => {
 test('Undo walks the shown drawing\'s History and never changes the other drawing', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular, linear } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
   circular.unmanagedConfigOverrides['objects.circular.a'] = 1;
   linear.unmanagedConfigOverrides['objects.linear.b'] = 2;
 
@@ -98,7 +100,8 @@ test('Undo walks the shown drawing\'s History and never changes the other drawin
 test('Reset all drawings is one project step: one Undo restores every drawing', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular, linear } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
   if (state.activeDrawingId.value !== 'linear') app.selectDrawing('linear');
   // The app's palette colors hold every palette key, as a palette load leaves them.
   const { PALETTE_SLICE } = await import('../../gbdraw/web/js/services/drawing/palette.js');
@@ -142,7 +145,7 @@ test('Reset all drawings is one project step: one Undo restores every drawing', 
 test('a switch settles the departing drawing\'s open step in that drawing', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
   if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
   const circularSteps = history.getUndoCount();
   const before = circular.form.prefix;
@@ -209,7 +212,7 @@ test('a title edit in Circular is undone in Linear', async () => {
 test('a Circular step older than the Session edits is undone after them and keeps Linear\'s input type', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
   if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
   state.lInputType.value = 'gb';
   const before = circular.form.prefix;
@@ -245,13 +248,13 @@ test('Reset Settings leaves the multi-record layout of a new drawing', async () 
   for (const [shown, canvas] of /** @type {const} */ ([['circular', false], ['circular', true], ['linear', false]])) {
     const app = createAppSetup();
     if (state.activeDrawingId.value !== shown) app.selectDrawing(shown);
-    const { circular } = state.drawings;
+    const circular = modeDrawing(state, 'circular');
     circular.form.multi_record_canvas = canvas;
     circular.layoutPreferences.circular.multi.legend = 'top';
     await app.resetSettings();
     assert.deepEqual(JSON.parse(JSON.stringify(circular.layoutPreferences)), fresh,
       `the Circular layout after a Reset with ${shown} shown and the canvas ${canvas ? 'on' : 'off'}`);
-    assert.deepEqual(JSON.parse(JSON.stringify(state.drawings.linear.layoutPreferences)), fresh);
+    assert.deepEqual(JSON.parse(JSON.stringify(modeDrawing(state, 'linear').layoutPreferences)), fresh);
   }
 });
 
@@ -260,7 +263,7 @@ test('Reset Settings leaves the multi-record layout of a new drawing', async () 
 test('Reset Settings re-derives the comparison rings from the kept ring files', async () => {
   const app = createAppSetup();
   if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
-  const rings = state.drawings.circular.circularConservation;
+  const rings = modeDrawing(state, 'circular').circularConservation;
   const ringsOf = () => JSON.parse(JSON.stringify({ enabled: rings.enabled, series: rings.series }));
   state.files.c_conservation_fastas = [new File(['>r\nACGT\n'], 'ring.fa')];
   app.changeCircularConservationSource();
@@ -302,7 +305,8 @@ const show = (app, id) => {
 test('a step that also clears a draft is its drawing\'s step and leaves the other drawing\'s History', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular, linear } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
   show(app, 'circular');
   const draftBefore = state.newSpecRule.val;
   await history.runUndoable('Type pattern', () => { state.newSpecRule.val = 'abc'; });
@@ -338,7 +342,7 @@ test('a step that also clears a draft is its drawing\'s step and leaves the othe
 test('a selection outside any step is unsaved only with the next step, in its drawing', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
   show(app, 'circular');
   const selectedBefore = state.selectedAnnotation.value;
   const prefixBefore = circular.form.prefix;
@@ -374,7 +378,7 @@ test('the feature panel tab reset at a switch is no change and no step', async (
   show(app, 'linear');
   assert.equal(state.featurePanelTab.value, 'colors');
   assert.equal(await history.hasChangesSinceSavePoint(), false);
-  await history.runUndoable('Linear prefix', () => { state.drawings.linear.form.prefix = 'lin-after-switch'; });
+  await history.runUndoable('Linear prefix', () => { modeDrawing(state, 'linear').form.prefix = 'lin-after-switch'; });
   show(app, 'circular');
   assert.equal(history.canUndo(), false, 'Circular does not see the Linear step');
   show(app, 'linear');
@@ -411,7 +415,7 @@ test('a title typed in a step open at the switch is undone, without the tab rese
 test('a prefix and a draft changed in a step open at the switch are undone together', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
   show(app, 'circular');
   await history.captureBaseline();
   const before = { prefix: circular.form.prefix, draft: state.newSpecRule.val };
@@ -433,10 +437,10 @@ test('a prefix and a draft changed in a step open at the switch are undone toget
 test('a step that changes nothing after a click records nothing and keeps the other drawing\'s Redo', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
   show(app, 'linear');
   await history.captureBaseline();
-  await history.runUndoable('Linear prefix', () => { state.drawings.linear.form.prefix = 'redo-kept'; });
+  await history.runUndoable('Linear prefix', () => { modeDrawing(state, 'linear').form.prefix = 'redo-kept'; });
   await app.undoHistory();
   show(app, 'circular');
   history.markSavePoint();
@@ -484,7 +488,7 @@ test('a step past the project limit drops only the oldest project step', async (
     await history.runUndoable('Rename Session', () => { state.sessionTitle.value = `T${index}`; });
   }
   assert.ok(history.historyLimitMessage.value, 'the oldest title step dropped');
-  await history.runUndoable('Add rule', () => { state.drawings.circular.form.prefix = 'mixed'; state.newSpecRule.val = 'x'; });
+  await history.runUndoable('Add rule', () => { modeDrawing(state, 'circular').form.prefix = 'mixed'; state.newSpecRule.val = 'x'; });
   assert.equal(history.historyLimitMessage.value, '', 'the step dropped nothing');
   while (history.canUndo()) assert.equal(await app.undoHistory(), true);
   assert.equal(state.sessionTitle.value, 'T0', 'only the first title step is gone');
@@ -495,7 +499,7 @@ test('a step past the project limit drops only the oldest project step', async (
 test('an Undo of Reset after the limit dropped a newer step keeps that step\'s change', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
   show(app, 'circular');
   circular.form.prefix = 'pre-reset';
   await history.captureBaseline();
@@ -531,7 +535,7 @@ test('two Undo presses at once over project steps take one step', async () => {
 test('an Undo of Reset from the other drawing keeps a later step of the hidden drawing', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
   show(app, 'linear');
   circular.form.prefix = 'pre-reset';
   await history.captureBaseline();
@@ -584,7 +588,7 @@ test('Reset all drawings resets each drawing\'s applied palette and its Undo res
 test('turning Instant Preview on applies every drawing\'s queued palette in one step', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
-  const { circular } = state.drawings;
+  const circular = modeDrawing(state, 'circular');
   show(app, 'circular');
   app.setPaletteInstantPreview(false);
   state.appliedPaletteName.value = 'circular-applied';

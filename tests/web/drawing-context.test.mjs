@@ -1,5 +1,5 @@
 // The drawing context (plan OV-80, PR-0a to PR-1): a diagram mode's settings
-// and edits live only in its drawing (`state.drawings[mode]`,
+// and edits live only in its drawing (`modeDrawing(state, mode)`,
 // `state.activeDrawing()`). A service reads them from the drawing it is given;
 // an owner resolves the drawing of each action. Each mode has its own drawing
 // (PR-1).
@@ -30,8 +30,7 @@ import {
   PROJECT_KEYS,
   STORE_KEYS,
   TRANSIENT_KEYS,
-  UI_KEYS
-} from './helpers/drawing-state.mjs';
+  UI_KEYS, modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = { Vue: {
   ref: (value) => ({ value }), reactive: (value) => value,
@@ -52,7 +51,7 @@ const DRAWING_CLASSES = {
 test('every state key and drawing member is in exactly one class', () => {
   for (const [classes, members] of [
     [STATE_CLASSES, Object.keys(state)],
-    [DRAWING_CLASSES, Object.keys(state.drawings.circular)]
+    [DRAWING_CLASSES, Object.keys(modeDrawing(state, 'circular'))]
   ]) {
     const classOf = new Map();
     for (const [name, keys] of Object.entries(classes)) {
@@ -68,10 +67,11 @@ test('every state key and drawing member is in exactly one class', () => {
 });
 
 test('only the drawings hold the drawing keys, one drawing per mode', () => {
-  const { circular, linear } = state.drawings;
-  assert.deepEqual(Object.keys(state.drawings), ['circular', 'linear']);
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
+  assert.deepEqual([...state.drawings.keys()], ['circular', 'linear']);
   assert.notEqual(circular, linear, 'each diagram mode has its own drawing');
-  assert.ok(Object.isFrozen(state.drawings) && Object.isFrozen(circular) && Object.isFrozen(linear));
+  assert.ok(state.drawings instanceof Map && Object.isFrozen(circular) && Object.isFrozen(linear));
   assert.deepEqual(Object.keys(circular), [...DRAWING_IDENTITY_KEYS, ...DRAWING_KEYS]);
   assert.deepEqual(Object.keys(linear), [...DRAWING_IDENTITY_KEYS, ...DRAWING_KEYS]);
   assert.deepEqual([circular.id, circular.mode, linear.id, linear.mode], ['circular', 'circular', 'linear', 'linear']);
@@ -80,7 +80,7 @@ test('only the drawings hold the drawing keys, one drawing per mode', () => {
     && circular[key] === linear[key]);
   assert.deepEqual(shared, [], 'each drawing owns its members');
   assert.deepEqual(DRAWING_KEYS.filter((key) => Object.hasOwn(state, key)), [], 'a drawing key is on state');
-  assert.equal(state.activeDrawing(), state.drawings[state.activeDrawingId.value]);
+  assert.equal(state.activeDrawing(), modeDrawing(state, state.activeDrawingId.value));
 });
 
 // `state.<key>`, `state?.<key>`, and `{ <key> } = state`, with comments removed.

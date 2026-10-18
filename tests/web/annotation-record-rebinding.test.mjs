@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -38,7 +39,7 @@ const band = (id, recordId) => ({ id, target: coordinateTarget({ start: 1, end: 
 test('a Linear multi-record expansion binds an annotation to its record card, and a no-op refresh binds nothing', async () => {
   const app = createAppSetup();
   app.selectDrawing('linear');
-  const drawing = state.drawings.linear;
+  const drawing = modeDrawing(state, 'linear');
   app.setLinearSeqPrimaryFile(0, 'gb', genbank(['chr0', 40]));
   await app.refreshLinearRecordSelectors();
   addAnnotationSet(drawing.slices.annotationSets, createAnnotationSet({ id: 'set', annotations: [band('on-chr2', 'chr2')] }));

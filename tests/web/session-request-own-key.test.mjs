@@ -3,6 +3,7 @@
 // record list with a region does not dereference null.
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -29,7 +30,7 @@ const bytes = new TextEncoder().encode('LOCUS c.gb\n//\n');
 const genbank = {
   name: 'c.gb', type: 'text/plain', size: bytes.byteLength, lastModified: 1, arrayBuffer: async () => bytes.slice().buffer
 };
-const drawing = state.drawings.circular;
+const drawing = modeDrawing(state, 'circular');
 
 // Every case starts from one Circular GenBank file and its own form values.
 const circularState = (form) => {

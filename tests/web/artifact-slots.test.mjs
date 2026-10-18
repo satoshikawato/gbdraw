@@ -6,6 +6,7 @@
 // alignment plan and record translations, and every editor intent.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = { Vue: {
   ref: value => ({ value }), reactive: value => value, toRaw: value => value,
@@ -92,7 +93,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   const circular = snapshots.captureArtifactSlot();
   assert.ok(Object.isFrozen(circular));
   assert.deepEqual(circular.legendInventory, ['CDS', 'tRNA']);
-  snapshots.installArtifactSlot(null, { drawing: state.drawings.linear });
+  snapshots.installArtifactSlot(null, { drawing: modeDrawing(state, 'linear') });
 
   // The arriving empty Linear slot: no Result, its own mode, no committed Session.
   assert.deepEqual(state.results.value, []);
@@ -111,7 +112,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
 
   // The displayed artifact is the Linear drawing's now (its mode is linear; the test installs it without a switch).
   const linear = snapshots.captureArtifactSlot();
-  snapshots.installArtifactSlot(circular, { drawing: state.drawings.circular });
+  snapshots.installArtifactSlot(circular, { drawing: modeDrawing(state, 'circular') });
   SWAPPED.forEach((key) => assert.strictEqual(state[key].value, values[key], key));
   assert.strictEqual(canonicalRenderArtifactOwner.capture().committedCanonicalSession, committed.committedCanonicalSession);
   assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, committed.activeSessionResourceTable);
@@ -119,7 +120,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
 
   // The Linear slot captured while empty installs as empty again.
-  snapshots.installArtifactSlot(linear, { drawing: state.drawings.linear });
+  snapshots.installArtifactSlot(linear, { drawing: modeDrawing(state, 'linear') });
   assert.deepEqual(state.results.value, []);
   assert.equal(state.generatedMode.value, 'linear');
 });
@@ -128,7 +129,9 @@ test('installing a slot of another drawing is refused', async () => {
   await fillCircularArtifact();
   const circular = snapshots.captureArtifactSlot();
   assert.equal(circular.drawingId, state.activeDrawing().id, 'the slot is of the drawing it was captured for');
-  assert.throws(() => snapshots.installArtifactSlot(circular, { drawing: state.drawings.linear }), /drawing circular.*drawing linear/);
+  assert.throws(() => snapshots.installArtifactSlot(circular, { drawing: modeDrawing(state, 'linear') }),
+    (error) => error.code === 'RESULT_INVALID' && error.context.reason === 'DRAWING_MISMATCH'
+      && error.context.artifactDrawingId === 'circular' && error.context.drawingId === 'linear');
 });
 
 // OV-104 (PD-OI-052): decoration continuity throws on a mode change
@@ -139,7 +142,7 @@ test('a Generate after a switch reads no decoration of the other mode\'s Result'
   const { captureDecorationContinuity } = await import('../../gbdraw/web/js/app/legend-layout/decoration-continuity.js');
   const { values } = await fillCircularArtifact();
   const circular = snapshots.captureArtifactSlot();
-  snapshots.installArtifactSlot(null, { drawing: state.drawings.linear });
+  snapshots.installArtifactSlot(null, { drawing: modeDrawing(state, 'linear') });
   const capture = () => captureDecorationContinuity({
     canonical: { renderRequest: { mode: 'linear', records: [] }, resources: {} },
     results: state.results.value,
@@ -149,7 +152,7 @@ test('a Generate after a switch reads no decoration of the other mode\'s Result'
     projectRecordIdentity: () => assert.fail('no Result of the other mode reaches continuity')
   });
   assert.equal(capture(), null);
-  snapshots.installArtifactSlot(circular, { drawing: state.drawings.circular });
+  snapshots.installArtifactSlot(circular, { drawing: modeDrawing(state, 'circular') });
   assert.strictEqual(state.results.value, values.results);
 });
 
@@ -179,9 +182,9 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
   const linearResult = { name: 'linear.svg' };
   const otherLinearResult = { name: 'other.svg' };
   const circularResult = { name: 'circular.svg' };
-  const kept = createArtifactSlot({ drawing: state.drawings.linear, values: { results: [otherLinearResult, linearResult], selectedResultIndex: 1 } });
+  const kept = createArtifactSlot({ drawing: modeDrawing(state, 'linear'), values: { results: [otherLinearResult, linearResult], selectedResultIndex: 1 } });
   assert.equal(kept.drawingId, 'linear');
-  assert.equal(kept.values.generatedMode, state.drawings.linear.mode, 'an unset value is the empty slot\'s of the drawing\'s mode');
+  assert.equal(kept.values.generatedMode, modeDrawing(state, 'linear').mode, 'an unset value is the empty slot\'s of the drawing\'s mode');
   const slots = new Map([[kept.drawingId, kept]]);
   /** @param {'circular' | 'linear'} id @param {'circular' | 'linear'} shownId @param {unknown} shown */
   const selected = (id, shownId, shown) => readArtifactOfDrawing(id, shownId, slots, () => shown,
@@ -206,7 +209,9 @@ test('a rerender lands in the artifact of its Result\'s drawing', async () => {
   /** @type {unknown[][]} */
   const installed = [];
   const installResults = (/** @type {unknown[]} */ results) => { installed.push(results); state.results.value = results; };
-  assert.throws(() => snapshots.installRedrawnArtifact('linear', redrawn, { installResults }), /drawing linear.*drawing circular/);
+  assert.throws(() => snapshots.installRedrawnArtifact('linear', redrawn, { installResults }),
+    (error) => error.code === 'RESULT_INVALID' && error.context.reason === 'DRAWING_MISMATCH'
+      && error.context.drawingId === 'linear' && error.context.artifactDrawingId === 'circular');
   assert.deepEqual(installed, []);
   assert.strictEqual(state.results.value, before.results);
   assert.strictEqual(state.featureCatalog.value, before.featureCatalog);

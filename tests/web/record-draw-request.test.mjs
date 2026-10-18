@@ -3,6 +3,7 @@
 // records and rows, the comparison indexes, the record display rows, and the
 // annotations bound to the OFF record, which wait in the draft.
 import assert from 'node:assert/strict';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -28,7 +29,7 @@ const blast = genbank('a-to-c.tsv');
 
 installShownDrawing('linear');
 state.lInputType.value = 'gb';
-const drawing = state.drawings.linear;
+const drawing = modeDrawing(state, 'linear');
 state.linearSeqs.splice(0, Infinity, ...['a', 'b', 'c'].map((uid) => ({
   uid, gb: genbank(`${uid}.gb`), gff: null, fasta: null, depth: null, losat_gencode: 1, definition: '',
   record_subtitle: '', file_definition: '', file_subtitle: '', inferred_definition: '', region_record_id: '',

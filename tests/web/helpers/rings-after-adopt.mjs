@@ -6,6 +6,7 @@
 import { File } from 'node:buffer';
 import { mock } from 'node:test';
 import { installFakeSvgDom } from '../fake-svg-dom.mjs';
+import { modeDrawing } from './drawing-state.mjs';
 
 const at = (path) => new URL(path, import.meta.url).href;
 globalThis.window = {
@@ -35,7 +36,7 @@ mock.module(runAnalysisUrl, {
 const { state } = await import(at('../../../gbdraw/web/js/state.js'));
 const { createAppSetup } = await import(at('../../../gbdraw/web/js/app/app-setup.js'));
 createAppSetup();
-const rings = state.drawings.circular.circularConservation;
+const rings = modeDrawing(state, 'circular').circularConservation;
 state.files.c_conservation_fastas = [new File(['>r\nACGT\n'], 'ring.fa')];
 rings.source = 'losat'; rings.labels = ''; rings.enabled = false; rings.series.splice(0);
 const before = { enabled: rings.enabled, series: rings.series.length };

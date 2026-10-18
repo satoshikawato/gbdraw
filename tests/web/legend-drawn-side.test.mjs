@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -199,7 +200,7 @@ for (const [name, resultMode, shownMode, drawnSide, shownLegend] of MODE_SWITCH)
     assert.deepEqual([state.mode.value, state.generatedMode.value, state.generatedLegendPosition.value], [resultMode, resultMode, drawnSide]);
     assert.equal(state.results.value.length, 1);
     // The flat draft's legend position is the shown mode's.
-    assert.equal(state.drawings[shownMode].form.legend, shownLegend);
+    assert.equal(modeDrawing(state, shownMode).form.legend, shownLegend);
     // The first Legend edit keeps the Legend on the side 0.13.0 drew it.
     const { svg } = transformed[0];
     applyCompositionEdit(svg, { legendSide: storedSide(svg), legendLocalBox: null });

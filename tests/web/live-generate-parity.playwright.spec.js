@@ -1209,7 +1209,7 @@ test.describe('the warm app page', () => {
       mode: app.mode,
       results: app.results.length,
       linearSources: state.linearSeqs.filter((seq) => seq.gb || seq.gff || seq.fasta).length,
-      showLabelsLinear: state.drawings.linear.form.show_labels_linear,
+      showLabelsLinear: state.drawingOf('linear').form.show_labels_linear,
       undo: window.__GBDRAW_HISTORY__.getUndoCount(),
       leftByCase: window.leftByCase ?? null
     };

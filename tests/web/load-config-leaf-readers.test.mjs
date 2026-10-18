@@ -9,6 +9,7 @@ import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -138,8 +139,8 @@ test('E1a: a retired name and an older option value are read as their current na
   session.config.adv.depth_tick_interval = 7;
   session.config.form.linear_track_layout = 'spreadout';
   assert.deepEqual(await load(session), []);
-  assert.equal(state.drawings.linear.adv.depth_large_tick_interval, 7);
-  assert.equal(state.drawings.linear.form.linear_track_layout, 'above');
+  assert.equal(modeDrawing(state, 'linear').adv.depth_large_tick_interval, 7);
+  assert.equal(modeDrawing(state, 'linear').form.linear_track_layout, 'above');
 });
 
 // TB32: the keys of a Session 27-39 draft no gbdraw writer wrote.
@@ -159,7 +160,7 @@ test('E1a: a retired name stored with its current name gives way to it', async (
   session.config.adv.depth_large_tick_interval = 9;
   session.config.adv.depth_tick_interval = 7;
   assert.deepEqual(await load(session), []);
-  assert.equal(state.drawings.linear.adv.depth_large_tick_interval, 9);
+  assert.equal(modeDrawing(state, 'linear').adv.depth_large_tick_interval, 9);
 });
 
 // The configuration-file path (E-OD04): the same rows at the file's own places.

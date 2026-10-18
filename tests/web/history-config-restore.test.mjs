@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = { Vue: {
   ref: value => ({ value }), reactive: value => value,
@@ -45,7 +46,7 @@ for (const [domain, key, first, second] of [
 // R11, TK-12: a Width the row shows as invalid is a draft the app wrote, so
 // Undo and Redo install it as captured; only Load reads a file's stack.
 {
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   const slot = () => drawing.adv.circular_track_slots.find(({ id }) => id === 'gc_content');
   const original = structuredClone(slot().width ?? null);
   await history.initializeIntentBaseline();
@@ -94,7 +95,7 @@ for (const [domain, key, first, second] of [
   });
   // The record settings are the Linear drawing's: its History records them.
   installShownDrawing('linear');
-  const drawing = state.drawings.linear;
+  const drawing = modeDrawing(state, 'linear');
   const card = state.linearSeqs[0];
   const uid = card.uid;
   card.definition = 'Kept organism';
@@ -173,15 +174,15 @@ const keptPlan = { schema: 1, mode: 'position', groupId: 'og-ov383',
 const keptTranslations = [{ recordKey: 'record-a', x: 12, y: -3 }];
 state.similarityAlignmentPlan.value = keptPlan;
 state.linearRecordTranslations.value = keptTranslations;
-const shaftBefore = state.drawings.linear.adv.arrow_shaft_width_ratio;
+const shaftBefore = modeDrawing(state, 'linear').adv.arrow_shaft_width_ratio;
 await history.initializeIntentBaseline();
-await history.runUndoable('Arrow shaft', () => { state.drawings.linear.adv.arrow_shaft_width_ratio = 0.6; });
+await history.runUndoable('Arrow shaft', () => { modeDrawing(state, 'linear').adv.arrow_shaft_width_ratio = 0.6; });
 await history.undo();
-assert.equal(state.drawings.linear.adv.arrow_shaft_width_ratio, shaftBefore);
+assert.equal(modeDrawing(state, 'linear').adv.arrow_shaft_width_ratio, shaftBefore);
 assert.equal(state.similarityAlignmentPlan.value?.groupId, 'og-ov383', 'Undo keeps the alignment plan');
 assert.deepEqual(state.linearRecordTranslations.value, keptTranslations, 'Undo keeps the record translations');
 await history.redo();
-assert.equal(state.drawings.linear.adv.arrow_shaft_width_ratio, 0.6);
+assert.equal(modeDrawing(state, 'linear').adv.arrow_shaft_width_ratio, 0.6);
 assert.equal(state.similarityAlignmentPlan.value?.groupId, 'og-ov383', 'Redo keeps the alignment plan');
 assert.deepEqual(state.linearRecordTranslations.value, keptTranslations, 'Redo keeps the record translations');
 console.log('History restores nullable config values and preserves key guards.');

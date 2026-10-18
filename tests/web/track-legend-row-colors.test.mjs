@@ -10,6 +10,7 @@ import { compileDirectEditorMutationPlan, draftLegendPanelColors, draftLegendRow
 import { buildLinearTrackSlotPayload, normalizeLinearTrackSlots } from '../../gbdraw/web/js/services/linear-track-slot-model.js';
 import { drawnTracks, loadedTracks, skewTrackColor, trackLegendRows, trackRowColor } from '../../gbdraw/web/js/services/track-legend-rows.js';
 import { fixture as paintFixture } from './helpers/svg-style-fixture.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
 const HMMT_AT_SKEW = readJson('../../gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
@@ -218,8 +219,8 @@ test('a palette edit paints a skew track with the colors of the slot that drew i
   const { actions, state, skewFills } = paintFixture({ default: '#d3d3d3', skew_high: '#abcdef', skew_low: '#fedcba' }, [], {
     slots: ['gc_skew:dinucleotide_skew@positive_color=#112233']
   });
-  state.drawings.circular.adv.circular_track_slots_enabled = true;
-  state.drawings.circular.adv.circular_track_slots = [
+  modeDrawing(state, 'circular').adv.circular_track_slots_enabled = true;
+  modeDrawing(state, 'circular').adv.circular_track_slots = [
     { id: 'gc_skew', renderer: 'dinucleotide_skew', params: { positive_color: '#00aa00', negative_color: '#445566' } }
   ];
   actions.applyPaletteToSvg();

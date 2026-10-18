@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -92,7 +93,7 @@ const load = async (session) => {
 };
 // The drawings as Save writes them (complete slices).
 const savedModes = () => Object.fromEntries(MODES.map((mode) => [mode, JSON.parse(JSON.stringify(
-  buildModeSliceData(state.drawings[mode], mode, {
+  buildModeSliceData(modeDrawing(state, mode), mode, {
     selectedFeatureRecordIdx: mode === state.mode.value ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
   })
 ))]));
@@ -193,7 +194,7 @@ test('a Session 46 written by main loads its renamed rows\' edits under their ro
     ['colorOverrides', 'GC skew (+)', 'GC content'], ['colorOverrides', 'W', 'GC skew (-)'], ['strokeOverrides', 'Z', 'GC skew (+)']
   ].map(([store, fromKey, toKey]) => ({ store, fromKey, toKey, outcome: 'moved', slice: 'circular' })));
   await load(fixture);
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   assert.deepEqual({ ...drawing.legendColorOverrides }, { 'GC content': '#ff0000', 'GC skew (-)': '#0000ff' });
   assert.deepEqual(Object.keys(drawing.legendStrokeOverrides), ['GC skew (+)']);
   assert.equal(drawing.legendStrokeOverrides['GC skew (+)'].strokeColor, '#00aa00');

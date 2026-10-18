@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { webLayerOf } from '../../tools/web-owner-graph-detectors.mjs';
-import { DRAWING_EDITOR_KEYS, DRAWING_SLICES } from './helpers/drawing-state.mjs';
+import { DRAWING_EDITOR_KEYS, DRAWING_SLICES, modeDrawing } from './helpers/drawing-state.mjs';
 import { memberWriteSites, refValueWriteSites, templateMemberWrites } from './helpers/drawing-writes.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
@@ -55,7 +55,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const JS = join(ROOT, 'gbdraw', 'web', 'js');
 const SLICE_DIRECTORY = join(JS, 'services', 'drawing');
 const FIXTURES = join(ROOT, 'tests', 'fixtures', 'sessions');
-const MODES = Object.keys(state.drawings);
+const MODES = [...state.drawings.keys()];
 const SLICES = Object.entries(DRAWING_SLICES);
 
 test('each slice view holds its members, every drawing shows it, and no member is in two slices', async () => {
@@ -75,7 +75,7 @@ test('each slice view holds its members, every drawing shows it, and no member i
     .filter((value) => value && typeof value === 'object' && Array.isArray(value.members))));
   assert.deepEqual(new Set(SLICES.map(([, slice]) => slice)), descriptors, 'DRAWING_SLICES names each slice module once');
   for (const mode of MODES) {
-    const drawing = state.drawings[mode];
+    const drawing = modeDrawing(state, mode);
     assert.deepEqual(Object.keys(drawing.slices), SLICES.map(([name]) => name), `${mode}: one handle per slice`);
     for (const [name, slice] of SLICES) {
       const captured = slice.capture(drawing.slices[name]);
@@ -116,7 +116,7 @@ test('install(capture(x)) gives back x, also after reset, on the Session 46 fixt
     assert.equal(loaded?.status, 'ok', `${name}: ${loaded?.error?.message ?? loaded?.status}`);
     for (const mode of MODES) {
       for (const [sliceName, slice] of SLICES) {
-        const handle = state.drawings[mode].slices[sliceName];
+        const handle = modeDrawing(state, mode).slices[sliceName];
         const captured = slice.capture(handle);
         const json = JSON.stringify(captured);
         slice.install(handle, captured);
@@ -144,6 +144,11 @@ test('only a slice writes its members: no module and no template binding writes 
   assert.deepEqual(found, []);
   const html = readFileSync(join(ROOT, 'gbdraw', 'web', 'index.html'), 'utf8');
   assert.deepEqual(templateMemberWrites(html), []);
+});
+
+test('no module reaches a drawing by a mode key of `state.drawings`', () => {
+  const found = webModules().filter((file) => /\bdrawings\.(?:circular|linear)\b|\bdrawings\[/.test(readFileSync(join(JS, file), 'utf8')));
+  assert.deepEqual(found, [], 'resolve a drawing through state.drawingOf or state.drawingList');
 });
 
 test('the slice write scan flags a planted write and leaves reads alone', () => {
@@ -201,9 +206,9 @@ test('the shown drawing is drawings[activeDrawingId], mode follows it, and one w
   for (const id of MODES) {
     installShownDrawing(id);
     assert.equal(state.activeDrawingId.value, id);
-    assert.equal(state.activeDrawing(), state.drawings[id]);
-    assert.equal(state.drawings[id].id, id, 'a drawing is keyed by its ID');
-    assert.equal(state.mode.value, state.drawings[id].mode, 'the shown mode is the shown drawing\'s');
+    assert.equal(state.activeDrawing(), modeDrawing(state, id));
+    assert.equal(modeDrawing(state, id).id, id, 'a drawing is keyed by its ID');
+    assert.equal(state.mode.value, modeDrawing(state, id).mode, 'the shown mode is the shown drawing\'s');
   }
   installShownDrawing(shown);
   assert.throws(() => installShownDrawing('none'), /Unknown drawing/);
@@ -300,7 +305,7 @@ const SAMPLES = {
   }),
   // A drawing's settings as Load gives them, with values no default holds.
   settings: (mode) => {
-    const settings = DRAWING_SLICES.settings.capture(state.drawings[mode].slices.settings);
+    const settings = DRAWING_SLICES.settings.capture(modeDrawing(state, mode).slices.settings);
     return {
       ...settings,
       form: { ...settings.form, plot_title: `Sample ${mode} title` },
@@ -323,7 +328,7 @@ const plain = (value) => {
   if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && 'value' in value) return plain(value.value);
   return value;
 };
-const captures = (mode) => JSON.stringify(SLICES.map(([name, slice]) => slice.capture(state.drawings[mode].slices[name])));
+const captures = (mode) => JSON.stringify(SLICES.map(([name, slice]) => slice.capture(modeDrawing(state, mode).slices[name])));
 // Each Save names its own file: Save asks before downloading a file name again.
 let saves = 0;
 const saveSession = async () => {
@@ -339,7 +344,7 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
   for (const mode of MODES) {
     const other = MODES.find((candidate) => candidate !== mode);
     for (const [name, slice] of SLICES) {
-      const drawing = state.drawings[mode];
+      const drawing = modeDrawing(state, mode);
       const loaded = JSON.stringify(slice.capture(drawing.slices[name]));
       const sample = SAMPLES[name](mode);
       const json = JSON.stringify(sample);
@@ -355,11 +360,11 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
       const reloaded = await importSession({ target: { files: [session], value: 'selected' } },
         { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
       assert.equal(reloaded?.status, 'ok', `${mode} ${name}: ${reloaded?.error?.message ?? reloaded?.status}`);
-      assert.equal(JSON.stringify(slice.capture(state.drawings[mode].slices[name])), json, `${mode} ${name}: Save then Load`);
+      assert.equal(JSON.stringify(slice.capture(modeDrawing(state, mode).slices[name])), json, `${mode} ${name}: Save then Load`);
       assert.equal(captures(other), untouched, `${mode} ${name}: Load leaves the ${other} drawing as saved`);
       // Back to the loaded fixture, which a Save and Load keep as it is (Load
       // resolves the defaults Reset gives, such as the track placements).
-      slice.install(state.drawings[mode].slices[name], JSON.parse(loaded));
+      slice.install(modeDrawing(state, mode).slices[name], JSON.parse(loaded));
     }
   }
 });
@@ -370,7 +375,7 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
 test('Reset Settings keeps the record layout, the OFF records, and the comparison files, inactive', async () => {
   const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
   const settings = DRAWING_SLICES.settings;
-  const handle = state.drawings.linear.slices.settings;
+  const handle = modeDrawing(state, 'linear').slices.settings;
   const before = settings.capture(handle);
   const file = new File(['pair'], 'pair.tsv');
   const edge = (id, fields) => ({ id, queryUid: 'a', subjectUid: 'b', source: 'upload', included: true, fileActive: true,

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import { drawingStore } from './helpers/drawing-state.mjs';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 const ref = (value) => ({ value });
@@ -42,6 +43,7 @@ const renderRequest = {
   }))
 };
 const state = () => ({
+  ...drawingStore({ recordsOff: [] }, { recordsOff: [] }),
   mode: ref('linear'),
   featureCatalog: ref({ items: [{
     recordKeys: ['a', 'b', 'c'],

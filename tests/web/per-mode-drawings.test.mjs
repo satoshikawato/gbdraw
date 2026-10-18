@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { test } from 'node:test';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -47,7 +48,7 @@ const genbank = () => file('per-mode.gb', genbankText);
 const depthFile = (name) => file(name, 'position\tdepth\n1\t10\n2\t12\n');
 
 const resetDrawing = (mode) => {
-  const drawing = state.drawings[mode];
+  const drawing = modeDrawing(state, mode);
   Object.assign(drawing.form, createDefaultForm());
   Object.assign(drawing.adv, createDefaultAdv(mode));
   drawing.linearRecordLayoutEnabled.value = false;
@@ -56,7 +57,7 @@ const resetDrawing = (mode) => {
 };
 // Generate builds the request of the shown mode from that mode's drawing.
 const requestOf = (mode, { linearDepth = null } = {}) => {
-  const drawing = state.drawings[mode];
+  const drawing = modeDrawing(state, mode);
   installShownDrawing(mode);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
@@ -102,7 +103,7 @@ test('no object of one drawing is shared with the other drawing', () => {
     for (const [key, child] of Object.entries(raw)) walk(child, `${path}.${key}`, mode);
   };
   for (const mode of MODES) {
-    for (const [key, member] of Object.entries(state.drawings[mode])) walk(member, key, mode);
+    for (const [key, member] of Object.entries(modeDrawing(state, mode))) walk(member, key, mode);
   }
   assert.ok(MODE_SCOPED_ROWS.length > 100, 'the registry names the per-mode values');
 });
@@ -119,8 +120,8 @@ test('every setting shared by both modes before PR-1 is set per drawing', () => 
         : Array.isArray(value) ? [...value, 'circular'] : value === null ? 'circular' : { circular: true });
   const checked = rows.flatMap((row) => {
     const container = row.domain === 'config.form' ? 'form' : 'adv';
-    const circular = state.drawings.circular[container];
-    const linear = state.drawings.linear[container];
+    const circular = modeDrawing(state, 'circular')[container];
+    const linear = modeDrawing(state, 'linear')[container];
     if (!Object.hasOwn(circular, row.path)) return [];
     const before = JSON.stringify(linear[row.path]);
     const saved = circular[row.path];
@@ -136,7 +137,7 @@ test('every setting shared by both modes before PR-1 is set per drawing', () => 
 test('each mode request carries its own drawing values', () => {
   MODES.forEach(resetDrawing);
   const linearDefaults = samples('linear', requestOf('linear'));
-  const circular = state.drawings.circular;
+  const circular = modeDrawing(state, 'circular');
   circular.adv.label_font_size = 13;
   circular.adv.axis_stroke_width = 3;
   circular.form.separate_strands = false;
@@ -144,7 +145,7 @@ test('each mode request carries its own drawing values', () => {
   circular.adv.depth_min = 4;
   assert.deepEqual(samples('circular', requestOf('circular')), [13, 3, false, 'percent', 4]);
   assert.deepEqual(samples('linear', requestOf('linear')), linearDefaults, 'the Linear request keeps the Linear values');
-  const linear = state.drawings.linear;
+  const linear = modeDrawing(state, 'linear');
   linear.adv.label_font_size = 7;
   linear.adv.depth_min = 2;
   linear.adv.gc_content_mode = 'deviation';
@@ -158,22 +159,22 @@ test('each mode request carries its own drawing values', () => {
 test('two Circular Depth series and one Linear Depth file both build their requests (Depth series count)', () => {
   MODES.forEach(resetDrawing);
   // Two series configured while Circular had two Depth files.
-  state.drawings.circular.form.show_depth = true;
-  state.drawings.circular.adv.depth_tracks.splice(0, state.drawings.circular.adv.depth_tracks.length,
+  modeDrawing(state, 'circular').form.show_depth = true;
+  modeDrawing(state, 'circular').adv.depth_tracks.splice(0, modeDrawing(state, 'circular').adv.depth_tracks.length,
     { label: 'Illumina', color: '#112233' }, { label: 'Nanopore', color: '#445566' });
-  state.drawings.linear.form.show_depth = true;
+  modeDrawing(state, 'linear').form.show_depth = true;
   installShownDrawing('linear');
   const linear = requestOf('linear', { linearDepth: [depthFile('a.depth.tsv')] });
   assert.equal(linear.renderRequest.diagramOptions.depthTracks?.length, 1);
-  assert.equal(state.drawings.circular.adv.depth_tracks.length, 2, 'the Linear request leaves the Circular series');
+  assert.equal(modeDrawing(state, 'circular').adv.depth_tracks.length, 2, 'the Linear request leaves the Circular series');
   installShownDrawing('circular');
   MODES.forEach(resetDrawing);
 });
 
 test('records turned OFF in one mode stay ON in the other (record selection)', () => {
   MODES.forEach(resetDrawing);
-  const circular = state.drawings.circular;
-  const linear = state.drawings.linear;
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
   installShownDrawing('circular');
   state.cInputType.value = 'gb';
   state.circularRecordList.value = [{ selector: '#1', record_id: 'a' }, { selector: '#2', record_id: 'b' }];
@@ -369,10 +370,10 @@ test('every slice writer, install, and reset changes its own drawing only (M6 is
   assert.deepEqual(SLICE_READERS.filter((key) => key.includes('.')).sort(), captures.sort(),
     'each slice\'s capture is listed under the name its module exports the slice by');
   const saved = Object.fromEntries(MODES.map((mode) => [mode, Object.fromEntries(Object.entries(DRAWING_SLICES)
-    .map(([name, slice]) => [name, slice.capture(state.drawings[mode].slices[name])]))]));
+    .map(([name, slice]) => [name, slice.capture(modeDrawing(state, mode).slices[name])]))]));
   for (const mode of MODES) {
-    const drawing = state.drawings[mode];
-    const other = state.drawings[MODES.find((candidate) => candidate !== mode)];
+    const drawing = modeDrawing(state, mode);
+    const other = modeDrawing(state, MODES.find((candidate) => candidate !== mode));
     for (const [name, slice] of Object.entries(DRAWING_SLICES)) {
       const handle = drawing.slices[name];
       const seed = SEEDS[name](drawing);
@@ -397,6 +398,6 @@ test('every slice writer, install, and reset changes its own drawing only (M6 is
     }
   }
   for (const mode of MODES) {
-    Object.entries(DRAWING_SLICES).forEach(([name, slice]) => slice.install(state.drawings[mode].slices[name], saved[mode][name]));
+    Object.entries(DRAWING_SLICES).forEach(([name, slice]) => slice.install(modeDrawing(state, mode).slices[name], saved[mode][name]));
   }
 });

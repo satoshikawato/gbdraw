@@ -2,6 +2,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -555,8 +556,8 @@ delete preservedFontSlice.config.adv.font_family;
 preservedFontSlice.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'DejaVu Serif', serif" };
 const preservedFontImport = await importPayload(preservedFontSession);
 assert.equal(preservedFontImport.status, 'ok', preservedFontImport.error?.message);
-assert.equal(state.drawings.linear.adv.font_family, "'DejaVu Serif', serif");
-assert.deepEqual({ ...state.drawings.linear.unmanagedConfigOverrides }, {});
+assert.equal(modeDrawing(state, 'linear').adv.font_family, "'DejaVu Serif', serif");
+assert.deepEqual({ ...modeDrawing(state, 'linear').unmanagedConfigOverrides }, {});
 
 const decisionRequiredSession = structuredClone(divergentSession);
 decisionRequiredSession.renderRequest.comparisons = [{
@@ -1037,13 +1038,13 @@ assert.deepEqual(alerts, []);
 // Multi-Record Canvas on keeps the single-record sides in the multi-record
 // slot, as one step of the import (no watcher, no flag).
 installShownDrawing('circular');
-state.drawings.circular.form.multi_record_canvas = false;
-Object.assign(state.drawings.circular.layoutPreferences.circular.single, { legend: 'right', plotTitlePosition: 'top' });
-Object.assign(state.drawings.circular.layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
+modeDrawing(state, 'circular').form.multi_record_canvas = false;
+Object.assign(modeDrawing(state, 'circular').layoutPreferences.circular.single, { legend: 'right', plotTitlePosition: 'top' });
+Object.assign(modeDrawing(state, 'circular').layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
 const canvasOnImport = await importPayload({ form: { multi_record_canvas: true } });
 assert.equal(canvasOnImport.status, 'legacy');
-assert.equal(state.drawings.circular.form.multi_record_canvas, true);
-assert.deepEqual({ ...state.drawings.circular.layoutPreferences.circular.multi }, { legend: 'right', plotTitlePosition: 'top' });
+assert.equal(modeDrawing(state, 'circular').form.multi_record_canvas, true);
+assert.deepEqual({ ...modeDrawing(state, 'circular').layoutPreferences.circular.multi }, { legend: 'right', plotTitlePosition: 'top' });
 alerts.length = 0;
 
 installShownDrawing('circular');

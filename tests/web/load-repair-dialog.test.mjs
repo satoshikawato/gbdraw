@@ -12,6 +12,7 @@ import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -52,7 +53,7 @@ const loadedState = () => JSON.stringify({
   results: state.results.value.map((result) => result.content),
   files: Object.keys(state.files),
   drawings: Object.fromEntries(['circular', 'linear'].map((mode) => {
-    const drawing = state.drawings[mode];
+    const drawing = modeDrawing(state, mode);
     return [mode, {
       form: drawing.form, adv: drawing.adv, featureOverrides: drawing.featureOverrides,
       legendEntries: drawing.legendEntries.value
@@ -125,8 +126,8 @@ test('a legend position outside its mode is listed at Load (OV-652)', async () =
     'Legend: the position "banana" (ui.layoutPreferences.linear.legend) is not one of its mode\'s positions; bottom is used.'
   ]]);
   assert.equal(state.generatedLegendPosition.value, 'bottom');
-  assert.equal(state.drawings.linear.form.legend, 'bottom');
-  assert.equal(state.drawings.circular.layoutPreferences.circular.single.legend, 'upper_left');
+  assert.equal(modeDrawing(state, 'linear').form.legend, 'bottom');
+  assert.equal(modeDrawing(state, 'circular').layoutPreferences.circular.single.legend, 'upper_left');
 });
 
 // G2: what Load applies after the dialog is what the dialog listed. Each
@@ -235,7 +236,7 @@ const filledSession = async ({ overrides = false } = {}) => {
   draft.modes.linear.editorState.legend.strokeOverrides = { CDS: { strokeColor: '#123456', strokeWidth: 1 } };
   const loaded = await importSession(input(draft), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  for (const drawing of Object.values(state.drawings)) {
+  for (const drawing of state.drawingList()) {
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...state.linearSeqs.map(({ uid }, index) => ({ uid, row: index + 1 })));
   }
   return savedSession('g2-filled');
@@ -350,8 +351,8 @@ test('a priority rule, a form value of another kind and an annotation mark or la
     'Settings: the value "top" (modes.linear.config.annotationSets[0].annotations[0].lane) cannot be used; 0 is used.',
     'Settings: 2 entries of modes.circular.config.qualifierPriorityRules could not be read and were dropped.'
   ]);
-  assert.deepEqual([...state.drawings.circular.manualPriorityRules], [{ feat: 'CDS', order: 'gene' }]);
-  assert.deepEqual(state.drawings.linear.annotationSets[0].annotations.map(({ mark, lane }) => [mark, lane]), [['bracket', 0]]);
+  assert.deepEqual([...modeDrawing(state, 'circular').manualPriorityRules], [{ feat: 'CDS', order: 'gene' }]);
+  assert.deepEqual(modeDrawing(state, 'linear').annotationSets[0].annotations.map(({ mark, lane }) => [mark, lane]), [['bracket', 0]]);
 });
 
 // BA-D15 (OV-569, OV-710): a legacy configuration file is read before it is
@@ -359,7 +360,7 @@ test('a priority rule, a form value of another kind and an annotation mark or la
 // Cancel leaves the drawing as it was.
 test('a legacy configuration with malformed record display settings loads with the rows dropped and listed (PLAN 12.7 (3), E-OD04)', async () => {
   const legacy = { form: { legend: 'left' }, recordDisplayDrafts: [{ junk: 1 }, 5, 'x'] };
-  const drawing = state.drawings[state.mode.value === 'linear' ? 'linear' : 'circular'];
+  const drawing = modeDrawing(state, state.mode.value === 'linear' ? 'linear' : 'circular');
   drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length);
   const formBefore = JSON.stringify(drawing.form);
   const dialogs = [];
@@ -455,7 +456,7 @@ test('a Legend edit a later edit of its row overwrites is listed for a Session 2
   const { loaded, items } = await loadAnswering(older);
   assert.deepEqual(items, ['Legend: the color edit stored under "X" (editorState.legend.colorOverrides) sets the row "K",'
     + ' which a later edit also sets; the later edit is used and this one was dropped.']);
-  assert.deepEqual(state.drawings.linear.legendColorOverrides, { K: '#222222' });
+  assert.deepEqual(modeDrawing(state, 'linear').legendColorOverrides, { K: '#222222' });
   assert.deepEqual(codes(loaded), ['legend-edit-overwritten']);
 
   const session46 = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
@@ -477,7 +478,7 @@ test('a Legend edit the rule row re-key cannot move is listed (B39)', async () =
     + ' (modes.circular.editorState.legend.strokeOverrides) moves to the row "Complex IV", which has an edit of its own;'
     + ' that edit is used and this one was dropped.']);
   assert.deepEqual(codes(loaded), ['legend-edit-rekey-dropped']);
-  assert.deepEqual(state.drawings.circular.legendStrokeOverrides['Complex IV'], { strokeColor: '#123456', strokeWidth: 1 });
+  assert.deepEqual(modeDrawing(state, 'circular').legendStrokeOverrides['Complex IV'], { strokeColor: '#123456', strokeWidth: 1 });
 });
 
 // OV-719 (inventory B48): a Session 46 keeps the first Legend entry of a
@@ -490,7 +491,7 @@ test('a Legend entry that repeats an earlier one is dropped and listed, by capti
   );
   const read46 = await loadAnswering(session46);
   assert.deepEqual(read46.items, ['Legend: entry "tRNA" repeats an earlier entry of its list and was dropped.']);
-  assert.deepEqual(state.drawings.circular.legendEntries.value.map(({ caption }) => caption).filter((caption) => ['tRNA', 'Q'].includes(caption)),
+  assert.deepEqual(modeDrawing(state, 'circular').legendEntries.value.map(({ caption }) => caption).filter((caption) => ['tRNA', 'Q'].includes(caption)),
     ['tRNA', 'Q']);
 
   const session47 = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
@@ -501,7 +502,7 @@ test('a Legend entry that repeats an earlier one is dropped and listed, by capti
   );
   const read47 = await loadAnswering(session47);
   assert.deepEqual(read47.items, ['Legend: entry "Q" repeats an earlier entry of its list and was dropped.']);
-  assert.deepEqual(state.drawings.circular.legendEntries.value.filter(({ caption }) => caption === 'tRNA').length, 2);
+  assert.deepEqual(modeDrawing(state, 'circular').legendEntries.value.filter(({ caption }) => caption === 'tRNA').length, 2);
 });
 
 // OV-758 (A10, E-OD08): the track stacks' readers list what they replace
@@ -516,7 +517,7 @@ test('a track slot value Load cannot use is listed; a slot that cannot be read r
   session.modes.circular.config.adv.circular_track_slots_axis_index = 9;
   let read = await loadAnswering(session);
   assert.deepEqual(read.items, ['Settings: the value "9" (modes.circular.config.adv.circular_track_slots_axis_index) cannot be used; 4 is used.']);
-  assert.equal(state.drawings.circular.adv.circular_track_slots_axis_index, 4);
+  assert.equal(modeDrawing(state, 'circular').adv.circular_track_slots_axis_index, 4);
 
   session = v46();
   const slots = session.modes.circular.config.adv.circular_track_slots;
@@ -532,9 +533,9 @@ test('a track slot value Load cannot use is listed; a slot that cannot be read r
     'Settings: the value "5" (modes.circular.config.adv.circular_track_slots[3].params) cannot be used; its default is used.',
     'Settings: the value "-7.5" (modes.linear.config.adv.linear_track_slots[0].height) cannot be used; it is left unset.'
   ]);
-  const circularSlots = state.drawings.circular.adv.circular_track_slots;
+  const circularSlots = modeDrawing(state, 'circular').adv.circular_track_slots;
   assert.deepEqual([circularSlots[1].width, circularSlots[1].z, circularSlots[3].params], [null, 0, {}]);
-  assert.ok([undefined, null, ''].includes(state.drawings.linear.adv.linear_track_slots[0].height));
+  assert.ok([undefined, null, ''].includes(modeDrawing(state, 'linear').adv.linear_track_slots[0].height));
 
   session = v46();
   session.modes.circular.config.adv.circular_track_slots[1] = 5;
@@ -545,14 +546,14 @@ test('a track slot value Load cannot use is listed; a slot that cannot be read r
     'Settings: the value of modes.circular.config.adv.circular_track_slots cannot be used; its default is used.'
   ]);
   const ids = (stack) => stack.map(({ id }) => id);
-  assert.deepEqual(ids(state.drawings.circular.adv.circular_track_slots), ids(createDefaultCircularTrackSlots()));
+  assert.deepEqual(ids(modeDrawing(state, 'circular').adv.circular_track_slots), ids(createDefaultCircularTrackSlots()));
 
   for (const stack of ['x', [{ id: 'x', renderer: 'zzz' }]]) {
     session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
     session.config.adv.linear_track_slots = stack;
     read = await loadAnswering(session);
     assert.deepEqual(read.items, ['Settings: the value of config.adv.linear_track_slots cannot be used; its default is used.'], JSON.stringify(stack));
-    assert.deepEqual(ids(state.drawings.linear.adv.linear_track_slots), ids(createDefaultLinearTrackSlots()));
+    assert.deepEqual(ids(modeDrawing(state, 'linear').adv.linear_track_slots), ids(createDefaultLinearTrackSlots()));
   }
 
   session = fixture('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz');
@@ -588,7 +589,7 @@ test('a Legend entry, color or stroke edit, order or original stroke Load cannot
     'Settings: 1 entry of editorState.featureStrokes.overrides could not be read and was dropped.',
     'Legend: entry "X" had a color the app does not accept and was dropped.'
   ]);
-  assert.deepEqual(state.drawings.linear.legendStrokeOverrides, { Z: { strokeColor: '#00aa00' } });
+  assert.deepEqual(modeDrawing(state, 'linear').legendStrokeOverrides, { Z: { strokeColor: '#00aa00' } });
 });
 
 // Inventory B50: an older Session whose feature information cannot be
@@ -660,7 +661,7 @@ test('a null definition lock loads as OFF with no row (OV-891)', async () => {
   session.modes.linear.config.form.keep_definition_left_aligned = null;
   const loaded = await importSession(input(session), { confirmLoadRepairs: async () => assert.fail('no row (E-OD06)') });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.equal(state.drawings.linear.form.keep_definition_left_aligned, false);
+  assert.equal(modeDrawing(state, 'linear').form.keep_definition_left_aligned, false);
 });
 
 // Inventory B51 (Q2): a Session older than 27 stays refused, and the error
@@ -711,9 +712,9 @@ test('a stored setting its reader cannot restore is listed before the Load (B37,
     'Settings: the value "turbo" (config.losat.executionMode) cannot be used; auto is used.',
     'Settings: 1 entry of config.adv.multi_record_positions could not be read and was dropped.'
   ]]);
-  assert.equal(state.drawings.linear.adv.label_rendering, 'auto');
+  assert.equal(modeDrawing(state, 'linear').adv.label_rendering, 'auto');
   // The circular settings are the Circular drawing's (the split, plan 4.2).
-  const { adv } = state.drawings.circular;
+  const { adv } = modeDrawing(state, 'circular');
   assert.equal(adv.circular_label_placement, 'radial');
   assert.equal(adv.multi_record_min_radius_ratio, 0.55);
   assert.deepEqual(adv.multi_record_positions, [{ selector: '#1', row: 1 }, { selector: '#2', row: 2 }]);
@@ -772,8 +773,8 @@ test('a Session 27-33 shape map that is no object reads as the repeat-region sha
   const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(loaded.repairs.filter(({ path }) => path.includes('feature_shapes')), []);
-  assert.equal(state.drawings[state.mode.value].adv.feature_shapes.repeat_region, 'rectangle');
-  const drawing = state.drawings[state.mode.value];
+  assert.equal(modeDrawing(state, state.mode.value).adv.feature_shapes.repeat_region, 'rectangle');
+  const drawing = modeDrawing(state, state.mode.value);
   const shapes = JSON.stringify(drawing.adv.feature_shapes);
   const asked = [];
   const fromFile = await importSession(input({ adv: { feature_shapes: ['arrow'] } }), {
@@ -781,7 +782,7 @@ test('a Session 27-33 shape map that is no object reads as the repeat-region sha
   });
   assert.equal(fromFile.status, 'legacy', JSON.stringify(fromFile.error));
   assert.deepEqual(asked, ['Settings: the value "[\"arrow\"]" (adv.feature_shapes) cannot be used; the drawing keeps its current value.']);
-  assert.equal(JSON.stringify(state.drawings[state.mode.value].adv.feature_shapes), shapes);
+  assert.equal(JSON.stringify(modeDrawing(state, state.mode.value).adv.feature_shapes), shapes);
 });
 
 // BA-OD89: a row of a list names the leaf with that leaf's values; free text
@@ -808,7 +809,7 @@ test('a row names the leaf and the value used, never free text, and a value anot
     'Settings: the value of modes.linear.config.annotationSets[0].annotations[1].id cannot be used; it is changed.'
   ]);
   assert.equal(state.generatedCircularPlotTitlePosition.value, 'top');
-  assert.equal(state.drawings.linear.linearRecordLayoutEnabled.value, true);
+  assert.equal(modeDrawing(state, 'linear').linearRecordLayoutEnabled.value, true);
   // A list given as another kind is one row of its own.
   const other = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   other.modes.linear.config.linearRecordLayout = { enabled: true, recordGap: 24, rows: { 0: { uid: 'a', row: 1 } } };
@@ -838,7 +839,7 @@ test('a Session 46 app setting Load cannot restore is listed; a pending palette 
     ['modes.linear.ui.pendingPaletteName']);
   assert.equal(state.featurePanelTab.value, 'colors');
   assert.equal(state.losatExecution.threadsPerJob, 'auto');
-  assert.equal(state.drawings.linear.pendingPaletteName.value, '');
+  assert.equal(modeDrawing(state, 'linear').pendingPaletteName.value, '');
 });
 
 test('a legacy configuration lists a setting its reader cannot restore (B48)', async () => {
@@ -955,7 +956,7 @@ test('a configuration file with a shape or Linear visibility that is no text, or
   const shownMode = state.mode.value;
   installShownDrawing('linear');
   try {
-    const drawing = state.drawings.linear;
+    const drawing = modeDrawing(state, 'linear');
     const before = { CDS: drawing.adv.feature_shapes.CDS, accession: drawing.adv.linear_accession_visibility,
       length: drawing.adv.linear_length_visibility };
     const file = currentLegacyWith({ adv: {} });
@@ -999,7 +1000,7 @@ test('a configuration file or a Session drops and lists a rule or whitelist entr
     'Settings: 2 entries of rules could not be read and were dropped.',
     'Settings: 1 entry of whitelist could not be read and was dropped.'
   ]]);
-  const drawing = state.drawings[state.mode.value];
+  const drawing = modeDrawing(state, state.mode.value);
   assert.deepEqual(JSON.parse(JSON.stringify(drawing.manualSpecificRules)), [{ ...rule, color: '#FF0000' }]);
   assert.deepEqual(JSON.parse(JSON.stringify(drawing.manualWhitelist)), [{ feat: 'CDS', qual: 'gene', key: 'dnaA' }]);
   for (const list of ['rules', 'whitelist']) {
@@ -1057,7 +1058,7 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
   for (const [file, , mode = 'circular'] of cases) {
     installShownDrawing(mode);
     assert.equal((await importSession(input(first), { confirmLoadRepairs: async () => true })).status, 'legacy');
-    const drawing = state.drawings[state.mode.value];
+    const drawing = modeDrawing(state, state.mode.value);
     assert.deepEqual([held(drawing), ratios(drawing)], [firstHeld, [0.5, 0.3]]);
     const shapes = JSON.stringify(drawing.adv.feature_shapes);
     const asked = [];
@@ -1087,11 +1088,11 @@ test('an arrow ratio stored as its text loads as its number with no row', async 
   Object.assign(session.modes.circular.config.adv, ratios);
   const fromSession = await importSession(input(session), noDialog);
   assert.deepEqual([fromSession.status, fromSession.repairs?.length], ['ok', 0], JSON.stringify(fromSession.error));
-  const { adv } = state.drawings.circular;
+  const { adv } = modeDrawing(state, 'circular');
   assert.deepEqual([adv.arrow_shaft_width_ratio, adv.arrow_head_length_ratio], [0.5, 0.3]);
   const fromFile = await importSession(input({ form: { plot_title: 'Ratios' }, adv: { arrow_shaft_width_ratio: '0.25' } }), noDialog);
   assert.deepEqual([fromFile.status, fromFile.repairs?.length], ['legacy', 0], JSON.stringify(fromFile.error));
-  assert.equal(state.drawings[state.mode.value].adv.arrow_shaft_width_ratio, 0.25);
+  assert.equal(modeDrawing(state, state.mode.value).adv.arrow_shaft_width_ratio, 0.25);
   const snapshot = loadedState();
   const refused = await importSession(input({ adv: { arrow_shaft_width_ratio: 'x' } }), noDialog);
   assert.deepEqual([refused.status, loadedState() === snapshot], ['error', true]);
@@ -1130,7 +1131,7 @@ test('a value the app writes into a setting of another kind loads with no row, i
   };
   // A blank reads as '' or as unset (null).
   const valuesOf = (mode) => WRITTEN_VALUES.map(([at]) => {
-    const [container, key] = place(state.drawings[mode], at);
+    const [container, key] = place(modeDrawing(state, mode), at);
     return container[key] === null ? '' : container[key];
   });
   // Every value loads as stored, but a cleared number field reads as the
@@ -1184,7 +1185,7 @@ test('a value the app writes into a setting of another kind loads with no row, i
   assert.deepEqual([blankStatus, blankRows.length], ['ok', 1], blankRows.join('\n'));
   // A text that is no number is not of a number filter's kind, so its row
   // says the drawing keeps its value; the e-value input holds text, so any text loads.
-  const drawing = state.drawings[shown];
+  const drawing = modeDrawing(state, shown);
   const kept = drawing.adv.min_bitscore;
   const [status, rows] = await load({ adv: { min_bitscore: 'abc', evalue: 'abc' } });
   assert.deepEqual([status, rows.length, rows[0]?.startsWith('Settings: the value "abc" (adv.min_bitscore) cannot be used;')], ['legacy', 1, true], rows.join('\n'));
@@ -1203,7 +1204,7 @@ test('a value the app writes into a setting of another kind loads with no row, i
 // and in a Session; a blank is never 0 for a reader whose default is not 0.
 test('a blank over a number reads as the field\'s default with no row, in a configuration file and a Session (OV-827)', async () => {
   await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
-  const drawing = state.drawings[state.mode.value];
+  const drawing = modeDrawing(state, state.mode.value);
   const edited = () => {
     Object.assign(drawing.adv, { gc_content_tick_interval: 50, multi_record_column_gap_ratio: 0.3, multi_record_row_gap_ratio: 0.2 });
     Object.assign(drawing.losat.blastp, { collinearMaxConflictsInMergeGap: 4, collinearMaxUnitGap: 3 });
@@ -1238,10 +1239,10 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
   const { items } = await loadAnswering(session);
   assert.deepEqual(items, []);
   for (const mode of ['circular', 'linear']) {
-    const { adv, losat } = state.drawings[mode];
+    const { adv, losat } = modeDrawing(state, mode);
     assert.deepEqual([adv.gc_content_tick_interval, adv.multi_record_column_gap_ratio, losat.blastp.collinearMaxConflictsInMergeGap], [20, 0.10, 1], mode);
   }
-  assert.equal(state.drawings.linear.linearRecordGap.value, 24);
+  assert.equal(modeDrawing(state, 'linear').linearRecordGap.value, 24);
 });
 
 // OV-823 (BA-OD110): a Session 44 whose GUI-unmanaged font override is now
@@ -1259,7 +1260,7 @@ test('a Session 44 font override adopted into an adv that is no object lists the
   });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [['Settings: the value "5" (config.adv) cannot be used; its default is used.']]);
-  assert.deepEqual(['circular', 'linear'].map((mode) => state.drawings[mode].adv.font_family), ["'Pres Font'", "'Pres Font'"]);
+  assert.deepEqual(['circular', 'linear'].map((mode) => modeDrawing(state, mode).adv.font_family), ["'Pres Font'", "'Pres Font'"]);
   // An object `adv` takes the font with no row.
   const kept = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
   kept.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'Pres Font'" };
@@ -1277,12 +1278,12 @@ test('a cleared Feature overlap tolerance saves and reads as its default (OV-826
     ['circular', 'legend-renamed-rows.v46.gbdraw-session.json.gz']]) {
     await loadAnswering(fixture(name));
     assert.equal(state.mode.value, mode);
-    state.drawings[mode].adv.feature_overlap_tolerance_bp = '';
+    modeDrawing(state, mode).adv.feature_overlap_tolerance_bp = '';
     const saved = await savedSession(`tolerance-${mode}`);
     assert.equal(saved.modes[mode].config.adv.feature_overlap_tolerance_bp, 0, mode);
     const { items } = await loadAnswering(saved);
     assert.deepEqual(items, []);
-    assert.equal(state.drawings[mode].adv.feature_overlap_tolerance_bp, 0, mode);
+    assert.equal(modeDrawing(state, mode).adv.feature_overlap_tolerance_bp, 0, mode);
   }
 });
 
@@ -1291,12 +1292,12 @@ test('a cleared Feature overlap tolerance saves and reads as its default (OV-826
 test('a cleared Linear record gap saves and reads as its default, 24 px (OV-828)', async () => {
   for (const blank of ['', null]) {
     await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
-    state.drawings.linear.linearRecordGap.value = blank;
+    modeDrawing(state, 'linear').linearRecordGap.value = blank;
     const saved = await savedSession(`record-gap-${JSON.stringify(blank)}`);
     assert.equal(saved.modes.linear.config.linearRecordLayout.recordGap, 24, JSON.stringify(blank));
     const { items } = await loadAnswering(saved);
     assert.deepEqual(items, []);
-    assert.equal(state.drawings.linear.linearRecordGap.value, 24, JSON.stringify(blank));
+    assert.equal(modeDrawing(state, 'linear').linearRecordGap.value, 24, JSON.stringify(blank));
   }
 });
 
@@ -1307,7 +1308,7 @@ test('a feature shape of a feature type the user added survives Save and Load', 
     confirmLoadRepairs: async () => assert.fail('a file Load restores fully asks nothing')
   });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  const { adv } = state.drawings.linear;
+  const { adv } = modeDrawing(state, 'linear');
   adv.features.push('gene');
   adv.feature_shapes.gene = 'arrow';
   const saved = await savedSession('shapes');
@@ -1315,7 +1316,7 @@ test('a feature shape of a feature type the user added survives Save and Load', 
     confirmLoadRepairs: async () => assert.fail('a file Load restores fully asks nothing')
   });
   assert.equal(again.status, 'ok', JSON.stringify(again.error));
-  assert.equal(state.drawings.linear.adv.feature_shapes.gene, 'arrow');
+  assert.equal(modeDrawing(state, 'linear').adv.feature_shapes.gene, 'arrow');
 });
 
 // A similarity-group name that is no text (an object, a boolean) is
@@ -1357,7 +1358,7 @@ test('a similarity-group edit of an unknown group and a dropped cache entry are 
   assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'cache-entry-dropped' || code === 'orthogroup-edit-dropped')
     .map(({ path, count }) => [path, count]),
   [['orthogroupState.orthogroupNameOverrides', 1], ['losatDerivedCache.entries', 1]]);
-  assert.deepEqual({ ...state.drawings.linear.orthogroupNameOverrides }, { [session.orthogroupState.groups[0].id]: 'Kept' });
+  assert.deepEqual({ ...modeDrawing(state, 'linear').orthogroupNameOverrides }, { [session.orthogroupState.groups[0].id]: 'Kept' });
 });
 
 // B45, BA-OD94: a drawing's Depth series and rows fit the Depth files Load
@@ -1382,7 +1383,7 @@ test('a Depth row that names no series of its drawing is listed before the Load;
       + ' names a Depth series its drawing does not have; the row is turned off and no longer names that series.')
   ]);
   assert.deepEqual(codes(loaded), ['depth-row-disabled', 'depth-row-disabled']);
-  const { adv } = state.drawings.circular;
+  const { adv } = modeDrawing(state, 'circular');
   assert.deepEqual(adv.depth_tracks.map(({ label }) => label), ['Depth', 'Coverage B']);
   assert.deepEqual(adv.circular_track_slots.filter(({ renderer }) => renderer === 'depth')
     .map(({ id, enabled, params }) => [id, enabled, params.track_index ?? null]),
@@ -1390,7 +1391,7 @@ test('a Depth row that names no series of its drawing is listed before the Load;
   // The Linear drawing's Circular stack is not drawn.
   const linear = await loadAnswering(depthEdits(fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'), 'linear'));
   assert.deepEqual(linear.items, []);
-  assert.deepEqual(state.drawings.linear.adv.depth_tracks.map(({ label }) => label), ['Depth', 'Coverage B']);
+  assert.deepEqual(modeDrawing(state, 'linear').adv.depth_tracks.map(({ label }) => label), ['Depth', 'Coverage B']);
 });
 
 // BA-OD94: in either mode, Add Depth track
@@ -1408,7 +1409,7 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(DEPTH_ROUND_TRI
     const { normalizeDepthTrackConfig, padDepthFileSlots, reconcileManagedDepthSlots } = await import('../../gbdraw/web/js/services/depth-track-state.js');
     await loadAnswering(fixture(name));
     assert.equal(state.mode.value, mode);
-    const { adv } = state.drawings[mode];
+    const { adv } = modeDrawing(state, mode);
     assert.equal(adv.depth_tracks.length, 1);
     // Add Depth track (Linear pads each record's Depth slots to the new series).
     adv.depth_tracks.push({ ...normalizeDepthTrackConfig(null, 1), label: 'Coverage B', small_tick_interval: 5 });
@@ -1448,7 +1449,7 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH
       const { canonicalRenderArtifactOwner } = await import('../../gbdraw/web/js/services/config.js');
       await loadAnswering(fixture(name));
       assert.equal(state.mode.value, mode);
-      const { adv } = state.drawings[mode];
+      const { adv } = modeDrawing(state, mode);
       adv[`${stackKey}_enabled`] = true;
       adv[stackKey].push(structuredClone(manualRow));
       if (mode === 'linear') state.linearSeqs.forEach((seq) => { seq.depth = structuredClone(cleared); });
@@ -1466,7 +1467,7 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH
       assert.deepEqual(stored[stackKey].filter(({ id }) => id === 'my_depth').map(({ enabled }) => enabled), [true]);
       const { items } = await loadAnswering(saved);
       assert.deepEqual(items, []);
-      assert.deepEqual(state.drawings[mode].adv[stackKey].filter(({ id }) => id === 'my_depth').map(({ enabled }) => enabled), [true]);
+      assert.deepEqual(modeDrawing(state, mode).adv[stackKey].filter(({ id }) => id === 'my_depth').map(({ enabled }) => enabled), [true]);
     });
   }
 }
@@ -1477,7 +1478,7 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH
 // gap's too (OV-828, BA-D30).
 test('a History restore reads a blank as the reader\'s default, other values as before, and asks nothing', async () => {
   const { applyCapturedConfigData } = await import('../../gbdraw/web/js/services/config.js');
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   applyCapturedConfigData(drawing, {
     adv: {
       label_rendering: 'sideways', multi_record_column_gap_ratio: null, multi_record_row_gap_ratio: 'x',
@@ -1535,7 +1536,7 @@ test('a schema 1/2 request lists an invalid comparison height of its full config
     assert.deepEqual(loaded.repairs.filter(({ code }) => code === 'setting-replaced').map(({ path, effect, stored }) => [path, effect, stored]),
       [['renderRequest.diagramOptions.config.canvas.linear.comparison_height', 'defaulted', '0']], name);
     assert.ok(dialogs.flat().some((line) => line.includes('comparison_height') && line.includes('its default is used')), name);
-    assert.equal(state.drawings.linear.adv.comparison_height, 60, name);
+    assert.equal(modeDrawing(state, 'linear').adv.comparison_height, 60, name);
   }
 });
 
@@ -1545,7 +1546,7 @@ test('a flat configuration override name of a schema-1 request loads as the deco
   session.renderRequest.diagramOptions.configOverrides = { show_gc: false };
   const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.equal(state.drawings.circular.form.suppress_gc, true);
+  assert.equal(modeDrawing(state, 'circular').form.suppress_gc, true);
 });
 
 // Only a stored request is read with the decoder's flat names (D-OD11): a
@@ -1560,13 +1561,13 @@ test('a flat override name in a draft is not read: Load drops it with a row and 
     assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
     assert.deepEqual(loaded.repairs.map(({ code, path, effect }) => [code, path, effect]),
       [['setting-replaced', `modes.circular.config.unmanagedConfigOverrides["${key}"]`, 'dropped']], JSON.stringify(overrides));
-    assert.equal(Object.hasOwn(state.drawings.circular.unmanagedConfigOverrides, key), false);
-    state.drawings.circular.unmanagedConfigOverrides[key] = overrides[key];
+    assert.equal(Object.hasOwn(modeDrawing(state, 'circular').unmanagedConfigOverrides, key), false);
+    modeDrawing(state, 'circular').unmanagedConfigOverrides[key] = overrides[key];
     await assert.rejects(exportSession('flat-override', { askChoice: async () => 'download' }), (error) => {
       assert.deepEqual([error.code, error.context?.field, error.context?.reason], ['INPUT_INVALID', 'configOverrides', reason], JSON.stringify(error));
       return true;
     }, JSON.stringify(overrides));
-    delete state.drawings.circular.unmanagedConfigOverrides[key];
+    delete modeDrawing(state, 'circular').unmanagedConfigOverrides[key];
   }
 });
 
@@ -1658,5 +1659,5 @@ test('the font question of a lossy Session comes after the repair dialog', async
   assert.deepEqual(await answered(false, true), { status: 'canceled', asked: ['repairs'] });
   assert.deepEqual(await answered(true, false), { status: 'canceled', asked: ['repairs', fonts] });
   assert.deepEqual(await answered(true, true), { status: 'ok', asked: ['repairs', fonts] });
-  assert.equal(state.drawings.linear.adv.font_family, "'Missing Probe Font'");
+  assert.equal(modeDrawing(state, 'linear').adv.font_family, "'Missing Probe Font'");
 });

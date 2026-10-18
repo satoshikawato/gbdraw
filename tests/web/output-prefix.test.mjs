@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -42,7 +43,7 @@ ORIGIN
 };
 // The output prefix of a Circular request: the typed prefix, or the one record's ID.
 const circularPrefix = ({ prefix = '', recordId = 'FL10.1' } = {}) => {
-  const drawing = state.drawings.circular;
+  const drawing = modeDrawing(state, 'circular');
   Object.assign(drawing.form, createDefaultForm(), { prefix });
   Object.assign(drawing.adv, createDefaultAdv('circular'));
   installShownDrawing('circular');

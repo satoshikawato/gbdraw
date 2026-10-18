@@ -17,6 +17,8 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-track-slot-row-edits-'));
 for (const directory of ['app', 'utils', 'contracts']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', directory), join(tempRoot, directory), { recursive: true });
 }
+// The slice editors and svg-serialization resolve a drawing's ID by its mode.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempRoot, 'services', 'drawing-view.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // track-slot-display.js reads the generated size-class boundaries.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), join(tempRoot, 'mode-profiles.generated.js'));

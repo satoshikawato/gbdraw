@@ -362,7 +362,7 @@ test('a 0.13.0 Gallery Session loads, and with its Custom Track Slots turned on 
   await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    const adv = state.drawings.circular.adv;
+    const adv = state.drawingOf('circular').adv;
     return { enabled: adv.circular_track_slots_enabled, spacing: adv.circular_track_slots.some((slot) => Object.hasOwn(slot, 'spacing')) };
   })).toEqual({ enabled: true, spacing: false });
 });

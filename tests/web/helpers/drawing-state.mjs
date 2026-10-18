@@ -5,6 +5,7 @@
 // key is a generated artifact, a project input or cache, an app setting or
 // catalog, transient, or the drawing store. Each diagram mode has its own
 // drawing (PR-1, Session 46 `modes`).
+import { drawingIdOfMode } from '../../../gbdraw/web/js/services/drawing-view.js';
 import { CANVAS_SLICE } from '../../../gbdraw/web/js/services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from '../../../gbdraw/web/js/services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from '../../../gbdraw/web/js/services/drawing/annotation-sets.js';
@@ -132,7 +133,7 @@ export const TRANSIENT_KEYS = Object.freeze([
 ]);
 
 // The drawing store itself.
-export const STORE_KEYS = Object.freeze(['drawings', 'activeDrawing']);
+export const STORE_KEYS = Object.freeze(['drawings', 'drawingList', 'drawingOf', 'activeDrawing']);
 
 // A `state`-shaped node fixture's drawing: its own drawing members, by reference.
 export const drawingOf = (fixture) => Object.freeze(withSliceHandles(Object.fromEntries(
@@ -163,19 +164,43 @@ const withSliceHandles = (drawing) => {
   return Object.defineProperty(drawing, 'slices', { value: Object.freeze(slices), configurable: true });
 };
 
+// The drawing of a diagram mode in a `state`-shaped value (the real state or a
+// fixture from `withDrawings` / `withModeDrawings`): the drawing whose ID the
+// mode names.
+export const modeDrawing = (state, mode) => state.drawingOf(drawingIdOfMode(mode));
+
+// The drawing store as state.js builds it: a ReadonlyMap by drawing ID in
+// creation order, with `drawingList` and `drawingOf`. A fake `state` spreads it.
+export const drawingStore = (circular, linear) => {
+  const drawings = new Map([[drawingIdOfMode('circular'), circular], [drawingIdOfMode('linear'), linear]]);
+  return {
+    drawings,
+    drawingList: () => [...drawings.values()],
+    drawingOf: (id) => {
+      if (!drawings.has(id)) throw new Error(`Unknown drawing ${id}`);
+      return drawings.get(id);
+    }
+  };
+};
+
+// The store's members as non-enumerable properties of a fixture.
+const storeProperties = (circular, linear) => Object.fromEntries(Object.entries(drawingStore(circular, linear))
+  .map(([key, value]) => [key, { value, configurable: true }]));
+
 // The fixture with the drawing store that services and owners read
-// (`state.drawings`, `state.activeDrawing()`): the fixture is the drawing of
-// both modes, so a member the test replaces later is read. A test of per-mode
-// behavior uses `withModeDrawings`. The store is not enumerable, so a test that
-// clones or serializes the fixture sees only its members.
+// (`state.drawingOf`, `state.drawingList()`, `state.activeDrawing()`): the
+// fixture is the drawing of both modes, so a member the test replaces later is
+// read. A test of per-mode behavior uses `withModeDrawings`. The store is not
+// enumerable, so a test that clones or serializes the fixture sees only its
+// members.
 export const withDrawings = (fixture) => Object.defineProperties(withSliceHandles(fixture), {
-  drawings: { value: Object.freeze({ circular: fixture, linear: fixture }), configurable: true },
+  ...storeProperties(fixture, fixture),
   activeDrawing: { value: () => fixture, configurable: true }
 });
 
 // The fixture with one drawing per mode, as in state.js: `activeDrawing()`
 // follows `fixture.mode.value`.
 export const withModeDrawings = (fixture, { circular, linear }) => Object.defineProperties(fixture, {
-  drawings: { value: Object.freeze({ circular: withSliceHandles(circular), linear: withSliceHandles(linear) }), configurable: true },
+  ...storeProperties(withSliceHandles(circular), withSliceHandles(linear)),
   activeDrawing: { value: () => (fixture.mode?.value === 'linear' ? linear : circular), configurable: true }
 });

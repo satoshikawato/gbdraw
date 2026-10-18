@@ -1802,8 +1802,8 @@ ORIGIN
   const layoutPreferenceTree = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return JSON.parse(JSON.stringify({
-      circular: state.drawings.circular.layoutPreferences.circular,
-      linear: state.drawings.linear.layoutPreferences.linear
+      circular: state.drawingOf('circular').layoutPreferences.circular,
+      linear: state.drawingOf('linear').layoutPreferences.linear
     }));
   });
 
@@ -1856,7 +1856,7 @@ ORIGIN
     );
     state.linearSeqs[0].definition = 'Inactive Linear draft';
     // The Linear drawing's stack, edited while Circular is shown.
-    const linearAdv = state.drawings.linear.adv;
+    const linearAdv = state.drawingOf('linear').adv;
     linearAdv.linear_track_slots.splice(
       0,
       linearAdv.linear_track_slots.length,
@@ -1962,7 +1962,7 @@ ORIGIN
   });
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    const linearAdv = state.drawings.linear.adv;
+    const linearAdv = state.drawingOf('linear').adv;
     return {
       linearFileName: state.linearSeqs[0].gb?.name,
       inactiveSlot: JSON.parse(JSON.stringify(
@@ -2048,13 +2048,13 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     }, null, { timeout: 120000 });
     // The Linear stack is the Linear drawing's (PR-1).
     await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state
-      .drawings.linear.adv.linear_track_slots.some((slot) => slot.id === 'inactive_overlay'))).toBe(true);
+      .drawingOf('linear').adv.linear_track_slots.some((slot) => slot.id === 'inactive_overlay'))).toBe(true);
   };
   // Each stack from its own mode's drawing.
   const browserDraft = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    const circularAdv = state.drawings.circular.adv;
-    const linearAdv = state.drawings.linear.adv;
+    const circularAdv = state.drawingOf('circular').adv;
+    const linearAdv = state.drawingOf('linear').adv;
     return JSON.parse(JSON.stringify({
       circularEnabled: circularAdv.circular_track_slots_enabled,
       circularAxis: circularAdv.circular_track_slots_axis_index,
@@ -2070,7 +2070,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     const app = window.__GBDRAW_APP__;
     // The Linear stack belongs to the Linear drawing (PR-1); it uses its own
     // copy of the review annotation set.
-    const linearDrawing = (await import('./js/state.js')).state.drawings.linear;
+    const linearDrawing = (await import('./js/state.js')).state.drawingOf('linear');
     app.selectDrawing('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([genbankText], 'p3-session.gbk', {
@@ -2315,7 +2315,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   });
   expect(await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    const linearAdv = (await import('./js/state.js')).state.drawings.linear.adv;
+    const linearAdv = (await import('./js/state.js')).state.drawingOf('linear').adv;
     const circularSpacer = app.adv.circular_track_slots.find(
       (slot) => slot.id === 'disabled_outer_space'
     );

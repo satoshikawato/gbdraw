@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,6 +7,8 @@ import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-orthogroup-stable-identity-'));
+// The slice editors and svg-serialization resolve a drawing's ID by its mode.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
 await mkdir(join(tempDir, 'app', 'feature-search'), { recursive: true });

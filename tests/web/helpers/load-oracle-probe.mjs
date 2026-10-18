@@ -33,6 +33,7 @@ import { createHash } from 'node:crypto';
 import { File, Blob } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+import { modeDrawing } from './drawing-state.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -184,7 +185,7 @@ const stateAreas = () => {
   const areas = {};
   for (const key of DOCUMENT_KEYS) areas[`state.${key}`] = key in state ? canon(state[key]) : { '#absent': true };
   for (const mode of ['circular', 'linear']) {
-    const drawing = state.drawings[mode];
+    const drawing = modeDrawing(state, mode);
     for (const key of Object.keys(drawing).sort()) {
       if (!DERIVED_DRAWING_KEYS.has(key)) areas[`drawings.${mode}.${key}`] = canon(drawing[key]);
     }

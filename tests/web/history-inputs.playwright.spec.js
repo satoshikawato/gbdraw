@@ -266,11 +266,11 @@ const controlState = (page) => page.evaluate(async () => {
   const app = window.__GBDRAW_APP__;
   const { state } = await import('./js/state.js');
   return {
-    overlaps: state.drawings.circular.adv.resolve_overlaps,
+    overlaps: state.drawingOf('circular').adv.resolve_overlaps,
     input: app.cInputType,
-    prefix: state.drawings.circular.form.prefix,
+    prefix: state.drawingOf('circular').form.prefix,
     mode: app.mode,
-    labels: state.drawings.circular.form.labels_mode
+    labels: state.drawingOf('circular').form.labels_mode
   };
 });
 const historyCounts = (page) => page.evaluate(() => [

@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-session-feature-metadata-'));
+// The slice editors and svg-serialization resolve a drawing's ID by its mode.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'services', 'drawing'), { recursive: true });
 await mkdir(join(tempDir, 'contracts'), { recursive: true });

@@ -16,6 +16,7 @@ import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -325,7 +326,7 @@ test('the other diagram\'s request is read at Load: its repairs are listed, and 
 
 const { getCommittedCanonicalSession, exportSession } = await import('../../gbdraw/web/js/services/config.js');
 const frame = () => {
-  const intent = state.drawings.linear.importedComparisonIntent;
+  const intent = modeDrawing(state, 'linear').importedComparisonIntent;
   return [intent.disposition, intent.message];
 };
 

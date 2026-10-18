@@ -98,7 +98,7 @@ const readDrawings = (page, paths) => page.evaluate(async (fieldPaths) => {
     return plain === undefined ? null : JSON.parse(JSON.stringify(plain));
   };
   const pick = (drawing) => Object.fromEntries(Object.entries(fieldPaths).map(([name, path]) => [name, copy(at(drawing, path))]));
-  return { mode: state.mode.value, circular: pick(state.drawings.circular), linear: pick(state.drawings.linear) };
+  return { mode: state.mode.value, circular: pick(state.drawingOf('circular')), linear: pick(state.drawingOf('linear')) };
 }, paths);
 
 // One History step that assigns `values` (dotted paths) in the shown mode's drawing.

@@ -263,7 +263,7 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
     // profile value, each in its own drawing.
     const axisColors = await fresh.evaluate(async () => {
       const { state: live } = await import('./js/state.js');
-      return { circular: live.drawings.circular.adv.axis_stroke_color, linear: live.drawings.linear.adv.axis_stroke_color };
+      return { circular: live.drawingOf('circular').adv.axis_stroke_color, linear: live.drawingOf('linear').adv.axis_stroke_color };
     });
     for (const mode of ['circular', 'linear']) {
       expect(axisColors[mode]).toBe(mode === settings.ui.mode

@@ -23,6 +23,7 @@ import { evaluateWithRetainedPromise } from './app-lifecycle.cjs';
 import { expectLiveEqualsGenerate, settleLive, showResult } from './live-generate-parity.cjs';
 import { download } from './mode-transition.cjs';
 import { SINGLE_FIXTURE, generate, open } from './live-generate-parity-steps.cjs';
+import { modeDrawing } from './drawing-state.mjs';
 
 // The step kinds. Each run draws every kind at least once.
 export const WALK_KINDS = Object.freeze([
@@ -231,7 +232,7 @@ const sliceHashes = (page) => page.evaluate(async () => {
   const hex = async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))]
     .map((byte) => byte.toString(16).padStart(2, '0')).join('');
   const drawings = {};
-  for (const drawing of Object.values(state.drawings)) {
+  for (const drawing of state.drawingList()) {
     const slices = {};
     for (const [name, slice] of Object.entries(DRAWING_SLICES)) slices[name] = await hex(JSON.stringify(slice.capture(drawing.slices[name])));
     drawings[drawing.id] = slices;
@@ -626,7 +627,7 @@ const resetKeepingGenerateSettings = async (page) => {
   const kept = await page.evaluate(async (settings) => {
     const { state } = await import('/gbdraw/web/js/state.js');
     return Object.fromEntries(Object.entries(settings).map(([drawingId, paths]) => [
-      drawingId, paths.map(([group, key]) => [group, key, window.Vue.unref(state.drawings[drawingId][group])[key]])
+      drawingId, paths.map(([group, key]) => [group, key, window.Vue.unref(modeDrawing(state, drawingId)[group])[key]])
     ]));
   }, GENERATE_SETTINGS);
   const notes = await applyStepWithin(page, { kind: 'reset' });

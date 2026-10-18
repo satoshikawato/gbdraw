@@ -10,6 +10,7 @@ import { createPaletteLoader } from '../../gbdraw/web/js/app/palettes.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { normalizePaletteColors } from '../../gbdraw/web/js/utils/color-utils.js';
+import { drawingStore } from './helpers/drawing-state.mjs';
 import {
   PALETTE_SLICE, clearQueuedPalette, queuePalette, replaceDefaultColors, restoreArtifactQueuedPalette, selectPalette, setDefaultColors
 } from '../../gbdraw/web/js/services/drawing/palette.js';
@@ -39,7 +40,7 @@ const setup = ({ colors = editedColors(), instant = true } = {}) => {
   };
   const state = {
     paletteDefinitions: ref(PALETTES), paletteInstantPreviewEnabled: ref(instant), appliedPaletteName: ref('default'),
-    appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, drawings: { circular: drawing }, paletteColorsDialog
+    appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, ...drawingStore(drawing, drawing), paletteColorsDialog
   };
   /** Whether the dialog was open at each History capture. */
   const openAtCapture = [];
@@ -396,7 +397,7 @@ test('a palette named like an inherited member falls back to the default palette
     const linear = drawingOf();
     const state = {
       paletteDefinitions: ref({}), paletteNames: ref([]), appliedPaletteName: ref(''), appliedPaletteColors: ref({}),
-      drawings: { circular, linear }, activeDrawing: () => circular
+      ...drawingStore(circular, linear), activeDrawing: () => circular
     };
     assert.equal(createPaletteLoader({ state }).applyPalettes(PALETTES), true);
     assert.equal(circular.selectedPalette.value, 'default', name);

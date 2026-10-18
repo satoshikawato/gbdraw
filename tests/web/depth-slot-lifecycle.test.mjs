@@ -25,6 +25,8 @@ await cp(
 for (const leaf of ['current-option-values.js', 'linear-label-visibility.js', 'losat-normalization.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf), join(tempRoot, 'services', leaf));
 }
+// The slice editors and svg-serialization resolve a drawing's ID by its mode.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempRoot, 'services', 'drawing-view.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // track-slot-display.js reads the generated size-class boundaries.
 await cp(

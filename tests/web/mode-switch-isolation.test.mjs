@@ -17,6 +17,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -93,10 +94,10 @@ test('a mode switch changes the source of no drawing watcher', () => {
 
   // Distinct values in each drawing, so a watcher that followed the shown
   // drawing would see its source change.
-  state.drawings.circular.currentColors.value = { CDS: '#111111' };
-  state.drawings.linear.currentColors.value = { CDS: '#222222' };
-  state.drawings.circular.canvasPadding.top = 5;
-  state.drawings.linear.canvasPadding.top = 9;
+  modeDrawing(state, 'circular').currentColors.value = { CDS: '#111111' };
+  modeDrawing(state, 'linear').currentColors.value = { CDS: '#222222' };
+  modeDrawing(state, 'circular').canvasPadding.top = 5;
+  modeDrawing(state, 'linear').canvasPadding.top = 9;
 
   for (const [from, to] of [['circular', 'linear'], ['linear', 'circular']]) {
     installShownDrawing(from);
@@ -129,13 +130,13 @@ test('an auxiliary table imports through its file input, into the drawing shown 
   assert.deepEqual(watchers.filter(({ line }) => /\bfiles(?:\[|\.(?:d_color|t_color|qualifier_priority|whitelist|blacklist)\b)/.test(line))
     .map(({ line }) => line), [], 'no watcher imports a table file');
   installShownDrawing('linear');
-  const before = state.drawings.circular.manualBlacklist.value;
+  const before = modeDrawing(state, 'circular').manualBlacklist.value;
   const imported = importAuxiliaryTable('blacklist', new File(['M3_12_WORD\n'], 'blacklist.txt', { type: 'text/plain' }));
   installShownDrawing('circular');
   assert.equal(await imported, true);
   assert.equal(state.files.blacklist?.name, 'blacklist.txt');
-  assert.match(state.drawings.linear.manualBlacklist.value, /M3_12_WORD/);
-  assert.equal(state.drawings.circular.manualBlacklist.value, before);
+  assert.match(modeDrawing(state, 'linear').manualBlacklist.value, /M3_12_WORD/);
+  assert.equal(modeDrawing(state, 'circular').manualBlacklist.value, before);
 });
 
 // OV-462: the label owner closes its dialogs, so a Label Not Shown dialog
@@ -179,7 +180,7 @@ test('the drawing-write scan sees each receiver form (A2 review-I2, Low 2)', () 
     'state.activeDrawing().form.show_depth = true',
     'const d = state.drawings.circular; d.form.show_depth = true',
     'state.drawings.circular.circularConservation.enabled = false',
-    "state.drawings['linear'].form.show_depth = false"
+    "state.drawings.linear.form.show_depth = false"
   ]) assert.equal(writesDrawing(`watch(() => x, () => { ${planted}; })`), true, planted);
   for (const read of ['const d = state.drawings.circular; if (d.form.show_depth === true) f(d)', 'drawing.form.show_depth !== x'])
     assert.equal(writesDrawing(read), false, read);

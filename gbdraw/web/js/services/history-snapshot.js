@@ -71,7 +71,7 @@ const COMPOSITION_INTENT_PATH = Object.freeze(['ui', 'compositionUserDeltas']);
 /** @typedef {{ orthogroupNameOverrides?: unknown, orthogroupDescriptionOverrides?: unknown, orthogroupDormantOverrides?: unknown }} GroupNameIntentData */
 /** @typedef {{ mode?: unknown, defaultSource?: unknown, edges?: unknown }} LinearComparisonPlanData */
 /** @typedef {{ x?: unknown, y?: unknown }} OffsetData */
-/** @typedef {Record<string, any>} HistorySnapshotState The app state (state.js has no typedef for it yet). */
+/** @typedef {HistorySnapshotServiceOptions['state']} HistorySnapshotState The app state (state.js has no typedef for it yet). */
 /** @typedef {{ name?: unknown, content?: unknown }} ResultData One generated Result, as the fallback capture and restore read it. */
 /** @typedef {{ receipt?: AlignmentResetReceipt | null, plan?: unknown, recordTranslations?: unknown }} AlignmentStateData */
 /**
@@ -575,7 +575,7 @@ const applyFallbackSessionUiData = (state, ui) => {
 
 // `mode` is not restored: a drawing switch is no History step (PD-OI-090).
 /**
- * @param {Record<string, any>} state
+ * @param {HistorySnapshotState} state
  * @param {DrawingView} drawing
  * @param {FallbackUiData} [ui]
  */
