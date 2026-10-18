@@ -1116,10 +1116,26 @@ const createDrawingState = (id, drawingMode) => {
 };
 const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circular');
 /** @typedef {typeof circularDrawing} DrawingState */
-/** @type {Readonly<Record<DrawingId, DrawingState> & { circular: DrawingState, linear: DrawingState }>} */
-const drawings = Object.freeze({ circular: circularDrawing, linear: createDrawingState(drawingIdOfMode('linear'), 'linear') });
+/**
+ * Every drawing by ID, in creation order (circular, then linear). Not reactive
+ * itself; no writer adds or removes a drawing in A.
+ * @type {ReadonlyMap<DrawingId, DrawingState>}
+ */
+const drawings = new Map([circularDrawing, createDrawingState(drawingIdOfMode('linear'), 'linear')].map((d) => [d.id, d]));
+/** @returns {readonly DrawingState[]} Every drawing, in creation order. */
+const drawingList = () => [...drawings.values()];
+/**
+ * The one lookup invariant: a drawing ID names a drawing.
+ * @param {DrawingId} id
+ * @returns {DrawingState}
+ */
+const drawingOf = (id) => {
+  const drawing = drawings.get(id);
+  if (!drawing) throw new Error(`Unknown drawing: ${id}`);
+  return drawing;
+};
 /** @returns {DrawingState} The shown drawing. */
-const activeDrawing = () => drawings[activeDrawingId.value];
+const activeDrawing = () => drawingOf(activeDrawingId.value);
 
 export const state = Object.freeze({
   processing,
@@ -1159,6 +1175,8 @@ export const state = Object.freeze({
   activeDrawingId,
   mode,
   drawings,
+  drawingList,
+  drawingOf,
   activeDrawing,
   cInputType,
   lInputType,

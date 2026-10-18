@@ -4,10 +4,11 @@
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
-import { inputTypeKeyOf } from './drawing-view.js';
+import { drawingIdOfMode, inputTypeKeyOf } from './drawing-view.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLayoutPreferences } from './layout-preferences.js';
 import {
   isResourceBackedCanonicalComparison,
@@ -70,7 +71,7 @@ const COMPOSITION_INTENT_PATH = Object.freeze(['ui', 'compositionUserDeltas']);
 /** @typedef {{ orthogroupNameOverrides?: unknown, orthogroupDescriptionOverrides?: unknown, orthogroupDormantOverrides?: unknown }} GroupNameIntentData */
 /** @typedef {{ mode?: unknown, defaultSource?: unknown, edges?: unknown }} LinearComparisonPlanData */
 /** @typedef {{ x?: unknown, y?: unknown }} OffsetData */
-/** @typedef {HistorySnapshotServiceOptions['state']} HistorySnapshotState The app state (state.js has no typedef for it yet). */
+/** @typedef {Record<string, any>} HistorySnapshotState The app state (state.js has no typedef for it yet). */
 /** @typedef {{ name?: unknown, content?: unknown }} ResultData One generated Result, as the fallback capture and restore read it. */
 /** @typedef {{ receipt?: AlignmentResetReceipt | null, plan?: unknown, recordTranslations?: unknown }} AlignmentStateData */
 /**
@@ -828,7 +829,7 @@ const collectCurrentFileIds = (state, fileStore) => {
     register(sequence?.depth);
   });
   // Every drawing's comparison plan holds its uploaded comparison files.
-  new Set(Object.values(state.drawings)).forEach((drawing) => {
+  /** @type {readonly DrawingView[]} */ (state.drawingList()).forEach((drawing) => {
     Array.from(drawing.linearComparisonPlan?.edges || []).forEach((comparison) => {
       register(comparison?.file);
     });
@@ -949,7 +950,7 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * (state.js `DrawingState`); the service reads them as a `DrawingView`.
  * @template {DrawingView} [D=DrawingView]
  * @typedef {object} HistorySnapshotServiceOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Record<string, any> & { drawingOf: (id: DrawingId) => D, drawingList: () => readonly D[] }} state App state (state.js; not yet typed).
  * @property {HistorySnapshotFileStore} fileStore
  *   The file store that holds the files an intent and a checkpoint name.
  * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`, awaited between restore steps.
@@ -1025,7 +1026,7 @@ export const createHistorySnapshotService = ({
    * @param {unknown} mode
    * @returns {D}
    */
-  const drawingOf = (mode) => state.drawings[mode === 'linear' ? 'linear' : 'circular'];
+  const drawingOf = (mode) => state.drawingOf(drawingIdOfMode(mode === 'linear' ? 'linear' : 'circular'));
   // The drawing the displayed artifact belongs to: the drawing of its mode
   // (`generatedMode`). It differs from the shown drawing after a Load of a
   // Session with no Result whose request mode is not its `ui.mode`. Every
@@ -1268,7 +1269,7 @@ export const createHistorySnapshotService = ({
   const installRedrawnArtifact = (drawingId, redrawn, { installResults }) => {
     const displayed = displayedArtifactDrawing();
     if (displayed.id !== drawingId) {
-      throw new Error(`A rerender of drawing ${drawingId} cannot install into the artifact of drawing ${displayed.id}.`);
+      throw diagnosticError('RESULT_INVALID', { reason: 'DRAWING_MISMATCH', drawingId, artifactDrawingId: displayed.id }, { stage: 'result-admission', operation: 'installRedrawnArtifact' });
     }
     setGeneratedArtifactRef(state.featureCatalog, redrawn.featureCatalog);
     setGeneratedArtifactRef(state.extractedFeatures, redrawn.extractedFeatures);
@@ -1311,7 +1312,7 @@ export const createHistorySnapshotService = ({
    */
   const installArtifactSlot = (slot, { drawing, ui = {} }) => {
     if (slot && slot.drawingId !== drawing.id) {
-      throw new Error(`The artifact of drawing ${slot.drawingId} cannot be installed for drawing ${drawing.id}.`);
+      throw diagnosticError('RESULT_INVALID', { reason: 'DRAWING_MISMATCH', drawingId: drawing.id, artifactDrawingId: slot.drawingId }, { stage: 'result-admission', operation: 'installArtifactSlot' });
     }
     ARTIFACT_SLOT_KEYS.forEach((key) => {
       setGeneratedArtifactRef(state[key], slot?.values[key]
@@ -1796,12 +1797,6 @@ export const createHistorySnapshotService = ({
   // (`buildIntentFilesData`), and the shared selections; the Session-level
   // values are the router's project stream's (R15-23). Undo and Redo walk the
   // shown drawing's History and the project stream.
-  /** @param {DrawingId} drawingId */
-  const drawingOfId = (drawingId) => {
-    const drawing = /** @type {D | undefined} */ (state.drawings[drawingId]);
-    if (!drawing) throw new Error(`History has no drawing ${drawingId}.`);
-    return drawing;
-  };
   /** @param {D} drawing */
   const buildDrawingConfig = (drawing) => (typeof buildConfigData === 'function'
     ? buildConfigData(drawing)
@@ -1834,14 +1829,14 @@ export const createHistorySnapshotService = ({
       Object.entries(values).forEach(([key, value]) => setGeneratedArtifactRef(state[key], value));
       return;
     }
-    artifactSlots.set(drawingId, withArtifactSlotValues(artifactSlots.get(drawingId) ?? null, drawingOfId(drawingId), values));
+    artifactSlots.set(drawingId, withArtifactSlotValues(artifactSlots.get(drawingId) ?? null, state.drawingOf(drawingId), values));
   };
   const UI_SLOT_KEYS = /** @type {const} */ (['appliedPaletteName', 'appliedPaletteColors']);
 
   // Synchronous: History captures it without an await (OV-922).
   /** @param {DrawingId} drawingId */
   const buildHistoryIntent = (drawingId) => {
-    const drawing = drawingOfId(drawingId);
+    const drawing = state.drawingOf(drawingId);
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
       : buildFallbackUiStateData(state, drawing);
@@ -1895,7 +1890,7 @@ export const createHistorySnapshotService = ({
    */
   const applyHistoryIntent = async (drawingId, intent, context = {}) => {
     if (!intent || typeof intent !== 'object') return;
-    const drawing = drawingOfId(drawingId);
+    const drawing = state.drawingOf(drawingId);
     closeTransientState(state);
 
     const domains = intentDomains(context);
@@ -1989,7 +1984,7 @@ export const createHistorySnapshotService = ({
   // A checkpoint holds the shown drawing's artifact with the drawing.
   /** @param {DrawingId} drawingId */
   const buildArtifactCheckpoint = (drawingId) => {
-    const drawing = drawingOfId(drawingId);
+    const drawing = state.drawingOf(drawingId);
     const generated = buildGeneratedArtifactSnapshot(drawing);
     const { featureCatalog = null, ...editorState } = generated.editorState || {};
     const checkpoint = cloneJsonData({
@@ -2010,7 +2005,7 @@ export const createHistorySnapshotService = ({
    */
   const applyArtifactCheckpoint = async (drawingId, snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
-    const drawing = drawingOfId(drawingId);
+    const drawing = state.drawingOf(drawingId);
     const suppressRef = state.semanticFileWatchersSuppressed;
     const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
     setGeneratedArtifactRef(suppressRef, true);
@@ -2076,7 +2071,7 @@ export const createHistorySnapshotService = ({
   // not depend on the drawing that `buildUiStateData` reads them with.
   const sessionHistory = () => ({
     buildIntent: () => {
-      const drawing = drawingOfId(/** @type {DrawingId} */ (Object.keys(state.drawings)[0]));
+      const drawing = state.drawingList()[0];
       const ui = /** @type {Record<string, unknown>} */ (typeof buildUiStateData === 'function'
         ? buildUiStateData(drawing, { includePreviewNavigation: false })
         : buildFallbackUiStateData(state, drawing));
