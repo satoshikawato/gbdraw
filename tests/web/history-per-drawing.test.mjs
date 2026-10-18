@@ -578,3 +578,36 @@ test('Reset all drawings resets each drawing\'s applied palette and its Undo res
   show(app, 'circular');
   assert.equal(state.appliedPaletteName.value, 'circular-palette');
 });
+
+// OV-1160 (Owner R15-23 Q-DR-5 A): turning Instant Preview on applies every
+// drawing's queued palette in one project step; its Undo queues each again.
+test('turning Instant Preview on applies every drawing\'s queued palette in one step', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { circular } = state.drawings;
+  show(app, 'circular');
+  app.setPaletteInstantPreview(false);
+  state.appliedPaletteName.value = 'circular-applied';
+  await history.captureBaseline();
+  await history.runUndoable('Change setting', () => app.selectPalette('queued', 'palette'));
+  assert.equal(circular.pendingPaletteName.value, 'queued');
+  show(app, 'linear');
+  const linearApplied = state.appliedPaletteName.value;
+  await app.setPaletteInstantPreview(true);
+  assert.equal(state.paletteInstantPreviewEnabled.value, true);
+  assert.equal(circular.pendingPaletteName.value, '', 'the hidden drawing\'s queue is applied');
+  assert.equal(state.appliedPaletteName.value, linearApplied, 'the shown Result keeps its palette');
+  assert.equal(history.undoLabel(), 'Change setting');
+  await app.undoHistory();
+  assert.equal(state.paletteInstantPreviewEnabled.value, false);
+  assert.equal(circular.pendingPaletteName.value, 'queued', 'the Undo queues it again');
+  show(app, 'circular');
+  assert.equal(state.appliedPaletteName.value, 'circular-applied');
+  await app.redoHistory();
+  assert.equal(state.paletteInstantPreviewEnabled.value, true);
+  assert.equal(circular.pendingPaletteName.value, '');
+  assert.equal(state.appliedPaletteName.value, 'queued', 'Redo from the other drawing applies it again');
+  assert.equal(await app.undoHistory(), true);
+  assert.equal(state.appliedPaletteName.value, 'circular-applied');
+  assert.equal(circular.pendingPaletteName.value, 'queued');
+});

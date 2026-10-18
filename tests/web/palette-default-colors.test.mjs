@@ -39,7 +39,7 @@ const setup = ({ colors = editedColors(), instant = true } = {}) => {
   };
   const state = {
     paletteDefinitions: ref(PALETTES), paletteInstantPreviewEnabled: ref(instant), appliedPaletteName: ref('default'),
-    appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, paletteColorsDialog
+    appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, drawings: { circular: drawing }, paletteColorsDialog
   };
   /** Whether the dialog was open at each History capture. */
   const openAtCapture = [];
@@ -53,7 +53,9 @@ const setup = ({ colors = editedColors(), instant = true } = {}) => {
   });
   // app-setup.js wires the dialog's choices the same way.
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
-  const manager = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
+  const manager = createResultsManager({
+    state, closeAfterDialogChoice: dialogChoice.closeAfterChoice, writeArtifactValues: () => { throw new Error('no hidden drawing'); }
+  });
   const choose = dialogChoice.withHistory(
     () => 'Change setting', manager.handlePaletteColorsChoice, manager.cancelPaletteColorsDialog
   );

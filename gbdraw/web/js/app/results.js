@@ -3,6 +3,7 @@
 import { buildPaletteColorOverrideRows, normalizePaletteColors } from '../utils/color-utils.js';
 import { clearQueuedPalette, queuePalette, replaceDefaultColors, selectPalette as selectDrawingPalette, setDefaultColors } from '../services/drawing/palette.js';
 /** @import { PaletteDrawing } from '../services/drawing/palette.js' */
+/** @import { DrawingId } from '../services/drawing-view.js' */
 
 // The palette dialog body names up to three keys (Q6 A, Owner 2026-10-09).
 /** @param {string[]} keys */
@@ -21,6 +22,7 @@ const describeKeys = (keys) => {
  * @property {{ value: string }} appliedPaletteName
  * @property {{ value: Record<string, string> }} appliedPaletteColors
  * @property {() => ResultsManagerDrawing} activeDrawing The shown mode's drawing.
+ * @property {Readonly<Record<DrawingId, ResultsManagerDrawing>>} drawings Every drawing, by its ID.
  * @property {() => any} [sessionOperationAvailability] The busy outcome of a Session operation, if any.
  * @property {PaletteColorsDialog} paletteColorsDialog
  */
@@ -30,11 +32,13 @@ const describeKeys = (keys) => {
 /**
  * @param {{
  *   state: ResultsManagerState,
- *   closeAfterDialogChoice?: (close: () => unknown) => void
+ *   closeAfterDialogChoice?: (close: () => unknown) => void,
+ *   writeArtifactValues: (drawingId: DrawingId, values: { appliedPaletteName: string, appliedPaletteColors: Record<string, string> }) => void
  * }} options `closeAfterDialogChoice` runs the palette dialog's close at once,
- *   or once the History step of its choice in flight ends (D-12, OIC-028).
+ *   or once the History step of its choice in flight ends (D-12, OIC-028). `writeArtifactValues` writes
+ *   the applied palette of a drawing that is not shown into the artifact it keeps (OV-1160).
  */
-export const createResultsManager = ({ state, closeAfterDialogChoice = (close) => { close(); } }) => {
+export const createResultsManager = ({ state, closeAfterDialogChoice = (close) => { close(); }, writeArtifactValues }) => {
   const {
     paletteDefinitions,
     paletteInstantPreviewEnabled,
@@ -100,12 +104,27 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     setAppliedPaletteState(drawing, drawing.selectedPalette.value, drawing.currentColors.value);
     clearPendingPaletteDraft(drawing);
   };
-  // The Instant Preview toggle's transition: turned on, it applies the shown
-  // drawing's queued palette (D-15-46).
+  // The Instant Preview toggle's transition (D-15-46): turned on, it applies
+  // every drawing's queued palette (OV-1160, Owner R15-23 Q-DR-5 A), the
+  // shown drawing's to the displayed Result and another drawing's to the
+  // artifact it keeps, so that drawing shows it when it is shown again.
   /** @param {boolean} enabled */
   const setPaletteInstantPreview = (enabled) => {
     paletteInstantPreviewEnabled.value = Boolean(enabled);
-    if (enabled && String(state.activeDrawing().pendingPaletteName.value || '').trim() !== '') applyPaletteDraftToPreview();
+    if (!enabled) return;
+    const shown = state.activeDrawing();
+    /** @type {[DrawingId, ResultsManagerDrawing][]} */ (Object.entries(state.drawings)).forEach(([drawingId, drawing]) => {
+      if (String(drawing.pendingPaletteName.value || '').trim() === '') return;
+      if (drawing === shown) {
+        applyPaletteDraftToPreview();
+        return;
+      }
+      writeArtifactValues(drawingId, {
+        appliedPaletteName: String(drawing.selectedPalette.value || 'default'),
+        appliedPaletteColors: cloneColors(drawing.currentColors.value)
+      });
+      clearPendingPaletteDraft(drawing);
+    });
   };
   const syncPaletteDraftState = () => {
     const drawing = state.activeDrawing();

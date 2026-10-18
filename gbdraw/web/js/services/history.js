@@ -2261,9 +2261,11 @@ export const createHistoryRouter = ({
     await sessionHistory.applyIntent(applyIntentPatch(live, changes, direction), { changes, direction });
     sessionCurrent = patchedRecord(sessionCurrent, changes, direction);
   };
-  // Every drawing settles its open step and none restores; the drawings that
-  // are not shown apply their parts first, the shown drawing last, while the
-  // shown drawing's History restores (no edit they cause records a step).
+  // Every drawing settles its open step and none restores; the Session-level
+  // values apply first (a drawing's queued palette restores under the
+  // Instant Preview flag it was queued with, OV-1160), then the parts of the
+  // drawings that are not shown, the shown drawing's last, while the shown
+  // drawing's History restores (no edit they cause records a step).
   /** @param {ProjectEntry} entry @param {'undo' | 'redo'} direction */
   const traverseProject = async (entry, direction) => {
     for (const manager of every()) {
@@ -2275,10 +2277,10 @@ export const createHistoryRouter = ({
     const shownId = activeDrawingId();
     const shown = managerOf(shownId);
     await shown.restoreWith(async () => {
+      if (entry.session) await applySession(entry.session, direction);
       for (const part of entry.parts) {
         if (part.drawingId !== shownId) await managerOf(part.drawingId).applyProjectPart(part.entry, direction, false);
       }
-      if (entry.session) await applySession(entry.session, direction);
       const own = entry.parts.find((part) => part.drawingId === shownId);
       if (own) await shown.applyProjectPart(own.entry, direction, !shown.lostStepAfter(entry.sequence));
     });

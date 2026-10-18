@@ -1934,7 +1934,9 @@ export const createAppSetup = () => {
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
   // The palette owner comes before the feature editor, whose popup sets a
   // type's default color through it (D-15).
-  const resultsManager = createResultsManager({ state, closeAfterDialogChoice: dialogChoice.closeAfterChoice });
+  const resultsManager = createResultsManager({
+    state, closeAfterDialogChoice: dialogChoice.closeAfterChoice, writeArtifactValues: historySnapshots.writeArtifactValues
+  });
   const featureActions = createFeatureEditor({
     state,
     previewPopupsHeld,
@@ -5319,6 +5321,15 @@ export const createAppSetup = () => {
     })));
   };
 
+  // OV-1160 (Owner R15-23 Q-DR-5 A): turned on, the Instant Preview toggle
+  // applies every drawing's queued palette, so it is one project step whose
+  // parts hold each drawing's palette (D-15-51); turned off, it changes the
+  // Session-level flag alone.
+  /** @param {boolean} enabled */
+  const setPaletteInstantPreview = (enabled) => (enabled
+    ? history.runProjectStep('Change setting', () => resultsManager.setPaletteInstantPreview(true))
+    : history.runUndoable('Change setting', () => resultsManager.setPaletteInstantPreview(false)));
+
   const resetLayout = () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -7242,7 +7253,7 @@ export const createAppSetup = () => {
     editDefaultColor: resultsManager.editDefaultColor,
     // Read-only here: the toggle's transition is its one writer.
     paletteInstantPreviewEnabled: computed(() => paletteInstantPreviewEnabled.value),
-    setPaletteInstantPreview: resultsManager.setPaletteInstantPreview,
+    setPaletteInstantPreview,
     appliedPaletteName,
     appliedPaletteColors,
     pendingPaletteName: drawingMember('pendingPaletteName'),

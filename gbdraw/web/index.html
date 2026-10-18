@@ -4724,7 +4724,7 @@
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
                                     <div class="flex items-center gap-2 text-[10px]">
                                         <label class="flex items-center gap-2 text-[10px] font-medium text-slate-600 cursor-pointer">
-                                            <input :checked="paletteInstantPreviewEnabled" @change="setPaletteInstantPreview($event.target.checked)" type="checkbox" aria-describedby="help-colors-palette-instant-preview" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable">
+                                            <input data-history-managed :checked="paletteInstantPreviewEnabled" @change="setPaletteInstantPreview($event.target.checked)" type="checkbox" aria-describedby="help-colors-palette-instant-preview" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable">
                                             <span>Palette instant preview</span>
                                         </label>
                                         <help-tip id="help-colors-palette-instant-preview" text="When off, changing the palette only updates the swatches. The preview keeps the current palette until you click Generate Diagram."></help-tip>
