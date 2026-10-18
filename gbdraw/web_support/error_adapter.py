@@ -11,6 +11,8 @@ import logging
 import re
 from typing import Iterator, Protocol, cast
 
+from Bio.Seq import UndefinedSequenceError
+
 from gbdraw.exceptions import (
     ComparisonIdentityError, ConfigError, ExportError, GbdrawError, InputFileError, ParseError, ValidationError,
 )
@@ -57,7 +59,7 @@ DINUCLEOTIDE CANNOT_FIT DEFINITION_RESERVED CENTER_RESERVED THREE_COLUMNS DEPTH_
 REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME
 LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES ANNOTATION_LANE_CONFLICT CIRCULAR_SETTING LINEAR_SETTING
-ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER""".split())
+ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GZIP_INPUT GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER""".split())
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
     "row column columnCount seriesIndex slotIndex innerPx outerPx placementIndex queryRecordIndex subjectRecordIndex".split()
 )
@@ -291,6 +293,9 @@ def _classify_native(error: BaseException, chain: list[BaseException], stage: st
         code, context = _validation(cause)
         if code != "VALIDATION_UNCLASSIFIED":
             return code, context, stage
+    # OV-1258: a GenBank record without sequence is an input problem, not an engine failure.
+    if any(isinstance(cause, UndefinedSequenceError) for cause in chain):
+        return "INPUT_UNREADABLE", {"reason": "SEQUENCE_UNDEFINED"}, stage
     validation = isinstance(error, (ValidationError, ParseError, ValueError, TypeError, KeyError, json.JSONDecodeError))
     # UnicodeError is a ValueError: test the explicit chain before the validation flag (CI-08).
     if any(isinstance(cause, UnicodeError) for cause in chain) or (

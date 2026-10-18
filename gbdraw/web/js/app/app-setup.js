@@ -144,7 +144,7 @@ import { createPreviewFeatureSearch } from './feature-search/preview-actions.js'
 import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
-import { afterPaint, createRunAnalysis } from './run-analysis.js';
+import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -1640,6 +1640,9 @@ export const createAppSetup = () => {
       specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
+  // An operation's outcome shows in the notice banner (no native alert).
+  const noticeBanner = createNoticeBanner({ reactive });
+  const showNotice = noticeBanner.show;
   const history = createHistoryManager(/** @type {HistoryManagerOptions} */ ({
     buildIntent: historySnapshots.buildHistoryIntent,
     applyIntent: (...args) => followRuleEdits(
@@ -1655,6 +1658,8 @@ export const createAppSetup = () => {
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
     collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
+    // OV-1260: dropped older steps are told, not silent.
+    onHistoryLimit: (text) => showNotice({ text, tone: 'warning' }),
     makeRef: ref,
     mutationAvailability: sessionOperationAvailability,
     // An Undo or Redo of a mode switch waits as the mode buttons do (E1).
@@ -1664,13 +1669,10 @@ export const createAppSetup = () => {
   }));
   // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
-  // Confirmations ask with the app's choice dialog, and an
-  // operation's outcome shows in the notice banner (no native confirm or alert).
+  // Confirmations ask with the app's choice dialog (no native confirm).
   const choicePrompt = createChoicePrompt({ reactive });
-  const noticeBanner = createNoticeBanner({ reactive });
   const askChoice = choicePrompt.ask;
   const askText = choicePrompt.askText;
-  const showNotice = noticeBanner.show;
   // The Font section: the drawing's text font and the fonts loaded in this page.
   const fontSettings = createFontSettings({
     state,
@@ -2856,6 +2858,9 @@ export const createAppSetup = () => {
       depthTrackUiCounts.circular
     ],
     () => {
+      // OV-1164: a Load fits both drawings' series to the loaded sources and
+      // then sets the row count; the previous document's count does not pad them.
+      if (sessionImportPending.value) return;
       depthTrackUiCounts.circular = Math.max(
         depthTrackUiCounts.circular,
         sourceDepthTrackCount(files.c_depth, 1)
@@ -3563,8 +3568,8 @@ export const createAppSetup = () => {
     // failure about those inputs, as the Circular discovery does.
     refreshLinearRecordSelectors: async (/** @type {{ suppress?: boolean } | undefined} */ options) => {
       const outcome = await linearRecordSelector.refresh(options);
-      const ready = linearSeqs.every((/** @type {Record<string, any>} */ seq) => linearRecordSelector.statusFor(seq) === 'ready');
-      if (ready) releaseSourceInputFailure('linear');
+      const read = linearSeqs.every((/** @type {Record<string, any>} */ seq) => ['ready', 'error'].includes(linearRecordSelector.statusFor(seq)));
+      if (read) releaseSourceInputFailure('linear');
       return outcome;
     },
     resetPreviewViewport,
@@ -5247,9 +5252,10 @@ export const createAppSetup = () => {
         'Labels, Feature visibility, and Feature placements',
         'Legend names, deleted Legend rows, Similarity group names, and Region Annotations',
         'Linear record definitions, subtitles, regions, reverse complement, and alignment',
-        'Linear comparisons, which turn off; their uploaded tables stay'
+        'Linear comparisons, which turn off; their uploaded tables stay',
+        'The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded'
       ],
-      note: 'Uploaded files, the records you chose, File defaults, and Depth files stay. Undo brings the settings back.',
+      note: 'Input files (genome, Depth, and Circular conservation files), the records you chose, and File defaults stay. Undo brings the settings back.',
       actions: [{ id: 'reset', label: 'Reset all settings', tone: 'danger' }],
       cancelLabel: 'Keep settings'
     });
@@ -5287,6 +5293,9 @@ export const createAppSetup = () => {
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
       resetSettingsState(state);
+      // OV-1249: the loaded Circular records keep a Record Order row each, at
+      // their defaults; Reset resets settings, not the records.
+      state.drawings.circular.adv.multi_record_positions.push(...buildDefaultCircularRecordPositions());
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
       // also clears the alignment plan (D-15).
@@ -6101,19 +6110,10 @@ export const createAppSetup = () => {
     }
   }, { flush: 'sync' });
 
-  const buildDefaultCircularRecordPositions = () => {
-    const selectors = Array.isArray(circularRecordList.value)
-      ? circularRecordList.value
-          .map((/** @type {{ selector?: unknown }} */ entry) => String(entry?.selector || '').trim())
-          .filter(Boolean)
-      : [];
-    if (selectors.length === 0) return [];
-    const cols = Math.ceil(Math.sqrt(selectors.length));
-    return selectors.map((/** @type {string} */ selector, /** @type {number} */ index) => ({
-      selector,
-      row: Math.floor(index / cols) + 1
-    }));
-  };
+  const buildDefaultCircularRecordPositions = () => buildDefaultMultiRecordPositions(
+    (Array.isArray(circularRecordList.value) ? circularRecordList.value : [])
+      .map((/** @type {{ selector?: unknown }} */ entry) => entry?.selector)
+  );
 
   /** @param {MultiRecordPosition | null | undefined} position */
   const getCircularRecordRow = (position) => {

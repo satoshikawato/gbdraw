@@ -524,8 +524,10 @@ const createLayoutPreferences = () => ({
     retainedBytes: 80,
     fileIds: []
   };
+  const limitMessages = [];
   const history = createHistoryManager({
     maxBytes: 100,
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: async () => ({}),
     applyIntent: async () => {},
     buildCheckpoint: () => ({}),
@@ -545,8 +547,15 @@ const createLayoutPreferences = () => ({
     return { status: 'ok' };
   }, { shouldCommit: (result) => result.status === 'ok' });
   assert.equal(history.getDiagnostics().artifactReplacementHistoryEntryCount, 1);
-  assert.equal(history.canUndo(), false);
-  assert.match(history.historyLimitMessage.value, /discarded/);
+  // OV-1260: the Generate just taken stays undoable although it alone is over
+  // the limit; it drops no older step, so nothing is announced.
+  assert.equal(history.canUndo(), true);
+  assert.deepEqual(limitMessages, []);
+  assert.equal(await history.undo(), true);
+  assert.equal(artifact.identity.compactSignature, 'a');
+  assert.equal(history.canRedo(), true, 'the step just undone stays redoable');
+  assert.equal(await history.redo(), true);
+  assert.equal(artifact.identity.compactSignature, 'b');
 }
 
 {
@@ -676,8 +685,10 @@ const createLayoutPreferences = () => ({
   const applyState = async (snapshot) => {
     value = snapshot.value;
   };
+  const limitMessages = [];
   const history = createHistoryManager({
     maxBytes: 220,
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: buildState,
     applyIntent: applyState,
     buildCheckpoint: buildState,
@@ -685,11 +696,19 @@ const createLayoutPreferences = () => ({
   });
 
   await history.captureBaseline('initial');
+  await history.runUndoable('Small edit', () => {
+    value = 'tiny';
+  });
+  assert.equal(history.getUndoCount(), 1);
   await history.runUndoable('Large state', () => {
     value = 'x'.repeat(1000);
   });
-  assert.equal(history.canUndo(), false);
-  assert.equal(history.historyLimitMessage.value.length > 0, true);
+  // OV-1260: the newest step stays; the older one drops and the drop is announced.
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.undoLabel(), 'Large state');
+  assert.deepEqual(limitMessages, ['Older undo history was discarded to stay within the history limit.']);
+  assert.equal(await history.undo(), true);
+  assert.equal(value, 'tiny');
 }
 
 {
@@ -3061,6 +3080,36 @@ for (const previousSuppressed of [false, true]) {
     }
   }
   console.log('history action remainder tests passed');
+}
+
+// OV-1260: a kept rerender that grows the last step over the byte limit
+// drops the Redo steps, and the drop is announced as an Undo drop is.
+{
+  let rules = 0;
+  let figure = 'drawn-0';
+  const limitMessages = [];
+  const history = createHistoryManager({
+    maxBytes: 1000,
+    onHistoryLimit: (message) => limitMessages.push(message),
+    buildIntent: () => ({ rules }),
+    applyIntent: (intent) => { rules = intent.rules; },
+    buildCheckpoint: () => ({ rules, figure }),
+    applyCheckpoint: (checkpoint) => { rules = checkpoint.rules; figure = checkpoint.figure; }
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('Change feature color', () => {
+    rules = 1;
+    figure = 'shown-1';
+  }, { drawn: { before: () => true, change: false } });
+  await history.runUndoable('Edit setting', () => { rules = 2; });
+  await history.undo();
+  assert.equal(history.getRedoCount(), 1);
+  assert.deepEqual(limitMessages, []);
+  figure = 'x'.repeat(2000);
+  assert.equal(await history.keepRedrawnResult(), true);
+  assert.equal(history.getRedoCount(), 0);
+  assert.equal(history.undoLabel(), 'Change feature color');
+  assert.deepEqual(limitMessages, ['Redo history was discarded to stay within the history limit.']);
 }
 
 // D-24 (OV-731): a checkpoint step's caller says whether the figure of each

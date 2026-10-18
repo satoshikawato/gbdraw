@@ -75,6 +75,18 @@ test('the notice banner shows warnings as a list and is cleared by dismiss', () 
   assert.equal(notice.announcement, '');
 });
 
+// D-06: the handle a notice returns ends that notice and leaves a later one.
+test('a notice handle dismisses only the notice it showed', () => {
+  const { notice, show } = createNoticeBanner({ reactive });
+  const loaded = show({ text: 'Loaded 3 row(s). Applied to 2 label(s).' });
+  const later = show({ text: 'Label table saved.' });
+  loaded.dismiss();
+  assert.equal(notice.text, 'Label table saved.');
+  later.dismiss();
+  assert.equal(notice.text, '');
+  assert.equal(notice.announcement, '');
+});
+
 // A live region speaks only a change of its text, so a notice that repeats
 // the shown one changes the announced text and keeps the visible one.
 test('a repeated notice is announced again', () => {

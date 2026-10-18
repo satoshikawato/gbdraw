@@ -32,6 +32,18 @@ const obsoleteSlots = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: '
   { operation: 'session-load' });
 assert.match(obsoleteSlots.summary, /Recreate Custom Track Slots with the current schema\..*Load a supported Session file/);
 assert.equal(operationErrorTitle('session-load'), 'Session not loaded');
+// OV-1253: a Session version this app does not read is named with the versions
+// it reads, in the CLI's words (gbdraw/session_io.py `validate_session`); the
+// Session reader names those versions in the context.
+const versionRefusal = (context) => normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation',
+  context: { field: 'schema', ...context } }, { operation: 'session-load' }).summary;
+assert.match(versionRefusal({ reason: 'SESSION_TOO_NEW', sessionVersion: 49, latestSessionVersion: 48 }),
+  /Session version 49 is newer than this gbdraw supports \(48\)\./);
+assert.match(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: '27–33, 39–42, 44, and 46–48' }),
+  /Unsupported session version: 34\. This gbdraw reads Session versions 27–33, 39–42, 44, and 46–48\./);
+assert.doesNotMatch(versionRefusal({ reason: 'SESSION_TOO_NEW', sessionVersion: 99, latestSessionVersion: 48 }), /Check the required fields/);
+// A context word list that is not a version list is dropped, not shown.
+assert.doesNotMatch(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: '<b>27</b>' }), /<b>/);
 // The LOSATP-mode reason is true with and without an Upload pair: a Selected
 // plan whose pairs all run LOSAT raises it too.
 const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage: 'request-validation',
@@ -544,7 +556,8 @@ test('a display start beyond the record and an unparsable GenBank file are input
   assert.match(display.summary, /Use a display start between 1 and the record length\./);
   assert.deepEqual(display.actions, ['edit-input', 'retry']);
   assert.deepEqual([genbank.code, genbank.operation, genbank.stage], ['INPUT_UNREADABLE', 'generate', 'render']);
-  assert.deepEqual(genbank.context, {});
+  // OV-1258: the reason says the file is cut off or damaged.
+  assert.deepEqual(genbank.context, { reason: 'GENBANK_PARSE' });
   assert.deepEqual(genbank.actions, ['select-input', 'retry']);
   for (const model of [display, genbank]) {
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE_|RENDER_FAILED/);

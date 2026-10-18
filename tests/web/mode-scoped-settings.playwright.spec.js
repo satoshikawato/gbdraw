@@ -9,7 +9,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
-const { openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
+const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
@@ -686,6 +686,22 @@ test('H1: Undo and Redo of an edit, a switch, and an edit in the other mode rest
     await historyStep(page, step);
     expect(await read(), `${step} to ${JSON.stringify(expected)}`).toEqual(expected);
   }
+});
+
+// OV-1249: Reset resets settings, not the loaded records.
+test('OV-1249: Reset Settings keeps a Record Order row for each loaded record', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openWithGenBank(page, BATCH_FIXTURE);
+  const recordOrder = () => page.evaluate(() => window.__GBDRAW_APP__.adv.multi_record_positions
+    .map(({ selector, row }) => ({ selector, row })));
+  const loaded = await recordOrder();
+  expect(loaded).toHaveLength(2);
+  await page.evaluate(() => { window.__GBDRAW_APP__.adv.multi_record_positions[1].row = 2; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.resetSettings(); });
+  await settleLive(page);
+  // Reset returns the rows to the defaults of the loaded records, as an upload sets them.
+  expect(await recordOrder()).toEqual(loaded);
+  await expect(page.getByText('Upload a sequence file to load records.')).toHaveCount(0);
 });
 
 // H2: Reset Settings resets both drawings, and one Undo restores both modes' edits.

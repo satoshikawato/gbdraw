@@ -128,6 +128,8 @@ const REASONS = Object.freeze({
   SELECT_RECORD_FOR_REGION: 'Choose a Record before setting a region on a multi-record file.',
   DISCOVERY_PENDING: 'Wait for the record list to finish loading, then retry.',
   SESSION_FORMAT: 'Choose a gbdraw Session file.',
+  SESSION_TOO_NEW: 'This Session was saved by a newer gbdraw.',
+  SESSION_VERSION_UNSUPPORTED: 'This gbdraw does not read this Session version.',
   SESSION_TOO_OLD: 'This Session was saved by gbdraw 0.11.0 or older, or by gbdraw.app before 0.12.0, and this version cannot read it. Generate the diagram again from its input files.',
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
   EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
@@ -138,6 +140,12 @@ const REASONS = Object.freeze({
   OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',
   FASTA_IN_GENBANK: 'This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.',
+  // OV-1258, OV-1257: what a GenBank/DDBJ, GFF3, or FASTA slot file lacks.
+  GZIP_INPUT: 'The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.',
+  GENBANK_PARSE: 'The GenBank/DDBJ file could not be parsed: it may be cut off or damaged. Download or export it again.',
+  SEQUENCE_UNDEFINED: 'Sequence content is undefined: a record has no sequence after ORIGIN. Use a GenBank/DDBJ file that includes the sequence.',
+  GFF_NO_FEATURES: 'The GFF3 file has no feature lines.',
+  FASTA_NO_ENTRIES: 'The FASTA file has no sequence entry: no line starts with ">".',
   FONT_FILE: 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.',
   FONT_EMBEDDING: 'Turn off Embed font in exported SVG in Font to export without the font, or choose another font.',
   FONT_RASTER: 'The PNG cannot draw this font. Choose another font.',
@@ -285,6 +293,9 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [queryRecordIndex]
  * @property {number} [subjectRecordIndex]
  * @property {string} [labelFitCounts] Python's sentence of the label fit counts, shown as sent.
+ * @property {number} [sessionVersion] The version of a Session file this app does not read.
+ * @property {number} [latestSessionVersion] The newest Session version this app reads.
+ * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
  */
 
 /**
@@ -537,6 +548,11 @@ const contextFor = (value) => {
   const caption = typeof value.featureCaption === 'string' ? value.featureCaption.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 80).trimEnd() : '';
   if (caption) context.featureCaption = caption;
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
+  if (Number.isSafeInteger(value.sessionVersion)) context.sessionVersion = value.sessionVersion;
+  if (Number.isSafeInteger(value.latestSessionVersion)) context.latestSessionVersion = value.latestSessionVersion;
+  if (typeof value.readSessionVersions === 'string' && /^[0-9\u2013, and]{1,200}$/.test(value.readSessionVersions)) {
+    context.readSessionVersions = value.readSessionVersions;
+  }
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
   // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
@@ -551,6 +567,21 @@ const contextFor = (value) => {
     }
   }
   return context;
+};
+
+// OV-1253: the CLI's words for a Session version this app does not read
+// (gbdraw/session_io.py `validate_session`). The Session reader
+// (services/session-authority.js) names the versions it reads.
+/** @param {UserFacingContext} context */
+const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, readSessionVersions }) => {
+  if (sessionVersion === undefined) return '';
+  if (reason === 'SESSION_TOO_NEW' && latestSessionVersion !== undefined) {
+    return `Session version ${sessionVersion} is newer than this gbdraw supports (${latestSessionVersion}).`;
+  }
+  if (reason === 'SESSION_VERSION_UNSUPPORTED' && readSessionVersions) {
+    return `Unsupported session version: ${sessionVersion}. This gbdraw reads Session versions ${readSessionVersions}.`;
+  }
+  return '';
 };
 
 /** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
@@ -603,7 +634,8 @@ export const normalizeUserFacingError = (value, {
     /** @type {number} */ (featureCount) > 1 ? `Features affected: ${featureCount}.` : ''
   ].filter(Boolean).map((text) => ` ${text}`).join('');
   const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
-  const guidance = REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
+  const guidance = sessionVersionGuidance(result.context)
+    || REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
   const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
   // The context keeps Python's zero-based index; people count from one.
   const position = result.context.position !== undefined ? ` At character ${result.context.position + 1}.` : '';

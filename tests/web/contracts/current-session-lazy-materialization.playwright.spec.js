@@ -1556,7 +1556,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
   expect(rejected.status).toBe('error');
   expect(rejected.message).toContain('Load a supported Session file or recreate it with the current writer.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' }
+    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'SESSION_TOO_NEW', latestSessionVersion: expect.any(Number) }
   });
   expect(rejected.message).not.toContain('unused-lazy-contract');
   expect(await page.evaluate(() => {

@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { ShowNotice } from '../app-messages.js' */
+/** @import { NoticeHandle, ShowNotice } from '../app-messages.js' */
 /** @import { DrawingState, DiagramMode } from '../../state.js' */
 import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
@@ -1567,10 +1567,18 @@ export const createFeatureLabelActions = ({
     queueLabelReflow();
   };
 
+  /** @type {{ drawing: DrawingState, notice: NoticeHandle } | null} The notice of the last Label TSV load, and the drawing it edited. */
+  let labelImportNotice = null;
   const resetAllLabelTextOverrides = () => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    // D-06: the notice of the Label TSV edits this removes ends with them.
+    const importNotice = labelImportNotice;
+    if (importNotice && importNotice.drawing === drawing) {
+      importNotice.notice.dismiss();
+      labelImportNotice = null;
+    }
     const svg = svgContainer.value?.querySelector('svg');
     if (svg) resetLabelsToSourceText(drawing, svg);
     clearOverrides(drawing);
@@ -1753,7 +1761,8 @@ export const createFeatureLabelActions = ({
         : [];
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;
-      showNotice({ text: message, items: skipped });
+      const notice = showNotice({ text: message, items: skipped });
+      labelImportNotice = notice ? { drawing, notice } : null;
     } catch (error) {
       if (revision !== labelImportRevision || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
         || state.errorLog?.value !== previousError) return;

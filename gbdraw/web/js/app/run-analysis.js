@@ -1220,10 +1220,11 @@ const sortMultiRecordPositionsByRow = (positions) => {
     .map(({ __index, ...entry }) => entry);
 };
 /**
+ * The default Record Order of a Circular source's records: a near-square grid.
  * @param {unknown} selectors
  * @returns {MultiRecordPosition[]}
  */
-const buildDefaultMultiRecordPositions = (selectors) => {
+export const buildDefaultMultiRecordPositions = (selectors) => {
   const normalizedSelectors = Array.isArray(selectors)
     ? selectors.map((value) => String(value ?? '').trim()).filter(Boolean)
     : [];
@@ -1864,7 +1865,9 @@ export const createRunAnalysis = ({
   const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
   /**
    * Record discovery read every source input of `drawingMode`: a shown
-   * Generate failure about those inputs no longer holds, so it ends here.
+   * Generate failure about those inputs no longer holds, so it ends here,
+   * whether the inputs now give records or the inspection line says why
+   * they do not (OV-1257).
    * @param {string} drawingMode
    */
   const releaseSourceInputFailure = (drawingMode) => {
@@ -2415,6 +2418,7 @@ export const createRunAnalysis = ({
       circularRecordDiscovery.status = 'error';
       circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
+      releaseSourceInputFailure('circular');
       onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: 0 });
     }
   };

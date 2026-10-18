@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 # A file that cannot be parsed is a user-fixable input: the Web asks to replace it.
 _UNREADABLE_INPUT = {"code": "INPUT_UNREADABLE"}
 _DUPLICATE_FASTA_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UNIQUE_IDS"}
+# OV-1257: a GFF3/FASTA pair whose slot file holds no entry says which slot.
+_GFF_WITHOUT_FEATURES = {"code": "NO_RECORDS", "reason": "GFF_NO_FEATURES"}
+_FASTA_WITHOUT_ENTRIES = {"code": "NO_RECORDS", "reason": "FASTA_NO_ENTRIES"}
 
 
 def _parser_reason(error: BaseException) -> str:
@@ -42,6 +45,17 @@ def genbank_absence_diagnostic(path: str) -> dict[str, str]:
         first = next((line.strip() for line in handle if line.strip()), b"")
     reason = "EMPTY_FILE" if not first else "FASTA_IN_GENBANK" if first.startswith(b">") else "NOT_GENBANK"
     return {"code": "NO_RECORDS", "reason": reason}
+
+
+def genbank_read_diagnostic(path: str) -> dict[str, str]:
+    """The INPUT_UNREADABLE diagnostic of a GenBank/DDBJ file the parser refused (OV-1258).
+
+    A gzip file says so; any other refusal is a file cut off or damaged.
+    """
+
+    with open(path, "rb") as handle:
+        compressed = handle.read(2) == b"\x1f\x8b"
+    return {"code": "INPUT_UNREADABLE", "reason": "GZIP_INPUT" if compressed else "GENBANK_PARSE"}
 
 
 def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
@@ -103,7 +117,7 @@ def load_gbks(
             raise ParseError(
                 f"The GenBank parser stopped: {_parser_reason(e)}. "
                 f"Error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format.",
-                diagnostic=_UNREADABLE_INPUT,
+                diagnostic=genbank_read_diagnostic(gbk_file),
             ) from e
         except Exception as e:  # A more generic catch-all for other unexpected issues
             raise ParseError(
@@ -338,6 +352,26 @@ def _gff_fasta_errors(gff_file: str, fasta_file: str):
         ) from e
 
 
+def _read_fasta_records(fasta_file: str) -> list[SeqRecord]:
+    """Read the records of a FASTA file the same way under every Biopython version.
+
+    Text before the first ">" line is skipped, as Biopython 1.85 (the Web's) does;
+    Biopython 1.88 refuses it. A file without a ">" line has no entry (OV-1257).
+    Only the lines before the first entry are read twice.
+    """
+
+    with open(fasta_file) as handle:
+        while True:
+            start = handle.tell()
+            line = handle.readline()
+            if not line:
+                raise ValidationError(f"FASTA file {fasta_file} has no sequence entry.", diagnostic=_FASTA_WITHOUT_ENTRIES)
+            if line.startswith(">"):
+                break
+        handle.seek(start)
+        return list(SeqIO.parse(handle, "fasta"))
+
+
 def parse_gff_fasta(
     gff_file: str,
     fasta_file: str,
@@ -357,11 +391,13 @@ def parse_gff_fasta(
     with _gff_fasta_errors(gff_file, fasta_file):
         logger.info("INFO: Loading GFF3 file {}".format(gff_file))
         gff_records = [_normalize_gff3_multipart_features(record) for record in GFF.parse(gff_file)]
+        if not gff_records:
+            raise ValidationError(f"GFF3 file {gff_file} has no feature lines.", diagnostic=_GFF_WITHOUT_FEATURES)
         catalogs = {
             id(record): build_source_feature_catalog(record) for record in gff_records
         } if source_feature_catalogs is not None else {}
         logger.info("INFO: Loading FASTA file {}".format(fasta_file))
-        fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
+        fasta_records = _read_fasta_records(fasta_file)
         merged_records = merge_gff_fasta_records(gff_records, fasta_records, fasta_file=fasta_file)
         if source_feature_catalogs is not None:
             source_feature_catalogs.extend(catalogs[id(record)] for record in merged_records)

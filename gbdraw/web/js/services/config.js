@@ -4176,11 +4176,7 @@ const applyFiles = (filesData, {
   targetState.files.c_conservation_fastas = [];
   targetState.files.c_conservation_sequence_sources = [];
   targetState.files.linearCanonicalComparisons = [];
-  targetState.files.d_color = null;
-  targetState.files.t_color = null;
-  targetState.files.blacklist = null;
-  targetState.files.whitelist = null;
-  targetState.files.qualifier_priority = null;
+  // The setting-table cards are cleared by Reset Settings, which every Session replace runs first.
   targetState.linearReorderNotice.value = '';
 
   if (!filesData) {
