@@ -5,6 +5,7 @@ globalThis.self = {};
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
+  buildPreparedInputRetention,
   buildPreparedResourceIdentityMap,
   buildGeneratedArtifactTransportIdentity,
   collectGenerationResultTransferList,
@@ -32,6 +33,16 @@ assert.deepEqual(preparedIdentities, {
   'record-1-genbank': { cacheToken: TOKEN_7, size: 1234 }
 });
 assert.equal(JSON.stringify(preparedIdentities).includes('secret-name.gbk'), false);
+// A4b: Python keeps each drawing's prepared inputs while the retain set names their resources.
+assert.deepEqual(buildPreparedInputRetention('linear', [TOKEN_1, TOKEN_2]), {
+  drawing: 'linear', resourceTokens: [TOKEN_1, TOKEN_2]
+});
+assert.deepEqual(buildPreparedInputRetention('circular', undefined), { drawing: 'circular', resourceTokens: [] });
+assert.equal(buildPreparedInputRetention(null, [TOKEN_1]), null);
+assert.equal(buildPreparedInputRetention(undefined, [TOKEN_1]), null);
+for (const drawingId of ['', 'Circular', 'circular/linear', 7]) {
+  assert.throws(() => buildPreparedInputRetention(drawingId, []), (error) => error.code === 'HELPER_PROTOCOL');
+}
 assert.equal(JSON.stringify(preparedIdentities).includes('/temporary/workspace'), false);
 for (const cacheToken of ['bad-token', 'render-resource-1']) {
   assert.throws(

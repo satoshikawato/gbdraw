@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
+/** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
@@ -1301,6 +1302,8 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  *   renders; when this render reuses its build, the reply says so and the page keeps it.
  * @property {readonly unknown[] | null} [heldResults] The drawing's committed Results; Python
  *   omits the children texts whose sanitized segments they keep.
+ * @property {DrawingId | null} [drawingId] The drawing it renders: the Worker keeps the prepared
+ *   inputs of each drawing's last request (A4b).
  */
 
 /** @param {CanonicalRenderCandidateExecutionOptions} options */
@@ -1318,7 +1321,8 @@ export const executeCanonicalRenderCandidate = async ({
   timingEntries = [],
   resultNames = null,
   heldFeatureCatalog = null,
-  heldResults = null
+  heldResults = null,
+  drawingId = null
 }) => {
   if (!canonical?.renderRequest || !canonical?.resources) {
     throw new Error('Canonical candidate execution requires a request and resources.');
@@ -1334,7 +1338,7 @@ export const executeCanonicalRenderCandidate = async ({
     : await runDiagramGeneration({
         request: canonical.renderRequest,
         resources: canonical.resources
-      }, { onProgress: onProgress, held });
+      }, { onProgress: onProgress, held, drawingId });
   const results = generationResponse.results;
   if (!shouldAdmit()) {
     return { status: /** @type {const} */ ('superseded'), generationResponse, elapsedMs: getNow() - startedAt };
@@ -1607,7 +1611,8 @@ export const createRunAnalysis = ({
     return executeCanonicalRenderCandidate({
       ...options,
       heldFeatureCatalog: shown.featureCatalog ?? null,
-      heldResults: shown.results ?? null
+      heldResults: shown.results ?? null,
+      drawingId: state.activeDrawingId.value
     });
   };
   /**

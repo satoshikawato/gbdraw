@@ -730,12 +730,14 @@ const settleActiveRequest = (request, callback) => {
 
 /**
  * @param {GenerationPayload} [payload]
- * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState> }} [options]
+ * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState>, drawingId?: string | null }} [options]
  *   `held`: what the page holds for the drawing it renders (selectHeldRenderState); the
  *   catalog's revision and each segment's revision and byte count are posted.
+ *   `drawingId`: the drawing it renders; the Worker keeps each drawing's prepared inputs
+ *   while the retain set names their resources (A4b).
  * @returns {Promise<GenerationResponse>}
  */
-export const runDiagramGeneration = (payload = {}, { onProgress = null, held = NOTHING_HELD } = {}) => {
+export const runDiagramGeneration = (payload = {}, { onProgress = null, held = NOTHING_HELD, drawingId = null } = {}) => {
   if (activeRequest) {
     return Promise.reject(new Error('A diagram generation request is already running.'));
   }
@@ -792,6 +794,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
         resourceManifest: preparedResources.resourceManifest,
         stagedResources: preparedResources.stagedResources,
         retainedResourceTokens: preparedResources.retainedResourceTokens,
+        drawingId,
         fontIdentities: requestFontIdentities(payload.request),
         heldFeatureCatalogRevision: held.catalog?.revision ?? null,
         heldSegments: heldSegmentList(held)

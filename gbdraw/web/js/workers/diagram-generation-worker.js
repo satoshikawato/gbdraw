@@ -6,7 +6,7 @@ import {
   readHeldSegments,
   readSvgDocumentParts
 } from '../services/diagram-worker-protocol.js';
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
 import {
@@ -66,6 +66,20 @@ export const buildPreparedResourceIdentityMap = (resourceManifest) => {
     identities[resourceId] = { cacheToken, size };
   });
   return identities;
+};
+
+/**
+ * What Python's prepared input cache keeps besides this request's inputs
+ * (A4b): the inputs of each drawing's last request, while the resources they
+ * name are requested or retained. No drawing: only this request's.
+ */
+export const buildPreparedInputRetention = (drawingId, retainedResourceTokens) => {
+  if (drawingId === null || drawingId === undefined) return null;
+  // A drawing ID has the form of a resource ID.
+  if (typeof drawingId !== 'string' || !RENDER_RESOURCE_ID_RE.test(drawingId)) {
+    throw diagnosticError('HELPER_PROTOCOL', { reason: 'retention-drawing' });
+  }
+  return { drawing: drawingId, resourceTokens: [...(retainedResourceTokens ?? [])] };
 };
 
 const emitTestLifecycle = (enabled, requestId, name, detail = {}) => {
@@ -1040,6 +1054,7 @@ const runGeneration = async ({
   resourceManifest,
   stagedResources,
   retainedResourceTokens,
+  drawingId = null,
   fontIdentities = [],
   heldFeatureCatalogRevision = null,
   heldSegments: heldSegmentsInput = null,
@@ -1117,6 +1132,9 @@ const runGeneration = async ({
     const preparedResourceIdentitiesJson = JSON.stringify(
       buildPreparedResourceIdentityMap(resourceManifest)
     );
+    const preparedInputRetentionJson = JSON.stringify(
+      buildPreparedInputRetention(drawingId, retainedResourceTokens)
+    );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-end', {
       characters: resourcePathsJson.length,
       preparedIdentityCharacters: preparedResourceIdentitiesJson.length
@@ -1137,7 +1155,8 @@ const runGeneration = async ({
       testLifecycleEnabled,
       preparedResourceIdentitiesJson,
       held?.revision ?? null,
-      JSON.stringify(heldSegments.map(({ revision }) => revision))
+      JSON.stringify(heldSegments.map(({ revision }) => revision)),
+      preparedInputRetentionJson
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });
