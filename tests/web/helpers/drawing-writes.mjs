@@ -76,6 +76,39 @@ export const memberWriteSites = (source, members = MEMBERS) => {
   return [...sites, ...computedKey, ...bare].sort((left, right) => Number(left.split(':')[1]) - Number(right.split(':')[1]));
 };
 
+// Words that open a parenthesis but are no call.
+export const NOT_CALLS = new Set(['if', 'while', 'for', 'switch', 'catch', 'return', 'typeof', 'await', 'void']);
+
+// The call whose arguments hold `index`, or '' outside a call.
+export const enclosingCallee = (code, index) => {
+  const closers = [];
+  for (let at = index - 1; at >= 0; at -= 1) {
+    const char = code[at];
+    if (')]}'.includes(char)) closers.push(char);
+    else if ('([{'.includes(char)) {
+      if (closers.length) closers.pop();
+      else return char === '(' ? (code.slice(0, at).match(/([\w$]+(?:\.[\w$]+)*)\s*$/)?.[1] || '') : '';
+    }
+  }
+  return '';
+};
+
+// The calls that receive a slice handle of `handles` (R2, R15): the handle
+// as `slices.<handle>`, or a name equal to the handle's (a helper's `paint`
+// parameter), as an argument; `{ callee, index }`, keyword groups left out.
+// A slice writer writes for its caller; the caller tells the slice readers
+// (`SLICE_READERS`, helpers/drawing-state.mjs) from the writers.
+export const sliceHandleCalls = (source, handles) => {
+  if (handles.length === 0) return [];
+  const code = codeOnly(source);
+  return [...code.matchAll(new RegExp(
+    `(?:\\bslices\\s*\\??\\.\\s*|(?<![\\w$.]))(?:${handles.join('|')})\\b(?!\\s*(?:\\??\\.|\\[|:))`, 'g'
+  ))].flatMap(({ index }) => {
+    const callee = enclosingCallee(code, index);
+    return callee && !NOT_CALLS.has(callee) ? [{ callee, index }] : [];
+  });
+};
+
 // The writes of the refs `names` name in a module: an assignment to a ref's
 // `.value` (or a field under it, `++`, `--`), held by its name directly
 // (`mode.value`) or through any receiver (`state.mode.value`). The sites are

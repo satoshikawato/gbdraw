@@ -31,6 +31,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { DRAWING_SLICES, SLICE_READERS } from './helpers/drawing-state.mjs';
+import { NOT_CALLS as KEYWORDS, enclosingCallee, sliceHandleCalls } from './helpers/drawing-writes.mjs';
 
 const WEB_ROOT = new URL('../../gbdraw/web/', import.meta.url);
 const NAME = 'featureVisibilityManualRules';
@@ -148,7 +149,6 @@ const READERS = new Set([
   'normalizedLegendEntries', 'publicationClone', 'readFeatureColorEdits', 'requestFeatureVisibilityRules', 'rewriteOverrideMap',
   'rowOf', 'savedFeatureColorEdits', 'serializeFeatureVisibilityRules'
 ]);
-const KEYWORDS = new Set(['if', 'while', 'for', 'switch', 'catch', 'return', 'typeof', 'await', 'void']);
 const ASSIGNMENT = /^\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])/;
 
 // Comments and quoted strings blanked, so offsets stay and prose is no writer.
@@ -166,20 +166,6 @@ const writesThrough = (after) => {
     last = step[1] || '';
   }
   return (MUTATING_METHODS.has(last) && /^\s*\(/.test(rest)) || ASSIGNMENT.test(rest);
-};
-
-// The call whose arguments hold `index`, or '' outside a call.
-const enclosingCallee = (code, index) => {
-  const closers = [];
-  for (let at = index - 1; at >= 0; at -= 1) {
-    const char = code[at];
-    if (')]}'.includes(char)) closers.push(char);
-    else if ('([{'.includes(char)) {
-      if (closers.length) closers.pop();
-      else return char === '(' ? (code.slice(0, at).match(/([\w$]+(?:\.[\w$]+)*)\s*$/)?.[1] || '') : '';
-    }
-  }
-  return '';
 };
 
 // The index after the bracket group that opens at `start`.
@@ -228,12 +214,8 @@ export const writerSites = (source, names, refs = []) => {
   };
   const handles = Object.entries(DRAWING_SLICES)
     .filter(([, slice]) => slice.members.some((member) => names.includes(member))).map(([handle]) => handle);
-  const sliceCalls = handles.length === 0 ? [] : [...code.matchAll(new RegExp(
-    `(?:\\bslices\\s*\\??\\.\\s*|(?<![\\w$.]))(?:${handles.join('|')})\\b(?!\\s*(?:\\??\\.|\\[|:))`, 'g'
-  ))].flatMap(({ index }) => {
-    const callee = enclosingCallee(code, index);
-    return callee && !KEYWORDS.has(callee) && !READERS.has(callee) && !SLICE_READERS.includes(callee) ? [at(index)] : [];
-  });
+  const sliceCalls = sliceHandleCalls(code, handles)
+    .filter(({ callee }) => !READERS.has(callee) && !SLICE_READERS.includes(callee)).map(({ index }) => at(index));
   return [...sliceCalls, ...[...code.matchAll(new RegExp(`(?<![\\w$])(?:${names.join('|')})\\b`, 'g'))].flatMap((match) => {
     const start = match.index;
     const before = code.slice(0, start);

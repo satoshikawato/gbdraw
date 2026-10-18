@@ -1453,7 +1453,6 @@ export const createAppSetup = () => {
   };
   /** @param {{ uid: string, records: SequenceRecord[] }} discovered */
   const handleLinearRecordsDiscovered = ({ uid, records }) => {
-    rebindAnnotationRecords();
     const drawing = state.drawings.linear;
     const isRollbackOrSessionLoad = Boolean(
       state.sessionImportRollbackInProgress?.value ||
@@ -1466,6 +1465,9 @@ export const createAppSetup = () => {
       uid, records, inferDefinitions: fromUpload && lInputType.value === 'gb'
     });
     if (fromUpload) requestRecordListAfterUpload('linear', uid, records.length);
+    // After the expansion, which gives records 2..n of the file new keys: an
+    // expansion rebinds in its source edit (`applyLinearSeqMutation`).
+    if (!expanded) rebindAnnotationRecords();
     return expanded;
   };
   /**
@@ -1558,9 +1560,15 @@ export const createAppSetup = () => {
   // annotations to the records the catalog resolves, in that transition's
   // History step. Load and its rollback are busy and end in a discovery; a
   // History restore installs the bindings it captured; Generate rebinds in
-  // `validateAnnotationTargets`.
+  // `validateAnnotationTargets`. A transition that leaves the catalog's
+  // status and records as the last rebind saw them rebinds nothing (a refresh
+  // after Save or at the end of Load), as the former catalog watcher did.
+  let reboundCatalog = '';
   const rebindAnnotationRecords = () => {
     const catalog = getAnnotationRecordCatalog();
+    const seen = `${catalog.status}:${catalog.signature}`;
+    if (seen === reboundCatalog) return;
+    reboundCatalog = seen;
     if (catalog.status === 'ready' && !sessionOperationAvailability()) {
       reconcileAnnotationRecordBindings(state.activeDrawing(), catalog);
     }
@@ -7177,7 +7185,8 @@ export const createAppSetup = () => {
     selectedPalette: drawingMember('selectedPalette'),
     currentColors: drawingMember('currentColors'),
     editDefaultColor: resultsManager.editDefaultColor,
-    paletteInstantPreviewEnabled,
+    // Read-only here: the toggle's transition is its one writer.
+    paletteInstantPreviewEnabled: computed(() => paletteInstantPreviewEnabled.value),
     setPaletteInstantPreview: resultsManager.setPaletteInstantPreview,
     appliedPaletteName,
     appliedPaletteColors,

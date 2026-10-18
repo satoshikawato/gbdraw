@@ -1136,7 +1136,7 @@ test('a stroke and a palette change reach a Session 30 Result loaded without a f
   const before = await fills();
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.paletteInstantPreviewEnabled = true;
+    app.setPaletteInstantPreview(true);
     // The fixture has a user default color, so the switch asks first (D-15);
     // take the palette's colors, as the dialog's "Change palette" does.
     return app.selectPalette(app.paletteNames.find((name) => name !== app.selectedPalette), 'palette');

@@ -4,9 +4,13 @@
 //   1. no watcher's source changes on a switch except the ones that watch the
 //      mode itself (each drawing holds its own palette colors and padding
 //      here, so a watcher that followed the shown drawing's would see its
-//      source change), the watchers write no editor member (the slice write
-//      scan, helpers/drawing-writes.mjs), and no watcher imports an auxiliary
-//      table's file (M3.12: the file input's transition does);
+//      source change), no watcher imports an auxiliary table's file (M3.12:
+//      the file input's transition does), watchers.js writes no editor
+//      member through a drawing (the slice write scan), and no watcher's
+//      source or callback hands a slice handle to a call other than a slice
+//      reader (the R2 slice-call scan); both scans are in
+//      helpers/drawing-writes.mjs and see neither an alias held under another
+//      name nor a write by a helper a callback calls;
 //   2. the transition writes no drawing member and does not commit a Result
 //      edit;
 //   3. the Depth panels read the drawing's series and never write them (OV-109).
@@ -27,7 +31,11 @@ globalThis.document = {};
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw/web/js/app/watchers.js');
-const { memberWriteSites } = await import('./helpers/drawing-writes.mjs');
+const { memberWriteSites, sliceHandleCalls } = await import('./helpers/drawing-writes.mjs');
+const { DRAWING_SLICES, SLICE_READERS } = await import('./helpers/drawing-state.mjs');
+// The calls in `source` that hand a slice handle to a writer.
+const sliceWriterCalls = (source) => sliceHandleCalls(source, Object.keys(DRAWING_SLICES))
+  .filter(({ callee }) => !SLICE_READERS.includes(callee)).map(({ callee }) => callee);
 const APP_SETUP = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
 const WATCHERS = readFileSync(new URL('../../gbdraw/web/js/app/watchers.js', import.meta.url), 'utf8');
 
@@ -80,6 +88,8 @@ const { resetModeTransientUi, importAuxiliaryTable } = setupWatchers({
 test('a mode switch changes the source of no drawing watcher', () => {
   assert.ok(watchers.length > 0, 'the watchers were registered');
   assert.deepEqual(memberWriteSites(WATCHERS), [], 'the watchers write no editor member of a drawing');
+  assert.deepEqual(watchers.flatMap(({ source, callback }) => sliceWriterCalls(`${source}\n${callback}`)), [],
+    'the watchers call no slice writer');
 
   // Distinct values in each drawing, so a watcher that followed the shown
   // drawing would see its source change.
@@ -99,6 +109,15 @@ test('a mode switch changes the source of no drawing watcher', () => {
     assert.deepEqual(unexpected, [], `${from} -> ${to}: these watchers would fire on the switch`);
   }
   installShownDrawing('circular');
+});
+
+test('the watcher scans flag a slice writer call and leave slice reads alone', () => {
+  const [palette] = Object.keys(DRAWING_SLICES).filter((name) => name === 'palette');
+  assert.deepEqual(sliceWriterCalls([
+    `watch(() => state.paletteInstantPreviewEnabled.value, () => { clearQueuedPalette(state.activeDrawing().slices.${palette}); });`,
+    `watch(() => state.mode.value, () => { const queued = queuedPaletteData(state.activeDrawing().slices.${palette}); });`,
+    `watch(() => state.mode.value, () => { if (state.activeDrawing().slices.${palette}) return; });`
+  ].join('\n')), ['clearQueuedPalette']);
 });
 
 test('an auxiliary table imports through its file input, into the drawing shown when it was chosen', async () => {

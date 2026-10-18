@@ -105,9 +105,6 @@ export const createAnnotationEditor = ({
     const recordIndex = Number(feature?.record_idx);
     return hash && Number.isSafeInteger(recordIndex) && recordIndex >= 0 ? { recordIndex, hash } : null;
   };
-  const reconcileRecords = (drawing = state.activeDrawing()) => {
-    reconcileAnnotationRecordBindings(drawing, getRecordCatalog?.());
-  };
   // The catalog is read first: when it cannot be read, the sets stay as they were.
   /** @param {Partial<AnnotationSet>[] | null | undefined} sets */
   const replaceSets = (sets) => {
@@ -378,7 +375,6 @@ export const createAnnotationEditor = ({
     recordIsMissing: recordSelector.isMissing,
     recordMissingMessage: recordSelector.missingMessage,
     recordShowsSelect: recordSelector.showsSelect,
-    recordCaptionFor: recordSelector.captionFor,
-    reconcileRecordBindings: reconcileRecords
+    recordCaptionFor: recordSelector.captionFor
   };
 };
