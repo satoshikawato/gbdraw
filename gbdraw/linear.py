@@ -120,7 +120,12 @@ from .render.track_slot_metadata import (
     collect_track_slot_geometry_records,
 )
 from .render.output_paths import preflight_output_paths
-from .session import SessionDocument, load_session_document, session_drawing_artifacts
+from .session import (
+    SessionDocument,
+    load_session_document,
+    require_search_frame_protein_results,
+    session_drawing_artifacts,
+)
 from .session_drawings import SessionDrawingArtifacts
 from .session_io import session_to_cli_args
 from .cli_utils.losat_output import (
@@ -1730,6 +1735,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         legacy_protein_derived_evidence = (
             render_result.migration_report.protein_derived_evidence
         )
+        if writes_session:
+            require_search_frame_protein_results(render_result.migration_report)
     else:
         try:
             # A Linear request renders to one result, never a batch.

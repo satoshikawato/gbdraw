@@ -924,6 +924,20 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // A Session up to 47 stored the protein results of a reversed Linear record
+  // in the drawn frame: Python returns their bytes in the search frame by
+  // stored resource ID (OV-1145), from the drawing's request and its staged files.
+  [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: {
+    keys: ['version', 'canonicalRequest', 'resourceManifest', 'stagedResources'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'stored_protein_results_to_search_frame_json', [
+        jsonArgument({ version: payload.version, renderRequest: payload.canonicalRequest }, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV]: {
     keys: ['entry', 'identityManifest'],
     fileRoles: [],

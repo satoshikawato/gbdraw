@@ -656,7 +656,9 @@ def _rendered_drawing_build(
     """The re-save of one rendered drawing: its request, Results and artifacts."""
 
     from gbdraw.api.request_render import CircularBatchRenderResult, stored_protein_result_request
-    from gbdraw.session import _DrawingBuild
+    from gbdraw.session import _DrawingBuild, require_search_frame_protein_results
+
+    require_search_frame_protein_results(rendered.migration_report)
 
     state, web_file_inventory = project_session_adjunct_for_current_write(
         copy.deepcopy(dict(plan.drawing.artifacts.fields)),

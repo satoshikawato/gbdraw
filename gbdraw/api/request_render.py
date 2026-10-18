@@ -173,7 +173,10 @@ from .record_planning import (
     _similarity_candidate_from_orthogroup_member,
     effective_record_presentation,
     project_similarity_alignment_centers,
-    project_source_bound_comparisons,
+    comparison_record_bindings,
+    record_is_reverse_complemented,
+    has_source_bound_results,
+    project_source_bound_results,
     resolve_circular_batch_outputs,
     resolve_circular_options,
     resolve_implicit_record_output_prefix,
@@ -1109,14 +1112,23 @@ class LinearRequestPlan:
             raise ValidationError(
                 "Linear alignment anchor centers must align with its records."
             )
+        options = self.request.options
+        # Rows are checked against their bindings; a typed item moves only on a
+        # reversed record (a forward record draws its search frame).
+        reverses = any(map(record_is_reverse_complemented, self.records))
         object.__setattr__(
             self,
             "_drawn_options",
-            project_source_bound_comparisons(
-                self.request.options,
-                self.records,
-                self.provenance,
-            ),
+            project_source_bound_results(
+                options,
+                comparison_record_bindings(self.records, self.provenance, search_frame=False),
+            ).options
+            if has_source_bound_results(
+                options.linear_comparisons, options.protein_comparisons,
+                options.orthogroups if reverses else None,
+                options.collinearity_blocks if reverses else None,
+            )
+            else options,
         )
 
     @property
@@ -1152,29 +1164,43 @@ class LinearRequestPlan:
         kwargs["similarity_alignment"] = self.request.similarity_alignment
         kwargs["_alignment_anchor_centers"] = self.alignment_anchor_centers
         built = build_linear_diagram_result(self.records, **kwargs)
-        if isinstance(built, LinearDiagramBuildResult):
-            return built
-        if not isinstance(built, Drawing):
-            raise ValidationError(
-                "The Linear diagram builder returned an unsupported result."
+        if not isinstance(built, LinearDiagramBuildResult):
+            if not isinstance(built, Drawing):
+                raise ValidationError(
+                    "The Linear diagram builder returned an unsupported result."
+                )
+            built = LinearDiagramBuildResult(
+                drawing=built,
+                metadata=LinearDiagramMetadata(
+                    protein_comparisons=(
+                        tuple(options.protein_comparisons)
+                        if options.protein_comparisons is not None
+                        else None
+                    ),
+                    linear_comparisons=tuple(options.linear_comparisons or ()),
+                    orthogroups=options.orthogroups,
+                    collinearity_result=(
+                        options.collinearity_blocks
+                        if isinstance(options.collinearity_blocks, CollinearityResult)
+                        else None
+                    ),
+                ),
             )
-        return LinearDiagramBuildResult(
-            drawing=built,
-            metadata=LinearDiagramMetadata(
-                protein_comparisons=(
-                    tuple(options.protein_comparisons)
-                    if options.protein_comparisons is not None
-                    else None
-                ),
-                linear_comparisons=tuple(options.linear_comparisons or ()),
-                orthogroups=options.orthogroups,
-                collinearity_result=(
-                    options.collinearity_blocks
-                    if isinstance(options.collinearity_blocks, CollinearityResult)
-                    else None
-                ),
+        metadata = built.metadata
+        if not any(map(record_is_reverse_complemented, self.records)) or not has_source_bound_results(
+            metadata.linear_comparisons, metadata.protein_comparisons,
+            metadata.orthogroups, metadata.collinearity_result,
+        ):
+            return built
+        # The drawn results go back to each record's search frame when a
+        # Session stores them (OV-1145); the bindings are made once, here.
+        # A forward record draws its search frame, so it needs none.
+        return replace(built, metadata=replace(
+            metadata,
+            search_frame_bindings=comparison_record_bindings(
+                self.records, self.provenance, search_frame=True,
             ),
-        )
+        ))
 
 
 DiagramRequestPlan: TypeAlias = (
@@ -2200,7 +2226,8 @@ def stored_protein_result_request(
     pipeline marker of mode ``"none"`` reuses the typed result; Similarity
     groups also stores each drawn pair's table, Collinear only its typed
     result. Any other request, Pairwise included, is stored as given.
-    ``metadata`` is the render's; nothing is computed again.
+    ``metadata`` is the render's; nothing is computed again. The drawn
+    results are stored in each record's search frame (R5, OV-1145).
     """
 
     if not isinstance(request, LinearDiagramRequest):
@@ -2213,6 +2240,7 @@ def stored_protein_result_request(
         metadata.collinearity_result if mode == "collinear" else metadata.orthogroups
     ) is None:
         raise ValueError(f"computed no {mode} result")
+    metadata = _search_frame_metadata(metadata)
     stored = replace(options, losat_search=_resolved_losat_search(options.losat_search))
     return replace(
         request,
@@ -2225,6 +2253,41 @@ def stored_protein_result_request(
                 protein_comparisons=tuple(metadata.protein_comparisons or ()),
             )
         ),
+    )
+
+
+def _search_frame_metadata(metadata: LinearDiagramMetadata) -> LinearDiagramMetadata:
+    """The drawn results of ``metadata`` in each record's search frame.
+
+    Every Python writer stores them so (R5, OV-1145): the request of a
+    Session, the resolved alignment request and the derived payloads.
+    Metadata without bindings (no build attached them) is returned as given.
+    """
+
+    if not metadata.search_frame_bindings or not has_source_bound_results(
+        metadata.linear_comparisons, metadata.protein_comparisons,
+        metadata.orthogroups, metadata.collinearity_result,
+    ):
+        return metadata
+    stored = project_source_bound_results(
+        LinearDiagramOptions(
+            linear_comparisons=metadata.linear_comparisons,
+            protein_comparisons=metadata.protein_comparisons,
+            orthogroups=metadata.orthogroups,
+            collinearity_blocks=metadata.collinearity_result,
+        ),
+        metadata.search_frame_bindings,
+    ).options
+    collinearity = stored.collinearity_blocks
+    assert collinearity is None or isinstance(collinearity, CollinearityResult)
+    return replace(
+        metadata,
+        linear_comparisons=tuple(stored.linear_comparisons or ()),
+        protein_comparisons=(
+            None if stored.protein_comparisons is None else tuple(stored.protein_comparisons)
+        ),
+        orthogroups=stored.orthogroups,
+        collinearity_result=collinearity,
     )
 
 
@@ -2247,32 +2310,21 @@ def _resolve_similarity_alignment_reference(
     reference = request.similarity_alignment
     analysis_plan = plan_linear_request(replace(request, similarity_alignment=None))
     analysis = build_request_plan_diagram(analysis_plan, artifacts=artifacts)
-    metadata = analysis.linear_metadata
+    drawn = analysis.linear_metadata
     alignment = resolve_similarity_alignment_plan(
         analysis_plan,
-        metadata.orthogroups if metadata is not None else None,
+        drawn.orthogroups if drawn is not None else None,
         reference,
     )
-    assert metadata is not None  # a missing result has no orthogroups
+    assert drawn is not None  # a missing result has no orthogroups
+    metadata = _search_frame_metadata(drawn)
     records = _reference_record_inputs(request, analysis_plan, reference)
     layout = request.layout or LinearMultiRecordOptions()
     # The build drew the comparisons; the request keeps the planned ones as
-    # given and stores the analysis rows in the search frame (OV-399).
+    # given and stores the analysis rows and typed results, all in the
+    # search frame (OV-399, OV-1145).
     planned = analysis_plan.request.options
     given = tuple(planned.linear_comparisons or ())
-    analysis_rows = project_source_bound_comparisons(
-        replace(
-            planned,
-            protein_comparisons=(
-                None if planned.protein_comparisons is not None or metadata.protein_comparisons is None
-                else tuple(metadata.protein_comparisons)
-            ),
-            linear_comparisons=tuple(metadata.linear_comparisons or ())[len(given):],
-        ),
-        analysis_plan.records,
-        analysis_plan.provenance,
-        search_frame=True,
-    )
     resolved = replace(
         request,
         records=records,
@@ -2281,10 +2333,10 @@ def _resolve_similarity_alignment_reference(
             losat_search=_resolved_losat_search(request.options.losat_search),
             protein_comparisons=(
                 planned.protein_comparisons
-                if planned.protein_comparisons is not None
-                else analysis_rows.protein_comparisons
+                if planned.protein_comparisons is not None or metadata.protein_comparisons is None
+                else tuple(metadata.protein_comparisons)
             ),
-            linear_comparisons=(*given, *(analysis_rows.linear_comparisons or ())),
+            linear_comparisons=(*given, *tuple(metadata.linear_comparisons or ())[len(given):]),
             orthogroups=metadata.orthogroups,
             collinearity_blocks=metadata.collinearity_result,
         ),
@@ -2648,6 +2700,8 @@ def _build_current_derived_entries(
     manifest = artifacts.extraction.identity_manifest
     if manifest is None:
         raise ValidationError("Derived protein payload requires an identity manifest.")
+    # A derived payload holds the stored form, as a Web payload does (OV-1145).
+    metadata = None if metadata is None else _search_frame_metadata(metadata)
     pair_frames = _resolved_protein_pair_frames(metadata, request)
     orthogroups = (
         metadata.orthogroups

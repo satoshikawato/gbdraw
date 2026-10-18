@@ -45,7 +45,9 @@ def test_stored_sessions_of_the_current_version_match_the_description() -> None:
         if session.get("version") == CURRENT_SESSION_VERSION
     }
     assert {name: found for name, found in current.items() if found} == {}
-    assert len(current) >= 12
+    # The ten Gallery Sessions and the test input; the documentation Sessions
+    # stay at 47 until their captures are regenerated (OV-1145).
+    assert len(current) >= 11
 
 
 def test_sessions_that_python_upgrades_match_the_description() -> None:

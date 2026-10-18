@@ -1,0 +1,66 @@
+{
+  "sourceCommit": "150d26706064e7ca20eef4d3553ea266b51b79f6",
+  "history": "first-parent main",
+  "writer": "origin/main Gallery Session gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json (Session 47, Web Session shape), bytes unchanged",
+  "command": "git -C <clone> show 150d26706:gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json | gzip -n -9 > BGC0000708-BGC0000713.v47.gbdraw-session.json.gz",
+  "sourceSha256": "3e9f764f37064f67c7fd0cf401cbb56bf35aeb453f472a50d0b40d5be012b0ca",
+  "records": [
+    {
+      "index": 0,
+      "recordKey": "record-1",
+      "file": "BGC0000708.gbk",
+      "genbankSha256": "9a5f971c5ed8c406b20574fb50aac567609deb787eb1e8d4635050aa264a04b0",
+      "reverseComplement": false
+    },
+    {
+      "index": 1,
+      "recordKey": "record-2",
+      "file": "BGC0000709.gbk",
+      "genbankSha256": "4b66b7e4b78d429d12176e1e36d0e48178c562a9d128d4308b38753af9995255",
+      "reverseComplement": false
+    },
+    {
+      "index": 2,
+      "recordKey": "record-3",
+      "file": "BGC0000711.gbk",
+      "genbankSha256": "32393648f6a91166444331b83687f1b9b7b24c60553a7ddcb677dfe207736789",
+      "reverseComplement": false
+    },
+    {
+      "index": 3,
+      "recordKey": "record-4",
+      "file": "BGC0000712.gbk",
+      "genbankSha256": "705104a0daa5c44981b0a1e5352d3e56f012dd2e3ae94c98c85cd0ee9198bf94",
+      "reverseComplement": false
+    },
+    {
+      "index": 4,
+      "recordKey": "record-5",
+      "file": "BGC0000713.gbk",
+      "genbankSha256": "bf182663de453f4a3fc30ed0aa8f040a164eeab1c98e604983844994996e58fb",
+      "reverseComplement": true
+    }
+  ],
+  "sha256": "902941c217badd9c97e216169dd719095683c8ac46d711be34241af231357b75",
+  "bytes": 637500,
+  "compression": "gzip -n -9",
+  "sessionVersion": 47,
+  "requestSchema": 9,
+  "replay": {
+    "svg": "BGC0000708-BGC0000713.v47.replay.svg",
+    "code": "e8b460772 (dev base of the PR)",
+    "command": "python -c 'from gbdraw.cli import main; main()' linear --session BGC0000708-BGC0000713.v47.gbdraw-session.json.gz -o BGC0000708-BGC0000713.v47.replay -f svg",
+    "sha256": "0243daa566ac01c917e73662c16d3c23c21152c3929655bef2aa410c6a6a2f9f",
+    "mainReplaySha256": "0243daa566ac01c917e73662c16d3c23c21152c3929655bef2aa410c6a6a2f9f",
+    "mainReplayEqualsBaseReplay": true,
+    "storedResultEqualsMainReplay": true
+  },
+  "reversedRecordItemsInV": {
+    "checker": "/home/kawato/gbdraw-baselines/incremental-render-20261013/scratch/ov1145/check_v_frame.py",
+    "counts": {
+      "table rows (reversed side)": 18,
+      "orthogroup members": 19
+    },
+    "inF": 0
+  }
+}

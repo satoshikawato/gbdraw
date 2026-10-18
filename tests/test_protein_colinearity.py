@@ -3654,7 +3654,7 @@ def test_web_protein_cache_keys_validate_once_and_preserve_direction_and_options
 
 
 @pytest.mark.linear
-def test_web_losatp_pairwise_payload_uses_display_view_transform(
+def test_web_losatp_pairwise_payload_stores_a_reversed_record_in_its_search_frame(
     tmp_path: Path,
     stage_web_losatp_transport,
     monkeypatch: pytest.MonkeyPatch,
@@ -3742,8 +3742,9 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(
     assert len(encoded_tables) == 1
     row = converted_pair_rows(result["pairs"][0])[0]
     assert row["query_protein_id"] == "qa"
-    assert row["qstart"] == 300
-    assert row["qend"] == 271
+    # The reversed query record is stored in its search frame (OV-1145).
+    assert row["qstart"] == 1
+    assert row["qend"] == 30
     assert row["sstart"] == 160
     assert row["send"] == 101
 
@@ -3899,7 +3900,8 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     assert "orthogroups" not in result
     rows = converted_pair_rows(result["pairs"][0])
     assert rows[0]["subject_feature_svg_id"] == "feature_b"
-    assert rows[0]["subject_view_feature_svg_id"] == display_feature_svg_id
+    # Stored in the search frame (OV-1145); the planner draws the display ID.
+    assert rows[0]["subject_view_feature_svg_id"] == subject_map["b"]["feature_svg_id"]
     assert rows[0]["orthogroup_id"] == "og_1"
     assert rows[0]["edge_kind"] == "rbh"
     assert rows[1]["orthogroup_id"] == "og_1"

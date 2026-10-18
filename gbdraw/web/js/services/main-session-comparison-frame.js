@@ -6,6 +6,9 @@
 // search frame. The table is read and rewritten by Python (one table reader).
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import { base64ToBytes, bytesToText, textToBase64, textToBytes } from './byte-utils.js';
+import {
+  DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION, MAIN_DISPLAY_FRAME_SESSION_VERSION
+} from '../contracts/schema.generated.js';
 
 /** @import { SequenceRecord } from './record-discovery.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
@@ -34,8 +37,6 @@ import { base64ToBytes, bytesToText, textToBase64, textToBytes } from './byte-ut
  *   gffFasta: (options: { gffFile: File, fastaFile: File }) => Promise<SequenceRecord[]>
  * }} RecordDiscovery
  */
-
-export const MAIN_DISPLAY_FRAME_SESSION_VERSION = 42;
 
 // The app injects the Worker table conversion, like the configuration validator.
 /** @type {((request: TableConversion) => Promise<unknown>) | null} */
@@ -106,13 +107,47 @@ const selectedRecordLength = async (record, resources, discover) => {
 const endpointFrame = async (stored, resources, discover) => {
   const record = /** @type {StoredRecord} */ (stored);
   const region = /** @type {UnvalidatedFields<keyof CanonicalRecordRegion>} */ (record?.region);
-  const presentation = /** @type {UnvalidatedFields<keyof CanonicalRecordPresentation>} */ (record?.presentation);
-  const reverse = Boolean(region?.reverseComplement || presentation?.reverseComplement);
-  if (!reverse) return { length: 0, reverse: false };
+  if (!storedRecordReverses(record)) return { length: 0, reverse: false };
   const length = region
     ? Number(region.end) - Number(region.start) + 1
     : await selectedRecordLength(record, resources, discover);
   return length === null ? null : { length, reverse: true };
+};
+
+/**
+ * @param {StoredRecord} record
+ * @returns {boolean} whether the stored record is drawn reverse-complemented
+ */
+const storedRecordReverses = (record) => {
+  const region = /** @type {UnvalidatedFields<keyof CanonicalRecordRegion>} */ (record?.region);
+  const presentation = /** @type {UnvalidatedFields<keyof CanonicalRecordPresentation>} */ (record?.presentation);
+  return Boolean(region?.reverseComplement || presentation?.reverseComplement);
+};
+
+const STORED_PROTEIN_RESULT_KINDS = new Set(['precomputedProteinComparison', 'orthogroupResult', 'collinearityResult']);
+
+/**
+ * Whether a Session up to 47 stores protein results of a reverse-complemented
+ * Linear record, which it stored in the drawn frame; Session 48 stores them in
+ * the search frame and Python converts older ones (OV-1145). Both committed
+ * requests are read: the shown one and the other mode's.
+ * @param {{ version?: unknown, renderRequest?: unknown, otherModeResult?: unknown }} data
+ * @returns {boolean}
+ */
+export const storesDrawnFrameProteinResults = (data) => {
+  if (!(Number(data?.version) <= DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION)) return false;
+  const other = /** @type {UnvalidatedFields<'renderRequest'>} */ (data?.otherModeResult);
+  return [data?.renderRequest, other?.renderRequest].some((stored) => {
+    const request = /** @type {UnvalidatedFields<keyof CanonicalLinearRenderRequest>} */ (stored);
+    if (request?.mode !== 'linear' || !Array.isArray(request.comparisons) || !Array.isArray(request.records)) return false;
+    /** @type {readonly unknown[]} */
+    const comparisons = request.comparisons;
+    /** @type {readonly unknown[]} */
+    const records = request.records;
+    return comparisons.some((item) => STORED_PROTEIN_RESULT_KINDS.has(
+      String(/** @type {UnvalidatedFields<'kind'>} */ (item)?.kind)
+    )) && records.some((record) => storedRecordReverses(/** @type {StoredRecord} */ (record)));
+  });
 };
 
 /**

@@ -2083,3 +2083,186 @@ def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path)
     assert ">nan<" not in second_svg
     # The replay of the re-saved Session draws the figure the first replay drew.
     assert second_svg == first_svg
+
+
+# OV-1145: Sessions up to 47 stored the protein results of a reverse-
+# complemented Linear record in the drawn frame; Session 48 stores them in the
+# search frame. Each fixture is a Session 47 that main wrote, with the SVG the
+# base code draws for it (`.v47.provenance.json`).
+_V47_PROTEIN_SESSIONS = ("BGC0000708-BGC0000713", "majanivirus_collinear-rc")
+_SESSION_FIXTURES = Path(__file__).parent / "fixtures" / "sessions"
+
+
+def _v47_protein_session(name: str, tmp_path: Path, resource_id: str = "", edit=None) -> Path:
+    from gbdraw.api.session_compat import replace_resource_bytes
+
+    data = json.loads(gzip.decompress((_SESSION_FIXTURES / f"{name}.v47.gbdraw-session.json.gz").read_bytes()))
+    if edit is not None:
+        typed = json.loads(base64.b64decode(data["resources"][resource_id]["data"]))
+        edit(typed["value"]["fields"])
+        data["resources"][resource_id] = replace_resource_bytes(
+            data["resources"][resource_id], json.dumps(typed, separators=(",", ":")).encode("utf-8"),
+        )
+    path = tmp_path / f"{name}.gbdraw-session.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def _protein_results(options) -> tuple[object, ...]:
+    tables = tuple(
+        (comparison.query_record_index, comparison.subject_record_index, comparison.matches.to_dict("records"))
+        for comparison in (*(options.linear_comparisons or ()), *(options.protein_comparisons or ()))
+    )
+    return tables, repr(options.orthogroups), repr(options.collinearity_blocks)
+
+
+def _replay(session: Path, tmp_path: Path, prefix: str, *extra: str) -> str:
+    linear_main(["--session", str(session), "-o", str(tmp_path / prefix), "-f", "svg", *extra])
+    return (tmp_path / f"{prefix}.svg").read_text(encoding="utf-8")
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("name", _V47_PROTEIN_SESSIONS)
+def test_session_47_protein_results_of_a_reversed_record_move_to_the_search_frame(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str,
+) -> None:
+    from gbdraw.api.record_planning import comparison_record_bindings, project_source_bound_results
+    from gbdraw.api.request_render import plan_request
+    from gbdraw.api.session_compat import drawn_frame_protein_results_to_search_frame
+
+    monkeypatch.chdir(tmp_path)
+    source = _v47_protein_session(name, tmp_path)
+    document = load_session_document(source)
+    assert document.version == 47
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        stored = session_to_request(materialized)
+        adapted = adapt_session_request(stored, session_drawing_artifacts(document))
+        converted = adapted.request
+        assert adapted.migration_report.unconverted_protein_results == ()
+        assert _protein_results(converted.options) != _protein_results(stored.options)
+        plan = plan_request(converted)
+        # F -> F is the same request; F -> V gives the results the base drew.
+        assert drawn_frame_protein_results_to_search_frame(plan, converted) == (converted, ())
+        drawn = comparison_record_bindings(plan.records, plan.provenance, search_frame=False)
+        assert _protein_results(project_source_bound_results(converted.options, drawn).options) == (
+            _protein_results(project_source_bound_results(stored.options, drawn).options)
+        )
+
+    expected = (_SESSION_FIXTURES / f"{name}.v47.replay.svg").read_text(encoding="utf-8")
+    resaved = tmp_path / "resaved.gbdraw-session.json"
+    assert _replay(source, tmp_path, "replay", "--session_output", str(resaved)) == expected
+    saved = load_session_document(resaved)
+    assert saved.version == CURRENT_SESSION_VERSION == 48
+    with materialize_session(saved, output_directory=tmp_path) as materialized:
+        written = session_to_request(materialized)
+        assert _protein_results(written.options) == _protein_results(converted.options)
+    # The re-save is read as F: no second conversion, the same drawing.
+    assert _replay(resaved, tmp_path, "resaved") == expected
+
+
+@pytest.mark.linear
+def test_untagged_session_39_anchors_of_a_reversed_record_follow_their_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Session 39 anchors carry neither view IDs nor feature indexes; the
+    # record-level rule of gbdraw.linear_comparison decides them: V up to
+    # Session 47, which the migrator turns to F, and F in a request, which the
+    # planner turns to V. A schema 3 resource requires the tags, so the
+    # untagged anchors are built from the fixture's typed result.
+    from gbdraw.api.record_planning import comparison_record_bindings, project_source_bound_results
+    from gbdraw.api.request_render import plan_request
+    from gbdraw.api.session_compat import drawn_frame_protein_results_to_search_frame
+
+    def untag(result):
+        def anchor(item):
+            return replace(item, query_view_feature_svg_id="", subject_view_feature_svg_id="",
+                           query_feature_index=None, subject_feature_index=None)
+
+        return replace(
+            result,
+            blocks=tuple(replace(block, anchors=tuple(map(anchor, block.anchors))) for block in result.blocks),
+            unblocked_anchors=tuple(map(anchor, result.unblocked_anchors)),
+        )
+
+    def spans(result) -> list[tuple[object, ...]]:
+        return [
+            (anchor.query_record_index, anchor.query_start, anchor.query_end, anchor.query_strand,
+             anchor.subject_record_index, anchor.subject_start, anchor.subject_end, anchor.subject_strand)
+            for block in result.blocks for anchor in block.anchors
+        ] + [(block.block_id, block.orientation) for block in result.blocks]
+
+    monkeypatch.chdir(tmp_path)
+    document = load_session_document(_v47_protein_session("majanivirus_collinear-rc", tmp_path))
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        stored = session_to_request(materialized)
+        assert isinstance(stored, LinearDiagramRequest)
+        untagged = replace(stored, options=replace(
+            stored.options, collinearity_blocks=untag(stored.options.collinearity_blocks),
+        ))
+        plan = plan_request(untagged)
+        converted, unmatched = drawn_frame_protein_results_to_search_frame(plan, untagged)
+        tagged, _ = drawn_frame_protein_results_to_search_frame(plan_request(stored), stored)
+    assert unmatched == ()
+    # The untagged anchors land where the tagged ones do (F) ...
+    assert spans(converted.options.collinearity_blocks) == spans(tagged.options.collinearity_blocks)
+    assert spans(converted.options.collinearity_blocks) != spans(untagged.options.collinearity_blocks)
+    # ... and the planner draws them as stored.
+    drawn = project_source_bound_results(
+        converted.options, comparison_record_bindings(plan.records, plan.provenance, search_frame=False),
+    ).options
+    assert spans(drawn.collinearity_blocks) == spans(untagged.options.collinearity_blocks)
+
+
+@pytest.mark.linear
+def test_a_session_47_result_matching_neither_frame_draws_but_is_not_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Re-review finding 1: a replay keeps the item and draws as stored; only a
+    # writer of Session 48 refuses it.
+    # A member of the reversed record (#5) whose span matches neither strand.
+    def corrupt(fields: dict[str, Any]) -> None:
+        member = next(
+            member["fields"] for members in fields["orthogroups"].values() for member in members
+            if member["fields"]["recordIndex"] == 4
+        )
+        for stored in (member, fields["memberByProteinId"][member["proteinId"]]["fields"]):
+            stored["start"] += 1
+
+    monkeypatch.chdir(tmp_path)
+    source = _v47_protein_session("BGC0000708-BGC0000713", tmp_path, "comparison-canonical-orthogroups-1", corrupt)
+    document = load_session_document(source)
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        adapted = adapt_session_request(session_to_request(materialized), session_drawing_artifacts(document))
+    unconverted = adapted.migration_report.unconverted_protein_results
+    assert unconverted and "member" in unconverted[0] and "record #5" in unconverted[0]
+
+    assert "<svg" in _replay(source, tmp_path, "replay")
+    with pytest.raises(SessionConversionError, match="matches neither strand"):
+        _replay(source, tmp_path, "written", "--session_output", str(tmp_path / "out.gbdraw-session.json"))
+    assert not (tmp_path / "out.gbdraw-session.json").exists()
+    with pytest.raises(SessionConversionError):
+        upgrade_session_document(source, temporary_directory=tmp_path)
+
+
+def test_the_worker_helper_converts_a_session_47_drawing_like_the_upgrade(tmp_path: Path) -> None:
+    # The Web boundary of the conversion returns the bytes the upgrade writes,
+    # by stored resource ID, and nothing for a Session 48.
+    from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
+
+    source = _v47_protein_session("BGC0000708-BGC0000713", tmp_path)
+    document = load_session_document(source)
+    data = document.to_dict()
+    upgraded = upgrade_session_document(document, temporary_directory=tmp_path).document.to_dict()
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        paths = json.dumps({key: str(path) for key, path in materialized.resource_paths.items()})
+
+        def convert(version: int) -> dict[str, Any]:
+            payload = json.dumps({"version": version, "renderRequest": data["renderRequest"]})
+            return json.loads(stored_protein_results_to_search_frame_json(payload, paths, str(tmp_path)))["resources"]
+
+        converted = convert(47)
+        assert convert(48) == {}
+    assert sorted(converted) == ["comparison-canonical-orthogroups-1", "comparison-canonical-protein-4"]
+    for key, value in converted.items():
+        assert value["data"] == upgraded["resources"][key]["data"]
+        assert value["size"] == upgraded["resources"][key]["size"]

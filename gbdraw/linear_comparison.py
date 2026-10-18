@@ -318,6 +318,25 @@ def reverse_unbound_endpoint_rows(
     return replace(comparison, matches=updated)
 
 
+def reverse_unbound_endpoint_span(
+    start: int,
+    end: int,
+    strand: int | None,
+    endpoint: tuple[int, bool],
+) -> tuple[int, int, int | None]:
+    """Map one 1-based span of a reversed endpoint ``(L, True)`` as its rows map.
+
+    x -> L + 1 - x and the strand negates; the map is its own inverse. A typed
+    item without feature tags (a Session 39 collinearity anchor) is decided by
+    its record this way, as :func:`reverse_unbound_endpoint_rows` decides rows.
+    """
+
+    length, reverse = endpoint
+    if not reverse:
+        return start, end, strand
+    return int(length) + 1 - int(start), int(length) + 1 - int(end), -strand if strand in (-1, 1) else strand
+
+
 def reverse_endpoint_table_text(
     text: str,
     query: tuple[int, bool],
@@ -468,6 +487,7 @@ __all__ = [
     "ProteinComparisonFrames",
     "merge_linear_comparisons",
     "project_search_frame_comparisons",
+    "reverse_unbound_endpoint_span",
     "validate_linear_comparison_record_ids",
     "validate_linear_comparison_topology",
 ]
