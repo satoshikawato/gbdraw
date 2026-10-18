@@ -286,3 +286,62 @@ test('an Undo of Reset from the other drawing keeps the shown drawing\'s applied
   await app.undoHistory();
   assert.equal(state.appliedPaletteName.value, linearApplied);
 });
+
+/** @param {ReturnType<typeof createAppSetup>} app @param {'circular' | 'linear'} id */
+const show = (app, id) => {
+  if (state.activeDrawingId.value !== id) assert.deepEqual(app.selectDrawing(id), { status: 'ok' });
+};
+
+// D-15-53 1 (PD-OI-090, OIC-030): a step that changes a drawing value and a
+// Session-level value (Add rule clears the rule draft) is that drawing's step
+// whole. The other drawing's History keeps its Redo and never takes part of
+// it; its Undo restores the draft only where still as the step left it.
+test('a step that also clears a draft is its drawing\'s step and leaves the other drawing\'s History', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { circular, linear } = state.drawings;
+  show(app, 'circular');
+  const draftBefore = state.newSpecRule.val;
+  await history.runUndoable('Type pattern', () => { state.newSpecRule.val = 'abc'; });
+  show(app, 'linear');
+  await history.runUndoable('Linear prefix', () => { linear.form.prefix = 'lin-1'; });
+  await app.undoHistory();
+  assert.equal(history.canRedo(), true);
+  show(app, 'circular');
+  const prefixBefore = circular.form.prefix;
+  await history.runUndoable('Add specific color rule', () => { circular.form.prefix = 'rule-added'; state.newSpecRule.val = ''; });
+
+  show(app, 'linear');
+  assert.equal(history.canRedo(), true, 'a Circular step keeps Linear\'s Redo');
+  assert.equal(history.undoLabel(), 'Type pattern', 'Linear does not see the Circular step');
+  await app.undoHistory();
+  assert.equal(state.newSpecRule.val, draftBefore, 'the draft stays as the Circular step left it');
+  assert.equal(circular.form.prefix, 'rule-added');
+
+  show(app, 'circular');
+  assert.equal(history.undoLabel(), 'Add specific color rule');
+  await app.undoHistory();
+  assert.deepEqual({ prefix: circular.form.prefix, draft: state.newSpecRule.val }, { prefix: prefixBefore, draft: 'abc' },
+    'one Undo restores the rule and the draft');
+  assert.equal(history.redoLabel(), 'Type pattern', 'Redo replays in the order the steps ended');
+  await app.redoHistory();
+  await app.redoHistory();
+  assert.deepEqual({ prefix: circular.form.prefix, draft: state.newSpecRule.val }, { prefix: 'rule-added', draft: '' });
+});
+
+// A3 review 2 Low 4: a drawing step drops no project step; only the oldest
+// title step is gone after the limit.
+test('a step past the project limit drops only the oldest project step', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  show(app, 'circular');
+  await history.captureBaseline();
+  for (let index = 0; index <= 30; index += 1) {
+    await history.runUndoable('Rename Session', () => { state.sessionTitle.value = `T${index}`; });
+  }
+  assert.ok(history.historyLimitMessage.value, 'the oldest title step dropped');
+  await history.runUndoable('Add rule', () => { state.drawings.circular.form.prefix = 'mixed'; state.newSpecRule.val = 'x'; });
+  assert.equal(history.historyLimitMessage.value, '', 'the step dropped nothing');
+  while (history.canUndo()) assert.equal(await app.undoHistory(), true);
+  assert.equal(state.sessionTitle.value, 'T0', 'only the first title step is gone');
+});
