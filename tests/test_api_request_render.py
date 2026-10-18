@@ -530,10 +530,7 @@ def test_a_zero_hit_api_entry_holds_header_only_tables(
         assert pair["hit_count"] == 0
 
 
-# OV-1127 (open): admission refuses a zero-hit entry ("unresolved protein
-# references"), because the strict-empty check does not allow the typed-result
-# member. The fix flips this strict xfail.
-@pytest.mark.xfail(strict=True, raises=ValidationError, reason="OV-1127: a zero-hit derived entry is refused at admission")
+# OV-1127: a zero-hit entry names no protein; its empty typed result is admitted.
 @pytest.mark.parametrize("mode", ("similarity_groups", "collinear"))
 def test_a_zero_hit_api_entry_is_admitted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str) -> None:
     import gbdraw.analysis.protein_colinearity as protein_colinearity_module

@@ -764,7 +764,7 @@ def test_canonical_session_replay_uses_current_overwrite_permission(
         (plan,) = plans
         captured["overwrite"] = plan.request.output.overwrite
         captured["include_feature_catalog"] = include_feature_catalog
-        return {plan.drawing.id: SimpleNamespace(feature_identity_notices=())}
+        return {plan.drawing.id: SimpleNamespace(feature_identity_notices=(), linear_metadata=None)}
 
     monkeypatch.setattr(session_module, "_render_session_drawing_plans", fake_render)
 
@@ -820,6 +820,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
                 drawing=object(),
                 output_paths=(),
                 interactive_context=None,
+                linear_metadata=None,
                 losat_cache_entries=(),
                 losat_derived_cache_entries=({"schema": 3},),
                 protein_identity_manifest=None,

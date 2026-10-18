@@ -156,6 +156,7 @@ import {
   emptyProteinIdentityManifest,
   getCurrentRawLosatCacheEntry,
   isCurrentRawLosatCacheEntry,
+  isDerivedAnalysisResult,
   isLosatDerivedCacheEntry,
   mergeProteinIdentityManifests,
   normalizeLosatArgs,
@@ -164,7 +165,8 @@ import {
   transitionLegacyProteinCandidate,
   losatEdgeFilename,
   validateDerivedProteinReferences,
-  webLosatRuntimeRecord
+  webLosatRuntimeRecord,
+  writtenLegacyProteinArtifacts
 } from '../services/losat-cache.js';
 import {
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, LEGACY_PROTEIN_CANDIDATE_SCHEMA,
@@ -553,25 +555,11 @@ const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
 export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
   const normalizedMode = String(mode || '').trim().toLowerCase();
   if (!['orthogroup', 'collinear'].includes(normalizedMode)) return true;
-  const rawResource = normalizedMode === 'collinear'
+  const resource = normalizedMode === 'collinear'
     ? payload?.collinearityResult
     : payload?.orthogroupResult;
-  // The checks below test that `resource` is a non-array object before they read its fields.
-  const resource = /** @type {{ schema?: unknown, kind?: unknown, value?: { type?: unknown, fields?: unknown } | null } | null | undefined} */ (
-    rawResource
-  );
-  const expectedKind = normalizedMode === 'collinear' ? 'result' : 'orthogroupResult';
-  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupGraphResult';
   return Boolean(
-    resource
-    && typeof resource === 'object'
-    && !Array.isArray(resource)
-    && resource.schema === 3
-    && resource.kind === expectedKind
-    && resource.value?.type === expectedType
-    && resource.value.fields
-    && typeof resource.value.fields === 'object'
-    && !Array.isArray(resource.value.fields)
+    isDerivedAnalysisResult(normalizedMode, resource)
     && isCanonicalTypedResourceBound(resource)
     && Array.isArray(payload?.pairs)
     && payload.pairs.every((pair) => typeof pair?.canonicalTsv === 'string')
@@ -4876,18 +4864,15 @@ export const createRunAnalysis = ({
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
           if (legacyPromotionTransaction.length > 0) {
             commitProteinMigration = (candidateOwnerSet) => {
-              let nextLegacyEnvelope = candidateOwnerSet.legacyProteinRawCandidates;
+              const written = writtenLegacyProteinArtifacts({
+                candidates: candidateOwnerSet.legacyProteinRawCandidates,
+                evidence: candidateOwnerSet.legacyProteinDerivedEvidence,
+                promoted: legacyPromotionTransaction.map(({ candidateIndex }) => candidateIndex),
+                hasCurrentDerived: false
+              });
               /** @type {Record<string, unknown>} */
               const promotedProteinIdMap = {};
-              legacyPromotionTransaction.forEach(({
-                candidateIndex,
-                proteinIdMap
-              }) => {
-                nextLegacyEnvelope = transitionLegacyProteinCandidate(
-                  nextLegacyEnvelope,
-                  candidateIndex,
-                  'promoted'
-                );
+              legacyPromotionTransaction.forEach(({ proteinIdMap }) => {
                 Object.entries(proteinIdMap || {}).forEach(([oldId, runtimeHandle]) => {
                   const previous = promotedProteinIdMap[oldId];
                   if (previous && previous !== runtimeHandle) {
@@ -4896,10 +4881,6 @@ export const createRunAnalysis = ({
                   promotedProteinIdMap[oldId] = runtimeHandle;
                 });
               });
-              let nextLegacyEvidence = candidateOwnerSet.legacyProteinDerivedEvidence;
-              if (!nextLegacyEnvelope.entries.some((/** @type {LegacyProteinCandidateEnvelope['entries'][number]} */ candidate) => candidate.state === 'pending')) {
-                nextLegacyEvidence = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
-              }
               let nextOrthogroups = candidateOwnerSet.orthogroups;
               let nextExtractedFeatures = candidateOwnerSet.extractedFeatures;
               let nextBiologicalFeatures = candidateOwnerSet.biologicalFeatures;
@@ -4928,8 +4909,8 @@ export const createRunAnalysis = ({
               return {
                 ownerSet: {
                   ...candidateOwnerSet,
-                  legacyProteinRawCandidates: nextLegacyEnvelope,
-                  legacyProteinDerivedEvidence: nextLegacyEvidence,
+                  legacyProteinRawCandidates: written.candidates,
+                  legacyProteinDerivedEvidence: written.evidence,
                   orthogroups: nextOrthogroups,
                   extractedFeatures: nextExtractedFeatures,
                   biologicalFeatures: nextBiologicalFeatures

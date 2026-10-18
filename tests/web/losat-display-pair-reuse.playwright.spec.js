@@ -305,8 +305,24 @@ test('The Web reuses every raw LOSATP search of a CLI Session over a multi-recor
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 60000 })
     .toBe(3);
+  // OV-1068: the CLI Session stores the results it drew, so the first Generate
+  // draws them as stored: no LOSAT run, hence no cache telemetry.
+  const stored = await generate(page);
+  expect(stored.executorCalls).toBe(0);
+  expect(stored.cache).toEqual({
+    cacheHits: undefined, cacheMisses: undefined, derivedHits: undefined, derivedMisses: undefined
+  });
+  expect(stored.links.length).toBeGreaterThan(0);
+
+  // A derived-only setting invalidates the stored results but not the raw
+  // searches: nine record-pair results, all from the CLI raw entries; nothing
+  // is searched.
+  await openLayoutControls(page);
+  await page.getByRole('spinbutton', { name: 'Paralog links per group', exact: true }).fill('3');
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.losat.blastp.collinearMaxParalogLinksPerOrthogroup
+  ))).toBe(3);
   const run = await generate(page);
-  // Nine record-pair results, all from the CLI raw entries; nothing is searched.
   expect({ hits: run.cache.cacheHits, misses: run.cache.cacheMisses }).toEqual({ hits: 9, misses: 0 });
   expect(run.executorCalls).toBe(0);
   expect(run.links.length).toBeGreaterThan(0);

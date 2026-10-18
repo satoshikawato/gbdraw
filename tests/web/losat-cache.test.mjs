@@ -519,8 +519,53 @@ for (const entry of ['rows', 'canonicalTsv'].flatMap((tableForm) => [
   );
 }
 
+// OV-1127: the current writer's zero-hit entry carries the mode's empty typed result instead of `orthogroups: []`;
+// no member list: a member that holds no array or object entry names no protein.
+const emptyOrthogroupGraph = {
+  type: 'OrthogroupGraphResult',
+  fields: Object.fromEntries([
+    'confidenceByOrthogroupId', 'descriptionsByOrthogroupId', 'memberByProteinId', 'nameCandidatesByOrthogroupId',
+    'namesByOrthogroupId', 'orthogroups', 'orthologEdgesByOrthogroupId', 'pathIndexesByOrthogroupId', 'rbhOrthogroups',
+    'relatedEdgesByOrthogroupId', 'scopeByOrthogroupId', 'sourceRecordIndexByOrthogroupId'
+  ].map((key) => [key, {}]))
+};
+const typedZeroHitEntry = (mode, mutateResult = () => {}) => {
+  const entry = zeroHitDerivedEntry(mode, { tableForm: 'canonicalTsv' });
+  for (const key of ['orthogroups', 'collinearGroups', 'collinearGroupScope', 'collinearityBlocks']) {
+    delete entry.payload[key];
+  }
+  const result = mode === 'collinear'
+    ? { schema: 3, kind: 'result', value: { type: 'CollinearityResult', fields: {
+      blocks: [], unblockedAnchors: [], orthogroups: structuredClone(emptyOrthogroupGraph)
+    } } }
+    : { schema: 3, kind: 'orthogroupResult', value: structuredClone(emptyOrthogroupGraph) };
+  mutateResult(result);
+  entry.payload[mode === 'collinear' ? 'collinearityResult' : 'orthogroupResult'] = result;
+  return entry;
+};
+for (const [label, entry, admitted] of [
+  ['an empty Similarity groups result', typedZeroHitEntry('orthogroup'), true],
+  ['an empty Collinear result', typedZeroHitEntry('collinear'), true],
+  ['a scalar member', (() => { const entry = zeroHitDerivedEntry('collinear'); entry.payload.note = 'arbitrary'; return entry; })(), true],
+  ['another collinear scope', (() => {
+    const entry = zeroHitDerivedEntry('collinear');
+    entry.payload.collinearGroupScope = 'invalid';
+    return entry;
+  })(), true],
+  ['a result member', typedZeroHitEntry('orthogroup', (result) => {
+    result.value.fields.namesByOrthogroupId = { og1: 'x' };
+  }), false],
+  ['a nested result member', typedZeroHitEntry('collinear', (result) => {
+    result.value.fields.orthogroups.fields.memberByProteinId = { x: 'og1' };
+  }), false],
+  ['an unblocked anchor', typedZeroHitEntry('collinear', (result) => { result.value.fields.unblockedAnchors = [{}]; }), false],
+  ['the other mode\'s result', typedZeroHitEntry('orthogroup', (result) => { result.kind = 'result'; }), false],
+  ['an older typed schema', typedZeroHitEntry('orthogroup', (result) => { result.schema = 2; }), false]
+]) {
+  assert.equal(cache.validateDerivedProteinReferences(entry, manifest), admitted, `zero-hit: ${label}`);
+}
+
 const zeroHitNearMisses = [
-  ['arbitrary field', (payload) => { payload.note = 'arbitrary'; }],
   ['nonempty rows', (payload) => { payload.pairs[0].rows = [{}]; }],
   ['both table forms', (payload) => { payload.pairs[0].canonicalTsv = 'query\n'; }],
   ['nonempty canonical table', (payload) => {
@@ -539,7 +584,6 @@ const zeroHitNearMisses = [
   ['nonempty orthogroups', (payload) => { payload.orthogroups = [{}]; }],
   ['nonempty collinear groups', (payload) => { payload.collinearGroups = [{}]; }],
   ['nonempty collinearity blocks', (payload) => { payload.collinearityBlocks = [{}]; }],
-  ['invalid collinear scope', (payload) => { payload.collinearGroupScope = 'invalid'; }],
   ['null identity', (payload) => { payload.identity = null; }],
   ['invalid raw cache binding', (payload) => { payload.identity.rawCacheKeys = [null]; }],
   ['identity mode mismatch', (payload) => { payload.identity.mode = 'orthogroup'; }]

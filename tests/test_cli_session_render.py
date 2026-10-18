@@ -439,22 +439,115 @@ def _cli(monkeypatch: pytest.MonkeyPatch, *args: str) -> None:
     cli_main()
 
 
-def _fresh_protein_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def _fresh_protein_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str = "similarity_groups",
+    *extra: str,
+) -> Path:
     """A Session saved by a fresh `gbdraw linear` protein render (fake LOSATP)."""
 
     import gbdraw.analysis.protein_colinearity as protein_colinearity_module
     from tests.test_render_stage_protein_analysis import _fake_losatp, _request
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
-    request, _identities = _request("similarity_groups", tmp_path)
+    request, _identities = _request(mode, tmp_path)
     sidecar = tmp_path / "fresh.gbdraw-session.json"
     _cli(
         monkeypatch,
         "linear", "--gbk", *(str(record.source.path) for record in request.records), "--losat", "losatp",
-        "--losatp_mode", "similarity_groups", "-o", str(tmp_path / "fresh"), "-f", "svg",
+        "--losatp_mode", mode, *extra, "-o", str(tmp_path / "fresh"), "-f", "svg",
         "--session_output", str(sidecar),
     )
     return sidecar
+
+
+def _protein_comparison_kinds(session: dict[str, Any]) -> list[tuple[str, str | None]]:
+    return [
+        (comparison["kind"], comparison.get("mode"))
+        for comparison in session["renderRequest"]["comparisons"]
+    ]
+
+
+# The Web Session writer's form after a protein Generate (session-request.js):
+# the pipeline marker reuses the stored result; Similarity groups also stores
+# each drawn pair's table, Collinear only its typed result.
+_STORED_PROTEIN_FORMS = {
+    "similarity_groups": [
+        ("precomputedProteinComparison", None),
+        ("precomputedProteinComparison", None),
+        ("orthogroupResult", None),
+        ("generatedProteinComparison", "none"),
+    ],
+    "collinear": [
+        ("collinearityResult", None),
+        ("generatedProteinComparison", "none"),
+    ],
+}
+
+
+@pytest.mark.parametrize("mode", sorted(_STORED_PROTEIN_FORMS))
+def test_a_cli_protein_session_stores_the_results_the_web_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    """OV-1068: a CLI Session stores the resolved results, so its replay searches nothing."""
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _no_search
+
+    sidecar = _fresh_protein_session(tmp_path, monkeypatch, mode)
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert _protein_comparison_kinds(session) == _STORED_PROTEIN_FORMS[mode]
+    assert session["losatCache"]["entries"]
+    assert session["losatDerivedCache"] == {"entries": []}
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
+    resaved = tmp_path / "replayed.gbdraw-session.json"
+    _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replayed"),
+         "-f", "svg", "--session_output", str(resaved))
+    assert (tmp_path / "replayed.svg").read_text(encoding="utf-8") == (
+        tmp_path / "fresh.svg"
+    ).read_text(encoding="utf-8")
+    replayed = json.loads(resaved.read_text(encoding="utf-8"))
+    assert _protein_comparison_kinds(replayed) == _STORED_PROTEIN_FORMS[mode]
+
+
+def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1068: with a reversed record the CLI stores the tables the Gallery tool stores."""
+
+    from tools.refresh_gallery_sessions import (
+        _canonical_table_rows,
+        _reopen_stored_protein_comparisons,
+        _resolved_protein_comparisons,
+        _resource_bytes,
+    )
+
+    sidecar = _fresh_protein_session(
+        tmp_path, monkeypatch, "similarity_groups",
+        "--reverse_complement", "0", "--reverse_complement", "1", "--reverse_complement", "0",
+    )
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert _protein_comparison_kinds(session) == _STORED_PROTEIN_FORMS["similarity_groups"]
+    rebuild = json.loads(json.dumps(session))
+    assert _reopen_stored_protein_comparisons(rebuild, "orthogroup") == 1
+    resolved = _resolved_protein_comparisons(rebuild)
+    assert resolved is not None
+    rebuilt, descriptors = resolved
+
+    def stored(source: dict[str, Any], comparisons: list[dict[str, Any]]) -> list[object]:
+        return [
+            _canonical_table_rows(_resource_bytes(source, comparison["resourceId"]))
+            if comparison["kind"] == "precomputedProteinComparison"
+            else _resource_bytes(source, comparison["resourceId"])
+            for comparison in comparisons
+            if comparison["kind"] != "generatedProteinComparison"
+        ]
+
+    assert stored(session, session["renderRequest"]["comparisons"]) == stored(
+        {"resources": descriptors}, rebuilt
+    )
 
 
 def test_a_fresh_cli_render_builds_no_derived_protein_entries(
@@ -681,3 +774,84 @@ def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_en
     assert resaved_session["losatDerivedCache"]["entries"] == session["losatDerivedCache"]["entries"]
     resaved = resaved_session.get("legacyArtifacts")
     assert resaved is not None and set(resaved) == {"proteinRawCandidates"}
+
+
+_LEGACY_PROTEIN_SESSION = SESSION_FIXTURES / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
+
+
+def _legacy_protein_session() -> dict[str, Any]:
+    """The BGC Session 33: 34 legacy protein raw entries, 8 legacy derived entries, draft Similarity groups."""
+
+    return json.loads(gzip.decompress(_LEGACY_PROTEIN_SESSION.read_bytes()))
+
+
+def _resaved_legacy_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, session: dict[str, Any], name: str
+) -> tuple[list[str], int]:
+    """The candidate states and the evidence count of a CLI re-save of ``session``."""
+
+    source = tmp_path / f"{name}.gbdraw-session.json"
+    source.write_text(json.dumps(session), encoding="utf-8")
+    resaved = tmp_path / f"{name}-resaved.gbdraw-session.json"
+    _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / name / "out"),
+         "-f", "svg", "--session_output", str(resaved))
+    legacy = load_session_document(resaved).to_dict().get("legacyArtifacts") or {}
+    return (
+        [entry["state"] for entry in legacy.get("proteinRawCandidates", {}).get("entries", [])],
+        len(legacy.get("proteinDerivedEvidence", {}).get("entries", [])),
+    )
+
+
+def test_a_cli_resave_keeps_the_legacy_candidates_its_search_did_not_promote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1143: the 25 Similarity groups searches promote 25 candidates; 9 stay pending, as after a Web Generate."""
+
+    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, _legacy_protein_session(), "groups") == (
+        ["pending"] * 9, 8
+    )
+
+
+def test_a_cli_resave_tries_only_the_candidates_of_the_searches_it_plans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1143: Pairwise searches the 4 adjacent edges; no protein search tries none."""
+
+    pairwise = _legacy_protein_session()
+    pairwise["config"]["losat"]["blastp"]["mode"] = "pairwise"
+    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, pairwise, "pairwise") == (["pending"] * 30, 8)
+    without = _legacy_protein_session()
+    without["renderRequest"]["comparisons"] = []
+    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, without, "none") == (["pending"] * 34, 8)
+
+
+def test_a_non_losatp_search_tries_no_legacy_candidate() -> None:
+    """A LOSATN search is not a protein search: no record pair is attempted, so all candidates stay pending."""
+
+    from types import SimpleNamespace
+
+    from gbdraw.api.session_compat import _legacy_candidate_attempt_pairs
+
+    request = SimpleNamespace(options=SimpleNamespace(losat_search=SimpleNamespace(program="losatn")))
+    assert _legacy_candidate_attempt_pairs(request, "orthogroup") == ()  # type: ignore[arg-type]
+
+
+def test_a_cli_resave_that_promotes_the_last_candidate_drops_the_legacy_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1132: with no candidate left pending the evidence goes, as after a Web Generate."""
+
+    from gbdraw.api.session_compat import adapt_session_request
+    from gbdraw.session import session_drawing_artifacts, session_to_request
+
+    document = load_session_document(_LEGACY_PROTEIN_SESSION)
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        adapted = adapt_session_request(session_to_request(materialized), session_drawing_artifacts(document))
+    unmatched = {candidate["originalEntry"]["key"] for candidate in adapted.migration_report.protein_raw_candidates}
+    assert len(unmatched) == 9
+    session = _legacy_protein_session()
+    session["losatCache"]["entries"] = [
+        entry for entry in session["losatCache"]["entries"] if entry["key"] not in unmatched
+    ]
+    assert _resaved_legacy_artifacts(tmp_path, monkeypatch, session, "promoted") == ([], 0)
+

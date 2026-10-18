@@ -8,7 +8,7 @@ import logging
 import re
 from dataclasses import dataclass, fields, is_dataclass, replace
 from pathlib import Path
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Collection, Mapping, Sequence, cast
 
 from pandas import DataFrame
 
@@ -45,7 +45,7 @@ from gbdraw.session_io import (
 )
 
 from .migration_report import SessionMigrationReport
-from .options import LinearMultiRecordOptions, LinearRecordTranslation
+from .options import LinearMultiRecordOptions, LinearRecordTranslation, losatp_analysis_mode
 from .record_planning import (
     ResolvedRecordCollection,
     ResolvedRecordProvenance,
@@ -64,6 +64,7 @@ from .request_render import (
     RequestRenderResult,
     _extract_linear_request_proteins,
     _build_request_plan_diagram,
+    _request_losatp_job_specs,
     plan_request,
     render_prepared_request,
 )
@@ -322,23 +323,88 @@ def _merge_promoted_tsv_id_map(
             target[old_id] = new_id
 
 
+def written_legacy_protein_artifacts(
+    candidates: Sequence[Mapping[str, Any]],
+    evidence: Sequence[Mapping[str, Any]],
+    *,
+    promoted: Collection[int],
+    has_current_derived: bool,
+) -> tuple[tuple[Mapping[str, Any], ...], tuple[Mapping[str, Any], ...]]:
+    """The legacy protein raw candidates and derived evidence a written Session keeps.
+
+    ``candidates`` are in their states after this write's attempts and
+    ``promoted`` are the indexes it promoted: a promoted candidate leaves the
+    envelope (its entry is a current raw entry now); every other candidate
+    stays, ``pending`` or ``rejected``. The evidence goes when this write
+    promoted a candidate and left none pending, or when the written Session
+    holds or built current derived entries (OV-1129); else it stays. The Web
+    twin is ``writtenLegacyProteinArtifacts`` (``services/losat-cache.js``);
+    ``tests/fixtures/legacy_protein_artifact_vectors.json`` pins both
+    (OV-1132, OV-1143).
+    """
+
+    kept = tuple(
+        candidate for index, candidate in enumerate(candidates) if index not in promoted
+    )
+    superseded = has_current_derived or (
+        bool(promoted) and not any(candidate.get("state") == "pending" for candidate in kept)
+    )
+    return kept, () if superseded else tuple(evidence)
+
+
+def _legacy_candidate_attempt_pairs(
+    request: LinearDiagramRequest,
+    stored_result_mode: ProteinBlastpMode | None,
+) -> tuple[tuple[int, int], ...]:
+    """The directed record pairs whose legacy candidates this drawing's protein run tries.
+
+    They are the searches of the request's LOSATP run. A request that stores
+    its protein results (mode ``"none"``) is computed again in
+    ``stored_result_mode``, the Web draft's mode, else the stored result's, as
+    the next Web Generate does. A request without a LOSATP search tries none.
+    """
+
+    search = request.options.losat_search
+    if search is None or search.program != "losatp":
+        return ()
+    mode = losatp_analysis_mode(search)
+    if mode == "none":
+        options = request.options
+        mode = stored_result_mode or (
+            "collinear"
+            if options.collinearity_blocks is not None
+            else "orthogroup" if options.orthogroups is not None else "pairwise"
+        )
+    return _request_losatp_job_specs(request, mode, search.pairs)
+
+
 def _promote_legacy_candidates(
     candidates: Sequence[Mapping[str, Any]],
     extraction: ProteinExtractionResult,
+    pairs: Sequence[tuple[int, int]],
 ) -> tuple[
     tuple[Mapping[str, Any], ...],
-    tuple[Mapping[str, Any], ...],
+    frozenset[int],
     Mapping[str, str],
 ]:
+    """Try each ``pending`` candidate on the searched record ``pairs``.
+
+    Returns the promoted current raw entries, the indexes of the candidates
+    they came from and the legacy-to-current protein ID map. An unmatched
+    candidate stays as it is; a ``rejected`` one is not tried again.
+    """
+
     manifest = extraction.identity_manifest
     if manifest is None:
         raise ValidationError("Protein cache promotion requires an identity manifest.")
     fastas = tuple(proteins_to_fasta(items) for items in extraction.proteins_by_record)
     promoted_entries: list[Mapping[str, Any]] = []
-    unresolved_candidates: list[Mapping[str, Any]] = []
+    promoted_indexes: set[int] = set()
     id_map: dict[str, str] = {}
 
-    for candidate in candidates:
+    for candidate_index, candidate in enumerate(candidates):
+        if candidate.get("state") != "pending":
+            continue
         original = candidate.get("originalEntry")
         if not isinstance(original, Mapping) or not is_legacy_protein_losat_cache_entry(
             original
@@ -353,62 +419,40 @@ def _promote_legacy_candidates(
             else ()
         )
         promotion = None
-        rejection_reasons: list[str] = []
-        for query_index, query_proteins in enumerate(extraction.proteins_by_record):
-            for subject_index, subject_proteins in enumerate(
-                extraction.proteins_by_record
-            ):
-                try:
-                    scan = promote_legacy_protein_raw_cache_entries(
-                        (candidate,),
-                        query_proteins=query_proteins,
-                        subject_proteins=subject_proteins,
-                        query_fasta=fastas[query_index],
-                        subject_fasta=fastas[subject_index],
-                        identity_manifest=manifest,
-                        expected_args=expected_args,
-                        expected_program=str(original.get("program") or "blastp"),
-                        expected_outfmt=str(original.get("outfmt") or "6"),
-                    )
-                except ValidationError as exc:
-                    rejection_reasons.append(str(exc))
-                    continue
-                if scan.promotion is not None:
-                    promotion = scan.promotion
-                    break
-                rejection_reasons.extend(item.reason for item in scan.rejections)
-            if promotion is not None:
+        for query_index, subject_index in pairs:
+            try:
+                scan = promote_legacy_protein_raw_cache_entries(
+                    (candidate,),
+                    query_proteins=extraction.proteins_by_record[query_index],
+                    subject_proteins=extraction.proteins_by_record[subject_index],
+                    query_fasta=fastas[query_index],
+                    subject_fasta=fastas[subject_index],
+                    identity_manifest=manifest,
+                    expected_args=expected_args,
+                    expected_program=str(original.get("program") or "blastp"),
+                    expected_outfmt=str(original.get("outfmt") or "6"),
+                )
+            except ValidationError:
+                continue
+            if scan.promotion is not None:
+                promotion = scan.promotion
                 break
 
         if promotion is None:
-            reason = next(
-                (
-                    item
-                    for item in reversed(rejection_reasons)
-                    if item and "hash does not match" not in item
-                ),
-                "No current record pair matched the legacy cache identity.",
-            )
-            unresolved_candidates.append(
-                make_legacy_protein_raw_candidate(
-                    original,
-                    state="rejected",
-                    rejection_reason=reason,
-                )
-            )
             continue
         if not validate_protein_raw_entry_references(promotion.entry, manifest):
             raise ValidationError(
                 "Promoted protein raw entry failed manifest validation."
             )
         promoted_entries.append(promotion.entry)
+        promoted_indexes.add(candidate_index)
         _merge_promoted_tsv_id_map(
             id_map,
             legacy_text=str(original.get("text") or ""),
             current_text=promotion.rewritten_tsv,
         )
 
-    return tuple(promoted_entries), tuple(unresolved_candidates), id_map
+    return tuple(promoted_entries), frozenset(promoted_indexes), id_map
 
 
 def _rewrite_protein_reference_string(
@@ -1278,7 +1322,7 @@ def _adapt_session_plan(
         plan = _replace_plan_request(plan, request)
     current_raw = source.current_raw_entries
     manifest = source.protein_identity_manifest
-    unresolved = source.legacy_candidates
+    promoted_indexes: frozenset[int] = frozenset()
     id_map: dict[str, str] = {}
     extraction: ProteinExtractionResult | None = None
 
@@ -1290,9 +1334,12 @@ def _adapt_session_plan(
         current_protein = tuple(
             entry for entry in current_raw if is_protein_losat_cache_entry(entry)
         )
-        needs_extraction = bool(
-            source.legacy_candidates or reference_ids or current_protein
+        attempt_pairs = (
+            _legacy_candidate_attempt_pairs(request, source.protein_source_mode)
+            if any(candidate.get("state") == "pending" for candidate in source.legacy_candidates)
+            else ()
         )
+        needs_extraction = bool(attempt_pairs or reference_ids or current_protein)
         promoted: tuple[Mapping[str, Any], ...] = ()
         if needs_extraction:
             if plan.inputs is None:  # pragma: no cover - planner invariant.
@@ -1306,9 +1353,10 @@ def _adapt_session_plan(
             )
             extracted_manifest = extraction.identity_manifest
             assert extracted_manifest is not None
-            promoted, unresolved, promoted_id_map = _promote_legacy_candidates(
+            promoted, promoted_indexes, promoted_id_map = _promote_legacy_candidates(
                 source.legacy_candidates,
                 extraction,
+                attempt_pairs,
             )
             id_map.update(promoted_id_map)
             if reference_ids:
@@ -1344,12 +1392,6 @@ def _adapt_session_plan(
             request,
             id_map,
         )
-        has_protein_tables = request.options.protein_comparisons is not None or any(
-            "query_protein_id" in comparison.matches.columns
-            for comparison in request.options.linear_comparisons or ()
-        )
-        if has_protein_tables and promoted:
-            unresolved = ()
 
     if manifest is None and not any(
         is_protein_losat_cache_entry(entry) for entry in current_raw
@@ -1360,6 +1402,12 @@ def _adapt_session_plan(
         losat_derived_cache_entries=source.current_derived_entries,
         protein_identity_manifest=manifest,
         protein_source_mode=source.protein_source_mode,
+    )
+    unresolved, evidence = written_legacy_protein_artifacts(
+        source.legacy_candidates,
+        source.legacy_derived_evidence,
+        promoted=promoted_indexes,
+        has_current_derived=bool(source.current_derived_entries),
     )
     warnings = (
         (
@@ -1379,8 +1427,8 @@ def _adapt_session_plan(
         request=request,
         artifacts=artifacts,
         migration_report=SessionMigrationReport(
-            protein_raw_candidates=tuple(unresolved),
-            protein_derived_evidence=source.legacy_derived_evidence,
+            protein_raw_candidates=unresolved,
+            protein_derived_evidence=evidence,
             protein_id_map=id_map,
             warnings=warnings,
         ),
@@ -1417,15 +1465,20 @@ def _adjust_migration_report(
     builds them; a CLI render and a batch build none.
     """
 
-    if not (
-        adapted.artifacts.losat_derived_cache_entries
-        or (
-            isinstance(prepared, PreparedDiagramRequest)
-            and prepared.losat_derived_cache_entries
-        )
-    ):
-        return adapted.migration_report
-    return replace(adapted.migration_report, protein_derived_evidence=())
+    report = adapted.migration_report
+    _candidates, evidence = written_legacy_protein_artifacts(
+        report.protein_raw_candidates,
+        report.protein_derived_evidence,
+        promoted=(),
+        has_current_derived=bool(
+            adapted.artifacts.losat_derived_cache_entries
+            or (
+                isinstance(prepared, PreparedDiagramRequest)
+                and prepared.losat_derived_cache_entries
+            )
+        ),
+    )
+    return replace(report, protein_derived_evidence=evidence)
 
 
 def build_session_compatible_request_diagram(
@@ -1617,4 +1670,5 @@ __all__ = [
     "promote_legacy_session_similarity_alignment_request",
     "render_session_compatible_request",
     "rewrite_protein_artifact_references",
+    "written_legacy_protein_artifacts",
 ]

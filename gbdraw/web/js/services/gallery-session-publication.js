@@ -442,6 +442,9 @@ export const createGallerySessionPublication = (owners) => {
     /** @type {PublicationSession} */
     let session = { ...prepared, resources };
     for (const field of ARTIFACT_FIELDS) if (has(replayed, field)) session[field] = replayed[field];
+    // The replay decides the legacy protein artifacts, also when it writes none (OV-1144).
+    if (has(replayed, 'legacyArtifacts')) session.legacyArtifacts = replayed.legacyArtifacts;
+    else delete session.legacyArtifacts;
     session = applyDerivedCachePublicationPolicy(session);
     return { session, equivalence: (await rebuild(session)).equivalence };
   };

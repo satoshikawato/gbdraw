@@ -147,8 +147,15 @@ also changes these parts that both sets share:
   derived cache.
 - `proteinIdentityManifest` and `legacyArtifacts` are replaced by the render's.
   A Circular render, one diagram or a batch, returns the Session's own manifest
-  and `legacyArtifacts`, so the protein entries it keeps still resolve. Legacy
-  derived evidence is dropped once the Session has current derived entries.
+  and `legacyArtifacts`, so the protein entries it keeps still resolve. With
+  both drawings, `legacyArtifacts` come from the Linear one.
+- A Linear LOSATP render tries only the pending legacy protein candidates of
+  the record pairs its protein search plans. A promoted candidate moves to
+  `losatCache`; an unmatched one stays pending, with a warning, so a later Web
+  Generate can still promote it; a rejected one stays. Legacy derived evidence
+  is dropped once the Session has current derived entries, or when the render
+  promoted the last pending candidate (OV-1132, OV-1143). The Web Save follows
+  the same rule, pinned by `tests/fixtures/legacy_protein_artifact_vectors.json`.
 - When the render migrates legacy protein IDs (only Sessions 44 and older have
   them), the protein references are rewritten throughout the Session.
 - Resources that neither set's request nor the Web files name are dropped.
@@ -356,6 +363,17 @@ the bundled runtime records `gbdraw/bin/<platform>/losat`. A CLI Session's
 as typed. The saved request carries the resolved comparisons, not the search
 intent, so replay needs no LOSAT runtime. A request that still carries the
 search intent cannot be encoded; resolve or render it first.
+
+## Unreleased: CLI LOSATP results in Sessions
+
+Session version 47 and the request schema are unchanged. A Linear LOSATP run
+that writes a Session (`--session_output`, `--save_session`, a Gallery
+rebuild) stores the results it computed: the request's
+`generatedProteinComparison` marker has mode `none`. Similarity groups stores
+the `precomputedProteinComparison` tables and the `orthogroupResult`; Collinear
+stores only the `collinearityResult` (no tables); Pairwise stores nothing, so
+its first Generate still searches (OV-1068). The first Web Generate after Load
+reuses what is stored instead of searching again.
 
 ## Unreleased: one LOSAT cache entry per raw key
 
@@ -617,6 +635,13 @@ In the Web, any derived result read from a Session (old `rows` entries
 included) is recomputed once from the raw cache.
 A zero-hit pair is accepted in either form, a header-only `canonicalTsv` or
 `rows: []`, but not both. Session version and the envelope schema are unchanged.
+A zero-hit entry (no hits) may also hold its mode's result member,
+`orthogroupResult` or `collinearityResult`, as the Web writes it, when that
+member decodes as the mode's typed result; it and every other member must hold
+no values. Python Load and the Web Load admit the same entries (OV-1127), except one
+known difference (OV-1149): an `orthogroupResult` whose typed `value.fields` is
+empty is admitted by the Web Load, which checks only the envelope, and refused
+by the Python Load, which decodes the member.
 
 OV-1063 (D-90): one Python owner (`gbdraw.analysis.protein_artifacts`) builds a
 derived entry's identity, key, provenance, and pair numbering for the Web

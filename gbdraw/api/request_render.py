@@ -2189,6 +2189,45 @@ def _resolved_losat_search(
     return replace(search, losatp_mode="none", pairs=None)
 
 
+def stored_protein_result_request(
+    request: DiagramRequest,
+    metadata: LinearDiagramMetadata | None,
+) -> DiagramRequest:
+    """The request a Session stores after a render that ran a protein pipeline.
+
+    A Linear request that generated a Similarity groups or Collinear result
+    stores it as the Web Session writer does after a Generate (OV-1068): the
+    pipeline marker of mode ``"none"`` reuses the typed result; Similarity
+    groups also stores each drawn pair's table, Collinear only its typed
+    result. Any other request, Pairwise included, is stored as given.
+    ``metadata`` is the render's; nothing is computed again.
+    """
+
+    if not isinstance(request, LinearDiagramRequest):
+        return request
+    options = request.options
+    mode = losatp_analysis_mode(options.losat_search)
+    if mode not in {"orthogroup", "collinear"}:
+        return request
+    if metadata is None or (
+        metadata.collinearity_result if mode == "collinear" else metadata.orthogroups
+    ) is None:
+        raise ValueError(f"computed no {mode} result")
+    stored = replace(options, losat_search=_resolved_losat_search(options.losat_search))
+    return replace(
+        request,
+        options=(
+            replace(stored, collinearity_blocks=metadata.collinearity_result)
+            if mode == "collinear"
+            else replace(
+                stored,
+                orthogroups=metadata.orthogroups,
+                protein_comparisons=tuple(metadata.protein_comparisons or ()),
+            )
+        ),
+    )
+
+
 def _resolve_similarity_alignment_reference(
     request: DiagramRequest,
     artifacts: CurrentRequestArtifacts | None,
@@ -2529,6 +2568,27 @@ def _request_derived_settings(
     )
 
 
+def _request_losatp_job_specs(
+    request: LinearDiagramRequest,
+    mode: str,
+    pairs: Sequence[tuple[int, int]] | None,
+) -> tuple[tuple[int, int], ...]:
+    """The directed record pairs that a LOSATP run of ``request`` in ``mode`` searches.
+
+    ``pairs`` are its displayed comparison edges (``None``: the consecutive
+    records); the registered job plan (``losatp_job_specs``) gives the searches.
+    """
+
+    options = request.options
+    return losatp_job_specs(
+        mode,
+        record_count=len(request.records),
+        pairs=pairs,
+        infer_orthogroups=options.collinear_infer_orthogroups,
+        search_scope=str(options.collinearity_search_scope),
+    )
+
+
 def _derived_identity_pairs(
     request: LinearDiagramRequest,
     settings: DerivedLosatpSettings,
@@ -2553,12 +2613,8 @@ def _derived_identity_pairs(
                 [],
             ).append(str(entry.get("key") or ""))
     pairs: list[DerivedLosatpPair] = []
-    for query_index, subject_index in losatp_job_specs(
-        settings.mode,
-        record_count=len(request.records),
-        pairs=tuple(displayed),
-        infer_orthogroups=settings.infer_orthogroups,
-        search_scope=settings.search_scope,
+    for query_index, subject_index in _request_losatp_job_specs(
+        request, settings.mode, tuple(displayed)
     ):
         keys = raw_keys.get((instance_keys[query_index], instance_keys[subject_index]), [])
         if len(keys) != 1 or not keys[0]:

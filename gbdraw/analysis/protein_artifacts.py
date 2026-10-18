@@ -111,24 +111,69 @@ def _has_one_empty_table_form(pair: Mapping[str, object]) -> bool:
     return isinstance(table, str) and table.endswith("\n") and table.count("\n") == 1
 
 
-def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
-    mode = entry.get("mode")
-    if mode not in {"orthogroup", "collinear"}:
-        return False
-    payload = entry.get("payload")
-    if not isinstance(payload, Mapping):
-        return False
+# The typed analysis result a derived payload of each mode carries: its
+# payload member and the kind of its typed resource.
+_DERIVED_RESULT_MEMBERS = {
+    "orthogroup": ("orthogroupResult", "orthogroupResult"),
+    "collinear": ("collinearityResult", "result"),
+}
 
-    allowed_keys = {"identity", "provenance", "pairs", "orthogroups"}
-    if mode == "collinear":
-        allowed_keys.update(
-            {
-                "collinearGroups",
-                "collinearGroupScope",
-                "collinearityBlocks",
-            }
+
+def _holds_no_value(value: object) -> bool:
+    """Whether a JSON value names nothing: every array and object in it is empty.
+
+    A typed object (``{"type", "fields"}``) is read through its fields, so a
+    typed result whose collections are all empty, nested results included,
+    holds no value.
+    """
+
+    if isinstance(value, Mapping):
+        fields = value.get("fields")
+        if set(value) == {"type", "fields"} and isinstance(fields, Mapping):
+            return all(_holds_no_value(item) for item in fields.values())
+        return not value
+    if isinstance(value, list):
+        return not value
+    return True
+
+
+def _decodes_as_derived_result(mode: str, resource: object) -> bool:
+    """Whether a payload's typed member decodes as the result of its mode."""
+
+    from gbdraw.session_request_codec import (
+        CanonicalRequestDecodingError,
+        decode_canonical_typed_resource,
+    )
+
+    from .collinearity import CollinearityResult
+    from .protein_colinearity import OrthogroupGraphResult
+
+    _member, kind = _DERIVED_RESULT_MEMBERS[mode]
+    try:
+        decode_canonical_typed_resource(
+            json.dumps(resource).encode("utf-8"),
+            value_kind=kind,
+            expected=CollinearityResult if mode == "collinear" else OrthogroupGraphResult,
         )
-    if not set(payload).issubset(allowed_keys):
+    except (CanonicalRequestDecodingError, TypeError, ValueError, ValidationError):
+        return False
+    return True
+
+
+def _is_zero_hit_result(entry: Mapping[str, object]) -> bool:
+    """Whether a derived entry is the result of zero-hit searches, which names no protein.
+
+    Its mode computes a result, its identity (if present) is current, every
+    pair is a zero-hit pair, its typed result (if present) decodes as the
+    mode's, and every other member holds no value: the typed result and the
+    members of the form written before it (`orthogroups: []`) are empty. The
+    Web twin is ``isZeroHitDerivedResult`` (``services/losat-cache.js``);
+    ``tests/fixtures/session_admission_vectors.json`` pins both (OV-1127).
+    """
+
+    mode = entry.get("mode")
+    payload = entry.get("payload")
+    if not isinstance(mode, str) or mode not in _DERIVED_RESULT_MEMBERS or not isinstance(payload, Mapping):
         return False
 
     if "identity" in payload:
@@ -147,8 +192,7 @@ def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
             return False
 
     pairs = payload.get("pairs")
-    orthogroups = payload.get("orthogroups")
-    if not isinstance(pairs, list) or not pairs or orthogroups != []:
+    if not isinstance(pairs, list) or not pairs:
         return False
     pair_indices: set[int] = set()
     for pair in pairs:
@@ -185,16 +229,17 @@ def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
         ):
             return False
 
-    if mode == "collinear":
-        for collection_key in ("collinearGroups", "collinearityBlocks"):
-            if collection_key in payload and payload[collection_key] != []:
-                return False
-        if "collinearGroupScope" in payload and payload["collinearGroupScope"] not in {
-            "adjacent_local",
-            "global_collinear",
-        }:
-            return False
-    return True
+    member, _kind = _DERIVED_RESULT_MEMBERS[mode]
+    result = payload.get(member)
+    if member in payload and (
+        not isinstance(result, Mapping) or not _decodes_as_derived_result(mode, result)
+    ):
+        return False
+    return all(
+        _holds_no_value(cast(Mapping[str, object], value).get("value") if key == member else value)
+        for key, value in payload.items()
+        if key not in {"identity", "provenance", "pairs"}
+    )
 
 
 def validate_current_derived_protein_artifacts(
@@ -338,7 +383,7 @@ def validate_current_derived_protein_artifacts(
         assert isinstance(payload, Mapping)
         valid, saw_reference = visit(payload)
         if not valid or (
-            payload and not saw_reference and not _is_strict_empty_result(entry)
+            payload and not saw_reference and not _is_zero_hit_result(entry)
         ):
             raise ValidationError(
                 "Current derived protein artifact contains unresolved protein "

@@ -222,7 +222,16 @@ def test_cli_session_keeps_one_file_as_one_source_on_replay(
         ({"kind": "genbank", "resourceId": "record-1-genbank"}, {"kind": "recordId", "value": "BGC0000709"}),
         ({"kind": "genbank", "resourceId": "record-3-genbank"}, None),
     ]
-    assert sorted(session["resources"]) == ["record-1-genbank", "record-3-genbank"]
+    # Similarity groups also stores its computed results (OV-1068).
+    assert sorted(session["resources"]) == [
+        *(
+            ["comparison-orthogroups", "comparison-protein-1", "comparison-protein-2"]
+            if mode == "similarity_groups"
+            else []
+        ),
+        "record-1-genbank",
+        "record-3-genbank",
+    ]
     assert session["resources"]["record-1-genbank"]["name"] == "two.gbk"
     # A replay writes the same layout and keeps every raw entry.
     assert replayed["renderRequest"]["records"] == records

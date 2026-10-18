@@ -1247,6 +1247,19 @@ def test_current_session_accepts_strict_zero_hit_derived_results(
     validate_session(payload)
 
 
+@pytest.mark.parametrize(
+    "member",
+    ({"note": "arbitrary"}, {"collinearGroupScope": "invalid"}),
+    ids=("arbitrary-field", "other-collinear-scope"),
+)
+def test_a_zero_hit_derived_result_may_hold_members_without_values(member: dict) -> None:
+    """OV-1127: no member list; a member that holds no array or object entry names no protein."""
+
+    payload = _zero_hit_derived_payload("collinear")
+    payload.update(member)
+    validate_session(_current_derived_session(_protein_identity_manifest(), payload, mode="collinear"))
+
+
 def _replace_rows_with_table(payload: dict, table: object) -> None:
     pair = payload["pairs"][0]
     del pair["rows"]
@@ -1256,7 +1269,6 @@ def _replace_rows_with_table(payload: dict, table: object) -> None:
 @pytest.mark.parametrize(
     "mutate",
     (
-        lambda payload: payload.update({"note": "arbitrary"}),
         lambda payload: payload["pairs"][0].update({"rows": [{}]}),
         lambda payload: payload["pairs"][0].update({"canonicalTsv": "query\n"}),
         lambda payload: _replace_rows_with_table(payload, "query\nq1\n"),
@@ -1269,13 +1281,11 @@ def _replace_rows_with_table(payload: dict, table: object) -> None:
         lambda payload: payload.update({"orthogroups": [{}]}),
         lambda payload: payload.update({"collinearGroups": [{}]}),
         lambda payload: payload.update({"collinearityBlocks": [{}]}),
-        lambda payload: payload.update({"collinearGroupScope": "invalid"}),
         lambda payload: payload.update({"identity": None}),
         lambda payload: payload["identity"].update({"rawCacheKeys": [None]}),
         lambda payload: payload["identity"].update({"mode": "orthogroup"}),
     ),
     ids=(
-        "arbitrary-field",
         "nonempty-rows",
         "both-table-forms",
         "nonempty-canonical-table",
@@ -1288,7 +1298,6 @@ def _replace_rows_with_table(payload: dict, table: object) -> None:
         "nonempty-orthogroups",
         "nonempty-collinear-groups",
         "nonempty-collinearity-blocks",
-        "invalid-collinear-scope",
         "null-identity",
         "invalid-raw-cache-binding",
         "identity-mode-mismatch",

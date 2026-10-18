@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
@@ -50,6 +51,16 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { getResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
+const { resolveComparisonThresholds } = await import('../../gbdraw/web/js/mode-profiles.js');
+// The Generate's reuse test of stored protein results is module-private; a
+// copy of run-analysis.js that exports it imports the same modules.
+const runAnalysisUrl = pathToFileURL(path.join(process.cwd(), 'gbdraw/web/js/app/run-analysis.js'));
+const reuseProbeDir = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-reuse-'));
+const reuseProbePath = path.join(reuseProbeDir, 'run-analysis-reuse-probe.mjs');
+await writeFile(reuseProbePath, (await readFile(runAnalysisUrl, 'utf8'))
+  .replace('const canReuseResolvedProteinArtifacts = ({', 'export const canReuseResolvedProteinArtifacts = ({')
+  .replace(/from '(\.\.?\/[^']+)'/g, (_match, specifier) => `from '${new URL(specifier, runAnalysisUrl).href}'`), 'utf8');
+const { canReuseResolvedProteinArtifacts } = await import(pathToFileURL(reuseProbePath).href);
 const root = process.cwd();
 // Exercise the Worker's actual typed helper without starting a browser runtime.
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
@@ -247,7 +258,8 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
 
 // B15: an editable CLI protein pipeline is the adjacent LOSATP comparison the
 // CLI drew. The projection states that plan (the plan normalizer no longer
-// falls back to adjacent), so Generate rebuilds the same pipeline.
+// falls back to adjacent), so a changed setting rebuilds the same pipeline;
+// with no change the first Generate reuses the stored results (OV-1068).
 await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
   try {
@@ -258,21 +270,35 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
     });
     const bytes = gunzipSync(await readFile(file));
     const session = JSON.parse(bytes);
-    assert.deepEqual(session.renderRequest.comparisons.map(item => [item.kind, item.mode]),
-      [['generatedProteinComparison', 'orthogroup']]);
+    // OV-1068: the CLI stores the results it computed as the Web Save does.
+    const stored = [['precomputedProteinComparison', undefined], ['orthogroupResult', undefined],
+      ['generatedProteinComparison', 'none']];
+    assert.deepEqual(session.renderRequest.comparisons.map(item => [item.kind, item.mode]), stored);
     const result = await load(bytes);
     assert.equal(result.status, 'ok', result.error?.stack);
     assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
     assert.deepEqual(state.activeDrawing().linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
     assert.equal(state.activeDrawing().losatProgram.value, 'blastp');
     const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+    // ... so the first Generate after Load reuses them instead of converting again.
+    const blastp = state.activeDrawing().losat.blastp;
+    assert.equal(canReuseResolvedProteinArtifacts({
+      canonicalComparisons: filesData.linearCanonicalComparisons,
+      committedSession: getCommittedCanonicalSession(),
+      sequences: filesData.linearSeqs,
+      active: {
+        featureVisibility: '', mode: blastp.mode, candidateLimit: blastp.candidateLimit ?? null,
+        ...resolveComparisonThresholds(state.activeDrawing().adv, 'linear'),
+        orthogroupMembershipMode: blastp.orthogroupMembershipMode, memberMaxHits: blastp.orthogroupMemberMaxHits ?? null,
+        maxParalogLinks: blastp.collinearMaxParalogLinksPerOrthogroup
+      }
+    }), true);
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
       losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
     });
     const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
-    assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode]),
-      [['generatedProteinComparison', 'orthogroup']]);
+    assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode]), stored);
     // OV-296: the Python API re-save of that Session (same request, no
     // cliInvocation, no Web draft) loads with the same plan, so Generate
     // rebuilds the same pipeline.

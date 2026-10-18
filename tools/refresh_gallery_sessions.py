@@ -1168,6 +1168,16 @@ def _edit_staged_session(
     )
 
 
+def _with_comparisons(comparisons: list[Any], session: dict[str, Any]) -> int:
+    """Give a staged Session's request ``comparisons``; 1 when that changes it."""
+
+    request = session["renderRequest"]
+    if request["comparisons"] == comparisons:
+        return 0
+    request["comparisons"] = comparisons
+    return 1
+
+
 def _cli_env() -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = (
@@ -1321,15 +1331,15 @@ def _resolved_protein_comparisons(
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]]] | None:
     """Compute a Session's protein pipeline once from its raw LOSATP cache.
 
-    Returns the codec's encoding of the resolved comparisons (the analysis
-    result, the display tables of a similarity-groups result, and the marker
-    that reuses them, as the Web writes them after a Generate) with their
-    resource descriptors; ``None`` when the request runs no protein pipeline.
+    Returns the codec's encoding of the comparisons every Python Session
+    writer stores after that render (``stored_protein_result_request``: the
+    form the Web writes after a Generate) with their resource descriptors;
+    ``None`` when the request runs no protein pipeline.
     A result that needed a LOSATP search the raw cache does not hold is
     refused: a refresh keeps the Session's search evidence.
     """
 
-    from gbdraw.api.request_render import _resolved_losat_search
+    from gbdraw.api.request_render import stored_protein_result_request
     from gbdraw.session import materialize_session, render_session, session_to_request
     from gbdraw.session_request_codec import encode_canonical_request
     from gbdraw.session_resources import SessionResourceTable
@@ -1365,30 +1375,9 @@ def _resolved_protein_comparisons(
                     f"the {mode} result needs {len(searched)} LOSATP search(es) "
                     "that the raw cache does not hold"
                 )
-            if metadata is None or (
-                metadata.collinearity_result is None
-                if mode == "collinear"
-                else metadata.orthogroups is None
-            ):
-                raise ValueError(f"computed no {mode} result")
-            options = dataclasses.replace(
-                typed.options,
-                losat_search=_resolved_losat_search(typed.options.losat_search),
-            )
-            options = (
-                dataclasses.replace(
-                    options, collinearity_blocks=metadata.collinearity_result
-                )
-                if mode == "collinear"
-                else dataclasses.replace(
-                    options,
-                    orthogroups=metadata.orthogroups,
-                    protein_comparisons=tuple(metadata.protein_comparisons or ()),
-                )
-            )
             table = SessionResourceTable(session["resources"])
             comparisons = encode_canonical_request(
-                dataclasses.replace(typed, options=options), table=table
+                stored_protein_result_request(typed, metadata), table=table
             ).payload["comparisons"]
             return comparisons, table.descriptors()
 
@@ -1596,6 +1585,11 @@ def _refresh_one_session(
             env=env,
             check=True,
         )
+        if _is_test_input_session(session_path):
+            # A CLI re-save stores the protein results it computed (OV-1068);
+            # a test input keeps the pipelines its specs run on Generate.
+            pipelines = load_session(prepared_path)["renderRequest"]["comparisons"]
+            _edit_staged_session(replayed_path, lambda staged: _with_comparisons(pipelines, staged))
         _run_publication_bridge(
             "finalize",
             prepared_path,

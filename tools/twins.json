@@ -1011,8 +1011,7 @@
       "vector": "tests/fixtures/legacy_protein_artifact_vectors.json",
       "reason": "Both Session writers decide it and the Web Save does not go through Python; the cases pin one rule from the attempt outcomes.",
       "retireWhen": "the Web writes a Session's LOSAT artifacts through the Python writer (Worker), or the legacy protein artifacts are retired",
-      "source": "incremental-render-20261013 PRETAG-PROTEIN-DESIGN rev 2 (OV-1132, OV-1143; D-112, D-121)",
-      "pending": true
+      "source": "incremental-render-20261013 PRETAG-PROTEIN-DESIGN rev 2 (OV-1132, OV-1143; D-112, D-121)"
     }
   ]
 }

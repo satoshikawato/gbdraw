@@ -655,7 +655,7 @@ def _rendered_drawing_build(
 ) -> tuple[Any, dict[str, Any] | None]:
     """The re-save of one rendered drawing: its request, Results and artifacts."""
 
-    from gbdraw.api.request_render import CircularBatchRenderResult
+    from gbdraw.api.request_render import CircularBatchRenderResult, stored_protein_result_request
     from gbdraw.session import _DrawingBuild
 
     state, web_file_inventory = project_session_adjunct_for_current_write(
@@ -716,7 +716,11 @@ def _rendered_drawing_build(
         state.pop("runMetadata", None)
     build = _DrawingBuild(
         mode=plan.drawing.mode,
-        request=rendered.request,
+        # The Session stores the protein results this render computed (OV-1068).
+        request=stored_protein_result_request(
+            rendered.request,
+            None if isinstance(rendered, CircularBatchRenderResult) else rendered.linear_metadata,
+        ),
         state=state,
         id=plan.drawing.id,
     )
