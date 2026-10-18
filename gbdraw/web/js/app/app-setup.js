@@ -4326,8 +4326,7 @@ export const createAppSetup = () => {
     void history.refreshCurrentIntent();
     // 4. Transient UI. "Showing the last successful result" named the
     // departing drawing's Result, and the notice the departing drawing's work.
-    resetModeTransientUi();
-    history.adoptSessionValues();
+    history.adoptSessionReset(resetModeTransientUi);
     noticeBanner.dismiss();
     previewFeatureSearch.switchModeSearch(departing.mode, arriving.mode);
     failedGeneratePreservedResult.value = false;

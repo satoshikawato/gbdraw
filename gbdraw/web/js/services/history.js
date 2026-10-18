@@ -289,6 +289,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The editable intent (config, files, ui, features, ...); the snapshot service builds and applies it.
  * @typedef {Record<string, any>} HistoryCheckpoint
  *   An artifact checkpoint: intent plus the generated Result domains.
+ * @typedef {{ intent: HistoryIntent, signature: string }} SessionMark
+ *   The router's record of the Session-level values as a step opened (D-15-53).
  * @typedef {{
  *   label: string,
  *   before: any,
@@ -303,12 +305,14 @@ const checkpointSvgBytes = (checkpoint) => (
  *   beforeFileIds?: Set<any>,
  *   beforeIntentCheckpoint?: any,
  *   beforeIntent?: HistoryIntent | null,
- *   takeEntry?: HistoryStepBase['takeEntry']
+ *   takeEntry?: HistoryStepBase['takeEntry'],
+ *   sessionMark?: SessionMark | null
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
  *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
  *   calls that ran on it, each with the step name it started with. `serial`: an intent step's
- *   number, in the order the steps began (`intentStepSerial`).
+ *   number, in the order the steps began (`intentStepSerial`). `sessionMark`: the router's Session
+ *   values as the step opened (`stepOpened`).
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {{
@@ -366,10 +370,13 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {readonly string[] | null} [identityMapPath]
  *   The intent path of a map keyed by Result identity (the composition
  *   offsets); `heldIdentities` lists the keys History holds there (OV-110).
- * @property {(entry: HistoryEntry | null, label: string) => IntentEntry | null} [stepEnded]
+ * @property {() => SessionMark | null} [stepOpened]
+ *   The router's Session values as a step opens here; the step carries them to its end.
+ * @property {(entry: HistoryEntry | null, label: string, mark: SessionMark | null) => IntentEntry | null} [stepEnded]
  *   The router hears each step that ends on this History's Undo stack, with
- *   its entry or `null` when it changed nothing here (D-15-51, R15-23); it
- *   answers the Session-level values the entry's step also changed (D-15-53).
+ *   its entry or `null` when it changed nothing here (D-15-51, R15-23), and
+ *   the Session values it opened with; it answers the Session-level values
+ *   the entry's step also changed (D-15-53).
  * @property {(part: IntentEntry, direction: 'undo' | 'redo') => unknown} [applySessionPart]
  *   Restores an entry's `session` part, where still as its step left it.
  */
@@ -462,6 +469,7 @@ export const createHistoryManager = ({
   mutationAvailability = () => null,
   stepAvailability = () => null,
   identityMapPath = null,
+  stepOpened = () => null,
   stepEnded = () => null,
   applySessionPart = () => {}
 } = /** @type {HistoryManagerOptions} */ ({})) => {
@@ -822,13 +830,13 @@ export const createHistoryManager = ({
   // new entry clears Redo.
   /**
    * @param {HistoryEntry | null} entry
-   * @param {{ label: string, takeEntry?: HistoryStepBase['takeEntry'] }} step
+   * @param {{ label: string, takeEntry?: HistoryStepBase['takeEntry'], sessionMark?: SessionMark | null }} step
    */
   const endStep = (entry, step) => {
     if (step.takeEntry) {
       step.takeEntry(entry);
     } else {
-      const session = stepEnded(entry, step.label);
+      const session = stepEnded(entry, step.label, step.sessionMark ?? null);
       if (entry && session) entry.session = session;
     }
     if (!entry) return;
@@ -954,7 +962,8 @@ export const createHistoryManager = ({
       owner: options.owner,
       deferAdapterCommit: ownedByAction,
       serial,
-      takeEntry: options.takeEntry
+      takeEntry: options.takeEntry,
+      sessionMark: stepOpened()
     };
     activeTransaction = tx;
     touchTransaction();
@@ -1018,7 +1027,7 @@ export const createHistoryManager = ({
 
   /**
    * The bookkeeping of every intent step.
-   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds' | 'takeEntry'>} from
+   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds' | 'takeEntry' | 'sessionMark'>} from
    *   The transaction, or the last recorded intent when an action records its remainder.
    * @param {Awaited<ReturnType<typeof captureIntent>>} afterRecord
    * @param {{ label?: string }} options
@@ -1027,7 +1036,7 @@ export const createHistoryManager = ({
     setCurrentIntent(afterRecord);
 
     const entry = buildPatchEntry(from, afterRecord, options);
-    endStep(entry, { label: entry?.label ?? from.label, takeEntry: from.takeEntry });
+    endStep(entry, { label: entry?.label ?? from.label, takeEntry: from.takeEntry, sessionMark: from.sessionMark });
     if (!entry) {
       emitHistoryDiagnostic({ type: 'commit', scope: 'intent', label: from.label, created: false });
       releaseUnreferencedFiles();
@@ -1198,7 +1207,8 @@ export const createHistoryManager = ({
         beforeIntent: currentIntent,
         closed: false,
         source: options.source || '',
-        takeEntry: options.takeEntry
+        takeEntry: options.takeEntry,
+        sessionMark: stepOpened()
       };
     };
     const captureBefore = () => {
@@ -2051,7 +2061,8 @@ export const createHistoryManager = ({
     runUndoableCommand,
     // R11: the open step ends now, in this History (a drawing switch).
     settlePendingIntent,
-    stepOpen: () => Boolean(openTransaction()),
+    // The Session values the open step opened with, if a step is open.
+    openStepMark: () => openTransaction()?.sessionMark ?? null,
     heldIdentities,
     undo,
     undoLabel
@@ -2137,10 +2148,18 @@ export const createHistoryRouter = ({
   const projectRedo = [];
   const projectRevision = makeRef(0);
   const touchProject = () => { projectRevision.value += 1; };
+  /** @returns {SessionMark} */
   const sessionRecord = () => {
     const intent = cloneIntentValue(sessionHistory.buildIntent());
     return { intent, signature: JSON.stringify(intent) };
   };
+  /** @param {SessionMark} record @param {HistoryIntentChange[]} changes @param {'undo' | 'redo'} [direction] */
+  const patchedRecord = (record, changes, direction = 'redo') => {
+    const intent = applyIntentPatch(record.intent, changes, direction);
+    return { intent, signature: JSON.stringify(intent) };
+  };
+  /** @param {SessionMark} from @param {SessionMark} to */
+  const recordChanges = (from, to) => (from.signature === to.signature ? [] : buildIntentPatch(from.intent, to.intent));
   // The Session-level values as the last step left them.
   let sessionCurrent = sessionRecord();
 
@@ -2155,14 +2174,16 @@ export const createHistoryRouter = ({
     budget.enforce();
     touchProject();
   };
-  // The Session-level values changed since the last step ended.
-  const sessionStepChanges = (after = sessionRecord()) => (
-    after.signature === sessionCurrent.signature ? [] : buildIntentPatch(sessionCurrent.intent, after.intent));
-  /** @param {string} label @returns {IntentEntry | null} */
-  const sessionStep = (label) => {
+  // The Session-level values a step changed. A step that changed a drawing
+  // value (`mark` null) takes every change since the last step ended, so it
+  // keeps one made outside any step (D-15-53 2). A step that changed none
+  // takes only the changes since it opened (`mark`); an earlier one stays
+  // for the next step.
+  /** @param {string} label @param {SessionMark | null} [mark] @returns {IntentEntry | null} */
+  const sessionStep = (label, mark = null) => {
     const after = sessionRecord();
-    const changes = sessionStepChanges(after);
-    sessionCurrent = after;
+    const changes = recordChanges(mark ?? sessionCurrent, after);
+    sessionCurrent = mark ? patchedRecord(sessionCurrent, changes) : after;
     return changes.length > 0
       ? { type: 'intent', label, changes, byteSize: JSON.stringify(changes).length * 2, fileIds: new Set() }
       : null;
@@ -2180,10 +2201,10 @@ export const createHistoryRouter = ({
       byteSize: parts.reduce((bytes, { entry }) => bytes + entry.byteSize, session?.byteSize ?? 0)
     });
   };
-  /** @param {HistoryEntry | null} entry @param {string} label @returns {IntentEntry | null} */
-  const stepEnded = (entry, label) => {
+  /** @param {HistoryEntry | null} entry @param {string} label @param {SessionMark | null} mark @returns {IntentEntry | null} */
+  const stepEnded = (entry, label, mark) => {
     const stamp = ++sequence;
-    const session = sessionStep(label);
+    const session = sessionStep(label, entry ? null : mark);
     if (!entry) {
       recordProjectStep(label, stamp, [], session);
       return null;
@@ -2195,6 +2216,7 @@ export const createHistoryRouter = ({
 
   const managers = new Map(drawingIds.map((drawingId) => /** @type {const} */ ([drawingId, createHistoryManager({
     ...managerOptions(drawingId),
+    stepOpened: sessionRecord,
     stepEnded,
     applySessionPart: (part, direction) => applySession(part, direction, { asLeft: true }),
     budget: { ...budget, join: (member) => joinBudget(drawingId, member) }
@@ -2237,8 +2259,7 @@ export const createHistoryRouter = ({
     const changes = asLeft ? changesAsLeft(live, entry.changes, direction) : entry.changes;
     if (changes.length === 0) return;
     await sessionHistory.applyIntent(applyIntentPatch(live, changes, direction), { changes, direction });
-    const intent = applyIntentPatch(sessionCurrent.intent, changes, direction);
-    sessionCurrent = { intent, signature: JSON.stringify(intent) };
+    sessionCurrent = patchedRecord(sessionCurrent, changes, direction);
   };
   // Every drawing settles its open step and none restores; the drawings that
   // are not shown apply their parts first, the shown drawing last, while the
@@ -2384,8 +2405,20 @@ export const createHistoryRouter = ({
       projectSavePoint = { undo: projectUndo[projectUndo.length - 1] ?? null, redo: projectRedo[projectRedo.length - 1] ?? null };
     },
     // D-15-53: a drawing switch resets Session-level transient values (the
-    // feature panel tab) without a step; they are the recorded values now.
-    adoptSessionValues: () => { sessionCurrent = sessionRecord(); },
+    // feature panel tab) without a step. Only what `reset` changes becomes
+    // recorded, as the last step left it and as an open step opened with it;
+    // an open step's own edits stay its changes.
+    adoptSessionReset: (/** @type {() => void} */ reset) => {
+      const before = sessionRecord();
+      reset();
+      const changes = recordChanges(before, sessionRecord());
+      if (changes.length === 0) return;
+      sessionCurrent = patchedRecord(sessionCurrent, changes);
+      every().forEach((manager) => {
+        const mark = manager.openStepMark();
+        if (mark) Object.assign(mark, patchedRecord(mark, changes));
+      });
+    },
     // OV-110: the Result identities any drawing's History holds.
     heldIdentities: () => {
       /** @type {Set<string>} */
@@ -2394,12 +2427,16 @@ export const createHistoryRouter = ({
       return ids;
     },
     // D-15-53: a Session-level value changed outside any step is no change
-    // until a step takes it; one an open step changed is (as a manager counts
-    // its own values).
+    // until a step takes it; one an open step changed since it opened is (as
+    // a manager counts its own values).
     hasChangesSinceSavePoint: async () => {
       if ((projectUndo[projectUndo.length - 1] ?? null) !== projectSavePoint.undo) return true;
       if ((projectRedo[projectRedo.length - 1] ?? null) !== projectSavePoint.redo) return true;
-      if (every().some((manager) => manager.stepOpen()) && sessionStepChanges().length > 0) return true;
+      const marks = every().flatMap((manager) => manager.openStepMark() ?? []);
+      if (marks.length > 0) {
+        const { signature } = sessionRecord();
+        if (marks.some((mark) => mark.signature !== signature)) return true;
+      }
       for (const manager of every()) if (await manager.hasChangesSinceSavePoint()) return true;
       return false;
     },

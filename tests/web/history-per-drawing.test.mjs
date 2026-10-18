@@ -382,6 +382,81 @@ test('the feature panel tab reset at a switch is no change and no step', async (
   assert.equal(state.featurePanelTab.value, 'colors', 'the Linear Undo leaves the tab the switch set');
 });
 
+const settleTurns = async () => { for (let turn = 0; turn < 20; turn += 1) await new Promise((r) => setTimeout(r, 0)); };
+
+// A3 review 3 Low 2: the switch takes only the tab reset as recorded; a title
+// typed in a step still open at the switch is that step's change.
+test('a title typed in a step open at the switch is undone, without the tab reset', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  show(app, 'circular');
+  state.featurePanelTab.value = 'labels';
+  await history.captureBaseline();
+  const title = state.sessionTitle.value;
+  const step = await history.begin('Rename Session', { source: 'test-control' });
+  state.sessionTitle.value = 'typed before switch';
+  show(app, 'linear');
+  await settleTurns();
+  await history.commit(step);
+  assert.equal(state.featurePanelTab.value, 'colors');
+  assert.equal(history.undoLabel(), 'Rename Session', 'the title edit is a project step');
+  show(app, 'circular');
+  assert.equal(history.undoLabel(), 'Rename Session');
+  await app.undoHistory();
+  assert.deepEqual({ title: state.sessionTitle.value, tab: state.featurePanelTab.value }, { title, tab: 'colors' });
+});
+
+// A3 review 3 Low 2: one open step changes a drawing value and a draft; the
+// switch ends it in its drawing with both.
+test('a prefix and a draft changed in a step open at the switch are undone together', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { circular } = state.drawings;
+  show(app, 'circular');
+  await history.captureBaseline();
+  const before = { prefix: circular.form.prefix, draft: state.newSpecRule.val };
+  await history.begin('Edit', { source: 'test-control' });
+  circular.form.prefix = 'open-at-switch';
+  state.newSpecRule.val = 'draft-at-switch';
+  show(app, 'linear');
+  await settleTurns();
+  assert.equal(history.canUndo(), false, 'Linear does not see the Circular step');
+  show(app, 'circular');
+  assert.deepEqual({ label: history.undoLabel(), count: history.getUndoCount() }, { label: 'Edit', count: 1 });
+  await app.undoHistory();
+  assert.deepEqual({ prefix: circular.form.prefix, draft: state.newSpecRule.val }, before);
+});
+
+// A3 review 3 Medium 1 (D-15-53 2): a step that changes nothing records
+// nothing, even after a selection made outside any step. The selection is no
+// unsaved work and stays for the next step, which keeps it.
+test('a step that changes nothing after a click records nothing and keeps the other drawing\'s Redo', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { circular } = state.drawings;
+  show(app, 'linear');
+  await history.captureBaseline();
+  await history.runUndoable('Linear prefix', () => { state.drawings.linear.form.prefix = 'redo-kept'; });
+  await app.undoHistory();
+  show(app, 'circular');
+  history.markSavePoint();
+  const selectedBefore = state.selectedAnnotation.value;
+  const prefixBefore = circular.form.prefix;
+  state.selectedAnnotation.value = { setId: 'set-b', id: 'annotation-b' };
+  const step = await history.begin('Output prefix', { source: 'test-control' });
+  assert.equal(await history.hasChangesSinceSavePoint(), false, 'a focus after a click is not unsaved work');
+  await history.commit(step);
+  assert.equal(await history.hasChangesSinceSavePoint(), false, 'a blur without an edit is not unsaved work');
+  assert.equal(history.canUndo(), false, 'the blur records no step');
+  show(app, 'linear');
+  assert.deepEqual({ canRedo: history.canRedo(), canUndo: history.canUndo() }, { canRedo: true, canUndo: false });
+  show(app, 'circular');
+  await history.runUndoable('Circular prefix', () => { circular.form.prefix = 'after-blur'; });
+  await app.undoHistory();
+  assert.deepEqual({ prefix: circular.form.prefix, selected: state.selectedAnnotation.value },
+    { prefix: prefixBefore, selected: selectedBefore }, 'the next step keeps the click');
+});
+
 // A3 review 2 M1 (OV-1168 class): the alignment Reset receipt is an artifact
 // slot value, the shown Result's. An Undo of Reset made in Linear, from
 // Circular, neither validates nor installs a receipt for the hidden Linear.
