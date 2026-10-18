@@ -53,8 +53,10 @@ label edits, Feature placements, annotation sets, Depth series, custom track
 stacks, and the layout positions. A change made in one mode stays in that mode,
 including a Generate; switching modes changes no setting and shows that mode's
 settings and Result. **Reset Settings** resets both modes, and one **Undo**
-restores both. The input files, LOSAT run settings (run mode and threads), and
-the rich feature popup are shared. A saved Session keeps each mode's settings
+restores both. The Circular **GenBank/DDBJ File** input and the Linear **File**
+cards are separate inputs: a Circular upload does not appear in Linear, and a
+mode switch keeps both. LOSAT run settings (run mode and threads) and the rich
+feature popup are shared. A saved Session keeps each mode's settings
 (Session 48, [compatibility](session-and-request-compatibility.md)).
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
