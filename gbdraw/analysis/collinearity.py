@@ -44,6 +44,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.comparisons.losat_jobs import losatp_job_specs
 from gbdraw.contract_shapes import Spellings, read_spelling
+from gbdraw.core.numeric import compensated_sum
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
@@ -757,9 +758,9 @@ def _lossless_singleton_orientation(anchor: CollinearityAnchor) -> CollinearityO
 
 
 def _anchor_bitscore_total(anchors: Sequence[CollinearityAnchor]) -> float:
-    """Total anchor bitscore; ``math.fsum`` gives it the same bits on every Python (OV-1237)."""
+    """Total anchor bitscore, with the same bits on every Python (OV-1237)."""
 
-    return math.fsum(float(anchor.bitscore) for anchor in anchors)
+    return compensated_sum(float(anchor.bitscore) for anchor in anchors)
 
 
 def _lossless_block_from_anchors(
@@ -1539,11 +1540,11 @@ def _coordinate_span(anchors: Sequence[CollinearityAnchor], start_attr: str, end
 def _weighted_identity(anchors: Sequence[CollinearityAnchor]) -> float:
     total_length = sum(max(0, int(anchor.alignment_length)) for anchor in anchors)
     if total_length > 0:
-        return math.fsum(
+        return compensated_sum(
             float(anchor.identity) * max(0, int(anchor.alignment_length))
             for anchor in anchors
         ) / total_length
-    return math.fsum(float(anchor.identity) for anchor in anchors) / len(anchors)
+    return compensated_sum(float(anchor.identity) for anchor in anchors) / len(anchors)
 
 
 def _joined_anchor_values(anchors: Sequence[CollinearityAnchor], attr: str) -> str:

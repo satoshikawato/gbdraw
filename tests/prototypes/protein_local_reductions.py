@@ -14,6 +14,7 @@ from types import ModuleType
 from unittest.mock import patch
 
 from gbdraw.analysis import collinearity as cc, protein_colinearity as pc
+from gbdraw.core.numeric import compensated_sum
 
 
 def _moved_runtime_global(node):
@@ -34,8 +35,8 @@ def _moved_runtime_global(node):
         for target in node.targets)
 
 
-class _FitSumsToFsum(ast.NodeTransformer):
-    """Add the frozen fit model's floats with math.fsum, as the runtime does since OV-1237.
+class _FitSumsToCompensated(ast.NodeTransformer):
+    """Add the frozen fit model's floats with compensated_sum, as the runtime does since OV-1237.
 
     Built-in sum() compensates floats only from Python 3.12, so the frozen
     copy would otherwise differ from the runtime in the last bits on 3.10/3.11.
@@ -44,8 +45,7 @@ class _FitSumsToFsum(ast.NodeTransformer):
     def visit_Call(self, node):
         self.generic_visit(node)
         if isinstance(node.func, ast.Name) and node.func.id == 'sum':
-            node.func = ast.copy_location(
-                ast.Attribute(ast.Name('math', ast.Load()), 'fsum', ast.Load()), node.func)
+            node.func = ast.copy_location(ast.Name('compensated_sum', ast.Load()), node.func)
         return node
 
 
@@ -54,7 +54,7 @@ def frozen_module():
     module = ModuleType('protein_colinearity_s076')
     module.__dict__.update(vars(pc))
     tree = ast.parse(source)
-    tree.body = [_FitSumsToFsum().visit(node) if getattr(node, 'name', None) == '_fit_expected_bitscore_model'
+    tree.body = [_FitSumsToCompensated().visit(node) if getattr(node, 'name', None) == '_fit_expected_bitscore_model'
                  else node
                  for node in tree.body
                  if isinstance(node, ast.FunctionDef) or _moved_runtime_global(node)]
@@ -100,10 +100,10 @@ def fit_oracle(frame, fraction):
     if len(frame) >= 12 and len(points) >= 3:
         xs, ys = zip(*points)
         if len({round(x, 9) for x in xs}) >= 2:
-            mx, my = math.fsum(xs) / len(xs), math.fsum(ys) / len(ys)
-            denominator = math.fsum((x - mx) ** 2 for x in xs)
+            mx, my = compensated_sum(xs) / len(xs), compensated_sum(ys) / len(ys)
+            denominator = compensated_sum((x - mx) ** 2 for x in xs)
             if denominator > 1e-12:
-                slope = math.fsum((x - mx) * (y - my) for x, y in points) / denominator
+                slope = compensated_sum((x - mx) * (y - my) for x, y in points) / denominator
                 intercept = my - slope * mx
                 if math.isfinite(slope) and math.isfinite(intercept):
                     model = slope, intercept

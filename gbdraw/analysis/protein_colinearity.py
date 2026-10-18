@@ -56,6 +56,7 @@ from gbdraw.comparisons.losat_runtime import (
     losat_cache_args,
     run_losat_search,
 )
+from gbdraw.core.numeric import compensated_sum
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
     _read_coord_map as _read_record_coord_map,
@@ -3428,13 +3429,13 @@ def _fit_expected_bitscore_model(
     y_values = [point[1] for point in fit_points]
     if len(set(round(value, 9) for value in x_values)) < 2:
         return None
-    # math.fsum: the same bits on every Python; sum() compensates only from 3.12 (OV-1237).
-    x_mean = math.fsum(x_values) / len(x_values)
-    y_mean = math.fsum(y_values) / len(y_values)
-    denominator = math.fsum((x_value - x_mean) ** 2 for x_value in x_values)
+    # compensated_sum: CPython 3.12+ sum() on every Python (OV-1237).
+    x_mean = compensated_sum(x_values) / len(x_values)
+    y_mean = compensated_sum(y_values) / len(y_values)
+    denominator = compensated_sum((x_value - x_mean) ** 2 for x_value in x_values)
     if denominator <= _ORTHOGROUP_SPLIT_EPSILON:
         return None
-    slope = math.fsum(
+    slope = compensated_sum(
         (x_value - x_mean) * (y_value - y_mean)
         for x_value, y_value in zip(x_values, y_values)
     ) / denominator

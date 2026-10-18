@@ -3939,5 +3939,5 @@ def test_protein_float_reductions_do_not_depend_on_the_python_version(monkeypatc
     score, identity, (bitscore, row_identity), model = current
     assert score == bitscore == 1.0
     assert identity == row_identity == 0.1
-    # Correctly rounded values; left-to-right sum() gives (0.2345015637431571, 0.645579356667975).
+    # CPython 3.12+ sum() values; left-to-right addition gives (0.2345015637431571, 0.645579356667975).
     assert model == (0.23450156374315714, 0.6455793566679746)
