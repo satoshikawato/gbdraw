@@ -123,8 +123,7 @@ export const createAnnotationEditor = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const set = createAnnotationSet({ id: uniqueAnnotationSetId(drawing.annotationSets, base) });
-    addSetToDrawing(drawing.slices.annotationSets, set);
-    return set;
+    return addSetToDrawing(drawing.slices.annotationSets, set);
   };
   /**
    * @param {AnnotationSetRow} set
@@ -165,8 +164,7 @@ export const createAnnotationEditor = ({
     if (sessionBusy) return sessionBusy;
     const copy = createAnnotationSet(JSON.parse(JSON.stringify(set)));
     copy.id = nextCopyId(set.id, drawing.annotationSets);
-    addSetToDrawing(drawing.slices.annotationSets, copy);
-    return copy;
+    return addSetToDrawing(drawing.slices.annotationSets, copy);
   };
   /** @param {AnnotationSetRow} set */
   const removeAnnotationSet = (set) => {
@@ -188,8 +186,7 @@ export const createAnnotationEditor = ({
     if (!set) return null;
     const id = nextAnnotationId(set.annotations, 'region');
     const item = { id, target: coordinateTarget({ start: 1, end: 1, ...options }), label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} };
-    addAnnotations(drawing.slices.annotationSets, set, [item]);
-    return item;
+    return addAnnotations(drawing.slices.annotationSets, set, [item])[0] ?? null;
   };
   /** @param {AnnotationSetRow | null | undefined} set */
   const addSelectedFeatures = (set) => {
@@ -208,8 +205,7 @@ export const createAnnotationEditor = ({
     targets.forEach((target) => {
       items.push({ id: nextAnnotationId([...set.annotations, ...items], 'feature'), target, label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} });
     });
-    addAnnotations(drawing.slices.annotationSets, set, items);
-    return items;
+    return addAnnotations(drawing.slices.annotationSets, set, items);
   };
   /**
    * @param {AnnotationSetRow} set

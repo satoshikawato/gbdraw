@@ -83,9 +83,13 @@ const reset = (slice) => install(slice, { annotationSets: [] });
 /**
  * @param {AnnotationSetsSlice} slice
  * @param {AnnotationSet} set A new set (the slice keeps the object).
+ * @returns {AnnotationSetRow} The row the drawing shows for it: the writers
+ *   find a row by identity, and a reactive list holds `set` behind its proxy.
  */
 export const addAnnotationSet = (slice, set) => {
-  membersOf(slice).annotationSets.push(set);
+  const list = membersOf(slice).annotationSets;
+  list.push(set);
+  return list[list.length - 1];
 };
 
 /**
@@ -122,9 +126,13 @@ export const setAnnotationSetLegendLabel = (slice, set, legendLabel) => {
  * @param {AnnotationSetsSlice} slice
  * @param {AnnotationSetRow} set
  * @param {readonly AnnotationItem[]} items New rows (the slice keeps the objects).
+ * @returns {AnnotationRow[]} The rows the drawing shows for them (none for a set it does not hold).
  */
 export const addAnnotations = (slice, set, items) => {
-  setOf(slice, set)?.annotations.push(...items);
+  const rows = setOf(slice, set)?.annotations;
+  if (!rows || items.length === 0) return [];
+  rows.push(...items);
+  return rows.slice(-items.length);
 };
 
 /**

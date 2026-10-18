@@ -1452,6 +1452,7 @@ export const createAppSetup = () => {
   };
   /** @param {{ uid: string, records: SequenceRecord[] }} discovered */
   const handleLinearRecordsDiscovered = ({ uid, records }) => {
+    rebindAnnotationRecords();
     const drawing = state.drawings.linear;
     const isRollbackOrSessionLoad = Boolean(
       state.sessionImportRollbackInProgress?.value ||
@@ -1471,6 +1472,7 @@ export const createAppSetup = () => {
    * @param {{ primaryFile: File | null, pairedFile: File | null, recordCount: number }} discovered
    */
   const handleCircularRecordsDiscovered = ({ primaryFile, pairedFile, recordCount }) => {
+    rebindAnnotationRecords();
     if (!pendingCircularUpload || (pendingCircularUpload !== primaryFile && pendingCircularUpload !== pairedFile)) return;
     pendingCircularUpload = null;
     requestRecordListAfterUpload('circular', 'circular', recordCount);
@@ -1548,6 +1550,19 @@ export const createAppSetup = () => {
       linearSources: linearSourcesOverride
         || linearSeqs.map((seq) => linearAnnotationSource(seq, !linearRecordsOff.has(seq.uid)))
     }));
+  };
+  // R10 (D-15-46): each transition that changes the annotation record catalog
+  // (a discovery that ends, a mode switch, record selection, a Linear source
+  // edit, a record selector, Multi-Record Canvas) rebinds the shown drawing's
+  // annotations to the records the catalog resolves, in that transition's
+  // History step. Load and its rollback are busy and end in a discovery; a
+  // History restore installs the bindings it captured; Generate rebinds in
+  // `validateAnnotationTargets`.
+  const rebindAnnotationRecords = () => {
+    const catalog = getAnnotationRecordCatalog();
+    if (catalog.status === 'ready' && !sessionOperationAvailability()) {
+      reconcileAnnotationRecordBindings(state.activeDrawing(), catalog);
+    }
   };
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   setPreviewRuntime(previewRuntime);
@@ -2092,20 +2107,6 @@ export const createAppSetup = () => {
     state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, askChoice,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
-  watch(
-    () => {
-      const catalog = getAnnotationRecordCatalog();
-      return `${catalog.status}:${catalog.signature}`;
-    },
-    () => {
-      const drawing = state.activeDrawing();
-      const catalog = getAnnotationRecordCatalog();
-      if (catalog.status === 'ready' && !sessionOperationAvailability()) {
-        reconcileAnnotationRecordBindings(drawing, catalog);
-      }
-    },
-    { immediate: true }
-  );
   const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(
     state, state.drawings.circular, circularEstimateRecordLengths.value
   ));
@@ -4268,7 +4269,9 @@ export const createAppSetup = () => {
     if (errorLog.value && normalizeUserFacingError(errorLog.value)?.context?.diagramMode !== nextMode) {
       errorLog.value = null;
     }
-    // 5. Presentation: the arriving Result is shown as a selection.
+    // 5. The arriving drawing's annotations, over its mode's record catalog.
+    rebindAnnotationRecords();
+    // 6. Presentation: the arriving Result is shown as a selection.
     previewRuntime.presentSelectedResult({ modeArrival: true });
     return true;
   };
@@ -5998,6 +6001,7 @@ export const createAppSetup = () => {
     const normalized = String(value || '').trim();
     drawing.form.circular_record_selector = normalized;
     drawing.adv.circular_grouping_intent = normalized ? 'single' : 'auto';
+    rebindAnnotationRecords();
     return { status: 'ok' };
   };
   const showCircularCanvasSetting = async () => {
@@ -6201,6 +6205,7 @@ export const createAppSetup = () => {
     } else {
       similarityAlignmentActions?.clearForMutation?.(alignmentMutation);
     }
+    rebindAnnotationRecords();
   };
 
   const addLinearSeq = () => {
@@ -6487,6 +6492,7 @@ export const createAppSetup = () => {
     closeAfterDialogChoice: dialogChoice.closeAfterChoice,
     // A toggle invalidates comparison results and the alignment plan until Generate (P-9).
     afterRecordSetChange: (listMode) => {
+      rebindAnnotationRecords();
       if (listMode !== 'linear') return;
       invalidateLinearComparisonArtifacts(state.drawings.linear, { preserveLosatCacheInfo: true });
       similarityAlignmentActions?.clearForMutation?.('record drawing changed.');
@@ -6554,6 +6560,7 @@ export const createAppSetup = () => {
     if (lInputType.value === 'gb' && linearRecordSelector.statusFor(sequence) === 'ready') {
       sequence.inferred_definition = inferredDefinitionForRecord(linearRecordSelector.recordsFor(sequence), next);
     }
+    rebindAnnotationRecords();
     return true;
   };
 
@@ -7158,6 +7165,7 @@ export const createAppSetup = () => {
     circularRecordSelectionEnabled,
     showCircularCanvasSetting,
     setCircularRecordPresentationSelector,
+    rebindAnnotationRecords,
     setCircularSourceFile,
     recordSelection,
     circularDrawnRecordCount,
