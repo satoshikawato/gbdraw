@@ -17,6 +17,7 @@ import {
 } from '../contracts/schema.generated.js';
 import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
+import { storesDrawnFrameProteinResults } from './main-session-comparison-frame.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
@@ -400,8 +401,14 @@ export const createGallerySessionPublication = (owners) => {
   /** @param {PublicationSession} session */
   const admit = (session) => {
     const version = Number(session?.version);
-    if (version === CURRENT_VERSION || version === MODE_SCOPED_SESSION_VERSION) {
-      // A Session 46 differs only in the keys of its Legend edits.
+    // Only Python converts the protein results these Sessions stored in the drawn frame (OV-1145).
+    if (storesDrawnFrameProteinResults(session)) {
+      throw new Error(`Gallery publication cannot convert the protein results that Session ${version} stored for a `
+        + 'reverse-complemented record; load it in the app and save it again, or refresh it with '
+        + 'tools/refresh_gallery_sessions.py.');
+    }
+    if (version >= MODE_SCOPED_SESSION_VERSION && version <= CURRENT_VERSION) {
+      // A Session 46 differs only in the keys of its Legend edits, 47 in its protein result frame.
       const current = version === CURRENT_VERSION
         ? session : { ...sessionLegendEditsByRowKey(session, version).session, version: CURRENT_VERSION };
       validateCurrentFields(current);
@@ -411,7 +418,7 @@ export const createGallerySessionPublication = (owners) => {
     // draft until `prepare` splits it into the Session's mode slice.
     if ([40, 41, 42, 44].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
       renderRequest: publicationCanonicalRequest(session, owners.readRequest) }));
-    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44/${MODE_SCOPED_SESSION_VERSION}; received ${String(session?.version)}.`);
+    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44/${MODE_SCOPED_SESSION_VERSION}-${CURRENT_VERSION - 1}; received ${String(session?.version)}.`);
     /** @type {LoadRepair[]} */
     const repairs = [];
     const promoted = owners.promoteSession(session, { repairs });

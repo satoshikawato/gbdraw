@@ -27,6 +27,7 @@ from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     DEPTH_FILE_ENCODING,
     MODE_SCOPED_SESSION_MIN_VERSION,
+    ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SESSION_FORMAT,
     _read_session_text,
     _attach_current_web_file_bindings,
@@ -52,6 +53,7 @@ from gbdraw.session_drawings import (
 )
 
 if TYPE_CHECKING:
+    from gbdraw.api.migration_report import SessionMigrationReport
     from gbdraw.api.request_render import (
         CircularBatchRenderResult,
         RequestRenderResult,
@@ -88,6 +90,27 @@ class SessionConversionError(SessionError):
 
 class SessionRenderError(SessionError):
     """Raised when canonical session rendering fails."""
+
+
+def require_search_frame_protein_results(report: SessionMigrationReport) -> None:
+    """Refuse to write a Session whose replay kept protein results in the drawn frame.
+
+    A replay draws an item the Session 47 migrator could not place as stored;
+    a current Session must hold every protein result in the search frame
+    (OV-1145).
+    """
+
+    if report.unconverted_protein_results:
+        raise SessionConversionError(
+            f"Cannot write a version {CURRENT_SESSION_VERSION} Session: "
+            f"{report.unconverted_protein_results[0]}"
+            + (
+                f" (and {len(report.unconverted_protein_results) - 1} more)"
+                if len(report.unconverted_protein_results) > 1
+                else ""
+            )
+            + ". Generate the drawing again to compute its protein results."
+        )
 
 
 class SessionDrawingSelectionError(SessionError):
@@ -1151,6 +1174,72 @@ def _dropped_results_warning(
     )
 
 
+def _upgrade_mode_scoped_session(
+    loaded: SessionDocument,
+    temporary_directory: str | Path | None,
+) -> SessionDocument:
+    """A Session 46 or 47 as the current version, every drawing kept.
+
+    Session 46 gets the Legend edits of each slice keyed by row key (47).
+    The stored protein results of each Linear drawing go to each record's
+    search frame (48, OV-1145): only their resources' bytes change, under
+    their stored IDs.
+    """
+
+    from gbdraw.api.session_compat import (
+        describe_unmatched_frame_item,
+        drawn_frame_protein_results_to_search_frame,
+        replace_resource_bytes,
+        search_frame_protein_resources,
+        stores_protein_results,
+    )
+
+    data = dict(loaded._data)
+    if loaded.version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
+        data, _outcomes = session_legend_edits_by_row_key(data)
+    drawings = [
+        drawing for drawing in loaded._drawings
+        if drawing.mode == "linear" and stores_protein_results(drawing.request)
+    ]
+    if drawings:
+        from gbdraw.api.request_render import plan_request
+
+        replaced: dict[str, bytes] = {}
+        with materialize_session(
+            loaded, output_directory=Path("."), temporary_directory=temporary_directory,
+        ) as materialized:
+            for drawing in drawings:
+                assert drawing.request is not None  # stores_protein_results
+                request = _decode_drawing(materialized, drawing)
+                try:
+                    converted, unmatched = drawn_frame_protein_results_to_search_frame(
+                        plan_request(request), request,
+                    )
+                    if unmatched:
+                        raise SessionConversionError(
+                            f"Cannot upgrade drawing {drawing.id!r} to Session {CURRENT_SESSION_VERSION}: "
+                            f"{describe_unmatched_frame_item(unmatched[0])}."
+                        )
+                    for resource_id, content in search_frame_protein_resources(
+                        drawing.request, request, converted,
+                    ).items():
+                        if replaced.get(resource_id, content) != content:
+                            raise SessionConversionError(
+                                f"Session resource {resource_id!r} holds two different protein results."
+                            )
+                        replaced[resource_id] = content
+                except SessionError:
+                    raise
+                except ValidationError as exc:
+                    raise SessionConversionError(str(exc)) from exc
+        resources = loaded._data["resources"]
+        data["resources"] = {
+            **resources,
+            **{key: replace_resource_bytes(resources[key], content) for key, content in replaced.items()},
+        }
+    return SessionDocument({**data, "version": CURRENT_SESSION_VERSION})
+
+
 def upgrade_session_document(
     document: SessionDocument | Mapping[str, Any] | str | Path,
     *,
@@ -1158,9 +1247,13 @@ def upgrade_session_document(
 ) -> SessionUpgrade:
     """Return a Session in the current version without rendering it.
 
-    A current document is returned unchanged. A Session 46 keeps its
-    drawings and gets its Legend color and stroke edits keyed by row key
-    (:func:`gbdraw.session_io.legend_edits_by_row_key`). A Session 31-44 gets the
+    A current document is returned unchanged. A Session 46 or 47 keeps its
+    drawings; a Session 46 gets its Legend color and stroke edits keyed by
+    row key (:func:`gbdraw.session_io.legend_edits_by_row_key`), and the
+    stored protein results of a reverse-complemented Linear record are
+    written in its search frame under their resource IDs (OV-1145); a result
+    matching neither strand of its record raises
+    :class:`SessionConversionError`. A Session 31-44 gets the
     migrations a CLI re-save applies: its request is decoded, adapted to
     current typed state (comparison frames, similarity alignment, LOSAT
     artifacts) and encoded again with the same resource IDs, and its
@@ -1179,10 +1272,8 @@ def upgrade_session_document(
     loaded = load_session_document(document)
     if loaded.version == CURRENT_SESSION_VERSION:
         return SessionUpgrade(loaded)
-    if loaded.version == MODE_SCOPED_SESSION_MIN_VERSION:
-        # Session 47 differs only in the keys of each slice's Legend edits.
-        keyed, _outcomes = session_legend_edits_by_row_key(loaded._data)
-        return SessionUpgrade(SessionDocument({**keyed, "version": CURRENT_SESSION_VERSION}))
+    if loaded.version >= MODE_SCOPED_SESSION_MIN_VERSION:
+        return SessionUpgrade(_upgrade_mode_scoped_session(loaded, temporary_directory))
     if loaded.version < CANONICAL_SESSION_MIN_VERSION:
         raise SessionVersionError(
             "Sessions version 27 through 30 have no canonical request; replay one with "
@@ -1246,6 +1337,7 @@ def upgrade_session_document(
             raise
         except ValidationError as exc:
             raise SessionConversionError(str(exc)) from exc
+        require_search_frame_protein_results(adapted.migration_report)
         state = with_current_artifacts(
             state,
             losat_cache_entries=adapted.artifacts.losat_cache_entries,

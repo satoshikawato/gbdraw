@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const {
-  MAIN_DISPLAY_FRAME_SESSION_VERSION,
-  convertMainSessionComparisonFrames
-} = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+const { convertMainSessionComparisonFrames, storesDrawnFrameProteinResults } =
+  await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+const { MAIN_DISPLAY_FRAME_SESSION_VERSION } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 
 const base64 = (text) => Buffer.from(text, 'utf8').toString('base64');
 const TABLE = 'q\ts\t99\t10\t0\t0\t1\t10\t1\t10\t0\t20\n';
@@ -99,4 +98,23 @@ test('a comparison whose reversed record file the Session does not hold is left 
     assert.equal(await convertMainSessionComparisonFrames(stored, { convertTable, discover: NO_DISCOVERY }), stored, source.kind);
     assert.deepEqual(calls, []);
   }
+});
+
+test('a Session up to 47 with protein results of a reversed record is named for conversion (OV-1145)', () => {
+  const protein = (version, reverse = true, kind = 'orthogroupResult') => {
+    const data = session({ version, reverse });
+    data.renderRequest.comparisons = [{ kind, resourceId: 'table' }];
+    return data;
+  };
+  assert.equal(storesDrawnFrameProteinResults(protein(47)), true);
+  assert.equal(storesDrawnFrameProteinResults(protein(46, true, 'collinearityResult')), true);
+  assert.equal(storesDrawnFrameProteinResults(protein(47, true, 'precomputedProteinComparison')), true);
+  assert.equal(storesDrawnFrameProteinResults(protein(48)), false);
+  assert.equal(storesDrawnFrameProteinResults(protein(47, false)), false);
+  assert.equal(storesDrawnFrameProteinResults(protein(47, true, 'nucleotideBlast')), false);
+  assert.equal(storesDrawnFrameProteinResults(session({ version: 47, mode: 'circular' })), false);
+  // The other mode's committed request is read too.
+  const other = { format: 'gbdraw-session', version: 47, renderRequest: { mode: 'circular' },
+    otherModeResult: { renderRequest: protein(47).renderRequest } };
+  assert.equal(storesDrawnFrameProteinResults(other), true);
 });

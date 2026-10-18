@@ -392,13 +392,15 @@ def test_display_frame_bound_rows_of_a_main_session_draw_once_and_resave_as_stor
     # and a re-save keeps the rows as stored.
     from dataclasses import replace
 
-    from gbdraw.api.record_planning import project_source_bound_comparisons
+    from gbdraw.api.record_planning import comparison_record_bindings, project_source_bound_results
     from gbdraw.api.request_render import plan_linear_request
     from gbdraw.session import save_session_document
 
     request = _bound_row_request(tmp_path)
     plan = plan_linear_request(request)
-    drawn = project_source_bound_comparisons(plan.request.options, plan.records, plan.provenance)
+    drawn = project_source_bound_results(
+        plan.request.options, comparison_record_bindings(plan.records, plan.provenance, search_frame=False)
+    ).options
     (comparison,) = drawn.linear_comparisons
     assert comparison.matches.loc[0, ["sstart", "send"]].tolist() == [141, 170]
     search = tmp_path / "search.gbdraw-session.json"
@@ -422,18 +424,18 @@ def test_linear_plan_projects_bound_rows_once_for_its_validation_and_build(
     import gbdraw.api.request_render as request_render_module
 
     request = _bound_row_request(tmp_path)
-    calls: list[bool] = []
-    original = request_render_module.project_source_bound_comparisons
+    calls: list[object] = []
+    original = request_render_module.project_source_bound_results
 
-    def counting(*args, **kwargs):
-        calls.append(bool(kwargs.get("search_frame", False)))
-        return original(*args, **kwargs)
+    def counting(options, bindings):
+        calls.append(options)
+        return original(options, bindings)
 
-    monkeypatch.setattr(request_render_module, "project_source_bound_comparisons", counting)
+    monkeypatch.setattr(request_render_module, "project_source_bound_results", counting)
     plan = request_render_module.plan_linear_request(request)
     built = plan.build()
 
-    assert calls == [False]
+    assert calls == [plan.request.options]
     (given,) = plan.request.options.linear_comparisons
     assert "subject_view_feature_svg_id" not in given.matches.columns
     (drawn,) = built.metadata.linear_comparisons

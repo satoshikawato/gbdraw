@@ -87,6 +87,7 @@ from gbdraw.annotations import (
     resolve_annotations,
 )
 from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.record_planning import ComparisonRecordBinding
 from gbdraw.api.options import (
     AnnotationOptions,
     CircularDiagramOptions,
@@ -262,6 +263,9 @@ class LinearDiagramMetadata:
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
     collinearity_result: CollinearityResult | None = None
     comparison_warnings: tuple[ComparisonRecordIdWarning, ...] = ()
+    # Each record's search-frame binding, set by the plan's build when the
+    # values above hold source-bound results: a Session stores them in F (R5).
+    search_frame_bindings: tuple[ComparisonRecordBinding, ...] = ()
 
 
 @dataclass(frozen=True)

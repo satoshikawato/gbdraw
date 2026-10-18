@@ -11,7 +11,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
     Object.freeze({minVersion: 31, versions: Object.freeze([31, 32, 33]), root: "SessionChecked31"}),
     Object.freeze({minVersion: 39, versions: Object.freeze([39]), root: "SessionChecked39"}),
     Object.freeze({minVersion: 40, versions: Object.freeze([40, 41, 42, 44]), root: "SessionChecked40"}),
-    Object.freeze({minVersion: 46, versions: Object.freeze([46, 47]), root: "SessionChecked46"})
+    Object.freeze({minVersion: 46, versions: Object.freeze([46, 47, 48]), root: "SessionChecked46"})
   ]),
   types: Object.freeze({
     CheckedSessionResult: Object.freeze({
@@ -727,7 +727,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         runMetadata: Object.freeze({kind: "unknown"}),
         cliInvocation: Object.freeze({kind: "unknown"}),
         format: Object.freeze({kind: "literal", values: Object.freeze(["gbdraw-session"])}),
-        version: Object.freeze({kind: "literal", values: Object.freeze([46, 47])}),
+        version: Object.freeze({kind: "literal", values: Object.freeze([46, 47, 48])}),
         createdAt: Object.freeze({kind: "unknown"}),
         renderRequest: Object.freeze({kind: "unknown"}),
         resources: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),

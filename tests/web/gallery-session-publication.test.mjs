@@ -146,6 +146,15 @@ for (const name of sessionNames) {
   assert.deepEqual(admitted.modes[mode].editorState.legend.colorOverrides, { 'GC content': '#ff0000' });
 }
 
+// OV-1145: a Session 47 is admitted as current unless it stored protein
+// results of a reverse-complemented record, which only Python converts.
+{
+  const source = structuredClone(await loadSession(sessionNames[0]));
+  assert.equal(admitGallerySession({ ...source, version: 47 }).version, CURRENT_SESSION_VERSION);
+  const stored = await loadReleasedSession('BGC0000708-BGC0000713.v47.gbdraw-session.json.gz');
+  assert.throws(() => admitGallerySession(stored), /cannot convert the protein results that Session 47 stored/);
+}
+
 // D-OD08 (5): a historical Session is promoted through the one request
 // reader; one whose request Load would repair is not published.
 {
@@ -314,7 +323,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 47 or historical versions 31-33\/39-44\/46/
+    /supports current version 48 or historical versions 31-33\/39-44\/46-47/
   );
 }
 

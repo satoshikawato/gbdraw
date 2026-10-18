@@ -18,6 +18,7 @@ from gbdraw.web_support.error_adapter import private_web_execution, serialize_we
 from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
+from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
@@ -1096,6 +1097,64 @@ def _build_display_web_cds_protein_map(raw_map, view_transform):
         display_map[str(protein_id)] = display_data
     return _build_web_cds_protein_map(display_map)
 
+def _web_protein_map_bindings(record_payloads):
+    """Each record's search-frame binding, built from its Web protein map (OV-1145).
+
+    The raw map holds the search frame (F) and the display map the drawn
+    frame of a reversed record: the binding the planner makes from the
+    record for its CDS keys, with no second plan. A forward record draws
+    its search frame, so its binding has no other strand.
+    """
+    from gbdraw.api.record_planning import ComparisonRecordBinding
+
+    by_index = {}
+    for record in record_payloads:
+        raw_map = record["protein_map"] if isinstance(record["protein_map"], dict) else {}
+        transform = record["view_transform"]
+        reverse = bool(transform["reverse"])
+        length = int(transform["length"]) or next(
+            (int(data.get("coord_length") or 0) for data in raw_map.values() if isinstance(data, dict)), 0
+        )
+        flipped = {"length": length, "reverse": True}
+        source, current, opposite, current_spans, opposite_spans = {}, {}, {}, {}, {}
+        for data in raw_map.values():
+            if not isinstance(data, dict):
+                continue
+            index = int(data.get("feature_index") or 0)
+            span = _web_transform_cds_span(data.get("start", 0), data.get("end", 0), data.get("strand"), {})
+            source[index] = data.get("feature_svg_id")
+            current[index] = data.get("view_feature_svg_id") or data.get("feature_svg_id")
+            current_spans[index] = span
+            if reverse:
+                flipped_span = _web_transform_cds_span(*span, flipped)
+                opposite[index] = _display_feature_svg_id_from_data(data, *flipped_span, flipped)
+                opposite_spans[index] = flipped_span
+        by_index[int(record["record_index"])] = ComparisonRecordBinding(
+            source, current, opposite, length, current_spans, opposite_spans, reverse,
+        )
+    empty = ComparisonRecordBinding({}, {}, {}, 0, {}, {}, False)
+    return tuple(by_index.get(index, empty) for index in range(max(by_index, default=-1) + 1))
+
+def _web_search_frame_results(bindings, pairs, typed=None):
+    """The pairs ((pair, query, subject, table)) and typed result in each record's
+    search frame, as every Session writer stores them (R5, OV-1145)."""
+    from gbdraw.analysis.collinearity import CollinearityResult
+    from gbdraw.api.options import LinearDiagramOptions
+    from gbdraw.api.record_planning import project_source_bound_results
+    from gbdraw.linear_comparison import LinearComparison
+
+    collinear = isinstance(typed, CollinearityResult)
+    stored = project_source_bound_results(LinearDiagramOptions(
+        linear_comparisons=tuple(LinearComparison(query, subject, table) for _, query, subject, table in pairs),
+        orthogroups=None if collinear else typed,
+        collinearity_blocks=typed if collinear else None,
+    ), bindings).options
+    return (
+        [(pair[0], pair[1], pair[2], comparison.matches)
+         for pair, comparison in zip(pairs, stored.linear_comparisons or (), strict=True)],
+        stored.collinearity_blocks if collinear else stored.orthogroups,
+    )
+
 def _build_web_protein_extraction(protein_maps, identity_manifest=None):
     from gbdraw.analysis.protein_colinearity import ProteinExtractionResult
 
@@ -1443,14 +1502,14 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     color_mode=color_mode,
                     search_scope=search_scope,
                 )
-                converted_pairs = [
-                    derived_pair_payload(display_pair_indices[pair], pair[0], pair[1], converted_by_pair[pair])
+                drawn_pairs = [
+                    (display_pair_indices[pair], pair[0], pair[1], converted_by_pair[pair])
                     for pair in display_pairs
                     if pair in converted_by_pair
                 ]
             else:
-                converted_pairs = [
-                    derived_pair_payload(pair_index, pair_index, pair_index + 1, converted)
+                drawn_pairs = [
+                    (pair_index, pair_index, pair_index + 1, converted)
                     for pair_index, converted in enumerate(convert_collinearity_blocks_to_comparisons(
                         collinearity_result,
                         record_ids=record_ids,
@@ -1458,13 +1517,17 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                         search_scope=search_scope,
                     ))
                 ]
+            stored_pairs, collinearity_result = _web_search_frame_results(
+                _web_protein_map_bindings(record_payloads), drawn_pairs, collinearity_result,
+            )
+            converted_pairs = [derived_pair_payload(*pair) for pair in stored_pairs]
             canonical_content = encode_canonical_typed_resource("result", collinearity_result)
             return _finalize_losatp_payload({"pairs": converted_pairs},
                collinearity_result=collinearity_result,
                canonical_content=canonical_content, canonical_kind="collinearity-result")
 
         if normalized_mode == "pairwise":
-            converted_pairs = []
+            drawn_pairs = []
             for item in pair_items:
                 display_hits = select_top_hits_per_query(
                     item["hits"],
@@ -1476,9 +1539,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     item["subject_map"],
                     orthogroups=None,
                 )
-                converted_pairs.append(derived_pair_payload(
-                    item["pair_index"], item["query_index"], item["subject_index"], converted
-                ))
+                drawn_pairs.append((item["pair_index"], item["query_index"], item["subject_index"], converted))
+            stored_pairs, _ = _web_search_frame_results(_web_protein_map_bindings(record_payloads), drawn_pairs)
+            converted_pairs = [derived_pair_payload(*pair) for pair in stored_pairs]
             return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": []})
 
         hits_by_direction = {
@@ -1503,7 +1566,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         )
         orthogroups = edge_selection.orthogroups
 
-        converted_pairs = []
+        drawn_pairs = []
         for query_index, subject_index in sorted(edge_selection.adjacent_display_edges_by_pair):
             display_hits = edge_selection.adjacent_display_edges_by_pair[(query_index, subject_index)]
             forward = hits_by_direction.get((query_index, subject_index))
@@ -1515,11 +1578,11 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 forward["subject_map"],
                 orthogroups=orthogroups,
             )
-            converted_pairs.append(
-                derived_pair_payload(
-                    display_pair_indices[(query_index, subject_index)], query_index, subject_index, converted
-                )
-            )
+            drawn_pairs.append((display_pair_indices[(query_index, subject_index)], query_index, subject_index, converted))
+        stored_pairs, orthogroups = _web_search_frame_results(
+            _web_protein_map_bindings(record_payloads), drawn_pairs, orthogroups,
+        )
+        converted_pairs = [derived_pair_payload(*pair) for pair in stored_pairs]
         canonical_content = encode_canonical_typed_resource("orthogroupResult", orthogroups)
         return _finalize_losatp_payload({"pairs": converted_pairs},
             canonical_content=canonical_content, canonical_kind="orthogroup-result")
@@ -1704,6 +1767,7 @@ _WEB_JSON_HELPERS = {
     "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),
     "convert_losatp_blastp_pairs_to_genomic_payload": (convert_losatp_blastp_pairs_to_genomic_payload, "convertLosatpPairsToGenomicPayload"),
     "main_session_table_text_to_search_frame_json": (main_session_table_text_to_search_frame_json, "convertMainSessionComparisonFrame"),
+    "stored_protein_results_to_search_frame_json": (stored_protein_results_to_search_frame_json, "convertStoredProteinResultFrames"),
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),

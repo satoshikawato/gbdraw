@@ -289,3 +289,20 @@ fixture, compressed with `gzip -n -9`. It is the version 29 base of the
 admission description's soundness test (`tests/test_session_contract.py`). Its
 decompressed SHA-256 is
 `71b923ce1a2b8fb587ed394e51571e5b15f289df58574fbc84734a1b2042b220`.
+
+`BGC0000708-BGC0000713.v47.gbdraw-session.json.gz` is the Gallery Session of
+first-parent `main` commit `150d26706` (bytes unchanged, `gzip -n -9`; see its
+`.provenance.json`). Its record 5 is reverse complemented, and Session 47
+stored that record's LOSATP table (`comparison-canonical-protein-4`) and its
+`orthogroupResult` members in the drawn frame.
+`majanivirus_collinear-rc.v47.gbdraw-session.json.gz` holds two records of the
+majanivirus Gallery Session, the second reverse complemented, with the
+`collinearityResult` that `main`'s Web converter (the Python of
+`python-helpers.js` at `150d26706`, run natively) computes from that pair's raw
+LOSATP entries, stored as `main`'s Web Session writer lays it out;
+`tools/build_main_collinear_v47_fixture.py` rebuilds it from a worktree at
+`150d26706` (command in its `.provenance.json`). Both are the positive fixtures of the
+Session 48 conversion to the search frame (OV-1145): `tests/test_session_compat.py`
+replays each and compares it with its `.v47.replay.svg`, the SVG the dev base
+`e8b460772` drew (equal to `main`'s replay), and `tests/test_api_session.py`
+upgrades and re-saves the BGC Session.
