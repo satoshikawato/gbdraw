@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 _STYLE_LEAF_DOMAINS = (
     (("font_size",), "POSITIVE", "font sizes must be finite numbers greater than zero"),
     (("stroke_width", "tick_width"), "NONNEGATIVE", "stroke widths must be finite numbers of zero or greater"),
+    # OV-1247: the accepted range is unchanged; a swatch of size <= 0 failed in
+    # the Legend metrics (a ValueError while drawing) and is now refused here.
+    (("color_rect_size",), "POSITIVE", "legend swatch sizes must be finite numbers greater than zero"),
 )
 # D-04: None keeps the automatic interval. A request (a Session, the Web) that
 # carries <= 0 is read as None before it reaches here (session_request_codec.py).

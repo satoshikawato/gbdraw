@@ -163,7 +163,10 @@ def test_cli_rejects_vector_without_traceback(monkeypatch, capsys, tmp_path, mod
         # The typed owner's message names the rejected field or setting.
         assert "ERROR:" in stderr or "error:" in stderr
         path = vector.get("configPath", "")
-        named = vector.get("field") or ("font_size" if "font_size" in path else "stroke_width")
+        setting = path.removesuffix(".short").removesuffix(".long")
+        named = vector.get("field") or next(
+            (leaf for leaf in ("font_size", "stroke_width") if leaf in path), setting
+        )
         assert named in stderr, stderr
 
 

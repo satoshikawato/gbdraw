@@ -17,7 +17,11 @@ from typing import Any, Literal, Mapping, Union, cast, get_args, get_origin, get
 from gbdraw.exceptions import ValidationError
 
 from .models import GbdrawConfig
-from .models.canvas import linear_axis_ruler_applies
+from .models.canvas import (
+    FEATURE_OVERLAP_TOLERANCE_PATH,
+    linear_axis_ruler_applies,
+    validate_feature_overlap_tolerance,
+)
 from .models.objects import UNSET_NUMBER_SPELLINGS, circular_definition_interval_for_font
 from .models.root import validate_style_leaf
 
@@ -391,6 +395,9 @@ def validate_config_overrides(
                 diagnostic=_invalid_leaf(path, annotation),
             )
         validate_style_leaf(path, value, prefix="Invalid value for config override")
+        if path == FEATURE_OVERLAP_TOLERANCE_PATH:
+            # The canvas model owns the domain; a request is refused before it renders (OV-1248).
+            validate_feature_overlap_tolerance(value)
         validated.append((path, value))
     return tuple(validated)
 
