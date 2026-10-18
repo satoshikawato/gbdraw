@@ -1041,3 +1041,40 @@ def test_python_load_reads_a_session_47_and_a_settings_only_session_47() -> None
     settings_only = {**current, "version": 47}
     assert is_settings_only_session(settings_only)
     assert load_session_document(settings_only).drawings == load_session_document(current).drawings
+
+
+def test_session_save_warns_about_a_linear_record_once_and_refuses_an_existing_output_first(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1246: a save to an existing path built the whole document, and warned
+    about the record's topology again, before it refused the output."""
+
+    import logging
+
+    import gbdraw.session as session_module
+
+    seqrecord = SeqRecord(
+        Seq("ATGCGCAT"),
+        id="linear_record",
+        annotations={"molecule_type": "DNA", "topology": "linear"},
+    )
+    request = CircularDiagramRequest(records=(RecordInput(source=InMemoryRecordSource(seqrecord)),))
+    session_path = tmp_path / "linear.gbdraw-session.json"
+    question = "Are you sure you want to visualize it as circular?"
+
+    with caplog.at_level(logging.WARNING):
+        save_session_document(session_path, request)
+    assert caplog.text.count(question) == 1
+
+    caplog.clear()
+    builds: list[object] = []
+    real_build = session_module.build_session_document
+    monkeypatch.setattr(
+        session_module,
+        "build_session_document",
+        lambda *args, **kwargs: builds.append(args) or real_build(*args, **kwargs),
+    )
+    with caplog.at_level(logging.WARNING), pytest.raises(SessionFormatError, match="already exists"):
+        save_session_document(session_path, request)
+    assert builds == []
+    assert question not in caplog.text

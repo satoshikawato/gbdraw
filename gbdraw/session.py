@@ -1100,15 +1100,21 @@ def _write_session_document(
     """Write one built session document through a staged commit."""
 
     try:
-        output_path = Path(path)
-        preflight_output_paths((output_path,), overwrite=True)
-        if (output_path.exists() or output_path.is_symlink()) and not overwrite:
-            raise OutputExistsError((output_path,), subject="Session output")
+        _preflight_session_output(path, overwrite=overwrite)
         # The document was validated when it was built.
         _write_validated_session_json(path, document._data, overwrite=overwrite)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     return document
+
+
+def _preflight_session_output(path: str | Path, *, overwrite: bool) -> None:
+    """Refuse a Session output path before anything is built or written."""
+
+    output_path = Path(path)
+    preflight_output_paths((output_path,), overwrite=True)
+    if (output_path.exists() or output_path.is_symlink()) and not overwrite:
+        raise OutputExistsError((output_path,), subject="Session output")
 
 
 def save_session_document(
@@ -1124,6 +1130,11 @@ def save_session_document(
 ) -> SessionDocument:
     """Build and write a current canonical session through a staged commit."""
 
+    try:
+        # A refused output is reported before the drawings are rendered.
+        _preflight_session_output(path, overwrite=overwrite)
+    except ValidationError as exc:
+        raise SessionFormatError(str(exc)) from exc
     document = build_session_document(
         request,
         drawings=drawings,
