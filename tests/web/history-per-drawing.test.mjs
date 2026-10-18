@@ -146,6 +146,7 @@ test('a switch settles the departing drawing\'s open step in that drawing', asyn
   if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
   const circularSteps = history.getUndoCount();
   const before = circular.form.prefix;
+  const title = state.sessionTitle.value;
   // A text control began on focus; the switch comes before its own commit.
   const step = await history.begin('Output prefix', { source: 'test-control' });
   assert.ok(step, 'the control opened a step');
@@ -160,12 +161,14 @@ test('a switch settles the departing drawing\'s open step in that drawing', asyn
   assert.equal(history.getUndoCount(), titleSteps, 'the Linear walk gains nothing from the Circular step');
   assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
   assert.equal(history.getUndoCount(), circularSteps + 2, 'the step is the Circular drawing\'s');
-  // The step ended at the switch, before the title edit: the title is undone first.
+  // The step ended at the switch, before the title edit.
   assert.equal(history.undoLabel(), 'Rename Session');
   await app.undoHistory();
+  assert.equal(state.sessionTitle.value, title, 'the title is undone first');
   assert.equal(circular.form.prefix, 'typed-before-switch');
   await app.undoHistory();
   assert.equal(circular.form.prefix, before);
+  assert.equal(state.sessionTitle.value, title, 'the Circular step leaves the title');
 });
 
 // R15-23 (Q-DR-8 A): an edit of a Session-level value is a project step,
@@ -432,4 +435,36 @@ test('an Undo of Reset after the limit dropped a newer step keeps that step\'s c
   assert.equal(circular.form.prefix, 'later', 'the dropped step\'s change stays');
   await app.redoHistory();
   assert.equal(circular.form.prefix, 'later', 'and stays on Redo');
+});
+
+// A3 review 2 P4: a second Undo pressed while the first restores a project
+// step returns false and leaves both stacks consistent.
+test('two Undo presses at once over project steps take one step', async () => {
+  createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  await history.captureBaseline();
+  for (const title of ['T1', 'T2', 'T3']) await history.runUndoable('Rename Session', () => { state.sessionTitle.value = title; });
+  assert.deepEqual(await Promise.all([history.undo(), history.undo()]), [true, false]);
+  assert.deepEqual({ title: state.sessionTitle.value, undo: history.getUndoCount(), redo: history.getRedoCount() },
+    { title: 'T2', undo: 2, redo: 1 });
+  await history.redo();
+  assert.equal(state.sessionTitle.value, 'T3');
+});
+
+// A3 review 2 P6: a hidden drawing's part of Reset restores only the values
+// still as Reset left them; a later step of that drawing is kept.
+test('an Undo of Reset from the other drawing keeps a later step of the hidden drawing', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { circular } = state.drawings;
+  show(app, 'linear');
+  circular.form.prefix = 'pre-reset';
+  await history.captureBaseline();
+  await app.resetSettings();
+  show(app, 'circular');
+  await history.runUndoable('Circular prefix', () => { circular.form.prefix = 'later'; });
+  show(app, 'linear');
+  assert.equal(history.undoLabel(), 'Reset settings');
+  await app.undoHistory();
+  assert.equal(circular.form.prefix, 'later');
 });

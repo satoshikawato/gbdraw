@@ -3109,7 +3109,7 @@ for (const previousSuppressed of [false, true]) {
   await history.undo();
   await history.redo();
   assert.deepEqual({ rules, figure }, { rules: 1, figure: 'drawn-1' });
-  assert.deepEqual(restores.map(({ drawn }) => ({ drawn })), [{ drawn: true }, { drawn: true }]);
+  assert.deepEqual(restores, [{ drawn: true }, { drawn: true }]);
 
   // A later step, or an Undo of the step, keeps the figure out of it.
   await history.runUndoableCheckpoint('Change feature color again', () => {
@@ -3121,11 +3121,11 @@ for (const previousSuppressed of [false, true]) {
   assert.equal(await history.keepRedrawnResult(), false, 'not a checkpoint step');
   await history.undo();
   await history.undo();
-  assert.equal(restores.at(-1).drawn, false, 'the before side was not drawn');
+  assert.deepEqual(restores.at(-1), { drawn: false }, 'the before side was not drawn');
   // The step before is the last one now; its after side is drawn already.
   assert.equal(await history.keepRedrawnResult(), false, 'undone');
   await history.redo();
-  assert.equal(restores.at(-1).drawn, false);
+  assert.deepEqual(restores.at(-1), { drawn: false });
   // A checkpoint step's side is kept only while nothing is open.
   let release;
   const open = history.runUndoableCheckpoint('Open step', () => new Promise((resolve) => { release = resolve; }));
@@ -3136,7 +3136,7 @@ for (const previousSuppressed of [false, true]) {
   // A step without a caller's answer restores as before.
   await history.runUndoableCheckpoint('Reset', () => { rules = 4; });
   await history.undo();
-  assert.equal(restores.at(-1).drawn, false);
+  assert.deepEqual(restores.at(-1), { drawn: false });
   // N1 (review C): the before side is drawn as History captures it, not as
   // the caller asked for the step: a step that waits for an open one reads it
   // once that one settled.
@@ -3157,9 +3157,9 @@ for (const previousSuppressed of [false, true]) {
   await recolored;
   assert.deepEqual(reads, [true], 'read once, when the before side is captured');
   await history.undo();
-  assert.equal(restores.at(-1).drawn, false, 'owed when captured');
+  assert.deepEqual(restores.at(-1), { drawn: false }, 'owed when captured');
   await history.redo();
-  assert.equal(restores.at(-1).drawn, false, 'the after side follows the before side');
+  assert.deepEqual(restores.at(-1), { drawn: false }, 'the after side follows the before side');
   console.log('history redrawn result tests passed');
 }
 
