@@ -2125,12 +2125,12 @@ export const createAppSetup = () => {
   const setTrackShown = (key, checked) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    const { form } = state.activeDrawing();
+    const drawing = state.activeDrawing();
     const shown = Boolean(checked);
     retireLegendStylesOfUnnamedCaptions(() => {
-      if (key === 'show_gc') form.show_gc = shown;
-      else if (key === 'show_skew') form.show_skew = shown;
-      else form.show_depth = shown;
+      if (key === 'show_gc') drawing.form.show_gc = shown;
+      else if (key === 'show_skew') drawing.form.show_skew = shown;
+      else drawing.form.show_depth = shown;
     });
   };
   watch(
