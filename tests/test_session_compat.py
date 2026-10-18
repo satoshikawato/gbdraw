@@ -2266,3 +2266,46 @@ def test_the_worker_helper_converts_a_session_47_drawing_like_the_upgrade(tmp_pa
     for key, value in converted.items():
         assert value["data"] == upgraded["resources"][key]["data"]
         assert value["size"] == upgraded["resources"][key]["size"]
+
+    # A result matching neither strand is a bounded conversion error (design section 4).
+    def corrupt(fields: dict[str, Any]) -> None:
+        member = next(
+            member["fields"] for members in fields["orthogroups"].values() for member in members
+            if member["fields"]["recordIndex"] == 4
+        )
+        for stored in (member, fields["memberByProteinId"][member["proteinId"]]["fields"]):
+            stored["start"] += 1
+
+    (tmp_path / "corrupt").mkdir()
+    broken = load_session_document(_v47_protein_session(
+        "BGC0000708-BGC0000713", tmp_path / "corrupt", "comparison-canonical-orthogroups-1", corrupt,
+    ))
+    with materialize_session(broken, output_directory=tmp_path) as materialized:
+        with pytest.raises(SessionConversionError, match="matches neither strand"):
+            stored_protein_results_to_search_frame_json(
+                json.dumps({"version": 47, "renderRequest": broken.to_dict()["renderRequest"]}),
+                json.dumps({key: str(path) for key, path in materialized.resource_paths.items()}),
+                str(tmp_path),
+            )
+
+
+def test_an_upgrade_of_a_session_40_refuses_a_result_matching_neither_frame(tmp_path: Path) -> None:
+    # Review finding 2: the 31-44 upgrade path writes Session 48 too, so it
+    # refuses an unconverted item as the Session 46/47 path does.
+    from gbdraw.api.session_compat import replace_resource_bytes
+
+    data = json.loads(_VERSION_40_LEGACY_ALIGNMENT_SESSION.read_text(encoding="utf-8"))
+    resource_id = "comparison-canonical-orthogroups-1"
+    typed = json.loads(base64.b64decode(data["resources"][resource_id]["data"]))
+    fields = typed["value"]["fields"]
+    member = next(
+        member["fields"] for members in fields["orthogroups"].values() for member in members
+        if member["fields"]["recordIndex"] == 4
+    )
+    for stored in (member, fields["memberByProteinId"][member["proteinId"]]["fields"]):
+        stored["start"] += 1
+    data["resources"][resource_id] = replace_resource_bytes(
+        data["resources"][resource_id], json.dumps(typed, separators=(",", ":")).encode("utf-8"),
+    )
+    with pytest.raises(SessionConversionError, match="matches neither strand"):
+        upgrade_session_document(data, temporary_directory=tmp_path)

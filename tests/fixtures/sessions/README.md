@@ -299,8 +299,9 @@ stored that record's LOSATP table (`comparison-canonical-protein-4`) and its
 majanivirus Gallery Session, the second reverse complemented, with the
 `collinearityResult` that `main`'s Web converter (the Python of
 `python-helpers.js` at `150d26706`, run natively) computes from that pair's raw
-LOSATP entries, stored as `main`'s Web Session writer lays it out; its
-`.provenance.json` names the script. Both are the positive fixtures of the
+LOSATP entries, stored as `main`'s Web Session writer lays it out;
+`tools/build_main_collinear_v47_fixture.py` rebuilds it from a worktree at
+`150d26706` (command in its `.provenance.json`). Both are the positive fixtures of the
 Session 48 conversion to the search frame (OV-1145): `tests/test_session_compat.py`
 replays each and compares it with its `.v47.replay.svg`, the SVG the dev base
 `e8b460772` drew (equal to `main`'s replay), and `tests/test_api_session.py`

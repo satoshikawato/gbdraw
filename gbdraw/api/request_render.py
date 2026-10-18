@@ -1071,6 +1071,13 @@ class LinearRequestPlan:
         repr=False,
         compare=False,
     )
+    # Whether any record is drawn reverse-complemented; only then do typed
+    # items move between the search and drawn frames.
+    _reverses: bool = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, LinearDiagramRequest):
@@ -1116,6 +1123,7 @@ class LinearRequestPlan:
         # Rows are checked against their bindings; a typed item moves only on a
         # reversed record (a forward record draws its search frame).
         reverses = any(map(record_is_reverse_complemented, self.records))
+        object.__setattr__(self, "_reverses", reverses)
         object.__setattr__(
             self,
             "_drawn_options",
@@ -1187,7 +1195,7 @@ class LinearRequestPlan:
                 ),
             )
         metadata = built.metadata
-        if not any(map(record_is_reverse_complemented, self.records)) or not has_source_bound_results(
+        if not self._reverses or not has_source_bound_results(
             metadata.linear_comparisons, metadata.protein_comparisons,
             metadata.orthogroups, metadata.collinearity_result,
         ):

@@ -1337,6 +1337,7 @@ def upgrade_session_document(
             raise
         except ValidationError as exc:
             raise SessionConversionError(str(exc)) from exc
+        require_search_frame_protein_results(adapted.migration_report)
         state = with_current_artifacts(
             state,
             losat_cache_entries=adapted.artifacts.losat_cache_entries,

@@ -2,8 +2,8 @@
   "sourceCommit": "150d26706064e7ca20eef4d3553ea266b51b79f6",
   "history": "first-parent main",
   "writer": "main's Web Generate and Save reproduced natively on origin/main: the Python embedded in gbdraw/web/js/app/python-helpers.js (extract_cds_protein_fasta with reverse flag 0, convert_losatp_blastp_pairs_to_genomic_payload in collinear mode with viewTransform {length, reverse}), resources laid out as services/session-request.js buildComparisons/addJson, Result = main's CLI replay with its feature catalog and runMetadata",
-  "script": "/home/kawato/gbdraw-baselines/incremental-render-20261013/scratch/ov1145/build_main_collinear_v47.py (sha256 305d36dfc18f8fe1cbfed0942bd3fdb346692214f81c088e9773b878925df427)",
-  "command": "PYTHONPATH=<worktree at 150d26706> python3 build_main_collinear_v47.py <worktree> <out> majanivirus_orthogroup",
+  "script": "tools/build_main_collinear_v47_fixture.py",
+  "command": "PYTHONPATH=<worktree at 150d26706> python3 tools/build_main_collinear_v47_fixture.py <worktree at 150d26706> <out> majanivirus_orthogroup",
   "sourceSession": "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz at 150d26706 (sha256 ab2f64d4dbf3a36b5d84617abd2e5a41758fa81a529d8c5b3a79a4f57bfa754d)",
   "losatCacheEntries": [
     {
@@ -70,7 +70,6 @@
     "mainReplayEqualsBaseReplay": true
   },
   "reversedRecordItemsInV": {
-    "checker": "/home/kawato/gbdraw-baselines/incremental-render-20261013/scratch/ov1145/check_v_frame.py",
     "counts": {
       "orthogroup members": 101,
       "anchor sides": 100

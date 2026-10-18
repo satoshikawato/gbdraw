@@ -366,8 +366,8 @@ def test_web_lookup_converter_and_api_build_one_derived_entry(
         ]
         assert ends and set(ends) <= search_frame
     if reversed_record is None:
-        # The identity of a reversed record differs between the two (reported
-        # in the OV-1145 handoff); its pairs and typed result agree.
+        # The identity of a reversed record differs between the two (OV-1180,
+        # pre-existing on dev); its pairs and typed result agree.
         assert reply["derived"]["key"] == converted["identityKey"] == api_entry["key"]
         assert converted["identity"] == api_payload["identity"]
         assert converted["provenance"] == api_payload["provenance"]

@@ -6,11 +6,13 @@
 // search frame. The table is read and rewritten by Python (one table reader).
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import { base64ToBytes, bytesToText, textToBase64, textToBytes } from './byte-utils.js';
+import { isResourceBackedCanonicalComparison } from './canonical-comparisons.js';
 import {
   DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION, MAIN_DISPLAY_FRAME_SESSION_VERSION
 } from '../contracts/schema.generated.js';
 
 /** @import { SequenceRecord } from './record-discovery.js' */
+/** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
 /** @import { SessionChecked31, SessionChecked39, SessionChecked40, SessionChecked46 } from '../contracts/session.generated.js' */
@@ -124,8 +126,6 @@ const storedRecordReverses = (record) => {
   return Boolean(region?.reverseComplement || presentation?.reverseComplement);
 };
 
-const STORED_PROTEIN_RESULT_KINDS = new Set(['precomputedProteinComparison', 'orthogroupResult', 'collinearityResult']);
-
 /**
  * Whether a Session up to 47 stores protein results of a reverse-complemented
  * Linear record, which it stored in the drawn frame; Session 48 stores them in
@@ -144,8 +144,8 @@ export const storesDrawnFrameProteinResults = (data) => {
     const comparisons = request.comparisons;
     /** @type {readonly unknown[]} */
     const records = request.records;
-    return comparisons.some((item) => STORED_PROTEIN_RESULT_KINDS.has(
-      String(/** @type {UnvalidatedFields<'kind'>} */ (item)?.kind)
+    return comparisons.some((item) => isResourceBackedCanonicalComparison(
+      /** @type {ResourceBackedComparison} */ (item)
     )) && records.some((record) => storedRecordReverses(/** @type {StoredRecord} */ (record)));
   });
 };

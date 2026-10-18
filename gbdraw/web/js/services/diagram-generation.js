@@ -1042,8 +1042,10 @@ export const runDiagramHelperOperation = (operation, payload = {}, { onProgress 
   }
   recordStructuralMetric('diagramHelperRequest', 1, { operation: normalizedOperation });
   // Helpers that read the records of a committed request stage its resources.
-  const staging = [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE,
-    DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES].includes(normalizedOperation) ? payload
+  /** @type {readonly string[]} */
+  const stagingOperations = [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE,
+    DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES];
+  const staging = stagingOperations.includes(normalizedOperation) ? payload
     : (normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT ? payload.projection : undefined);
   const { resources, ...helperPayload } = payload;
   return runAuxiliaryWorkerRequest({

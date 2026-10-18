@@ -21,6 +21,7 @@ from gbdraw.api.session_compat import (
     search_frame_protein_resources,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.session import SessionConversionError
 from gbdraw.session_request_codec import decode_canonical_request
 
 
@@ -33,7 +34,7 @@ def stored_protein_results_to_search_frame(
 
     ``payload`` is ``{"version", "renderRequest"}`` of one drawing and
     ``resource_paths`` the staged files of its request. A result matching
-    neither strand of its record raises ValidationError; nothing is
+    neither strand of its record raises SessionConversionError; nothing is
     returned for a drawing already in the search frame or a Session after 47.
     """
 
@@ -50,7 +51,9 @@ def stored_protein_results_to_search_frame(
     )
     converted, unmatched = drawn_frame_protein_results_to_search_frame(plan_request(request), request)
     if unmatched:
-        raise ValidationError(f"Session protein results cannot be converted: {describe_unmatched_frame_item(unmatched[0])}.")
+        raise SessionConversionError(
+            f"Session protein results cannot be converted: {describe_unmatched_frame_item(unmatched[0])}."
+        )
     if converted is request:
         return {}
     return search_frame_protein_resources(request_payload, request, converted)
