@@ -493,6 +493,27 @@ def _session_with_derived_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     return source, built
 
 
+def test_a_python_api_replay_that_builds_derived_entries_drops_the_legacy_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-1129: outside the CLI's switch the render's own entries supersede the evidence too."""
+
+    from gbdraw.session import render_session_drawings
+
+    sidecar = _fresh_protein_session(tmp_path, monkeypatch)
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert session["losatDerivedCache"] == {"entries": []}
+    legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
+    session["legacyArtifacts"] = {"proteinDerivedEvidence": {"schema": 1, "entries": [legacy_derived]}}
+    source = tmp_path / "with-evidence.gbdraw-session.json"
+    source.write_text(json.dumps(session), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    with materialize_session(load_session_document(source), output_directory=tmp_path / "api") as materialized:
+        (api,) = render_session_drawings(materialized, output_prefix="api", overwrite=True).values()
+    assert api.losat_derived_cache_entries
+    assert api.migration_report.protein_derived_evidence == ()
+
+
 def _derived(path: Path) -> list[dict[str, Any]]:
     return load_session_document(path).to_dict()["losatDerivedCache"]["entries"]
 
@@ -613,13 +634,19 @@ def test_a_circular_replay_keeps_the_legacy_protein_evidence_of_its_session(
     assert json.dumps(resaved, sort_keys=True) == json.dumps(saved, sort_keys=True)
 
 
-@pytest.mark.parametrize("batch", [False, True], ids=["one-diagram", "batch"])
+@pytest.mark.parametrize("shape", ["one-diagram", "batch", "linear"])
 def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_entries_supersede(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, batch: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shape: str
 ) -> None:
-    """OV-1119: both shapes drop superseded derived evidence and keep the raw candidates."""
+    """OV-1119, OV-1129: every shape drops superseded derived evidence and keeps the raw candidates."""
 
-    source = _circular_batch_session_with_protein_artifacts(tmp_path, monkeypatch, raw_entries=True, batch=batch)
+    source = (
+        _session_with_derived_entries(tmp_path, monkeypatch)[0]
+        if shape == "linear"
+        else _circular_batch_session_with_protein_artifacts(
+            tmp_path, monkeypatch, raw_entries=True, batch=shape == "batch"
+        )
+    )
     session = json.loads(source.read_text(encoding="utf-8"))
     assert session["losatDerivedCache"]["entries"]
     legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
@@ -649,5 +676,8 @@ def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_en
     replayed = tmp_path / "replayed.gbdraw-session.json"
     _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / "out" / "replayed"),
          "-f", "svg", "--session_output", str(replayed))
-    resaved = load_session_document(replayed).to_dict().get("legacyArtifacts")
+    resaved_session = load_session_document(replayed).to_dict()
+    # The evidence goes only because the re-save writes current derived entries.
+    assert resaved_session["losatDerivedCache"]["entries"] == session["losatDerivedCache"]["entries"]
+    resaved = resaved_session.get("legacyArtifacts")
     assert resaved is not None and set(resaved) == {"proteinRawCandidates"}

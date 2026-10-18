@@ -127,7 +127,7 @@ import {
   requireCurrentCollinearColorMode,
   requireCurrentCollinearMaxConflicts,
   requireCurrentCollinearMaxDiagonalDrift,
-  requireCurrentCollinearMaxParalogLinks,
+  drawnCollinearMaxParalogLinks,
   requireCurrentCollinearMaxUnitGap,
   requireCurrentCollinearMergeOrientation,
   requireCurrentCollinearMinAnchors,
@@ -3599,11 +3599,10 @@ export const createRunAnalysis = ({
               drawing.losat.blastp?.collinearMaxConflictsInMergeGap
             )
           : 1;
-        const collinearMaxParalogLinksPerOrthogroup = useCollinearBlastp
-          ? requireCurrentCollinearMaxParalogLinks(
-              drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup
-            )
-          : 2;
+        const collinearMaxParalogLinksPerOrthogroup = drawnCollinearMaxParalogLinks(
+          useCollinearBlastp,
+          drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup
+        );
         const collinearColorMode = useCollinearBlastp
           ? requireCurrentCollinearColorMode(drawing.losat.blastp?.collinearColorMode)
           : 'orientation';
