@@ -34,13 +34,31 @@ def _moved_runtime_global(node):
         for target in node.targets)
 
 
+class _FitSumsToFsum(ast.NodeTransformer):
+    """Add the frozen fit model's floats with math.fsum, as the runtime does since OV-1237.
+
+    Built-in sum() compensates floats only from Python 3.12, so the frozen
+    copy would otherwise differ from the runtime in the last bits on 3.10/3.11.
+    """
+
+    def visit_Call(self, node):
+        self.generic_visit(node)
+        if isinstance(node.func, ast.Name) and node.func.id == 'sum':
+            node.func = ast.copy_location(
+                ast.Attribute(ast.Name('math', ast.Load()), 'fsum', ast.Load()), node.func)
+        return node
+
+
 def frozen_module():
     source = gzip.decompress(Path(__file__).with_name('protein_colinearity_s076.py.gz').read_bytes())
     module = ModuleType('protein_colinearity_s076')
     module.__dict__.update(vars(pc))
     tree = ast.parse(source)
-    tree.body = [node for node in tree.body
+    tree.body = [_FitSumsToFsum().visit(node) if getattr(node, 'name', None) == '_fit_expected_bitscore_model'
+                 else node
+                 for node in tree.body
                  if isinstance(node, ast.FunctionDef) or _moved_runtime_global(node)]
+    ast.fix_missing_locations(tree)
     exec(compile(tree, 'protein_colinearity_s076.py', 'exec'), module.__dict__)
     return module
 
@@ -82,10 +100,10 @@ def fit_oracle(frame, fraction):
     if len(frame) >= 12 and len(points) >= 3:
         xs, ys = zip(*points)
         if len({round(x, 9) for x in xs}) >= 2:
-            mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
-            denominator = sum((x - mx) ** 2 for x in xs)
+            mx, my = math.fsum(xs) / len(xs), math.fsum(ys) / len(ys)
+            denominator = math.fsum((x - mx) ** 2 for x in xs)
             if denominator > 1e-12:
-                slope = sum((x - mx) * (y - my) for x, y in points) / denominator
+                slope = math.fsum((x - mx) * (y - my) for x, y in points) / denominator
                 intercept = my - slope * mx
                 if math.isfinite(slope) and math.isfinite(intercept):
                     model = slope, intercept

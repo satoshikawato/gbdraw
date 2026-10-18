@@ -3878,3 +3878,64 @@ def test_chain_merge_preserves_float_score_and_final_order(reverse, min_anchors,
         m.setattr(collinearity_module, "_merge_lossless_clusters", oracle)
         expected = cluster_lossless_collinearity_anchors(anchors, params=params)
     assert actual == expected
+
+
+def _left_to_right_sum(values, /, start=0):
+    """``sum()`` as Python 3.10 and 3.11 add floats (3.12 compensates them)."""
+
+    total = start
+    for value in values:
+        total = total + value
+    return total
+
+
+def _protein_float_reductions():
+    anchors = tuple(
+        replace(_anchor(index, index, bitscore=0.1), identity=0.1, alignment_length=1)
+        for index in range(10)
+    )
+    block = CollinearityBlock(
+        block_id="block",
+        query_record_index=0,
+        subject_record_index=1,
+        orientation="plus",
+        score=collinearity_module._anchor_bitscore_total(anchors),
+        anchors=anchors,
+    )
+    (row,) = convert_collinearity_blocks_to_pair_comparisons(
+        CollinearityResult(blocks=(block,)), record_ids=["a", "b"]
+    )[(0, 1)][["bitscore", "identity"]].itertuples(index=False)
+    size = 12
+    hits = pd.DataFrame(
+        {
+            "query": [f"q{index % 3}" for index in range(size)],
+            "subject": [f"s{index % 2}" for index in range(size)],
+            "length_product": [float(100 + (index % 7) * 17) for index in range(size)],
+            "bitscore": [float(10 + (index % 4) * 3) for index in range(size)],
+        }
+    )
+    return (
+        block.score,
+        collinearity_module._weighted_identity(anchors),
+        tuple(row),
+        protein_colinearity_module._fit_expected_bitscore_model(hits, top_fraction=1.0),
+    )
+
+
+def test_protein_float_reductions_do_not_depend_on_the_python_version(monkeypatch) -> None:
+    """Stored Gallery protein results equal a rebuild on every Python (OV-1237).
+
+    Python 3.12 changed ``sum()`` of floats to compensated summation, so a
+    result built with ``sum()`` on 3.10 or 3.11 differed in its last bits from
+    the 3.13 Sessions and the Web's Pyodide.
+    """
+
+    current = _protein_float_reductions()
+    with monkeypatch.context() as patched:
+        patched.setattr("builtins.sum", _left_to_right_sum)
+        left_to_right = _protein_float_reductions()
+
+    assert current == left_to_right
+    score, identity, (bitscore, row_identity), _model = current
+    assert score == bitscore == 1.0
+    assert identity == row_identity == 0.1
