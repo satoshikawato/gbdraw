@@ -1495,7 +1495,6 @@ test('Session preflight rejects invalid canonical data without resetting live st
 
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    const { state } = await import('./js/state.js');
     app.setDiagramMode('linear');
     await window.Vue.nextTick();
     app.sessionTitle = 'keep-live-state';
@@ -1513,19 +1512,16 @@ test('Session preflight rejects invalid canonical data without resetting live st
     );
     app.adv.linear_track_slots_axis_index = 1;
     app.setLinearTrackSlotsEnabled(true);
-    state.suppressCircularMultiRecordDefaults.value = true;
   });
 
-  const snapshot = () => page.evaluate(async () => {
+  const snapshot = () => page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    const { state } = await import('./js/state.js');
     return {
       mode: app.mode,
       title: app.sessionTitle,
       enabled: app.adv.linear_track_slots_enabled,
       axisIndex: app.adv.linear_track_slots_axis_index,
-      slots: JSON.parse(JSON.stringify(app.adv.linear_track_slots)),
-      suppressDefaults: state.suppressCircularMultiRecordDefaults.value
+      slots: JSON.parse(JSON.stringify(app.adv.linear_track_slots))
     };
   });
   const before = await snapshot();

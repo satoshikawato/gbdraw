@@ -177,7 +177,7 @@ const DOCUMENT_KEYS = [
   // What Load reports and the Result artifacts it restores.
   'errorLog', 'comparisonWarnings', 'annotationWarnings', 'featureIdentityNotices', 'originalLegendOrder',
   'originalLegendColors', 'originalSvgStroke', 'matchSequenceRegistry', 'pairwiseMatchFactors', 'featureOrthogroupIndex',
-  'linearReorderNotice', 'circularRecordDiscovery', 'suppressCircularMultiRecordDefaults', 'featureEditRemovalCount',
+  'linearReorderNotice', 'circularRecordDiscovery', 'featureEditRemovalCount',
   'generationFailureRecovery', 'svgContent'
 ];
 const stateAreas = () => {

@@ -4083,7 +4083,7 @@
                                     </label>
 
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Place multiple records on one shared circular canvas.">
-                                        <input type="checkbox" v-model="form.multi_record_canvas" @change="rebindAnnotationRecords()" data-circular-canvas-setting class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                        <input type="checkbox" v-model="form.multi_record_canvas" @change="changeCircularMultiRecordCanvas()" data-circular-canvas-setting class="form-checkbox" :disabled="!semanticMutationAvailable">
                                         <span>Multi-Record Canvas</span>
                                     </label>
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">

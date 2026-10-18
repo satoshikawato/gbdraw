@@ -1033,6 +1033,19 @@ assert.deepEqual(
 // gbdraw...`); the service shows no native alert.
 assert.deepEqual(alerts, []);
 
+// D-15-47 (A2 W1): a configuration that turns the shown Circular drawing's
+// Multi-Record Canvas on keeps the single-record sides in the multi-record
+// slot, as one step of the import (no watcher, no flag).
+installShownDrawing('circular');
+state.drawings.circular.form.multi_record_canvas = false;
+Object.assign(state.drawings.circular.layoutPreferences.circular.single, { legend: 'right', plotTitlePosition: 'top' });
+Object.assign(state.drawings.circular.layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
+const canvasOnImport = await importPayload({ form: { multi_record_canvas: true } });
+assert.equal(canvasOnImport.status, 'legacy');
+assert.equal(state.drawings.circular.form.multi_record_canvas, true);
+assert.deepEqual({ ...state.drawings.circular.layoutPreferences.circular.multi }, { legend: 'right', plotTitlePosition: 'top' });
+alerts.length = 0;
+
 installShownDrawing('circular');
 state.activeDrawing().form.multi_record_canvas = false;
 state.activeDrawing().form.legend = 'left';
@@ -1043,7 +1056,6 @@ Object.assign(state.activeDrawing().canvasPadding, { top: 7, right: 8, bottom: 9
 Object.assign(state.canvasPan, { x: 27, y: 28 });
 state.zoom.value = 1.25;
 state.skipCaptureBaseConfig.value = false;
-state.suppressCircularMultiRecordDefaults.value = true;
 state.linearReorderNotice.value = 'keep reorder notice';
 state.showRightDrawer.value = true;
 state.rightDrawerTab.value = 'legend';
@@ -1179,7 +1191,6 @@ const rollbackState = () => ({
   semanticFileWatchersSuppressed: state.semanticFileWatchersSuppressed.value,
   sessionImportRollbackInProgress: state.sessionImportRollbackInProgress.value,
   skipCaptureBaseConfig: state.skipCaptureBaseConfig.value,
-  suppressCircularMultiRecordDefaults: state.suppressCircularMultiRecordDefaults.value,
   linearReorderNotice: state.linearReorderNotice.value,
   showRightDrawer: state.showRightDrawer.value,
   rightDrawerTab: state.rightDrawerTab.value,

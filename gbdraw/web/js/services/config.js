@@ -59,7 +59,10 @@ import {
   normalizeLayoutPreferences,
   normalizeLinearPlotTitlePosition,
   resolveActiveLayoutPreference,
-  restoredLayoutPreferences
+  resolveCircularLayoutPreference,
+  restoredLayoutPreferences,
+  hasStoredCircularMultiRecordLayout,
+  updateActiveLayoutPreference
 } from './layout-preferences.js';
 import {
   serializeFeatureVisibilityRules,
@@ -1787,22 +1790,18 @@ const withBoundLinearRecordsOff = (config, linearSeqs) => {
 
 /** @param {DrawingState} drawing @param {Record<string, unknown>} config What `readLegacyConfigPayload` read. */
 const applyLegacyConfigPayload = (drawing, config) => {
-  state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
-    drawing, /** @type {UnvalidatedFields<'multi_record_canvas'>} */ (config.form)
-  );
+  // D-15-47: a configuration that turns the shown Circular drawing's
+  // Multi-Record Canvas on keeps the single-record sides in the multi-record
+  // slot (none stored), so a later toggle stores no smart defaults.
+  const turnsCanvasOn = drawing.mode === 'circular' && drawing.id === state.activeDrawingId.value
+    && drawing.form.multi_record_canvas === false
+    && isPlainObject(config.form) && config.form.multi_record_canvas === true;
   applyConfigData(drawing, config);
+  if (turnsCanvasOn && !hasStoredCircularMultiRecordLayout(drawing.layoutPreferences)) {
+    updateActiveLayoutPreference(drawing.layoutPreferences, 'circular', true,
+      resolveCircularLayoutPreference(drawing.layoutPreferences, false));
+  }
   restorePaletteStateAfterConfigImport(drawing);
-};
-
-/**
- * @param {DrawingState} drawing
- * @param {UnvalidatedFields<'multi_record_canvas'>} incomingForm
- */
-const shouldSuppressCircularMultiRecordDefaults = (drawing, incomingForm) => {
-  if (state.mode.value !== 'circular') return false;
-  if (!incomingForm || typeof incomingForm !== 'object' || Array.isArray(incomingForm)) return false;
-  if (!Object.prototype.hasOwnProperty.call(incomingForm, 'multi_record_canvas')) return false;
-  return drawing.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
 /**
@@ -4365,9 +4364,6 @@ const captureSessionImportTransientState = () => ({
     state.semanticFileWatchersSuppressed.value
   ),
   skipCaptureBaseConfig: Boolean(state.skipCaptureBaseConfig.value),
-  suppressCircularMultiRecordDefaults: Boolean(
-    state.suppressCircularMultiRecordDefaults.value
-  ),
   linearReorderNotice: state.linearReorderNotice.value,
   linearFoldedSources: [...state.linearFoldedSources],
   rightDrawer: captureRightDrawerState(state),
@@ -4424,8 +4420,6 @@ const captureSessionImportTransientState = () => ({
 
 /** @param {ReturnType<typeof captureSessionImportTransientState>} snapshot */
 const restoreSessionImportTransientState = (snapshot) => {
-  state.suppressCircularMultiRecordDefaults.value =
-    snapshot.suppressCircularMultiRecordDefaults;
   state.linearReorderNotice.value = snapshot.linearReorderNotice;
   restoreFoldedLinearSources(state.linearFoldedSources, snapshot.linearFoldedSources);
   restoreRightDrawerState(state, snapshot.rightDrawer);
@@ -6266,10 +6260,6 @@ const importSessionDocument = async (e, options = {}) => {
     state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
     state.generatedCircularPlotTitlePosition.value = readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value;
 
-    state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
-      state.drawings.circular,
-      modeConfigs.circular.form
-    );
     // Each drawing over its mode's defaults (resetSessionBaseline); the shown
     // drawing's Canvas padding follows once its Result is mounted. A Session 46
     // slice without its mode's request projection is stored settings: its track

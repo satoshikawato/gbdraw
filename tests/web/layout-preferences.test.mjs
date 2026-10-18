@@ -85,4 +85,15 @@ SETTINGS_SLICE.install(settings.handle, { layoutPreferences: normalizeLayoutPref
 assert.deepEqual(target, migrated);
 assert.equal(target.circular.single, single, 'the nested preferences stay the same objects');
 
+// The Multi-Record Canvas toggle's smart defaults (A2 W1): a left Legend and
+// no title move below the grid, other sides are copied, and a stored
+// multi-record side means the toggle stored them already.
+const { circularMultiRecordDefaults } = await import('../../gbdraw/web/js/services/layout-preferences.js');
+assert.deepEqual(circularMultiRecordDefaults(createDefaultLayoutPreferences()), { legend: 'bottom', plotTitlePosition: 'bottom' });
+const sided = createDefaultLayoutPreferences();
+Object.assign(sided.circular.single, { legend: 'right', plotTitlePosition: 'top' });
+assert.deepEqual(circularMultiRecordDefaults(sided), { legend: 'right', plotTitlePosition: 'top' });
+sided.circular.multi.plotTitlePosition = 'none';
+assert.equal(circularMultiRecordDefaults(sided), null);
+
 console.log('layout preference tests passed');

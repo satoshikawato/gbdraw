@@ -9,11 +9,6 @@ import {
   parsePriorityRules,
   parseWhitelistRules
 } from '../services/file-imports.js';
-import {
-  legendPositionOrDefault,
-  normalizeCircularPlotTitlePosition,
-  resolveCircularLayoutPreference
-} from '../services/layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
 import { addWhitelistRules, appendBlacklistWords, setPriorityRules } from '../services/drawing/label-tables.js';
@@ -153,7 +148,6 @@ export const setupWatchers = ({
     skipExtractOnSvgChange,
     trustedArtifactRestoreInProgress,
     svgContainer,
-    suppressCircularMultiRecordDefaults,
     selectedFeatureRecordIdx,
     featurePanelTab,
     labelSearch,
@@ -181,23 +175,6 @@ export const setupWatchers = ({
   const { refreshDiagramDragAffordances } = legendLayout;
   const { editDefaultColors } = resultsManager;
 
-  /** @param {unknown} value */
-  const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
-
-  /** @param {DrawingState} drawing */
-  const hasStoredCircularMultiRecordLayout = (drawing) =>
-    hasStoredLayoutValue(drawing.layoutPreferences.circular.multi.legend) ||
-    hasStoredLayoutValue(drawing.layoutPreferences.circular.multi.plotTitlePosition);
-
-  /** @param {DrawingState} drawing */
-  const applyCircularMultiRecordSmartDefaults = (drawing) => {
-    const singleLayout = resolveCircularLayoutPreference(drawing.layoutPreferences, false);
-    drawing.layoutPreferences.circular.multi.legend =
-      singleLayout.legend === 'left' ? 'bottom' : singleLayout.legend;
-    drawing.layoutPreferences.circular.multi.plotTitlePosition =
-      singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
-  };
-
   watch(
     () => layoutRepositionMode.value,
     () => {
@@ -205,31 +182,6 @@ export const setupWatchers = ({
         refreshLegendDragAffordances();
         refreshDiagramDragAffordances();
       });
-    }
-  );
-
-  watch(
-    () => state.drawings.circular.form.multi_record_canvas,
-    (enabled, previousEnabled) => {
-      const drawing = state.drawings.circular;
-      if (mode.value !== 'circular') return;
-      if (enabled === previousEnabled) return;
-
-      if (enabled && !hasStoredCircularMultiRecordLayout(drawing)) {
-        if (suppressCircularMultiRecordDefaults.value) {
-          drawing.layoutPreferences.circular.multi.legend =
-            legendPositionOrDefault(drawing.form.legend, 'circular');
-          drawing.layoutPreferences.circular.multi.plotTitlePosition =
-            normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
-        } else {
-          applyCircularMultiRecordSmartDefaults(drawing);
-        }
-      }
-
-      if (suppressCircularMultiRecordDefaults.value) {
-        suppressCircularMultiRecordDefaults.value = false;
-      }
-
     }
   );
 

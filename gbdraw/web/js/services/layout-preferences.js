@@ -231,6 +231,32 @@ export const updateActiveLayoutPreference = (
 };
 
 /**
+ * Whether a circular multi-record side is stored (a null side follows the
+ * single-record side).
+ * @param {LayoutPreferences} preferences
+ */
+export const hasStoredCircularMultiRecordLayout = (preferences) => (
+  storedText(preferences.circular.multi.legend) || storedText(preferences.circular.multi.plotTitlePosition)
+);
+
+/**
+ * The multi-record sides the Multi-Record Canvas toggle stores when it turns
+ * the canvas on: the single-record sides, with a left Legend and no title
+ * moved below the grid. Null when a multi-record side is stored, so the
+ * toggle stores them once.
+ * @param {LayoutPreferences} preferences
+ * @returns {ActiveLayoutPreference | null}
+ */
+export const circularMultiRecordDefaults = (preferences) => {
+  if (hasStoredCircularMultiRecordLayout(preferences)) return null;
+  const single = resolveCircularLayoutPreference(preferences, false);
+  return {
+    legend: single.legend === 'left' ? 'bottom' : single.legend,
+    plotTitlePosition: single.plotTitlePosition === 'none' ? 'bottom' : single.plotTitlePosition
+  };
+};
+
+/**
  * @param {unknown} source Saved layout preferences, validated here.
  * @returns {LayoutPreferences}
  */

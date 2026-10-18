@@ -127,7 +127,6 @@ export const resetSettings = (state) => {
     LABEL_TABLES_SLICE.reset(drawing.slices.labelTables);
     GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
     state.selectedAnnotation.value = null;
-    state.suppressCircularMultiRecordDefaults.value = false;
     resetPaletteState(state, drawing);
     resetRuleDraftState(state, drawing);
     resetEditorDraftState(state, drawing);

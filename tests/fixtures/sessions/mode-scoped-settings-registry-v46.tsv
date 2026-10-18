@@ -197,7 +197,6 @@ Scale bar drag offset	editor	editor	Result SVG length_bar delta (mirror state.le
 Canvas padding	editor	editor	state.canvasPadding	SHARED	drawing	mode slice	ui.canvasPadding | modes=both	modes.<m>.ui.canvasPadding	copied to both slices (R1-1 principle P: per mode)	both slices: Reset Layout only	both		copy
 Layout mode and canvas controls toggles	editor	other	state.layoutRepositionMode, showCanvasControls	SHARED	ui	view/transient (unchanged)		none	unchanged	as today	-		-
 Zoom and pan	editor	other	state.zoom, canvasPan, isPanning, panStart	PER-MODE:other:reset-on-switch	ui	view/transient (unchanged)		ui.zoom, ui.canvasPan	unchanged	as today	-		-
-Circular multi-record layout default suppression	editor	other	state.suppressCircularMultiRecordDefaults	MODE-ONLY:circular	drawing	derived/transient (not saved)		not saved	n/a	n/a	-		-
 Circular input files and type	editor	file	state.files.c_gb, c_gff, c_fasta; state.cInputType	INPUT	project	project (unchanged)		resources/webFiles; ui.cInputType	unchanged	kept	-		-
 Linear File cards (files) and input type	editor	file	state.linearSeqs[].gb/gff/fasta; state.lInputType	INPUT	project	project (unchanged)		resources/webFiles; renderRequest.records	unchanged	kept	-		-
 Linear record selection and region per File	editor	file	state.linearSeqs[].region_record_id, region_start, region_end, region_reverse	MODE-ONLY:linear	drawing	mode-only input (unchanged)		renderRequest.records; webFiles	unchanged	kept (PD-OI-070)	-		-

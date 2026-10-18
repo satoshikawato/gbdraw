@@ -119,7 +119,6 @@ const canvasContainerRef = ref(null);
 /** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
 const activeDrawingId = typedRef(/** @type {DrawingId} */ ('circular'));
 const mode = typedComputed(() => activeDrawing().mode);
-const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
 const files = reactive({
@@ -1160,7 +1159,6 @@ export const state = Object.freeze({
   mode,
   drawings,
   activeDrawing,
-  suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
   files,

@@ -242,6 +242,7 @@ import {
   removeRecordEdits
 } from '../services/record-draw-selection.js';
 import { ANNOTATION_RECORD_BINDING_KEY } from '../services/annotation-state.js';
+import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { removeAnnotations } from '../services/drawing/annotation-sets.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { createRecordSelection } from './record-selection.js';
@@ -1574,6 +1575,21 @@ export const createAppSetup = () => {
     if (catalog.status === 'ready' && !sessionOperationAvailability()) {
       reconcileAnnotationRecordBindings(state.activeDrawing(), catalog);
     }
+  };
+  // A Circular drawing whose Multi-Record Canvas is on and has no multi-record
+  // sides stored gets the toggle's smart defaults. Load, its rollback, and a
+  // History restore install the sides they read or captured (R11, D-15-48).
+  /** @param {DrawingState} drawing */
+  const storeCircularMultiRecordDefaults = (drawing) => {
+    const defaults = drawing.mode === 'circular' && drawing.form.multi_record_canvas
+      ? circularMultiRecordDefaults(drawing.layoutPreferences) : null;
+    if (defaults) updateActiveLayoutPreference(drawing.layoutPreferences, 'circular', true, defaults);
+  };
+  // The Multi-Record Canvas checkbox, after its `v-model` wrote the shown
+  // drawing: in the control's History step.
+  const changeCircularMultiRecordCanvas = () => {
+    storeCircularMultiRecordDefaults(state.activeDrawing());
+    rebindAnnotationRecords();
   };
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   setPreviewRuntime(previewRuntime);
@@ -5235,7 +5251,15 @@ export const createAppSetup = () => {
       const returning = state.activeDrawing().deletedLegendEntries.value
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
+      const circularCanvasWasOff = state.drawings.circular.form.multi_record_canvas === false;
       resetSettingsState(state);
+      // OV-1166 (Owner question Q-DR-6, open): today's outcome, kept as is. A
+      // Reset that turns the shown Circular drawing's Multi-Record Canvas on
+      // stores the toggle's smart defaults; from the canvas on, or with Linear
+      // shown, the multi-record sides stay unset. The answer changes this step.
+      if (circularCanvasWasOff && state.activeDrawingId.value === 'circular') {
+        storeCircularMultiRecordDefaults(state.drawings.circular);
+      }
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
       // also clears the alignment plan (D-15).
@@ -7178,7 +7202,7 @@ export const createAppSetup = () => {
     circularRecordSelectionEnabled,
     showCircularCanvasSetting,
     setCircularRecordPresentationSelector,
-    rebindAnnotationRecords,
+    changeCircularMultiRecordCanvas,
     setCircularSourceFile,
     recordSelection,
     circularDrawnRecordCount,

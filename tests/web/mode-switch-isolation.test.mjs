@@ -111,6 +111,11 @@ test('a mode switch changes the source of no drawing watcher', () => {
   installShownDrawing('circular');
 });
 
+test('no watcher stores the Multi-Record Canvas defaults, and no flag suppresses them (A2 W1)', () => {
+  assert.deepEqual(watchers.filter(({ source }) => /multi_record_canvas/.test(String(source))).map(({ line }) => line), []);
+  assert.ok(!('suppressCircularMultiRecordDefaults' in state), 'the suppress flag is gone');
+});
+
 test('the watcher scans flag a slice writer call and leave slice reads alone', () => {
   const [palette] = Object.keys(DRAWING_SLICES).filter((name) => name === 'palette');
   assert.deepEqual(sliceWriterCalls([
