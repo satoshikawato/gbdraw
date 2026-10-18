@@ -98,6 +98,7 @@ const buildHarness = ({
       keyFor(id), rowFor(id, { labelVisibility: mode })
     ])),
     labelTextBulkOverrides: {},
+    canonicalLabelOverrideRows: ref([]),
     autoLabelReflowEnabled: ref(false),
     labelReflowRequestSeq: ref(0),
     labelReflowForceRequestSeq: ref(0),
@@ -722,6 +723,45 @@ for (const [name, body, tsv, message] of [
     assert.deepEqual(messages, [message]);
   });
 }
+
+// OV-1102: an action that changes the bulk label edits replaces the saved label
+// table (the rules a loaded Session sent) itself, in its own History step, so
+// Undo returns both. An action that leaves the bulk label edits as they are
+// keeps the table: a per-feature label edit applies before it (design Q4).
+const SAVED_LABEL_ROW = Object.freeze({
+  recordId: '*', featureType: '*', qualifier: 'product', valueRegex: '^alpha$', labelText: 'SAVED'
+});
+for (const [name, tsv, bulk, rows] of [
+  ['a global label row replaces it', '*\t*\tlabel\t^alpha$\tBULK_A\n', { alpha: 'BULK_A' }, []],
+  ['a per-feature row keeps it', '*\tCDS\tlabel\t^alpha$\tLOADED\n', {}, [SAVED_LABEL_ROW]]
+]) {
+  test(`a Label TSV load: ${name} (OV-1102)`, async () => {
+    const harness = buildHarness({
+      svg: loadedLabelSvg(), featureId: 'fa', rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+      evaluateLabelRules: async ({ features }) => ({ winners: features.map(() => 0) })
+    });
+    const { state, actions } = harness;
+    state.errorLog = ref(null);
+    state.canonicalLabelOverrideRows.value = [SAVED_LABEL_ROW];
+    await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
+    assert.deepEqual([state.labelTextBulkOverrides, state.canonicalLabelOverrideRows.value], [bulk, rows]);
+  });
+}
+test('Reset label edits and an "all labels" text edit replace the saved label table when they change the bulk label edits (OV-1102)', () => {
+  const svg = new DOMParser().parseFromString(
+    '<svg><text data-label-editable="true" data-label-source-text="alpha">alpha</text></svg>', 'image/svg+xml'
+  ).documentElement;
+  const { state, actions } = buildHarness({ svg });
+  state.canonicalLabelOverrideRows.value = [SAVED_LABEL_ROW];
+  actions.resetAllLabelTextOverrides();
+  assert.deepEqual(state.canonicalLabelOverrideRows.value, [SAVED_LABEL_ROW], 'no bulk label edit changed');
+  Object.assign(state.labelTextScopeDialog, { show: true, sourceText: 'alpha', newText: 'ALL', labelKey: '', featureId: '' });
+  actions.handleLabelTextScopeChoice('all');
+  assert.deepEqual([state.labelTextBulkOverrides, state.canonicalLabelOverrideRows.value], [{ alpha: 'ALL' }, []]);
+  state.canonicalLabelOverrideRows.value = [SAVED_LABEL_ROW];
+  actions.resetAllLabelTextOverrides();
+  assert.deepEqual([state.labelTextBulkOverrides, state.canonicalLabelOverrideRows.value], [{}, []]);
+});
 
 // OV-447, OV-449 (Owner decisions): a Label TSV load is declined with a
 // notice that names the cause when, while the table is being evaluated, a

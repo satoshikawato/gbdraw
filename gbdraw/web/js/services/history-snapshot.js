@@ -26,6 +26,7 @@ export { cloneJsonData };
  *   featureColorOverrides?: unknown,
  *   featureVisibilityManualRules?: unknown,
  *   featureOverrides?: unknown,
+ *   labelOverrideRows?: unknown,
  *   labelTextBulkOverrides?: unknown
  * }} FeatureEditsData
  */
@@ -106,7 +107,7 @@ export { cloneJsonData };
  * The mutable intent of a generated artifact handle.
  * @typedef {object} GeneratedArtifactIntent
  * @property {IntentUiData} ui
- * @property {FeatureEditsData & { labelOverrideRows?: unknown }} features
+ * @property {FeatureEditsData} features
  * @property {EditorIntentData & { originalSvgStroke?: unknown }} editorState
  * @property {OrthogroupIntentData & GroupNameIntentData} orthogroupState
  * @property {unknown} alignmentState
@@ -215,6 +216,7 @@ const buildFeatureIntentData = (features = {}) => ({
   featureColorOverrides: clonePlainObject(features.featureColorOverrides),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules),
   featureOverrides: clonePlainObject(features.featureOverrides),
+  labelOverrideRows: cloneLabelOverrideRows(features.labelOverrideRows),
   labelTextBulkOverrides: clonePlainObject(features.labelTextBulkOverrides)
 });
 
@@ -358,13 +360,17 @@ const replaceLinearComparisonPlan = (target, plan = {}) => {
   })));
 };
 
+/** @param {unknown} rows The saved label table (`canonicalLabelOverrideRows`). */
+const cloneLabelOverrideRows = (rows) => (Array.isArray(rows) ? cloneJsonData(rows) : []);
+
 /** @param {unknown} rules */
 const cloneFeatureVisibilityRules = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
 
 // Manual visibility rules, identity-keyed per-feature edits, and bulk label
-// edits: the feature edit intent History restores as captured (R11).
+// edits with the saved label table they replace (OV-1102): the feature edit
+// intent History restores as captured (R11).
 /**
  * @param {HistorySnapshotDrawing} drawing
  * @param {FeatureEditsData} [features]
@@ -378,6 +384,7 @@ const replaceFeatureEditState = (drawing, features = {}) => {
     );
   }
   replacePlainObject(drawing.featureOverrides, clonePlainObject(features.featureOverrides));
+  replaceRefArray(drawing.canonicalLabelOverrideRows, features.labelOverrideRows);
   replacePlainObject(drawing.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
 };
 
@@ -628,6 +635,7 @@ const buildFallbackFeatureStateData = (state, drawing) => ({
   featureColorOverrides: clonePlainObject(drawing.featureColorOverrides),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(drawing.featureVisibilityManualRules),
   featureOverrides: clonePlainObject(drawing.featureOverrides),
+  labelOverrideRows: cloneLabelOverrideRows(getRef(drawing.canonicalLabelOverrideRows, [])),
   labelTextBulkOverrides: clonePlainObject(drawing.labelTextBulkOverrides)
 });
 
@@ -1436,9 +1444,9 @@ export const createHistorySnapshotService = ({
         drawing.featureVisibilityManualRules
       ),
       featureOverrides: clonePlainObject(drawing.featureOverrides),
-      labelOverrideRows: cloneJsonData(
+      labelOverrideRows: cloneLabelOverrideRows(
         getGeneratedArtifactRef(drawing.canonicalLabelOverrideRows, [])
-      ) || [],
+      ),
       labelTextBulkOverrides: clonePlainObject(drawing.labelTextBulkOverrides)
     };
     const editorState = {
@@ -1809,6 +1817,7 @@ export const createHistorySnapshotService = ({
         featureColorOverrides: drawing.featureColorOverrides,
         featureVisibilityManualRules: drawing.featureVisibilityManualRules,
         featureOverrides: drawing.featureOverrides,
+        labelOverrideRows: getRef(drawing.canonicalLabelOverrideRows, []),
         labelTextBulkOverrides: drawing.labelTextBulkOverrides
       }),
       editorState: buildEditorIntentData({
