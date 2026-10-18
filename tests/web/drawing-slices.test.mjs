@@ -132,19 +132,22 @@ test('install(capture(x)) gives back x, also after reset, on the Session 46 fixt
 // whose views are read-only. This scan covers the untyped holders: in each
 // module outside services/drawing/, a write through `<drawing>.<member>` (an
 // assignment to it, to its `.value`, an element, or a field, a mutating
-// method, `delete`, or `Object.assign` into it) whose receiver is a drawing by
-// name (an identifier that ends in `drawing` or `Drawing`, `activeDrawing()`,
-// `drawings.<mode>`, or `drawings[<mode>]`); and in the template, a `v-model`
-// on a member or on a row of a `v-for` over one (nested rows too), and a
-// handler that writes through either. A name that is a member's (a helper's
-// parameter or a destructured member) counts as the member. Blind spots: an
-// alias under another name (a member or a row held in a local, a slice handle
-// held in a local) and a drawing held under another name; the type checker
-// sees those where the holder is typed.
+// method, `++` or `--`, `delete`, or `Object.assign` into it) whose receiver
+// is a drawing by name (an identifier that ends in `drawing` or `Drawing`,
+// `activeDrawing()`, `drawings.<mode>`, or `drawings[<mode>]`), and any write
+// through a drawing's computed key (`drawing[key]`, which may name a member);
+// and in the template, a `v-model` (or `v-model:<arg>`) on a member or on a
+// row of a `v-for` over one (nested rows too), and a handler that writes
+// through either. A name that is a member's (a helper's parameter or a
+// destructured member) counts as the member. Blind spots: an alias under
+// another name (a member or a row held in a local, a slice handle held in a
+// local) and a drawing held under another name; the type checker sees those
+// where the holder is typed.
 // The settings are not scanned: their controls write them (plan-r2 §13 item 3).
 const MEMBERS = SLICES.flatMap(([, slice]) => slice.members).filter((member) => DRAWING_EDITOR_KEYS.includes(member));
 const MUTATING_METHODS = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin', 'add', 'delete', 'clear', 'set'];
-const ASSIGNMENT = /^\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])/;
+const ASSIGNMENT = /^\s*(?:(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])|\+\+|--)/;
+const PREFIX_WRITE = /(?:\bdelete|\+\+|--)\s*$/;
 const DRAWING_RECEIVER = /(?:[\w$]*[dD]rawing|activeDrawing\s*\(\s*\)|drawings\s*(?:\??\.\s*[\w$]+|\[[^\]]*\]))\s*\??$/;
 // Comments and quoted strings blanked, so offsets stay and prose is no writer.
 const codeOnly = (source) => source.replace(
@@ -167,9 +170,16 @@ export const memberWriteSites = (source, members = MEMBERS) => {
     const receiver = before.match(/[\w$]+(?:\(\s*\))?(?:\??\.[\w$]+(?:\(\s*\))?|\[[^\]]*\])*\??$/)?.[0] ?? '';
     const start = match.index - receiver.length;
     const writes = writesThrough(code.slice(match.index + match[0].length))
-      || /\bdelete\s+$/.test(code.slice(0, start))
+      || PREFIX_WRITE.test(code.slice(0, start))
       || /\bObject\.assign\s*\(\s*$/.test(code.slice(0, start));
     return writes ? [`${match[1]}:${lineOf(code, match.index)}`] : [];
+  });
+  // A drawing's computed key may name any member: a write through it counts.
+  const computedKey = [...code.matchAll(/(?:[\w$]*[dD]rawing|activeDrawing\s*\(\s*\))\s*(?:\?\.)?\s*\[[^\]]*\]/g)].flatMap((match) => {
+    const before = code.slice(0, match.index);
+    const writes = writesThrough(code.slice(match.index + match[0].length))
+      || PREFIX_WRITE.test(before) || /\bObject\.assign\s*\(\s*$/.test(before);
+    return writes ? [`[computed]:${lineOf(code, match.index)}`] : [];
   });
   // A name that is a member's (a parameter, a destructured member, an alias
   // under its name): a write through it, `delete`, or `Object.assign` into it.
@@ -178,11 +188,11 @@ export const memberWriteSites = (source, members = MEMBERS) => {
     const before = code.slice(0, match.index);
     const after = code.slice(match.index + match[0].length);
     const step = /^\s*(?:\??\.|\[)/.test(after);
-    const writes = (step && (writesThrough(after) || /\bdelete\s+$/.test(before)))
+    const writes = (step && (writesThrough(after) || PREFIX_WRITE.test(before)))
       || /\bObject\.assign\s*\(\s*$/.test(before);
     return writes ? [`${match[1]}:${lineOf(code, match.index)}`] : [];
   });
-  return [...sites, ...bare].sort((left, right) => Number(left.split(':')[1]) - Number(right.split(':')[1]));
+  return [...sites, ...computedKey, ...bare].sort((left, right) => Number(left.split(':')[1]) - Number(right.split(':')[1]));
 };
 
 // The markup of the element whose start tag holds `index` (a void element: its tag).
@@ -197,7 +207,7 @@ const elementRange = (html, index) => {
   }
   return [start, html.length];
 };
-const BINDINGS = /\s(v-model(?:\.[\w.]+)?|@[\w.:-]+|v-on:[\w.:-]+)="([^"]*)"/g;
+const BINDINGS = /\s(v-model(?::[\w-]+)?(?:\.[\w.]+)?|@[\w.:-]+|v-on:[\w.:-]+)="([^"]*)"/g;
 
 export const templateMemberWrites = (html, members = MEMBERS) => {
   /** Rows of a `v-for` over a member or over another such row, by the element range they name. */
@@ -242,14 +252,19 @@ test('the slice write scan flags a planted write and leaves reads alone', () => 
     `  delete otherDrawing?.${member}[key];`,
     `  Object.assign(state.drawings.circular.${other}, next);`,
     `  state.drawings[mode].${other}.value.top = 1;`,
+    `  drawing.${member}.count++;`,
+    `  --state.activeDrawing().${other}.value.top;`,
+    `  state.activeDrawing()[key].value = value;`,
+    `  delete drawing[key];`,
     `};`,
     `const read = (drawing, saved) => {`,
     `  // drawing.${member}.push(row) in prose is no writer`,
     `  saved.${member} = drawing.${member}.map((row) => row);`,
-    `  return drawing.${member}.length === 0 || drawing.${member}.includes(row);`,
+    `  return drawing.${member}.length === 0 || drawing.${member}.includes(row) || drawing[key] === state.drawings[mode];`,
     `};`
   ].join('\n'), [member, other]);
-  assert.deepEqual(writes, [`${member}:2`, `${member}:3`, `${member}:4`, `${other}:5`, `${other}:6`]);
+  assert.deepEqual(writes, [`${member}:2`, `${member}:3`, `${member}:4`, `${other}:5`, `${other}:6`, `${member}:7`, `${other}:8`,
+    '[computed]:9', '[computed]:10']);
   // A helper that holds a member under its name (the M3.9 blind spot).
   assert.deepEqual(memberWriteSites([
     `const prune = ({ ${member} = {}, ${other} }, key) => {`,
@@ -265,6 +280,8 @@ test('the slice write scan flags a planted write and leaves reads alone', () => 
   assert.equal(templateMemberWrites(rows('<input v-model="item.label">'), [member]).length, 1);
   assert.equal(templateMemberWrites(rows('<button @click="set.rows.splice(index, 1)"></button>'), [member]).length, 1);
   assert.equal(templateMemberWrites(`<input v-model.number="${member}.top">`, [member]).length, 1);
+  assert.equal(templateMemberWrites(`<color-field v-model:color="${member}.top"></color-field>`, [member]).length, 1);
+  assert.equal(templateMemberWrites(`<button @click="${member}.count++"></button>`, [member]).length, 1);
   assert.equal(templateMemberWrites('<div v-for="item in list"><input v-model="item.label"></div>', [member]).length, 0);
 });
 

@@ -6622,15 +6622,19 @@ export const createAppSetup = () => {
   });
 
   // The template's names for the members of the shown mode's drawing: a ref
-  // member reads and writes its value, any other member is the object itself.
+  // member is its value, any other member the object itself. Only a setting's
+  // ref takes a write, its control's (plan-r2 §13 item 3); an editor member's
+  // writers are ports, and a derived value is read-only.
   /** @param {keyof DrawingState} key */
-  const drawingMember = (key) => (isRef(state.activeDrawing()[key])
-    ? computed({
+  const drawingMember = (key) => {
+    if (!isRef(state.activeDrawing()[key])) return computed(() => state.activeDrawing()[key]);
+    if (!(/** @type {readonly string[]} */ (SETTINGS_SLICE.members)).includes(key)) return computed(() => state.activeDrawing()[key].value);
+    return computed({
       get: () => state.activeDrawing()[key].value,
       /** @param {unknown} value */
-      set: (value) => { state.activeDrawing()[key].value = value; }
-    })
-    : computed(() => state.activeDrawing()[key]));
+      set: (value) => SETTINGS_SLICE.install(state.activeDrawing().slices.settings, { [key]: value })
+    });
+  };
 
   // The default colors of the feature types the shown figure draws,
   // and the user's own default colors, come first; the others wait under More.

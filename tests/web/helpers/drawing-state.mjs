@@ -26,21 +26,11 @@ export const DRAWING_SLICES = Object.freeze({
   settings: SETTINGS_SLICE
 });
 
-export const DRAWING_DRAFT_KEYS = Object.freeze([
-  'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',
-  'linearRecordLayoutEnabled', 'linearRecordGap', 'linearRecordRows', 'recordDisplayDrafts', 'recordsOff',
-  'unmanagedConfigOverrides', 'importedComparisonIntent', 'layoutPreferences', 'linearTypographyLinked'
-]);
-
-export const DRAWING_EDITOR_KEYS = Object.freeze([
-  'featureOverrides', 'featurePlacementOverrides', 'featureColorOverrides', 'featureStrokeOverrides',
-  'featureVisibilityManualRules', 'labelTextBulkOverrides', 'canonicalLabelOverrideRows', 'legendEntries',
-  'deletedLegendEntries', 'dormantLegendEntries', 'legendColorOverrides', 'legendStrokeOverrides', 'addedLegendCaptions',
-  'fileLegendCaptions', 'manualSpecificRules', 'manualPriorityRules', 'filterMode', 'manualBlacklist',
-  'manualWhitelist', 'selectedPalette', 'currentColors', 'pendingPaletteName', 'pendingPaletteColors',
-  'annotationSets', 'orthogroupNameOverrides', 'orthogroupDescriptionOverrides', 'orthogroupDormantOverrides',
-  'canvasPadding'
-]);
+// The members of a drawing, as its slices name them: the settings (the draft
+// keys) and the editor slices' members, in the order the drawing spreads them.
+export const DRAWING_DRAFT_KEYS = SETTINGS_SLICE.members;
+export const DRAWING_EDITOR_KEYS = Object.freeze(Object.entries(DRAWING_SLICES)
+  .filter(([name]) => name !== 'settings').flatMap(([, slice]) => slice.members));
 
 // Computed from the members above (and project inputs); each drawing derives its own.
 export const DRAWING_DERIVED_KEYS = Object.freeze([

@@ -1064,35 +1064,22 @@ const createDrawingState = (drawingMode) => {
   return Object.freeze({
     // Settings
     ...settings.view,
-    // Editor edits
-    // Per-feature edits and Feature placements keyed by original-source
-    // identity (design Q4, R2; services/feature-placement.js owns the row shape).
-    ...featureEdits.view,
-    // The paint intent (R2): feature and Legend colors and strokes, and the
-    // Legend rows (services/drawing/paint.js).
-    featureColorOverrides: paint.view.featureColorOverrides,
-    featureStrokeOverrides: paint.view.featureStrokeOverrides,
+    // Editor edits, slice by slice (services/drawing/): the visibility and
+    // color rules, the palette, the label tables, the annotation sets, the
+    // Similarity group names and dormant names keyed by member set (D-21), the
+    // canvas padding, the per-feature edits and Feature placements keyed by
+    // original-source identity (design Q4, R2), and the paint intent (R2):
+    // feature and Legend colors and strokes, and the Legend rows, with the
+    // renamed rows the last Generate did not draw (OV-120).
     ...visibilityRules.view,
-    labelTextBulkOverrides: labelTables.view.labelTextBulkOverrides,
-    canonicalLabelOverrideRows: labelTables.view.canonicalLabelOverrideRows,
-    legendEntries: paint.view.legendEntries,
-    deletedLegendEntries: paint.view.deletedLegendEntries,
-    // OV-120: renamed rows the last Generate did not draw (GC off, Show Depth
-    // off); their renames apply again when a Generate draws the row.
-    dormantLegendEntries: paint.view.dormantLegendEntries,
-    legendColorOverrides: paint.view.legendColorOverrides,
-    legendStrokeOverrides: paint.view.legendStrokeOverrides,
-    addedLegendCaptions: paint.view.addedLegendCaptions,
     ...colorRules.view,
-    manualPriorityRules: labelTables.view.manualPriorityRules,
-    filterMode: labelTables.view.filterMode,
-    manualBlacklist: labelTables.view.manualBlacklist,
-    manualWhitelist: labelTables.view.manualWhitelist,
     ...palette.view,
+    ...labelTables.view,
     ...annotationSets.view,
-    // Similarity group names, and dormant names keyed by member set (D-21).
     ...groupNames.view,
     ...canvas.view,
+    ...featureEdits.view,
+    ...paint.view,
     // Derived from the members above
     activeLayoutPreferences,
     // The Linear record cards a Generate draws, in file order (read-only; the
