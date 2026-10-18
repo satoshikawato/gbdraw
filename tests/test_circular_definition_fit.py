@@ -337,6 +337,31 @@ def test_the_definition_band_failure_starts_its_band_at_the_reserve(tmp_path: Pa
         "Circular track slot 'ticks' cannot fit inside between 122.6px and 386.1px "
         "because the center definition text reserves 122.6px."
     ) in str(error)
-    assert "set a smaller center_reserved_radius, hide the scale (--hide_scale), or place tracks outside." in str(error)
+    assert "set a smaller center_reserved_radius, hide the scale (--hide_scale; with an explicit track list, remove the ticks slot), or place tracks outside." in str(error)
     context = serialize_web_error(error, operation="generate", stage="render")["context"]
     assert (context["innerPx"], context["outerPx"], context["slotTrack"]) == (123, 386, "ticks")
+
+
+@pytest.mark.circular
+def test_the_scale_remedy_names_the_ticks_slot_of_an_explicit_track_list(tmp_path: Path) -> None:
+    """OV-1276 (review B-1): with an explicit track list --hide_scale leaves an enabled ticks slot, so the remedy says so."""
+
+    error = _lambda_resolved_overlaps(tmp_path, "--no-gc", "--no-skew", "--circular_track_order", "features,ticks")
+    assert "'ticks' cannot fit inside" in str(error)
+    assert "hide the scale (--hide_scale; with an explicit track list, remove the ticks slot)" in str(error)
+
+
+def test_a_kept_scale_row_adds_no_scale_remedy() -> None:
+    """OV-1276 (review N-1): the scale is offered only when it is the failed slot; a kept GC row is still offered."""
+
+    from gbdraw.diagrams.circular.radial_layout import PlacementWindow, _InsideFitError, _KeptInsideSlot
+
+    window = PlacementWindow(
+        200,
+        386,
+        kept_inside_px=40,
+        kept_inside_slots=(_KeptInsideSlot("ticks", "ticks"), _KeptInsideSlot("gc_content", "dinucleotide_content")),
+    )
+    message = str(_InsideFitError("slot", intent=None, placement_window=window))
+    assert "turn off or narrow the GC content track (--no-gc, --gc_content_width)" in message
+    assert "--hide_scale" not in message

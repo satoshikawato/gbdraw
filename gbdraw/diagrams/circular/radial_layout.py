@@ -79,7 +79,7 @@ class _SwitchedTrack:
 _SWITCHED_TRACKS: Mapping[str, _SwitchedTrack] = {
     "dinucleotide_content": _SwitchedTrack("gc_content", "GC content", "--no-gc", "--gc_content_width"),
     "dinucleotide_skew": _SwitchedTrack("gc_skew", "GC skew", "--no-skew", "--gc_skew_width"),
-    "ticks": _SwitchedTrack("ticks", "scale", "--hide_scale"),
+    "ticks": _SwitchedTrack("ticks", "scale", "--hide_scale; with an explicit track list, remove the ticks slot"),
 }
 # Their diagnostic identifiers: the vocabulary of the Web error adapter.
 SWITCHED_TRACK_IDS: frozenset[str] = frozenset(track.diagnostic_id for track in _SWITCHED_TRACKS.values())
@@ -129,12 +129,12 @@ class PlacementWindow:
 
     @property
     def kept_switched_tracks(self) -> tuple[_SwitchedTrack, ...]:
-        """The rows with an off option among the rows kept inside, each once, in slot order."""
+        """The narrowable rows (GC) among the rows kept inside, each once, in slot order; the scale is offered only when it fails."""
 
         if self.kept_inside_px <= LAYOUT_EPSILON:
             return ()
         tracks = (_SWITCHED_TRACKS.get(slot.renderer) for slot in self.kept_inside_slots)
-        return tuple(dict.fromkeys(track for track in tracks if track is not None))
+        return tuple(dict.fromkeys(track for track in tracks if track is not None and track.width_option is not None))
 
 
 @dataclass(frozen=True)

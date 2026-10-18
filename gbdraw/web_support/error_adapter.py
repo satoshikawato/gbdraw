@@ -227,7 +227,7 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
         if known:
             context["keptInsideTracks"] = ",".join(dict.fromkeys(known))
     slot_track = diagnostic.get("slotTrack")
-    if diagnostic["code"] == "TRACK_LAYOUT" and slot_track in SWITCHED_TRACK_IDS:
+    if diagnostic["code"] == "TRACK_LAYOUT" and isinstance(slot_track, str) and slot_track in SWITCHED_TRACK_IDS:
         context["slotTrack"] = slot_track
     # Python words the label fit counts (gbdraw.labels.fit); the Web shows the sentence as sent.
     counts = diagnostic.get("labelFitCounts")

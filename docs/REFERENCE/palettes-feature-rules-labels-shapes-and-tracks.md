@@ -98,10 +98,12 @@ the room kept for the tracks inside it and offers turning the GC tracks off or
 narrowing them (`--no-gc`, `--no-skew`, `--gc_content_width`,
 `--gc_skew_width`; in the web app, **Hide GC Content**, **Hide GC Skew**,
 **GC Content Width**, **GC Skew Width**, or the row widths when Custom Track
-Slots is on). When the scale ticks are the slot that could not be placed, the
-error also offers hiding the scale (`--hide_scale`; in the web app, clear
-**Show Coordinate Scale**, or remove the Ticks row when Custom Track Slots is
-on).
+Slots is on). When a GC row is the slot that could not be placed, the error offers turning
+that row off or narrowing it. When the scale ticks are the slot that could not
+be placed, the error also offers hiding the scale (`--hide_scale`; with an
+explicit track list, `--hide_scale` does not remove an enabled ticks slot, so
+remove the ticks slot; in the web app, clear **Show Coordinate Scale**, or
+remove the Ticks row when Custom Track Slots is on).
 
 GC-content mode can show deviation from the record mean or an absolute
 percentage. Window and step control smoothing and sampling: larger values
