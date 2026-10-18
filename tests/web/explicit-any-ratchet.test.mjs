@@ -34,7 +34,7 @@ import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.
 const EXPLICIT_ANY_BASELINE = {
   'app/annotations.js': 8,
   'app/annotations/record-catalog.js': 3,
-  'app/app-setup.js': 14,
+  'app/app-setup.js': 13,
   'app/candidate-render.js': 1,
   'app/circular-track-slots.js': 4,
   'app/feature-editor.js': 21,

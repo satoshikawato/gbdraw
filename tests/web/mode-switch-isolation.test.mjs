@@ -170,6 +170,24 @@ test('the mode transition writes no drawing member and commits no Result edit', 
     'app-setup.js runs no profile transition on a switch');
 });
 
+// The text of every `watch(...)` call in app-setup.js (balanced parentheses).
+const appSetupWatchCalls = () => [...APP_SETUP.matchAll(/\bwatch\(/g)].map(({ index }) => {
+  let depth = 0;
+  for (let end = index + 'watch'.length; end < APP_SETUP.length; end += 1) {
+    if (APP_SETUP[end] === '(') depth += 1;
+    if (APP_SETUP[end] === ')' && --depth === 0) return APP_SETUP.slice(index, end + 1);
+  }
+  throw new Error(`the watch call at ${index} has no end`);
+});
+// The settings fits that were watchers: each control, Reset, and setup call them (A2).
+const SETTINGS_FITS = /\bensureDepthTrackConfigCount\b/;
+
+test('no app-setup watcher fits a drawing\'s settings (A2: Depth series)', () => {
+  const calls = appSetupWatchCalls();
+  assert.ok(calls.length > 0, 'the watch calls were found');
+  assert.deepEqual(calls.filter((text) => SETTINGS_FITS.test(text)).map((text) => text.slice(0, 160)), []);
+});
+
 test('the Depth panels read the drawing series and never write them (OV-109)', () => {
   for (const name of ['rowsForDepthTrackCount', 'circularDepthTrackRows', 'linearDepthTrackRows', 'depthTrackRows',
     'readDepthTrackConfig', 'getDepthTrackLabel', 'getDepthTrackColor']) {

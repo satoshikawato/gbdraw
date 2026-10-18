@@ -1150,10 +1150,11 @@ state.featureListScrollTop.value = 144;
 state.semanticFileWatchersSuppressed.value = true;
 
 const depthTrackUiCounts = { circular: 2 };
-const depthTracks = [
-  { label: 'Keep depth 1' },
-  { label: 'Keep depth 2' }
-];
+const keptDepthSeries = (label, color) => ({
+  label, color, height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null
+});
+state.activeDrawing().adv.depth_tracks.splice(0, state.activeDrawing().adv.depth_tracks.length,
+  keptDepthSeries('Keep depth 1', '#4A90E2'), keptDepthSeries('Keep depth 2', '#E45756'));
 const featureListScrollRef = { value: { scrollTop: 144 } };
 const selectedPairwiseBlockOrthogroupId = { value: 'keep-orthogroup' };
 // E1: the other mode's stashed artifact comes back by reference.
@@ -1166,7 +1167,6 @@ const sessionImportRollbackState = createSessionImportRollbackState({
   captureDisplayedArtifact: () => displayedArtifact,
   installDisplayedArtifact: (slot) => installedArtifacts.push(slot),
   depthTrackUiCounts,
-  depthTracks,
   featureListScrollTop: state.featureListScrollTop,
   featureListScrollRef,
   selectedPairwiseBlockOrthogroupId
@@ -1239,7 +1239,6 @@ const rollbackState = () => ({
   plotTitleDragStart: { ...state.plotTitleDragStart },
   plotTitleAutoTransform: structuredClone(state.plotTitleAutoTransform.value),
   circularDepthTrackUiCount: depthTrackUiCounts.circular,
-  depthTracks: structuredClone(depthTracks),
   featureListScrollTop: state.featureListScrollTop.value,
   featureListElementScrollTop: featureListScrollRef.value.scrollTop,
   selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
@@ -1328,9 +1327,10 @@ try {
         state.featureListScrollTop.value = 0;
         featureListScrollRef.value.scrollTop = 0;
         selectedPairwiseBlockOrthogroupId.value = '';
-        depthTracks.splice(
+        // OV-1165: the restored document brings back the drawing's series.
+        state.activeDrawing().adv.depth_tracks.splice(
           0,
-          depthTracks.length,
+          state.activeDrawing().adv.depth_tracks.length,
           ...Array.from({ length: 5 }, (_, index) => ({
             label: `Imported depth ${index + 1}`
           }))

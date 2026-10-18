@@ -96,7 +96,6 @@ import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gal
 import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
-import { cloneJsonData } from '../services/json-clone.js';
 import {
   groupLinearSourceRecords,
   linearCardFileFields,
@@ -340,7 +339,6 @@ const loadExportService = () => {
  * @property {(slot: Readonly<ArtifactSlot>) => void} installDisplayedArtifact
  *   Installs a captured slot after the import rollback restored the document.
  * @property {{ circular: number }} depthTrackUiCounts
- * @property {Record<string, any>[]} depthTracks
  * @property {{ value: number }} featureListScrollTop
  * @property {{ value: HTMLElement | null }} featureListScrollRef
  * @property {{ value: string }} selectedPairwiseBlockOrthogroupId
@@ -354,7 +352,6 @@ const loadExportService = () => {
  * @property {ReadonlyMap<DrawingId, Readonly<ArtifactSlot>>} artifactSlots
  * @property {Readonly<ArtifactSlot>} displayedArtifact
  * @property {number} circularDepthTrackUiCount
- * @property {SessionImportRollbackOptions['depthTracks']} depthTracks
  * @property {number} featureListScrollTop
  * @property {string} selectedPairwiseBlockOrthogroupId
  * @property {unknown} [specificRulePatternDrafts] The unsaved rule pattern drafts, as the feature editor captured them; handed back as they are.
@@ -366,7 +363,6 @@ export const createSessionImportRollbackState = ({
   captureDisplayedArtifact,
   installDisplayedArtifact,
   depthTrackUiCounts,
-  depthTracks,
   featureListScrollTop,
   featureListScrollRef,
   selectedPairwiseBlockOrthogroupId,
@@ -379,7 +375,6 @@ export const createSessionImportRollbackState = ({
     // match-sequence owner, committed Session and CLI helper files.
     displayedArtifact: captureDisplayedArtifact(),
     circularDepthTrackUiCount: depthTrackUiCounts.circular,
-    depthTracks: cloneJsonData(depthTracks),
     featureListScrollTop: featureListScrollTop.value,
     selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
@@ -388,12 +383,8 @@ export const createSessionImportRollbackState = ({
     artifactSlots.clear();
     snapshot.artifactSlots.forEach((slot, id) => artifactSlots.set(id, slot));
     installDisplayedArtifact(snapshot.displayedArtifact);
+    // The restored document holds each drawing's Depth series (OV-1165).
     depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
-    depthTracks.splice(
-      0,
-      depthTracks.length,
-      ...cloneJsonData(snapshot.depthTracks)
-    );
     await nextTick();
     featureListScrollTop.value = snapshot.featureListScrollTop;
     if (featureListScrollRef.value) {
@@ -2822,24 +2813,15 @@ export const createAppSetup = () => {
       linearTrackSlotEditor.normalizeLinearTrackSlots();
     });
   };
-  watch(
-    () => [
-      files.c_depth,
-      linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth).length).join(','),
-      linearSeqs.map((seq) => seq.uid).join(','),
-      depthTrackUiCounts.circular
-    ],
-    () => {
-      depthTrackUiCounts.circular = Math.max(
-        depthTrackUiCounts.circular,
-        sourceDepthTrackCount(files.c_depth, 1)
-      );
-      // Each drawing holds a series for each of its own mode's Depth sources.
-      ensureDepthTrackConfigCount(state.drawings.circular, activeDepthTrackCount('circular'));
-      ensureDepthTrackConfigCount(state.drawings.linear, activeDepthTrackCount('linear'));
-    },
-    { deep: true, immediate: true }
-  );
+  // Each drawing holds a series for each of its own mode's Depth sources: a
+  // new drawing at setup and after Reset Settings. Each Depth control fits its
+  // drawing itself; Load and History restore install the saved or captured
+  // series (OV-1164).
+  const fitDepthSeriesToSources = () => {
+    ensureDepthTrackConfigCount(state.drawings.circular, activeDepthTrackCount('circular'));
+    ensureDepthTrackConfigCount(state.drawings.linear, activeDepthTrackCount('linear'));
+  };
+  fitDepthSeriesToSources();
   /** @param {DrawingState} drawing */
   const isCircularConservationUploadSource = (drawing) => (
     String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
@@ -3653,7 +3635,6 @@ export const createAppSetup = () => {
         drawing: state.drawings[slot.drawingId], ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
       }),
       depthTrackUiCounts,
-      depthTracks: state.activeDrawing().adv.depth_tracks,
       featureListScrollTop,
       featureListScrollRef,
       selectedPairwiseBlockOrthogroupId,
@@ -5276,8 +5257,7 @@ export const createAppSetup = () => {
       circularTrackNewRenderer.value = 'dinucleotide_skew';
       linearTrackNewRenderer.value = 'dinucleotide_skew';
       depthTrackUiCounts.circular = 1;
-      ensureDepthTrackConfigCount(state.drawings.circular, activeDepthTrackCount('circular'));
-      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
+      fitDepthSeriesToSources();
       if (shown) {
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({
