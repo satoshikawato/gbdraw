@@ -132,7 +132,7 @@ const hold = () => {
   };
   return { evaluate, ready, release: () => release() };
 };
-for (const change of ['new edit', 'new keystroke', 'remove', 'reorder', 'drawer', 'mode cycle', 'catalog', 'Result', 'document', 'Session pending']) {
+for (const change of ['new edit', 'new keystroke', 'remove', 'reorder', 'drawer', 'mode cycle', 'document', 'Session pending']) {
   test(`held old edit cannot commit after ${change}`, async () => {
     const gate = hold(); const s = setup({ evaluate: gate.evaluate });
     s.state.manualSpecificRules.push(rule('other'));
@@ -147,8 +147,6 @@ for (const change of ['new edit', 'new keystroke', 'remove', 'reorder', 'drawer'
     if (change === 'reorder') await s.actions.moveSpecificRuleDown(0);
     if (change === 'drawer') s.actions.suspendSpecificRulePatternDrafts();
     if (change === 'mode cycle') { s.actions.suspendSpecificRulePatternDrafts(); s.state.mode.value = 'linear'; s.state.mode.value = 'circular'; }
-    if (change === 'catalog') s.state.extractedFeatures.value = [];
-    if (change === 'Result') s.state.svgResultIdentity.value = 'replaced';
     if (change === 'document') s.actions.clearSpecificRulePatternDrafts();
     if (change === 'Session pending') { s.actions.suspendSpecificRulePatternDrafts(); s.setAvailable(false); }
     const current = s.stable();
@@ -163,6 +161,24 @@ for (const change of ['new edit', 'new keystroke', 'remove', 'reorder', 'drawer'
     if (change === 'new edit') assert.equal(s.state.manualSpecificRules[0].val, '(?P<enzyme>NADH)');
     if (change === 'new keystroke') assert.equal(s.actions.specificRulePattern(s.row), '[new');
     if (change === 'drawer') assert.equal(s.actions.specificRulePatternDraft(s.row).pending, false);
+  });
+}
+
+// OV-1133 (S4-Q5): a catalog or Result that the automatic rerender replaces
+// while the edit prepares makes that preparation stale, not the edit: the
+// edit prepares again against the new inputs and commits once.
+for (const change of ['catalog', 'Result']) {
+  test(`held edit prepares again after a ${change} replacement and commits once`, async () => {
+    const gate = hold(); const s = setup({ evaluate: gate.evaluate });
+    const pending = s.actions.setSpecificRuleField(0, 'val', '(?i)NADH');
+    await gate.ready;
+    if (change === 'catalog') s.state.extractedFeatures.value = [{ type: 'CDS', svg_id: 'two', qualifiers: { product: ['nadh'] } }];
+    if (change === 'Result') s.state.svgResultIdentity.value = 'replaced';
+    gate.release();
+    assert.equal(await pending, true);
+    assert.equal(s.state.manualSpecificRules[0].val, '(?i)NADH');
+    assert.equal(s.actions.specificRulePatternDraft(s.row), null);
+    assert.equal(s.history.length, 1);
   });
 }
 

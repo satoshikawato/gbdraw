@@ -50,6 +50,7 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
 /** @typedef {Partial<VisibilityScope> & { id: string }} VisibilityScopeChoice A scope, or the bare `feature` scope. */
 
 /** @typedef {{ reflow?: boolean, rerender?: boolean, labels?: boolean }} LabelFollowOptions */
+/** @typedef {{ updated: boolean, needsRerender: boolean }} DrawnProjection Whether the Result changed, and whether the rerender must draw a feature or the Legend. */
 
 /**
  * The label owner's reaction the composition root registers once that owner exists.
@@ -326,6 +327,7 @@ export const createFeatureVisibilityActions = ({
    * @param {DrawingState} drawing
    * @param {VisibilityTarget[]} features
    * @param {{ targeted?: boolean, legend?: boolean, show?: boolean }} [projection]
+   * @returns {DrawnProjection}
    */
   const projectDrawn = (drawing, features, { show = true, ...projection } = {}) => ({
     updated: show ? showEditorIntent({ domains: VISIBILITY_DOMAINS }) : true,
@@ -461,25 +463,31 @@ export const createFeatureVisibilityActions = ({
   // rejects (an invalid regex) changes nothing, as a failed Generate keeps its
   // Result, and reports Generate's error until a projection reads a table that
   // Generate accepts. A later projection supersedes one that still waits for
-  // its matches. Resolves to `projectDrawn`'s answer, or null when it projects
-  // nothing.
+  // its matches (`superseded`: the later one shows the matches). Resolves to
+  // `projectDrawn`'s answer, or says why it projected nothing.
+  /**
+   * @typedef {{ status: 'projected', projection: DrawnProjection } | { status: 'superseded' | 'rejected' }} VisibilityProjectionOutcome
+   */
   let projectionRun = 0;
   /** @type {unknown} */
   let ruleTableError = null;
-  /** @param {DrawingState} drawing */
+  /**
+   * @param {DrawingState} drawing
+   * @returns {Promise<VisibilityProjectionOutcome>}
+   */
   const runProjection = async (drawing, { legend = true, show = true } = {}) => {
     const run = ++projectionRun;
     const prepared = /** @type {any} */ (await prepareDrawn());
-    if (run !== projectionRun) return null;
+    if (run !== projectionRun) return { status: prepared?.error ? 'rejected' : 'superseded' };
     if (prepared?.error) {
-      if (!state.errorLog) return null;
+      if (!state.errorLog) return { status: 'rejected' };
       state.errorLog.value = normalizeUserFacingError(prepared.error, { operation: 'evaluateRules', stage: 'rule-validation' });
       ruleTableError = state.errorLog.value; // As the error log holds it (a reactive copy).
-      return null;
+      return { status: 'rejected' };
     }
     if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
     ruleTableError = null;
-    return projectDrawn(drawing, displayedFeatures(), { legend, show });
+    return { status: 'projected', projection: projectDrawn(drawing, displayedFeatures(), { legend, show }) };
   };
 
   // The one projection of this domain (R3), which History apply, the display
@@ -496,7 +504,8 @@ export const createFeatureVisibilityActions = ({
   // its own compile passes `show: false`.
   const projectFeatureVisibility = async ({ rerender = false, reflow = false, show = true, labels = false } = {}) => {
     const drawing = state.activeDrawing();
-    const projection = await runProjection(drawing, { legend: rerender, show });
+    const outcome = await runProjection(drawing, { legend: rerender, show });
+    const projection = outcome.status === 'projected' ? outcome.projection : null;
     const drawsMissing = rerender && Boolean(projection?.needsRerender);
     if (labels || (projection && (projection.updated || reflow || drawsMissing))) {
       followLabels({ reflow: reflow && Boolean(projection), rerender: drawsMissing, labels });
@@ -514,7 +523,9 @@ export const createFeatureVisibilityActions = ({
   // were (a rule added, or a field set before its value) projects nothing.
   // A rerender that runs when the rules change may have read the old ones and
   // is about to replace the Result this edit is decided against, so the edit
-  // asks for one more, which the running one coalesces (OV-330).
+  // asks for one more, which the running one coalesces (OV-330). It asks also
+  // when a later projection superseded its own, as the display of that
+  // rerender's Result does (OV-1134), but not for a table Generate rejects.
   /**
    * @param {DrawingState} drawing
    * @param {(rules: FeatureVisibilityRuleDraft[]) => boolean | void} edit Changes the copy; false writes nothing.
@@ -528,8 +539,9 @@ export const createFeatureVisibilityActions = ({
     drawing.featureVisibilityManualRules.splice(0, drawing.featureVisibilityManualRules.length, ...rules);
     if (JSON.stringify(requestFeatureVisibilityRules(rules)) === requested) return true;
     const rerendering = Boolean(state.labelReflowProcessing?.value);
-    const projection = await runProjection(drawing);
-    const rerender = Boolean(projection?.needsRerender) || (Boolean(projection) && rerendering);
+    const outcome = await runProjection(drawing);
+    const projection = outcome.status === 'projected' ? outcome.projection : null;
+    const rerender = Boolean(projection?.needsRerender) || (rerendering && outcome.status !== 'rejected');
     if (projection?.updated || rerender) followLabels({ rerender });
     return true;
   };

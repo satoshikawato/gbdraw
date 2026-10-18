@@ -5,7 +5,7 @@
 // Session has not changed since it started. Controls are selected by CSS.
 const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise, generateAndWaitForResult, settleLive } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
 const { open, addColorRule, addVisibilityRule } = require('./helpers/live-generate-parity-steps.cjs');
@@ -877,6 +877,86 @@ test('tobacco: Reset Settings, then Multi-Record Canvas off, applies the reset p
     expect(after.generationKey, 'no Generate ran').toBe(before.generationKey);
     expect(after.reflowError).toBeNull();
     expect(after.content, 'the Result draws them').not.toBe(reset.content);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// S4-Q5 (design 6.6): an editor edit made while a live setting apply runs
+// waits for that apply, then applies; the Result then equals a Generate from
+// the same draft.
+const COLOR_RULE_PATTERN = 'input[aria-label="Color rule 1 pattern"]';
+const VISIBILITY_RULE = (field) => `[aria-label="Visibility rule 1 ${field}"]`;
+
+// OV-1133: the pattern edit waited for the apply and was then dropped as
+// stale, with its text left in the field as "Not applied".
+test('tobacco: a color rule pattern committed during a Legend font size apply is drawn and equals a Generate (OV-1133)', async ({ browser }) => {
+  test.setTimeout(900_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await generateNow(page);
+    const pattern = page.locator(COLOR_RULE_PATTERN);
+    await reveal(pattern);
+    const before = await facts(page);
+    const value = `${await pattern.inputValue()}|psbA`;
+    const size = nextLegendFont(before.legendFontSizes);
+    await installGate(page);
+    await commitValue(page, LEGEND_FONT, size);
+    await gateEntered(page);
+    await pattern.fill(value);
+    await pattern.press('Tab');
+    await releaseGate(page);
+    await appliedLegendFont(page, size);
+    const rule = await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const row = app.manualSpecificRules[0];
+      return { val: row.val, draft: app.specificRulePatternDraft(row) };
+    });
+    expect(rule, 'the edit is committed and no draft stays').toEqual({ val: value, draft: null });
+    await expect(pattern).toHaveValue(value);
+    expect((await facts(page)).reflowError).toBeNull();
+    await expectLiveEqualsGenerate(page, { label: 'color rule pattern during a Legend font size apply' });
+  } finally {
+    await removeGate(page);
+    await page.context().close();
+  }
+});
+
+// OV-1134: the edit shows psbA, which the apply's Result does not draw (the
+// apply started with the old rule). The display of that Result superseded
+// the edit's projection, and the rerender that must draw psbA never ran.
+test('tobacco: a visibility rule edit during a Legend font size apply equals a Generate (OV-1134)', async ({ browser }) => {
+  test.setTimeout(900_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    // The rule controls are enabled once a Result is shown.
+    await generateNow(page);
+    const add = page.locator('button[aria-label="Add feature visibility rule"]');
+    await reveal(add);
+    await add.click();
+    await reveal(page.locator(VISIBILITY_RULE('value regex')));
+    await page.locator(VISIBILITY_RULE('feature type')).selectOption('CDS');
+    await commitValue(page, VISIBILITY_RULE('qualifier'), 'gene');
+    await commitValue(page, VISIBILITY_RULE('value regex'), '^psbA$');
+    await page.locator(VISIBILITY_RULE('action')).selectOption('off');
+    await settleLive(page);
+    const size = nextLegendFont((await facts(page)).legendFontSizes);
+    await commitValue(page, LEGEND_FONT, size);
+    // The edit as the field commits it, at once once the apply runs.
+    const editedDuringApply = await evaluateWithRetainedPromise(page, async (selector) => {
+      const app = window.__GBDRAW_APP__;
+      const deadline = Date.now() + 60_000;
+      while (!app.labelReflowProcessing && Date.now() < deadline) await new Promise((resolve) => requestAnimationFrame(resolve));
+      const input = document.querySelector(selector);
+      input.value = '^psbB$';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return app.labelReflowProcessing;
+    }, VISIBILITY_RULE('value regex'));
+    expect(editedDuringApply, 'the edit is made while the apply runs').toBe(true);
+    await appliedLegendFont(page, size);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.featureVisibilityManualRules[0].value)).toBe('^psbB$');
+    expect((await facts(page)).reflowError).toBeNull();
+    await expectLiveEqualsGenerate(page, { label: 'visibility rule during a Legend font size apply' });
   } finally {
     await page.context().close();
   }

@@ -594,6 +594,20 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   rerenderState.labelReflowProcessing.value = true;
   await owner.setFeatureVisibilityRuleField(0, 'value', '^(A)$');
   assert.deepEqual(follows, [{ rerender: true }], 'an edit during a rerender asks for one more');
+  // OV-1134: the display of the rerender's Result projects while the edit
+  // still waits for its matches, which supersedes the edit's projection; the
+  // edit still asks for one more rerender.
+  follows.length = 0;
+  const edit = owner.setFeatureVisibilityRuleField(0, 'value', '^((A))$');
+  await owner.projectFeatureVisibility();
+  await edit;
+  assert.deepEqual(follows, [{ rerender: true }], 'a superseded edit during a rerender still asks for one more');
+  // A rule table Generate rejects asks for none: the rerender would fail.
+  rerenderState.biologicalFeatures = ref(catalog.items[0].biologicalFeatures);
+  follows.length = 0;
+  await owner.setFeatureVisibilityRuleField(0, 'value', '[');
+  assert.deepEqual(follows, [], 'a rejected table asks for nothing');
+  assert.ok(rerenderState.errorLog.value, 'and reports why');
 }
 
 console.log('feature visibility action tests passed');
