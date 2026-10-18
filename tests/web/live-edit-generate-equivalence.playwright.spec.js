@@ -178,7 +178,7 @@ for (const mode of MODES) {
       });
     }
     const saved = testInfo.outputPath('live-edits.gbdraw-session.json');
-    await download(page, 'Save Session', saved);
+    await download(page, 'Save Session', saved, { title: '' });
     const reloaded = await load(browser, saved);
     await settle(reloaded);
     await generateAndWaitForResult(reloaded);

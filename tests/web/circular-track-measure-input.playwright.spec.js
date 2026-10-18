@@ -4,7 +4,7 @@ const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const {
-  openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs,
+  openApp, reveal, answerSessionTitle, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs,
   settleLive
 } = require('./helpers/app-lifecycle.cjs');
 
@@ -19,7 +19,7 @@ const prepare = async page => {
   dialogs.set(page, messages);
   page.on('dialog', async dialog => {
     messages.push(dialog.message());
-    await dialog.accept(dialog.type() === 'prompt' ? '' : undefined);
+    await dialog.accept();
   });
   await page.addInitScript(() => {
     window.__C619_EVENTS__ = [];
@@ -114,9 +114,10 @@ const generate = async (page, valid = true) => {
   if (valid) expect(error).toBeNull();
   else expect(error).not.toBeNull();
 };
-const save = async (page, testInfo, name) => {
+const save = async (page, testInfo, name, { title } = {}) => {
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+  if (title !== undefined) await answerSessionTitle(page, title);
   const download = await pending;
   const path = testInfo.outputPath(`${name}.gbdraw-session.json.gz`);
   await download.saveAs(path);
@@ -601,7 +602,7 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
     const before = await snapshot(page);
     expect(before.request).toBeNull();
     expect(before.resultHashes).toEqual([]);
-    const saved = await save(page, testInfo, 'settings-only');
+    const saved = await save(page, testInfo, 'settings-only', { title: '' });
     expect(saved.document.runMetadata).toBeUndefined();
     await freshLoad(browser, testInfo, saved.path, async fresh => {
       const restored = await snapshot(fresh);

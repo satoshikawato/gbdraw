@@ -237,7 +237,6 @@ const changePaletteThroughUi = async (page) => {
 
 const saveSessionThroughUi = async (page) => {
   const downloadPromise = page.waitForEvent('download', { timeout: 180_000 });
-  page.once('dialog', (dialog) => dialog.accept('custom-skew-round-trip'));
   await page.getByRole('button', { name: 'Save Session' }).click();
   const download = await downloadPromise;
   const path = await download.path();

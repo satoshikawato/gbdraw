@@ -185,8 +185,12 @@ for (const mode of ['circular', 'linear']) {
     const audit = await auditButtons(page);
     expect(audit.count).toBeGreaterThan(40);
     expect(audit.problems, 'buttons without a stable author-provided name').toEqual([]);
+    // loadMode opens every disclosure, so the audit above covered the open Row
+    // actions menus: a row's Axis moves are items named by their text inside
+    // the row's group (Owner decision 2026-10-18).
     const move = mode === 'circular' ? 'Move outside Axis' : 'Move above Axis';
-    await expect(page.getByRole('button', { name: new RegExp(`^${mode} track slot \\S+ ${move}$`, 'i') }).first()).toBeVisible();
+    const row = page.locator(`[data-capture^="${mode}-track-slot-"]:visible`).first();
+    await expect(row.locator('.track-slot-row-menu').getByRole('button', { name: move, exact: true })).toBeVisible();
     expect(await auditStateNames(page), 'button names that change with state').toEqual([]);
   });
 

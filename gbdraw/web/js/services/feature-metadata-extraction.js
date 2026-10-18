@@ -1,6 +1,6 @@
 // @ts-check
 import { runFeatureExtraction } from './diagram-generation.js';
-import { diagnosticError } from '../utils/error-normalization.js';
+import { linearCardRegion } from './record-options.js';
 import { cloneJsonValue } from './json-clone.js';
 import { cloneFileBytesForTransfer } from './file-content-cache.js';
 
@@ -286,27 +286,16 @@ const biologicalFeaturesFromExtraction = (featData) => (
     : (Array.isArray(featData?.features) ? featData.features : [])
 );
 
-/** @param {unknown} value */
-const hasRegionValue = (value) => value !== null && value !== undefined && value !== '';
-
 /**
- * Linear card region endpoints: null when unset, else validated numbers.
+ * Linear card region endpoints: null when unset, else validated numbers
+ * (`linearCardRegion` reads the fields); a region Generate cannot draw throws.
  * @param {Pick<LinearRegionSeq, 'region_start' | 'region_end'>} seq
  * @param {number} idx
  */
 export const resolveLinearRegionBounds = (seq, idx) => {
-  const hasStart = hasRegionValue(seq.region_start);
-  const hasEnd = hasRegionValue(seq.region_end);
-  /** @param {string} reason */
-  const invalid = (reason) => diagnosticError('REGION_INVALID', { inputOrdinal: idx + 1, reason });
-  if (hasStart !== hasEnd) throw invalid('BOTH_ENDPOINTS');
-  if (!hasStart) return null;
-  const start = Number(seq.region_start);
-  const end = Number(seq.region_end);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) throw invalid('FINITE');
-  if (!Number.isInteger(start) || !Number.isInteger(end)) throw invalid('INTEGER');
-  if (start < 1 || end < 1) throw invalid('POSITIVE_INTEGER');
-  return { start, end };
+  const region = linearCardRegion(seq, idx + 1);
+  if (region && 'error' in region) throw region.error;
+  return region;
 };
 
 /**

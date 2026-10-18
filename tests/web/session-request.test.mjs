@@ -928,9 +928,10 @@ assert.equal(
 );
 
 const invalidCircularCases = [
-  [{ circular_region_start: 3, circular_region_end: null }, /requires both Start and End/],
-  [{ circular_region_start: 8, circular_region_end: 3 }, /must not exceed End/],
-  [{ circular_region_start: 3, circular_region_end: 19 }, /exceeds the selected record length/],
+  [{ circular_region_start: 3, circular_region_end: null }, { code: 'REGION_INVALID', context: { field: 'region', reason: 'BOTH_ENDPOINTS' } }],
+  [{ circular_region_start: 8, circular_region_end: 3 }, { code: 'REGION_INVALID', context: { field: 'region', reason: 'ORDER' } }],
+  // OV-1097: a region that starts after the record (18 bp) ends is refused, as Python refuses it.
+  [{ circular_region_start: 19, circular_region_end: 25 }, { code: 'REGION_INVALID', context: { field: 'region', reason: 'RECORD_BOUNDS' } }],
   [{ circular_record_selector: 'missing-record', circular_region_start: null, circular_region_end: null }, { code: 'RECORD_SELECTION', context: { reason: 'NO_MATCH' } }]
 ];
 for (const [overrides, message] of invalidCircularCases) {
@@ -942,6 +943,13 @@ for (const [overrides, message] of invalidCircularCases) {
   });
   assert.throws(() => buildCanonicalRenderRequest({ state, filesData }), message);
 }
+// OV-1097 (Owner decision 2026-10-18): an End past the record end is not
+// refused; the request sends it as typed and Python draws to the record end.
+Object.assign(state.form, { circular_record_selector: 'second-record', circular_region_start: 3, circular_region_end: 19 });
+assert.deepEqual(
+  { start: 3, end: 19 },
+  (({ start, end }) => ({ start, end }))(buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.records[0].region)
+);
 state.circularRecordList.value = [
   { selector: '#1', record_id: 'duplicate-record', record_length: 18 },
   { selector: '#2', record_id: 'duplicate-record', record_length: 18 }

@@ -109,13 +109,15 @@ const loadSession = async (page, file) => {
   }
 };
 
-const saveSession = async (page, file) => {
+// `title`: the Session has none, so Save asks for one; the dialog is answered with it.
+const saveSession = async (page, file, { title } = {}) => {
   const dialogs = [];
   const accept = async (dialog) => { dialogs.push(dialog.message()); await dialog.accept(); };
   page.on('dialog', accept);
   try {
     const pending = page.waitForEvent('download', { timeout: 300_000 });
     await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+    if (title !== undefined) await helpers().answerSessionTitle(page, title);
     const download = await pending;
     await download.saveAs(file);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending, null, { timeout: 120_000 });

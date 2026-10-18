@@ -4,7 +4,10 @@ import test from 'node:test';
 
 import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
 import { createCircularTrackSlotEditor } from '../../gbdraw/web/js/app/circular-track-slots.js';
-import { circularEstimateLengths, circularRequestDiagrams } from '../../gbdraw/web/js/services/record-options.js';
+import {
+  circularDrawingRegionNote, circularEstimateLengths, circularFormRegion, circularRequestDiagrams, linearCardRegion,
+  regionClampNote
+} from '../../gbdraw/web/js/services/record-options.js';
 import { circularSingleRecordKey } from '../../gbdraw/web/js/services/record-draw-selection.js';
 import { createDefaultAdv, createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import { sizeClassForRecordLengths } from '../../gbdraw/web/js/services/track-slot-display.js';
@@ -211,6 +214,64 @@ test('OV-518: a record cropped to a region is drawn at the length of the region'
     circularDiagramRecordLengths(SHORT_AND_LONG, circularDrawing({ circular_region_start: 1, circular_region_end: 5000 })),
     [[30_000], [300_000]]
   );
+});
+
+// OV-1097 (Owner decision 2026-10-18): Python draws a region whose End is past
+// the record end to the record end; the Web predicts it once, and the lengths,
+// the note beside the Region fields, and the request read that one prediction.
+test('OV-1097: an End past the record end is drawn to the record end, and the note says so', () => {
+  const past = circularDrawing({ circular_region_start: 10_000, circular_region_end: 20_000 });
+  assert.deepEqual(circularDiagramRecordLengths(MITOGENOME, past), [[6_570]]);
+  assert.equal(
+    circularDrawingRegionNote(MITOGENOME, past),
+    'Region reaches 20,000, past the record end (16,569 bp); Generate draws to 16,569.'
+  );
+  assert.deepEqual(circularFormRegion(past.form, MITOGENOME[0]), { start: 10_000, end: 20_000, drawnEnd: 16_569, recordLength: 16_569 });
+  // A region within the record, or a record of unknown length, has no note.
+  assert.equal(circularDrawingRegionNote(MITOGENOME, circularDrawing({ circular_region_start: 1, circular_region_end: 16_569 })), '');
+  assert.equal(circularDrawingRegionNote([{ selector: '#1', record_id: 'unread' }], past), '');
+  // Separate diagrams draw whole records, so no region and no note.
+  assert.equal(circularDrawingRegionNote(SHORT_AND_LONG, circularDrawing({ circular_region_start: 1, circular_region_end: 400_000 })), '');
+  // A Start past the record end stays an error, as Python refuses it.
+  const late = circularFormRegion(circularDrawing({ circular_region_start: 16_570, circular_region_end: 20_000 }).form, MITOGENOME[0]);
+  assert.ok(late && 'error' in late);
+  assert.equal(/** @type {{ code?: string }} */ (late.error).code, 'REGION_INVALID');
+  assert.deepEqual(/** @type {{ context?: unknown }} */ (late.error).context, { field: 'region', reason: 'RECORD_BOUNDS' });
+  assert.deepEqual(circularDiagramRecordLengths(MITOGENOME, circularDrawing({ circular_region_start: 16_570, circular_region_end: 20_000 })), [[16_569]]);
+});
+
+test('a Region Generate cannot draw is a typed REGION_INVALID diagnostic, named by its reason', () => {
+  const reasonOf = (start, end) => {
+    const region = circularFormRegion(circularDrawing({ circular_region_start: start, circular_region_end: end }).form, MITOGENOME[0]);
+    assert.ok(region && 'error' in region);
+    const { code, context } = /** @type {{ code?: string, context?: unknown }} */ (region.error);
+    return [code, context];
+  };
+  assert.deepEqual(reasonOf(5, null), ['REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' }]);
+  assert.deepEqual(reasonOf(0, 9), ['REGION_INVALID', { field: 'region', reason: 'POSITIVE_INTEGER' }]);
+  assert.deepEqual(reasonOf(9, 5), ['REGION_INVALID', { field: 'region', reason: 'ORDER' }]);
+});
+
+// The Linear Region fields have one reader: Generate's request, the sequences a
+// match reads, and the note beside the fields all take its result.
+test('OV-1097: a Linear card region is read once, with the span Generate draws', () => {
+  assert.equal(linearCardRegion({ region_start: '', region_end: null }, 2, 48_502), null);
+  const reasonOf = (start, end) => {
+    const region = linearCardRegion({ region_start: start, region_end: end }, 2, 48_502);
+    assert.ok(region && 'error' in region);
+    return /** @type {{ context?: unknown }} */ (region.error).context;
+  };
+  assert.deepEqual(reasonOf(5, ''), { inputOrdinal: 2, reason: 'BOTH_ENDPOINTS' });
+  assert.deepEqual(reasonOf('x', 9), { inputOrdinal: 2, reason: 'FINITE' });
+  assert.deepEqual(reasonOf(1.5, 9), { inputOrdinal: 2, reason: 'INTEGER' });
+  assert.deepEqual(reasonOf(0, 9), { inputOrdinal: 2, reason: 'POSITIVE_INTEGER' });
+  const past = linearCardRegion({ region_start: 60_000, region_end: 40_000 }, 2, 48_502);
+  assert.deepEqual(past, { start: 60_000, end: 40_000, drawn: { start: 40_000, end: 60_000, drawnEnd: 48_502, recordLength: 48_502 } });
+  assert.equal(regionClampNote(past && 'drawn' in past ? past.drawn : null),
+    'Region reaches 60,000, past the record end (48,502 bp); Generate draws to 48,502.');
+  assert.deepEqual(linearCardRegion({ region_start: 50_000, region_end: 60_000 }, 2, 48_502), { start: 50_000, end: 60_000, drawn: null });
+  // Without a known length the region is drawn as typed.
+  assert.deepEqual(linearCardRegion({ region_start: '3', region_end: '9' }, 1), { start: 3, end: 9, drawn: { start: 3, end: 9, drawnEnd: 9 } });
 });
 
 test('OV-518: a record of unknown length leaves the lengths that are known', () => {

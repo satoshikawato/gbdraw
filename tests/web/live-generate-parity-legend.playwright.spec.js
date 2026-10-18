@@ -1248,7 +1248,7 @@ for (const order of ['stroke then color', 'color then stroke']) {
     expect(rowStrokedFeatures(generated), 'Generate strokes the same features').toEqual(stroked);
     if (order !== 'stroke then color') return;
     const saved = testInfo.outputPath('ov288.gbdraw-session.json');
-    await download(page, 'Save Session', saved);
+    await download(page, 'Save Session', saved, { title: '' });
     const loaded = await load(browser, saved);
     expect(rowStrokedFeatures(await semanticSnapshot(loaded)), 'Load shows the stroke').toEqual(stroked);
     await expectLiveEqualsGenerate(loaded, { label: `${order}, after Save and Load` });
@@ -1355,7 +1355,7 @@ test('OV-307: two Legend color edits and a stroke on a rule\'s own row recolor a
   const { generated } = await expectLiveEqualsGenerate(page, { label: 'two Legend colors and a stroke on a rule row, after Undo and Redo' });
   expect(await shown(generated), 'Generate draws the same').toEqual(expected);
   const saved = testInfo.outputPath('ov307.gbdraw-session.json');
-  await download(page, 'Save Session', saved);
+  await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   expect(await shown(await semanticSnapshot(loaded), loaded), 'Load shows the same').toEqual(expected);
   await expectLiveEqualsGenerate(loaded, { label: 'two Legend colors and a stroke on a rule row, after Save and Load' });

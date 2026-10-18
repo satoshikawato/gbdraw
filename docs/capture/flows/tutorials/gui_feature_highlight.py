@@ -33,6 +33,7 @@ from flows.how_to.tracks import (
     _track_slot_snapshot,
 )
 from flows.web_capture import (
+    run_track_slot_row_action,
     toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
@@ -125,7 +126,7 @@ def _remove_slot_if_present(page: Page, slot_id: str) -> None:
         "group", name=f"Circular track slot {slot_id}", exact=True
     )
     if slot.count():
-        slot.get_by_title("Remove", exact=True).click()
+        run_track_slot_row_action(slot, "Remove")
 
 
 def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
@@ -137,9 +138,7 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     ticks = page.get_by_role(
         "group", name="Circular track slot ticks", exact=True
     )
-    move_outside = ticks.get_by_title("Move outside Axis", exact=True)
-    if move_outside.is_enabled():
-        move_outside.click()
+    run_track_slot_row_action(ticks, "Move outside Axis", only_if_enabled=True)
     ticks = page.get_by_role(
         "group", name="Circular track slot ticks", exact=True
     )

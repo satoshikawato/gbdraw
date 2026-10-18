@@ -245,10 +245,6 @@ assert.equal((alignCause.summary.match(/Not a valid regular expression/g)||[]).l
 
 // Native boundary diagnostics retain corrections while discarding private IDs.
 for (const [message, code, context] of [
-  ['Circular region End (60000) exceeds the selected record length (50466).', 'REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' }],
-  ['Circular region requires both Start and End coordinates.', 'REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' }],
-  ['Circular region Start and End must be positive integers.', 'REGION_INVALID', { field: 'region', reason: 'POSITIVE_INTEGER' }],
-  ['Circular region Start must not exceed End. Use Reverse complement to change display orientation.', 'REGION_INVALID', { field: 'region', reason: 'ORDER' }],
   ['The preserved comparison is missing a required resource.', 'COMPARISON_INPUT', { field: 'comparison', reason: 'REQUIRED' }],
   ['Canonical renderRequest records are required.', 'INPUT_INVALID', { field: 'schema', reason: 'RECORDS_REQUIRED' }],
   ['Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2.', 'INPUT_INVALID', { field: 'schema', reason: 'TRACK_SCHEMA' }],
@@ -260,7 +256,9 @@ for (const [message, code, context] of [
   assert.equal(model.stage, 'request-validation');
   assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
 }
-assert.equal(roundtrip(new Error('Circular region End (PRIVATE_VALUE) exceeds the selected record length (50466).')).code, 'UNKNOWN');
+// OV-1097: no surface refuses an End past the record end any more (Python draws to
+// the record end), so the text that refusal had is not classified.
+assert.equal(roundtrip(new Error('Circular region End (60000) exceeds the selected record length (50466).')).code, 'UNKNOWN');
 // E4f m1 (E-OD36): Load reads the Web file bindings and resource descriptors
 // with rows (OV-895), so no code throws these texts any more; none is classified.
 for (const message of ['Unsupported Web file binding schema.', 'Web binding schema 2 requires c_gb.',

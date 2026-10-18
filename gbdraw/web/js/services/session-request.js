@@ -1227,7 +1227,8 @@ const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
 const circularRegionPayload = (form, record) => {
   const region = circularFormRegion(form, record);
   if (region === null) return null;
-  if ('error' in region) throw new Error(region.error);
+  if ('error' in region) throw region.error;
+  // The request sends the End as typed: Python shortens an End past the record end (R7).
   return {
     selector: selectorPayload(record?.value),
     start: region.start,

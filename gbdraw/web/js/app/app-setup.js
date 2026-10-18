@@ -191,9 +191,12 @@ import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
   circularDrawingRecordSet,
+  circularDrawingRegionNote,
   circularEstimateLengths,
   circularRequestDiagrams,
   formatRecordLength,
+  regionClampNote,
+  linearCardRegion,
   resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
 import {
@@ -1658,6 +1661,7 @@ export const createAppSetup = () => {
   const choicePrompt = createChoicePrompt({ reactive });
   const noticeBanner = createNoticeBanner({ reactive });
   const askChoice = choicePrompt.ask;
+  const askText = choicePrompt.askText;
   const showNotice = noticeBanner.show;
   // The Font section: the drawing's text font and the fonts loaded in this page.
   const fontSettings = createFontSettings({
@@ -2106,6 +2110,24 @@ export const createAppSetup = () => {
     state, state.drawings.circular, circularEstimateRecordLengths.value
   ));
   const losatSettings = createLosatSettings({ state });
+  /**
+   * The record a Linear entry draws, once its records are read: the one its
+   * selector names, or the only record of its file.
+   * @param {LinearSeq} seq
+   */
+  const linearSeqRecord = (seq) => {
+    const records = linearRecordSelector.recordsFor(seq);
+    const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
+    return selection.record || (selection.status === 'unspecified' && records.length === 1 ? records[0] : null);
+  };
+  // The note beside a Linear entry's Region fields (`regionClampNote`). The
+  // request draws the larger coordinate as the region's end (reverse when typed first).
+  /** @param {LinearSeq} seq */
+  const linearRegionNote = (seq) => {
+    const region = linearCardRegion(seq, 1, linearSeqRecord(seq)?.recordLength);
+    return region && !('error' in region) ? regionClampNote(region.drawn) : '';
+  };
+  const circularRegionNote = computed(() => circularDrawingRegionNote(state.circularRecordList.value, state.drawings.circular));
   // Auto values follow the records the next Generate draws. The Linear ones are
   // known once every drawn record is read and none is cropped; until then the
   // values name their rule.
@@ -2114,10 +2136,7 @@ export const createAppSetup = () => {
     linearRecordLengths: () => {
       const lengths = state.drawings.linear.drawnLinearSeqs.value.map((seq) => {
         if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
-        const records = linearRecordSelector.recordsFor(seq);
-        const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
-        const record = selection.record || (selection.status === 'unspecified' && records.length === 1 ? records[0] : null);
-        return Number(record?.recordLength);
+        return Number(linearSeqRecord(seq)?.recordLength);
       });
       return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
     }
@@ -5675,13 +5694,21 @@ export const createAppSetup = () => {
     return Array.from(values);
   });
 
-  const editSessionTitle = () => {
+  // The Session title is asked in the app's dialog; Save asks for it when the Session has none.
+  /** @param {{ title: string, actionLabel: string }} request */
+  const askSessionTitle = ({ title, actionLabel }) => askText({
+    title, label: 'Session title', value: normalizeSessionTitle(sessionTitle.value), actionLabel
+  });
+
+  const editSessionTitle = async () => {
     const busy = sessionOperationAvailability();
     if (busy) return busy;
-    const current = normalizeSessionTitle(sessionTitle.value);
-    const input = prompt('Session title', current);
+    const input = await askSessionTitle({ title: 'Rename Session', actionLabel: 'Rename' });
     if (input === null) return;
-    sessionTitle.value = normalizeSessionTitle(input);
+    // The title is part of the History snapshot: a rename is its own step.
+    const title = normalizeSessionTitle(input);
+    if (title === normalizeSessionTitle(sessionTitle.value)) return;
+    return history.runUndoable('Rename Session', () => { sessionTitle.value = title; });
   };
 
   const saveSessionWithTitle = () => exportSession(null, {
@@ -5690,10 +5717,10 @@ export const createAppSetup = () => {
     recordDisplayRows: recordDisplayControls.allRows,
     // Save writes every Result: the other mode's slot goes beside the shown one (E1).
     readOtherModeArtifact: () => artifactSlots[mode.value === 'linear' ? 'circular' : 'linear'],
-    resolveTitle: () => {
+    resolveTitle: async () => {
       let title = normalizeSessionTitle(sessionTitle.value);
       if (!title) {
-        const input = prompt('Session title', '');
+        const input = await askSessionTitle({ title: 'Save Session', actionLabel: 'Save' });
         if (input === null) {
           recordSessionLifecycleEvent('session-save-title-canceled');
           return null;
@@ -7437,6 +7464,9 @@ export const createAppSetup = () => {
     exampleSessionPending,
     choicePrompt: choicePrompt.prompt,
     resolveChoicePrompt: choicePrompt.resolve,
+    submitChoicePromptField: choicePrompt.submitField,
+    circularRegionNote,
+    linearRegionNote,
     notice: noticeBanner.notice,
     dismissNotice: noticeBanner.dismiss,
     circularRecordPresentationPanel,

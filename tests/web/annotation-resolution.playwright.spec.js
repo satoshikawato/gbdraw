@@ -20,7 +20,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 960 });
     const consoleText = [];
     page.on('console', (message) => consoleText.push(message.text()));
-    page.on('dialog', (dialog) => dialog.accept(dialog.type() === 'prompt' ? 'S02 selectors' : undefined));
+    page.on('dialog', (dialog) => dialog.accept());
     await openApp(page);
     await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
       .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));

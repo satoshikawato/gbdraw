@@ -150,7 +150,7 @@ const colorRow = async (page, caption, color = COLOR) => {
 
 // Save Session, then a fresh page that loads the saved file.
 const saveAndLoadFresh = async (page, browser, path) => {
-  await download(page, 'Save Session', path);
+  await download(page, 'Save Session', path, { title: '' });
   const context = await browser.newContext({ baseURL: new URL(page.url()).origin });
   const fresh = await context.newPage();
   await openFresh(fresh);

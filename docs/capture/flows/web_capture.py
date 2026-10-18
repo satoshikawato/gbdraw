@@ -235,6 +235,26 @@ def open_ancestor_details(locator: Locator) -> Locator:
     return locator
 
 
+def run_track_slot_row_action(row: Locator, label: str, *, only_if_enabled: bool = False) -> bool:
+    """Run one item of a track slot row's Row actions menu.
+
+    Move up and Move down are the row's own buttons; the Axis moves, Duplicate,
+    and Remove (Circular) or Delete (Linear) are items of the menu, which closes
+    after an item runs. With ``only_if_enabled``, a disabled item is skipped and
+    the menu is closed again. Returns whether the item ran.
+    """
+
+    menu = row.locator(".track-slot-row-menu")
+    toggle = menu.locator(":scope > summary")
+    toggle.click()
+    item = menu.get_by_role("button", name=label, exact=True)
+    if only_if_enabled and not item.is_enabled():
+        toggle.click()
+        return False
+    item.click()
+    return True
+
+
 def expect_circular_source_status(page: Page, text: str) -> None:
     """Wait until the Circular Source records status shows the documented text."""
 

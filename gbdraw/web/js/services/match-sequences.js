@@ -7,6 +7,7 @@ import {
 } from './conservation-series.js';
 import { readFileText } from './file-content-cache.js';
 import { genbankHeaderIds } from './genbank-header.js';
+import { linearCardRegion } from './record-options.js';
 
 /** @import { FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
 /** @import { FileLike } from './session-resource-backing.js' */
@@ -1139,27 +1140,14 @@ const selectInputSequenceRecord = (records, selectorValue) => {
  */
 const materializeLinearSequenceRecord = (record, sequenceState) => {
   if (!record) return null;
-  const startRaw = sequenceState?.region_start;
-  const endRaw = sequenceState?.region_end;
-  const hasStart = startRaw !== null && startRaw !== undefined && startRaw !== '';
-  const hasEnd = endRaw !== null && endRaw !== undefined && endRaw !== '';
-  if (hasStart !== hasEnd) return null;
-
   let sequence = normalizedSequence(record.sequence);
   let reverse = Boolean(sequenceState?.region_reverse);
-  if (hasStart) {
-    const start = Number(startRaw);
-    const end = Number(endRaw);
-    if (
-      !Number.isInteger(start) ||
-      !Number.isInteger(end) ||
-      start < 1 ||
-      end < 1 ||
-      start > sequence.length ||
-      end > sequence.length
-    ) return null;
-    sequence = sequence.slice(Math.min(start, end) - 1, Math.max(start, end));
-    reverse = reverse || start > end;
+  // The region Generate draws: an end past the record end is drawn to it.
+  const region = linearCardRegion(sequenceState ?? {}, 1, sequence.length);
+  if (region && ('error' in region || !region.drawn)) return null;
+  if (region?.drawn) {
+    sequence = sequence.slice(region.drawn.start - 1, region.drawn.drawnEnd);
+    reverse = reverse || region.start > region.end;
   }
   return {
     ...record,

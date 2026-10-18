@@ -142,7 +142,7 @@ test('OV-01: edits on a cropped record reach their feature, also on CLI replay',
   expect(result[TY].labels).not.toContain('EDITED_X');
 
   const sessionPath = testInfo.outputPath('ov01.gbdraw-session.json');
-  await download(page, 'Save Session', sessionPath);
+  await download(page, 'Save Session', sessionPath, { title: '' });
   const replay = replayOnCli(sessionPath, testInfo.outputPath('ov01-replay'));
   expect(replay.match(/EDITED_X/g) || []).toHaveLength(1);
   expect(replay).toContain(`data-gbdraw-feature-id="${Y}"`);

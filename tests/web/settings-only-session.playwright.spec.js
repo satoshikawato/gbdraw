@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, answerLoadRepairs, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, answerLoadRepairs, answerSessionTitle, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 
@@ -26,12 +26,13 @@ const assertSourceFree = state => {
 };
 
 // `again`: the page already downloaded this Session file name, so the Save asks first.
-const save = async (page, testInfo, label, { again = false } = {}) => {
+const save = async (page, testInfo, label, { again = false, title } = {}) => {
   let downloaded;
   const listener = download => { downloaded = download; };
   page.on('download', listener);
   try {
     await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+    if (title !== undefined) await answerSessionTitle(page, title);
     if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
     // Await operation settlement, then assert once. Preserve the product error
     // as the red witness instead of reporting only a download timeout.
@@ -125,7 +126,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     });
     const page = await context.newPage();
     page.setDefaultTimeout(20000);
-    page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'J08 settings' : undefined));
+    page.on('dialog', dialog => dialog.accept());
     await openApp(page);
     return page;
   };
@@ -148,7 +149,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
         missingCount: 1, message: 'Prior unmatched selector', resultIndex: 0, resultName: 'prior.svg' }];
       state.trackSlotResolvedGeometry.value = { schema: 1, records: [] };
     });
-    const saved = await save(page, testInfo, 'first');
+    const saved = await save(page, testInfo, 'first', { title: 'J08 settings' });
     expect(saved.document.version).toBe(CURRENT_SESSION_VERSION);
     expect(saved.document).not.toHaveProperty('runMetadata');
     // Each mode's settings are its slice (Session 46).
@@ -219,7 +220,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
 test('settings-only Load replaces existing work, and canceled or refused candidates preserve the complete prior Session', async ({ page }, testInfo) => {
   test.setTimeout(1_800_000);
   page.setDefaultTimeout(20000);
-  page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'Full control' : undefined));
+  page.on('dialog', dialog => dialog.accept());
   await openApp(page);
   await loadFile(page, path.join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
   const runMetadata = await page.evaluate(async () => {
@@ -316,7 +317,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
 test('both modes\' settings and auxiliary file bytes survive settings-only Save Load Save', async ({ page, browser }, testInfo) => {
   test.setTimeout(1_800_000);
   page.setDefaultTimeout(20000);
-  page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'Profiles and priority' : undefined));
+  page.on('dialog', dialog => dialog.accept());
   await openApp(page);
   // Distinct explicit values in each mode's drawing.
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.axis_stroke_color = '#13579b'; });
@@ -332,7 +333,7 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
   await page.getByLabel('Priority File (TSV)', { exact: true }).setInputFiles({
     name: 'priority.tsv', mimeType: 'text/tab-separated-values', buffer: bytes
   });
-  const original = await save(page, testInfo, 'profiles');
+  const original = await save(page, testInfo, 'profiles', { title: 'Profiles and priority' });
   await assertDiagramWorkerIdle(page);
   const binding = original.document.webFiles.bindings.qualifier_priority;
   expect(Buffer.from(original.document.resources[binding.resourceId].data, 'base64')).toEqual(bytes);

@@ -22,6 +22,21 @@
  * `cancel` for Cancel, Escape, a backdrop click, or a later question.
  * @typedef {(request: ChoiceRequest) => Promise<string>} AskChoice
  *
+ * @typedef {object} TextField
+ * @property {string} label The field's visible label, which is also its accessible name.
+ * @property {string} value
+ *
+ * @typedef {object} TextRequest
+ * @property {string} title
+ * @property {string} [description]
+ * @property {string} label The text field's label.
+ * @property {string} [value] The text the field starts with, selected.
+ * @property {string} actionLabel The button that keeps the text; Enter in the field chooses it.
+ *
+ * Asks for one line of text with the app's choice dialog; resolves to the
+ * text as typed, or null for Cancel, Escape, a backdrop click, or a later question.
+ * @typedef {(request: TextRequest) => Promise<string | null>} AskText
+ *
  * @typedef {'info' | 'warning'} NoticeTone
  *
  * @typedef {object} NoticeRequest
@@ -36,7 +51,9 @@
 
 /**
  * A confirmation asks with the app's choice dialog, never a native
- * `confirm()`. One question shows at a time: a new question cancels the open one.
+ * `confirm()`, and a question for text asks with the same dialog and a text
+ * field, never a native `prompt()`. One question shows at a time: a new
+ * question cancels the open one.
  * @param {{ reactive: <T extends object>(value: T) => T }} options Vue's `reactive`.
  */
 export const createChoicePrompt = ({ reactive }) => {
@@ -47,7 +64,8 @@ export const createChoicePrompt = ({ reactive }) => {
     items: /** @type {string[]} */ ([]),
     note: '',
     actions: /** @type {ChoiceAction[]} */ ([]),
-    cancelLabel: 'Cancel'
+    cancelLabel: 'Cancel',
+    field: /** @type {TextField | null} */ (null)
   });
   /** @type {((choice: string) => void) | null} */
   let answer = null;
@@ -68,11 +86,27 @@ export const createChoicePrompt = ({ reactive }) => {
       note: request.note || '',
       actions: request.actions.map((action) => ({ tone: 'secondary', ...action })),
       cancelLabel: request.cancelLabel || 'Cancel',
+      field: null,
       show: true
     });
     return new Promise((settle) => { answer = settle; });
   };
-  return { prompt, ask, resolve };
+  /** @type {AskText} */
+  const askText = async ({ title, description, label, value = '', actionLabel }) => {
+    const choice = ask({ title, description, actions: [{ id: 'ok', label: actionLabel, tone: 'primary' }] });
+    // The dialog's field writes the text through `prompt.field` into `field`.
+    const field = { label, value };
+    prompt.field = field;
+    return (await choice) === 'ok' ? field.value : null;
+  };
+  // Enter in the text field chooses the action; an Enter that ends an IME composition does not.
+  /** @param {KeyboardEvent} event */
+  const submitField = (event) => {
+    if (!prompt.field || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    resolve('ok');
+  };
+  return { prompt, ask, askText, submitField, resolve };
 };
 
 /**

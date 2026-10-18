@@ -719,7 +719,7 @@ journey('J7', 'Phone width', 20, async ({ page, steps, dir }) => {
   }, { limitMs: 300_000 });
   await steps.step('Save Session at phone width', async () => {
     await expectReachable(page, page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }), 'Save Session');
-    const saved = await A.saveSession(page, join(dir, 'phone.gbdraw-session.json.gz'));
+    const saved = await A.saveSession(page, join(dir, 'phone.gbdraw-session.json.gz'), { title: '' });
     expect(saved.doc.version).toBe(CURRENT_SESSION_VERSION);
     return { file: saved.suggested, ...(await expectNoHorizontalOverflow(page, 'after Save')) };
   }, { limitMs: 300_000 });

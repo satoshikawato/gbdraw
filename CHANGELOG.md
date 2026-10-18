@@ -2354,6 +2354,24 @@ Retired names and their replacements are listed under
   are keyed once and reused, and the cache no longer checks render-stage entries against
   a constant. Figures, SVG bytes, replies and Saved Sessions are unchanged.
 
+- Web app, Custom Track Slots: each row keeps its Move up and Move down arrow
+  buttons, and one **Row actions** menu holds its other actions with text
+  labels: the moves across the Axis, **Track on Axis** where the row can sit on
+  the Axis, **Duplicate**, and **Remove** (Circular) or **Delete** (Linear), in
+  red. The menu closes after an action, the arrow keys move through it, and
+  Escape closes it. After a move, focus stays on the row's **Row actions**;
+  after a removal it moves to the next row's, else the previous row's, else
+  **Add track**.
+- Web app: the Session title is asked in the app's own dialog instead of the
+  browser's prompt: **Save Session** without a title opens **Save Session**,
+  and the title in the header opens **Rename Session**. The field starts with
+  the title selected; Enter saves or renames, Escape cancels, and focus returns
+  to the button that opened it.
+- Web app (OV-1097): a Region **End** past the record end is no longer refused.
+  Generate draws to the record end, as the CLI and Python already do, and a
+  note under the Region fields (Circular, and Linear once the record is read)
+  names the record length. A **Start** past the record end stays an error.
+
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
 - Added a small top-level Python interface (`read_genbank`, `read_gff`,

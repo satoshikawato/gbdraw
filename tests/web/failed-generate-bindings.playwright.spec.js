@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
-const { answerChoicePrompt, openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { answerChoicePrompt, answerSessionTitle, openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -19,9 +19,10 @@ const load = async (page, file) => {
 };
 
 // `again`: the page already downloaded this Session file name, so the Save asks first.
-const save = async (page, file, { again = false } = {}) => {
+const save = async (page, file, { again = false, title } = {}) => {
   const pending = page.waitForEvent('download', { timeout: 120_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  if (title !== undefined) await answerSessionTitle(page, title);
   if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
   await (await pending).saveAs(file);
   return JSON.parse(gunzipSync(await fs.readFile(file)));
@@ -217,7 +218,7 @@ ${origin}
 
 test('failed multi-record Generate retains a validated binding to the selected second record', async ({ page, browser, baseURL }, info) => {
   test.setTimeout(360_000);
-  page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'S04 multi' : undefined));
+  page.on('dialog', dialog => dialog.accept());
   await page.addInitScript(() => { window.__GBDRAW_TEST_HOOKS__ = {}; });
   await openApp(page);
   await page.evaluate(content => {
@@ -234,7 +235,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
   await page.evaluate(() => {
     delete window.__GBDRAW_APP__.annotationSets[0].annotations[0].metadata._gbdraw_web_target_record_key;
   });
-  const beforeSaved = await save(page, info.outputPath('multi-before.gbdraw-session.json.gz'));
+  const beforeSaved = await save(page, info.outputPath('multi-before.gbdraw-session.json.gz'), { title: 'S04 multi' });
   const before = await snapshot(page);
   expect(before.positions.map(position => position.selector)).toEqual(['#1', '#2']);
   expect(before.annotations[0].record).toEqual({ kind: 'recordId', value: 'RecB' });

@@ -212,8 +212,10 @@ settings always show in full.
 
 ### Save and Load Sessions
 
-**Save Session** asks for a **Session title** when none is set and downloads
-`<title>.gbdraw-session.json.gz`. Saving again under the same file name first
+**Save Session** asks for a **Session title** in a dialog when none is set
+(Enter saves, Escape cancels) and downloads
+`<title>.gbdraw-session.json.gz`. The title beside **Session** in the header
+opens the same dialog as **Rename Session**. Saving again under the same file name first
 asks whether to **Download again**. When the compressed Session is larger
 than 50 MiB, Save names its size and asks before it downloads. **Cancel** in
 either dialog saves nothing. When the download starts, a notice above the Result
@@ -374,6 +376,13 @@ the restored draft. Invalid drafts cannot be saved as valid Sessions.
 
 ### Custom Track Slots
 
+The arrow buttons of a row move it within its side of the Axis. Its **Row
+actions** menu holds the moves across the Axis (**Move outside Axis** and
+**Move inside Axis** in Circular, **Move above Axis** and **Move below Axis** in
+Linear), **Track on Axis** for a row that can sit on the Axis, **Duplicate**,
+and **Remove** (Circular) or **Delete** (Linear). The arrow keys move through
+the menu and Escape closes it.
+
 Each Circular row keeps its inner and outer gap in a disclosure under the row;
 for a GC or AT content or skew row it also holds the dinucleotide, the legend
 label and, for skew, the two colors. Its summary names the dinucleotide and says
@@ -503,8 +512,10 @@ section opens when an upload, a **Record** choice, or turning off
 **Multi-Record Canvas** makes it editable, and focus stays on the control you
 used. After you close it, later edits leave it closed. The app does not choose a
 record or change **Multi-Record Canvas** for you. Empty **Record label** and
-**Subtitle** keep the inferred title lines. A region needs both coordinates
-within the record. These settings apply on **Generate Diagram**.
+**Subtitle** keep the inferred title lines. A region needs both coordinates.
+An **End** past the record end is drawn to the record end, and a note under
+the fields names the record length; a **Start** past the record end stops
+Generate with an error. These settings apply on **Generate Diagram**.
 
 **Region Annotations** offers the records the next Circular Generate draws. One
 selected record offers that record alone; **All records**, or **Multi-Record
@@ -560,6 +571,8 @@ the file default subtitle. A record that inherits a file default you typed is ma
 **Using file default**; typing a value overrides it, and **Reset to default**
 restores inheritance. Choosing another record in a row infers the definition of
 that record again for a GenBank File. A region changes the displayed interval, not the source file.
+A region that reaches past the record end is drawn to the record end, with the
+same note under the fields once the record is read.
 Reverse complementation changes displayed coordinates and feature orientation
 without rewriting the input. Comparison tables keep the search frame of the
 cropped record, and gbdraw maps their rows onto the displayed orientation; see

@@ -13,7 +13,7 @@
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
+const { answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows, switchMode } = require('./helpers/mode-transition.cjs');
@@ -889,7 +889,7 @@ test('a stroke removed after Load leaves a batch Result that showed it (circular
   await showResult(page, 1);
   await showResult(page, 0);
   const saved = testInfo.outputPath('stroked-batch.gbdraw-session.json');
-  await download(page, 'Save Session', saved);
+  await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
   await loaded.evaluate((row) => {
@@ -912,7 +912,7 @@ test('a batch Result saved before it showed the paint edits shows them after Loa
   await popupEdit(page, 'TESTA_0001', { stroke: '#2a9d8f' });
   await legendRowColor(page, 'tRNA', '#7b2cbf');
   const saved = testInfo.outputPath('stale-batch.gbdraw-session.json');
-  await download(page, 'Save Session', saved);
+  await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
   await showResult(loaded, 1);
@@ -971,12 +971,12 @@ test('a batch Result displayed while Save runs shows the edits once Save ends (c
 // displayed Result lacks, and the Save prepares the matches it needs. (The
 // case above holds its Save with its own `beforeExport`, so it never reaches
 // the app's Save.)
-const saveWhileDisplaying = (page, resultIndex) => evaluateWithRetainedPromise(page, async (index) => {
+const saveWhileDisplaying = (page, resultIndex) => Promise.all([evaluateWithRetainedPromise(page, async (index) => {
   const app = window.__GBDRAW_APP__;
   const saved = app.saveSessionWithTitle();
   app.selectResult(index);
   await saved;
-}, resultIndex);
+}, resultIndex), answerSessionTitle(page, '')]);
 test('a batch Result displayed while Save runs is saved with the edits (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
   test.setTimeout(240_000);
   await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
@@ -1006,7 +1006,7 @@ test('a batch Result saved with a label edit removed meanwhile shows the label a
   await showResult(page, 0);
   await appAction(page, 'resetAllLabelTextOverrides');
   const saved = testInfo.outputPath('label-batch.gbdraw-session.json');
-  await download(page, 'Save Session', saved);
+  await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
   await showResult(loaded, 1);
@@ -1409,7 +1409,7 @@ const WORK_ALLOWLIST = [
     // A Session this page saved, loaded into it: its Results already show
     // their drawing's intent, so the Load compiles nothing and asks nothing.
     kind: 'Session Load', stages: [], compiles: 0, requests: [],
-    before: (page) => download(page, 'Save Session', test.info().outputPath('work-allowlist.gbdraw-session.json')),
+    before: (page) => download(page, 'Save Session', test.info().outputPath('work-allowlist.gbdraw-session.json'), { title: '' }),
     run: async (page) => {
       const shown = () => page.evaluate(async () => {
         const { getCommittedSvgResultRuntimeIdentity } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
@@ -1571,8 +1571,9 @@ test.describe('the warm app page', () => {
   const saveSession = async (page) => {
     const downloaded = page.waitForEvent('download').then((file) => file.suggestedFilename());
     const question = page.locator('#choice-prompt-title');
-    const asked = question.waitFor().then(() => question.textContent());
     await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+    await answerSessionTitle(page, '');
+    const asked = question.waitFor().then(() => question.textContent());
     return Promise.race([downloaded, asked]);
   };
 

@@ -5,7 +5,7 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, openApp, waitForAppShell, evaluateWithRetainedPromise, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -1714,8 +1714,8 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
   expect(generated.placements).toEqual(expectedPlacement(generated.expectedKeys));
 
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  page.once('dialog', (dialog) => dialog.accept('automatic-source-card-rows'));
   await page.getByRole('button', { name: 'Save Session' }).click();
+  await answerSessionTitle(page, 'automatic-source-card-rows');
   const sessionPath = await (await sessionDownloadPromise).path();
 
   const restoredContext = await browser.newContext();

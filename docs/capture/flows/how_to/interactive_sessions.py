@@ -1145,15 +1145,15 @@ def _save_current_session(
     *,
     title: str = SESSION_TITLE,
 ) -> Path:
-    page.once("dialog", lambda dialog: dialog.accept(title))
     with page.expect_download(timeout=ACTION_TIMEOUT_MS) as download_info:
-        with page.expect_event("dialog", timeout=ACTION_TIMEOUT_MS) as dialog_info:
-            page.get_by_role(
-                "button", name="Save Session", exact=True
-            ).click()
-        dialog = dialog_info.value
-        if dialog.type != "prompt" or dialog.message != "Session title":
-            raise AssertionError(f"Unexpected session-save dialog: {dialog.message}")
+        page.get_by_role("button", name="Save Session", exact=True).click()
+        # Save without a title asks for one in the app's dialog.
+        title_dialog = page.get_by_role("dialog", name="Save Session", exact=True)
+        field = title_dialog.get_by_role("textbox", name="Session title", exact=True)
+        expect(field).to_be_focused(timeout=ACTION_TIMEOUT_MS)
+        field.fill(title)
+        field.press("Enter")
+        expect(title_dialog).to_have_count(0)
     download = download_info.value
     if download.failure() is not None:
         raise AssertionError(f"Session download failed: {download.failure()}")

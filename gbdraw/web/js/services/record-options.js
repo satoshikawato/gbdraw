@@ -1,5 +1,6 @@
 // @ts-check
 import { circularRecordRequestKeys, circularRecordsToDraw } from './record-draw-selection.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 /** @param {unknown} value */
 const cleanText = (value) => String(value ?? '').trim();
@@ -173,32 +174,89 @@ export const circularDrawingRecordSet = (records, drawing) => resolveCircularReq
 export const isSingleCircularJourney = (recordSet) => recordSet.presentedCount <= 1 && recordSet.singlePresentation;
 
 /**
- * The region the Circular form crops a record to (1-based, both ends
- * included), as its fields state it: null without one (both fields empty), and
- * `{ error }` while Generate cannot draw it. The one reader of those fields;
- * only a record offered alone is cropped (`isSingleCircularJourney`).
+ * A region of a record (1-based, both ends included): `start` and `end` as
+ * typed, and `drawnEnd`, the End that Generate draws to. `recordLength` is set
+ * when `drawnEnd` is shorter than `end`.
+ * @typedef {{ start: number, end: number, drawnEnd: number, recordLength?: number }} RecordRegion
+ */
+
+/**
+ * Where Generate's crop ends: Python owns the rule (`check_start_end_coords`
+ * in gbdraw/crop_genbank.py) and this is the Web's one prediction of it. An End
+ * past the end of a record of known length is drawn to the record end; a
+ * region that starts after the record ends is refused. Without a known length
+ * the region is drawn as typed, and Python applies the rule.
+ * @param {number} start
+ * @param {number} end not less than `start`
+ * @param {unknown} recordLength
+ * @returns {RecordRegion | null} null when the region starts after the record ends
+ */
+export const regionWithinRecord = (start, end, recordLength) => {
+  const length = Number(recordLength);
+  if (!Number.isInteger(length) || length <= 0 || end <= length) return { start, end, drawnEnd: end };
+  return start > length ? null : { start, end, drawnEnd: length, recordLength: length };
+};
+
+/**
+ * The region a Linear record card's fields state, for what Generate draws (the
+ * analysis inputs, the match sequences, the note); the request projection
+ * `linearRegionPayload` parses them itself and sends them as typed. null
+ * without one (both fields empty); `{ error }`, a REGION_INVALID diagnostic
+ * naming the card's 1-based `ordinal`, while Generate cannot draw it; else the
+ * endpoints as typed (an End before the Start draws the reverse complement) and
+ * `drawn`, the span Generate draws from a record of `recordLength`
+ * (`regionWithinRecord`; null when it starts after the record ends).
+ * @param {{ region_start?: unknown, region_end?: unknown }} seq
+ * @param {number} ordinal
+ * @param {unknown} [recordLength]
+ * @returns {{ start: number, end: number, drawn: RecordRegion | null } | { error: Error } | null}
+ */
+export const linearCardRegion = (seq, ordinal, recordLength) => {
+  /** @param {unknown} value */
+  const stated = (value) => value !== null && value !== undefined && value !== '';
+  /** @param {string} reason */
+  const invalid = (reason) => ({ error: diagnosticError('REGION_INVALID', { inputOrdinal: ordinal, reason }) });
+  const hasStart = stated(seq.region_start);
+  if (hasStart !== stated(seq.region_end)) return invalid('BOTH_ENDPOINTS');
+  if (!hasStart) return null;
+  const start = Number(seq.region_start);
+  const end = Number(seq.region_end);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return invalid('FINITE');
+  if (!Number.isInteger(start) || !Number.isInteger(end)) return invalid('INTEGER');
+  if (start < 1 || end < 1) return invalid('POSITIVE_INTEGER');
+  return { start, end, drawn: regionWithinRecord(Math.min(start, end), Math.max(start, end), recordLength) };
+};
+
+/**
+ * The note beside the Region fields while Generate draws a shorter region than typed; '' otherwise.
+ * @param {RecordRegion | null} region
+ */
+export const regionClampNote = (region) => (
+  region?.recordLength === undefined ? '' : `Region reaches ${region.end.toLocaleString('en-US')}, past the record end`
+    + ` (${formatRecordLength(region.recordLength)}); Generate draws to ${region.drawnEnd.toLocaleString('en-US')}.`
+);
+
+/**
+ * The region the Circular form crops a record to, as its fields state it: null
+ * without one (both fields empty), and `{ error }` while Generate cannot draw
+ * it. The one reader of those fields; only a record offered alone is cropped
+ * (`isSingleCircularJourney`).
  * @param {CircularRegionForm} form
  * @param {{ recordLength?: unknown, record_length?: unknown } | null} [record] the record it crops, when known
- * @returns {{ start: number, end: number } | { error: string } | null}
+ * @returns {RecordRegion | { error: Error } | null}
  */
 export const circularFormRegion = (form, record = null) => {
   const hasStart = cleanText(form.circular_region_start) !== '';
   const hasEnd = cleanText(form.circular_region_end) !== '';
   if (!hasStart && !hasEnd) return null;
-  if (hasStart !== hasEnd) return { error: 'Circular region requires both Start and End coordinates.' };
+  /** @param {string} reason */
+  const invalid = (reason) => ({ error: diagnosticError('REGION_INVALID', { field: 'region', reason }) });
+  if (hasStart !== hasEnd) return invalid('BOTH_ENDPOINTS');
   const start = Number(form.circular_region_start);
   const end = Number(form.circular_region_end);
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < 1) {
-    return { error: 'Circular region Start and End must be positive integers.' };
-  }
-  if (start > end) {
-    return { error: 'Circular region Start must not exceed End. Use Reverse complement to change display orientation.' };
-  }
-  const recordLength = Number(record?.recordLength ?? record?.record_length);
-  if (Number.isInteger(recordLength) && recordLength > 0 && end > recordLength) {
-    return { error: `Circular region End (${end}) exceeds the selected record length (${recordLength}).` };
-  }
-  return { start, end };
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < 1) return invalid('POSITIVE_INTEGER');
+  if (start > end) return invalid('ORDER');
+  return regionWithinRecord(start, end, record?.recordLength ?? record?.record_length) ?? invalid('RECORD_BOUNDS');
 };
 
 /**
@@ -208,7 +266,7 @@ export const circularFormRegion = (form, record = null) => {
  * @param {boolean} single whether the drawing offers one record alone (`isSingleCircularJourney`)
  * @param {CircularRegionForm} form
  * @param {{ recordLength?: unknown, record_length?: unknown } | null} record the record it crops, when known
- * @returns {{ start: number, end: number } | null}
+ * @returns {RecordRegion | null}
  */
 const circularCropRegion = (single, form, record) => {
   const region = single ? circularFormRegion(form, record) : null;
@@ -224,6 +282,17 @@ const circularCropRegion = (single, form, record) => {
 export const circularDrawingCropped = (records, drawing) => {
   const recordSet = circularDrawingRecordSet(records, drawing);
   return circularCropRegion(isSingleCircularJourney(recordSet), drawing.form, recordSet.records[0] ?? null) !== null;
+};
+
+/**
+ * The note beside the Circular Region fields (`regionClampNote`) for the
+ * region the next Generate crops its record to.
+ * @param {CircularRequestRecordSetOptions['records']} records the records discovered in the input
+ * @param {CircularRecordDrawing} drawing
+ */
+export const circularDrawingRegionNote = (records, drawing) => {
+  const recordSet = circularDrawingRecordSet(records, drawing);
+  return regionClampNote(circularCropRegion(isSingleCircularJourney(recordSet), drawing.form, recordSet.records[0] ?? null));
 };
 
 /**
@@ -253,7 +322,7 @@ export const circularRequestDiagrams = (records, drawing) => {
   /** @param {{ record_length?: unknown, sourceIndex: number, recordKey?: unknown, recordId?: unknown, selector?: unknown }} record */
   const drawnLength = (record) => {
     const region = circularCropRegion(single, drawing.form, record);
-    return region !== null ? region.end - region.start + 1 : Number(record.record_length);
+    return region !== null ? region.drawnEnd - region.start + 1 : Number(record.record_length);
   };
   return (drawing.form.multi_record_canvas ? [drawn] : drawn.map((record) => [record]))
     .map((diagram) => ({
