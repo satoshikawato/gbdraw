@@ -40,6 +40,7 @@ import { CANVAS_SLICE } from './services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './services/drawing/visibility-rules.js';
+import { COLOR_RULES_SLICE } from './services/drawing/color-rules.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -1033,6 +1034,7 @@ const createDrawingState = (drawingMode) => {
     blastpMode: losat.blastp?.mode
   }));
   const visibilityRules = VISIBILITY_RULES_SLICE.create();
+  const colorRules = COLOR_RULES_SLICE.create();
   const { featureVisibilityManualRules } = visibilityRules.view;
   const pendingPaletteName = ref(defaultPaletteDraftState.pendingPaletteName);
   const labelFilters = createDefaultLabelFilterState();
@@ -1080,8 +1082,7 @@ const createDrawingState = (drawingMode) => {
     // { caption: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth } }
     legendStrokeOverrides: reactive({}),
     addedLegendCaptions: ref(new Set()),
-    fileLegendCaptions: ref(new Set()),
-    manualSpecificRules: reactive([]),
+    ...colorRules.view,
     manualPriorityRules: reactive([]),
     filterMode: ref(labelFilters.filterMode),
     manualBlacklist: ref(labelFilters.manualBlacklist),
@@ -1112,7 +1113,7 @@ const createDrawingState = (drawingMode) => {
     ),
     // The handles a slice's writers take.
     slices: Object.freeze({
-      visibilityRules: visibilityRules.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle })
+      visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle })
   });
 };
 const circularDrawing = createDrawingState('circular');

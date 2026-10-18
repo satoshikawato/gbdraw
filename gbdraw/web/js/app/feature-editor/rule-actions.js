@@ -26,6 +26,7 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
+import { replaceColorRules } from '../../services/drawing/color-rules.js';
 import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
@@ -150,7 +151,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // `rekeyed` are the rows both rule tables hold under another key (OV-645).
   /**
    * @param {DrawingState} drawing
-   * @param {Partial<SpecificColorRule>[]} candidateRules
+   * @param {readonly Partial<SpecificColorRule>[]} candidateRules
    * @param {Array<{ caption?: string, color?: string }>} retiredLegendIntents
    */
   const candidateLegendIntents = (drawing, candidateRules, retiredLegendIntents) => {
@@ -185,7 +186,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // merge into a new row, an unknown match, or a row of another batch Result.
   // Python then redraws the rows, their order, and the "other <type>s" rows.
   // The rows are read with the current Feature visibility before and after.
-  /** @param {DrawingState} drawing @param {Partial<SpecificColorRule>[]} rules */
+  /** @param {DrawingState} drawing @param {readonly Partial<SpecificColorRule>[]} rules */
   const legendSourceContext = (drawing, rules) => ({
     ...featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions }),
     colorRules: rules
@@ -195,14 +196,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // A change that removes the last such rule of a type makes Python draw the
   // default row again, which the live removal of the rule row does not; the
   // automatic rerender draws it.
-  /** @param {Record<string, any>[]} rules */
+  /** @param {readonly Record<string, any>[]} rules */
   const typeRowCaptions = (rules) => new Set(rules
     .filter(rule => String(rule?.cap ?? '').trim() && rule.cap === rule.feat)
     .map(rule => rule.cap));
   /**
    * @param {DrawingState} drawing
-   * @param {Record<string, any>[]} before
-   * @param {Record<string, any>[]} after
+   * @param {readonly Record<string, any>[]} before
+   * @param {readonly Record<string, any>[]} after
    * @param {{ rows?: import('../candidate-render.js').RuleLegendRows | null, replaced?: ReadonlyMap<string, string>, holdsRow?: (caption: string) => boolean }} [options]
    *   `rows`: the rows the commit's own show adds and retires on the displayed
    *   Result (else the Result shows what History restored); `replaced`: the
@@ -373,7 +374,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     });
     if (!rules) return false;
     // The row each rule is written into, so a kept or revised row keeps its identity.
-    const sourceRows = rules.map(rule => revised.get(rule) || (current.includes(rule) ? rule : null));
+    const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
     for (let attempt = 0; ; attempt += 1) {
       const results = state.results.value;
       const table = JSON.stringify(drawing.manualSpecificRules);
@@ -418,7 +419,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   /**
    * @param {DrawingState} drawing
    * @param {Partial<SpecificColorRule>[]} rules
-   * @param {(Record<string, any> | null)[]} sourceRows The row each rule is written into, or null for a new row.
+   * @param {readonly (Readonly<SpecificColorRule> | null)[]} sourceRows The row each rule is written into, or null for a new row.
    * @param {string} label
    * @param {CommitSpecificRulesOptions} [options]
    */
@@ -464,15 +465,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     // is shown, while the step is the last one (`keepRedrawnResult`).
     await transact(label, () => {
       if (!current() || !legend.isCurrent()) return false;
-      drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
-        const row = sourceRows[index];
-        if (!row) return rule;
-        Object.assign(row, rule);
-        if (!Object.hasOwn(rule, 'fromFile')) delete row.fromFile;
-        return row;
-      }));
+      // `prepareRules` without `asGiven` wrote each rule as `normalizeSpecificRule` does.
+      replaceColorRules(drawing.slices.colorRules, /** @type {readonly SpecificColorRule[]} */ (candidate.rules), sourceRows);
       patternDrafts.reconcile();
-      drawing.fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
       drawing.addedLegendCaptions.value = new Set([
         ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
         ...intents.map(intent => intent.caption)

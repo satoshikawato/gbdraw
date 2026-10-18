@@ -509,7 +509,7 @@ export const splitLegacyVisibilityRules = (rules) => {
  * @property {FeatureOverrideDraft} featureOverrides
  * @property {FeatureVisibilityRule[]} rules
  * @property {Set<string> | null} selectedTypes `null` while the request's types are unknown.
- * @property {Partial<SpecificColorRule>[]} colorRules
+ * @property {readonly Partial<SpecificColorRule>[]} colorRules
  */
 
 // The inputs `resolveFeatureDrawn` reads. The feature types come from the

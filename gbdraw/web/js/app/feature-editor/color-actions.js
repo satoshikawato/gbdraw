@@ -273,6 +273,7 @@ export const createFeatureColorActions = ({
     args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(/** @type {ColorFeature | null | undefined} */ (arg)));
     add(clickedFeature.value?.feat);
     add(featureStyleScopeDialog.feat);
+    /** @type {ColorRule[]} */
     const candidates = [...drawing.manualSpecificRules];
     targets.forEach((feature) => {
       const hash = getFeatureQualifier(feature);

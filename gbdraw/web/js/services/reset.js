@@ -17,6 +17,7 @@ import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
+import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -112,7 +113,7 @@ const resetRuleDraftState = (state, drawing) => {
   drawing.filterMode.value = labelDefaults.filterMode;
   drawing.manualBlacklist.value = labelDefaults.manualBlacklist;
   replaceReactiveArray(drawing.manualWhitelist, labelDefaults.manualWhitelist);
-  replaceReactiveArray(drawing.manualSpecificRules);
+  COLOR_RULES_SLICE.reset(drawing.slices.colorRules);
   replaceReactiveObject(state.newSpecRule, createDefaultSpecificRule());
   state.selectedSpecificPreset.value = editorDefaults.selectedSpecificPreset;
   state.specificRulePresetLoading.value = editorDefaults.specificRulePresetLoading;
@@ -144,7 +145,6 @@ const resetEditorDraftState = (state, drawing) => {
     return entry.caption === drawn ? entry : { ...entry, caption: drawn };
   });
   drawing.addedLegendCaptions.value = new Set();
-  drawing.fileLegendCaptions.value = new Set();
 
   // The saved label table of a loaded Session goes with the bulk label edits,
   // also when the bulk map is already empty (R15-21).

@@ -38,6 +38,7 @@ installSessionImportWorker();
 const { exportSession, importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
 const { normalizeAnnotationSets } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { normalizeFeatureVisibilityRule } = await import('../../gbdraw/web/js/services/feature-visibility.js');
+const { normalizeSpecificRule } = await import('../../gbdraw/web/js/services/specific-color-rules.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -269,6 +270,10 @@ const SAMPLES = {
   visibilityRules: () => ({ featureVisibilityManualRules: [normalizeFeatureVisibilityRule({
     id: 'sample-rule', featureType: 'CDS', qualifier: 'locus_tag', value: '^A$', action: 'off'
   })] }),
+  colorRules: () => ({
+    fileLegendCaptions: ['Kinase'],
+    manualSpecificRules: [normalizeSpecificRule({ feat: 'CDS', qual: 'product', val: 'kinase', color: '#123456', cap: 'Kinase', fromFile: true })]
+  }),
   annotationSets: () => ({ annotationSets: normalizeAnnotationSets([{ id: 'sample-set', legendLabel: 'Sample', annotations: [
     { id: 'region_1', target: { kind: 'coordinateSpan', start: 10, end: 20 }, label: 'Sample region' }
   ] }]) }),

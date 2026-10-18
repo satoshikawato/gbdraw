@@ -42,7 +42,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/feature-editor/feature-edit-table.js': 7,
   'app/feature-editor/label-actions.js': 16,
   'app/feature-editor/placement-actions.js': 10,
-  'app/feature-editor/rule-actions.js': 29,
+  'app/feature-editor/rule-actions.js': 28,
   'app/feature-editor/svg-actions.js': 16,
   'app/feature-editor/visibility-actions.js': 5,
   'app/feature-search/preview-actions.js': 8,

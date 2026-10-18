@@ -19,6 +19,7 @@ import { CANVAS_SLICE } from './drawing/canvas.js';
 /** @import { CanvasPadding, CanvasSlice } from './drawing/canvas.js' */
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
+import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
 /** @import { GroupNamesData } from './drawing/group-names.js' */
 /** @import { HistoryArtifactHandle } from './history.js' */
 
@@ -440,7 +441,7 @@ const buildDraftIntentData = (state) => ({
 });
 
 /** @param {HistorySnapshotDrawing} drawing */
-const buildFileLegendCaptionData = (drawing) => Array.from(getRef(drawing.fileLegendCaptions, new Set()) || [])
+const buildFileLegendCaptionData = (drawing) => COLOR_RULES_SLICE.capture(drawing.slices.colorRules).fileLegendCaptions
   .map((caption) => String(caption || '').trim())
   .filter(Boolean);
 
@@ -448,13 +449,9 @@ const buildFileLegendCaptionData = (drawing) => Array.from(getRef(drawing.fileLe
  * @param {HistorySnapshotDrawing} drawing
  * @param {unknown} captions
  */
-const applyFileLegendCaptionData = (drawing, captions) => {
-  if (drawing.fileLegendCaptions?.value !== undefined) {
-    drawing.fileLegendCaptions.value = new Set(
-      Array.isArray(captions) ? captions.map((caption) => String(caption || '').trim()).filter(Boolean) : []
-    );
-  }
-};
+const applyFileLegendCaptionData = (drawing, captions) => COLOR_RULES_SLICE.install(drawing.slices.colorRules, {
+  fileLegendCaptions: Array.isArray(captions) ? captions.map((caption) => String(caption || '').trim()).filter(Boolean) : []
+});
 
 /**
  * @param {Record<string, any>} state
@@ -1095,6 +1092,7 @@ export const createHistorySnapshotService = ({
   const captureGeneratedArtifactOwnerSet = () => {
     const drawing = drawingOfMode(state, getGeneratedArtifactRef(state.generatedMode, null));
     const results = toRaw(getGeneratedArtifactRef(state.results, []));
+    const colorRules = COLOR_RULES_SLICE.capture(drawing.slices.colorRules);
     return Object.freeze({
       results,
       featureCatalog: toRaw(getGeneratedArtifactRef(state.featureCatalog, null)),
@@ -1122,8 +1120,8 @@ export const createHistorySnapshotService = ({
       ),
       comparisonWarnings: toRaw(getGeneratedArtifactRef(state.comparisonWarnings, null)),
       labelFitReports: toRaw(getGeneratedArtifactRef(state.labelFitReports, null)),
-      specificRules: (drawing.manualSpecificRules || []).map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule })),
-      fileLegendCaptions: new Set(drawing.fileLegendCaptions?.value || []),
+      specificRules: colorRules.manualSpecificRules,
+      fileLegendCaptions: new Set(colorRules.fileLegendCaptions),
       trackSlotResolvedGeometry: toRaw(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
@@ -1216,10 +1214,10 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
     setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
     setGeneratedArtifactRef(state.labelFitReports, ownerSet.labelFitReports || []);
-    if (drawing.manualSpecificRules && ownerSet.specificRules) {
-      drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...ownerSet.specificRules.map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule })));
-    }
-    if (drawing.fileLegendCaptions && ownerSet.fileLegendCaptions) drawing.fileLegendCaptions.value = new Set(ownerSet.fileLegendCaptions);
+    COLOR_RULES_SLICE.install(drawing.slices.colorRules, {
+      manualSpecificRules: ownerSet.specificRules,
+      fileLegendCaptions: ownerSet.fileLegendCaptions && [...ownerSet.fileLegendCaptions]
+    });
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null

@@ -12,6 +12,7 @@ import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
 import { keepResultNames } from '../services/result-normalization.js';
 import { regionWithinRecord } from '../services/record-options.js';
+import { fileLegendCaptionsOf } from '../services/drawing/color-rules.js';
 import {
   nameFeaturePlacementFailure,
   requestFeatureOverrides,
@@ -2471,7 +2472,8 @@ export const createRunAnalysis = ({
     if (!rulePreparation) return { rules: drawing.manualSpecificRules, shouldAdmit: isCurrent };
     const candidate = await rulePreparation.prepareCandidate(drawing.manualSpecificRules, options);
     if (!candidate || !isCurrent()) return null;
-    return { rules: candidate.rules, shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent() };
+    // Without `asGiven`, the preparation wrote each rule as `normalizeSpecificRule` does.
+    return { rules: /** @type {readonly SpecificColorRule[]} */ (candidate.rules), shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent() };
   };
 
   // A render of the committed Session draws the drawing's live editor paint (PD-OI-102): the
@@ -5287,7 +5289,7 @@ export const createRunAnalysis = ({
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         labelFitReports: canonicalExecution.labelFitReports,
         specificRules: candidateRules,
-        fileLegendCaptions: new Set(candidateRules.filter((/** @type {SpecificColorRule} */ rule) => rule.fromFile && rule.cap).map((/** @type {SpecificColorRule} */ rule) => rule.cap)),
+        fileLegendCaptions: fileLegendCaptionsOf(candidateRules),
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
         legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,

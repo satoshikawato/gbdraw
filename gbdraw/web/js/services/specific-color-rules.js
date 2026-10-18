@@ -391,7 +391,7 @@ export const colorRuleLegendGroups = (rules, type) => {
 
 /**
  * Returns rule -> the key of the Legend row Generate draws for that rule.
- * @param {Partial<SpecificColorRule>[] | null} [rules]
+ * @param {readonly Partial<SpecificColorRule>[] | null} [rules]
  * @param {RendererLegendRow[]} [rendererRows]
  * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey}
  */
@@ -518,7 +518,7 @@ export const groupLegendRowKeys = (context) => {
 // admits (a commit: those a displayed feature takes). The keys are allocated
 // from the whole table, as Python allocates them, whichever rules draw a row.
 /**
- * @param {Partial<SpecificColorRule>[] | null | undefined} rules
+ * @param {readonly Partial<SpecificColorRule>[] | null | undefined} rules
  * @param {RendererLegendRow[]} [rendererRows]
  * @param {(rule: Partial<SpecificColorRule>) => boolean} [draws]
  */

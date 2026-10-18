@@ -126,7 +126,7 @@ export const ruleKeysPending = (features, keys) => {
  * The color rule matches of one rule list, read for many features (one pass):
  * the rule keys are built once, and each feature is read in its own matches.
  * Ties of priority go to the earliest rule.
- * @param {Record<string, any>[]} rules
+ * @param {readonly Record<string, any>[]} rules
  */
 export const ruleMatcher = (rules) => {
   /** @type {Map<string, { rule: Record<string, any>, index: number }>} */

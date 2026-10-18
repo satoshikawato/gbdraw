@@ -258,6 +258,7 @@ import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
+import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 
 const { nextTick, ref } = window.Vue;
 
@@ -882,7 +883,7 @@ export const buildConfigData = (drawing) => ({
   losat: cloneJsonData(drawing.losat || {}),
   colors: drawing.currentColors.value,
   palette: drawing.selectedPalette.value,
-  rules: drawing.manualSpecificRules,
+  rules: COLOR_RULES_SLICE.capture(drawing.slices.colorRules).manualSpecificRules,
   qualifierPriorityRules: readQualifierPriorityRules(drawing.manualPriorityRules).value,
   filterMode: drawing.filterMode.value,
   whitelist: drawing.manualWhitelist,
@@ -2858,12 +2859,7 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
 
   const storedRules = readColorRules(data.rules);
   if (!storedRules.kept) {
-    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...storedRules.value);
-    drawing.fileLegendCaptions.value = new Set(
-      storedRules.value
-        .filter((rule) => rule.fromFile && rule.cap)
-        .map((rule) => rule.cap)
-    );
+    replaceColorRules(drawing.slices.colorRules, storedRules.value);
   }
   if (Object.prototype.hasOwnProperty.call(data, 'qualifierPriorityRules')) {
     replaceQualifierPriorityRules(drawing, data.qualifierPriorityRules);
@@ -4517,7 +4513,7 @@ const captureDrawingImportSnapshot = (drawing) => ({
   editorState: buildEditorStateData(drawing),
   orthogroupState: buildOrthogroupStateData(drawing),
   importedComparisonIntent: cloneJsonData(drawing.importedComparisonIntent),
-  fileLegendCaptions: Array.from(drawing.fileLegendCaptions.value || [])
+  fileLegendCaptions: COLOR_RULES_SLICE.capture(drawing.slices.colorRules).fileLegendCaptions
 });
 
 const captureSessionImportSnapshot = () => ({
@@ -4599,7 +4595,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       applyFeatureStateData(drawing, saved.features);
       applyOrthogroupStateData(drawing, saved.orthogroupState);
       applyEditorStateData(drawing, saved.editorState, { normalized: true });
-      drawing.fileLegendCaptions.value = new Set(saved.fileLegendCaptions);
+      COLOR_RULES_SLICE.install(drawing.slices.colorRules, { fileLegendCaptions: saved.fileLegendCaptions });
     });
     state.collinearGroups.value = snapshot.collinearGroups;
     applyRunStateData(snapshot.runState);
