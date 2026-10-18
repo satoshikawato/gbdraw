@@ -322,10 +322,10 @@ const checkpointSvgBytes = (checkpoint) => (
  * @typedef {object} HistoryBudgetMember
  * @property {() => number} entryBytes The bytes its entries retain.
  * @property {() => Set<string>} retainedFileIds The files its current intent and entries name.
- * @property {() => boolean} dropOldestStep
- *   Drops its oldest Undo entry, or its Redo entries when no Undo entry is left;
- *   `false` when it holds none.
- * @property {() => void} noteEvicted Shows that its older History was discarded.
+ * @property {() => 'undo' | 'redo' | null} dropOldestStep
+ *   Drops its oldest Undo entry, or its Redo entries when no Undo entry is left,
+ *   and says which; `null` when it holds none.
+ * @property {() => void} noteEvicted Shows that its older Undo History was discarded.
  *
  * The byte budget and file retention of every drawing's History (OV-112).
  * @typedef {object} HistoryBudget
@@ -367,9 +367,14 @@ export const createHistoryBudget = ({ maxBytes = DEFAULT_MAX_BYTES, estimateFile
   /** @param {HistoryBudgetMember} member */
   const enforce = (member) => {
     [...[...members].filter((other) => other !== member), member].forEach((candidate) => {
-      let dropped = false;
-      while (overBudget() && candidate.dropOldestStep()) dropped = true;
-      if (dropped) candidate.noteEvicted();
+      let undoDropped = false;
+      while (overBudget()) {
+        const dropped = candidate.dropOldestStep();
+        if (!dropped) break;
+        if (dropped === 'undo') undoDropped = true;
+      }
+      // The notice names undo history: a pass that drops only Redo steps is silent.
+      if (undoDropped) candidate.noteEvicted();
     });
     releaseUnreferencedFiles();
   };
@@ -749,11 +754,11 @@ export const createHistoryManager = ({
     dropOldestStep: () => {
       if (undoStack.length > 0) {
         removeEntryBytes(undoStack.shift());
-        return true;
+        return 'undo';
       }
-      if (redoStack.length === 0) return false;
+      if (redoStack.length === 0) return null;
       clearRedo();
-      return true;
+      return 'redo';
     },
     noteEvicted: () => { historyLimitMessage.value = HISTORY_LIMIT_MESSAGE; }
   };

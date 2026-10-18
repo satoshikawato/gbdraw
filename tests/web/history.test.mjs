@@ -3448,4 +3448,16 @@ for (const previousSuppressed of [false, true]) {
   await router.undo();
   assert.equal(files.linear?.name, 'b.gb');
   assert.equal(values.circular, 'z', 'Undo in Linear leaves Circular unchanged');
+
+  // D-15-50 (4): the notice names undo history, so a pass that drops only the
+  // hidden drawing's Redo steps shows none.
+  const redoOnly = makeRouter(Math.floor(stepBytes * 1.5));
+  await redoOnly.router.captureBaseline();
+  await redoOnly.router.runUndoable('Linear edit', () => { redoOnly.values.linear = 'x'.repeat(400); });
+  await redoOnly.router.undo();
+  assert.equal(redoOnly.router.canRedo(), true);
+  redoOnly.shown.value = 'circular';
+  await redoOnly.router.runUndoable('Circular edit', () => { redoOnly.values.circular = 'y'.repeat(400); });
+  assert.equal(redoOnly.router.managerOf('linear').canRedo(), false, 'the hidden drawing loses its Redo step');
+  assert.equal(redoOnly.router.managerOf('linear').historyLimitMessage.value, '', 'a Redo-only drop shows no notice');
 }
