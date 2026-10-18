@@ -1,6 +1,8 @@
 import re
+from pathlib import Path
 
 import pandas as pd
+from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -495,6 +497,7 @@ def _build_linear_span(
     record_count: int = 1,
     features: tuple[tuple[int, int], ...] = ((120, 250),),
     overrides: dict[str, object] | None = None,
+    label_text: bool = True,
     **kwargs: object,
 ):
     records = []
@@ -513,7 +516,7 @@ def _build_linear_span(
                     RegionAnnotation(
                         f"span{index}",
                         CoordinateSpan(parse_record_selector(f"#{index}"), 100, 300),
-                        label=f"Span {index}",
+                        label=f"Span {index}" if label_text else None,
                         mark="highlight",
                     )
                     for index in range(1, record_count + 1)
@@ -718,32 +721,198 @@ def test_linear_annotation_to_slot_follows_a_features_slot_off_the_axis() -> Non
     assert bands["drawn"] == pytest.approx((_linear_bands(plain)["features"][0] + shift, bands["gc"][1]))
 
 
+def _label_box(drawing, slot_id: str = "regions", record_index: int = 0) -> tuple[float, float]:
+    """The vertical box of a slot's drawn labels from the record axis (font size around the centre)."""
+
+    record = drawing._gbdraw_track_slot_geometry["records"][record_index]
+    root = ElementTree.fromstring(drawing.tostring())
+    parents = {child: parent for parent in root.iter() for child in parent}
+
+    def absolute_y(element) -> float:
+        y = 0.0
+        while element is not None:
+            y += sum(
+                float(value)
+                for value in re.findall(r"translate\([^,)]+,\s*([^)]+)\)", element.attrib.get("transform", ""))
+            )
+            element = parents.get(element)
+        return y
+
+    boxes = [
+        (center - 0.5 * size, center + 0.5 * size)
+        for group in root.iter()
+        if group.attrib.get("data-gbdraw-annotation-track-id") == slot_id
+        and group.attrib.get("data-gbdraw-record-index") == str(record_index)
+        for text in group.iter()
+        if text.tag.endswith("text") and (text.text or "").strip()
+        for size in (float(text.attrib.get("font-size", 10.0)),)
+        for center in (absolute_y(group) + float(text.attrib["y"]) - float(record["axisYpx"]),)
+    ]
+    assert boxes, f"no {slot_id} labels drawn on record {record_index}"
+    return min(top for top, _ in boxes), max(bottom for _, bottom in boxes)
+
+
+def _assert_clear(box: tuple[float, float], band: tuple[float, float], name: str) -> None:
+    assert box[1] <= band[0] + 1e-6 or box[0] >= band[1] - 1e-6, f"labels {box} overlap {name} {band}"
+
+
+def _record_body(drawing, record_index: int = 0) -> tuple[float, float]:
+    band = drawing._gbdraw_track_slot_geometry["records"][record_index]["recordBodyBand"]
+    return band["topPx"], band["bottomPx"]
+
+
+_FEATURES_BELOW_STACK = (
+    "features:features@side=below",
+    "gc:dinucleotide_content@side=below",
+    "skew:dinucleotide_skew@side=below",
+)
+
+_LABELLED_SPANS = [
+    # Review F4: labels below the lanes, where GC starts.
+    pytest.param(
+        _FEATURES_BELOW_STACK,
+        "anchor_slot=features,cover_anchor=true,layer=foreground,z=1",
+        ("features",),
+        id="cover-anchor-labels-before-gc",
+    ),
+    # Labels above the lanes, where the axis line is.
+    pytest.param(
+        _FEATURES_BELOW_STACK,
+        "anchor_slot=features,cover_anchor=true,layer=underlay,z=-1",
+        (),
+        id="cover-anchor-labels-before-axis",
+    ),
+    pytest.param(
+        _SPAN_STACK,
+        "anchor_slot=features,to_slot=gc,layer=foreground,z=1",
+        ("features", "gc"),
+        id="to-slot-labels-before-skew",
+    ),
+    pytest.param(
+        _SPAN_STACK,
+        "anchor_slot=gc,to_slot=skew,layer=underlay,z=-1",
+        ("features",),
+        id="to-slot-labels-before-lanes",
+    ),
+]
+
+
+@pytest.mark.parametrize(("stack", "spec", "unmoved"), _LABELLED_SPANS)
+def test_linear_span_labels_keep_clear_of_the_next_slot_and_the_axis(
+    stack: tuple[str, ...], spec: str, unmoved: tuple[str, ...]
+) -> None:
+    plain = _build_linear_span(*stack, _span_slot(spec))
+    labelled = _build_linear_span(*stack, _span_slot(spec, labels=True))
+    box = _label_box(labelled)
+    bands = _linear_bands(labelled)
+    plain_bands = _linear_bands(plain)
+
+    # The next slot, or the axis line, moves out of the labels (OV-843). The labels may
+    # touch the edge of a slot the span covers (label_offset 4 is less than half the font size).
+    covered = {
+        value for key, value in (part.split("=") for part in spec.split(",")) if key in {"anchor_slot", "to_slot"}
+    }
+    for slot_id, band in bands.items():
+        if slot_id not in {"regions", "drawn", *covered} and band is not None:
+            _assert_clear(box, band, slot_id)
+    if "features:features@side=below" in stack:
+        # Nothing lies above the axis line there without labels: the record body starts at the line.
+        axis_top = _record_body(plain)[0]
+        _assert_clear(box, (axis_top, -axis_top), "axis")
+    # Only on the side with label text; the span still covers its slots.
+    for slot_id in unmoved:
+        assert bands[slot_id] == pytest.approx(plain_bands[slot_id])
+    assert bands["drawn"] == pytest.approx(bands["regions"])
+    assert _record_body(labelled)[0] <= box[0] and box[1] <= _record_body(labelled)[1]
+
+
+@pytest.mark.parametrize(("stack", "spec", "unmoved"), _LABELLED_SPANS)
+def test_linear_span_without_label_text_keeps_no_label_room(
+    stack: tuple[str, ...], spec: str, unmoved: tuple[str, ...]
+) -> None:
+    del unmoved
+    labels_off = _build_linear_span(*stack, _span_slot(spec))
+    no_text = _build_linear_span(*stack, _span_slot(spec, labels=True), label_text=False)
+
+    assert _linear_bands(no_text) == _linear_bands(labels_off)
+    assert _record_body(no_text) == pytest.approx(_record_body(labels_off))
+
+
+def test_linear_plain_overlay_labels_keep_their_room_on_the_anchor() -> None:
+    spec = "anchor_slot=gc,layer=foreground,z=1"
+    plain = _linear_bands(_build_linear_span(*_SPAN_STACK, _span_slot(spec)))
+    drawing = _build_linear_span(*_SPAN_STACK, _span_slot(spec, labels=True))
+    labelled = _linear_bands(drawing)
+
+    # An overlay that spans nothing reserves its labels on its anchor, as before: GC stays, skew moves.
+    assert labelled["gc"] == pytest.approx(plain["gc"])
+    assert labelled["skew"][0] > plain["skew"][0]
+    _assert_clear(_label_box(drawing), labelled["skew"], "skew")
+
+
+def test_linear_highlight_labels_keep_off_the_axis_in_the_below_layout() -> None:
+    record = SeqIO.read(Path(__file__).parent / "test_inputs" / "AP027078.gb", "genbank")
+
+    def build(label: str | None):
+        crispr = RegionAnnotation("crispr", CoordinateSpan(None, 20000, 40000), label=label, mark="highlight")
+        return assemble_linear_diagram_from_records(
+            [record],
+            cfg=apply_config_overrides(
+                None, {"labels.linear.scope": "none", "canvas.linear.track_layout": "below"}
+            ),
+            legend="none",
+            selected_features_set=["CDS", "rRNA", "tRNA"],
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (crispr,)),)),
+        )
+
+    # Without label text nothing lies above the axis line, so the record body starts at the line.
+    axis_top = _record_body(build(None))[0]
+    box = _label_box(build("CRISPR-Cas"), slot_id="annotations_1")
+
+    # The label sits below the axis line, and the lanes move only that far (default CLI path, OV-843).
+    assert box[0] == pytest.approx(-axis_top)
+
+
 @pytest.mark.parametrize(
-    ("spec", "grows"),
+    ("spec", "moved"),
     [
-        pytest.param("anchor_slot=features,to_slot=gc,layer=underlay,z=-1", True, id="ends-at-record-top"),
-        pytest.param("anchor_slot=gc,to_slot=skew,layer=underlay,z=-1", False, id="ends-inside-record"),
+        pytest.param("anchor_slot=features,to_slot=gc,layer=underlay,z=-1", (), id="ends-at-record-top"),
+        pytest.param("anchor_slot=gc,to_slot=skew,layer=underlay,z=-1", ("gc", "skew"), id="ends-inside-record"),
     ],
 )
-def test_linear_annotation_to_slot_labels_add_room_only_at_the_record_edge(
-    spec: str, grows: bool
+def test_linear_annotation_to_slot_labels_keep_room_beyond_the_outermost_slot(
+    spec: str, moved: tuple[str, ...]
 ) -> None:
     def build(labels: bool):
         drawing = _build_linear_span(*_SPAN_STACK, _span_slot(spec, labels=labels), record_count=2)
-        bodies = [
-            (record["recordBodyBand"]["topPx"], record["recordBodyBand"]["bottomPx"])
-            for record in drawing._gbdraw_track_slot_geometry["records"]
-        ]
-        return [_linear_bands(drawing, index) for index in range(2)], bodies
+        return drawing, [_linear_bands(drawing, index) for index in range(2)]
 
-    plain_bands, plain_bodies = build(False)
-    labelled_bands, labelled_bodies = build(True)
+    plain, plain_bands = build(False)
+    labelled, labelled_bands = build(True)
 
-    # Labels do not move a slot or the span.
-    assert labelled_bands == plain_bands
-    # label_offset (4) plus half the label font size (10) above an underlay span.
-    overhang = 9.0 if grows else 0.0
-    assert labelled_bodies == pytest.approx([(top - overhang, bottom) for top, bottom in plain_bodies])
+    for index in range(2):
+        box = _label_box(labelled, record_index=index)
+        plain_top, plain_bottom = _record_body(plain, index)
+        top, bottom = _record_body(labelled, index)
+        shift = labelled_bands[index]["skew"][0] - plain_bands[index]["skew"][0]
+        if moved:
+            # The labels lie between the lanes and GC: the slots below them move out, the lanes stay.
+            assert 0.0 < shift <= 9.0
+            for slot_id in moved:
+                assert labelled_bands[index][slot_id] == pytest.approx(
+                    (plain_bands[index][slot_id][0] + shift, plain_bands[index][slot_id][1] + shift)
+                )
+            assert labelled_bands[index]["features"] == pytest.approx(plain_bands[index]["features"])
+            _assert_clear(box, labelled_bands[index]["features"], "features")
+            assert labelled_bands[index]["drawn"] == pytest.approx(
+                (labelled_bands[index]["gc"][0], labelled_bands[index]["skew"][1])
+            )
+            assert (top, bottom) == pytest.approx((plain_top, plain_bottom + shift))
+        else:
+            # At the record top no slot moves; label_offset (4) plus half the label font size (10)
+            # joins the record body above an underlay span.
+            assert labelled_bands[index] == plain_bands[index]
+            assert (top, bottom) == pytest.approx((plain_top - 9.0, plain_bottom))
 
 
 def test_linear_annotation_to_slot_uses_the_bands_each_record_has() -> None:

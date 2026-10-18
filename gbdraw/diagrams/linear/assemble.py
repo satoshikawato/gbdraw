@@ -161,6 +161,7 @@ from ...annotations import (
     feature_underlay_anchor_slot_id,
     feature_underlay_slot_id,
     layout_annotation_track,
+    linear_annotation_labels_above,
     merge_feature_underlays,
     sync_annotation_legend_entries,
 )
@@ -943,6 +944,7 @@ def _linear_slot_footprints_for_record(
             params = annotation_track_params_from_mapping(slot.params)
             top_overhang = 0.0
             bottom_overhang = 0.0
+            labels_above = linear_annotation_labels_above(slot.side, params)
             if params.show_labels:
                 for placement in placements:
                     if not placement.annotation.label:
@@ -950,9 +952,6 @@ def _linear_slot_footprints_for_record(
                     style = placement.annotation.style
                     label_overhang = float(style.label_offset) + 0.5 * float(
                         style.label_font_size or 10.0
-                    )
-                    labels_above = slot.side == "above" or (
-                        slot.side == "overlay" and params.layer == "underlay"
                     )
                     if labels_above:
                         top_overhang = max(top_overhang, label_overhang)

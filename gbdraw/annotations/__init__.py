@@ -36,6 +36,7 @@ from .models import (
     ResolutionWarning,
     annotation_track_params_from_mapping,
     effective_annotation_style,
+    linear_annotation_labels_above,
     parse_feature_selector,
 )
 from .resolve import (
@@ -71,6 +72,7 @@ __all__ = [
     "annotation_sets_from_dataframe",
     "annotation_midpoint",
     "annotation_track_params_from_mapping",
+    "linear_annotation_labels_above",
     "effective_annotation_style",
     "feature_underlay_anchor_slot_id",
     "feature_underlay_slot_id",
