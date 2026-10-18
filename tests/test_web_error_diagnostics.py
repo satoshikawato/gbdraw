@@ -568,3 +568,40 @@ def test_circular_labels_that_do_not_fit_reach_the_web_as_label_layout():
         # Python words the counts (one wording owner); the Web shows the sentence as sent.
         "context": {"labelFitCounts": "Overlapping label pairs: 20. Crossing leader pairs: 24."},
     }
+
+
+def test_the_gc_rows_kept_inside_a_placement_reach_the_web_by_name() -> None:
+    """OV-1274: the GC rows a placement keeps room for pass the adapter, and the Web wording owner names each."""
+
+    import re
+
+    from gbdraw.diagrams.circular.radial_layout import _GC_TRACKS
+    from gbdraw.web_support.error_adapter import KEPT_INSIDE_TRACKS
+
+    wording = (Path(__file__).resolve().parents[1] / "gbdraw" / "web" / "js" / "utils" / "error-normalization.js").read_text(
+        encoding="utf-8"
+    )
+    block = wording[wording.index("const KEPT_INSIDE_TRACKS") :]
+    web_tracks = set(re.findall(r"\b([a-z_]+): \{ name:", block[: block.index("});")]))
+    assert {track.diagnostic_id for track in _GC_TRACKS.values()} == KEPT_INSIDE_TRACKS == web_tracks
+
+    context = serialize_web_error(
+        ValidationError(
+            "PRIVATE",
+            diagnostic={
+                "code": "TRACK_LAYOUT",
+                "reason": "CANNOT_FIT",
+                "keptInsidePx": 34,
+                "keptInsideTracks": ["gc_skew", "PRIVATE", "gc_skew"],
+            },
+        ),
+        operation="generate",
+        stage="render",
+    )["context"]
+    assert context == {"reason": "CANNOT_FIT", "keptInsidePx": 34, "keptInsideTracks": "gc_skew"}
+    unnamed = serialize_web_error(
+        ValidationError("PRIVATE", diagnostic={"code": "TRACK_LAYOUT", "keptInsideTracks": ["PRIVATE"]}),
+        operation="generate",
+        stage="render",
+    )["context"]
+    assert "keptInsideTracks" not in unnamed
