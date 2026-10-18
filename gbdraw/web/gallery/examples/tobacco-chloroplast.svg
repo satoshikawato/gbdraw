@@ -6691,6 +6691,11 @@
   function closestAnnotation(node) {
     while (node &amp;&amp; node !== svg) {
       if (node.matches &amp;&amp; node.matches(ANNOTATION_SELECTOR)) return node;
+      var frontOf = node.getAttribute ? node.getAttribute('data-gbdraw-region-label-for') : null;
+      if (frontOf) {
+        var owner = svg.ownerDocument.getElementById(frontOf);
+        return owner &amp;&amp; svg.contains(owner) &amp;&amp; owner.matches(ANNOTATION_SELECTOR) ? owner : null;
+      }
       node = node.parentNode;
     }
     return null;

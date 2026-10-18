@@ -470,6 +470,20 @@ export const createFeatureSvgActions = ({
     return featureEl;
   };
 
+  /**
+   * The annotation a click on `target` selects. A region label drawn in front of the leader lines
+   * (LP-D82) is outside its annotation's group and names that group by id.
+   * @param {MaybeElementTarget | null | undefined} target @param {Element} svg
+   */
+  const getAnnotationTarget = (target, svg) => {
+    if (!target || typeof target.closest !== 'function') return null;
+    const front = target.closest('[data-gbdraw-region-label-for]')?.getAttribute('data-gbdraw-region-label-for');
+    const annotationEl = front
+      ? svg.querySelector(`[id="${CSS.escape(front)}"][data-gbdraw-annotation-id]`)
+      : target.closest('[data-gbdraw-annotation-id]');
+    return annotationEl && svg.contains(annotationEl) ? annotationEl : null;
+  };
+
   /** @param {MaybeElementTarget | null | undefined} target @param {Element} svg */
   const getPairwiseMatchTarget = (target, svg) => {
     if (!target || typeof target.closest !== 'function') return null;
@@ -1844,8 +1858,8 @@ export const createFeatureSvgActions = ({
           }
           return;
         }
-        const annotationEl = /** @type {MaybeElementTarget | null} */ (e.target)?.closest?.('[data-gbdraw-annotation-id]');
-        if (annotationEl && svg.contains(annotationEl)) {
+        const annotationEl = getAnnotationTarget(/** @type {MaybeElementTarget | null} */ (e.target), svg);
+        if (annotationEl) {
           e.preventDefault();
           e.stopPropagation();
           if (selectedAnnotation) {

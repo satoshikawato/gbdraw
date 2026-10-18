@@ -798,14 +798,66 @@ def prepare_label_list_linear(
         track_num = int(track_id.split("_")[1])
 
         for label in track_labels:
-            # Compact vertical positioning for external labels
+            # Compact vertical positioning for external labels: row N of its side
+            # (``linear_label_in_row`` moves a label to another row of it).
             if track_layout_normalized == "below" or label["secondary_below"]:
-                label["middle_y"] = bottom_feature_y_limit + (track_height * track_num)
+                label["row_origin_y"], label["row_pitch"] = bottom_feature_y_limit, track_height
             else:
-                label["middle_y"] = top_feature_y_limit - (track_height * track_num)
+                label["row_origin_y"], label["row_pitch"] = top_feature_y_limit, -track_height
+            label["middle_y"] = label["row_origin_y"] + label["row_pitch"] * track_num
             external_labels.append(label)
 
     return embedded_labels + external_labels
+
+
+def linear_label_row(label: Mapping[str, object]) -> int:
+    """The row of a label (0: on its feature, or a label that is not in a row)."""
+
+    return int(str(label.get("track_id", "track_0")).split("_")[1])
+
+
+def linear_label_side(label: Mapping[str, object]) -> tuple[float, float] | None:
+    """The rows an external, horizontal label stacks in (``None`` for a label that has no rows to
+    move to: embedded, above-feature mode, or without a source feature)."""
+
+    if (
+        label.get("is_embedded")
+        or label.get("leader_line")
+        or label.get("source_feature_index") is None
+        or "row_pitch" not in label
+    ):
+        return None
+    return float(cast(float, label["row_origin_y"])), float(cast(float, label["row_pitch"]))
+
+
+def linear_label_in_row(label: dict, side: tuple[float, float], row: int) -> dict:
+    """A copy of an external label in row ``row`` of its ``side`` (``linear_label_side``), at the same x
+    (LP-D82 ``RGN-YIELD-ROW``)."""
+
+    origin, pitch = side
+    return {**label, "middle_y": origin + pitch * row, "track_id": f"track_{row}"}
+
+
+class FeatureLabelRow(NamedTuple):
+    """A feature label moved to another row of its side for a region label (LP-D82 ``RGN-YIELD-ROW``),
+    by its record and source feature."""
+
+    record_index: int
+    source_feature_index: int
+    row: int
+
+
+def with_feature_label_rows(all_labels: Sequence[list[dict]], rows: Sequence[FeatureLabelRow]) -> list[list[dict]]:
+    """Each record's labels with the listed feature labels moved to their rows."""
+
+    moved = {(row.record_index, row.source_feature_index): row.row for row in rows}
+
+    def placed(record_index: int, label: dict) -> dict:
+        side = linear_label_side(label)
+        row = moved.get((record_index, cast(int, label.get("source_feature_index"))))
+        return label if side is None or row is None else linear_label_in_row(label, side, row)
+
+    return [[placed(record_index, label) for label in labels] for record_index, labels in enumerate(all_labels)]
 
 
 def linear_leader_polyline(label: dict) -> tuple[Point, ...]:
@@ -838,8 +890,37 @@ def linear_label_shapes(labels: list[dict]) -> list[LabelShape]:
     ]
 
 
+def linear_record_label_fit(labels: Sequence[dict]) -> LabelFit:
+    """One record's drawn feature labels counted with the shared rule (their layout boxes and leaders)."""
+
+    return label_fits_by_kind(linear_label_shapes(list(labels)), touching=False).get("linear", FITS)
+
+
 # The drawing attribute that carries a Linear figure's label fit to the check.
 LINEAR_LABEL_FIT_ATTR = "_gbdraw_linear_label_fit"
+
+
+@dataclass(frozen=True)
+class RecordRegionLabels:
+    """One record's drawn region (annotation) labels: their font sizes, how many pairs of
+    them and other labels or lines still overlap (LP-D68), and which labels (by placement
+    order) those are."""
+
+    font_sizes: tuple[float, ...] = ()
+    overlaps: int = 0
+    conflicted: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class FeatureLabelRows:
+    """Feature label rows a figure needs room for (LP-D82 ``RGN-YIELD-ROW``): the figure is
+    assembled again with ``rows`` and kept when that clears the ``overlaps`` of the region
+    labels that asked for them (``region_labels``: record index, placement order) and makes
+    no other count larger (``keeps_feature_label_rows``)."""
+
+    rows: tuple[FeatureLabelRow, ...]
+    overlaps: int
+    region_labels: tuple[tuple[int, int], ...]
 
 
 @dataclass(frozen=True)
@@ -847,11 +928,15 @@ class LinearLabelFit:
     """The drawn Linear labels that do not fit, by record.
 
     ``embedded_overlap`` marks an overlapping pair with a label drawn on its
-    feature: the features are drawn on top of each other.
+    feature: the features are drawn on top of each other. ``new_rows`` are the
+    feature label rows this figure has no room for yet; ``region_conflicts`` the
+    region labels (record index, placement order) still over other labels or lines.
     """
 
     records: tuple[LabelFitRecord, ...] = ()
     embedded_overlap: bool = False
+    new_rows: FeatureLabelRows | None = None
+    region_conflicts: frozenset[tuple[int, int]] = frozenset()
 
     @property
     def fit(self) -> LabelFit:
@@ -865,23 +950,58 @@ class LinearLabelFit:
 def linear_label_fit(
     record_labels: Sequence[tuple[str, Sequence[dict]]],
     font_size: float,
+    region_labels: Sequence[RecordRegionLabels] | None = None,
+    new_rows: FeatureLabelRows | None = None,
 ) -> LinearLabelFit:
-    """Count one figure's drawn Linear labels with the shared rule (LP-D48 SCOPE-ALL-LABELS)."""
+    """Count one figure's drawn Linear labels with the shared rule (LP-D48 SCOPE-ALL-LABELS).
 
+    ``region_labels`` are each record's region labels as their placer counted
+    them (LP-D68); a record whose region labels overlap other labels or lines
+    gets a ``linear_region`` record, which only warns.
+    """
+
+    regions = list(region_labels) if region_labels is not None else [RecordRegionLabels()] * len(record_labels)
     failing: list[LabelFitRecord] = []
     embedded_overlap = False
-    for record_id, labels in record_labels:
-        shapes = linear_label_shapes(list(labels))
-        fit = label_fits_by_kind(shapes, touching=False).get("linear", FITS)
-        if fit.fits:
-            continue
-        failing.append(LabelFitRecord(record_id, "linear", len(labels), font_size, fit))
-        if fit.overlap_pairs and not embedded_overlap:
-            embedded_overlap = any(
-                labels[left]["is_embedded"] or labels[right]["is_embedded"]
-                for left, right in overlapping_pairs([shape.parts for shape in shapes], touching=False)
+    for (record_id, labels), region in zip(record_labels, regions, strict=True):
+        fit = linear_record_label_fit(labels)
+        if not fit.fits:
+            failing.append(LabelFitRecord(record_id, "linear", len(labels), font_size, fit))
+            if fit.overlap_pairs and not embedded_overlap:
+                embedded_overlap = any(
+                    labels[left]["is_embedded"] or labels[right]["is_embedded"]
+                    for left, right in overlapping_pairs(
+                        [shape.parts for shape in linear_label_shapes(list(labels))], touching=False
+                    )
+                )
+        if region.overlaps:
+            failing.append(
+                LabelFitRecord(
+                    record_id,
+                    "linear_region",
+                    len(region.font_sizes),
+                    max(region.font_sizes),
+                    LabelFit(0, 0, region_overlaps=region.overlaps),
+                )
             )
-    return LinearLabelFit(tuple(failing), embedded_overlap)
+    conflicts = frozenset((index, label) for index, region in enumerate(regions) for label in region.conflicted)
+    return LinearLabelFit(tuple(failing), embedded_overlap, new_rows, conflicts)
+
+
+def keeps_feature_label_rows(before: LinearLabelFit, after: LinearLabelFit) -> bool:
+    """Whether the figure assembled with ``before.new_rows`` (``after``) is kept: it clears the
+    overlaps of the region labels that asked for the rows (LP-D77) and makes no other count larger."""
+
+    if before.new_rows is None:
+        return False
+    old, new = before.fit, after.fit
+    return (
+        after.region_conflicts.isdisjoint(before.new_rows.region_labels)
+        and new.region_overlaps <= old.region_overlaps - before.new_rows.overlaps
+        and new.overlap_pairs <= old.overlap_pairs
+        and new.crossing_pairs <= old.crossing_pairs
+        and new.definition_overlaps <= old.definition_overlaps
+    )
 
 
 def check_linear_label_fit(
@@ -889,30 +1009,43 @@ def check_linear_label_fit(
     verify: Callable[[Mapping[str, LabelFitValue]], LabelFitVerification],
     *,
     features_separated: bool,
-) -> None:
+) -> LabelFitReport | None:
     """Raise or warn for a drawn Linear figure whose labels do not fit.
 
     Placed Linear labels keep apart, so overlaps come from labels drawn on
     features drawn on top of each other; their one row puts overlapping
     features on separate tracks (LP-D52 ``E-ROW``), verified with ``verify``.
+    A figure drawn with crossing leaders or with region labels over other
+    labels or lines warns (LP-D68) and returns its report, which has no rows.
     """
 
     outcome = label_fit.outcome
     if outcome == "fits":
-        return
+        return None
     rows: tuple[LabelFitRow, ...] = ()
     if outcome == "stop" and label_fit.embedded_overlap and not features_separated:
         values = SEPARATE_FEATURES_VALUES
         rows = (switch_row("separate_features", values, verify(values), offer_notice=True),)
-    raise_or_warn(LabelFitReport(label_fit.records, rows=rows, drawn=outcome == "warn"))
+    report = LabelFitReport(label_fit.records, rows=rows, drawn=outcome == "warn")
+    raise_or_warn(report)
+    return report
 
 
 __all__ = [
     "LINEAR_LABEL_FIT_ATTR",
+    "FeatureLabelRow",
+    "FeatureLabelRows",
     "LinearLabelFit",
+    "RecordRegionLabels",
     "calculate_label_bounds",
     "check_linear_label_fit",
+    "keeps_feature_label_rows",
     "linear_label_fit",
+    "linear_label_in_row",
+    "linear_label_row",
+    "linear_label_side",
+    "linear_record_label_fit",
+    "with_feature_label_rows",
     "calculate_label_y_bounds",
     "check_label_overlap",
     "find_lowest_available_track",

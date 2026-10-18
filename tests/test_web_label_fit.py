@@ -64,7 +64,7 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert payload["records"] == [{
         "recordId": "rec-1", "labelKind": "circular_outer", "labelKindTitle": "outer labels",
         "labelCount": 111, "fontSize": 14.0, "overlapPairs": 20, "crossingPairs": 21,
-        "definitionOverlaps": 0, "refused": False,
+        "definitionOverlaps": 0, "regionOverlaps": 0, "refused": False,
         "counts": "20 label pairs overlap, 21 leader pairs cross",
     }]
     vertical, font, tighter, combination = payload["rows"]
@@ -707,3 +707,51 @@ def test_label_fit_row_token_with_non_ascii_digits_is_stale(digit: str) -> None:
     for stale in (f"{mode}:{digit}:{index}", f"{mode}:{generation}:{digit}"):
         row = searches.row(stale, "combination")
         assert row["status"] == "not_computed" and row["reason"]
+
+
+def test_a_linear_figure_with_region_labels_over_others_opens_the_notice_with_no_rows(tmp_path) -> None:
+    """LP-D68, LP-D82: the Linear Result carries a report for the notice bar, with no fix rows."""
+
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.api import (
+        AnnotationOptions,
+        AnnotationSet,
+        CoordinateSpan,
+        LinearDiagramOptions,
+        LinearDiagramRequest,
+        RegionAnnotation,
+    )
+
+    record = SeqRecord(Seq("ACGT" * 1500), id="adjacent", name="adjacent", annotations={"topology": "linear"})
+    record.features = [
+        SeqFeature(FeatureLocation(2999, 3300, strand=1), type="CDS", qualifiers={"product": ["photosystem II protein D1"]}),
+    ]
+    regions = (
+        RegionAnnotation("r0", CoordinateSpan(None, 1000, 1100), label="First region with a long label", mark="highlight"),
+        RegionAnnotation("r1", CoordinateSpan(None, 1120, 1220), label="Second region with a long label", mark="highlight"),
+    )
+    document = build_session_document(
+        LinearDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=LinearDiagramOptions(
+                config_overrides={"labels.linear.scope": "all", "canvas.linear.track_layout": "above"},
+                annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            ),
+            output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
+        )
+    ).to_dict()
+    searches = LabelFitRowSearches()
+    response = _web_render(document, tmp_path, searches)
+
+    (entry,) = response["metadata"]["labelFitReports"]
+    report = entry["report"]
+    assert report["drawn"] is True and report["regionOverlaps"] == 1
+    assert report["notice"] == ["Region labels overlap other labels or lines (1)."]
+    (record_payload,) = report["records"]
+    assert (record_payload["labelKind"], record_payload["labelKindTitle"], record_payload["counts"]) == (
+        "linear_region", "region labels", "1 region label overlap"
+    )
+    assert report["rows"] == []

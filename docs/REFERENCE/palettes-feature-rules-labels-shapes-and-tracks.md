@@ -292,13 +292,15 @@ affected.
   tracks leave, nothing is drawn. The command line prints `ERROR:` with the
   message and exits with status 1. Python raises `LabelsDoNotFitError`, a
   `GbdrawError`.
-- If leader lines cross or labels cover the definition text, but no labels
-  overlap, the figure is drawn as before. The command line prints the same
+- If leader lines cross, labels cover the definition text, or Linear region
+  (annotation) labels overlap other labels or lines, but no labels overlap,
+  the figure is drawn as before. The command line prints the same
   message after `WARNING:` and exits with status 0. Python warns with
   `LabelLeadersCrossWarning`, a `UserWarning`.
 
-The message counts the overlapping label pairs, crossing leader pairs, and
-labels over the definition text of each record and side, and lists settings
+The message counts the overlapping label pairs, crossing leader pairs,
+labels over the definition text, and region label overlaps of each record and
+side, and lists settings
 that make the labels fit. Each setting changes one thing and is checked by
 drawing the whole figure again. The rows depend on which labels do not fit:
 
@@ -329,8 +331,36 @@ When the figure is drawn anyway, gbdraw searches for 5 seconds and names the
 rows it did not reach. When nothing is drawn, every outer-label row is
 searched; for inner, embedded, or radial labels the switches and then the font
 search share 30 seconds, and a setting is tried only if drawing the figure once
-more ends within that time. Linear labels get only the separate overlapping
-features row, because the Linear layout keeps its other labels apart.
+more ends within that time. Linear feature labels get only the separate
+overlapping features row, because the Linear layout keeps its other labels
+apart. Linear region labels get no row.
+
+A Linear region label moves along its region to a place clear of the feature
+labels, leader lines, record names and definition text, other records of its
+row, and the region labels placed before it. When no place along its region
+is clear, gbdraw tries, in this order:
+
+1. the empty area inside the region's own filled box (a `highlight` or `band`
+   with a solid fill), clear of feature glyphs, the axis, and other tracks by
+   the label spacing;
+2. at the label's place along its region, each feature label whose letters
+   it meets moves to another row on its side: the nearest row first, then
+   one new row beyond the others, for which the figure is drawn again;
+3. a label that then meets only the leader lines of its record's feature
+   labels is drawn in front of them on a white rounded box at 70% opacity,
+   and a leader line behind the box does not count.
+
+Steps 2 and 3 may combine. gbdraw uses a step only when it clears every
+conflict of the label and makes no new overlap, checked by drawing the
+figure; otherwise the label stays on one line along its region. The font
+size and the number of lines never change. A figure in which every region
+label has a clear place along its region is drawn as before. When a conflict
+remains, each thing the label still overlaps counts as one region label
+overlap (a feature label and its leader line count once). This only warns:
+the Web app shows "Region labels overlap other labels or lines (N)." over
+the figure, with no **Choose a fix** button. SVG, PNG, and PDF keep the box's
+opacity and drawing order; EPS and PS keep them by rasterizing the area of
+the box.
 
 In the Web app, the rows appear in the **Labels do not fit** dialog. Generate
 searches no row of a figure drawn anyway; the dialog computes each row that
@@ -348,7 +378,8 @@ are packed 0.1 px apart, as in 0.13, so a map that fit in 0.13 still draws.
 
 In Python, `LabelsDoNotFitError.report` and `LabelLeadersCrossWarning.report`
 hold a `LabelFitReport`: the records that do not fit, by label kind
-(`circular_outer`, `circular_inner`, `circular_embedded`, or `linear`), with
+(`circular_outer`, `circular_inner`, `circular_embedded`, `linear`, or
+`linear_region` for Linear region labels), with
 their label counts, font sizes, and counts, and `refused` for radial labels
 without room; and the rows. A row's `values` maps config paths to the values
 that fit, and its `status` is `found`, `found_with_notice` (the figure then
