@@ -93,6 +93,13 @@ def mark_reach(
     return MarkReach(reach, reach - half_lane)
 
 
+def past_span_edge(reach: MarkReach, inset: float) -> float:
+    """How far a span's mark paints past the span's edge on the label side, when its lane lies ``inset`` inside
+    that edge; zero while the paint stays within the span. A span's label keeps ``label_offset`` beyond that."""
+
+    return max(0.0, reach.past_lane_edge - inset)
+
+
 def label_font_size(style: RegionAnnotationStyle) -> float:
     return float(style.label_font_size or DEFAULT_LABEL_FONT_SIZE)
 
@@ -121,4 +128,5 @@ __all__ = [
     "label_font_size",
     "label_ink_offsets",
     "mark_reach",
+    "past_span_edge",
 ]

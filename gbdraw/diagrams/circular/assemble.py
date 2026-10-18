@@ -62,6 +62,7 @@ from ...labels.circular import (
     assign_leader_start_points,
     circular_label_fits,
     circular_label_font_size,
+    circular_label_shapes,
     minimum_bbox_gap_px,
     prepare_label_list,
     x_overlap,
@@ -125,6 +126,7 @@ from ...annotations import (
 from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.circular.annotations import (
     CircularAnnotationLabel,
+    CircularLabelObstacles,
     circular_annotation_label_room,
     circular_annotation_labels,
     circular_annotation_track_content,
@@ -697,10 +699,12 @@ def _circular_annotation_labels_by_slot(
     record_index: int,
     record_length: int,
     font_family: str,
+    obstacles: CircularLabelObstacles,
 ) -> dict[str, tuple[CircularAnnotationLabel, ...]]:
     """The labels of each annotation slot of a record, measured once for the drawer and the canvas bounds.
 
-    The letters clear the axis circle's paint too where they would meet it.
+    The letters clear the axis circle's paint too where they would meet it, and
+    move along their regions off ``obstacles`` and the labels of earlier slots.
     """
 
     axis_paint = radial_layout.axis.paint_band_px
@@ -719,8 +723,30 @@ def _circular_annotation_labels_by_slot(
             font_family=font_family,
             params=annotation_track_params_from_mapping(slot.params),
             rings=(axis_paint,),
+            obstacles=obstacles,
+            covers_slots=slot.spans_slots,
         )
+        obstacles = obstacles.with_polygons([label.corners for label in labels[slot.id]])
     return labels
+
+
+def _feature_label_obstacles(
+    labels: Sequence[CircularLabel], total_length: int, canvas_config: CircularCanvasConfigurator
+) -> CircularLabelObstacles:
+    """The record's drawn feature labels and their leaders, as the fit count sees them, for annotation labels to
+    keep the label spacing from (OV-1173)."""
+
+    shapes = circular_label_shapes(labels, total_length)
+    spacing = float(canvas_config.profile.config.labels.spacing.circular)
+    half_stroke = 0.5 * float(
+        canvas_config.profile.config.labels.stroke_width.for_length_param(canvas_config.length_param)
+    )
+    return CircularLabelObstacles(
+        polygons=tuple(part for shape in shapes for part in shape.parts),
+        segments=tuple(segment for shape in shapes for segment in zip(shape.leader, shape.leader[1:])),
+        clearance=spacing,
+        segment_clearance=spacing + half_stroke,
+    )
 
 
 def _circular_annotation_label_rooms(
@@ -2630,18 +2656,23 @@ def add_record_on_circular_canvas(
     )
 
     # Annotation labels lie outside the radial bands too: the canvas holds them and a legend or title avoids them.
-    annotation_labels = _circular_annotation_labels_by_slot(
-        radial_layout,
-        annotation_track_layouts,
-        record_index=annotation_record_index,
-        record_length=len(gb_record.seq),
-        font_family=str(cfg.objects.text.font_family),
-    )
-    annotation_label_obstacles = tuple(
-        label.ink_bounds.translated(float(canvas_config.offset_x), float(canvas_config.offset_y))
-        for labels in annotation_labels.values()
-        for label in labels
-    )
+    # They move along their regions off the feature labels and leaders, so they follow the feature labels.
+    def place_annotation_labels() -> tuple[dict[str, tuple[CircularAnnotationLabel, ...]], tuple[Aabb, ...]]:
+        labels_by_slot = _circular_annotation_labels_by_slot(
+            radial_layout,
+            annotation_track_layouts,
+            record_index=annotation_record_index,
+            record_length=len(gb_record.seq),
+            font_family=str(cfg.objects.text.font_family),
+            obstacles=_feature_label_obstacles(precalculated_labels or (), len(gb_record.seq), canvas_config),
+        )
+        return labels_by_slot, tuple(
+            label.ink_bounds.translated(float(canvas_config.offset_x), float(canvas_config.offset_y))
+            for labels in labels_by_slot.values()
+            for label in labels
+        )
+
+    annotation_labels, annotation_label_obstacles = place_annotation_labels()
     overlay_obstacles = (
         *_external_label_obstacles_on_canvas(precalculated_labels or (), len(gb_record.seq), canvas_config),
         *annotation_label_obstacles,
@@ -2689,6 +2720,7 @@ def add_record_on_circular_canvas(
                     ],
                     len(gb_record.seq),
                 )
+            annotation_labels, annotation_label_obstacles = place_annotation_labels()
             overlay_obstacles = (
                 *_external_label_obstacles_on_canvas(precalculated_labels, len(gb_record.seq), canvas_config),
                 *annotation_label_obstacles,

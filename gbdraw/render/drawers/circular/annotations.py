@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
-from dataclasses import dataclass
+import sys
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
+from functools import partial
 
 from svgwrite.base import BaseElement
 
@@ -17,19 +19,25 @@ from gbdraw.annotations import (
     effective_annotation_style,
     is_auto_feature_underlay,
 )
+from gbdraw.annotations.label_search import nearest_fewest_conflicts
 from gbdraw.annotations.layout import PlacedRegionAnnotation
+from gbdraw.annotations.models import ResolvedRegionAnnotation
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.spatial import Aabb
+from gbdraw.layout.text_geometry import Point, convex_polygons_intersect, segment_intersects_polygon
 from gbdraw.render.drawers.annotation_marks import (
     annotation_dom_id,
     cap_size,
     label_font_size,
     label_ink_offsets,
     mark_reach,
+    past_span_edge,
 )
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
+
+Polygon = tuple[Point, ...]
 
 
 def _point(position: float, total_length: int, radius: float) -> tuple[float, float]:
@@ -176,6 +184,110 @@ def _label_radius(
     return max(radius, 0.0)
 
 
+@dataclass(frozen=True)
+class CircularLabelObstacles:
+    """What Circular annotation labels keep clear of, around the circle centre (OV-1173).
+
+    ``polygons`` are convex shapes (the feature labels as the fit count sees
+    them); ``segments`` are leader lines. Letters keep ``clearance`` from a
+    polygon and ``segment_clearance`` (half the leader stroke included) from a
+    segment.
+    """
+
+    polygons: tuple[Polygon, ...] = ()
+    segments: tuple[tuple[Point, Point], ...] = ()
+    clearance: float = 0.0
+    segment_clearance: float = 0.0
+
+    def with_polygons(self, polygons: Sequence[Polygon]) -> CircularLabelObstacles:
+        return replace(self, polygons=(*self.polygons, *polygons))
+
+
+def _grown(corners: Sequence[Point], by: float) -> Polygon:
+    """A label's ink box (corners left-top, right-top, right-bottom, left-bottom) grown by ``by`` on every side."""
+
+    (x0, y0), (x1, y1), _, (x3, y3) = corners
+    width, height = math.hypot(x1 - x0, y1 - y0), math.hypot(x3 - x0, y3 - y0)
+    ux, uy = ((x1 - x0) / width, (y1 - y0) / width) if width else (1.0, 0.0)
+    vx, vy = ((x3 - x0) / height, (y3 - y0) / height) if height else (-uy, ux)
+    signs = ((-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0))
+    return tuple((x + by * (su * ux + sv * vx), y + by * (su * uy + sv * vy)) for (x, y), (su, sv) in zip(corners, signs))
+
+
+def _box(points: Sequence[Point]) -> Aabb:
+    return Aabb(min(x for x, _ in points), min(y for _, y in points), max(x for x, _ in points), max(y for _, y in points))
+
+
+class _ObstacleIndex:
+    """Counts what a label's letters meet: the polygons within ``clearance``, the segments within theirs."""
+
+    def __init__(self, obstacles: CircularLabelObstacles) -> None:
+        self._obstacles = obstacles
+        self._polygons = [(_box(polygon), polygon) for polygon in obstacles.polygons]
+        self._segments = [(_box(segment), segment) for segment in obstacles.segments]
+
+    def conflicts(self, label: CircularAnnotationLabel) -> int:
+        near = _grown(label.corners, self._obstacles.clearance)
+        near_box = _box(near)
+        count = sum(
+            1
+            for box, polygon in self._polygons
+            if box.intersects(near_box) and convex_polygons_intersect(near, polygon)
+        )
+        line_near = _grown(label.corners, self._obstacles.segment_clearance)
+        line_box = _box(line_near)
+        return count + sum(
+            1
+            for box, segment in self._segments
+            if box.intersects(line_box) and segment_intersects_polygon(segment, line_near, touching=False)
+        )
+
+
+def _reach(label: CircularAnnotationLabel, inner_radius_px: float, outer_radius_px: float, outward: bool) -> float:
+    """How far a label's letters, ``label_offset`` beyond them included, reach past its slot's band on its side."""
+
+    near, far = label.ink_radii
+    return far + label.label_offset - outer_radius_px if outward else inner_radius_px - near + label.label_offset
+
+
+def _along_region(
+    annotation: ResolvedRegionAnnotation,
+    default: CircularAnnotationLabel,
+    label_at: Callable[[float], CircularAnnotationLabel],
+    *,
+    record_length: int,
+    fits: Callable[[CircularAnnotationLabel], bool],
+    conflicts: Callable[[CircularAnnotationLabel], int],
+) -> CircularAnnotationLabel:
+    """The label moved along its own region to the clear place nearest its default (OV-1173, the Linear rule).
+
+    Its centre stays over one of the region's segments, sampled every pixel of
+    arc at the label's radius; a place whose letters would reach past the
+    slot's label room (``fits``) is not taken. With no clear place the label
+    takes the place with the fewest conflicts, nearest its default.
+    """
+
+    length = max(1, record_length)
+    centre = float(annotation.geometry_midpoint_bp)
+    step = max(1e-9, length / (2.0 * math.pi * max(1.0, math.hypot(default.x, default.y))))
+    candidates: set[float] = set()
+    for start, end in annotation.geometry_segments:
+        steps = max(1, math.ceil((float(end) - float(start)) / step))
+        for index in range(steps + 1):
+            position = float(start) + (float(end) - float(start)) * index / steps
+            # Positions are unwrapped around the default so that "nearest" is measured along the circle.
+            candidates.add(centre + ((position - centre + 0.5 * length) % length - 0.5 * length))
+    labels: dict[float, CircularAnnotationLabel] = {centre: default}
+
+    def count(position: float) -> int:
+        if position not in labels:
+            labels[position] = label_at(position % length)
+        label = labels[position]
+        return conflicts(label) if fits(label) else sys.maxsize
+
+    return labels[nearest_fewest_conflicts(centre, candidates, count)]
+
+
 def circular_annotation_labels(
     track: ResolvedAnnotationTrack,
     *,
@@ -187,6 +299,8 @@ def circular_annotation_labels(
     font_family: str,
     params: AnnotationTrackParams,
     rings: Sequence[RadialBand] = (),
+    obstacles: CircularLabelObstacles | None = None,
+    covers_slots: bool = False,
 ) -> tuple[CircularAnnotationLabel, ...]:
     """The labels of one record's annotation track, around the centre of the circle.
 
@@ -194,7 +308,14 @@ def circular_annotation_labels(
     its mark (stroke included), outward or, on an ``inside`` slot, inward, at
     the label's own turn (OV-849, the Linear rule of OV-844). A painted ring of
     ``rings`` (the axis circle) that the letters would meet, or come within
-    ``label_offset`` of, is cleared the same way beyond its paint.
+    ``label_offset`` of, is cleared the same way beyond its paint. A span that
+    ``covers_slots`` measures the gap from its band's edge, or from the mark's
+    paint where it passes that edge (OD-R1174 F1, the Linear span rule), so its
+    letters stay off every ring it covers.
+
+    A label sits at its region's midpoint. With ``obstacles``, a label whose
+    letters meet one, or a label of this track placed before it, moves along
+    its region (``_along_region``) within the room the default places take.
     """
 
     if not params.show_labels:
@@ -203,7 +324,7 @@ def circular_annotation_labels(
         track, record_index=record_index, inner_radius_px=inner_radius_px, outer_radius_px=outer_radius_px, params=params
     )
     outward = side != "inside"
-    labels: list[CircularAnnotationLabel] = []
+    entries: list[tuple[ResolvedRegionAnnotation, Callable[[float], CircularAnnotationLabel]]] = []
     for placement in placements:
         annotation = placement.annotation
         if not annotation.label:
@@ -218,49 +339,105 @@ def circular_annotation_labels(
             params=params,
         )
         # A Circular band fills its whole lane; an arrow cap is drawn as a straight cap.
-        reach = mark_reach(annotation, style, lane_width, fill_share=1.0, arrow_heads=False).from_centre
-        centre = 0.5 * (lane_inner + lane_outer)
-        edge = centre + reach if outward else centre - reach
-        gap = float(style.label_offset)
+        reach = mark_reach(annotation, style, lane_width, fill_share=1.0, arrow_heads=False)
+        if covers_slots:
+            inset = outer_radius_px - lane_outer if outward else lane_inner - inner_radius_px
+            beyond = past_span_edge(reach, inset)
+            mark_edge = outer_radius_px + beyond if outward else inner_radius_px - beyond
+        else:
+            centre = 0.5 * (lane_inner + lane_outer)
+            mark_edge = centre + reach.from_centre if outward else centre - reach.from_centre
         size = label_font_size(style)
-        offsets = label_ink_offsets(annotation.label, font_family, size, "middle")
-        angle = 360.0 * annotation.geometry_midpoint_bp / max(1, record_length) - 90.0
-        rotation = _label_rotation(style.label_orientation, angle)
-        theta, turn = math.radians(angle), math.radians(rotation)
-        # The ray's direction in the text's frame: the screen direction turned back by the label's rotation.
-        direction = (math.cos(theta - turn), math.sin(theta - turn))
-        radius = _label_radius(edge + gap if outward else edge - gap, outward, direction, offsets)
-        for ring in sorted(rings, key=lambda band: band.inner_px if outward else -band.outer_px):
-            near, far = _ink_extent(radius, direction, offsets)
-            if outward and edge < ring.outer_px and ring.inner_px < far + gap:
-                edge = ring.outer_px
-            elif not outward and ring.inner_px < edge and near - gap < ring.outer_px:
-                edge = ring.inner_px
-            else:
-                continue
-            radius = _label_radius(edge + gap if outward else edge - gap, outward, direction, offsets)
-        x, y = radius * math.cos(theta), radius * math.sin(theta)
-        ink_radii = _ink_extent(radius, direction, offsets)
-        left, right, top, bottom = offsets
-        cos, sin = math.cos(turn), math.sin(turn)
-        labels.append(
-            CircularAnnotationLabel(
-                annotation_id=annotation.id,
-                text=annotation.label,
-                x=x,
-                y=y,
-                rotation=rotation,
-                font_size=size,
-                color=style.label_color,
-                corners=tuple(
-                    (x + cx * cos - cy * sin, y + cx * sin + cy * cos)
-                    for cx, cy in ((left, top), (right, top), (right, bottom), (left, bottom))
+        entries.append(
+            (
+                annotation,
+                partial(
+                    _label_at,
+                    annotation_id=annotation.id,
+                    text=annotation.label,
+                    record_length=record_length,
+                    mark_edge=mark_edge,
+                    outward=outward,
+                    gap=float(style.label_offset),
+                    font_size=size,
+                    color=style.label_color,
+                    orientation=style.label_orientation,
+                    offsets=label_ink_offsets(annotation.label, font_family, size, "middle"),
+                    rings=rings,
                 ),
-                ink_radii=ink_radii,
-                label_offset=gap,
             )
         )
-    return tuple(labels)
+    defaults = [label_at(float(annotation.geometry_midpoint_bp)) for annotation, label_at in entries]
+    if obstacles is None:
+        return tuple(defaults)
+    room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for label in defaults), default=0.0)
+    placed: list[CircularAnnotationLabel] = []
+    for (annotation, label_at), default in zip(entries, defaults):
+        index = _ObstacleIndex(obstacles.with_polygons([label.corners for label in placed]))
+        placed.append(
+            _along_region(
+                annotation,
+                default,
+                label_at,
+                record_length=record_length,
+                fits=lambda label: _reach(label, inner_radius_px, outer_radius_px, outward) <= room + 1e-9,
+                conflicts=index.conflicts,
+            )
+        )
+    return tuple(placed)
+
+
+def _label_at(
+    position_bp: float,
+    *,
+    annotation_id: str,
+    text: str,
+    record_length: int,
+    mark_edge: float,
+    outward: bool,
+    gap: float,
+    font_size: float,
+    color: str,
+    orientation: str,
+    offsets: tuple[float, float, float, float],
+    rings: Sequence[RadialBand],
+) -> CircularAnnotationLabel:
+    """One label with its centre on the ray through ``position_bp``, ``gap`` beyond ``mark_edge`` (and any ring)."""
+
+    angle = 360.0 * position_bp / max(1, record_length) - 90.0
+    rotation = _label_rotation(orientation, angle)
+    theta, turn = math.radians(angle), math.radians(rotation)
+    # The ray's direction in the text's frame: the screen direction turned back by the label's rotation.
+    direction = (math.cos(theta - turn), math.sin(theta - turn))
+    edge = mark_edge
+    radius = _label_radius(edge + gap if outward else edge - gap, outward, direction, offsets)
+    for ring in sorted(rings, key=lambda band: band.inner_px if outward else -band.outer_px):
+        near, far = _ink_extent(radius, direction, offsets)
+        if outward and edge < ring.outer_px and ring.inner_px < far + gap:
+            edge = ring.outer_px
+        elif not outward and ring.inner_px < edge and near - gap < ring.outer_px:
+            edge = ring.inner_px
+        else:
+            continue
+        radius = _label_radius(edge + gap if outward else edge - gap, outward, direction, offsets)
+    x, y = radius * math.cos(theta), radius * math.sin(theta)
+    left, right, top, bottom = offsets
+    cos, sin = math.cos(turn), math.sin(turn)
+    return CircularAnnotationLabel(
+        annotation_id=annotation_id,
+        text=text,
+        x=x,
+        y=y,
+        rotation=rotation,
+        font_size=font_size,
+        color=color,
+        corners=tuple(
+            (x + cx * cos - cy * sin, y + cx * sin + cy * cos)
+            for cx, cy in ((left, top), (right, top), (right, bottom), (left, bottom))
+        ),
+        ink_radii=_ink_extent(radius, direction, offsets),
+        label_offset=gap,
+    )
 
 
 def circular_annotation_label_room(
@@ -275,11 +452,12 @@ def circular_annotation_label_room(
     rings: Sequence[RadialBand] = (),
 ) -> float:
     """How far the record's labels reach beyond the slot's ``band`` on their side (outward, or inward on an
-    ``inside`` slot), ``label_offset`` beyond the letters included, so the next ring keeps that gap (OV-1192)."""
+    ``inside`` slot), ``label_offset`` beyond the letters included, so the next ring keeps that gap (OV-1192).
+
+    Labels moved along their regions stay within this room (``circular_annotation_labels``)."""
 
     outward = side != "inside"
-    room = 0.0
-    for label in circular_annotation_labels(
+    labels = circular_annotation_labels(
         track,
         record_index=record_index,
         record_length=record_length,
@@ -289,11 +467,8 @@ def circular_annotation_label_room(
         font_family=font_family,
         params=params,
         rings=rings,
-    ):
-        near, far = label.ink_radii
-        reach = far + label.label_offset - band.outer_px if outward else band.inner_px - near + label.label_offset
-        room = max(room, reach)
-    return room
+    )
+    return max((_reach(label, band.inner_px, band.outer_px, outward) for label in labels), default=0.0)
 
 
 def circular_annotation_track_content(
@@ -479,6 +654,7 @@ def circular_annotation_track_content(
 
 __all__ = [
     "CircularAnnotationLabel",
+    "CircularLabelObstacles",
     "circular_annotation_label_room",
     "circular_annotation_labels",
     "circular_annotation_track_content",

@@ -828,3 +828,175 @@ def test_circular_annotation_labels_keep_label_offset_from_automatic_rings(
             # The automatic rings keep out of the labels' room: label_offset beyond the letters (OV-1192).
             gap = max(inner - far, near - outer)
             assert gap >= 4.0 - 1e-6, (text.text, slot_id, gap)
+
+
+def _feature_label_corners(text) -> list[tuple[float, float]]:
+    """The four corners of a drawn (horizontal) feature label's painted letters."""
+
+    family = text.attrib["font-family"].split(",")[0].strip("'\" ")
+    size = float(text.attrib["font-size"])
+    ink = text_ink(text.text or "", family)
+    metrics = get_font_vertical_metrics(family)
+    assert ink is not None and metrics is not None
+    shift = dominant_baseline_shift_em(text.attrib.get("dominant-baseline", "alphabetic"), metrics)
+    assert shift is not None and "transform" not in text.attrib
+    x, y = float(text.attrib["x"]), float(text.attrib["y"])
+    origin = x - {"start": 0.0, "middle": 0.5, "end": 1.0}[text.attrib.get("text-anchor", "start")] * ink.advance * size
+    left, right = origin + ink.left * size, origin + ink.right * size
+    top, bottom = y + (shift - ink.top) * size, y + (shift - ink.bottom) * size
+    return [(left, top), (right, top), (right, bottom), (left, bottom)]
+
+
+def _annotation_label_crossings(drawing) -> dict[str, int]:
+    """For each annotation label, how many feature leaders and feature labels its painted letters meet."""
+
+    from gbdraw.layout.text_geometry import convex_polygons_intersect, segment_intersects_polygon
+
+    root = ElementTree.fromstring(drawing.tostring())
+    groups = {element.attrib.get("id"): element for element in root.iter() if element.tag.endswith("}g")}
+    # The plot groups share one frame: the annotation track, the leaders and the feature labels.
+    assert len({groups[name].attrib["transform"] for name in ("label_leaders", "label_text")}) == 1
+    leaders = [
+        ((float(line.attrib["x1"]), float(line.attrib["y1"])), (float(line.attrib["x2"]), float(line.attrib["y2"])))
+        for line in groups["label_leaders"]
+    ]
+    feature_labels = [_feature_label_corners(text) for text in groups["label_text"]]
+    crossings: dict[str, int] = {}
+    for element in root.iter():
+        label = element.attrib.get("data-gbdraw-annotation-label")
+        if not label:
+            continue
+        (text,) = [child for child in element if child.tag.endswith("}text")]
+        corners = _label_ink_corners(text)
+        crossings[label] = sum(segment_intersects_polygon(leader, corners, touching=False) for leader in leaders) + sum(
+            convex_polygons_intersect(corners, box) for box in feature_labels
+        )
+    return crossings
+
+
+def _hmmtdna_with_brackets(*regions: tuple[str, int, int]):
+    from Bio import SeqIO
+
+    record = SeqIO.read(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk", "genbank")
+    style = RegionAnnotationStyle(label_font_size=14)
+    annotations = tuple(
+        RegionAnnotation(f"r{index}", CoordinateSpan(None, start, end), label=text, mark="bracket", style=style)
+        for index, (text, start, end) in enumerate(regions)
+    )
+    return build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=AnnotationOptions(sets=(AnnotationSet("regions", annotations),)),
+            config_overrides={"labels.circular.scope": "outer"},
+        ),
+    )
+
+
+def test_circular_annotation_labels_move_along_their_region_off_feature_leaders() -> None:
+    drawing = _hmmtdna_with_brackets(("rRNA genes", 648, 3229), ("ND1 region", 3307, 4262), ("COX block", 5904, 9207))
+
+    # Feature leaders crossed "ND1 region" and "COX block" at their midpoints (OV-1173); each label now moves
+    # along its own region to the clear place nearest its midpoint (the Linear rule of OV-845).
+    assert _annotation_label_crossings(drawing) == {"rRNA genes": 0, "ND1 region": 0, "COX block": 0}
+    root = ElementTree.fromstring(drawing.tostring())
+    for element in root.iter():
+        label = element.attrib.get("data-gbdraw-annotation-label")
+        if label:
+            (text,) = [child for child in element if child.tag.endswith("}text")]
+            # The label's centre stays over its own region.
+            angle = math.degrees(math.atan2(float(text.attrib["y"]), float(text.attrib["x"]))) + 90.0
+            position = (angle % 360.0) / 360.0 * 16569
+            start, end = {"rRNA genes": (648, 3229), "ND1 region": (3307, 4262), "COX block": (5904, 9207)}[label]
+            assert start - 1 <= position <= end + 1, label
+
+
+def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_conflicts() -> None:
+    from gbdraw.annotations import annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.layout.text_geometry import convex_polygons_intersect
+    from gbdraw.render.drawers.circular.annotations import CircularLabelObstacles, _grown, circular_annotation_labels
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    region = RegionAnnotation("r0", CoordinateSpan(None, 2000, 3000), label="Region", mark="bracket")
+    bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+    params = annotation_track_params_from_mapping({"set_id": "s"})
+    track = layout_annotation_track("s", "s", bundle.annotations, record_lengths={0: 10000}, params=params)
+
+    def labels(*polygons):
+        return circular_annotation_labels(
+            track,
+            record_index=0,
+            record_length=10000,
+            inner_radius_px=300.0,
+            outer_radius_px=320.0,
+            side="outside",
+            font_family="Liberation Sans",
+            params=params,
+            obstacles=CircularLabelObstacles(polygons=polygons, clearance=3.0) if polygons else None,
+        )
+
+    (default,) = labels()
+    everywhere = ((-1000.0, -1000.0), (1000.0, -1000.0), (1000.0, 1000.0), (-1000.0, 1000.0))
+    # Nothing is clear anywhere: the label stays at its midpoint, drawn.
+    assert labels(everywhere) == (default,)
+    # One more obstacle on the midpoint: the label moves to the nearest place with one conflict, over its region.
+    box = default.ink_bounds
+    on_midpoint = ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))
+    (moved,) = labels(everywhere, on_midpoint)
+    assert (moved.x, moved.y) != (default.x, default.y)
+    assert not convex_polygons_intersect(moved.corners, on_midpoint)
+    position = (math.degrees(math.atan2(moved.y, moved.x)) + 90.0) % 360.0 / 360.0 * 10000
+    assert 2000 <= position <= 3000
+    # The nearest such place, sampled every pixel of arc: the letters keep the clearance and less than a pixel more.
+    assert not convex_polygons_intersect(_grown(moved.corners, 3.0), on_midpoint)
+    assert convex_polygons_intersect(_grown(moved.corners, 4.0), on_midpoint)
+
+
+@pytest.mark.parametrize("mark", ["highlight", "band", "bracket", "line"])
+@pytest.mark.parametrize(
+    "span",
+    [
+        "anchor_slot=features,cover_anchor=true",
+        "anchor_slot=features,to_slot=gc",
+        "anchor_slot=features,to_slot=outer_gc",
+    ],
+    ids=["cover_anchor", "to_slot-inside", "to_slot-outside"],
+)
+def test_circular_span_labels_keep_label_offset_beyond_every_covered_ring(span: str, mark: str) -> None:
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    record.features = [
+        SeqFeature(FeatureLocation(start, start + 600, strand=1 if index % 2 else -1), type="CDS")
+        for index, start in enumerate(range(100, 9500, 900))
+    ]
+    regions = (
+        RegionAnnotation("a", CoordinateSpan(None, 1000, 3000), label="Region gyp", mark=mark),
+        RegionAnnotation("b", CoordinateSpan(None, 6000, 7500), label="IRb", mark=mark),
+    )
+    drawing = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            config_overrides={"labels.circular.scope": "none"},
+            tracks=CircularRequestTrackOptions(
+                circular_track_slots=(
+                    "outer_gc:dinucleotide_content@side=outside",
+                    "features:features",
+                    "gc:dinucleotide_content@side=inside",
+                    f"regions:annotations@side=overlay,set_id=regions,{span},z=5",
+                )
+            ),
+        ),
+    )
+
+    geometry = drawing._gbdraw_track_slot_geometry["records"][0]
+    (slot,) = [slot for slot in geometry["slots"] if slot["slotId"] == "regions"]
+    span_outer = float(slot["radiusFactor"]) * float(geometry["axisRadiusPx"]) + 0.5 * float(slot["widthPx"])
+    gaps = _circular_label_gaps(drawing)
+    root = ElementTree.fromstring(drawing.tostring())
+    for element in root.iter():
+        if element.attrib.get("data-gbdraw-annotation-label"):
+            (text,) = [child for child in element if child.tag.endswith("}text")]
+            near, _far = _ink_radii(text)
+            # The letters keep label_offset beyond the span's outer edge, off every ring it covers (OD-R1174 F1),
+            # and beyond their own mark's paint.
+            assert near - span_outer >= 4.0 - 1e-3, (element.attrib["data-gbdraw-annotation-label"], near - span_outer)
+    assert gaps and all(gap >= 4.0 - 1e-3 for _side, gap in gaps.values()), gaps

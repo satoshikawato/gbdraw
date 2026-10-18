@@ -2428,6 +2428,7 @@ def _resolve_circular_radial_layout(
             packing_band_px=None,
             draw_band_px=draw_band,
             reserved_band_px=None,
+            spans_slots=span_band is not None or (annotation.cover_anchor and anchor_band is not None),
         )
         resolved_by_index[intent.slot_index] = anchored
         by_id[intent.slot_id] = anchored

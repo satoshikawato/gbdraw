@@ -157,6 +157,9 @@ class CircularResolvedSlot:
     explicit_anchor: bool = False
     explicit_width: bool = False
     compressed: bool = False
+    # An overlay stretched over the slots it covers (``to_slot``, or ``cover_anchor`` on a band): its labels keep
+    # ``label_offset`` beyond the span's edge, as a Linear span's do.
+    spans_slots: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "params", freeze_layout_mapping(self.params))
