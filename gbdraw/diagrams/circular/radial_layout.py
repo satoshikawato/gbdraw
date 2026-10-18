@@ -70,7 +70,8 @@ class _SwitchedTrack:
     # The diagnostic identifier (``keptInsideTracks``, ``slotTrack``; utils/error-normalization.js words it).
     diagnostic_id: str
     words: str
-    off_option: str
+    # How the CLI turns the row off, as the remedy names it.
+    off_remedy: str
     # The option that narrows the row, or None.
     width_option: str | None = None
 
@@ -92,9 +93,9 @@ def _switched_track_remedy(tracks: Sequence[_SwitchedTrack]) -> str:
     remedy = ""
     if narrowable:
         words = " and ".join(track.words for track, _width in narrowable)
-        options = ", ".join([*(track.off_option for track, _width in narrowable), *(width for _track, width in narrowable)])
+        options = ", ".join([*(track.off_remedy for track, _width in narrowable), *(width for _track, width in narrowable)])
         remedy = f"turn off or narrow the {words} track{'s' if len(narrowable) > 1 else ''} ({options}), "
-    return remedy + "".join(f"hide the {track.words} ({track.off_option}), " for track in tracks if track.width_option is None)
+    return remedy + "".join(f"hide the {track.words} ({track.off_remedy}), " for track in tracks if track.width_option is None)
 
 
 # The owner of the center reservation band among the occupied bands.
