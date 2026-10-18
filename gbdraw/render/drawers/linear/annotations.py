@@ -97,12 +97,23 @@ def _capped_ends(annotation: ResolvedRegionAnnotation, part_index: int) -> tuple
     )
 
 
-def _mark_reach(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_height: float) -> float:
-    """How far a mark's paint reaches from its lane centre, stroke included (the label side's painted edge)."""
+@dataclass(frozen=True)
+class _MarkReach:
+    """How far a mark's paint reaches on the label side, stroke included: from its lane centre, and
+    past its lane's edge (negative while the paint stays inside the lane)."""
+
+    from_centre: float
+    past_lane_edge: float
+
+
+def _mark_reach(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle, lane_height: float) -> _MarkReach:
+    """The painted edge of a mark on its label side (``_MarkReach``)."""
 
     half_stroke = _half_stroke(annotation, style)
+    half_lane = 0.5 * lane_height
     if annotation.mark in {"band", "highlight"}:
-        return 0.5 * _band_height_factor(annotation.mark) * lane_height + half_stroke
+        half_fill = 0.5 * _band_height_factor(annotation.mark) * lane_height
+        return _MarkReach(half_fill + half_stroke, half_stroke - (half_lane - half_fill))
     reach = half_stroke
     if annotation.mark == "bracket" and style.line_cap != "none":
         cap = _cap_size(lane_height)
@@ -112,7 +123,7 @@ def _mark_reach(annotation: ResolvedRegionAnnotation, style: RegionAnnotationSty
         if any(end for _start, end in ends):
             # An arrow's butt-capped diagonals reach half the stroke times cos 45 degrees past the cap.
             reach = max(reach, cap + (half_stroke * math.sqrt(0.5) if style.line_cap == "arrow" else 0.0))
-    return reach
+    return _MarkReach(reach, reach - half_lane)
 
 
 def _half_stroke(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle) -> float:
@@ -167,10 +178,11 @@ def _label_rows(
 
     The letters keep ``label_offset`` from the painted edge of the mark on the
     side ``linear_annotation_labels_above`` picks (OV-844). A slot that
-    ``covers_slots`` (a ``to_slot`` or ``cover_anchor`` span) keeps them
-    outside every slot it covers: ``label_offset`` beyond the slot's edge, or
-    beyond a stroke wider than ``padding_px`` (no mark paints further out), so
-    the place does not depend on the slot's height (OV-1156).
+    ``covers_slots`` (the plan's ``spans_slots``) keeps them outside every slot
+    it covers too: ``label_offset`` beyond the slot's edge, or beyond the
+    mark's paint where it passes that edge (a highlight stroke more than twice
+    ``padding_px`` wide; never a bracket or line at the lane centre), so the
+    place does not depend on the overlay's own height (OV-1156, review 1176).
     """
 
     if not params.show_labels:
@@ -186,12 +198,19 @@ def _label_rows(
         size = float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE)
         offsets = _label_ink_offsets(annotation.label, font_family, size, _label_anchor(style))
         _left, _right, top, bottom = offsets
+        reach = _mark_reach(annotation, style, lane_height)
         if covers_slots:
-            near = max(0.0, _half_stroke(annotation, style) - params.padding_px) + float(style.label_offset)
+            # Beyond the slot edge, or beyond the mark's paint where it passes that edge.
+            inset = (
+                params.padding_px + placement.lane * lane_height
+                if above
+                else float(height_px) - params.padding_px - (placement.lane + 1) * lane_height
+            )
+            near = max(0.0, reach.past_lane_edge - inset) + float(style.label_offset)
             y = -near - bottom if above else float(height_px) + near - top
         else:
             lane_center = params.padding_px + (placement.lane + 0.5) * lane_height
-            near = _mark_reach(annotation, style, lane_height) + float(style.label_offset)
+            near = reach.from_centre + float(style.label_offset)
             y = lane_center - near - bottom if above else lane_center + near - top
         rows.append((annotation, style, y, offsets))
     return rows

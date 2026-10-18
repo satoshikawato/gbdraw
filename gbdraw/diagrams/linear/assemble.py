@@ -204,7 +204,6 @@ from ...svg.ids import (
 from .track_slots import (
     LinearRecordVerticalPlan,
     LinearSlotFootprint,
-    linear_overlay_covers_slots,
     resolve_linear_record_vertical_plan,
     resolve_linear_track_layout,
 )
@@ -864,7 +863,6 @@ def _linear_slot_footprints_for_record(
 ) -> tuple[dict[str, LinearSlotFootprint], float]:
     footprints: dict[str, LinearSlotFootprint] = {}
     font_family = str(canvas_config._cfg.objects.text.font_family)
-    renderers = {slot.id: slot.renderer for slot in layout.slots}
     label_band = measure_linear_label_band(
         labels,
         leader_stroke_width=float(canvas_config._cfg.labels.stroke_width.long),
@@ -938,39 +936,11 @@ def _linear_slot_footprints_for_record(
             continue
 
         if slot.renderer == "annotations":
-            annotation_layout = annotation_track_layouts.get(slot.id)
-            placements = (
-                [
-                    item
-                    for item in annotation_layout.placements
-                    if item.annotation.record_index == record_index
-                ]
-                if annotation_layout is not None
-                else []
-            )
-            params = annotation_track_params_from_mapping(slot.params)
-            label_overhang = (
-                linear_annotation_label_room(
-                    annotation_layout,
-                    record_index=record_index,
-                    side=slot.side,
-                    covers_slots=linear_overlay_covers_slots(params, renderers.get(params.anchor_slot or "")),
-                    height_px=float(body_band.height),
-                    font_family=font_family,
-                    params=params,
-                )
-                if annotation_layout is not None
-                else 0.0
-            )
-            if linear_annotation_labels_above(slot.side, params):
-                expanded = body_band.expand(label_overhang, 0.0)
-            else:
-                expanded = body_band.expand(0.0, label_overhang)
-            available = bool(placements)
-            footprints[slot.id] = LinearSlotFootprint(
-                paint_band=expanded if available else None,
-                reserve_band=expanded,
-                data_available=available,
+            footprints[slot.id] = _linear_annotation_slot_footprint(
+                slot,
+                record_index=record_index,
+                annotation_layout=annotation_track_layouts.get(slot.id),
+                font_family=font_family,
             )
             continue
 
@@ -980,6 +950,50 @@ def _linear_slot_footprints_for_record(
         + feature_geometry.occupied_band.bottom_y
     )
     return footprints, feature_center_y
+
+
+def _linear_annotation_slot_footprint(
+    slot: LinearResolvedTrack,
+    *,
+    record_index: int,
+    annotation_layout: ResolvedAnnotationTrack | None,
+    font_family: str,
+    span_height: float | None = None,
+) -> LinearSlotFootprint:
+    """An annotation slot's own band with its labels' room on their side.
+
+    ``span_height`` is the stretched height of an overlay the record's plan
+    spans over slots (``spans_slots``): its labels then keep clear of every
+    slot it covers, measured on that height; otherwise on the slot's own.
+    """
+
+    body_band = _slot_body_band(slot)
+    params = annotation_track_params_from_mapping(slot.params)
+    label_overhang = (
+        linear_annotation_label_room(
+            annotation_layout,
+            record_index=record_index,
+            side=slot.side,
+            covers_slots=span_height is not None,
+            height_px=float(body_band.height if span_height is None else span_height),
+            font_family=font_family,
+            params=params,
+        )
+        if annotation_layout is not None
+        else 0.0
+    )
+    if linear_annotation_labels_above(slot.side, params):
+        expanded = body_band.expand(label_overhang, 0.0)
+    else:
+        expanded = body_band.expand(0.0, label_overhang)
+    available = annotation_layout is not None and any(
+        item.annotation.record_index == record_index for item in annotation_layout.placements
+    )
+    return LinearSlotFootprint(
+        paint_band=expanded if available else None,
+        reserve_band=expanded,
+        data_available=available,
+    )
 
 
 def _resolved_linear_depth_heights(layout: LinearTrackLayout) -> dict[int, float]:
@@ -1197,6 +1211,31 @@ def _build_linear_record_vertical_plans(
             axis_band=axis_band,
             footprints=footprints,
         )
+        # The plan decides which overlays span slots on this record (OV-1158). Their labels keep
+        # clear of the slots they cover: measure their room again on the stretched height. That
+        # height does not depend on the room, which lies beyond the slots a span covers.
+        span_heights = {slot.id: float(slot.height) for slot in plan.slots if slot.spans_slots}
+        if span_heights:
+            font_family = str(canvas_config._cfg.objects.text.font_family)
+            footprints = {
+                **footprints,
+                **{
+                    slot.id: _linear_annotation_slot_footprint(
+                        slot,
+                        record_index=record_index,
+                        annotation_layout=annotation_track_layouts.get(slot.id),
+                        font_family=font_family,
+                        span_height=span_heights[slot.id],
+                    )
+                    for slot in layout.slots
+                    if slot.id in span_heights
+                },
+            }
+            plan = resolve_linear_record_vertical_plan(
+                layout,
+                axis_band=axis_band,
+                footprints=footprints,
+            )
         feature_origin_y = (
             plan.slot_by_id(feature_slot_id).origin_y
             if feature_slot_id is not None

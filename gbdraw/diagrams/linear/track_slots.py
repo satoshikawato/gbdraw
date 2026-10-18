@@ -42,8 +42,8 @@ class LinearResolvedSlot:
     data_available: bool
     z: int
     params: Mapping[str, object]
-    # An overlay over several slots (to_slot, or cover_anchor on a features slot with
-    # lanes) takes its band from them, not from its own height.
+    # An overlay that spans slots with a body on this record (``_overlay_span``)
+    # takes its band from them, not from its own height.
     spans_slots: bool = False
 
 @dataclass(frozen=True)
@@ -392,23 +392,41 @@ def _resolved_slot(
     )
 
 
-def linear_overlay_covers_slots(params: AnnotationTrackParams, anchor_renderer: str | None) -> bool:
-    """Whether an annotation overlay spans slots: ``to_slot``, or ``cover_anchor`` on a ``features`` slot.
-
-    Its labels then keep clear of every slot it covers, so their room does
-    not depend on the overlay's own height.
-    """
-
-    return anchor_renderer is not None and (
-        params.to_slot is not None or (params.cover_anchor and anchor_renderer == "features")
-    )
-
-
 def _span_body(track: LinearResolvedTrack, footprint: LinearSlotFootprint) -> VerticalBand | None:
     if footprint.body_band is not None:
         return footprint.body_band
     if footprint.data_available:
         return VerticalBand(-track.top_extent, track.bottom_extent)
+    return None
+
+
+def _overlay_span(
+    params: AnnotationTrackParams,
+    slots: Mapping[str, LinearResolvedTrack],
+    footprints: Mapping[str, LinearSlotFootprint],
+) -> tuple[LinearResolvedTrack, ...] | None:
+    """The slots an annotation overlay spans on one record, or ``None`` when it is not a span.
+
+    A ``to_slot`` overlay is a span and adds no space; it covers those of its
+    two slots that have a body on the record (none: it keeps its own place).
+    ``cover_anchor`` on a ``features`` slot spans the slot when it has lanes
+    there; without them the overlay is not a span and keeps its own band.
+    The plan stretches an overlay over the slots it covers and records that
+    as ``spans_slots``, the one span decision its labels follow (OV-1158).
+    """
+
+    anchor = slots.get(params.anchor_slot or "")
+    if anchor is None:
+        return None
+
+    def has_body(track: LinearResolvedTrack) -> bool:
+        return _span_body(track, footprints.get(track.id, _default_slot_footprint(track))) is not None
+
+    if params.to_slot is not None:
+        ids = dict.fromkeys((anchor.id, params.to_slot))
+        return tuple(slots[slot_id] for slot_id in ids if slot_id in slots and has_body(slots[slot_id]))
+    if params.cover_anchor and anchor.renderer == "features" and has_body(anchor):
+        return (anchor,)
     return None
 
 
@@ -454,10 +472,9 @@ def _span_resolved_slot(
     overlay: LinearResolvedSlot,
     referenced: Sequence[tuple[LinearResolvedTrack, LinearSlotFootprint, float]],
 ) -> LinearResolvedSlot:
-    """Stretch a spanning overlay over the hull of the bodies its slots have.
+    """Stretch a spanning overlay over the hull of the bodies of the slots it covers.
 
-    A slot without a body for the record adds none; with none at all, the
-    overlay keeps its place on the anchor. Label overhangs keep their size.
+    Label overhangs keep their size.
     """
 
     bodies = [
@@ -465,8 +482,6 @@ def _span_resolved_slot(
         for track, footprint, origin_y in referenced
         if (body := _span_body(track, footprint)) is not None
     ]
-    if not bodies:
-        return overlay
     span = union_vertical_bands(bodies)
     shift = span.top_y - overlay.origin_y
     grow = span.height - overlay.height
@@ -625,25 +640,11 @@ def resolve_linear_record_vertical_plan(
             )
             continue
         relative_origin = float(overlay.y_offset) - float(anchor.y_offset)
-        # cover_anchor on a features slot spans that slot's lanes; on a record
-        # without lanes the overlay keeps its own band on the slot.
-        span_to = (
-            (annotation.to_slot or (anchor.id if _span_body(anchor, footprint_of(anchor)) is not None else None))
-            if linear_overlay_covers_slots(annotation, anchor.renderer)
-            else None
-        )
-        span_tracks = (
-            ()
-            if span_to is None
-            else tuple(
-                tracks_by_id[slot_id]
-                for slot_id in dict.fromkeys((anchor.id, span_to))
-                if slot_id in tracks_by_id
-            )
-        )
+        span = _overlay_span(annotation, tracks_by_id, footprint_map)
+        span_tracks = span or ()
         # A span pushes no slot: its extent comes from the packed slots. Its labels
         # keep room beyond the outermost slot it covers, on their side.
-        if span_to is None:
+        if span is None:
             overlays_by_anchor.setdefault(anchor.id, []).append((relative_origin, overlay_footprint))
         else:
             rooms = _span_label_rooms(
@@ -749,7 +750,6 @@ __all__ = [
     "LinearResolvedSlot",
     "LinearSlotFootprint",
     "LinearTrackLayout",
-    "linear_overlay_covers_slots",
     "resolve_linear_track_layout",
     "resolve_linear_record_vertical_plan",
 ]
