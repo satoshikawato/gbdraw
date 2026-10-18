@@ -10,7 +10,7 @@ import logging
 import re
 from dataclasses import dataclass, fields, is_dataclass, replace
 from pathlib import Path
-from typing import Any, Collection, Mapping, Sequence, cast
+from typing import Any, Callable, Collection, Mapping, Sequence, cast
 
 from pandas import DataFrame
 
@@ -84,6 +84,7 @@ from .requests import (
     _with_legacy_similarity_alignment,
 )
 from ..linear_comparison import (
+    LinearComparison,
     _endpoint_frame,
     project_search_frame_comparisons,
     reverse_endpoint_table_text,
@@ -1225,7 +1226,10 @@ def search_frame_protein_resources(
 
     stored = [item for item in payload.get("comparisons") or () if isinstance(item, Mapping)
               and item.get("kind") in _STORED_PROTEIN_RESULT_KINDS]
-    (before, before_resources), (after, after_resources) = protein_items(request), protein_items(converted)
+    # ``request`` as stored: its tables encode to the bytes they were read from.
+    as_stored = (_with_drawn_feature_id_marks(request, lambda _comparison: False)
+                 if isinstance(request, LinearDiagramRequest) else request)
+    (before, before_resources), (after, after_resources) = protein_items(as_stored), protein_items(converted)
     if not len(stored) == len(before) == len(after):
         raise ValidationError("Stored protein results do not match their decoded request.")
     changed: dict[str, bytes] = {}
@@ -1706,14 +1710,24 @@ def decode_session_request(
     )
     if session_version > DRAWN_FEATURE_ID_SESSION_MAX_VERSION or not isinstance(request, LinearDiagramRequest):
         return request
+    return _with_drawn_feature_id_marks(request, lambda comparison: _stores_drawn_feature_ids(comparison.matches))
+
+
+def _with_drawn_feature_id_marks(
+    request: LinearDiagramRequest,
+    marked: Callable[[LinearComparison], bool],
+) -> LinearDiagramRequest:
+    """``request`` whose comparisons carry ``drawn_feature_ids`` where ``marked`` says so."""
+
     stored = request.options.linear_comparisons or ()
-    marked = tuple(
-        replace(comparison, drawn_feature_ids=True) if _stores_drawn_feature_ids(comparison.matches) else comparison
+    comparisons = tuple(
+        comparison if comparison.drawn_feature_ids == marked(comparison)
+        else replace(comparison, drawn_feature_ids=marked(comparison))
         for comparison in stored
     )
-    if all(before is after for before, after in zip(stored, marked, strict=True)):
+    if all(before is after for before, after in zip(stored, comparisons, strict=True)):
         return request
-    adapted = replace(request, options=replace(request.options, linear_comparisons=marked))
+    adapted = replace(request, options=replace(request.options, linear_comparisons=comparisons))
     # ``replace`` drops the old-schema alignment state (an ``init=False`` field).
     legacy = request._legacy_similarity_alignment
     return adapted if legacy is None else _with_legacy_similarity_alignment(adapted, legacy)

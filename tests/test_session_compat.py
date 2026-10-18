@@ -2240,6 +2240,17 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
         for column in ("qstart", "sstart", "subject_feature_svg_id", "subject_view_feature_svg_id"):
             assert list(written.matches[column]) == list(converted.matches[column])
     assert _replay(direct, tmp_path, "direct") == first
+    # The Web Worker helper returns the table the upgrade writes (OV-1181).
+    from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
+
+    upgraded = upgrade_session_document(document, temporary_directory=tmp_path).document.to_dict()
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        helper = json.loads(stored_protein_results_to_search_frame_json(
+            json.dumps({"version": version, "renderRequest": document.to_dict()["renderRequest"]}),
+            json.dumps({key: str(path) for key, path in materialized.resource_paths.items()}),
+            str(tmp_path),
+        ))["resources"]
+    assert [entry["data"] for entry in helper.values()] == [upgraded["resources"]["comparison-explicit-1"]["data"]]
 
 
 @pytest.mark.linear
