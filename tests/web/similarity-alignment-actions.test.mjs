@@ -605,23 +605,18 @@ test('stale initial resolution and canceled Apply cannot publish late completion
   assert.deepEqual(fixture.state.results.value, [{ name: 'prior.svg' }]);
 });
 
-test('a new Result or catalog of the same sources keeps the draft; other features or resources reject it before validation', async () => {
+test('a new Result or catalog under the same committed resources keeps the draft; other resources reject it before validation', async () => {
   const fixture = create();
   await startReview(fixture);
   // A live setting change draws a new Result from the same sources (PD-OI-102, OV-1082), and
-  // the automatic rerender a new feature catalog of the same features (OV-1120).
+  // the automatic rerender a new feature catalog of the same features (OV-1120). It keeps the
+  // committed resources.
   fixture.state.results.value = [{ name: 'new.svg' }];
   const catalog = fixture.state.featureCatalog.value;
-  const sameFeatures = { ...catalog, items: catalog.items.map((item) => ({ ...item })) };
-  fixture.state.featureCatalog.value = sameFeatures;
+  fixture.state.featureCatalog.value = { ...catalog, items: catalog.items.map((item) => ({ ...item })) };
   assert.equal(fixture.actions.isDraftArtifactCurrent(), true);
-  // A Generate or a Session load of other sources installs a catalog of other features.
-  fixture.state.featureCatalog.value = { ...catalog, items: catalog.items.map((item) => ({
-    ...item, biologicalFeatures: item.biologicalFeatures.slice(1) })) };
-  assert.equal(fixture.actions.isDraftArtifactCurrent(), false);
-  // One of the same files commits other resources: it replaces the figure too (PD-OI-039).
-  fixture.state.featureCatalog.value = sameFeatures;
-  assert.equal(fixture.actions.isDraftArtifactCurrent(), true);
+  // A Generate or a Session load, even of the same files and features, commits other resources:
+  // it replaces the figure (PD-OI-039). The resources decide, not the catalog.
   fixture.replaceCommittedResources();
   assert.equal(fixture.actions.isDraftArtifactCurrent(), false);
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });

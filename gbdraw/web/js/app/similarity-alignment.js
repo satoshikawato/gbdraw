@@ -16,7 +16,6 @@ import { recordsNeedingChoice } from '../services/alignment-review-view.js';
 import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { catalogNameIndex } from '../services/feature-catalog.js';
-import { toRaw } from '../utils/vue-raw.js';
 
 /**
  * @import { FeatureCatalog } from '../services/feature-catalog.js'
@@ -1272,26 +1271,6 @@ const anchorsAgree = (left, right) => {
  * @property {ReturnType<SimilarityAlignmentActionsOptions['getEnrichedOrthogroupMembers']>} members
  */
 
-// What a draft reads of a feature catalog: each item's records and their sequence lengths
-// (`recordLengths`) and the identities of the biological features (`catalogNameIndex`). The
-// automatic rerender of the same records installs a new catalog with the same key (OV-1120).
-/** @type {WeakMap<object, string>} */
-const catalogSourceKeys = new WeakMap();
-/** @param {Partial<FeatureCatalog> | null | undefined} catalog */
-const catalogSourceKey = (catalog) => {
-  const source = toRaw(catalog);
-  if (!source || typeof source !== 'object') return '';
-  const known = catalogSourceKeys.get(source);
-  if (known !== undefined) return known;
-  const key = JSON.stringify([
-    (Array.isArray(source.items) ? source.items : []).map((item) => [item?.recordKeys,
-      (Array.isArray(item?.sequenceSources) ? item.sequenceSources : []).map((row) => row?.sequence?.length ?? null)]),
-    catalogNameIndex(source).rows.map((row) => [row?.recordKey, row?.biologicalFeatureId, row?.sourceFeatureIndex])
-  ]);
-  catalogSourceKeys.set(source, key);
-  return key;
-};
-
 /**
  * One committed alignment baseline: the canonical Session that `projectCommittedAlignment`
  * returned, its render request, and the record translations it carries.
@@ -1303,17 +1282,16 @@ const catalogSourceKey = (catalog) => {
 
 /**
  * What `captureArtifact` records to tell whether the sources of a draft changed: the records,
- * the Similarity Group, what the draft reads of the feature catalog, the committed resources the
- * helper reads, the translations. Not the Result or the catalog object: a live setting change
- * draws a new Result, and the automatic rerender a new catalog, from the same sources
- * (PD-OI-102). The rerender keeps the resources object (`commitLiveSettingValues`), and a
- * Generate, a Session load or an Undo across one installs another, which replaces the figure
- * even from the same files (PD-OI-039).
+ * the Similarity Group, the committed resources, the translations. Not the Result or the feature
+ * catalog: a live setting change draws a new Result, and the automatic rerender a new catalog,
+ * from the same sources (PD-OI-102, OV-1120). The resources object is the identity of those
+ * sources: the rerender keeps it (`commitLiveSettingValues`), and a Generate, a Session load or
+ * an Undo across one installs another, also from the same files (PD-OI-039). Every path that
+ * changes the catalog's features is one of these.
  * @typedef {object} AlignmentArtifactStamp
  * @property {string} records
  * @property {string} group
  * @property {any} selectedGroup
- * @property {string} catalog
  * @property {unknown} resources
  * @property {string} translations
  */
@@ -1418,7 +1396,6 @@ export const createSimilarityAlignmentActions = ({
     records: JSON.stringify(currentRequest()?.records || []),
     group: JSON.stringify(getOrthogroupById(groupId)),
     selectedGroup: state.selectedOrthogroupId?.value,
-    catalog: catalogSourceKey(state.featureCatalog?.value),
     resources: getCommittedSession()?.resources,
     translations: JSON.stringify(state.linearRecordTranslations?.value || [])
   });
@@ -1428,7 +1405,6 @@ export const createSimilarityAlignmentActions = ({
     return current.records === artifactStamp.records
       && current.group === artifactStamp.group
       && current.selectedGroup === artifactStamp.selectedGroup
-      && current.catalog === artifactStamp.catalog
       && current.resources === artifactStamp.resources
       && current.translations === artifactStamp.translations;
   };

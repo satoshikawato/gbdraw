@@ -317,17 +317,19 @@ test('alignment rings and the reference line stay transient and share the panel 
   expect(await artifactSnapshot(page)).toEqual(before);
   await align.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
-  // Another Result under the open review, as a Generate of other sources draws it: its
-  // feature catalog lacks a feature the review read. The rings and the line belong to the
-  // sources the review was made on, so they go. (A Result of the same sources, as a live
-  // setting draws it, keeps them: OV-1082, OV-1120.)
+  // Another Result under the open review, as a Generate or a Session load draws it: it commits
+  // a Session with its own resources, even from the same files. The rings and the line belong
+  // to the sources the review was made on, so they go. (A Result of the same sources, as a live
+  // setting draws it, keeps the resources and them: OV-1082, OV-1120.)
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
+    const { canonicalRenderArtifactOwner } = await import('./js/services/config.js');
     window.__S03Result = state.results.value[state.selectedResultIndex.value];
-    const catalog = window.__S03Catalog = state.featureCatalog.value;
-    if (!catalog.items.some((item) => item.biologicalFeatures.length > 0)) throw new Error('The fixture has no catalog features.');
-    state.featureCatalog.value = { ...catalog, items: catalog.items.map((item) => ({
-      ...item, biologicalFeatures: item.biologicalFeatures.slice(1) })) };
+    const canonical = window.__S03Canonical = canonicalRenderArtifactOwner.capture();
+    const committed = canonical.committedCanonicalSession;
+    if (!committed?.resources) throw new Error('The fixture has no committed resources.');
+    canonicalRenderArtifactOwner.restore({ ...canonical,
+      committedCanonicalSession: { ...committed, resources: { ...committed.resources } } });
     state.results.value = [{ ...window.__S03Result }];
   });
   await expect(overlay).toHaveCount(0);
@@ -339,10 +341,11 @@ test('alignment rings and the reference line stay transient and share the panel 
   await page.evaluate(()=>window.__GBDRAW_APP__.cancelSimilarityAlignmentDialog());
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    state.featureCatalog.value = window.__S03Catalog;
+    const { canonicalRenderArtifactOwner } = await import('./js/services/config.js');
+    canonicalRenderArtifactOwner.restore(window.__S03Canonical);
     state.results.value = [window.__S03Result];
     delete window.__S03Result;
-    delete window.__S03Catalog;
+    delete window.__S03Canonical;
   });
   await expect(page.locator('.gbdraw-preview-surface svg')).toBeVisible();
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
