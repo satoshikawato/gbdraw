@@ -194,7 +194,7 @@ export const parseAnnotationTable = (text) => parseAnnotationTableWithNotice(tex
 // gives its drawn record position and feature hash, written as `record=#<n>` and
 // `feature_selector=hash=<hash>`; a target it does not place is not written.
 /**
- * @param {AnnotationSet[]} sets
+ * @param {readonly AnnotationSet[]} sets
  * @param {AnnotationTableEncodeOptions} [options]
  */
 export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => null } = {}) => {
@@ -237,5 +237,5 @@ export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => n
   return { text: `${rows.join('\n')}\n`, placedFeatureIdentityCount, skippedFeatureIdentityCount };
 };
 
-/** @param {AnnotationSet[]} sets */
+/** @param {readonly AnnotationSet[]} sets */
 export const encodeAnnotationTable = (sets) => encodeAnnotationTableWithNotice(sets).text;

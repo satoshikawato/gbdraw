@@ -256,6 +256,7 @@ import {
 } from './mode-scoped-migration.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
+import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 
 const { nextTick, ref } = window.Vue;
 
@@ -2790,7 +2791,7 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   // Omitted: every record is drawn.
   drawing.recordsOff.splice(0, drawing.recordsOff.length, ...recordsOffReader(mode)(data.recordsOff).value);
   replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(featurePlacementsReader(mode)(data.featurePlacementOverrides).value));
-  drawing.annotationSets.splice(0, drawing.annotationSets.length, ...readAnnotationSets(data.annotationSets).value);
+  ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets: readAnnotationSets(data.annotationSets).value });
   const linearLayout = readPlainObject(data.linearRecordLayout).value;
   // Omission takes the fresh default in every Session version.
   drawing.linearRecordLayoutEnabled.value = readLinearRecordLayoutEnabled(linearLayout.enabled).value;

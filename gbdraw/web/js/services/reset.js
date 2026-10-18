@@ -15,6 +15,7 @@ import {
 import { replaceBulkLabelEdits } from './label-override-table.js';
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
+import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -195,7 +196,7 @@ export const resetSettings = (state) => {
     replaceReactiveObject(drawing.losat, createDefaultLosat());
     replaceReactiveObject(drawing.circularConservation, createDefaultCircularConservation());
     clearReactiveObject(drawing.unmanagedConfigOverrides);
-    replaceReactiveArray(drawing.annotationSets);
+    ANNOTATION_SETS_SLICE.reset(drawing.slices.annotationSets);
     replaceReactiveArray(drawing.recordDisplayDrafts);
     Object.keys(drawing.featurePlacementOverrides).forEach((key) => delete drawing.featurePlacementOverrides[key]);
     state.selectedAnnotation.value = null;

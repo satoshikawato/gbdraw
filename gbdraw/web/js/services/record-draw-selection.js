@@ -268,7 +268,7 @@ export const linearCardHasSettings = (card) => Object.entries(RECORD_SETTINGS_DE
  * @property {Record<string, { recordKey?: unknown }>} [featureOverrides]
  * @property {Record<string, { recordKey?: unknown }>} [featurePlacementOverrides]
  * @property {Record<string, unknown>} [featureStrokeOverrides] Keyed `<recordKey>\0…`.
- * @property {{ annotations: { target?: { kind?: string, recordKey?: unknown },
+ * @property {readonly { annotations: { target?: { kind?: string, recordKey?: unknown },
  *   metadata?: Record<string, unknown> | null }[] }[]} [annotationSets]
  * @property {{ sourceUid?: unknown, selector?: unknown }[]} [recordDisplayDrafts]
  * @property {{ queryUid?: unknown, subjectUid?: unknown }[]} [comparisonEdges] Linear edges, by card uid.

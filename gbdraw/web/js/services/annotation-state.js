@@ -136,7 +136,7 @@ export const createAnnotationSet = (overrides = {}) => ({
 });
 
 /**
- * @param {Partial<AnnotationSet>[] | null | undefined} sets
+ * @param {readonly Partial<AnnotationSet>[] | null | undefined} sets
  * @returns {AnnotationSet[]}
  */
 export const normalizeAnnotationSets = (sets) => {
@@ -189,7 +189,7 @@ export const ANNOTATION_RECORD_BINDING_KEY = '_gbdraw_web_target_record_key';
 // for the records that draw them (design Q4 3.2, R2). A target bound to an OFF
 // record (`omittedRecordKeys` of the record catalog) waits the same way.
 /**
- * @param {Partial<AnnotationSet>[] | null | undefined} sets
+ * @param {readonly Partial<AnnotationSet>[] | null | undefined} sets
  * @param {FeatureRequestRecord[]} [records]
  * @param {Iterable<string>} [omittedRecordKeys]
  */

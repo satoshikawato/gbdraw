@@ -11,7 +11,7 @@ const text = (value) => String(value ?? '').trim();
  * draws a row from such data only, so a Legend style on a caption the data no
  * longer names can no longer be admitted (OV-65).
  * @param {{
- *   annotationSets?: any[],
+ *   annotationSets?: readonly { legendLabel?: unknown, annotations?: unknown }[],
  *   depthTracks?: any[],
  *   depthSlots?: any[],
  *   sourcedDepthTrackIndexes?: number[]

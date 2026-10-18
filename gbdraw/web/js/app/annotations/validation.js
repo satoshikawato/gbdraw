@@ -25,9 +25,9 @@ export const validateAnnotationCoordinates = ({ start, end }) => (
 /** @param {string} reason @returns {AnnotationCatalogIssue} */
 const targetIssue = (reason) => ({ code: 'ANNOTATION_TARGET', context: { reason } });
 
-/** @param {AnnotationSet[] | null | undefined} sets */
+/** @param {readonly AnnotationSet[] | null | undefined} sets */
 const allAnnotations = (sets) => (
-  (Array.isArray(sets) ? sets : []).flatMap((set) => (
+  (sets ?? []).flatMap((set) => (
     (Array.isArray(set?.annotations) ? set.annotations : []).map((annotation) => ({ set, annotation }))
   ))
 );
@@ -42,7 +42,7 @@ const selectorReason = (selector, records) => {
 
 /**
  * Returns null or the first failure as a { code, context } diagnostic.
- * @param {AnnotationSet[] | null | undefined} sets
+ * @param {readonly AnnotationSet[] | null | undefined} sets
  * @param {AnnotationRecordCatalog | null | undefined} catalog
  * @returns {AnnotationCatalogIssue | null}
  */

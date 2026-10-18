@@ -3,6 +3,7 @@
 /**
  * @import { AnnotationRecordCatalog } from './annotations/record-catalog.js'
  * @import { AnnotationItem, AnnotationSet, AnnotationStyle, AnnotationTarget } from '../services/annotation-state.js'
+ * @import { AnnotationSetsSlice, AnnotationSetsView } from '../services/drawing/annotation-sets.js'
  */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from '../services/annotation-state.js';
 import { nextCopyId } from '../services/track-slot-validation.js';
@@ -13,6 +14,7 @@ import {
   reconcileAnnotationRecordBindings
 } from './annotations/record-selector.js';
 import { getFeatureCaption, getFeatureColorRuleHash } from '../services/feature-utils.js';
+import { ANNOTATION_SETS_SLICE, addAnnotationSet as addSetToDrawing, removeAnnotationSet as removeSetFromDrawing } from '../services/drawing/annotation-sets.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { toRaw } from '../utils/vue-raw.js';
@@ -46,9 +48,11 @@ const nextAnnotationId = (annotations, prefix) => {
  *   extractedFeatures: any, biologicalFeatures: any, selectedFeatures: any, results: any,
  *   activeDrawing: () => AnnotationEditorDrawing, sessionOperationAvailability?: () => any
  * }} AnnotationEditorState `sessionOperationAvailability` returns a busy outcome while a Session operation runs.
- * @typedef {{
- *   annotationSets: AnnotationSet[], adv: { circular_track_slots?: any[], linear_track_slots?: any[] }
- * }} AnnotationEditorDrawing The members of a drawing (`DrawingState` of state.js) the editor reads.
+ * @typedef {AnnotationSetsView & {
+ *   adv: { circular_track_slots?: any[], linear_track_slots?: any[] },
+ *   readonly slices: { readonly annotationSets: AnnotationSetsSlice }
+ * }} AnnotationEditorDrawing The members of a drawing (`DrawingState` of state.js) the editor reads, and the
+ *   handle the set list's writers take.
  * @typedef {object} AnnotationEditorOptions
  * @property {AnnotationEditorState} state
  * @property {() => AnnotationRecordCatalog | null | undefined} getRecordCatalog
@@ -106,7 +110,7 @@ export const createAnnotationEditor = ({
     const drawing = state.activeDrawing();
     const candidate = reconcileRecords(normalizeAnnotationSets(sets));
     retireLegendStylesOfUnnamedCaptions(() => {
-      drawing.annotationSets.splice(0, drawing.annotationSets.length, ...candidate);
+      ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets: candidate });
     });
   };
   const addAnnotationSet = (base = 'annotations') => {
@@ -114,7 +118,7 @@ export const createAnnotationEditor = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const set = createAnnotationSet({ id: uniqueAnnotationSetId(drawing.annotationSets, base) });
-    drawing.annotationSets.push(set);
+    addSetToDrawing(drawing.slices.annotationSets, set);
     return set;
   };
   /**
@@ -155,7 +159,7 @@ export const createAnnotationEditor = ({
     if (sessionBusy) return sessionBusy;
     const copy = createAnnotationSet(JSON.parse(JSON.stringify(set)));
     copy.id = nextCopyId(set.id, drawing.annotationSets);
-    drawing.annotationSets.push(copy);
+    addSetToDrawing(drawing.slices.annotationSets, copy);
     return copy;
   };
   /** @param {AnnotationSet} set */
@@ -163,8 +167,9 @@ export const createAnnotationEditor = ({
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const index = drawing.annotationSets.indexOf(set);
-    if (index >= 0) retireLegendStylesOfUnnamedCaptions(() => drawing.annotationSets.splice(index, 1));
+    if (drawing.annotationSets.includes(set)) {
+      retireLegendStylesOfUnnamedCaptions(() => removeSetFromDrawing(drawing.slices.annotationSets, set));
+    }
   };
   /**
    * @param {AnnotationSet | null | undefined} set
