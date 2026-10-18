@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -540,26 +541,60 @@ def test_circular_rejects_unwritable_sidecar_target_before_diagram_build(
         assert not sidecar_path.exists()
 
 
-def test_no_replace_commit_copies_the_staged_file_without_hard_links(
+def _refuse_hard_link(*_args, **_kwargs):
+    raise OSError(errno.EPERM, "hard links are not supported")
+
+
+@pytest.mark.parametrize("staged_mode", (0o644, 0o600))
+@pytest.mark.parametrize("link_kind", ("missing", "refused"))
+def test_no_replace_commit_without_hard_links_keeps_the_staged_file_mode(
+    link_kind: str,
+    staged_mode: int,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Pyodide's file system has no os.link; the Web writes its outputs this way.
+    # Pyodide's file system, where the Web writes its outputs, has no os.link;
+    # some filesystems refuse one. The commit then reserves the target and renames.
     staged = tmp_path / "staged.svg"
     staged.write_text("new", encoding="utf-8")
-    staged.chmod(0o644)
+    staged.chmod(staged_mode)
     output = tmp_path / "out.svg"
-    monkeypatch.delattr(os, "link")
+    if link_kind == "missing":
+        monkeypatch.delattr(os, "link")
+    else:
+        monkeypatch.setattr(os, "link", _refuse_hard_link)
 
     output_paths_module.commit_staged_output_file(staged, output, overwrite=False)
 
     assert output.read_text(encoding="utf-8") == "new"
-    assert output.stat().st_mode & 0o777 == 0o644
+    assert output.stat().st_mode & 0o777 == staged_mode
     assert not staged.exists()
     staged.write_text("late", encoding="utf-8")
     with pytest.raises(FileExistsError):
         output_paths_module.commit_staged_output_file(staged, output, overwrite=False)
     assert output.read_text(encoding="utf-8") == "new"
+
+
+def test_failed_no_replace_commit_without_hard_links_leaves_no_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # REVIEW-1 F4: a commit that fails after reserving the target removes it again.
+    from svgwrite import Drawing
+
+    from gbdraw.api.render import save_figure_to
+    from gbdraw.exceptions import ExportError
+
+    def fail_replace(_source, _target) -> None:
+        raise OSError(errno.ENOSPC, "no space left")
+
+    monkeypatch.delattr(os, "link")
+    monkeypatch.setattr(os, "replace", fail_replace)
+
+    with pytest.raises(ExportError, match="Could not write output file"):
+        save_figure_to(Drawing("ignored.svg"), "svg", output_dir=str(tmp_path), output_prefix="nolink")
+
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_save_session_document_refuses_dangling_symlink_without_overwrite(

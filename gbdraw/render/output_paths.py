@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import errno
 import os
-import shutil
-import stat
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import mkdtemp
 from typing import Iterable, Iterator, Mapping
 
 from gbdraw.exceptions import ExportError, ValidationError
@@ -130,37 +128,21 @@ def preflight_output_paths(
     return output_paths
 
 
-def _copy_staged_file_exclusively(
-    staged_path: Path,
-    output_path: Path,
-) -> None:
-    """Fallback no-replace commit for filesystems without hard links.
+def _reserve_and_replace(staged_path: Path, output_path: Path) -> None:
+    """No-replace commit without hard links: reserve the target, then rename onto it.
 
-    The copy keeps the staged file's permission bits, as a link would.
+    The exclusive create refuses an existing target, as a link would, and the
+    rename moves the staged file itself, so the output keeps the staged file's
+    mode, as a link does. A failed rename removes the reservation again.
     """
 
-    output_fd: int | None = None
+    os.close(os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
     try:
-        output_fd = os.open(
-            output_path,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-            stat.S_IMODE(staged_path.stat().st_mode),
-        )
-        with staged_path.open("rb") as source:
-            output_file = os.fdopen(output_fd, "wb")
-            output_fd = None
-            with output_file:
-                shutil.copyfileobj(source, output_file)
-                output_file.flush()
-                os.fsync(output_file.fileno())
-    except Exception:
-        if output_fd is not None:
-            try:
-                os.close(output_fd)
-            except OSError:
-                pass
+        os.replace(staged_path, output_path)
+    except BaseException:
+        with suppress(OSError):
+            os.unlink(output_path)
         raise
-    staged_path.unlink()
 
 
 def commit_staged_output_file(
@@ -181,12 +163,12 @@ def commit_staged_output_file(
         return
     if not hasattr(os, "link"):
         # Pyodide's file system, where the Web writes its outputs, has no os.link.
-        _copy_staged_file_exclusively(staged, output)
+        _reserve_and_replace(staged, output)
         return
     try:
         os.link(staged, output, follow_symlinks=False)
     except NotImplementedError:
-        _copy_staged_file_exclusively(staged, output)
+        _reserve_and_replace(staged, output)
         return
     except OSError as exc:
         fallback_errors = {
@@ -196,7 +178,7 @@ def commit_staged_output_file(
         }
         if exc.errno not in fallback_errors:
             raise
-        _copy_staged_file_exclusively(staged, output)
+        _reserve_and_replace(staged, output)
         return
     staged.unlink()
 
@@ -212,23 +194,26 @@ def staged_output_files(output_paths: Iterable[str | Path]) -> Iterator[dict[Pat
     removed, so a failed generation leaves no output behind.
     """
 
-    with ExitStack() as stack:
-        directories: dict[Path, Path] = {}
-        staged: dict[Path, Path] = {}
+    directories: dict[Path, Path] = {}
+    staged: dict[Path, Path] = {}
+    try:
         for output_path in (Path(path) for path in output_paths):
             parent = output_path.parent
             if parent not in directories:
                 try:
-                    staging = TemporaryDirectory(
-                        prefix=".gbdraw-staged-",
-                        dir=parent,
-                        ignore_cleanup_errors=True,
-                    )
+                    directories[parent] = Path(mkdtemp(prefix=".gbdraw-staged-", dir=parent))
                 except OSError as exc:
                     raise ExportError(f"Could not stage output files in {parent}: {exc}.") from exc
-                directories[parent] = Path(stack.enter_context(staging))
             staged[output_path] = directories[parent] / output_path.name
         yield staged
+    finally:
+        # Only the staged files can be left: no recursive removal is needed.
+        for staged_path in staged.values():
+            with suppress(OSError):
+                staged_path.unlink(missing_ok=True)
+        for directory in directories.values():
+            with suppress(OSError):
+                directory.rmdir()
 
 
 def output_exists_message(path: str | Path) -> str:

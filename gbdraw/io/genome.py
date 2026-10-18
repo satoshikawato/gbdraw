@@ -127,14 +127,19 @@ def merge_gff_fasta_records(
 ) -> List[SeqRecord]:
     """Give each GFF3 record the sequence of the FASTA record with its ID.
 
-    The FASTA IDs are the join key, so ``fasta_file`` must not repeat one.
+    The FASTA IDs are the join key, so ``fasta_file`` must not repeat an ID
+    that a GFF3 record names; a FASTA sequence without GFF3 rows is not a
+    record, and its repeats are ignored as before.
     """
     id_counts = Counter(record.id for record in fasta_records)
-    duplicated_ids = [record_id for record_id, count in id_counts.items() if count > 1]
+    gff_ids = {gff_record.id for gff_record in gff_records}
+    duplicated_ids = [
+        record_id for record_id, count in id_counts.items() if count > 1 and record_id in gff_ids
+    ]
     if duplicated_ids:
         message = (
-            f"FASTA file {fasta_file} repeats record ID(s): {', '.join(duplicated_ids)}. "
-            "Each FASTA record needs a unique ID to match its GFF3 record."
+            f"FASTA file {fasta_file} has more than one sequence with the ID of GFF3 "
+            f"record(s) {', '.join(duplicated_ids)}. Give each FASTA sequence a unique ID."
         )
         logger.error(f"ERROR: {message}")
         raise ValidationError(message, diagnostic=_DUPLICATE_FASTA_IDS)

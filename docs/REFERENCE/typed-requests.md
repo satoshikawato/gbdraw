@@ -49,7 +49,7 @@ projects anchor centers after resolving those record transforms.
 | `render_request(request)` | resolves, plans, builds, and writes requested formats |
 | `render_prepared_request(prepared, output)` | writes a previously prepared request |
 
-Each plan exposes `preflight_outputs()`. A single Circular or Linear plan validates its materialized output set; a Circular batch validates all resolved targets together before diagram construction. Format generation is sequential, not transactional: a later conversion failure does not remove formats already written.
+Each plan exposes `preflight_outputs()`. A single Circular or Linear plan validates its materialized output set; a Circular batch validates all resolved targets together before diagram construction. Each diagram writes its formats all or nothing: every format is generated before any output is written, so a conversion failure, or missing CairoSVG, changes no existing file and leaves no new one. A Circular batch writes item by item: when an item fails, the items before it stay written.
 
 `resolve_request()` returns one in-memory, `EXACTLY_ONE` input per displayed record, resolved table-backed options and outputs, and no collection-level record transforms. `render_request()` accepts unresolved or already materialized requests through the same planning boundary. A request with a `SimilarityAlignmentReference` is the one exception to "no drawing": planning it runs the requested orthogroup analysis once, in memory, and the planned request carries the resolved plan and that analysis as precomputed comparisons.
 

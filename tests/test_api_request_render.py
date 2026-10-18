@@ -1395,6 +1395,57 @@ def test_circular_batch_items_share_prepared_feature_inputs(
     assert received == [prepared.inputs.features, prepared.inputs.features]
 
 
+def test_circular_batch_commits_each_item_all_or_nothing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # D-04: each batch item writes all its formats or none; a failing item
+    # leaves the items before it committed and its own old files unchanged.
+    import gbdraw.render.export as export_module
+
+    for name in ("batch-a", "batch-b"):
+        (tmp_path / f"{name}.svg").write_text("old svg", encoding="utf-8")
+        (tmp_path / f"{name}.pdf").write_bytes(b"old pdf")
+    request = CircularBatchRequest(
+        records=(_memory_input("batch-a"), _memory_input("batch-b")),
+        outputs=tuple(
+            RenderOutputRequest(
+                output_prefix=name,
+                output_directory=tmp_path,
+                formats=("svg", "pdf"),
+                overwrite=True,
+            )
+            for name in ("batch-a", "batch-b")
+        ),
+    )
+    conversions = []
+
+    class SecondPdfFails:
+        @staticmethod
+        def svg2pdf(*, bytestring, write_to):
+            conversions.append("pdf")
+            if len(conversions) == 2:
+                raise RuntimeError("converter failed")
+            write_to.write(b"new pdf")
+
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", lambda _record, **_kwargs: Drawing("out.svg"))
+    monkeypatch.setattr(export_module, "get_cairosvg", lambda: SecondPdfFails)
+
+    with pytest.raises(ExportError, match="Failed to generate PDF"):
+        render_request(request)
+
+    assert (tmp_path / "batch-a.svg").read_text(encoding="utf-8") != "old svg"
+    assert (tmp_path / "batch-a.pdf").read_bytes() == b"new pdf"
+    assert (tmp_path / "batch-b.svg").read_text(encoding="utf-8") == "old svg"
+    assert (tmp_path / "batch-b.pdf").read_bytes() == b"old pdf"
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "batch-a.pdf",
+        "batch-a.svg",
+        "batch-b.pdf",
+        "batch-b.svg",
+    ]
+
+
 def test_render_request_passes_output_policy_and_returns_existing_paths(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

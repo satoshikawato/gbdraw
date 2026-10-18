@@ -75,6 +75,23 @@ def test_load_gff_fasta_rejects_duplicate_fasta_ids(tmp_path: Path) -> None:
     assert raised.value.diagnostic == {"code": "INPUT_INVALID", "field": "fasta", "reason": "UNIQUE_IDS"}
 
 
+def test_load_gff_fasta_accepts_a_repeated_fasta_id_that_no_gff3_record_names(
+    tmp_path: Path,
+) -> None:
+    # A FASTA sequence without GFF3 rows is not a record, so its repeats do not matter.
+    gff_path = tmp_path / "records.gff3"
+    fasta_path = tmp_path / "records.fasta"
+    gff_path.write_text(
+        "##gff-version 3\nrecord_a\ttest\tgene\t1\t4\t.\t+\t.\tID=gene_a\n",
+        encoding="utf-8",
+    )
+    fasta_path.write_text(">record_a\nAAAA\n>contig9 x\nCC\n>contig9 y\nGG\n", encoding="utf-8")
+
+    records = load_gff_fasta([str(gff_path)], [str(fasta_path)], selected_features_set={"gene"})
+
+    assert [(record.id, str(record.seq)) for record in records] == [("record_a", "AAAA")]
+
+
 def test_load_gff_fasta_reports_a_missing_fasta_record_as_validation(tmp_path: Path) -> None:
     gff_path = tmp_path / "records.gff3"
     fasta_path = tmp_path / "records.fasta"

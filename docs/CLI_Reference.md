@@ -12,10 +12,13 @@ Every diagram run writes a base `.svg` and any additional requested formats.
 Both commands validate that complete target set before rendering and refuse to
 replace an existing file by default. Pass `--overwrite` to replace existing
 regular files selected by the current command. Directories, special files,
-dangling symlinks, and invalid parents are rejected even with that flag. Output
-generation is sequential rather than transactional, so formats completed before
-a later conversion error remain. Overwrite permission applies only to the
-current invocation and is not restored from a saved session.
+dangling symlinks, and invalid parents are rejected even with that flag. Each
+diagram writes its formats all or nothing: when a conversion fails, no existing
+file changes and no new file is left. Without CairoSVG, PNG, PDF, EPS, and PS
+are skipped with a warning and the SVG formats are still written. A Circular
+batch writes record by record, so the records before a failing one stay
+written. Overwrite permission applies only to the current invocation and is
+not restored from a saved session.
 
 The current boolean spelling is symmetric in both modes:
 `--gc` / `--no-gc` and `--skew` / `--no-skew`. Depth files use repeatable
