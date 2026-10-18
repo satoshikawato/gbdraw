@@ -11,7 +11,8 @@ const { createHistoryManager, createHistoryRouter } = await import('../../gbdraw
 const routerOver = (snapshotService, options = {}) => createHistoryRouter({
   drawingIds: ['circular', 'linear'],
   activeDrawingId: () => state.activeDrawingId.value,
-  managerOptions: (drawingId) => ({ ...snapshotService.drawingHistory(drawingId), ...options })
+  managerOptions: (drawingId) => ({ ...snapshotService.drawingHistory(drawingId), ...options }),
+  sessionHistory: snapshotService.sessionHistory()
 });
 const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');

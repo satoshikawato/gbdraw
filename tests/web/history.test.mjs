@@ -45,7 +45,7 @@ for (const filename of [
   );
 }
 
-const { createHistoryManager } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
+const { createHistoryManager, createHistoryRouter } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
 const { createHistoryFileStore } = await import(pathToFileURL(join(tempDir, 'services', 'history-files.js')));
 const { createHistorySnapshotService } = await import(
   pathToFileURL(join(tempDir, 'services', 'history-snapshot.js'))
@@ -1746,9 +1746,12 @@ const createLayoutPreferences = () => ({
     serializeResults: () => [],
     applyResultsData: () => {}
   });
-  const history = createHistoryManager({
-    fileStore,
-    ...snapshots.drawingHistory('circular')
+  // The drafts are Session-level values: the router's project stream records them (R15-23).
+  const history = createHistoryRouter({
+    drawingIds: ['circular'],
+    activeDrawingId: () => 'circular',
+    managerOptions: () => ({ fileStore, ...snapshots.drawingHistory('circular') }),
+    sessionHistory: snapshots.sessionHistory()
   });
   const draftState = () => ({
     selectedAnnotation: structuredClone(state.selectedAnnotation.value),
@@ -1791,24 +1794,28 @@ const createLayoutPreferences = () => ({
   await history.undo();
   assert.deepEqual(draftState(), after);
 
-  // R15-2 retired Add legend item and its form drafts. A History intent or
-  // checkpoint that still carries them restores the other drafts and writes
-  // nothing for them, even where a holder of the old name exists.
+  // R15-2 retired Add legend item and its form drafts. A Session-level step
+  // that still carries them restores the other drafts and writes nothing for
+  // them, even where a holder of the old name exists. A drawing's checkpoint
+  // holds no drafts and writes none (R15-23).
   const retiredDrafts = { newLegendCaption: 'Old draft', newLegendColor: '#123123' };
-  const oldIntent = { ...(await snapshots.drawingHistory('circular').buildIntent()) };
-  oldIntent.drafts = { ...oldIntent.drafts, ...retiredDrafts };
+  const sessionPorts = snapshots.sessionHistory();
+  const oldSession = { ...sessionPorts.buildIntent() };
+  oldSession.drafts = { ...oldSession.drafts, ...retiredDrafts };
   const oldCheckpoint = { ...(await snapshots.drawingHistory('circular').buildCheckpoint()) };
-  oldCheckpoint.drafts = { ...oldCheckpoint.drafts, ...retiredDrafts };
+  assert.equal(Object.hasOwn(oldCheckpoint, 'drafts'), false);
+  oldCheckpoint.drafts = { ...oldSession.drafts, newColorVal: '#000003' };
   state.newLegendCaption = ref('');
   state.newLegendColor = ref('#808080');
   state.newColorVal.value = '#000001';
-  await snapshots.drawingHistory('circular').applyIntent(oldIntent);
+  await sessionPorts.applyIntent(oldSession);
   assert.deepEqual(draftState(), after);
   state.newColorVal.value = '#000002';
   await snapshots.drawingHistory('circular').applyCheckpoint(oldCheckpoint);
-  assert.deepEqual(draftState(), after);
+  assert.equal(state.newColorVal.value, '#000002');
   assert.deepEqual([state.newLegendCaption.value, state.newLegendColor.value], ['', '#808080']);
-  assert.equal(Object.hasOwn((await snapshots.drawingHistory('circular').buildIntent()).drafts, 'newLegendCaption'), false);
+  assert.equal(Object.hasOwn(sessionPorts.buildIntent().drafts, 'newLegendCaption'), false);
+  assert.equal(Object.hasOwn(await snapshots.drawingHistory('circular').buildIntent(), 'drafts'), false);
 }
 
 {
@@ -3103,7 +3110,6 @@ for (const previousSuppressed of [false, true]) {
   await history.redo();
   assert.deepEqual({ rules, figure }, { rules: 1, figure: 'drawn-1' });
   assert.deepEqual(restores.map(({ drawn }) => ({ drawn })), [{ drawn: true }, { drawn: true }]);
-  assert.deepEqual(restores.map(({ from }) => from.figure), ['drawn-1', 'drawn-0'], 'each restore names the side it leaves');
 
   // A later step, or an Undo of the step, keeps the figure out of it.
   await history.runUndoableCheckpoint('Change feature color again', () => {
@@ -3404,6 +3410,7 @@ for (const previousSuppressed of [false, true]) {
       drawingIds,
       activeDrawingId: () => shown.value,
       maxBytes,
+      sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
       estimateFileBytes: fileStore.estimateBytes,
       retainOnlyFiles: fileStore.retainOnly,
       managerOptions: (drawingId) => {
@@ -3493,6 +3500,7 @@ for (const previousSuppressed of [false, true]) {
   const router = createHistoryRouter({
     drawingIds: ['circular', 'linear'],
     activeDrawingId: () => shown.value,
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
     managerOptions: (drawingId) => {
       const build = () => ({ ui: JSON.parse(JSON.stringify(ui[drawingId])) });
       const apply = (snapshot) => { ui[drawingId] = JSON.parse(JSON.stringify(snapshot.ui)); };

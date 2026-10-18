@@ -692,9 +692,9 @@ test('H1: Undo and Redo walk the shown drawing\'s steps across an edit, a switch
   }
 });
 
-// H2 (D-15-50): Reset Settings resets both drawings and is one step in each
-// drawing's History; an Undo restores the shown drawing's edits.
-test('H2: Reset Settings is one step in each drawing\'s History', async ({ page }) => {
+// H2 (D-15-51): Reset Settings resets both drawings and is one project step:
+// one Undo restores both drawings, from either drawing, and Redo resets both.
+test('H2: Reset Settings is one project step that one Undo restores in both drawings', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
   const fields = { size: 'adv.label_font_size', width: 'adv.axis_stroke_width' };
@@ -712,11 +712,12 @@ test('H2: Reset Settings is one step in each drawing\'s History', async ({ page 
   await settleLive(page);
   expect(await readDrawings(page, fields), 'Reset Settings').toEqual({ ...initial, mode: 'linear' });
   await historyStep(page, 'undo');
-  expect(await readDrawings(page, fields), 'a Linear Undo of Reset Settings')
-    .toEqual({ ...edited, circular: initial.circular });
+  expect(await readDrawings(page, fields), 'one Linear Undo restores both drawings').toEqual(edited);
+  await historyStep(page, 'redo');
+  expect(await readDrawings(page, fields), 'Redo resets both drawings').toEqual({ ...initial, mode: 'linear' });
   await switchMode(page, 'circular');
   await historyStep(page, 'undo');
-  expect(await readDrawings(page, fields), 'a Circular Undo of Reset Settings').toEqual({ ...edited, mode: 'circular' });
+  expect(await readDrawings(page, fields), 'one Circular Undo restores both drawings').toEqual({ ...edited, mode: 'circular' });
 });
 
 // OV-1100 (R15-19 B, OIC-030): a drawing switch waits while a color rule table

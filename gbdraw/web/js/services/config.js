@@ -4716,6 +4716,21 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
   return ui;
 };
 
+// The Session-level values of `buildUiStateData`, which no drawing owns; each
+// one present is written (History's project stream restores them, R15-23).
+/** @param {SavedUiFields} ui */
+export const applySessionUiData = (ui) => {
+  if (typeof ui.title === 'string') state.sessionTitle.value = ui.title;
+  if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
+  if (Object.hasOwn(ui, 'autoLabelReflow')) state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
+  if (Object.hasOwn(ui, 'paletteInstantPreviewEnabled')) state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
+  // The cast: a plain object, and every field of the type is an optional unknown.
+  if (isPlainObject(ui.losatExecution)) applyLosatExecutionData(/** @type {SessionLosatExecution} */ (ui.losatExecution));
+  if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
+    state.featurePanelTab.value = ui.featurePanelTab;
+  }
+};
+
 // `mode` is not restored here: History restores run the mode transition
 // first, and Session rollback sets it with the restored document.
 /**
@@ -4724,7 +4739,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
  * @param {{ restorePreviewNavigation?: boolean }} [options]
  */
 export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true } = {}) => {
-  if (typeof ui.title === 'string') state.sessionTitle.value = ui.title;
+  applySessionUiData(ui);
   // The drawing's own input type (OIC-030); the Load rollback restores each drawing's.
   const inputType = inputTypeKeyOf(drawing);
   if (ui[inputType]) state[inputType].value = ui[inputType];
@@ -4732,20 +4747,11 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
     const program = String(ui.losatProgram);
     SETTINGS_SLICE.install(drawing.slices.settings, { losatProgram: ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn' });
   }
-  if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
-  // A History checkpoint leaves out the Session values its step did not change.
-  if (Object.hasOwn(ui, 'autoLabelReflow')) state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
   reconcileImportedLinearTypographyLink({
     adv: drawing.adv,
     linked: drawing.linearTypographyLinked,
     ui
   });
-  if (Object.hasOwn(ui, 'paletteInstantPreviewEnabled')) state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
-  // The cast: a plain object, and every field of the type is an optional unknown.
-  if (isPlainObject(ui.losatExecution)) applyLosatExecutionData(/** @type {SessionLosatExecution} */ (ui.losatExecution));
-  if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
-    state.featurePanelTab.value = ui.featurePanelTab;
-  }
 
   if (ui.generatedMode) state.generatedMode.value = ui.generatedMode === 'linear' ? 'linear' : 'circular';
   if (ui.generatedLegendPosition) {

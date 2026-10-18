@@ -1,8 +1,9 @@
 // PD-OI-090 (OIC-030), A3: each drawing has its own History. A drawing switch
 // writes no setting and is no Undo step; Undo and Redo walk the shown
-// drawing's steps, and a step in one drawing never changes the other (checked
-// by a hash of each drawing per step); Reset Settings is one step in each
-// drawing's History (D-15-50).
+// drawing's steps and the project steps, newest first, and a step in one
+// drawing never changes the other (checked by a hash of each drawing per
+// step). Reset all drawings is one project step (D-15-51, D-15-52), and an
+// edit of a Session-level value is a project step (R15-23).
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { File } from 'node:buffer';
@@ -68,11 +69,11 @@ test('Undo walks the shown drawing\'s History and never changes the other drawin
   assert.equal(hashOf('linear'), linearAfterEdit, 'Undo in Circular leaves Linear unchanged');
 });
 
-test('Reset Settings is one step in each drawing\'s History', async () => {
+test('Reset all drawings is one project step: one Undo restores every drawing', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
   const { circular, linear } = state.drawings;
-  if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
+  if (state.activeDrawingId.value !== 'linear') app.selectDrawing('linear');
   circular.form.prefix = 'circular-prefix';
   linear.form.prefix = 'linear-prefix';
   const circularBefore = hashOf('circular');
@@ -80,15 +81,30 @@ test('Reset Settings is one step in each drawing\'s History', async () => {
   await app.resetSettings();
   assert.notEqual(circular.form.prefix, 'circular-prefix');
   assert.notEqual(linear.form.prefix, 'linear-prefix');
+  const circularReset = hashOf('circular');
   const linearReset = hashOf('linear');
 
+  // A newer step of the shown drawing is undone first.
+  await history.runUndoable('Linear prefix', () => { linear.form.prefix = 'after-reset'; });
+  assert.equal(history.undoLabel(), 'Linear prefix');
   await app.undoHistory();
-  assert.equal(hashOf('circular'), circularBefore, 'Undo in Circular restores its reset');
-  assert.equal(hashOf('linear'), linearReset, 'and leaves the Linear reset');
-  assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
+  assert.equal(hashOf('linear'), linearReset);
+  assert.equal(history.undoLabel(), 'Reset settings');
+
+  await app.undoHistory();
+  assert.equal(hashOf('circular'), circularBefore, 'one Undo in Linear restores Circular');
+  assert.equal(hashOf('linear'), linearBefore, 'and Linear');
+  await app.redoHistory();
+  assert.equal(history.redoLabel(), 'Linear prefix', 'Redo replays in the order the steps ended');
+  assert.equal(hashOf('circular'), circularReset, 'Redo resets Circular again');
+  assert.equal(hashOf('linear'), linearReset, 'and Linear');
+
+  // From the other drawing the Reset is the newest step too.
+  assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
   assert.equal(history.undoLabel(), 'Reset settings');
   await app.undoHistory();
-  assert.equal(hashOf('linear'), linearBefore, 'Undo in Linear restores its reset');
+  assert.equal(hashOf('circular'), circularBefore, 'one Undo in Circular restores Circular');
+  assert.equal(hashOf('linear'), linearBefore, 'and Linear');
 });
 
 test('a switch settles the departing drawing\'s open step in that drawing', async () => {
@@ -104,42 +120,83 @@ test('a switch settles the departing drawing\'s open step in that drawing', asyn
   circular.form.prefix = 'typed-before-switch';
   assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
   const linearSteps = history.getUndoCount();
-  // The Session title is shared; it changes while Linear is shown.
-  state.sessionTitle.value = 'title set in Linear';
+  // The Session title is shared; it changes in a step while Linear is shown.
+  await history.runUndoable('Rename Session', () => { state.sessionTitle.value = 'title set in Linear'; });
+  const titleSteps = history.getUndoCount();
   await history.commit(step);
-  assert.equal(history.getUndoCount(), linearSteps, 'the Linear History records nothing');
+  assert.equal(titleSteps, linearSteps + 1, 'the title edit is a project step');
+  assert.equal(history.getUndoCount(), titleSteps, 'the Linear walk gains nothing from the Circular step');
   assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
-  assert.equal(history.getUndoCount(), circularSteps + 1, 'the step is the Circular drawing\'s');
+  assert.equal(history.getUndoCount(), circularSteps + 2, 'the step is the Circular drawing\'s');
+  // The step ended at the switch, before the title edit: the title is undone first.
+  assert.equal(history.undoLabel(), 'Rename Session');
+  await app.undoHistory();
+  assert.equal(circular.form.prefix, 'typed-before-switch');
   await app.undoHistory();
   assert.equal(circular.form.prefix, before);
-  assert.equal(state.sessionTitle.value, 'title set in Linear',
-    'the step ended at the switch, so its Undo keeps what changed after it');
 });
 
-// A3 review M1 and M2 (checkpoint form): a checkpoint step restores what its
-// drawing owns and the Session-level values the step itself changed. Its Undo
-// keeps the other drawing's input type and the Session title and Auto Reflow
-// that a step of the other drawing changed afterwards.
-test('a checkpoint Undo keeps the other drawing\'s input type and the Session values it did not change', async () => {
+// R15-23 (Q-DR-8 A): an edit of a Session-level value is a project step,
+// undone newest first with the shown drawing's steps from any drawing.
+test('the Session title edits are undone newest first from either drawing', async () => {
+  for (const undoIn of /** @type {const} */ (['linear', 'circular'])) {
+    const app = createAppSetup();
+    const history = window.__GBDRAW_HISTORY__;
+    if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
+    const original = state.sessionTitle.value;
+    await history.runUndoable('Rename Session', () => { state.sessionTitle.value = `A ${undoIn}`; });
+    assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
+    await history.runUndoable('Rename Session', () => { state.sessionTitle.value = `B ${undoIn}`; });
+    if (undoIn !== 'linear') assert.deepEqual(app.selectDrawing(undoIn), { status: 'ok' });
+    await app.undoHistory();
+    assert.equal(state.sessionTitle.value, `A ${undoIn}`, `Undo in ${undoIn} undoes B first`);
+    await app.undoHistory();
+    assert.equal(state.sessionTitle.value, original, `then A (${undoIn})`);
+    await app.redoHistory();
+    assert.equal(state.sessionTitle.value, `A ${undoIn}`);
+  }
+});
+
+test('a title edit in Circular is undone in Linear', async () => {
+  const app = createAppSetup();
+  if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
+  const original = state.sessionTitle.value;
+  await window.__GBDRAW_HISTORY__.runUndoable('Rename Session', () => { state.sessionTitle.value = 'renamed in Circular'; });
+  assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
+  assert.equal(app.canUndoHistory.value, true);
+  await app.undoHistory();
+  assert.equal(state.sessionTitle.value, original);
+});
+
+// A3 review M1, R15-23: a checkpoint Undo restores what its drawing owns. The
+// Session title and Auto Reflow edits made later in Linear are project steps,
+// undone before the older Circular step, and the Linear input type stays.
+test('a Circular step older than the Session edits is undone after them and keeps Linear\'s input type', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
   const { circular } = state.drawings;
   if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
   state.lInputType.value = 'gb';
   const before = circular.form.prefix;
+  const title = state.sessionTitle.value;
+  const reflowBefore = state.autoLabelReflowEnabled.value;
   await history.runUndoableCheckpoint('Circular checkpoint', () => { circular.form.prefix = 'checkpoint-prefix'; return true; });
   assert.equal(circular.form.prefix, 'checkpoint-prefix');
 
   assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
-  const reflow = !state.autoLabelReflowEnabled.value;
   await history.runUndoable('Linear input type', () => { state.lInputType.value = 'gff'; });
   await history.runUndoable('Rename Session', () => { state.sessionTitle.value = 'title set in Linear'; });
-  await history.runUndoable('Auto Reflow', () => { state.autoLabelReflowEnabled.value = reflow; });
+  await history.runUndoable('Auto Reflow', () => { state.autoLabelReflowEnabled.value = !reflowBefore; });
 
   assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
   await app.undoHistory();
-  assert.equal(circular.form.prefix, before, 'the Circular step is undone');
+  assert.equal(state.autoLabelReflowEnabled.value, reflowBefore, 'the newest step, Auto Reflow, is undone first');
+  assert.equal(circular.form.prefix, 'checkpoint-prefix');
+  await app.undoHistory();
+  assert.equal(state.sessionTitle.value, title, 'then the title');
+  assert.equal(circular.form.prefix, 'checkpoint-prefix');
+  await app.undoHistory();
+  assert.equal(circular.form.prefix, before, 'then the Circular step');
   assert.equal(state.lInputType.value, 'gff', 'the Linear input type stays');
-  assert.equal(state.sessionTitle.value, 'title set in Linear', 'the Session title stays');
-  assert.equal(state.autoLabelReflowEnabled.value, reflow, 'Auto Reflow stays');
+  assert.equal(state.sessionTitle.value, title);
 });

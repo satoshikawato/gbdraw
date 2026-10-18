@@ -78,7 +78,8 @@ const COMPOSITION_INTENT_PATH = Object.freeze(['ui', 'compositionUserDeltas']);
  */
 /**
  * A History intent: one drawing's settings and edits, the file bindings of its
- * slots, and the app-level values its steps record (PD-OI-090).
+ * slots, and the shared selections its steps record (PD-OI-090); no
+ * Session-level value (R15-23).
  * @typedef {object} HistoryIntentData
  * @property {HistorySnapshotData} [config] The Settings capture.
  * @property {IntentUiData} [ui]
@@ -87,7 +88,6 @@ const COMPOSITION_INTENT_PATH = Object.freeze(['ui', 'compositionUserDeltas']);
  * @property {GroupNameIntentData} [groupNames]
  * @property {FilesData} [files]
  * @property {AlignmentStateData} [alignmentState] A Linear drawing's.
- * @property {DraftIntentData} [drafts]
  * @property {OrthogroupIntentData} [orthogroupState]
  */
 /**
@@ -100,7 +100,6 @@ const COMPOSITION_INTENT_PATH = Object.freeze(['ui', 'compositionUserDeltas']);
  * @property {HistorySnapshotData} [config]
  * @property {FilesData} [files]
  * @property {AlignmentStateData} [alignmentState]
- * @property {DraftIntentData} [drafts]
  * @property {IntentUiData} [ui]
  * @property {HistorySnapshotData[]} [results]
  * @property {FeatureEditsData & { extractedFeatures?: unknown, featureRecordIds?: unknown }} [features]
@@ -178,6 +177,11 @@ const COMPOSITION_INTENT_PATH = Object.freeze(['ui', 'compositionUserDeltas']);
  *   plotTitleUserOffset?: OffsetData | null,
  *   selectedResultIndex?: number
  * }} FallbackUiData
+ * @typedef {{
+ *   title?: unknown, downloadDpi?: unknown, autoLabelReflow?: unknown, paletteInstantPreviewEnabled?: unknown,
+ *   losatExecution?: unknown, featurePanelTab?: unknown
+ * }} SessionUiData
+ *   The Session-level `ui` values (`SESSION_UI_KEYS`), which the History router's project stream records.
  */
 /**
  * The draft inputs (annotation, preset, and rule forms) a History intent holds.
@@ -249,6 +253,20 @@ const buildOrthogroupIntentData = (orthogroupState = {}) => ({
 /** @param {DrawingView} drawing */
 const buildGroupNameIntentData = (drawing) => GROUP_NAMES_SLICE.capture(drawing.slices.groupNames);
 
+// The `ui` values of the Session and the app, which no drawing owns
+// (tests/web/helpers/drawing-state.mjs PROJECT_KEYS, UI_KEYS, TRANSIENT_KEYS):
+// the router's project stream records them with the drafts (R15-23), and a
+// drawing's intent and checkpoint hold none of them.
+const SESSION_UI_KEYS = Object.freeze([
+  'title', 'downloadDpi', 'autoLabelReflow', 'paletteInstantPreviewEnabled', 'losatExecution', 'featurePanelTab'
+]);
+/** @param {Record<string, unknown>} ui */
+const withoutSessionUi = (ui) => {
+  const drawingUi = { ...ui };
+  SESSION_UI_KEYS.forEach((key) => { delete drawingUi[key]; });
+  return drawingUi;
+};
+
 // Neither the selected Result nor the offsets read from its mounted root is
 // an edit, so neither is intent; composition offsets are recorded per Result
 // in `compositionUserDeltas` (B17).
@@ -259,7 +277,7 @@ const buildGroupNameIntentData = (drawing) => GROUP_NAMES_SLICE.capture(drawing.
  * @param {DrawingIdentity} drawing
  */
 const buildUiIntentData = (ui, drawing) => {
-  const intent = clonePlainObject(ui);
+  const intent = withoutSessionUi(clonePlainObject(ui));
   delete intent.mode;
   delete intent[drawing.mode === 'linear' ? 'cInputType' : 'lInputType'];
   delete intent.generatedLegendPosition;
@@ -272,14 +290,6 @@ const buildUiIntentData = (ui, drawing) => {
   delete intent.plotTitleUserOffset;
   return intent;
 };
-
-// The `ui` values of the Session and the app, which no drawing owns
-// (tests/web/helpers/drawing-state.mjs PROJECT_KEYS, UI_KEYS, TRANSIENT_KEYS).
-const SESSION_UI_KEYS = Object.freeze([
-  'title', 'downloadDpi', 'autoLabelReflow', 'paletteInstantPreviewEnabled', 'losatExecution', 'featurePanelTab'
-]);
-/** @param {unknown} left @param {unknown} right */
-const sameCapturedValue = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
 // A generated artifact's features hold the Features-list record it showed;
 // an intent's per-mode features do not (the intent's `ui` holds it).
@@ -546,6 +556,20 @@ const buildFallbackUiStateData = (state, drawing) => ({
   plotTitleUserOffset: { ...(state.plotTitleUserOffset || {}) }
 });
 
+// The fallback's Session-level values (R15-23).
+/**
+ * @param {HistorySnapshotState} state
+ * @param {SessionUiData} ui
+ */
+const applyFallbackSessionUiData = (state, ui) => {
+  if (typeof ui.title === 'string') setRef(state.sessionTitle, ui.title);
+  if (ui.downloadDpi) setRef(state.downloadDpi, ui.downloadDpi);
+  if (Object.hasOwn(ui, 'autoLabelReflow')) setRef(state.autoLabelReflowEnabled, Boolean(ui.autoLabelReflow));
+  if (Object.hasOwn(ui, 'paletteInstantPreviewEnabled')) {
+    setRef(state.paletteInstantPreviewEnabled, Boolean(ui.paletteInstantPreviewEnabled));
+  }
+};
+
 // `mode` is not restored: a drawing switch is no History step (PD-OI-090).
 /**
  * @param {Record<string, any>} state
@@ -553,13 +577,12 @@ const buildFallbackUiStateData = (state, drawing) => ({
  * @param {FallbackUiData} [ui]
  */
 const applyFallbackUiStateData = (state, drawing, ui = {}) => {
-  if (typeof ui.title === 'string') setRef(state.sessionTitle, ui.title);
+  applyFallbackSessionUiData(state, ui);
   const inputType = inputTypeKeyOf(drawing);
   if (ui[inputType]) setRef(state[inputType], ui[inputType]);
   SETTINGS_SLICE.install(drawing.slices.settings, {
     losatProgram: ui.losatProgram || undefined, layoutPreferences: normalizeLayoutPreferences(ui.layoutPreferences)
   });
-  if (ui.downloadDpi) setRef(state.downloadDpi, ui.downloadDpi);
   if (ui.generatedLegendPosition) setRef(state.generatedLegendPosition, ui.generatedLegendPosition);
   if (ui.generatedMode) setRef(state.generatedMode, ui.generatedMode);
   if (Object.prototype.hasOwnProperty.call(ui, 'generatedMultiRecordCanvas')) {
@@ -569,8 +592,6 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
     setRef(state.generatedCircularPlotTitlePosition, ui.generatedCircularPlotTitlePosition);
   }
   installCanvasPadding(drawing, ui);
-  setRef(state.autoLabelReflowEnabled, Boolean(ui.autoLabelReflow));
-  setRef(state.paletteInstantPreviewEnabled, Boolean(ui.paletteInstantPreviewEnabled));
   if (ui.appliedPaletteName !== undefined) setRef(state.appliedPaletteName, String(ui.appliedPaletteName || 'default'));
   if (ui.appliedPaletteColors) setRef(state.appliedPaletteColors, clonePlainObject(ui.appliedPaletteColors));
   installQueuedPalette(drawing, ui);
@@ -939,6 +960,8 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  *   The UI capture; `includePreviewNavigation` adds pan, zoom, and tab state.
  * @property {((drawing: D, ui: HistorySnapshotData, options?: { restorePreviewNavigation: boolean }) => unknown) | null} [applyUiStateData]
  *   The UI restore.
+ * @property {((ui: SessionUiData) => unknown) | null} [applySessionUiData]
+ *   The restore of the Session-level `ui` values, which writes each one present.
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildFeatureStateData] The feature-override capture.
  * @property {((drawing: D, features: HistorySnapshotData) => unknown) | null} [applyFeatureStateData]
  *   The feature-override restore.
@@ -977,6 +1000,7 @@ export const createHistorySnapshotService = ({
   applyConfigData = null,
   buildUiStateData = null,
   applyUiStateData = null,
+  applySessionUiData = null,
   buildFeatureStateData = null,
   applyFeatureStateData = null,
   buildEditorStateData = null,
@@ -1614,7 +1638,8 @@ export const createHistorySnapshotService = ({
         presentation.featureExtractionError ?? null
       );
 
-      const boundedUi = { ...ui };
+      // A Generate step restores no Session-level value (R15-23).
+      const boundedUi = withoutSessionUi(ui);
       [
         'generatedLegendPosition',
         'generatedMode',
@@ -1758,9 +1783,9 @@ export const createHistorySnapshotService = ({
 
   // PD-OI-090: each drawing has its own History, so an intent and a checkpoint
   // hold one drawing: its settings and edits, the bindings of its slots
-  // (`buildIntentFilesData`), and the app-level values the shown drawing's
-  // steps record (D-15-50). The History router restores only the shown
-  // drawing: Undo and Redo walk the shown drawing's History.
+  // (`buildIntentFilesData`), and the shared selections; the Session-level
+  // values are the router's project stream's (R15-23). Undo and Redo walk the
+  // shown drawing's History and the project stream.
   /** @param {DrawingId} drawingId */
   const drawingOfId = (drawingId) => {
     const drawing = /** @type {D | undefined} */ (state.drawings[drawingId]);
@@ -1802,7 +1827,6 @@ export const createHistorySnapshotService = ({
       groupNames: buildGroupNameIntentData(drawing),
       files: buildIntentFilesData(state, drawing, fileStore),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState() } : {}),
-      drafts: buildDraftIntentData(state),
       orthogroupState: buildOrthogroupIntentData({
         selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
         selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, '')
@@ -1811,7 +1835,7 @@ export const createHistorySnapshotService = ({
   };
 
   const INTENT_DOMAINS = Object.freeze([
-    'config', 'ui', 'features', 'editorState', 'groupNames', 'files', 'alignmentState', 'drafts', 'orthogroupState'
+    'config', 'ui', 'features', 'editorState', 'groupNames', 'files', 'alignmentState', 'orthogroupState'
   ]);
   // The domains a step changed: the first key of each change path.
   /** @param {HistoryIntentContext} context */
@@ -1904,13 +1928,16 @@ export const createHistorySnapshotService = ({
         applyFilesData(state, drawing, intent.files || {}, fileStore, normalizeLinearSeqList);
       }
       if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState);
-      if (domains.has('drafts')) applyDraftIntentData(state, intent.drafts || {});
       if (domains.has('features')) applyFeatureIntentData(state, drawing, intent.features || {});
       if (domains.has('editorState')) applyEditorIntentData(drawing, intent.editorState || {});
       if (domains.has('groupNames')) applyGroupNameIntentData(drawing, intent.groupNames || {});
       if (domains.has('orthogroupState')) applyOrthogroupIntentData(state, intent.orthogroupState || {});
       await nextTick();
-      if (afterApplyHistoryIntent) await afterApplyHistoryIntent(intent, { ...context, domains });
+      // The mounted Result is the shown drawing's: a drawing that is not shown
+      // takes the restored intent when it is shown again (D-15-51).
+      if (afterApplyHistoryIntent && drawingId === state.activeDrawingId?.value) {
+        await afterApplyHistoryIntent(intent, { ...context, domains });
+      }
     } finally {
       if (domains.has('files')) setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
@@ -1926,8 +1953,8 @@ export const createHistorySnapshotService = ({
       config: buildDrawingConfig(drawing),
       files: buildFilesData(state, drawing, fileStore),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState() } : {}),
-      drafts: buildDraftIntentData(state),
       ...generated,
+      ...(generated.ui ? { ui: withoutSessionUi(generated.ui) } : {}),
       editorState
     });
     checkpointFeatureCatalogs.set(checkpoint, featureCatalog);
@@ -1937,9 +1964,8 @@ export const createHistorySnapshotService = ({
   /**
    * @param {DrawingId} drawingId
    * @param {ArtifactCheckpointData | null | undefined} snapshot
-   * @param {ArtifactCheckpointData | null} [from] The checkpoint the restore leaves (the step's other side).
    */
-  const applyArtifactCheckpoint = async (drawingId, snapshot, from = null) => {
+  const applyArtifactCheckpoint = async (drawingId, snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
     const drawing = drawingOfId(drawingId);
     const suppressRef = state.semanticFileWatchersSuppressed;
@@ -1948,14 +1974,10 @@ export const createHistorySnapshotService = ({
     try {
       closeTransientState(state);
 
-      // A3 review M1, M2: the checkpoint restores what its drawing owns, its
-      // own input type, and the Session-level values its step changed (equal
-      // on the two sides: another drawing's step may have changed them since).
+      // A3 review M1: the checkpoint restores what its drawing owns and its
+      // own input type (it holds no Session-level value, R15-23).
       const ui = { ...(snapshot.ui || {}) };
       delete ui[inputTypeKeyOf(drawing) === 'lInputType' ? 'cInputType' : 'lInputType'];
-      SESSION_UI_KEYS.forEach((key) => {
-        if (from && sameCapturedValue(ui[key], from.ui?.[key])) delete ui[key];
-      });
       const inputType = inputTypeKeyOf(drawing);
       if (ui[inputType]) setRef(state[inputType], ui[inputType]);
       await nextTick();
@@ -1965,7 +1987,6 @@ export const createHistorySnapshotService = ({
       } else if (snapshot.config?.linearComparisonPlan) {
         installComparisonPlan(drawing, snapshot.config.linearComparisonPlan);
       }
-      if (!from || !sameCapturedValue(snapshot.drafts, from.drafts)) applyDraftIntentData(state, snapshot.drafts || {});
 
       if (typeof applyUiStateData === 'function') {
         applyUiStateData(drawing, ui, { restorePreviewNavigation: false });
@@ -2001,13 +2022,34 @@ export const createHistorySnapshotService = ({
     /** @param {HistoryIntentData | null | undefined} intent @param {HistoryIntentContext} [context] */
     applyIntent: (intent, context) => applyHistoryIntent(drawingId, intent, context),
     buildCheckpoint: () => buildArtifactCheckpoint(drawingId),
-    /**
-     * @param {ArtifactCheckpointData | null | undefined} snapshot
-     * @param {{ from?: ArtifactCheckpointData | null }} [restored]
-     */
-    applyCheckpoint: (snapshot, restored) => applyArtifactCheckpoint(drawingId, snapshot, restored?.from ?? null),
+    /** @param {ArtifactCheckpointData | null | undefined} snapshot */
+    applyCheckpoint: (snapshot) => applyArtifactCheckpoint(drawingId, snapshot),
     // OV-110: the intent's composition offsets are keyed by Result identity.
     identityMapPath: COMPOSITION_INTENT_PATH
+  });
+
+  // R15-23: the History ports of the Session-level values (the router's
+  // project stream): the `ui` values no drawing owns and the drafts. They do
+  // not depend on the drawing that `buildUiStateData` reads them with.
+  const sessionHistory = () => ({
+    buildIntent: () => {
+      const drawing = drawingOfId(/** @type {DrawingId} */ (Object.keys(state.drawings)[0]));
+      const ui = /** @type {Record<string, unknown>} */ (typeof buildUiStateData === 'function'
+        ? buildUiStateData(drawing, { includePreviewNavigation: false })
+        : buildFallbackUiStateData(state, drawing));
+      return cloneJsonData({
+        ui: Object.fromEntries(SESSION_UI_KEYS.filter((key) => Object.hasOwn(ui, key)).map((key) => [key, ui[key]])),
+        drafts: buildDraftIntentData(state)
+      });
+    },
+    /** @param {{ ui?: SessionUiData, drafts?: DraftIntentData }} intent */
+    applyIntent: async (intent) => {
+      closeTransientState(state);
+      if (typeof applySessionUiData === 'function') applySessionUiData(intent.ui || {});
+      else applyFallbackSessionUiData(state, intent.ui || {});
+      applyDraftIntentData(state, intent.drafts || {});
+      await nextTick();
+    }
   });
 
   /** @param {unknown} snapshot */
@@ -2020,6 +2062,7 @@ export const createHistorySnapshotService = ({
     collectCurrentFileIds: () => collectCurrentFileIds(state, fileStore),
     compareGeneratedArtifactHandles,
     drawingHistory,
+    sessionHistory,
     captureArtifactSlot,
     installArtifactSlot,
     installGeneratedArtifactOwnerSet,

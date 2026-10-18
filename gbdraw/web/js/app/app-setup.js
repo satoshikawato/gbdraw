@@ -61,6 +61,7 @@ import {
   applyResultsData,
   applyRunStateData,
   applyUiStateData,
+  applySessionUiData,
   buildConfigData,
   buildEditorStateData,
   buildFeatureStateData,
@@ -1595,6 +1596,7 @@ export const createAppSetup = () => {
     applyConfigData: applyCapturedConfigData,
     buildUiStateData,
     applyUiStateData,
+    applySessionUiData,
     buildFeatureStateData,
     applyFeatureStateData,
     buildEditorStateData,
@@ -1653,6 +1655,9 @@ export const createAppSetup = () => {
    * @returns {Promise<T>}
    */
   const followRuleEdits = async (drawing, write, { drawn } = { drawn: false }) => {
+    // The rule owner follows the shown drawing; a drawing that is not shown
+    // follows its rules when it is shown again (D-15-51).
+    if (drawing !== state.activeDrawing()) return write();
     const previousRules = drawing.manualSpecificRules.map((/** @type {SpecificColorRule} */ rule) => ({ ...rule }));
     specificRuleRestorePorts.retainRulesForRestore(previousRules);
     try {
@@ -1664,11 +1669,14 @@ export const createAppSetup = () => {
     }
   };
   // PD-OI-090: one History per drawing behind the router, which keeps the
-  // manager API for the shown drawing; the drawings share one byte budget and
-  // one file retention (OV-112).
+  // manager API for the shown drawing and the project stream (the
+  // Session-level values, Reset all drawings); the drawings share one byte
+  // budget and one file retention (OV-112).
   const history = createHistoryRouter({
     drawingIds: Object.values(state.drawings).map((drawing) => drawing.id),
     activeDrawingId: () => state.activeDrawingId.value,
+    sessionHistory: historySnapshots.sessionHistory(),
+    makeRef: ref,
     estimateFileBytes: historyFileStore.estimateBytes,
     retainOnlyFiles: historyFileStore.retainOnly,
     managerOptions: (drawingId) => {
@@ -1681,7 +1689,7 @@ export const createAppSetup = () => {
         ),
         buildCheckpoint: ports.buildCheckpoint,
         applyCheckpoint: (checkpoint, restored) => followRuleEdits(
-          drawing, () => restoreWithSpecificRuleDrafts(ports.applyCheckpoint, checkpoint, restored), restored
+          drawing, () => restoreWithSpecificRuleDrafts(ports.applyCheckpoint, checkpoint), restored
         ),
         captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
         restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
@@ -4281,8 +4289,8 @@ export const createAppSetup = () => {
   //      displayed Result's projection state (it followed every live edit).
   //   2. Swap the artifact slots (`swapArtifactSlots`).
   //   3. Show the arriving drawing (`installShownDrawing`); the template now
-  //      binds it. Its History takes the app-level values the other drawing's
-  //      steps changed.
+  //      binds it. Its History takes the shared selections in its intent
+  //      that changed while it was not shown.
   //   4. Reset the departing drawing's transient UI; the Preview search is
   //      kept per drawing.
   //   5. Show the arriving Result as a selection.
@@ -5245,9 +5253,9 @@ export const createAppSetup = () => {
     // the Legend list follows the Result. The reset itself runs at once, so a
     // caller reads the reset settings right after resetSettings(). One
     // rerender follows the step: the rerender requests wait until it ends
-    // (OV-1076). Reset is one step in each drawing's History (D-15-50): the
-    // shown drawing's checkpoint, and an intent step in every other drawing.
-    return holdAutomaticRerender(() => history.runInEveryDrawing('Reset settings', () => history.runUndoableCheckpoint('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
+    // (OV-1076). Reset is one project step (D-15-51): one Undo restores every
+    // drawing.
+    return holdAutomaticRerender(() => history.runProjectStep('Reset settings', () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
       const palette = { ...appliedPaletteColors.value };
@@ -5301,7 +5309,7 @@ export const createAppSetup = () => {
         legendActions.extractLegendEntries();
       }
       return true;
-    }))));
+    })));
   };
 
   const resetLayout = () => {

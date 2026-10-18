@@ -6,6 +6,7 @@ import {
 } from './runtime-test-hooks.js';
 
 const DEFAULT_MAX_ACTIONS = 30;
+const HISTORY_LIMIT_MESSAGE = 'Older undo history was discarded to stay within the history limit.';
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024;
 // The Session availability wording for an edit still being applied.
 const HISTORY_EDIT_BUSY = Object.freeze({
@@ -142,6 +143,22 @@ const applyIntentPatch = (source, changes, direction) => {
   return target;
 };
 
+/**
+ * The value at `path` in an intent, and whether it is present.
+ * @param {HistoryIntent | null} intent
+ * @param {readonly string[]} path
+ * @returns {{ has: boolean, value: unknown }}
+ */
+const intentValueAt = (intent, path) => {
+  /** @type {unknown} */
+  let at = intent;
+  for (const key of path) {
+    if (!isPlainObject(at) || !hasOwn(at, key)) return { has: false, value: undefined };
+    at = /** @type {Record<string, unknown>} */ (at)[key];
+  }
+  return { has: true, value: at };
+};
+
 /** @param {Record<string, unknown>} event */
 const emitHistoryDiagnostic = (event) => {
   const callback = globalThis.__GBDRAW_TEST_HOOKS__?.onHistoryDiagnostic;
@@ -186,8 +203,12 @@ const checkpointSvgBytes = (checkpoint) => (
  *   draws, so that restoring it needs no automatic rerender (D-24 (OV-731)).
  * @typedef {{ enabled: boolean, value: unknown }} ReplacementIntentCheckpoint
  *   The intent a replacement step also restores (`value` is the caller's own capture).
- * @typedef {{ type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string> }} IntentEntry
- * @typedef {{ type: 'checkpoint', label: string, before: CheckpointRecord, after: CheckpointRecord, byteSize: number, fileIds: Set<string> }} CheckpointEntry
+ * @typedef {{ type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string>, sequence?: number }} IntentEntry
+ * @typedef {{
+ *   type: 'checkpoint', label: string, before: CheckpointRecord, after: CheckpointRecord, byteSize: number,
+ *   fileIds: Set<string>, sequence?: number, changes?: HistoryIntentChange[]
+ * }} CheckpointEntry
+ *   `changes`: the intent values the step changed, kept by a part of a project step (`takeEntry`).
  * @typedef {{
  *   type: 'artifact-replacement',
  *   label: string,
@@ -195,15 +216,16 @@ const checkpointSvgBytes = (checkpoint) => (
  *   after: HistoryArtifactHandle,
  *   byteSize: number,
  *   fileIds: Set<string>,
+ *   sequence?: number,
  *   intentCheckpoint?: {
  *     before: ReplacementIntentCheckpoint,
  *     after: ReplacementIntentCheckpoint,
  *     restore: HistoryStepBase['restoreIntentCheckpoint']
  *   }
  * }} ArtifactReplacementEntry
- * @typedef {{ type: 'command', label: string, apply: () => unknown, revert: () => unknown, byteSize: number, fileIds: Set<string> }} CommandEntry
+ * @typedef {{ type: 'command', label: string, apply: () => unknown, revert: () => unknown, byteSize: number, fileIds: Set<string>, sequence?: number }} CommandEntry
  * @typedef {IntentEntry | CheckpointEntry | ArtifactReplacementEntry | CommandEntry} HistoryEntry
- *   One Undo or Redo step.
+ *   One Undo or Redo step. `sequence`: the order in which the router's steps ended (D-15-52).
  * @typedef {{ noop?: boolean, label?: string, apply: () => unknown, revert: () => unknown, estimateBytes?: () => number, metadata?: unknown }} UndoableCommand
  *   A reversible command; `apply` or `revert` returning `false` means it did not run.
  * @typedef {{
@@ -221,14 +243,16 @@ const checkpointSvgBytes = (checkpoint) => (
  *   restoreIntentCheckpoint?: IntentCheckpointHooks['restore'] | null,
  *   compareIntentCheckpoints?(before: unknown, after: unknown): boolean,
  *   restoreAppliedArtifact?: (before: HistoryArtifactHandle) => unknown,
- *   drawn?: { before: () => boolean, change: boolean }
+ *   drawn?: { before: () => boolean, change: boolean },
+ *   takeEntry?: (entry: HistoryEntry | null) => void
  * }} HistoryStepBase
  *   What a step reads from its caller; a hook that is not a function is not called. The intent
  *   checkpoint is the caller's own value, so the three hooks take and return it opaque (they are
  *   declared as methods); a caller names its type on its own parameter. A checkpoint step also
  *   reads `drawn`, whether the figure of each side is the one its state draws (`CheckpointRecord`):
  *   `before()` as the before side is captured, and `change`, whether the step's own change shows
- *   as its state draws it, so that the after side is drawn when the before side is.
+ *   as its state draws it, so that the after side is drawn when the before side is. `takeEntry`:
+ *   the router's project step takes the step's entry (or `null`) in place of this History's Undo stack.
  */
 /**
  * @template [R=unknown]
@@ -254,7 +278,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   beforeSignature?: string,
  *   beforeFileIds?: Set<any>,
  *   beforeIntentCheckpoint?: any,
- *   beforeIntent?: HistoryIntent | null
+ *   beforeIntent?: HistoryIntent | null,
+ *   takeEntry?: HistoryStepBase['takeEntry']
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
  *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
@@ -286,10 +311,9 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The snapshot service's restore of an intent; History awaits it.
  * @property {() => HistoryCheckpoint | Promise<HistoryCheckpoint>} buildCheckpoint
  *   The snapshot service's capture of an artifact checkpoint.
- * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean, from: HistoryCheckpoint }) => unknown} applyCheckpoint
+ * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean }) => unknown} applyCheckpoint
  *   The snapshot service's restore of an artifact checkpoint; History awaits it. `restored.drawn`:
- *   whether its figure is the one its state draws; `restored.from`: the step's other side, which
- *   the restore leaves.
+ *   whether its figure is the one its state draws.
  * @property {(() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>) | null} [captureGeneratedArtifactHandle]
  *   The snapshot service's capture of the generated artifact for a replacement step.
  * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
@@ -318,6 +342,9 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {readonly string[] | null} [identityMapPath]
  *   The intent path of a map keyed by Result identity (the composition
  *   offsets); `heldIdentities` lists the keys History holds there (OV-110).
+ * @property {(entry: HistoryEntry | null, label: string) => void} [stepEnded]
+ *   The router hears each step that ends on this History's Undo stack, with
+ *   its entry or `null` when it changed nothing here (D-15-51, R15-23).
  */
 
 /**
@@ -407,7 +434,8 @@ export const createHistoryManager = ({
   makeRef = makeBox,
   mutationAvailability = () => null,
   stepAvailability = () => null,
-  identityMapPath = null
+  identityMapPath = null,
+  stepEnded = () => {}
 } = /** @type {HistoryManagerOptions} */ ({})) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
@@ -498,7 +526,8 @@ export const createHistoryManager = ({
 
   // OV-110: the keys under `identityMapPath` that the current intent, the open
   // step, and the intent steps of Undo and Redo hold.
-  const heldIdentities = () => {
+  /** @param {readonly HistoryEntry[]} [projectParts] This drawing's parts of the router's project steps. */
+  const heldIdentities = (projectParts = []) => {
     /** @type {Set<string>} */
     const ids = new Set();
     if (!identityMapPath) return ids;
@@ -511,9 +540,9 @@ export const createHistoryManager = ({
     addKeysBelow(currentIntent, mapPath);
     const open = openTransaction();
     if (open) addKeysBelow(open.before, mapPath);
-    [...undoStack, ...redoStack].forEach((entry) => {
-      if (entry.type !== 'intent') return;
-      entry.changes.forEach(({ path, before, after }) => {
+    [...undoStack, ...redoStack, ...projectParts].forEach((entry) => {
+      const changes = entry.type === 'intent' || entry.type === 'checkpoint' ? entry.changes : null;
+      (changes || []).forEach(({ path, before, after }) => {
         const shared = Math.min(path.length, mapPath.length);
         if (!mapPath.slice(0, shared).every((key, index) => path[index] === key)) return;
         if (path.length > mapPath.length) {
@@ -759,6 +788,20 @@ export const createHistoryManager = ({
 
   const clearRedo = () => clearStack(redoStack);
 
+  // D-15-51, R15-23: a step's entry goes on this History's Undo stack, or to
+  // the project step that took it (`takeEntry`, Reset all drawings). Either
+  // way a new entry clears Redo.
+  /**
+   * @param {HistoryEntry | null} entry
+   * @param {{ label: string, takeEntry?: HistoryStepBase['takeEntry'] }} step
+   */
+  const endStep = (entry, step) => {
+    if (step.takeEntry) step.takeEntry(entry); else stepEnded(entry, step.label);
+    if (!entry) return;
+    if (!step.takeEntry) pushUndoEntry(entry);
+    clearRedo();
+  };
+
   // UJ-09: the History position of the last Save or Load. Work is unsaved
   // when an Undo or Redo step was added or traversed since then, when an
   // open control transaction already changed the intent it began with, or
@@ -784,7 +827,6 @@ export const createHistoryManager = ({
     return (await captureIntent()).signature !== open.beforeSignature;
   };
 
-  const HISTORY_LIMIT_MESSAGE = 'Older undo history was discarded to stay within the history limit.';
   /** @type {HistoryBudgetMember} */
   const budgetMember = {
     entryBytes: () => totalEntryBytes,
@@ -870,7 +912,8 @@ export const createHistoryManager = ({
       source: options.source || '',
       owner: options.owner,
       deferAdapterCommit: ownedByAction,
-      serial
+      serial,
+      takeEntry: options.takeEntry
     };
     activeTransaction = tx;
     touchTransaction();
@@ -934,7 +977,7 @@ export const createHistoryManager = ({
 
   /**
    * The bookkeeping of every intent step.
-   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds'>} from
+   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds' | 'takeEntry'>} from
    *   The transaction, or the last recorded intent when an action records its remainder.
    * @param {Awaited<ReturnType<typeof captureIntent>>} afterRecord
    * @param {{ label?: string }} options
@@ -943,6 +986,7 @@ export const createHistoryManager = ({
     setCurrentIntent(afterRecord);
 
     const entry = buildPatchEntry(from, afterRecord, options);
+    endStep(entry, { label: entry?.label ?? from.label, takeEntry: from.takeEntry });
     if (!entry) {
       emitHistoryDiagnostic({ type: 'commit', scope: 'intent', label: from.label, created: false });
       releaseUnreferencedFiles();
@@ -950,7 +994,6 @@ export const createHistoryManager = ({
       return false;
     }
 
-    pushUndoEntry(entry);
     emitHistoryDiagnostic({
       type: 'commit',
       scope: 'intent',
@@ -959,7 +1002,6 @@ export const createHistoryManager = ({
       changeCount: entry.changes.length,
       bytes: entry.byteSize
     });
-    clearRedo();
     enforceLimits();
     touch();
     settingsStepListener(entry.changes);
@@ -1114,7 +1156,8 @@ export const createHistoryManager = ({
         // The settings a committed checkpoint changed name the live values it asks to apply.
         beforeIntent: currentIntent,
         closed: false,
-        source: options.source || ''
+        source: options.source || '',
+        takeEntry: options.takeEntry
       };
     };
     const captureBefore = () => {
@@ -1122,17 +1165,19 @@ export const createHistoryManager = ({
       // Read as the capture starts; the snapshot service takes the figure at once.
       const drawn = options.drawn?.before();
       const before = captureCheckpoint();
-      return isPromiseLike(before)
-        ? Promise.resolve(before).then((record) => {
-            const transaction = createTransaction(record, drawn);
-            notifyCheckpointCapture(options, 'before-end');
-            return transaction;
-          })
-        : (() => {
-            const transaction = createTransaction(before, drawn);
-            notifyCheckpointCapture(options, 'before-end');
-            return transaction;
-          })();
+      // A project step's part keeps the intent values it changes (D-15-51),
+      // so it reads the intent as it begins.
+      const intent = options.takeEntry ? captureIntent() : null;
+      /** @param {CheckpointRecord} record @param {IntentRecord | null} intentRecord */
+      const open = (record, intentRecord) => {
+        if (intentRecord) setCurrentIntent(intentRecord);
+        const transaction = createTransaction(record, drawn);
+        notifyCheckpointCapture(options, 'before-end');
+        return transaction;
+      };
+      return isPromiseLike(before) || isPromiseLike(intent)
+        ? Promise.all([before, intent]).then(([record, intentRecord]) => open(record, intentRecord))
+        : open(before, intent);
     };
 
     if (!openTransaction()) return captureBefore();
@@ -1154,6 +1199,7 @@ export const createHistoryManager = ({
     setCurrentIntent(intent);
 
     if (after.signature === transaction.before.signature) {
+      endStep(null, transaction);
       emitHistoryDiagnostic({
         type: 'commit',
         scope: 'artifact-checkpoint',
@@ -1168,6 +1214,7 @@ export const createHistoryManager = ({
 
     const fileIds = new Set(transaction.before.fileIds);
     after.fileIds.forEach((id) => fileIds.add(id));
+    const changes = buildIntentPatch(transaction.beforeIntent ?? {}, intent.intent);
     /** @type {CheckpointEntry} */
     const entry = {
       type: 'checkpoint',
@@ -1175,9 +1222,11 @@ export const createHistoryManager = ({
       before: transaction.before,
       after,
       byteSize: transaction.before.byteSize + after.byteSize,
-      fileIds
+      fileIds,
+      // A project step's part restores these when its drawing is not shown.
+      ...(transaction.takeEntry ? { changes } : {})
     };
-    pushUndoEntry(entry);
+    endStep(entry, transaction);
     emitHistoryDiagnostic({
       type: 'commit',
       scope: 'artifact-checkpoint',
@@ -1185,11 +1234,10 @@ export const createHistoryManager = ({
       created: true,
       bytes: entry.byteSize
     });
-    clearRedo();
     enforceLimits();
     touch();
     notifyCheckpointCapture(options, 'after-end');
-    settingsStepListener(buildIntentPatch(transaction.beforeIntent ?? {}, intent.intent));
+    settingsStepListener(changes);
     return true;
   };
 
@@ -1520,8 +1568,7 @@ export const createHistoryManager = ({
       scope: 'artifact-replacement',
       bytes: namedBytes
     });
-    pushUndoEntry(entry);
-    clearRedo();
+    endStep(entry, transaction);
     enforceLimits();
     touch();
     emitHistoryDiagnostic({
@@ -1690,8 +1737,7 @@ export const createHistoryManager = ({
       return false;
     }
     await refreshCurrentIntent();
-    pushUndoEntry(command);
-    clearRedo();
+    endStep(command, command);
     enforceLimits();
     touch();
     return true;
@@ -1719,11 +1765,11 @@ export const createHistoryManager = ({
     settingsStepListener(entry.changes);
   };
 
-  /** @param {CheckpointRecord} record @param {CheckpointRecord} from The step's other side. */
-  const applyCheckpointEntry = async (record, from) => {
+  /** @param {CheckpointRecord} record */
+  const applyCheckpointEntry = async (record) => {
     restoring.value = true;
     try {
-      await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true, from: from.checkpoint });
+      await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true });
     } finally {
       restoring.value = false;
     }
@@ -1803,7 +1849,7 @@ export const createHistoryManager = ({
       }
       await refreshCurrentIntent();
     } else if (entry.type === 'checkpoint') {
-      await applyCheckpointEntry(entry.before, entry.after);
+      await applyCheckpointEntry(entry.before);
     } else if (entry.type === 'artifact-replacement') {
       await applyArtifactReplacementEntry(entry, 'undo');
     } else {
@@ -1831,7 +1877,7 @@ export const createHistoryManager = ({
       }
       await refreshCurrentIntent();
     } else if (entry.type === 'checkpoint') {
-      await applyCheckpointEntry(entry.after, entry.before);
+      await applyCheckpointEntry(entry.after);
     } else if (entry.type === 'artifact-replacement') {
       await applyArtifactReplacementEntry(entry, 'redo');
     } else {
@@ -1843,6 +1889,47 @@ export const createHistoryManager = ({
     touch();
     return true;
   });
+
+  // D-15-51: this drawing's part of a project step (Reset all drawings). An
+  // intent part restores only the values still as the step left them (a
+  // later step of this drawing on the same path is kept, OIC-030). A
+  // checkpoint part restores its checkpoint while its drawing is shown, and
+  // otherwise the intent values it changed; the Result shows them when the
+  // drawing is shown again (departed signature).
+  /**
+   * @param {IntentEntry | CheckpointEntry} entry
+   * @param {'undo' | 'redo'} direction
+   * @param {boolean} shown
+   */
+  const applyProjectPart = (entry, direction, shown) => traverse(async () => {
+    if (entry.type === 'checkpoint' && shown) {
+      await applyCheckpointEntry(direction === 'undo' ? entry.before : entry.after);
+    } else {
+      await refreshCurrentIntent();
+      const leaving = direction === 'undo' ? 'after' : 'before';
+      const changes = (entry.changes || []).filter((change) => {
+        const { has, value } = intentValueAt(currentIntent, change.path);
+        return has === change[`${leaving}Has`] && (!has || sameJsonValue(value, change[leaving]));
+      });
+      if (changes.length > 0) await applyIntentEntry({ ...entry, type: 'intent', changes }, direction);
+    }
+    touch();
+  });
+  // The router's own traversal steps (a project step, a Session-level value)
+  // run while this History restores, so no edit they cause records a step.
+  /** @param {() => unknown} fn */
+  const restoreWith = (fn) => traverse(async () => {
+    restoring.value = true;
+    try { await fn(); } finally { restoring.value = false; }
+    touch();
+  });
+  /** @param {'undo' | 'redo'} stack */
+  const topSequence = (stack) => topEntry(stack === 'undo' ? undoStack : redoStack)?.sequence ?? null;
+  const dropRedo = () => {
+    if (redoStack.length === 0) return;
+    clearRedo();
+    touch();
+  };
 
   const canUndo = () => undoStack.length > 0 && !restoring.value && !historyAvailability();
   const canRedo = () => redoStack.length > 0 && !restoring.value && !historyAvailability();
@@ -1893,8 +1980,13 @@ export const createHistoryManager = ({
     markSavePoint,
     redo,
     redoLabel,
-    // PD-OI-090: a drawing that is shown again takes the app-level values the
-    // other drawings' steps changed as its current intent, so its Undo and
+    applyProjectPart,
+    restoreWith,
+    topSequence,
+    dropRedo,
+    settleBeforeTraversal,
+    // PD-OI-090: a drawing that is shown again takes the shared selections in
+    // its intent that changed meanwhile as its current intent, so its Undo and
     // Redo restore only what its own steps changed.
     refreshCurrentIntent,
     restoring,
@@ -1913,15 +2005,32 @@ export const createHistoryManager = ({
 };
 
 /**
+ * @typedef {{ drawingId: string, entry: IntentEntry | CheckpointEntry }} ProjectPart
+ * @typedef {{
+ *   type: 'project', label: string, sequence: number, parts: ProjectPart[], session: IntentEntry | null,
+ *   byteSize: number, fileIds: Set<string>
+ * }} ProjectEntry
+ *   A step of the project stream: its part in each drawing it changed (Reset
+ *   all drawings) and the Session-level values it changed (R15-23).
+ * @typedef {object} SessionHistoryPorts
+ *   The capture and restore of the Session-level values, which no drawing owns.
+ * @property {() => HistoryIntent} buildIntent Synchronous: a step's end reads it.
+ * @property {(intent: HistoryIntent, context: { changes: HistoryIntentChange[], direction: 'undo' | 'redo' }) => unknown} applyIntent
  * @typedef {HistoryBudgetOptions & {
  *   drawingIds: readonly string[],
  *   activeDrawingId: () => string,
- *   managerOptions: (drawingId: string) => HistoryManagerOptions
+ *   managerOptions: (drawingId: string) => HistoryManagerOptions,
+ *   sessionHistory: SessionHistoryPorts,
+ *   makeRef?: <T>(value: T) => { value: T },
+ *   maxActions?: number
  * }} HistoryRouterOptions
  *   The drawings, each with its own History; the shown drawing, whose History
- *   Undo and Redo walk; the capture and restore of one drawing's History; and
- *   the budget every drawing's History shares.
+ *   Undo and Redo walk; the capture and restore of one drawing's History and
+ *   of the Session-level values; and the budget every History shares.
  */
+
+// The budget member of the project stream (D-15-52).
+const PROJECT_STREAM = Symbol('project stream');
 
 // PD-OI-090: each drawing has its own History. The router keeps the manager
 // API and routes it to the shown drawing's manager; a step that a call opened
@@ -1930,33 +2039,103 @@ export const createHistoryManager = ({
 // hears the shown drawing's steps; a mutation or traversal pending in any
 // drawing is pending. The managers share one byte budget and one file
 // retention (`createHistoryBudget`).
+//
+// D-15-51, D-15-52, R15-23: the router also keeps the project stream. A step
+// of it is a project operation (Reset all drawings: a part in each drawing)
+// or an edit of the Session-level values (the Session title, the app
+// settings, the LOSAT execution, the drafts), which the router reads at the
+// end of every step: the values a drawing's step changed with its own become
+// a project step with the same sequence. Undo takes the newest of the shown
+// drawing's and the project's top steps (one Undo for both halves of one
+// step), Redo replays in the order the steps ended. A new project step clears
+// every Redo; a new drawing step clears its own and the project's. Eviction
+// drops hidden drawings' steps first, then project steps, then the shown
+// drawing's.
 /** @param {HistoryRouterOptions} options */
 export const createHistoryRouter = ({
   drawingIds,
   activeDrawingId,
   managerOptions,
+  sessionHistory,
+  makeRef = makeBox,
+  maxActions = DEFAULT_MAX_ACTIONS,
   ...budgetOptions
 }) => {
-  /** @type {Map<HistoryBudgetMember, string>} The drawing of each budget member. */
-  const memberDrawings = new Map();
-  // A3 review Low 4 (plan-r2 A3): the drawings that are not shown lose their
-  // steps first, whichever drawing committed.
+  /** @type {Map<HistoryBudgetMember, string | typeof PROJECT_STREAM>} The stream of each budget member. */
+  const memberStreams = new Map();
+  /** @param {HistoryBudgetMember} member */
+  const evictionRank = (member) => {
+    const stream = memberStreams.get(member);
+    if (stream === PROJECT_STREAM) return 1;
+    return stream === activeDrawingId() ? 2 : 0;
+  };
   const budget = createHistoryBudget({
     ...budgetOptions,
-    evictionOrder: (members) => [
-      ...members.filter((member) => memberDrawings.get(member) !== activeDrawingId()),
-      ...members.filter((member) => memberDrawings.get(member) === activeDrawingId())
-    ]
+    evictionOrder: (members) => [...members].sort((left, right) => evictionRank(left) - evictionRank(right))
   });
-  /** @param {string} drawingId @returns {HistoryBudget} */
-  const budgetOf = (drawingId) => ({
-    ...budget,
-    join: (member) => { memberDrawings.set(member, drawingId); budget.join(member); }
-  });
-  const managers = new Map(drawingIds.map((drawingId) => /** @type {const} */ ([
-    drawingId,
-    createHistoryManager({ ...managerOptions(drawingId), budget: budgetOf(drawingId) })
-  ])));
+  /** @param {string | typeof PROJECT_STREAM} stream @param {HistoryBudgetMember} member */
+  const joinBudget = (stream, member) => { memberStreams.set(member, stream); budget.join(member); };
+
+  let sequence = 0;
+  /** @type {ProjectEntry[]} */
+  const projectUndo = [];
+  /** @type {ProjectEntry[]} */
+  const projectRedo = [];
+  const projectRevision = makeRef(0);
+  const touchProject = () => { projectRevision.value += 1; };
+  const sessionRecord = () => {
+    const intent = cloneIntentValue(sessionHistory.buildIntent());
+    return { intent, signature: JSON.stringify(intent) };
+  };
+  // The Session-level values as the last step left them.
+  let sessionCurrent = sessionRecord();
+
+  /** @param {ProjectEntry} entry */
+  const pushProject = (entry) => {
+    projectUndo.push(entry);
+    projectRedo.length = 0;
+    every().forEach((manager) => manager.dropRedo());
+    let evicted = false;
+    while (projectUndo.length > maxActions) { projectUndo.shift(); evicted = true; }
+    if (evicted) managerOf(activeDrawingId()).historyLimitMessage.value = HISTORY_LIMIT_MESSAGE;
+    budget.enforce();
+    touchProject();
+  };
+  // The project step of a step's end: its parts and the Session-level values
+  // it changed; none when it has neither.
+  /** @param {string} label @param {number} stamp @param {ProjectPart[]} [parts] */
+  const recordProjectStep = (label, stamp, parts = []) => {
+    const after = sessionRecord();
+    const changes = after.signature === sessionCurrent.signature ? [] : buildIntentPatch(sessionCurrent.intent, after.intent);
+    sessionCurrent = after;
+    if (changes.length === 0 && parts.length === 0) return;
+    /** @type {IntentEntry | null} */
+    const session = changes.length > 0
+      ? { type: 'intent', label, changes, byteSize: JSON.stringify(changes).length * 2, fileIds: new Set() }
+      : null;
+    /** @type {Set<string>} */
+    const fileIds = new Set();
+    parts.forEach(({ entry }) => entry.fileIds.forEach((id) => fileIds.add(id)));
+    pushProject({
+      type: 'project', label, sequence: stamp, parts, session, fileIds,
+      byteSize: parts.reduce((bytes, { entry }) => bytes + entry.byteSize, session?.byteSize ?? 0)
+    });
+  };
+  /** @param {HistoryEntry | null} entry @param {string} label */
+  const stepEnded = (entry, label) => {
+    const stamp = ++sequence;
+    if (entry) {
+      entry.sequence = stamp;
+      if (projectRedo.length > 0) { projectRedo.length = 0; touchProject(); }
+    }
+    recordProjectStep(label, stamp);
+  };
+
+  const managers = new Map(drawingIds.map((drawingId) => /** @type {const} */ ([drawingId, createHistoryManager({
+    ...managerOptions(drawingId),
+    stepEnded,
+    budget: { ...budget, join: (member) => joinBudget(drawingId, member) }
+  })])));
   /** @param {string} drawingId */
   const managerOf = (drawingId) => {
     const manager = managers.get(drawingId);
@@ -1967,6 +2146,202 @@ export const createHistoryRouter = ({
   const others = () => [...managers].filter(([drawingId]) => drawingId !== activeDrawingId()).map(([, manager]) => manager);
   const template = managerOf(drawingIds[0]);
   /** @typedef {typeof template} DrawingHistory */
+  const projectEntries = () => [...projectUndo, ...projectRedo];
+  joinBudget(PROJECT_STREAM, {
+    entryBytes: () => projectEntries().reduce((bytes, entry) => bytes + entry.byteSize, 0),
+    retainedFileIds: () => {
+      /** @type {Set<string>} */
+      const ids = new Set();
+      projectEntries().forEach((entry) => entry.fileIds.forEach((id) => ids.add(id)));
+      return ids;
+    },
+    dropOldestStep: () => {
+      if (projectUndo.length > 0) { projectUndo.shift(); touchProject(); return 'undo'; }
+      if (projectRedo.length === 0) return null;
+      projectRedo.length = 0;
+      touchProject();
+      return 'redo';
+    },
+    noteEvicted: () => { managerOf(activeDrawingId()).historyLimitMessage.value = HISTORY_LIMIT_MESSAGE; }
+  });
+
+  /** @param {IntentEntry} entry @param {'undo' | 'redo'} direction */
+  const applySession = async (entry, direction) => {
+    await sessionHistory.applyIntent(applyIntentPatch(sessionRecord().intent, entry.changes, direction), {
+      changes: entry.changes, direction
+    });
+    sessionCurrent = sessionRecord();
+  };
+  // Every drawing settles its open step and none restores; the drawings that
+  // are not shown apply their parts first, the shown drawing last, while the
+  // shown drawing's History restores (no edit they cause records a step).
+  /** @param {ProjectEntry} entry @param {'undo' | 'redo'} direction */
+  const traverseProject = async (entry, direction) => {
+    for (const manager of every()) {
+      const busy = await manager.settleBeforeTraversal();
+      if (busy) return busy;
+    }
+    const [from, to] = direction === 'undo' ? [projectUndo, projectRedo] : [projectRedo, projectUndo];
+    if (every().some((manager) => manager.restoring.value) || from[from.length - 1] !== entry) return false;
+    const shownId = activeDrawingId();
+    const shown = managerOf(shownId);
+    await shown.restoreWith(async () => {
+      for (const part of entry.parts) {
+        if (part.drawingId !== shownId) await managerOf(part.drawingId).applyProjectPart(part.entry, direction, false);
+      }
+      if (entry.session) await applySession(entry.session, direction);
+      const own = entry.parts.find((part) => part.drawingId === shownId);
+      if (own) await shown.applyProjectPart(own.entry, direction, true);
+    });
+    from.pop();
+    to.push(entry);
+    budget.enforce();
+    touchProject();
+    return true;
+  };
+  /** @param {'undo' | 'redo'} direction */
+  const traverse = async (direction) => {
+    const shown = managerOf(activeDrawingId());
+    const busy = await shown.settleBeforeTraversal();
+    if (busy) return busy;
+    const stack = direction === 'undo' ? projectUndo : projectRedo;
+    const project = stack[stack.length - 1];
+    const own = shown.topSequence(direction);
+    const ownFirst = (/** @type {number} */ ownSequence) => (
+      direction === 'undo' ? ownSequence > project.sequence : ownSequence < project.sequence);
+    const ownStep = () => (direction === 'undo' ? shown.undo() : shown.redo());
+    if (!project || (own !== null && ownFirst(own))) return ownStep();
+    if (own === project.sequence) {
+      const done = await ownStep();
+      if (done !== true) return done;
+    }
+    return traverseProject(project, direction);
+  };
+  /** @param {'undo' | 'redo'} direction The project step that Undo or Redo takes next, if any. */
+  const nextProjectStep = (direction) => {
+    const stack = direction === 'undo' ? projectUndo : projectRedo;
+    const project = stack[stack.length - 1];
+    if (!project) return null;
+    const own = managerOf(activeDrawingId()).topSequence(direction);
+    if (own === null) return project;
+    return (direction === 'undo' ? own > project.sequence : own < project.sequence) ? null : project;
+  };
+  const shownIdle = () => {
+    const shown = managerOf(activeDrawingId());
+    return !shown.restoring.value && !shown.historyAvailability();
+  };
+  /** @param {string} drawingId */
+  const projectPartsOf = (drawingId) => projectEntries()
+    .flatMap((entry) => entry.parts.filter((part) => part.drawingId === drawingId).map((part) => part.entry));
+  /** @type {{ undo: ProjectEntry | null, redo: ProjectEntry | null }} */
+  let projectSavePoint = { undo: null, redo: null };
+  const resetProjectStream = () => {
+    projectUndo.length = 0;
+    projectRedo.length = 0;
+    sessionCurrent = sessionRecord();
+    projectSavePoint = { undo: null, redo: null };
+    touchProject();
+  };
+
+  const own = {
+    managerOf,
+    revision: { get value() { return projectRevision.value + managerOf(activeDrawingId()).revision.value; } },
+    undo: () => traverse('undo'),
+    redo: () => traverse('redo'),
+    canUndo: () => managerOf(activeDrawingId()).canUndo() || (projectUndo.length > 0 && shownIdle()),
+    canRedo: () => managerOf(activeDrawingId()).canRedo() || (projectRedo.length > 0 && shownIdle()),
+    undoLabel: () => (shownIdle() ? nextProjectStep('undo')?.label ?? managerOf(activeDrawingId()).undoLabel() : ''),
+    redoLabel: () => (shownIdle() ? nextProjectStep('redo')?.label ?? managerOf(activeDrawingId()).redoLabel() : ''),
+    getUndoCount: () => managerOf(activeDrawingId()).getUndoCount() + projectUndo.length,
+    getRedoCount: () => managerOf(activeDrawingId()).getRedoCount() + projectRedo.length,
+    // A drawing that is not shown has no artifact installed, so its baseline
+    // is its intent only.
+    captureBaseline: async (/** @type {string} */ label = 'Baseline') => {
+      await managerOf(activeDrawingId()).captureBaseline(label);
+      for (const manager of others()) await manager.initializeIntentBaseline(label);
+      resetProjectStream();
+    },
+    initializeIntentBaseline: async (
+      /** @type {string} */ label = 'Intent baseline',
+      /** @type {{ isCurrent?: () => boolean }} */ options = {}
+    ) => {
+      for (const manager of every()) {
+        if (!await manager.initializeIntentBaseline(label, options)) return false;
+      }
+      resetProjectStream();
+      return true;
+    },
+    // D-15-51: an action that changes every drawing (Reset all drawings) is
+    // one project step. `fn` runs in this task as the shown drawing's
+    // checkpoint, as a caller of the action expects; each other drawing
+    // captured its state first and records what `fn` changed in it. Their
+    // entries are the step's parts, with the Session-level values it changed.
+    /**
+     * @template R
+     * @param {string} label
+     * @param {() => R | Promise<R>} fn
+     */
+    runProjectStep: (label, fn) => {
+      const shownId = activeDrawingId();
+      /** @type {ProjectPart[]} */
+      const parts = [];
+      /** @param {string} drawingId @returns {(entry: HistoryEntry | null) => void} */
+      const take = (drawingId) => (entry) => {
+        if (entry?.type === 'intent' || entry?.type === 'checkpoint') parts.push({ drawingId, entry });
+      };
+      const hidden = [...managers].filter(([drawingId]) => drawingId !== shownId);
+      const opening = hidden.map(([drawingId, manager]) => manager.begin(label, { source: 'project', takeEntry: take(drawingId) }));
+      /** @param {boolean} applied */
+      const settle = async (applied) => {
+        const steps = await Promise.all(opening);
+        for (const [index, [, manager]] of hidden.entries()) {
+          if (applied) await manager.commit(steps[index]); else manager.cancel(steps[index]);
+        }
+        if (applied) recordProjectStep(label, ++sequence, parts);
+      };
+      /** @type {ReturnType<DrawingHistory['runUndoableCheckpoint']>} */
+      let result;
+      try {
+        result = managerOf(shownId).runUndoableCheckpoint(label, fn, { takeEntry: take(shownId) });
+      } catch (error) {
+        void settle(false);
+        throw error;
+      }
+      if (!isPromiseLike(result)) {
+        void settle(true);
+        return result;
+      }
+      return Promise.resolve(result).then(
+        async (value) => { await settle(true); return value; },
+        async (error) => { await settle(false); throw error; }
+      );
+    },
+    markSavePoint: () => {
+      every().forEach((manager) => manager.markSavePoint());
+      projectSavePoint = { undo: projectUndo[projectUndo.length - 1] ?? null, redo: projectRedo[projectRedo.length - 1] ?? null };
+    },
+    // OV-110: the Result identities any drawing's History holds.
+    heldIdentities: () => {
+      /** @type {Set<string>} */
+      const ids = new Set();
+      managers.forEach((manager, drawingId) => manager.heldIdentities(projectPartsOf(drawingId)).forEach((id) => ids.add(id)));
+      return ids;
+    },
+    hasChangesSinceSavePoint: async () => {
+      if ((projectUndo[projectUndo.length - 1] ?? null) !== projectSavePoint.undo) return true;
+      if ((projectRedo[projectRedo.length - 1] ?? null) !== projectSavePoint.redo) return true;
+      if (sessionRecord().signature !== sessionCurrent.signature) return true;
+      for (const manager of every()) if (await manager.hasChangesSinceSavePoint()) return true;
+      return false;
+    },
+    /** @param {Parameters<DrawingHistory['setSettingsStepListener']>[0]} listener */
+    setSettingsStepListener: (listener) => managers.forEach((manager, drawingId) => manager.setSettingsStepListener(
+      (changes) => { if (drawingId === activeDrawingId()) listener(changes); }
+    )),
+    mutationPending: () => every().some((manager) => manager.mutationPending()),
+    traversalPending: () => every().some((manager) => manager.traversalPending())
+  };
+
   /** @type {WeakMap<object, DrawingHistory>} The manager that opened each step. */
   const openedBy = new WeakMap();
   /** @param {DrawingHistory} manager @param {string} key */
@@ -1980,6 +2355,7 @@ export const createHistoryRouter = ({
   /** @type {Record<string, unknown>} */
   const routed = {};
   Object.entries(template).forEach(([key, value]) => {
+    if (Object.hasOwn(own, key)) return;
     if (OPENERS.has(key)) {
       routed[key] = (/** @type {unknown[]} */ ...args) => {
         const manager = managerOf(activeDrawingId());
@@ -2001,79 +2377,5 @@ export const createHistoryRouter = ({
       Object.defineProperty(routed, key, { enumerable: true, get: () => activeMember(key) });
     }
   });
-  const router = /** @type {DrawingHistory} */ (/** @type {unknown} */ (routed));
-  return Object.assign(router, {
-    managerOf,
-    // A drawing that is not shown has no artifact installed, so its baseline
-    // is its intent only.
-    captureBaseline: async (/** @type {string} */ label = 'Baseline') => {
-      await managerOf(activeDrawingId()).captureBaseline(label);
-      for (const manager of others()) await manager.initializeIntentBaseline(label);
-    },
-    initializeIntentBaseline: async (
-      /** @type {string} */ label = 'Intent baseline',
-      /** @type {{ isCurrent?: () => boolean }} */ options = {}
-    ) => {
-      for (const manager of every()) {
-        if (!await manager.initializeIntentBaseline(label, options)) return false;
-      }
-      return true;
-    },
-    // D-15-50 (1): an action that resets every drawing (Reset Settings) is one
-    // step in each drawing's History: `fn` makes the shown drawing's step, and
-    // each other drawing records what `fn` changed in it as a step of its own,
-    // so each drawing's Undo restores its own part. `fn` runs in this task, as
-    // a caller of the action expects; each other step captured its state first.
-    /**
-     * @template R
-     * @param {string} label
-     * @param {() => R} fn
-     * @returns {R}
-     */
-    runInEveryDrawing: (label, fn) => {
-      const hidden = others();
-      const opening = hidden.map((manager) => manager.begin(label, { source: 'every-drawing' }));
-      /** @param {boolean} applied */
-      const settle = async (applied) => {
-        const steps = await Promise.all(opening);
-        for (const [index, manager] of hidden.entries()) {
-          if (applied) await manager.commit(steps[index]); else manager.cancel(steps[index]);
-        }
-      };
-      /** @type {R} */
-      let result;
-      try {
-        result = fn();
-      } catch (error) {
-        void settle(false);
-        throw error;
-      }
-      if (!isPromiseLike(result)) {
-        void settle(true);
-        return result;
-      }
-      return /** @type {R} */ (/** @type {unknown} */ (Promise.resolve(result).then(
-        async (value) => { await settle(true); return value; },
-        async (error) => { await settle(false); throw error; }
-      )));
-    },
-    markSavePoint: () => every().forEach((manager) => manager.markSavePoint()),
-    // OV-110: the Result identities any drawing's History holds.
-    heldIdentities: () => {
-      /** @type {Set<string>} */
-      const ids = new Set();
-      every().forEach((manager) => manager.heldIdentities().forEach((id) => ids.add(id)));
-      return ids;
-    },
-    hasChangesSinceSavePoint: async () => {
-      for (const manager of every()) if (await manager.hasChangesSinceSavePoint()) return true;
-      return false;
-    },
-    /** @param {Parameters<typeof template.setSettingsStepListener>[0]} listener */
-    setSettingsStepListener: (listener) => managers.forEach((manager, drawingId) => manager.setSettingsStepListener(
-      (changes) => { if (drawingId === activeDrawingId()) listener(changes); }
-    )),
-    mutationPending: () => every().some((manager) => manager.mutationPending()),
-    traversalPending: () => every().some((manager) => manager.traversalPending())
-  });
+  return Object.assign(/** @type {Omit<DrawingHistory, keyof typeof own>} */ (/** @type {unknown} */ (routed)), own);
 };
