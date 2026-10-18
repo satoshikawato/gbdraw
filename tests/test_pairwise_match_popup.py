@@ -73,7 +73,25 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
         .replace("./conservation-series.js", "./conservation-series.mjs")
         .replace("./genbank-header.js", "./genbank-header.mjs")
-        .replace("./file-content-cache.js", "./file-content-cache.mjs"),
+        .replace("./file-content-cache.js", "./file-content-cache.mjs")
+        .replace("./record-options.js", "./record-options.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "record-options.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "record-options.js")
+        .read_text(encoding="utf-8")
+        .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
+        .replace("../utils/error-normalization.js", "./error-normalization.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "record-draw-selection.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "record-draw-selection.js")
+        .read_text(encoding="utf-8")
+        .replace("../utils/download-names.js", "./download-names.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "download-names.mjs").write_text(
+        (WEB_ROOT / "js" / "utils" / "download-names.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (tmp_path / "genbank-header.mjs").write_text(
