@@ -99,6 +99,12 @@ class CircularAxisLayout:
     radius_px: float
     stroke_width_px: float
 
+    @property
+    def paint_band_px(self) -> RadialBand:
+        """The ring the axis circle's stroke paints."""
+        half_stroke = 0.5 * float(self.stroke_width_px)
+        return RadialBand(float(self.radius_px) - half_stroke, float(self.radius_px) + half_stroke)
+
 
 @dataclass(frozen=True)
 class CircularTickLayout:
@@ -151,6 +157,12 @@ class CircularResolvedSlot:
     explicit_anchor: bool = False
     explicit_width: bool = False
     compressed: bool = False
+    # An overlay stretched over the slots it covers (``to_slot``, or ``cover_anchor`` on a band): its labels keep
+    # ``label_offset`` beyond the span's edge, as a Linear span's do.
+    spans_slots: bool = False
+    # How far ``reserved_band_px`` reaches past the slot's own reservation, on the label side, for the labels of a
+    # span overlay that covers this slot: other slots keep out of it, but it does not move the slot itself.
+    span_label_room_px: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "params", freeze_layout_mapping(self.params))

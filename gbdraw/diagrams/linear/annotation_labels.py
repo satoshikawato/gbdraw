@@ -18,6 +18,7 @@ from collections.abc import Mapping, Sequence
 from typing import cast
 
 from gbdraw.annotations import ResolvedAnnotationTrack, annotation_track_params_from_mapping
+from gbdraw.annotations.label_search import nearest_fewest_conflicts
 from gbdraw.core.text import text_ink_offsets
 from gbdraw.labels.linear import calculate_label_bounds, linear_leader_polyline
 from gbdraw.layout.spatial import Aabb
@@ -76,9 +77,9 @@ def _place_along_span(label: LinearAnnotationLabel, origin_y: float, obstacles: 
     """The anchor x for ``label`` (in a slot at ``origin_y``).
 
     Its own x when its letters are clear; else, with the label's centre over
-    one of its marks, the x with the fewest conflicts, nearest its own x, the
-    smaller x on a tie. A sorted sweep keeps this O(B log B) in the B
-    obstacles in the label's row.
+    one of its marks, the x ``nearest_fewest_conflicts`` picks. A sorted
+    sweep keeps the conflict count O(log B) in the B obstacles in the label's
+    row.
     """
 
     ink = label.ink.translated(0.0, origin_y)
@@ -97,14 +98,12 @@ def _place_along_span(label: LinearAnnotationLabel, origin_y: float, obstacles: 
         # Intervals with start < x, less those already closed (end <= x): start < x < end.
         return bisect_left(starts, x) - bisect_right(ends, x)
 
-    if conflicts(label.x) == 0:
-        return label.x
     allowed = [(low - centre, high - centre) for low, high in label.segments]
-    candidates = {label.x}
+    candidates: set[float] = set()
     for low, high in allowed:
         candidates.update((low, high))
         candidates.update(value for value in (*starts, *ends) if low <= value <= high)
-    return min(sorted(candidates), key=lambda x: (conflicts(x), abs(x - label.x)))
+    return nearest_fewest_conflicts(label.x, candidates, conflicts)
 
 
 def place_linear_annotation_labels(

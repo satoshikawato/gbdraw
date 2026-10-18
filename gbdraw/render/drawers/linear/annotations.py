@@ -30,6 +30,7 @@ from gbdraw.render.drawers.annotation_marks import (
     label_font_size,
     label_ink_offsets,
     mark_reach,
+    past_span_edge,
 )
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
@@ -134,7 +135,7 @@ def _label_rows(
                 if above
                 else float(height_px) - params.padding_px - (placement.lane + 1) * lane_height
             )
-            near = max(0.0, reach.past_lane_edge - inset) + float(style.label_offset)
+            near = past_span_edge(reach, inset) + float(style.label_offset)
             y = -near - bottom if above else float(height_px) + near - top
         else:
             lane_center = params.padding_px + (placement.lane + 0.5) * lane_height
