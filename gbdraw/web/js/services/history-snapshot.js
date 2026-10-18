@@ -1,8 +1,8 @@
 // @ts-check
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
-/** @import { LinearComparisonEdge } from './linear-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
+/** @import { DrawingView } from './drawing-view.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -249,7 +249,7 @@ const buildOrthogroupIntentData = (orthogroupState = {}) => ({
 });
 
 // A drawing's group names (its Session 46 `config.webEdits`).
-/** @param {HistorySnapshotDrawing} drawing */
+/** @param {DrawingView} drawing */
 const buildGroupNameIntentData = (drawing) => GROUP_NAMES_SLICE.capture(drawing.slices.groupNames);
 
 // Neither the selected Result nor the offsets read from its mounted root is
@@ -273,7 +273,7 @@ const buildUiIntentData = (ui = {}) => {
 // an intent's per-mode features do not (the intent's `ui` holds it).
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {FeatureEditsData} [features]
  */
 const applyFeatureIntentData = (state, drawing, features = {}) => {
@@ -296,7 +296,7 @@ const capturedFills = (features) => /** @type {Record<string, FeatureFill>} */ (
 const capturedRows = (rows) => (Array.isArray(rows) ? /** @type {KeptLegendEntry[]} */ (rows) : []);
 
 /**
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {EditorIntentData} [editorState]
  */
 const applyEditorIntentData = (drawing, editorState = {}) => {
@@ -326,7 +326,7 @@ const applyOrthogroupIntentData = (state, orthogroupState = {}) => {
 };
 
 /**
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {GroupNameIntentData} [names]
  */
 const applyGroupNameIntentData = (drawing, names = {}) => {
@@ -382,7 +382,7 @@ const cloneFeatureVisibilityRules = (rules) => (
 // edits with the saved label table they replace (OV-1102): the feature edit
 // intent History restores as captured (R11).
 /**
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {FeatureEditsData} [features]
  */
 const replaceFeatureEditState = (drawing, features = {}) => {
@@ -451,13 +451,13 @@ const buildDraftIntentData = (state) => ({
   newFeatureToAdd: String(getRef(state.newFeatureToAdd, '') || '')
 });
 
-/** @param {HistorySnapshotDrawing} drawing */
+/** @param {DrawingView} drawing */
 const buildFileLegendCaptionData = (drawing) => COLOR_RULES_SLICE.capture(drawing.slices.colorRules).fileLegendCaptions
   .map((caption) => String(caption || '').trim())
   .filter(Boolean);
 
 /**
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {unknown} captions
  */
 const applyFileLegendCaptionData = (drawing, captions) => COLOR_RULES_SLICE.install(drawing.slices.colorRules, {
@@ -514,7 +514,7 @@ const installQueuedPalette = (drawing, { pendingPaletteName, pendingPaletteColor
 // Installs a drawing's `ui` values as captured. The shown drawing's values go
 // through the UI restore with the app-level values instead.
 /**
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {DrawingUiData} [ui]
  */
 const applyDrawingUiIntentData = (drawing, ui = {}) => {
@@ -524,15 +524,6 @@ const applyDrawingUiIntentData = (drawing, ui = {}) => {
   installQueuedPalette(drawing, ui);
   if (ui.losatProgram) setRef(drawing.losatProgram, ui.losatProgram);
 };
-
-// A History intent, checkpoint, or generated artifact holds the settings and
-// edits of one diagram mode: the drawing of that mode.
-/**
- * @param {Record<string, any>} state
- * @param {unknown} mode
- * @returns {HistorySnapshotDrawing}
- */
-const drawingOfMode = (state, mode) => state.drawings[mode === 'linear' ? 'linear' : 'circular'];
 
 const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
   if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
@@ -561,7 +552,7 @@ const closeTransientState = (state) => {
 
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  */
 const buildFallbackUiStateData = (state, drawing) => ({
   title: getRef(state.sessionTitle, ''),
@@ -591,7 +582,7 @@ const buildFallbackUiStateData = (state, drawing) => ({
 // `mode` is restored by the mode transition (`restoreMode`), not here.
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {FallbackUiData} [ui]
  */
 const applyFallbackUiStateData = (state, drawing, ui = {}) => {
@@ -640,7 +631,7 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
 
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  */
 const buildFallbackFeatureStateData = (state, drawing) => ({
   extractedFeatures: cloneJsonData(getRef(state.extractedFeatures, [])) || [],
@@ -654,7 +645,7 @@ const buildFallbackFeatureStateData = (state, drawing) => ({
 
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {FeatureEditsData & { extractedFeatures?: unknown, featureRecordIds?: unknown }} [features]
  */
 const applyFallbackFeatureStateData = (state, drawing, features = {}) => {
@@ -670,7 +661,7 @@ const applyFallbackFeatureStateData = (state, drawing, features = {}) => {
 
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  */
 const buildFallbackOrthogroupStateData = (state, drawing) => ({
   groups: cloneJsonData(getRef(state.orthogroups, [])) || [],
@@ -681,7 +672,7 @@ const buildFallbackOrthogroupStateData = (state, drawing) => ({
 
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {OrthogroupIntentData & GroupNameIntentData & { groups?: unknown }} [data]
  */
 const applyFallbackOrthogroupStateData = (state, drawing, data = {}) => {
@@ -726,7 +717,7 @@ const applyFallbackResultsData = (state, results = []) => {
 // managed track slots name those rows, so Undo restores them together (B23).
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {HistorySnapshotFileStore} fileStore
  */
 const buildIntentFilesData = (state, drawing, fileStore) => ({
@@ -771,7 +762,7 @@ const buildIntentFilesData = (state, drawing, fileStore) => ({
 // An artifact checkpoint adds the generated Linear comparisons.
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {HistorySnapshotFileStore} fileStore
  */
 const buildFilesData = (state, drawing, fileStore) => ({
@@ -842,7 +833,7 @@ const collectCurrentFileIds = (state, fileStore) => {
 
 /**
  * @param {Record<string, any>} state
- * @param {HistorySnapshotDrawing} drawing
+ * @param {DrawingView} drawing
  * @param {FilesData} filesData
  * @param {HistorySnapshotFileStore} fileStore
  * @param {HistorySnapshotServiceOptions['normalizeLinearSeqList']} [normalizeLinearSeqList]
@@ -912,7 +903,7 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
       (Array.isArray(filesData?.linearComparisons) ? filesData.linearComparisons : [])
         .map((comparison) => [String(comparison?.id || ''), restore(comparison?.file)])
     );
-    drawing.linearComparisonPlan.edges.forEach((/** @type {LinearComparisonEdge} */ edge) => {
+    drawing.linearComparisonPlan.edges.forEach((edge) => {
       edge.file = comparisonFiles.get(String(edge?.id || '')) || null;
     });
   }
@@ -942,14 +933,15 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @property {string} fingerprint
  * @property {Readonly<Record<string, any>>} ownerReferences
  *
- * @typedef {any} HistorySnapshotDrawing
- *   The drawing (`DrawingState` of state.js, a higher layer) whose settings and edits
- *   a History intent, checkpoint, or generated artifact holds.
- *
  * @typedef {Record<string, any>} HistorySnapshotData
  *   A domain payload that the snapshot service holds by value (config, ui, features, editor state,
  *   orthogroup state, run state): the owner that builds it declares its shape.
- *
+ */
+
+/**
+ * The ports take the drawing type `D` the composition root's drawings have
+ * (state.js `DrawingState`); the service reads them as a `DrawingView`.
+ * @template {DrawingView} [D=DrawingView]
  * @typedef {object} HistorySnapshotServiceOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {HistorySnapshotFileStore} fileStore
@@ -957,21 +949,21 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`, awaited between restore steps.
  * @property {((rows: HistorySnapshotData[]) => HistorySnapshotData[]) | null} [normalizeLinearSeqList]
  *   The Linear record rows' normalization after a files restore.
- * @property {((drawing: HistorySnapshotDrawing) => HistorySnapshotData) | null} [buildConfigData] The Settings capture.
- * @property {((drawing: HistorySnapshotDrawing, config: HistorySnapshotData, options: { resolveTrackPlacements: boolean, applyAlignment?: boolean }) => unknown) | null} [applyConfigData]
+ * @property {((drawing: D) => HistorySnapshotData) | null} [buildConfigData] The Settings capture.
+ * @property {((drawing: D, config: HistorySnapshotData, options: { resolveTrackPlacements: boolean, applyAlignment?: boolean }) => unknown) | null} [applyConfigData]
  *   The Settings restore.
- * @property {((drawing: HistorySnapshotDrawing, options: { includePreviewNavigation: boolean }) => HistorySnapshotData) | null} [buildUiStateData]
+ * @property {((drawing: D, options: { includePreviewNavigation: boolean }) => HistorySnapshotData) | null} [buildUiStateData]
  *   The UI capture; `includePreviewNavigation` adds pan, zoom, and tab state.
- * @property {((drawing: HistorySnapshotDrawing, ui: HistorySnapshotData, options?: { restorePreviewNavigation: boolean }) => unknown) | null} [applyUiStateData]
+ * @property {((drawing: D, ui: HistorySnapshotData, options?: { restorePreviewNavigation: boolean }) => unknown) | null} [applyUiStateData]
  *   The UI restore.
- * @property {((drawing: HistorySnapshotDrawing) => HistorySnapshotData) | null} [buildFeatureStateData] The feature-override capture.
- * @property {((drawing: HistorySnapshotDrawing, features: HistorySnapshotData) => unknown) | null} [applyFeatureStateData]
+ * @property {((drawing: D) => HistorySnapshotData) | null} [buildFeatureStateData] The feature-override capture.
+ * @property {((drawing: D, features: HistorySnapshotData) => unknown) | null} [applyFeatureStateData]
  *   The feature-override restore.
- * @property {((drawing: HistorySnapshotDrawing) => HistorySnapshotData) | null} [buildEditorStateData] The legend and stroke editor capture.
- * @property {((drawing: HistorySnapshotDrawing, editorState: HistorySnapshotData, options: { normalized: boolean }) => unknown) | null} [applyEditorStateData]
+ * @property {((drawing: D) => HistorySnapshotData) | null} [buildEditorStateData] The legend and stroke editor capture.
+ * @property {((drawing: D, editorState: HistorySnapshotData, options: { normalized: boolean }) => unknown) | null} [applyEditorStateData]
  *   The editor restore; `normalized` marks a state that is installed as captured.
- * @property {((drawing: HistorySnapshotDrawing) => HistorySnapshotData) | null} [buildOrthogroupStateData] The orthogroup capture.
- * @property {((drawing: HistorySnapshotDrawing, orthogroupState: HistorySnapshotData) => unknown) | null} [applyOrthogroupStateData]
+ * @property {((drawing: D) => HistorySnapshotData) | null} [buildOrthogroupStateData] The orthogroup capture.
+ * @property {((drawing: D, orthogroupState: HistorySnapshotData) => unknown) | null} [applyOrthogroupStateData]
  *   The orthogroup restore.
  * @property {(() => HistorySnapshotData[]) | null} [serializeResults] The generated Results' capture.
  * @property {((results: HistorySnapshotData[], ui: HistorySnapshotData) => unknown) | null} [applyResultsData]
@@ -983,7 +975,10 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  *   Results (D-37): a reused feature catalog keeps the groups array, so its watcher would not fire.
  */
 
-/** @param {HistorySnapshotServiceOptions} options */
+/**
+ * @template {DrawingView} D
+ * @param {HistorySnapshotServiceOptions<D>} options
+ */
 export const createHistorySnapshotService = ({
   state,
   fileStore,
@@ -1008,6 +1003,14 @@ export const createHistorySnapshotService = ({
   if (!state || !fileStore) {
     throw new Error('createHistorySnapshotService requires state and fileStore.');
   }
+
+  // A History intent, checkpoint, or generated artifact holds the settings and
+  // edits of one diagram mode: the drawing of that mode.
+  /**
+   * @param {unknown} mode
+   * @returns {D}
+   */
+  const drawingOf = (mode) => state.drawings[mode === 'linear' ? 'linear' : 'circular'];
 
   /** @type {((intent: HistorySnapshotData, context: Record<string, any>) => unknown) | null} */
   let afterApplyHistoryIntent = null;
@@ -1107,7 +1110,7 @@ export const createHistorySnapshotService = ({
 
   /** @typedef {ReturnType<typeof captureGeneratedArtifactOwnerSet>} GeneratedArtifactOwnerSet The owners' values, by reference, key by key. */
   const captureGeneratedArtifactOwnerSet = () => {
-    const drawing = drawingOfMode(state, getGeneratedArtifactRef(state.generatedMode, null));
+    const drawing = drawingOf(getGeneratedArtifactRef(state.generatedMode, null));
     const results = toRaw(getGeneratedArtifactRef(state.results, []));
     const colorRules = COLOR_RULES_SLICE.capture(drawing.slices.colorRules);
     return Object.freeze({
@@ -1191,7 +1194,7 @@ export const createHistorySnapshotService = ({
     if (!ownerSet || typeof ownerSet !== 'object') {
       throw new Error('A generated artifact owner set is required.');
     }
-    const drawing = drawingOfMode(state, ownerSet.generatedMode);
+    const drawing = drawingOf(ownerSet.generatedMode);
     const results = Array.isArray(ownerSet.results) ? ownerSet.results : [];
     const replacesShownResults = toRaw(results)
       !== toRaw(getGeneratedArtifactRef(state.results, []));
@@ -1441,7 +1444,7 @@ export const createHistorySnapshotService = ({
     recordStructuralMetric('generatedArtifactHeavyTraversalCount', 0);
     recordStructuralMetric('generatedArtifactMutableIntentSnapshotCount', 1);
     const ownerSet = captureGeneratedArtifactOwnerSet();
-    const drawing = drawingOfMode(state, getRef(state.mode, 'circular'));
+    const drawing = drawingOf(getRef(state.mode, 'circular'));
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: true })
       : buildFallbackUiStateData(state, drawing);
@@ -1577,7 +1580,7 @@ export const createHistorySnapshotService = ({
       const mutableIntent = handle.mutableIntent || {};
       const ui = mutableIntent.ui || {};
       if (ui.mode) await restoreArtifactMode(ui.mode);
-      const drawing = drawingOfMode(state, getRef(state.mode, 'circular'));
+      const drawing = drawingOf(getRef(state.mode, 'circular'));
       if (ui.cInputType) setGeneratedArtifactRef(state.cInputType, ui.cInputType);
       if (ui.lInputType) setGeneratedArtifactRef(state.lInputType, ui.lInputType);
       await nextTick();
@@ -1705,7 +1708,7 @@ export const createHistorySnapshotService = ({
     );
   };
 
-  /** @param {HistorySnapshotDrawing} drawing */
+  /** @param {D} drawing */
   const buildGeneratedArtifactSnapshot = (drawing) => {
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
@@ -1738,7 +1741,7 @@ export const createHistorySnapshotService = ({
   const checkpointFeatureCatalogs = new WeakMap();
 
   /**
-   * @param {HistorySnapshotDrawing} drawing
+   * @param {D} drawing
    * @param {ArtifactCheckpointData} snapshot
    */
   const applyArtifactDomains = (drawing, snapshot) => {
@@ -1784,7 +1787,7 @@ export const createHistorySnapshotService = ({
   // both, so Undo restores each drawing as captured.
   /** @param {'circular' | 'linear'} drawingMode */
   const buildModeIntent = (drawingMode) => {
-    const drawing = drawingOfMode(state, drawingMode);
+    const drawing = drawingOf(drawingMode);
     const config = typeof buildConfigData === 'function'
       ? buildConfigData(drawing)
       : {
@@ -1813,7 +1816,7 @@ export const createHistorySnapshotService = ({
   // Synchronous: History captures it without an await (OV-922).
   const buildHistoryIntent = () => {
     const shownMode = getRef(state.mode, 'circular') === 'linear' ? 'linear' : 'circular';
-    const drawing = drawingOfMode(state, shownMode);
+    const drawing = drawingOf(shownMode);
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
       : buildFallbackUiStateData(state, drawing);
@@ -1827,7 +1830,7 @@ export const createHistorySnapshotService = ({
         circular: buildModeIntent('circular'),
         linear: buildModeIntent('linear')
       },
-      files: buildIntentFilesData(state, drawingOfMode(state, 'linear'), fileStore),
+      files: buildIntentFilesData(state, drawingOf('linear'), fileStore),
       alignmentState: captureAlignmentState(),
       ui: uiIntent,
       drafts: buildDraftIntentData(state),
@@ -1923,15 +1926,15 @@ export const createHistorySnapshotService = ({
     const drawingModes = /** @type {const} */ (['circular', 'linear']);
     /** @param {'circular' | 'linear'} drawingMode @param {string} domain */
     const changed = (drawingMode, domain) => domains.has(`modes.${drawingMode}.${domain}`);
-    const linearDrawing = drawingOfMode(state, 'linear');
+    const linearDrawing = drawingOf('linear');
     const retainedComparisonFiles = changed('linear', 'config') && !domains.has('files')
       ? new Map(
           (Array.isArray(linearDrawing.linearComparisonPlan?.edges)
             ? linearDrawing.linearComparisonPlan.edges
             : []
           )
-            .map((/** @type {LinearComparisonEdge} */ edge) => [String(edge?.id || ''), edge?.file ?? null])
-            .filter((/** @type {[string, unknown]} */ [edgeId]) => edgeId)
+            .map((edge) => /** @type {[string, unknown]} */ ([String(edge?.id || ''), edge?.file ?? null]))
+            .filter(([edgeId]) => edgeId)
         )
       : null;
     const suppressRef = state.semanticFileWatchersSuppressed;
@@ -1947,7 +1950,7 @@ export const createHistorySnapshotService = ({
 
       drawingModes.forEach((drawingMode) => {
         if (!changed(drawingMode, 'config')) return;
-        const drawing = drawingOfMode(state, drawingMode);
+        const drawing = drawingOf(drawingMode);
         const config = intent.modes?.[drawingMode]?.config;
         if (typeof applyConfigData === 'function' && config) {
           // The alignmentState domain below owns the plan and translations (OV-383).
@@ -1957,7 +1960,7 @@ export const createHistorySnapshotService = ({
         }
       });
       if (retainedComparisonFiles) {
-        (linearDrawing.linearComparisonPlan?.edges || []).forEach((/** @type {LinearComparisonEdge} */ edge) => {
+        (linearDrawing.linearComparisonPlan?.edges || []).forEach((edge) => {
           const edgeId = String(edge?.id || '');
           if (edgeId && retainedComparisonFiles.has(edgeId)) {
             edge.file = retainedComparisonFiles.get(edgeId);
@@ -1969,9 +1972,9 @@ export const createHistorySnapshotService = ({
       if (domains.has('ui') || changed(shownMode, 'ui')) {
         const shownUi = { ...(intent.ui || {}), ...(intent.modes?.[shownMode]?.ui || {}) };
         if (typeof applyUiStateData === 'function') {
-          applyUiStateData(drawingOfMode(state, shownMode), shownUi, { restorePreviewNavigation: false });
+          applyUiStateData(drawingOf(shownMode), shownUi, { restorePreviewNavigation: false });
         } else {
-          applyFallbackUiStateData(state, drawingOfMode(state, shownMode), shownUi);
+          applyFallbackUiStateData(state, drawingOf(shownMode), shownUi);
         }
       }
       if (domains.has('ui') && Object.hasOwn(intent.ui || {}, 'selectedFeatureRecordIdx')) {
@@ -1982,7 +1985,7 @@ export const createHistorySnapshotService = ({
       }
       drawingModes.forEach((drawingMode) => {
         if (drawingMode !== shownMode && changed(drawingMode, 'ui')) {
-          applyDrawingUiIntentData(drawingOfMode(state, drawingMode), intent.modes?.[drawingMode]?.ui || {});
+          applyDrawingUiIntentData(drawingOf(drawingMode), intent.modes?.[drawingMode]?.ui || {});
         }
       });
 
@@ -1992,7 +1995,7 @@ export const createHistorySnapshotService = ({
       if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState);
       if (domains.has('drafts')) applyDraftIntentData(state, intent.drafts || {});
       drawingModes.forEach((drawingMode) => {
-        const drawing = drawingOfMode(state, drawingMode);
+        const drawing = drawingOf(drawingMode);
         const modeIntent = intent.modes?.[drawingMode] || {};
         if (changed(drawingMode, 'fileLegendCaptions')) applyFileLegendCaptionData(drawing, modeIntent.fileLegendCaptions);
         if (changed(drawingMode, 'features')) applyFeatureIntentData(state, drawing, modeIntent.features || {});
@@ -2015,7 +2018,7 @@ export const createHistorySnapshotService = ({
   const buildArtifactCheckpoint = () => {
     const shownMode = getRef(state.mode, 'circular') === 'linear' ? 'linear' : 'circular';
     const otherMode = shownMode === 'linear' ? 'circular' : 'linear';
-    const drawing = drawingOfMode(state, shownMode);
+    const drawing = drawingOf(shownMode);
     const config = typeof buildConfigData === 'function'
       ? buildConfigData(drawing)
       : {
@@ -2028,7 +2031,7 @@ export const createHistorySnapshotService = ({
     const { featureCatalog = null, ...editorState } = generated.editorState || {};
     const checkpoint = cloneJsonData({
       config,
-      files: buildFilesData(state, drawingOfMode(state, 'linear'), fileStore),
+      files: buildFilesData(state, drawingOf('linear'), fileStore),
       alignmentState: captureAlignmentState(),
       drafts: buildDraftIntentData(state),
       fileLegendCaptions: buildFileLegendCaptionData(drawing),
@@ -2051,7 +2054,7 @@ export const createHistorySnapshotService = ({
 
       const ui = snapshot.ui || {};
       if (ui.mode) await restoreArtifactMode(ui.mode);
-      const drawing = drawingOfMode(state, getRef(state.mode, 'circular'));
+      const drawing = drawingOf(getRef(state.mode, 'circular'));
       if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
       if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
       await nextTick();
@@ -2068,7 +2071,7 @@ export const createHistorySnapshotService = ({
       applyFileLegendCaptionData(drawing, snapshot.fileLegendCaptions);
       const other = snapshot.otherMode;
       if (other?.drawing && (other.mode === 'circular' || other.mode === 'linear')) {
-        const otherDrawing = drawingOfMode(state, other.mode);
+        const otherDrawing = drawingOf(other.mode);
         if (typeof applyConfigData === 'function' && other.drawing.config) {
           applyConfigData(otherDrawing, other.drawing.config, { resolveTrackPlacements: false });
         }
@@ -2086,7 +2089,7 @@ export const createHistorySnapshotService = ({
       }
       await nextTick();
 
-      applyFilesData(state, drawingOfMode(state, 'linear'), snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      applyFilesData(state, drawingOf('linear'), snapshot.files || {}, fileStore, normalizeLinearSeqList);
       installAlignmentState(snapshot.alignmentState);
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
