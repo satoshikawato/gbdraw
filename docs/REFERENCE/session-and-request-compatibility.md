@@ -445,7 +445,10 @@ A CLI Linear Session written without `-b` or `--losat` commits only a disabled
 protein pipeline (mode `none`, no pairs). It loads with **No comparison** and
 without selecting LOSATP, so Generate draws no ribbons and starts no LOSAT run.
 A CLI Session written with `--losat losatp` and an editable protein pipeline
-loads with the adjacent LOSATP comparison it drew.
+loads with the adjacent LOSATP comparison it drew. It stores the protein
+results the CLI computed as the Web Save stores them: the comparison tables
+and, for similarity groups or collinear blocks, their result. The first
+Generate after Load reuses them instead of running LOSAT again.
 
 Without saved `ui.layoutPreferences`, the legend and plot-title positions come
 from the committed `diagramOptions.output` for its mode and grouping, so a CLI
@@ -616,10 +619,15 @@ The re-save also replaces what both sets share: `losatCache` holds the entries
 the new render returns, `losatDerivedCache` keeps the Session's own entries
 unchanged (a CLI render builds none, and a Session saved by a fresh CLI render
 has an empty derived cache), and `proteinIdentityManifest` and `legacyArtifacts`
-come from the new render. A Circular render, one diagram or a batch, returns
+come from the new render (with both drawings, `legacyArtifacts` come from the
+Linear one). A Circular render, one diagram or a batch, returns
 the Session's own `proteinIdentityManifest` and `legacyArtifacts`, so the
-protein entries that the re-save keeps still resolve; legacy derived evidence
-is dropped once the Session has current derived entries. If
+protein entries that the re-save keeps still resolve. A Linear LOSATP render
+tries only the pending legacy protein entries of the record pairs it
+compares; an entry it cannot match stays pending, with a warning, so a later
+Web Generate can still use it. Legacy derived evidence is dropped once the
+Session has current derived entries, or when the render used the last pending
+entry. If
 the render migrates older protein IDs (only Sessions 44 and older have them),
 gbdraw rewrites the protein references throughout the Session. A resource
 whose bytes are unchanged
