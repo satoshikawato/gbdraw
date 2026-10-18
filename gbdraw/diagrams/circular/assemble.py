@@ -152,7 +152,7 @@ from .builders import (
     add_tick_group_on_canvas,
 )
 from ...render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup
-from .radial_layout import AnnotationLabelRoom, resolve_circular_radial_layout
+from .radial_layout import AnnotationLabelRoom, resolve_circular_radial_layout, track_layout_reason
 from .presets import (
     CircularPresetContext,
     circular_feature_lane_direction_for_preset,
@@ -1298,16 +1298,6 @@ def _packaged_circular_definition_font_size() -> float:
     return float(config["objects"]["definition"]["circular"]["font_size"])
 
 
-def _track_layout_reason(error: ValidationError) -> str | None:
-    """Return the ``TRACK_LAYOUT`` diagnostic reason of a placement failure."""
-
-    diagnostic = error.diagnostic or {}
-    if diagnostic.get("code") != "TRACK_LAYOUT":
-        return None
-    reason = diagnostic.get("reason")
-    return reason if isinstance(reason, str) else None
-
-
 def _resolve_radial_layout_fitting_definition(
     resolve_layout: Callable[[float | None], CircularRadialLayout],
     *,
@@ -1360,7 +1350,7 @@ def _resolve_radial_layout_fitting_definition(
     except ValidationError as error:
         font_size = float(cfg.objects.definition.circular.font_size)
         if (
-            _track_layout_reason(error) != "DEFINITION_RESERVED"
+            track_layout_reason(error) != "DEFINITION_RESERVED"
             or str(definition_profile) != "full"
             or not math.isclose(font_size, _packaged_circular_definition_font_size())
         ):
@@ -1376,7 +1366,7 @@ def _resolve_radial_layout_fitting_definition(
         try:
             return resolve_layout(wrapped), wrapped, line_count
         except ValidationError as retry_error:
-            if _track_layout_reason(retry_error) != "DEFINITION_RESERVED":
+            if track_layout_reason(retry_error) != "DEFINITION_RESERVED":
                 break
     raise definition_error
 

@@ -565,6 +565,48 @@ def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() ->
     assert row is not None and row.status == "not_found"
 
 
+def test_a_row_whose_tracks_do_not_fit_does_not_fit() -> None:
+    """OV-1266: a row's settings that leave the tracks no room (TRACK_LAYOUT) do not fit; Generate goes on."""
+
+    from gbdraw.api.diagram import (
+        _checked_circular_drawing,
+        _unfit_row_verification,
+        build_circular_diagram,
+        label_fit_row,
+    )
+
+    record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
+    options = CircularDiagramOptions(
+        config_overrides={
+            "labels.circular.scope": "outer",
+            "labels.rendering": "external_only",
+            "labels.font_size.short": 14.0,
+            "labels.font_size.long": 14.0,
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
+    error = ValidationError(
+        "Circular track slot 'features' cannot fit inside",
+        diagnostic={"code": "TRACK_LAYOUT", "reason": "DEFINITION_RESERVED"},
+    )
+
+    def assemble(overrides):
+        if not overrides:
+            return drawing
+        raise error
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        checked = _checked_circular_drawing(assemble, warn_search_seconds=0.0)
+    row = label_fit_row(checked, "smaller_font")
+    assert row is not None and row.status == "not_found"
+    unfit = _unfit_row_verification(error)
+    assert unfit is not None and unfit.outcome == "stop"
+    assert unfit.reason == "The tracks do not fit with this setting"
+
+
 def test_a_failed_render_keeps_the_shown_results_rows_computable() -> None:
     """OV-737: a failure of a mode keeps its last drawn figure; a newer drawn render releases both."""
 

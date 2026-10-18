@@ -502,6 +502,28 @@ def test_overlapping_embedded_labels_offer_to_separate_the_features() -> None:
     assert "separate_features" not in {row.kind for row in raised.value.report.rows}
 
 
+@pytest.mark.circular
+def test_separated_features_that_leave_no_track_room_are_a_row_not_found(tmp_path: Path) -> None:
+    """OV-1266: lambda at 12 pt with gene names first overprints two embedded labels; separating the features
+    needs six lanes the inside tracks cannot hold, so that row is not found and the labels ask (E-ROW)."""
+
+    priority = tmp_path / "priority.tsv"
+    priority.write_text("CDS\tgene,product,locus_tag\n", encoding="utf-8")
+    args = [
+        "--gbk", str(TEST_INPUTS / "NC_001416.gb"),
+        "--separate_strands", "--track_type", "tuckin", "-l", "left",
+        "--labels", "out", "--qualifier_priority", str(priority), "--label_font_size", "12",
+        "-o", str(tmp_path / "out"), "-f", "svg",
+    ]
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        circular_main(args)
+
+    rows = {row.kind: row for row in raised.value.report.rows}
+    assert rows["separate_features"].status == "not_found"
+    assert rows["separate_features"].reason == "The tracks do not fit with this setting"
+
+
 def _fit_assembly(fit_for: Callable[[Mapping[str, object]], LabelFit]):
     """A full assembly whose labels' fit depends on the row's settings."""
 

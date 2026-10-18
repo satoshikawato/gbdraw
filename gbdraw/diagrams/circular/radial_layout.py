@@ -70,6 +70,9 @@ class PlacementWindow:
     # The reserved band (tick labels) may reach below inner_px to this edge of
     # a pinned row, as it may touch the row below it in top-down packing.
     reserved_inner_px: float | None = None
+    # The room kept below inner_px for the inside rows placed after this window's rows, and their slot IDs.
+    kept_inside_px: float = 0.0
+    kept_inside_slot_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -122,6 +125,16 @@ def _cannot_fit_diagnostic(intent: "_RadialSlotIntent | None", window: Any = Non
     if intent is not None:
         diagnostic["slotIndex"] = int(intent.slot_index)
     return diagnostic
+
+
+def track_layout_reason(error: ValidationError) -> str | None:
+    """The ``TRACK_LAYOUT`` diagnostic reason of a placement failure, or None for any other error."""
+
+    diagnostic = error.diagnostic or {}
+    if diagnostic.get("code") != "TRACK_LAYOUT":
+        return None
+    reason = diagnostic.get("reason")
+    return reason if isinstance(reason, str) else None
 
 
 def _center_reserved_diagnostic(
@@ -1378,9 +1391,10 @@ class _InsideFitError(ValidationError):
         self.subject = subject
         self.placement_window = placement_window
         self.hint = hint
+        kept = self._kept_inside()
         super().__init__(
-            f"{self._between()}. Move the slot, reduce widths, disable conflicting labels, "
-            f"or use side=outside.{hint}",
+            f"{self._between()}{f'; below it, {kept}' if kept else ''}. Move the slot, reduce widths, "
+            f"disable conflicting labels, or use side=outside.{hint}",
             diagnostic=_cannot_fit_diagnostic(intent, placement_window),
         )
 
@@ -1390,10 +1404,20 @@ class _InsideFitError(ValidationError):
             f"{self.placement_window.inner_px:.1f}px and {self.placement_window.outer_px:.1f}px"
         )
 
+    def _kept_inside(self) -> str:
+        """The room the window keeps for the inside rows after it (OV-1268), or ""."""
+
+        window = self.placement_window
+        if window.kept_inside_px <= LAYOUT_EPSILON:
+            return ""
+        slot_ids = ", ".join(f"'{slot_id}'" for slot_id in window.kept_inside_slot_ids)
+        return f"{window.kept_inside_px:.1f}px are kept for the tracks inside it ({slot_ids})"
+
     def limited_by_center(self, reserved_radius_px: float, *, explicit_radius: bool) -> ValidationError:
         """Name the center reservation (definition text or explicit radius) as the cause."""
 
-        reserved = f"{float(reserved_radius_px):.1f}px"
+        kept = self._kept_inside()
+        reserved = f"{float(reserved_radius_px):.1f}px{f' and {kept}' if kept else ''}"
         if explicit_radius:
             message = (
                 f"{self._between()} because center_reserved_radius reserves {reserved}. "
@@ -1887,14 +1911,18 @@ def _future_unresolved_inside_span_px(
     feature_dict: Mapping[str, Any] | None,
     depth_config: DepthAxisSource | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
-) -> float:
+) -> tuple[float, tuple[str, ...]]:
+    """The smallest span the unresolved inside rows after ``start_pos`` need, and their slot IDs."""
+
     span = 0.0
+    slot_ids: list[str] = []
     outer_neighbor = current_outer_intent
     for future in ordered_intents[start_pos + 1:]:
         if future.slot_index in resolved_by_index:
             break
         if future.side != "inside" or future.placement_policy == "hard":
             break
+        slot_ids.append(future.slot_id)
         span += _gap_between_inner_outer_tracks(future, outer_neighbor) + _minimum_future_inside_width_px(
             future,
             axis_radius_px=axis_radius_px,
@@ -1905,7 +1933,7 @@ def _future_unresolved_inside_span_px(
             depth_config=depth_config,
         )
         outer_neighbor = future
-    return span
+    return span, tuple(slot_ids)
 
 
 def _inner_limit_with_reserved_future_span(
@@ -1974,7 +2002,7 @@ def _inside_placement_window(
             if band is not None
         )
         inner_limit = reserved_inner_limit + gap_to_future_hard
-    future_span = _future_unresolved_inside_span_px(
+    future_span, future_slot_ids = _future_unresolved_inside_span_px(
         ordered_intents,
         start_pos=start_pos,
         current_outer_intent=current_outer_intent,
@@ -1986,19 +2014,24 @@ def _inside_placement_window(
         depth_config=depth_config,
         resolved_by_index=resolved_by_index,
     )
-    if future_span > LAYOUT_EPSILON:
-        # The span kept free for the rows after this group bounds both bands.
-        reserved_inner_limit = None
-        inner_limit = max(
-            inner_limit,
-            _inner_limit_with_reserved_future_span(
-                occupied,
-                inner_limit_px=inner_limit,
-                outer_limit_px=float(inside_max_outer),
-                required_span_px=future_span,
-            ),
-        )
-    return PlacementWindow(inner_limit, float(inside_max_outer), reserved_inner_limit)
+    if future_span <= LAYOUT_EPSILON:
+        return PlacementWindow(inner_limit, float(inside_max_outer), reserved_inner_limit)
+    # The span kept free for the rows after this group bounds both bands.
+    inner_limit = max(
+        inner_limit,
+        _inner_limit_with_reserved_future_span(
+            occupied,
+            inner_limit_px=inner_limit,
+            outer_limit_px=float(inside_max_outer),
+            required_span_px=future_span,
+        ),
+    )
+    return PlacementWindow(
+        inner_limit,
+        float(inside_max_outer),
+        kept_inside_px=float(future_span),
+        kept_inside_slot_ids=future_slot_ids,
+    )
 
 
 def _outside_placement_window(
@@ -2616,4 +2649,5 @@ def _resolve_circular_radial_layout(
 __all__ = [
     "build_circular_feature_layout",
     "resolve_circular_radial_layout",
+    "track_layout_reason",
 ]
