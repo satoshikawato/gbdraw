@@ -1484,6 +1484,23 @@ const requestLegendPosition = (form, mode) => legendPositionOfMode(form.legend, 
 const requestPlotTitlePosition = (adv, mode) => String(adv.plot_title_position || (mode === 'linear' ? 'bottom' : 'none'));
 /** @param {Record<string, unknown>} form */
 const requestPlotTitle = (form) => String(form.plot_title || '').trim() || null;
+/** @param {Record<string, unknown>} form */
+const requestKeepDefinitionLeftAligned = (form) => Boolean(form.keep_definition_left_aligned);
+/**
+ * What a committed request draws for Lock Definition Column: its override,
+ * else the resolved `config` a CLI or API Session carries (Python applies
+ * overrides over it), else OFF (config.toml).
+ * @param {CanonicalRenderRequest} request
+ * @returns {boolean}
+ */
+const effectiveKeepDefinitionLeftAligned = (request) => {
+  const override = request.diagramOptions.configOverrides?.[CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned];
+  if (typeof override === 'boolean') return override;
+  const config = /** @type {{ canvas?: { linear?: { keep_definition_left_aligned?: unknown } } } | undefined} */ (
+    request.diagramOptions.config
+  );
+  return config?.canvas?.linear?.keep_definition_left_aligned === true;
+};
 /** @param {Record<string, unknown>} adv */
 const requestPlotTitleFontSize = (adv) => projectOptionalNumber(adv.plot_title_font_size, { field: 'plot_title_font_size' });
 /**
@@ -1564,12 +1581,12 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
           configLeaf(CONFIG_OVERRIDE_PATHS.plotTitleFontSize, drawing.adv.plot_title_font_size) ?? undefined]])
       : [])
   ],
-  // A request without the key draws OFF (config.toml), as a Session written
-  // by the CLI or before the Web default sends it; OFF writes nothing there.
+  // Writes only when the draft differs from what the committed request draws
+  // (`effectiveKeepDefinitionLeftAligned`), so a CLI Session that locks and a
+  // draft OFF writes false, and a request that already draws OFF stays as is.
   [`diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned}`]: (drawing, request) => {
-    const locked = Boolean(drawing.form.keep_definition_left_aligned);
-    const committed = request.diagramOptions.configOverrides?.[CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned];
-    return locked || committed !== undefined
+    const locked = requestKeepDefinitionLeftAligned(drawing.form);
+    return locked !== effectiveKeepDefinitionLeftAligned(request)
       ? [[['diagramOptions', 'configOverrides', CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned], locked]]
       : [];
   },
@@ -1782,7 +1799,7 @@ const buildConfigOverrides = (
           [CONFIG_OVERRIDE_PATHS.labelRotation]: leaf(CONFIG_OVERRIDE_PATHS.labelRotation, adv.label_rotation),
           [CONFIG_OVERRIDE_PATHS.alignCenter]: Boolean(form.align_center),
           [CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned]:
-            Boolean(form.keep_definition_left_aligned),
+            requestKeepDefinitionLeftAligned(form),
           [CONFIG_OVERRIDE_PATHS.linearTrackLayout]: linearTrackLayout,
           [CONFIG_OVERRIDE_PATHS.linearTrackAxisGap]: leaf(CONFIG_OVERRIDE_PATHS.linearTrackAxisGap, adv.track_axis_gap),
           [CONFIG_OVERRIDE_PATHS.linearRulerOnAxis]: Boolean(form.linear_ruler_on_axis),

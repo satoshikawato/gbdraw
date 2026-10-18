@@ -203,6 +203,30 @@ test('a Circular live apply writes the plot title font override and the grid lay
   drawing.adv.multi_record_positions = [];
 });
 
+test('Lock Definition Column OFF on a CLI-shaped request that locks yields the request a Generate builds', () => {
+  const drawing = state.drawings.linear;
+  const initialLock = drawing.form.keep_definition_left_aligned;
+  drawing.form.keep_definition_left_aligned = true;
+  const generated = generate('linear');
+  // A CLI Session: no configOverrides, the resolved config carries the lock.
+  const renderRequest = structuredClone(generated.renderRequest);
+  delete renderRequest.diagramOptions.configOverrides;
+  renderRequest.diagramOptions.config = { canvas: { linear: { keep_definition_left_aligned: true } } };
+  const committed = { ...generated, renderRequest };
+  const lock = `diagramOptions.configOverrides.${LOCK_KEY}`;
+  // Draft still locked: nothing differs, nothing is written.
+  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock] }), []);
+  drawing.form.keep_definition_left_aligned = false;
+  assert.equal(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock] }).length, 1, 'OFF writes false');
+  assert.equal(liveCandidate(committed, drawing).renderRequest.diagramOptions.configOverrides[LOCK_KEY], false);
+  assert.equal(liveCandidate(committed, drawing).renderRequest.diagramOptions.configOverrides[LOCK_KEY],
+    generate('linear').renderRequest.diagramOptions.configOverrides[LOCK_KEY]);
+  // A request that draws OFF stays untouched by an OFF draft.
+  delete renderRequest.diagramOptions.config;
+  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock] }), []);
+  drawing.form.keep_definition_left_aligned = initialLock;
+});
+
 test('Lock Definition Column applies only to a Linear Result', () => {
   const lock = `diagramOptions.configOverrides.${LOCK_KEY}`;
   const circular = state.drawings.circular;
