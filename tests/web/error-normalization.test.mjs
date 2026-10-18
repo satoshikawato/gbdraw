@@ -503,7 +503,7 @@ test('an annotation lane conflict names the table lane and the Overflow behavior
   const model = roundtrip({ code: 'TRACK_INVALID', operation: 'generate', stage: 'render', context: { reason: 'ANNOTATION_LANE_CONFLICT' } });
   assert.deepEqual([model.code, model.stage, model.context], ['TRACK_INVALID', 'render', { reason: 'ANNOTATION_LANE_CONFLICT' }]);
   assert.match(model.summary, /^The track settings are invalid\. Two region annotations overlap in the same lane of the annotation table, /);
-  assert.match(model.summary, /Overflow behavior to Compress or Clip\.$/);
+  assert.match(model.summary, /Overflow behavior to Compress or Clip in Custom Track Slots \(Use custom stack\)\.$/);
   assert.deepEqual(model.actions, ['edit-track', 'retry']);
 });
 
