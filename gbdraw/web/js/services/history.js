@@ -2042,6 +2042,7 @@ export const createHistoryManager = ({
     runUndoableCommand,
     // R11: the open step ends now, in this History (a drawing switch).
     settlePendingIntent,
+    stepOpen: () => Boolean(openTransaction()),
     heldIdentities,
     undo,
     undoLabel
@@ -2145,11 +2146,13 @@ export const createHistoryRouter = ({
     budget.enforce();
     touchProject();
   };
-  // The Session-level values a step changed since the last step ended.
+  // The Session-level values changed since the last step ended.
+  const sessionStepChanges = (after = sessionRecord()) => (
+    after.signature === sessionCurrent.signature ? [] : buildIntentPatch(sessionCurrent.intent, after.intent));
   /** @param {string} label @returns {IntentEntry | null} */
   const sessionStep = (label) => {
     const after = sessionRecord();
-    const changes = after.signature === sessionCurrent.signature ? [] : buildIntentPatch(sessionCurrent.intent, after.intent);
+    const changes = sessionStepChanges(after);
     sessionCurrent = after;
     return changes.length > 0
       ? { type: 'intent', label, changes, byteSize: JSON.stringify(changes).length * 2, fileIds: new Set() }
@@ -2371,6 +2374,9 @@ export const createHistoryRouter = ({
       every().forEach((manager) => manager.markSavePoint());
       projectSavePoint = { undo: projectUndo[projectUndo.length - 1] ?? null, redo: projectRedo[projectRedo.length - 1] ?? null };
     },
+    // D-15-53: a drawing switch resets Session-level transient values (the
+    // feature panel tab) without a step; they are the recorded values now.
+    adoptSessionValues: () => { sessionCurrent = sessionRecord(); },
     // OV-110: the Result identities any drawing's History holds.
     heldIdentities: () => {
       /** @type {Set<string>} */
@@ -2378,10 +2384,13 @@ export const createHistoryRouter = ({
       managers.forEach((manager, drawingId) => manager.heldIdentities(projectPartsOf(drawingId)).forEach((id) => ids.add(id)));
       return ids;
     },
+    // D-15-53: a Session-level value changed outside any step is no change
+    // until a step takes it; one an open step changed is (as a manager counts
+    // its own values).
     hasChangesSinceSavePoint: async () => {
       if ((projectUndo[projectUndo.length - 1] ?? null) !== projectSavePoint.undo) return true;
       if ((projectRedo[projectRedo.length - 1] ?? null) !== projectSavePoint.redo) return true;
-      if (sessionRecord().signature !== sessionCurrent.signature) return true;
+      if (every().some((manager) => manager.stepOpen()) && sessionStepChanges().length > 0) return true;
       for (const manager of every()) if (await manager.hasChangesSinceSavePoint()) return true;
       return false;
     },

@@ -329,6 +329,56 @@ test('a step that also clears a draft is its drawing\'s step and leaves the othe
   assert.deepEqual({ prefix: circular.form.prefix, draft: state.newSpecRule.val }, { prefix: 'rule-added', draft: '' });
 });
 
+// D-15-53 2: a Session-level value changed outside any step (an annotation
+// click) marks nothing unsaved and rides with the next step, in that step's
+// own drawing.
+test('a selection outside any step is unsaved only with the next step, in its drawing', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { circular } = state.drawings;
+  show(app, 'circular');
+  const selectedBefore = state.selectedAnnotation.value;
+  const prefixBefore = circular.form.prefix;
+  history.markSavePoint();
+  state.selectedAnnotation.value = { setId: 'set-a', id: 'annotation-a' };
+  assert.equal(await history.hasChangesSinceSavePoint(), false, 'a click alone is not unsaved work');
+  await history.runUndoable('Circular prefix', () => { circular.form.prefix = 'after-click'; });
+  assert.equal(await history.hasChangesSinceSavePoint(), true);
+  show(app, 'linear');
+  assert.equal(history.canUndo(), false, 'Linear does not see the Circular step');
+  show(app, 'circular');
+  assert.equal(history.undoLabel(), 'Circular prefix');
+  await app.undoHistory();
+  assert.deepEqual({ prefix: circular.form.prefix, selected: state.selectedAnnotation.value },
+    { prefix: prefixBefore, selected: selectedBefore });
+  // A title typed in an open step is unsaved work before the step ends.
+  history.markSavePoint();
+  const step = await history.begin('Rename Session', { source: 'test-control' });
+  state.sessionTitle.value = 'typed title';
+  assert.equal(await history.hasChangesSinceSavePoint(), true);
+  await history.commit(step);
+});
+
+// D-15-53 2: the switch resets the feature panel tab (no step); the router
+// takes it as the recorded Session value.
+test('the feature panel tab reset at a switch is no change and no step', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  show(app, 'circular');
+  state.featurePanelTab.value = 'labels';
+  await history.initializeIntentBaseline('Load');
+  history.markSavePoint();
+  show(app, 'linear');
+  assert.equal(state.featurePanelTab.value, 'colors');
+  assert.equal(await history.hasChangesSinceSavePoint(), false);
+  await history.runUndoable('Linear prefix', () => { state.drawings.linear.form.prefix = 'lin-after-switch'; });
+  show(app, 'circular');
+  assert.equal(history.canUndo(), false, 'Circular does not see the Linear step');
+  show(app, 'linear');
+  await app.undoHistory();
+  assert.equal(state.featurePanelTab.value, 'colors', 'the Linear Undo leaves the tab the switch set');
+});
+
 // A3 review 2 Low 4: a drawing step drops no project step; only the oldest
 // title step is gone after the limit.
 test('a step past the project limit drops only the oldest project step', async () => {

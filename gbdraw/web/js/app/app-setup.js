@@ -4292,7 +4292,8 @@ export const createAppSetup = () => {
   //      binds it. Its History takes the shared selections in its intent
   //      that changed while it was not shown.
   //   4. Reset the departing drawing's transient UI; the Preview search is
-  //      kept per drawing.
+  //      kept per drawing. The feature panel tab it resets is no Session
+  //      change (D-15-53).
   //   5. Show the arriving Result as a selection.
   // A switch waits for Generate, a label rerender, Save and Load, so each
   // Result lands in its own drawing's slot (OIPC-C07), and for a History
@@ -4326,6 +4327,7 @@ export const createAppSetup = () => {
     // 4. Transient UI. "Showing the last successful result" named the
     // departing drawing's Result, and the notice the departing drawing's work.
     resetModeTransientUi();
+    history.adoptSessionValues();
     noticeBanner.dismiss();
     previewFeatureSearch.switchModeSearch(departing.mode, arriving.mode);
     failedGeneratePreservedResult.value = false;
