@@ -166,7 +166,11 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
-from ...render.drawers.linear.annotations import linear_annotation_track_content
+from ...render.drawers.linear.annotations import (
+    linear_annotation_label_room,
+    linear_annotation_track_content,
+)
+from .annotation_labels import AnnotationLabelsBySlot, place_linear_annotation_labels
 from ...render.groups.linear import build_linear_feature_dom_index
 from ...render.composition import apply_composition_plan
 
@@ -858,6 +862,7 @@ def _linear_slot_footprints_for_record(
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
 ) -> tuple[dict[str, LinearSlotFootprint], float]:
     footprints: dict[str, LinearSlotFootprint] = {}
+    font_family = str(canvas_config._cfg.objects.text.font_family)
     label_band = measure_linear_label_band(
         labels,
         leader_stroke_width=float(canvas_config._cfg.labels.stroke_width.long),
@@ -942,22 +947,19 @@ def _linear_slot_footprints_for_record(
                 else []
             )
             params = annotation_track_params_from_mapping(slot.params)
-            top_overhang = 0.0
-            bottom_overhang = 0.0
-            labels_above = linear_annotation_labels_above(slot.side, params)
-            if params.show_labels:
-                for placement in placements:
-                    if not placement.annotation.label:
-                        continue
-                    style = placement.annotation.style
-                    label_overhang = float(style.label_offset) + 0.5 * float(
-                        style.label_font_size or 10.0
-                    )
-                    if labels_above:
-                        top_overhang = max(top_overhang, label_overhang)
-                    else:
-                        bottom_overhang = max(bottom_overhang, label_overhang)
-            expanded = body_band.expand(top_overhang, bottom_overhang)
+            # The labels' letters beyond the outer lane edge, which lies padding_px inside the body.
+            label_overhang = max(
+                (
+                    linear_annotation_label_room(placement.annotation, params, font_family)
+                    for placement in placements
+                ),
+                default=0.0,
+            )
+            label_overhang = max(0.0, label_overhang - params.padding_px)
+            if linear_annotation_labels_above(slot.side, params):
+                expanded = body_band.expand(label_overhang, 0.0)
+            else:
+                expanded = body_band.expand(0.0, label_overhang)
             available = bool(placements)
             footprints[slot.id] = LinearSlotFootprint(
                 paint_band=expanded if available else None,
@@ -1525,7 +1527,7 @@ def _linear_annotation_bounds(
     plan: LinearRecordVerticalPlan,
     *,
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
-    cfg: GbdrawConfig,
+    annotation_labels: AnnotationLabelsBySlot,
 ) -> list[Aabb]:
     """Return structured mark and label bounds for rendered annotation slots."""
 
@@ -1538,34 +1540,19 @@ def _linear_annotation_bounds(
         if track is None:
             continue
         params = annotation_track_params_from_mapping(slot.params)
+        labels = {label.annotation_id: label for label in annotation_labels.get(slot.id, ())}
         for item in track.placements:
             annotation = item.annotation
             if annotation.record_index != record_index:
                 continue
             style = effective_annotation_style(annotation, params)
             half_stroke = 0.5 * max(0.0, float(style.stroke_width))
-            min_x = min(float(start) for start, _end in annotation.segments) * scale
-            max_x = max(float(end) for _start, end in annotation.segments) * scale
-            if params.show_labels and annotation.label:
-                font_size = float(style.label_font_size or 10.0)
-                width, _height = calculate_bbox_dimensions(
-                    annotation.label,
-                    cfg.objects.text.font_family,
-                    font_size,
-                    cfg.canvas.dpi,
-                )
-                if style.label_position == "start":
-                    label_x = float(annotation.segments[0][0]) * scale
-                    label_min_x, label_max_x = label_x, label_x + width
-                elif style.label_position == "end":
-                    label_x = float(annotation.segments[-1][1]) * scale
-                    label_min_x, label_max_x = label_x - width, label_x
-                else:
-                    label_x = float(annotation.midpoint_bp) * scale
-                    label_min_x = label_x - (0.5 * width)
-                    label_max_x = label_x + (0.5 * width)
-                min_x = min(min_x, label_min_x)
-                max_x = max(max_x, label_max_x)
+            min_x = min(float(start) for start, _end in annotation.geometry_segments) * scale
+            max_x = max(float(end) for _start, end in annotation.geometry_segments) * scale
+            label = labels.get(annotation.id)
+            if label is not None:
+                min_x = min(min_x, label.ink.min_x)
+                max_x = max(max_x, label.ink.max_x)
             bounds.append(
                 Aabb(
                     placement.x + min_x - half_stroke,
@@ -1586,6 +1573,7 @@ def _collect_linear_primary_bounds(
     labels_by_record: list[list[dict]],
     record_depth_by_index: list[dict[int, DepthTrackData]],
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
+    annotation_labels_by_record: Sequence[AnnotationLabelsBySlot],
     normalized_comparisons: list[LinearComparison],
     canvas_config: LinearCanvasConfigurator,
     feature_config: FeatureDrawingConfigurator,
@@ -1720,7 +1708,7 @@ def _collect_linear_primary_bounds(
                 placement,
                 plan,
                 annotation_track_layouts=annotation_track_layouts,
-                cfg=cfg,
+                annotation_labels=annotation_labels_by_record[record_index],
             )
         )
 
@@ -2795,6 +2783,21 @@ def assemble_linear_diagram(
     label_fit = linear_label_fit(
         [(str(record.id), labels) for record, labels in zip(records, all_labels)], label_font_size
     )
+    # Annotation labels move along their spans off the feature labels and leaders (OV-845).
+    annotation_labels_by_record = [
+        place_linear_annotation_labels(
+            record_index=record_index,
+            record_length=len(record.seq),
+            sequence_width=record_placements[record_index].sequence_width,
+            plan=record_vertical_plans[record_index],
+            annotation_track_layouts=annotation_track_layouts,
+            feature_labels=all_labels[record_index] if record_index < len(all_labels) else [],
+            font_family=str(cfg.objects.text.font_family),
+            leader_stroke_width=float(cfg.labels.stroke_width.long),
+            gap=float(cfg.labels.spacing.linear),
+        )
+        for record_index, record in enumerate(records)
+    ]
 
     total_records = len(records)
     for count, record in enumerate(records, start=1):
@@ -2889,17 +2892,6 @@ def assemble_linear_diagram(
                     annotation_layout = annotation_track_layouts.get(slot.id)
                     if annotation_layout is None:
                         continue
-                    params = annotation_track_params_from_mapping(slot.params)
-                    bar_length = (
-                        float(sequence_width)
-                        if sequence_width is not None
-                        else float(canvas_config.alignment_width)
-                        * (
-                            1.0
-                            if canvas_config.normalize_length
-                            else len(record.seq) / max(1, canvas_config.longest_genome)
-                        )
-                    )
                     annotation_content = render_stage(
                         "annotation_content",
                         linear_annotation_track_content,
@@ -2907,12 +2899,12 @@ def assemble_linear_diagram(
                         record_id=str(record.id),
                         record_index=record_index,
                         record_length=len(record.seq),
-                        bar_length_px=bar_length,
+                        bar_length_px=float(sequence_width),
                         y_offset_px=0.0,
-                        side=slot.side,
                         height_px=float(resolved_slot.height),
                         font_family=str(cfg.objects.text.font_family),
-                        params=params,
+                        params=annotation_track_params_from_mapping(slot.params),
+                        labels=annotation_labels_by_record[record_index].get(slot.id, ()),
                         dom_group_id=slot_group_id,
                         semantic_slot_id=(
                             str(slot.id) if slot_group_id is not None else None
@@ -3123,6 +3115,7 @@ def assemble_linear_diagram(
         labels_by_record=all_labels,
         record_depth_by_index=record_depth_by_index,
         annotation_track_layouts=annotation_track_layouts,
+        annotation_labels_by_record=annotation_labels_by_record,
         normalized_comparisons=normalized_comparisons,
         canvas_config=canvas_config,
         feature_config=feature_config,

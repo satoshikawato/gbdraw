@@ -162,6 +162,17 @@ write-up of a release.
   only by the part of the room the gap did not already give (2 px for the
   tobacco chloroplast and AP027078). Figures without a labelled span are
   unchanged (OV-843).
+- Linear annotation labels (a labelled `highlight` row, `to_slot` span, or
+  annotation slot) no longer touch or overlap their own tint: the painted
+  letters now keep `label_offset` (4 px by default) clear of the mark's
+  stroke, and the label room grows to match (by up to 5 px; records grow
+  only where nothing else already gave that room, 2 to 3 px per record in
+  the tested figures) (OV-844). A label that crossed a feature
+  label's leader line or overlapped a feature label now moves along its
+  region to the nearest clear place; labels without such a conflict stay
+  where they were, for example the tobacco chloroplast `IRb` and `IRa` labels
+  with `--track_layout above` (OV-845). The label room now also follows a
+  slot's `style_override` font size and offset (OV-848).
 - Web app feature popup: the header shows the gene name, the product on up to
   two lines, and the record and location with thousands separators. **Edit**
   groups **Appearance** (fill, stroke, the label text with its visibility and
