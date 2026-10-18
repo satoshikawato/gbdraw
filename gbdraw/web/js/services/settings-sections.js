@@ -6,7 +6,11 @@
 // element carries its key through `v-settings-section`; `SettingsSectionIndex`
 // lists the entries of the shown mode (js/components.js). A card without an
 // entry of its own (Basic, the preserved-settings notice) names the entry that
-// docks it in the rail.
+// docks it in the rail. The list of drawn elements below names, for each
+// element of the Result that has a section, the section a click on it opens.
+import {
+  DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, LENGTH_BAR_ID, PLOT_TITLE_ID, TICK_GROUPS, trackGroupSelector
+} from './drawn-groups.js';
 
 /** @import { SettingsPaneDisplay } from './settings-pane-state.js' */
 
@@ -92,6 +96,51 @@ export const settingsEntryIn = (mode, key) => {
   const own = SETTINGS_SECTIONS.filter(hasEntry).find((entry) => entry.key === settingsEntryOf(key));
   const entries = settingsEntriesOf(mode, 'rail');
   return (entries.find((entry) => entry === own) ?? entries.find((entry) => entry.title === own?.title))?.key;
+};
+
+// The element of a section in the settings scroll area.
+/** @param {ParentNode} area The settings scroll area. @param {SettingsSectionKey} key */
+export const settingsSectionElement = (area, key) =>
+  /** @type {HTMLElement | null} */ (area.querySelector(`[data-settings-section="${key}"]`));
+
+// The drawn elements of a Result whose settings have a section: the scale
+// (the Circular ticks, the Linear bar or ruler), every dinucleotide track, and
+// the plot title. The groups are those of services/drawn-groups.js; a section
+// of one mode stands for the section of the same title in the other
+// (`settingsEntryIn`).
+/**
+ * The sections a drawn element opens. The template moves each of them into the
+ * popup beside the Result (index.html, `to="#settings-popup"`).
+ * @typedef {Extract<SettingsSectionKey, 'circular-axis' | 'linear-axis' | 'dinucleotide' | 'titles'>} DrawnElementSectionKey
+ */
+/** @type {readonly { readonly selector: string, readonly section: DrawnElementSectionKey }[]} */
+const DRAWN_ELEMENT_SECTIONS = Object.freeze([
+  { selector: trackGroupSelector(TICK_GROUPS), section: 'circular-axis' },
+  { selector: `#${LENGTH_BAR_ID}`, section: 'linear-axis' },
+  { selector: `${trackGroupSelector(DINUCLEOTIDE_CONTENT_GROUPS)}, ${trackGroupSelector(DINUCLEOTIDE_SKEW_GROUPS)}`, section: 'dinucleotide' },
+  { selector: `#${PLOT_TITLE_ID}`, section: 'titles' }
+]);
+
+export const DRAWN_ELEMENT_SELECTOR = DRAWN_ELEMENT_SECTIONS.map(({ selector }) => selector).join(', ');
+
+// The groups of a record are named after it, so those of a record called
+// `tick_1` or `skew_a` have ids that read like a track's: its definition
+// (`<record id>_definition…`; a Result drawn by 0.13.0 has the id alone, no
+// role) and, in such a Result, the group of its features (`<record id>…`).
+const RECORD_DEFINITION_SELECTOR = '[data-gbdraw-role^="record-definition"], [id*="_definition"]';
+const FEATURE_SELECTOR = '[data-gbdraw-feature-id]';
+
+/**
+ * The section that holds the settings of the drawn element an event in the
+ * Result reached: the element itself, or the group it is drawn in. A group of
+ * a record has none, whatever its id.
+ * @param {EventTarget | null} target
+ * @returns {DrawnElementSectionKey | null}
+ */
+export const drawnElementSection = (target) => {
+  const element = target instanceof Element ? target.closest(DRAWN_ELEMENT_SELECTOR) : null;
+  if (!element || element.matches(RECORD_DEFINITION_SELECTOR) || element.querySelector(FEATURE_SELECTOR)) return null;
+  return DRAWN_ELEMENT_SECTIONS.find(({ selector }) => element.matches(selector))?.section ?? null;
 };
 
 // What scrolls the settings: their scroll area, or the page in the phone

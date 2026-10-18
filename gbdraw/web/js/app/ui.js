@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { PersistedPreviewViewport } from '../services/config.js' */
+/** @import { PressPoint } from '../utils/popup-bounds.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
+import { isClickAtPress } from '../utils/popup-bounds.js';
 
 // Keep one burst alive through the existing 0.2 s transform transition. This
 // also absorbs browser delivery delay between nominally 80 ms wheel inputs.
@@ -491,6 +493,7 @@ export const createSidebarResize = (state) => {
  * @property {(callback: () => void) => void} onUnmounted
  * @property {() => void} closeRightDrawer
  * @property {() => boolean} previewPopupsHeld While it holds, a click outside leaves the feature and match popups as they are.
+ * @property {() => boolean} closeSettingsPopup The pane's closing of the popup that holds a settings section; whether it was open.
  */
 
 /** @param {GlobalUiEventsOptions} options */
@@ -499,7 +502,8 @@ export const setupGlobalUiEvents = ({
   onMounted,
   onUnmounted,
   closeRightDrawer,
-  previewPopupsHeld
+  previewPopupsHeld,
+  closeSettingsPopup
 }) => {
   const {
     clickedFeature,
@@ -516,10 +520,13 @@ export const setupGlobalUiEvents = ({
   // A click whose press began in a popup (a drag released past the popup's
   // clamp, a text selection) is not a click outside it.
   let pressStartedInPopup = false;
+  /** @type {PressPoint | null} */
+  let pressPoint = null;
   /** @param {MouseEvent} e */
   const rememberPressTarget = (e) => {
     pressStartedInPopup = e.target instanceof Element
       && Boolean(e.target.closest('.feature-popup, .pairwise-match-popup, .label-popup'));
+    pressPoint = { clientX: e.clientX, clientY: e.clientY };
   };
 
   /** @param {MouseEvent & { target: Element }} e A click; the popups and dialogs are elements. */
@@ -540,6 +547,9 @@ export const setupGlobalUiEvents = ({
       if (previewPopupsHeld()) return;
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
+      // The popup of a settings section stays through clicks elsewhere (Generate, Undo, the
+      // pane) and through a pan: a click on the Result's canvas that nothing took closes it.
+      if (e.target.closest('.preview-canvas') && isClickAtPress(pressPoint, e)) closeSettingsPopup();
     }
   };
 
@@ -555,6 +565,7 @@ export const setupGlobalUiEvents = ({
       if (clickedLabel.value) clickedLabel.value = null;
       return;
     }
+    if (closeSettingsPopup()) return;
     if (showCanvasControls.value) showCanvasControls.value = false;
     closeRightDrawer();
   };

@@ -1,11 +1,11 @@
 // @ts-check
 /** @import { DrawingState, PopupPosition } from '../../state.js' */
-/** @import { PopupOrigin } from '../../utils/popup-bounds.js' */
+/** @import { PopupAnchor, PopupBounds, PopupOrigin } from '../../utils/popup-bounds.js' */
 /** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
-import { placePopupNearPoint, popupViewportBounds } from '../../utils/popup-bounds.js';
+import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
@@ -25,6 +25,7 @@ import { featureIdentityKeyOf, featureOverrideValue } from '../../services/featu
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { COMPARISON_LEGEND_SELECTOR, legendEntryKey } from '../../services/legend-svg.js';
 import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.js';
+import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
   featureIdentity,
@@ -114,6 +115,13 @@ export {
  */
 
 /**
+ * The pane's way to show the settings section of a drawn element beside the
+ * clicked point: in a popup placed inside `bounds`, beside `anchor` and clear
+ * of the clicked item when there is room. Returns whether the section is shown.
+ * @typedef {(section: import('../../services/settings-sections.js').DrawnElementSectionKey, anchor: PopupAnchor, bounds: PopupBounds) => boolean} ShowElementSettings
+ */
+
+/**
  * @typedef {object} FeatureSvgActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(feature: Record<string, any>) => string} getFeatureColor The rule owner's color of a feature.
@@ -127,6 +135,8 @@ export {
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
  * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
  *   hidden), no gesture on the figure opens, retargets or closes a popup.
+ * @property {ShowElementSettings} [showElementSettings]
+ * @property {() => unknown} [closeElementSettings] The pane's closing of the popup that holds a settings section.
  */
 
 /**
@@ -214,6 +224,7 @@ export {
  * @property {Element | null} activeMatchHoverElement
  * @property {string} activeMatchHoverKey
  * @property {Element | null} pendingMatchElement
+ * @property {{ clientX: number, clientY: number } | null} pressPoint Where the last press on the Result began.
  * @property {Set<Element>} activeHoverElements
  * @property {string} hoverHighlightKey The hover whose highlight is written ('' for none).
  * @property {string} pendingHoverHighlightKey The hover whose highlight waits for the dwell.
@@ -254,7 +265,9 @@ export const createFeatureSvgActions = ({
   prepareDrawnFeatureMatches = () => true,
   featureSelection = null,
   previewTransformInteraction = null,
-  previewPopupsHeld = () => false
+  previewPopupsHeld = () => false,
+  showElementSettings = () => false,
+  closeElementSettings = () => {}
 }) => {
   const {
     orthogroups,
@@ -312,6 +325,17 @@ export const createFeatureSvgActions = ({
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === 'suppress') return 'exclude_matching';
     return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
+  };
+
+  // The Result shows one popup: the feature popup, the match frame (a match, a
+  // Legend row, a record definition), or the settings section of a drawn
+  // element. Opening one closes the others.
+  /** @param {'feature' | 'match' | 'settings'} opening */
+  const closeOtherPopups = (opening) => {
+    hideHoverSummary();
+    if (opening !== 'feature') clickedFeature.value = null;
+    if (opening !== 'match' && clickedPairwiseMatch) clickedPairwiseMatch.value = null;
+    if (opening !== 'settings') closeElementSettings();
   };
 
   // OV-371: a popup opened at a clicked point is placed beside it with an
@@ -626,8 +650,7 @@ export const createFeatureSvgActions = ({
     const featureElements = renderedSvgId ? getFeatureElements(svg, renderedSvgId) : [];
     if (renderedSvgId && featureElements.length === 0) return null;
 
-    hideHoverSummary();
-    if (clickedPairwiseMatch) clickedPairwiseMatch.value = null;
+    closeOtherPopups('feature');
     const featureElement = renderedSvgId
       ? getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null
       : null;
@@ -882,8 +905,7 @@ export const createFeatureSvgActions = ({
     if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos || previewPopupsHeld()) return null;
     const payload = buildMatchPayload(drawing, matchElement, featureLookup);
     if (!payload) return null;
-    hideHoverSummary();
-    clickedFeature.value = null;
+    closeOtherPopups('match');
     clickedPairwiseMatch.value = payload;
     placePopupAt(clickedPairwiseMatchPos, eventLike, 460);
     return payload;
@@ -908,8 +930,7 @@ export const createFeatureSvgActions = ({
     const anchor = Number.isFinite(eventLike?.clientX)
       ? eventLike
       : { clientX: rect.left + rect.width / 2, clientY: rect.bottom };
-    hideHoverSummary();
-    clickedFeature.value = null;
+    closeOtherPopups('match');
     // A Legend row's feature count reads the rule matches: the popup opens at
     // once and counts when they are prepared.
     const opened = { previewItem: item, matchesReady: item.kind !== 'legend-entry' };
@@ -978,6 +999,7 @@ export const createFeatureSvgActions = ({
       activeMatchHoverElement: null,
       activeMatchHoverKey: '',
       pendingMatchElement: null,
+      pressPoint: null,
       activeHoverElements: new Set(),
       hoverHighlightKey: '',
       pendingHoverHighlightKey: '',
@@ -1874,12 +1896,38 @@ export const createFeatureSvgActions = ({
           e.preventDefault();
           return;
         }
+        if (openDrawnElementSettings(e)) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
         if (isBackgroundPreviewClick(/** @type {Element} */ (e.target), svg)) { // a click on the Result targets an element
           featureSelection?.clearFeatureSelection?.({ clearStatus: true });
           if (previewPopupsHeld()) return;
           if (clickedFeature.value) clickedFeature.value = null;
           if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
         }
+      };
+
+      // A click on a drawn element whose settings have a section (the scale, a
+      // dinucleotide track, the plot title) shows that section in a popup
+      // beside the click, inside the Result's canvas and clear of the clicked
+      // item, as a click on a Legend row shows its popup: it takes the place of
+      // an open popup, and a feature selection stays. Nothing opens while
+      // Layout edit is on (a press drags there), while a review holds the
+      // popups, or when the press moved: a pan of the figure ends in a click
+      // on the element it began on.
+      /** @param {MouseEvent} e */
+      const openDrawnElementSettings = (e) => {
+        if (state.layoutRepositionMode?.value || previewPopupsHeld() || !isClickAtPress(handlerState.pressPoint, e)) return false;
+        const section = drawnElementSection(e.target);
+        const canvas = /** @type {Element | null} */ (state.canvasContainerRef?.value);
+        if (!section || !canvas) return false;
+        const { left, top, right, bottom } = /** @type {Element} */ (e.target).getBoundingClientRect();
+        const anchor = { x: e.clientX, y: e.clientY, avoid: { left, top, right, bottom } };
+        if (!showElementSettings(section, anchor, popupBoundsWithin(canvas.getBoundingClientRect()))) return false;
+        closeOtherPopups('settings');
+        return true;
       };
 
       /** @param {KeyboardEvent} e */
@@ -1901,6 +1949,7 @@ export const createFeatureSvgActions = ({
 
       /** @param {PointerEvent} e */
       const handlePointerDown = (e) => {
+        handlerState.pressPoint = { clientX: e.clientX, clientY: e.clientY };
         if (e.button === 0 && e.isPrimary !== false) {
           const matchEl = getPairwiseMatchClickTarget(e, svg);
           if (matchEl) {
@@ -2058,8 +2107,10 @@ export const createFeatureSvgActions = ({
     return true;
   };
 
-  // Legend rows and record definitions are buttons that open their popup;
-  // an export strips these attributes (stripTransientPreviewState).
+  // Legend rows and record definitions are buttons that open their popup. A
+  // drawn element whose settings have a section is marked `settings` for the
+  // pointer and the hint only: the section index is the keyboard way to its
+  // section. An export strips these attributes (stripTransientPreviewState).
   /** @param {{ root?: Element | null }} [options] */
   const preparePreviewItemAffordances = ({ root = null } = {}) => {
     const svg = root || delegatedFeatureHandlers?.svg || null;
@@ -2070,6 +2121,9 @@ export const createFeatureSvgActions = ({
       element.setAttribute('role', 'button');
       element.setAttribute('tabindex', '0');
       element.setAttribute('aria-haspopup', 'dialog');
+    });
+    svg.querySelectorAll(DRAWN_ELEMENT_SELECTOR).forEach((element) => {
+      if (drawnElementSection(element)) element.setAttribute('data-gbdraw-preview-item', 'settings');
     });
     return true;
   };

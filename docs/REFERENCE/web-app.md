@@ -1117,6 +1117,32 @@ edit** on, a press on these items drags them instead. The comparison legend
 opens no popup. Both popups open beside the clicked item and stay below the
 app header, as the feature popup does.
 
+With **Layout edit** off, a click on the Circular coordinate ticks or the
+Linear scale shows **Axis & Scale** in a popup beside the clicked point, a click
+on a dinucleotide content or skew track shows **Dinucleotide content/skew**, and
+a click on the plot title shows **Titles & Record Labels**. While the pointer is
+on one of them, the preview reads "Click to open its settings"; on the plot
+title and the Linear scale that line stands above "Turn on Layout edit to move
+this item". The popup holds the section itself, with the same controls and
+**Undo** steps: while it is open the settings pane does not list that section,
+and the section returns to the pane, open or closed as it was, when the popup
+closes. The popup opens clear of the clicked element where the preview has room
+beside, below, or above it. Drag the popup by its heading; when the window
+changes size, the popup moves back inside it, as the feature, match, Legend
+row, and record definition popups do. It stays open through **Generate**, and
+a click on another of these elements shows that element's section in it.
+
+The popup closes with its **Close section** button, Escape, a click on the
+figure's background, another popup of the Result (a feature, a match, a Legend
+row, a record definition), **Layout edit**, **Review alignment**, a mode
+switch, a loaded Session, or **Reset Settings**, when the section is opened in
+the pane with its icon button, and when the Result is not shown (the **Run
+info** tab, an **Undo** to before the first **Generate**). In the icon rail, a click on the element of
+the section that is docked moves the focus to that section and opens no popup.
+The click changes no setting and adds no **Undo** step, and a press that pans
+the figure opens nothing. While **Review alignment** is open, these elements
+open nothing and the preview does not read that line.
+
 Ctrl-click selects features for bulk color, legend name, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the name of another

@@ -145,7 +145,8 @@ import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
-import { placePopupNearPoint, popupViewportBounds } from '../utils/popup-bounds.js';
+import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
+/** @import { PopupPlacement } from '../utils/popup-bounds.js' */
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
@@ -1866,10 +1867,12 @@ export const createAppSetup = () => {
   // What the Review alignment panel took over while it is shown, given back when it ends: the
   // Editor drawer reopens on its tab, the popups (hidden meanwhile) show again, and the view
   // from before the fit returns. While it is set, no gesture on the figure and no click
-  // outside opens, retargets or closes a popup.
-  /** @type {{ drawerOpen: boolean, popup: unknown } | null} */
-  let similarityAlignmentTakeover = null;
-  const previewPopupsHeld = () => similarityAlignmentTakeover !== null;
+  // outside opens, retargets or closes a popup. The one predicate of that hold: the figure's
+  // gestures read it, and the preview's `preview-reviewing` class (the hint and the hand cursor
+  // of a drawn element) is bound to the same computed.
+  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, popup: unknown } | null} */ (null));
+  const previewPopupsHeldNow = computed(() => similarityAlignmentTakeover.value !== null);
+  const previewPopupsHeld = () => previewPopupsHeldNow.value;
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
   // The palette owner comes before the feature editor, whose popup sets a
   // type's default color through it (D-15).
@@ -1911,7 +1914,9 @@ export const createAppSetup = () => {
     shownLegendName: legendActions.shownLegendName,
     askChoice,
     showNotice,
-    revealSetting: settingsPaneActions.revealSetting
+    revealSetting: settingsPaneActions.revealSetting,
+    showElementSettings: settingsPaneActions.showSettingsBesideResult,
+    closeElementSettings: settingsPaneActions.closeSettingsPopup
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
@@ -1996,6 +2001,7 @@ export const createAppSetup = () => {
     onMounted,
     onUnmounted,
     closeRightDrawer: rightDrawerActions.closeRightDrawer,
+    closeSettingsPopup: settingsPaneActions.closeSettingsPopup,
     previewPopupsHeld
   });
   setupHistoryShortcuts({ history, onMounted, onUnmounted });
@@ -3609,6 +3615,7 @@ export const createAppSetup = () => {
         // of the previous Session.
         featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
         previewFeatureSearch.resetModeSearches();
+        settingsPaneActions.closeSettingsPopup();
         await nextTick();
         recordSessionLifecycleEvent('history-baseline-start');
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
@@ -4852,8 +4859,8 @@ export const createAppSetup = () => {
   // switch, a new Generate): the view and the drawer are that change's, and the review gives
   // neither back.
   const dropSimilarityAlignmentView = () => {
-    if (!similarityAlignmentTakeover || similarityAlignmentApplying) return;
-    similarityAlignmentTakeover.drawerOpen = false;
+    if (!similarityAlignmentTakeover.value || similarityAlignmentApplying) return;
+    similarityAlignmentTakeover.value.drawerOpen = false;
     releasePreviewViewport({ restore: false });
   };
   similarityAlignmentPorts.refreshCanvas = () => {
@@ -4915,9 +4922,9 @@ export const createAppSetup = () => {
   };
   watch(similarityAlignmentActions.dialogOpen, fitPreviewForSimilarityAlignment, { flush: 'post' });
   const endSimilarityAlignmentTakeover = () => {
-    const takeover = similarityAlignmentTakeover;
+    const takeover = similarityAlignmentTakeover.value;
     if (!takeover || similarityAlignmentApplying) return;
-    similarityAlignmentTakeover = null;
+    similarityAlignmentTakeover.value = null;
     if (takeover.drawerOpen) rightDrawerActions.openRightDrawerTab(rightDrawerTab.value);
     // The drawer narrows the visible frame, so the view returns after it.
     releasePreviewViewport({ restore: true });
@@ -4930,9 +4937,10 @@ export const createAppSetup = () => {
       return;
     }
     // A review shown again while an Apply is pending keeps what the first one took.
-    similarityAlignmentTakeover ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value };
+    similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value };
     holdPreviewViewport();
     rightDrawerActions.closeRightDrawer();
+    settingsPaneActions.closeSettingsPopup();
   }, { flush: 'sync' });
   /** @param {Event | null | undefined} event */
   const rememberSimilarityAlignmentInvoker = (event) => {
@@ -4977,7 +4985,7 @@ export const createAppSetup = () => {
       return;
     }
     // After Apply the focus returns once the outcome has given the drawer back.
-    if (open || similarityAlignmentTakeover) return;
+    if (open || similarityAlignmentTakeover.value) return;
     void restoreSimilarityAlignmentFocus();
   });
   onMounted(() => {
@@ -5152,6 +5160,7 @@ export const createAppSetup = () => {
     // A notice (a loaded Session's warnings, a table import) described the
     // settings the reset replaces. Generate keeps it: it describes the Session.
     noticeBanner.dismiss();
+    settingsPaneActions.closeSettingsPopup();
 
     // OV-287, OV-289, OV-290 (PD-OI-066): the displayed Result shows the
     // reset draft as the next Generate draws it. One projection of the editor
@@ -5281,7 +5290,7 @@ export const createAppSetup = () => {
   );
 
   /**
-   * @param {PopupPosition} pos
+   * @param {PopupPlacement} pos
    * @param {{ width: number, height: number }} size
    * @param {{ maxHeight: number }} constraints
    */
@@ -5294,6 +5303,11 @@ export const createAppSetup = () => {
   });
   const featurePopupStyle = computed(() => popupStyle(clickedFeaturePos, featurePopupSize, getFeaturePopupConstraints()));
   const pairwiseMatchPopupStyle = computed(() => popupStyle(clickedPairwiseMatchPos, pairwiseMatchPopupSize, getPairwiseMatchPopupConstraints()));
+  // The settings popup has the width of its stylesheet and the height of its section.
+  const settingsPopupStyle = computed(() => {
+    const pos = state.settingsPopup.value;
+    return pos ? popupStyle(pos, { width: 0, height: 0 }, popupConstraints(pos.x, pos.y, 0, 0)) : null;
+  });
 
   // OV-371: a popup opened at a clicked point was placed with an expected
   // size; once rendered it is placed again with its own size and content height.
@@ -5313,19 +5327,85 @@ export const createAppSetup = () => {
   watch(clickedFeature, () => placeRenderedPopup(clickedFeaturePos, featurePopupRef.value, '.feature-popup-body'), { flush: 'post' });
   watch(clickedPairwiseMatch, () => placeRenderedPopup(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value, '.pairwise-match-popup-body'), { flush: 'post' });
 
-  // A drag keeps the popup inside the popup bounds (OV-384: below the header).
+  // A press on the handle of an open popup drags it; every popup of the Result moves this way.
+  // A drag keeps the popup inside the popup bounds (OV-384: below the header), and a window that
+  // changed size moves an open popup the least distance back inside them (OV-626).
   /**
-   * @param {PopupPosition} pos
-   * @param {HTMLElement | null} element
-   * @param {number} x
-   * @param {number} y
+   * @param {object} popup
+   * @param {{ active: boolean, offsetX: number, offsetY: number }} popup.drag
+   * @param {() => boolean} popup.isOpen
+   * @param {(placement: PopupPlacement) => void} popup.moveTo The popup owner's move to a placement.
+   * @param {() => HTMLElement | null} popup.element
+   * @param {(target: Element) => boolean} popup.isHandle Whether a press on `target` drags the popup.
    */
-  const dragPopupTo = (pos, element, x, y) => {
-    const bounds = popupViewportBounds();
-    const margin = FEATURE_POPUP_MARGIN;
-    pos.x = clampNumber(x, margin, bounds.right - (element?.offsetWidth || 0) - margin);
-    pos.y = clampNumber(y, bounds.top + margin, bounds.bottom - (element?.offsetHeight || 0) - margin);
-    pos.maxHeight = 0;
+  const createPopupDrag = ({ drag, isOpen, moveTo, element, isHandle }) => {
+    /** @param {MouseEvent} event */
+    const move = (event) => {
+      const popup = element();
+      if (!drag.active || !isOpen()) return;
+      moveTo(placePopupWithin({
+        x: event.clientX - drag.offsetX, y: event.clientY - drag.offsetY,
+        width: popup?.offsetWidth || 0, height: popup?.offsetHeight || 0, bounds: popupViewportBounds()
+      }));
+    };
+    const end = () => {
+      drag.active = false;
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', end);
+    };
+    /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
+    const start = (event) => {
+      const popup = element();
+      if (event.button !== 0 || !popup || !isOpen() || !isHandle(event.target)) return;
+      const rect = popup.getBoundingClientRect();
+      drag.active = true;
+      drag.offsetX = event.clientX - rect.left;
+      drag.offsetY = event.clientY - rect.top;
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', end);
+      event.preventDefault();
+    };
+    const keepInWindow = () => {
+      const popup = element();
+      if (!popup || !isOpen()) return;
+      const { left: x, top: y } = popup.getBoundingClientRect();
+      const within = placePopupWithin({ x, y, width: popup.offsetWidth, height: popup.offsetHeight, bounds: popupViewportBounds() });
+      if (within.x !== x || within.y !== y) moveTo(within);
+    };
+    return { start, end, keepInWindow };
+  };
+  const featurePopupDragging = createPopupDrag({
+    drag: featurePopupDrag,
+    isOpen: () => Boolean(clickedFeature.value),
+    moveTo: (placement) => { Object.assign(clickedFeaturePos, placement); },
+    element: () => featurePopupRef.value,
+    isHandle: (target) => !featurePopupResize.active && !isInteractiveTarget(target)
+  });
+  const pairwiseMatchPopupDragging = createPopupDrag({
+    drag: pairwiseMatchPopupDrag,
+    isOpen: () => Boolean(clickedPairwiseMatch.value),
+    moveTo: (placement) => { Object.assign(clickedPairwiseMatchPos, placement); },
+    element: () => pairwiseMatchPopupRef.value,
+    isHandle: (target) => !pairwiseMatchPopupResize.active && !isInteractiveTarget(target)
+  });
+  // The heading of the section in the settings popup is the popup's handle. It is the section's
+  // own disclosure heading, which does not fold the section there.
+  const SETTINGS_POPUP_HEADING = '#settings-popup > [data-settings-section] > details > summary';
+  /** @param {Element} target */
+  const isSettingsPopupHeading = (target) => !isInteractiveTarget(target) && Boolean(target.closest(SETTINGS_POPUP_HEADING));
+  const settingsPopupDrag = createPopupDrag({
+    drag: { active: false, offsetX: 0, offsetY: 0 },
+    isOpen: () => Boolean(state.settingsPopup.value),
+    moveTo: settingsPaneActions.moveSettingsPopup,
+    element: () => document.getElementById('settings-popup'),
+    isHandle: isSettingsPopupHeading
+  });
+  const keepPopupsInWindow = () => [featurePopupDragging, pairwiseMatchPopupDragging, settingsPopupDrag].forEach((popup) => popup.keepInWindow());
+  onMounted(() => window.addEventListener('resize', keepPopupsInWindow));
+  onUnmounted(() => window.removeEventListener('resize', keepPopupsInWindow));
+  /** @param {MouseEvent & { target: Element }} event A click in the popup; its target is an element. */
+  const keepSettingsPopupSectionOpen = (event) => {
+    if (isSettingsPopupHeading(event.target)) event.preventDefault();
   };
 
   const pairwiseBlockOrthogroups = computed(() => (
@@ -5364,20 +5444,6 @@ export const createAppSetup = () => {
   });
 
   /** @param {MouseEvent} event */
-  const onPairwiseMatchPopupDrag = (event) => {
-    if (!pairwiseMatchPopupDrag.active || pairwiseMatchPopupResize.active) return;
-    dragPopupTo(clickedPairwiseMatchPos, pairwiseMatchPopupRef.value,
-      event.clientX - pairwiseMatchPopupDrag.offsetX, event.clientY - pairwiseMatchPopupDrag.offsetY);
-  };
-
-  const endPairwiseMatchPopupDrag = () => {
-    if (!pairwiseMatchPopupDrag.active) return;
-    pairwiseMatchPopupDrag.active = false;
-    document.removeEventListener('mousemove', onPairwiseMatchPopupDrag);
-    document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
-  };
-
-  /** @param {MouseEvent} event */
   const onPairwiseMatchPopupResize = (event) => {
     if (!pairwiseMatchPopupResize.active) return;
     const constraints = getPairwiseMatchPopupConstraints(clickedPairwiseMatchPos.x, clickedPairwiseMatchPos.y);
@@ -5396,23 +5462,6 @@ export const createAppSetup = () => {
   };
 
   /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
-  const startPairwiseMatchPopupDrag = (event) => {
-    if (event.button !== 0) return;
-    if (!clickedPairwiseMatch.value) return;
-    if (pairwiseMatchPopupResize.active) return;
-    if (isInteractiveTarget(event.target)) return;
-    const popup = pairwiseMatchPopupRef.value;
-    if (!popup) return;
-    const rect = popup.getBoundingClientRect();
-    pairwiseMatchPopupDrag.active = true;
-    pairwiseMatchPopupDrag.offsetX = event.clientX - rect.left;
-    pairwiseMatchPopupDrag.offsetY = event.clientY - rect.top;
-    document.addEventListener('mousemove', onPairwiseMatchPopupDrag);
-    document.addEventListener('mouseup', endPairwiseMatchPopupDrag);
-    event.preventDefault();
-  };
-
-  /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
   const startPairwiseMatchPopupResize = (event) => {
     if (event.button !== 0) return;
     if (!clickedPairwiseMatch.value) return;
@@ -5421,9 +5470,7 @@ export const createAppSetup = () => {
     const rect = popup.getBoundingClientRect();
     const constraints = getPairwiseMatchPopupConstraints(rect.left, rect.top);
 
-    pairwiseMatchPopupDrag.active = false;
-    document.removeEventListener('mousemove', onPairwiseMatchPopupDrag);
-    document.removeEventListener('mouseup', endPairwiseMatchPopupDrag);
+    pairwiseMatchPopupDragging.end();
 
     clickedPairwiseMatchPos.maxHeight = 0;
     pairwiseMatchPopupResize.active = true;
@@ -5437,13 +5484,6 @@ export const createAppSetup = () => {
     document.addEventListener('mouseup', endPairwiseMatchPopupResize);
     event.preventDefault();
     event.stopPropagation();
-  };
-
-  /** @param {MouseEvent} event */
-  const onFeaturePopupDrag = (event) => {
-    if (!featurePopupDrag.active || featurePopupResize.active) return;
-    dragPopupTo(clickedFeaturePos, featurePopupRef.value,
-      event.clientX - featurePopupDrag.offsetX, event.clientY - featurePopupDrag.offsetY);
   };
 
   /** @param {MouseEvent} event */
@@ -5464,30 +5504,6 @@ export const createAppSetup = () => {
     document.removeEventListener('mouseup', endFeaturePopupResize);
   };
 
-  const endFeaturePopupDrag = () => {
-    if (!featurePopupDrag.active) return;
-    featurePopupDrag.active = false;
-    document.removeEventListener('mousemove', onFeaturePopupDrag);
-    document.removeEventListener('mouseup', endFeaturePopupDrag);
-  };
-
-  /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
-  const startFeaturePopupDrag = (event) => {
-    if (event.button !== 0) return;
-    if (!clickedFeature.value) return;
-    if (featurePopupResize.active) return;
-    if (isInteractiveTarget(event.target)) return;
-    const popup = featurePopupRef.value;
-    if (!popup) return;
-    const rect = popup.getBoundingClientRect();
-    featurePopupDrag.active = true;
-    featurePopupDrag.offsetX = event.clientX - rect.left;
-    featurePopupDrag.offsetY = event.clientY - rect.top;
-    document.addEventListener('mousemove', onFeaturePopupDrag);
-    document.addEventListener('mouseup', endFeaturePopupDrag);
-    event.preventDefault();
-  };
-
   /** @param {MouseEvent & { target: Element }} event A press on the popup; its target is an element. */
   const startFeaturePopupResize = (event) => {
     if (event.button !== 0) return;
@@ -5497,9 +5513,7 @@ export const createAppSetup = () => {
     const rect = popup.getBoundingClientRect();
     const constraints = getFeaturePopupConstraints(rect.left, rect.top);
 
-    featurePopupDrag.active = false;
-    document.removeEventListener('mousemove', onFeaturePopupDrag);
-    document.removeEventListener('mouseup', endFeaturePopupDrag);
+    featurePopupDragging.end();
 
     clickedFeaturePos.maxHeight = 0;
     featurePopupResize.active = true;
@@ -6691,6 +6705,11 @@ export const createAppSetup = () => {
     startResizing,
     settingsPane: settingsPaneActions.settingsPane,
     revealSetting: settingsPaneActions.revealSetting,
+    revealSettingsSection: settingsPaneActions.revealSettingsSection,
+    closeSettingsPopup: settingsPaneActions.closeSettingsPopup,
+    settingsPopupStyle,
+    startSettingsPopupDrag: settingsPopupDrag.start,
+    keepSettingsPopupSectionOpen,
     showSettingsPaneRail: settingsPaneActions.showSettingsPaneRail,
     showSettingsPaneStacked: settingsPaneActions.showSettingsPaneStacked,
     closeDockedSettings: settingsPaneActions.closeDockedSettings,
@@ -7039,6 +7058,7 @@ export const createAppSetup = () => {
     similarityAlignmentNotice: similarityAlignmentActions.notice,
     similarityAlignmentRepair: similarityAlignmentActions.repair,
     similarityAlignmentDialogOpen: similarityAlignmentActions.dialogOpen,
+    previewPopupsHeld: previewPopupsHeldNow,
     similarityAlignmentApplyDisabledReason: similarityAlignmentActions.applyDisabledReason,
     similarityAlignmentDrawerReferenceKey: similarityAlignmentActions.drawerReferenceKey,
     featureDetailsPending,
@@ -7259,11 +7279,11 @@ export const createAppSetup = () => {
     clickedLabelPos,
     featurePopupRef,
     featurePopupStyle,
-    startFeaturePopupDrag,
+    startFeaturePopupDrag: featurePopupDragging.start,
     startFeaturePopupResize,
     pairwiseMatchPopupRef,
     pairwiseMatchPopupStyle,
-    startPairwiseMatchPopupDrag,
+    startPairwiseMatchPopupDrag: pairwiseMatchPopupDragging.start,
     startPairwiseMatchPopupResize,
     selectedPairwiseBlockOrthogroupId,
     pairwiseGroupView,

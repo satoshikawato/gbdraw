@@ -177,6 +177,29 @@ test('feature and match popups stay above the footer when opened low or dragged 
     await expect(matchPopup).toBeVisible();
     await dragDown(matchPopup);
     expect(await bottomOf(matchPopup), 'match popup dragged down').toBeLessThanOrEqual(await footerTop() + 0.5);
+
+    // OV-626: a window that gets narrower moves an open popup the least distance back inside it.
+    const insideNarrowerWindow = async (locator, name) => {
+      const before = await locator.boundingBox();
+      expect(before.x + before.width, `${name} starts right of the narrower window`).toBeGreaterThan(1100);
+      await page.setViewportSize({ width: 1100, height: 1000 });
+      await expect.poll(async () => { const box = await locator.boundingBox(); return box && box.x + box.width; }, { message: `${name} inside the window` })
+        .toBeLessThanOrEqual(1100);
+      await expect(locator, `${name} stays open`).toBeVisible();
+      const after = await locator.boundingBox();
+      expect(after.x, `${name} inside the window`).toBeGreaterThanOrEqual(0);
+      expect(after.y, `${name} keeps its height on the page`).toBeCloseTo(before.y, 0);
+      await page.setViewportSize({ width: 1600, height: 1000 });
+    };
+    await insideNarrowerWindow(matchPopup, 'match popup');
+    await page.keyboard.press('Escape');
+    await expect(matchPopup).toHaveCount(0);
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.type === 'CDS'), { clientX: 700, clientY: 400 });
+    });
+    await expect(featurePopup).toBeVisible();
+    await insideNarrowerWindow(featurePopup, 'feature popup');
   } finally {
     await page.context().close();
   }

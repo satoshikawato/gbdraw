@@ -7,6 +7,7 @@ import {
 import { planLegendComposition } from '../../services/legend-layout.js';
 import { legendPositionOfMode, readLegendPositionOfMode } from '../../services/layout-preferences.js';
 import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
+import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
 /** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy } from '../../services/legend-layout.js' */
 /** @import { LoadRepair } from '../../utils/load-repairs.js' */
 
@@ -1218,7 +1219,7 @@ const elementTag = (element) => String(element?.tagName || '').toLowerCase().rep
  */
 const discoverLegacyTargets = (svg) => {
   const legend = svg.getElementById?.('legend') || null;
-  const title = svg.getElementById?.('plot_title') || null;
+  const title = svg.getElementById?.(PLOT_TITLE_ID) || null;
   const primary = Array.from(svg.children || []).filter((element) => (
     elementTag(element) === 'g' && element !== legend && element !== title
   ));
@@ -1420,7 +1421,7 @@ export const normalizeLegacyComposition = (
   const primaryDeltaValues = Array.isArray(savedUserDeltas?.primary?.[0])
     ? savedUserDeltas.primary
     : targets.primary.map((target) => (
-        target.getAttribute?.('id') === 'length_bar'
+        target.getAttribute?.('id') === LENGTH_BAR_ID
           ? savedUserDeltas?.lengthBar ?? savedUserDeltas?.primary
           : savedUserDeltas?.primary
       ));

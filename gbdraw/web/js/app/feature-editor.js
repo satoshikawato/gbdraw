@@ -2,7 +2,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
-/** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
+/** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShowElementSettings, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
 /** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
@@ -72,6 +72,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {AskChoice} askChoice The root's choice dialog.
  * @property {ShowNotice} showNotice The root's notice banner: a table import or export reports there.
  * @property {RevealSetting} revealSetting The root's way to bring a setting of the settings pane into view.
+ * @property {ShowElementSettings} showElementSettings The pane's popup of the settings section of a drawn element.
+ * @property {() => unknown} closeElementSettings The pane's closing of that popup.
  */
 
 /** @param {FeatureEditorOptions} options */
@@ -112,7 +114,9 @@ export const createFeatureEditor = ({
   shownLegendName,
   askChoice,
   showNotice,
-  revealSetting
+  revealSetting,
+  showElementSettings,
+  closeElementSettings
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
   // R13: the label owner's reactions, registered once it exists; the owners
@@ -135,7 +139,9 @@ export const createFeatureEditor = ({
     onFeaturePopupOpened: () => editorPorts.syncLabelEditor({ reuseCurrentBinding: true }),
     featureSelection,
     previewTransformInteraction,
-    previewPopupsHeld
+    previewPopupsHeld,
+    showElementSettings,
+    closeElementSettings
   });
   const colorActions = createFeatureColorActions({
     state,

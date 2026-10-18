@@ -625,12 +625,15 @@ const isResizing = ref(false);
 // The display of the settings pane and the entry docked beside its icon rail.
 // services/settings-pane-state.js holds every transition; the browser, not
 // the Session, remembers the display (app/settings-pane.js).
-/** @import { SettingsPaneDisplay } from './services/settings-pane-state.js' */
+/** @import { SettingsPaneDisplay, SettingsPopup } from './services/settings-pane-state.js' */
 /** @import { SettingsSectionKey } from './services/settings-sections.js' */
 /** @type {{ value: SettingsPaneDisplay }} */
 const settingsPaneDisplay = ref(DEFAULT_SETTINGS_PANE_DISPLAY);
 /** @type {{ value: SettingsSectionKey | null }} */
 const settingsPaneDocked = ref(null);
+// The settings section a click on its drawn element moved to a popup beside the Result.
+/** @type {{ value: SettingsPopup | null }} */
+const settingsPopup = ref(null);
 
 // Legend Editor state
 const originalLegendOrder = ref([]); // Store original order from generation
@@ -1267,6 +1270,7 @@ export const state = {
   isResizing,
   settingsPaneDisplay,
   settingsPaneDocked,
+  settingsPopup,
   originalLegendOrder,
   originalLegendColors,
   legendStrokeOptionsOpen,

@@ -123,9 +123,15 @@ test('index.html names each section by its key, once on the element and once in 
   }
 });
 
-test('every top-level child of the settings scroll area is a section, so a rail entry docks it', () => {
+// A section that the popup beside the Result can hold stands inside a
+// `<teleport>`, which renders it in place while it is in the pane.
+const paneMarkup = () => {
   const start = html.indexOf('<div id="settings-sections"');
-  const { elements: area, depth } = elementsOf(html.slice(start, html.indexOf('<div class="generate-bar', start)));
+  return html.slice(start, html.indexOf('<div class="generate-bar', start)).replace(/<\/?teleport\b[^>]*>/g, '');
+};
+
+test('every top-level child of the settings scroll area is a section, so a rail entry docks it', () => {
+  const { elements: area, depth } = elementsOf(paneMarkup());
   assert.equal(area[0].depth, 0);
   // The scroll area closes before the Generate bar: the bar shows in every display.
   assert.equal(depth, 0, 'the Generate bar is outside the scroll area');
@@ -147,8 +153,7 @@ test('what stands beside a nested section has a tag the rail folds away', () => 
   const rule = html.match(/\[data-settings-in-dock="false"\]:not\(:has[^{]*\{ display: none; \}/)[0];
   const tagsAfter = (path) => new Set(rule.split(',').map((selector) => selector.trim().split(`[data-settings-in-dock="false"] > ${path}`)[1])
     .filter((rest) => rest !== undefined && /^[a-z]+(?![a-z >])/.test(rest)).map((rest) => rest.match(/^[a-z]+/)[0]));
-  const start = html.indexOf('<div id="settings-sections"');
-  const { elements: area } = elementsOf(html.slice(start, html.indexOf('<div class="generate-bar', start)));
+  const { elements: area } = elementsOf(paneMarkup());
   const nested = area.findIndex((element) => element.depth > 1 && /\sv-settings-section=/.test(element.attributes));
   assert.equal(area[nested].depth, 3, 'the nested section is a grandchild of its card');
   const parentOf = (index) => area.findLastIndex((element, order) => order < index && element.depth === area[index].depth - 1);

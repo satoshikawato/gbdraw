@@ -9,10 +9,11 @@ import {
   resolvePairwiseLegendGradientColorKeys
 } from '../utils/color-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR } from '../services/legend-svg.js';
-import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
+import {
+  DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, findTrackGroups
+} from '../services/drawn-groups.js';
 import { skewTrackColor } from '../services/track-legend-rows.js';
 
-export { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
 /** @param {unknown} value */
 const normalizeComparableColor = (value) => String(value || '').trim().toLowerCase();
@@ -129,11 +130,7 @@ export const createSvgStyles = ({
     const colors = appliedFeatureColors(state);
     let updatedCount = 0;
 
-    const gcContentGroups = getGroupsByBaseIds(
-      svg,
-      ['gc_content'],
-      ['dinucleotide_content']
-    );
+    const gcContentGroups = findTrackGroups(svg, DINUCLEOTIDE_CONTENT_GROUPS);
     if (gcContentGroups.length > 0 && colors.gc_content) {
       gcContentGroups.forEach((gcContentGroup) => {
         const gcPaths = gcContentGroup.querySelectorAll('path');
@@ -143,11 +140,7 @@ export const createSvgStyles = ({
       });
     }
 
-    const skewGroups = getGroupsByBaseIds(
-      svg,
-      ['skew', 'gc_skew'],
-      ['dinucleotide_skew']
-    );
+    const skewGroups = findTrackGroups(svg, DINUCLEOTIDE_SKEW_GROUPS);
     if (skewGroups.length > 0) {
       const tracks = readDrawnTracks();
       skewGroups.forEach((/** @type {Element} */ skewGroup) => {
@@ -264,11 +257,7 @@ export const createSvgStyles = ({
 
     let updated = false;
 
-    const gcContentGroups = getGroupsByBaseIds(
-      svg,
-      ['gc_content'],
-      ['dinucleotide_content']
-    );
+    const gcContentGroups = findTrackGroups(svg, DINUCLEOTIDE_CONTENT_GROUPS);
     if (gcContentGroups.length > 0) {
       const shouldHide = mode.value === 'circular' ? drawing.form.suppress_gc : !drawing.form.show_gc;
       gcContentGroups.forEach((gcContentGroup) => {
@@ -283,11 +272,7 @@ export const createSvgStyles = ({
       });
     }
 
-    const skewGroups = getGroupsByBaseIds(
-      svg,
-      ['skew', 'gc_skew'],
-      ['dinucleotide_skew']
-    );
+    const skewGroups = findTrackGroups(svg, DINUCLEOTIDE_SKEW_GROUPS);
     if (skewGroups.length > 0) {
       const shouldHide = mode.value === 'circular' ? drawing.form.suppress_skew : !drawing.form.show_skew;
       skewGroups.forEach((skewGroup) => {
@@ -302,7 +287,7 @@ export const createSvgStyles = ({
       });
     }
 
-    const depthGroups = getGroupsByBaseIds(svg, ['depth'], ['depth']);
+    const depthGroups = findTrackGroups(svg, DEPTH_GROUPS);
     if (depthGroups.length > 0) {
       const shouldHide = !drawing.form.show_depth;
       depthGroups.forEach((depthGroup) => {
