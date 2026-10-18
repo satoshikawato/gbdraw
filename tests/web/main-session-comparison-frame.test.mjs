@@ -9,6 +9,7 @@ const { MAIN_DISPLAY_FRAME_SESSION_VERSION } = await import('../../gbdraw/web/js
 
 const base64 = (text) => Buffer.from(text, 'utf8').toString('base64');
 const TABLE = 'q\ts\t99\t10\t0\t0\t1\t10\t1\t10\t0\t20\n';
+const digest = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 // A Linear Session that stored the comparison table of a reversed record (its
 // region is reverse-complemented) in the display frame.
@@ -26,7 +27,7 @@ const session = ({ version = MAIN_DISPLAY_FRAME_SESSION_VERSION, mode = 'linear'
   resources: resources ?? {
     q: { encoding: 'base64', data: base64('LOCUS q'), name: 'q.gb', size: 7 },
     s: { encoding: 'base64', data: base64('LOCUS s'), name: 's.gb', size: 7 },
-    table: { encoding: 'base64', data: base64(TABLE), name: 'table.tsv', size: TABLE.length, checksum: 'kept' }
+    table: { encoding: 'base64', data: base64(TABLE), name: 'table.tsv', size: TABLE.length, checksum: digest(TABLE) }
   }
 });
 
@@ -43,13 +44,13 @@ const NO_DISCOVERY = {
   gffFasta: async () => { throw new Error('no record discovery expected'); }
 };
 
-test('a stored table of a reversed record is rewritten in the search frame', async () => {
+test('a stored table of a reversed record is rewritten in the search frame, its checksum following the bytes (OV-1182)', async () => {
   const { calls, convertTable } = recordingConverter();
   const stored = session();
   const read = await convertMainSessionComparisonFrames(stored, { convertTable, discover: NO_DISCOVERY });
   assert.deepEqual(calls, [{ tableText: TABLE, queryFrame: { length: 20, reverse: true }, subjectFrame: { length: 0, reverse: false } }]);
   assert.deepEqual(read.resources.table, {
-    encoding: 'base64', data: base64('converted\n'), name: 'table.tsv', size: 10, checksum: 'kept'
+    encoding: 'base64', data: base64('converted\n'), name: 'table.tsv', size: 10, checksum: digest('converted\n')
   });
   assert.equal(read.resources.q, stored.resources.q);
   assert.equal(stored.resources.table.data, base64(TABLE), 'the stored document is not changed');

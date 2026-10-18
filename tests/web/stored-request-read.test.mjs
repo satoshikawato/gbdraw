@@ -615,17 +615,17 @@ const HARNESS_CANNOT_LOAD = new Map([
   // Their comparison tables are converted to the display frame by a Worker
   // (`convertMainSessionComparisonFrames`; OV-775, C-OD19 F2).
   ['q-frame-main-web-losatn.v42.gbdraw-session.json.gz', 'comparison conversion Worker'],
-  ['q-frame-main-web-upload.v42.gbdraw-session.json.gz', 'comparison conversion Worker'],
-  // Their protein results of a reversed record are converted to the search frame by a Worker
-  // (`convertStoredProteinResultFrames`; OV-1145).
-  ['BGC0000708-BGC0000713.v47.gbdraw-session.json.gz', 'protein result conversion Worker'],
-  ['majanivirus_collinear-rc.v47.gbdraw-session.json.gz', 'protein result conversion Worker']
+  ['q-frame-main-web-upload.v42.gbdraw-session.json.gz', 'comparison conversion Worker']
 ]);
 const REQUEST_ROW_CODES = new Set(['request-dropped', 'other-result-set-dropped', 'request-part-dropped', 'request-reference-dropped']);
 const requestRow = ({ code, path }) => REQUEST_ROW_CODES.has(code) || /^(otherModeResult\.)?renderRequest\b/.test(path);
 
 test('every Gallery Session and Session fixture loads with no stored-request row and commits the current schema (G3)', { timeout: 600000 }, async () => {
   const { readdirSync } = await import('node:fs');
+  // Node has no diagram Worker: Python's conversion of the protein results a
+  // Session up to 47 stored for a reversed record (OV-1145) answers "nothing changed".
+  const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+  setStoredProteinResultFrameConverter(async () => ({ result: { resources: {} } }));
   const findings = {};
   let loaded = 0;
   for (const folder of ['gbdraw/web/gallery/sessions/', 'tests/fixtures/sessions/']) {
@@ -642,6 +642,7 @@ test('every Gallery Session and Session fixture loads with no stored-request row
       loaded += 1;
     }
   }
+  setStoredProteinResultFrameConverter(null);
   assert.deepEqual(findings, {});
   assert.ok(loaded >= 50, String(loaded));
 });

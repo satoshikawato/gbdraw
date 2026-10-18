@@ -307,12 +307,13 @@ export const convertMainSessionComparisonFrames = async (
   const comparisons = request.comparisons;
   /** @type {readonly unknown[]} */
   const records = Array.isArray(request.records) ? request.records : [];
-  let resources = data.resources;
-  const converted = new Set();
+  const resources = data.resources;
+  /** @type {Map<string, ConvertedResource>} */
+  const converted = new Map();
   for (const stored of comparisons) {
     const comparison = /** @type {UnvalidatedFields<keyof CanonicalNucleotideBlastComparison>} */ (stored);
     const resourceId = comparison?.resourceId;
-    if (comparison?.kind !== 'nucleotideBlast' || !resourceId || converted.has(resourceId)) continue;
+    if (comparison?.kind !== 'nucleotideBlast' || !resourceId || converted.has(String(resourceId))) continue;
     // A table the Session does not hold is the request reader's to drop, with its row.
     const table = /** @type {StoredResource} */ (resources[String(resourceId)]);
     if (!table) continue;
@@ -325,11 +326,10 @@ export const convertMainSessionComparisonFrames = async (
       { tableText: bytesToText(base64ToBytes(String(table.data)), { fatal: true }), queryFrame, subjectFrame }
     ));
     const tsv = String(response?.result?.tsv ?? '');
-    resources = {
-      ...resources,
-      [String(resourceId)]: { ...table, encoding: 'base64', data: textToBase64(tsv), size: textToBytes(tsv).length }
-    };
-    converted.add(resourceId);
+    converted.set(String(resourceId), { data: textToBase64(tsv), size: textToBytes(tsv).length });
   }
-  return converted.size > 0 ? /** @type {T} */ ({ ...data, resources }) : data;
+  // One owner of replaced resource bytes: the size and any checksum follow them (OV-1182).
+  return converted.size > 0
+    ? /** @type {T} */ ({ ...data, resources: await withConvertedResources(resources, converted) })
+    : data;
 };
