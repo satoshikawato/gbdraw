@@ -275,7 +275,6 @@ const WRITES = {
   labelTables: {
     replaceBulkLabelEdits: (h) => modules.labelTables.replaceBulkLabelEdits(h, { kinase: 'K' }),
     clearLabelTextEdits: (h) => modules.labelTables.clearLabelTextEdits(h),
-    resetLabelFilters: (h) => modules.labelTables.resetLabelFilters(h),
     setLabelFilterMode: (h) => modules.labelTables.setLabelFilterMode(h, 'Blacklist'),
     setBlacklistText: (h) => modules.labelTables.setBlacklistText(h, 'unknown'),
     appendBlacklistWords: (h) => modules.labelTables.appendBlacklistWords(h, ['hypothetical']),
@@ -313,7 +312,6 @@ const WRITES = {
   groupNames: {
     setGroupName: (h) => modules.groupNames.setGroupName(h, 'g2', 'Second'),
     setGroupDescription: (h) => modules.groupNames.setGroupDescription(h, 'g2', 'Second description'),
-    clearGroupRenames: (h) => modules.groupNames.clearGroupRenames(h),
     clearDormantGroupNames: (h) => modules.groupNames.clearDormantGroupNames(h),
     clearGroupRename: (h) => modules.groupNames.clearGroupRename(h, 'g1')
   },

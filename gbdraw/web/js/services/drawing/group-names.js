@@ -107,9 +107,6 @@ export const setGroupDescription = (slice, groupId, description) => {
   else delete descriptions[groupId];
 };
 
-/** Removes every group's user name and description (Reset Settings keeps the dormant names). @param {GroupNamesSlice} slice */
-export const clearGroupRenames = (slice) => install(slice, { orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {} });
-
 /** Removes the dormant names (Clear dormant names). @param {GroupNamesSlice} slice */
 export const clearDormantGroupNames = (slice) => install(slice, { orthogroupDormantOverrides: {} });
 

@@ -11,7 +11,7 @@ import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
 import { PALETTE_SLICE, createDefaultPaletteData } from './drawing/palette.js';
-import { clearLabelTextEdits, resetLabelFilters } from './drawing/label-tables.js';
+import { LABEL_TABLES_SLICE } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 import { resetPaintEdits } from './drawing/paint.js';
 import { SETTINGS_SLICE } from './drawing/settings.js';
@@ -77,7 +77,6 @@ const resetPaletteState = (state, drawing) => {
  */
 const resetRuleDraftState = (state, drawing) => {
   const editorDefaults = createDefaultEditorDraftState();
-  resetLabelFilters(drawing.slices.labelTables);
   COLOR_RULES_SLICE.reset(drawing.slices.colorRules);
   replaceReactiveObject(state.newSpecRule, createDefaultSpecificRule());
   state.selectedSpecificPreset.value = editorDefaults.selectedSpecificPreset;
@@ -99,9 +98,6 @@ const resetEditorDraftState = (state, drawing) => {
   // the caption Python draws, its key.
   resetPaintEdits(drawing.slices.paint);
 
-  // The saved label table of a loaded Session goes with the bulk label edits,
-  // also when the bulk map is already empty (R15-21).
-  clearLabelTextEdits(drawing.slices.labelTables);
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
 
@@ -113,8 +109,6 @@ const resetEditorDraftState = (state, drawing) => {
   state.clickedLabel.value = null;
 
   state.selectedOrthogroupAlignmentFeature.value = '';
-  // Reset clears the dormant group names too (R15-21).
-  GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
 };
 
 // Reset Settings returns both drawings to their own mode's defaults
@@ -127,6 +121,11 @@ export const resetSettings = (state) => {
     SETTINGS_SLICE.reset(drawing.slices.settings);
     ANNOTATION_SETS_SLICE.reset(drawing.slices.annotationSets);
     FEATURE_EDITS_SLICE.reset(drawing.slices.featureEdits);
+    // The label tables (the bulk label edits, a loaded Session's saved label
+    // table, and the filters) and the Similarity group names, the dormant
+    // ones included, return to a new drawing's (R15-21).
+    LABEL_TABLES_SLICE.reset(drawing.slices.labelTables);
+    GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
     state.selectedAnnotation.value = null;
     state.suppressCircularMultiRecordDefaults.value = false;
     resetPaletteState(state, drawing);

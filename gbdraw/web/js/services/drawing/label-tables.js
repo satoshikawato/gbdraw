@@ -180,12 +180,6 @@ export const replaceBulkLabelEdits = (slice, edits) => {
 export const clearLabelTextEdits = (slice) => install(slice, { labelTextBulkOverrides: {}, canonicalLabelOverrideRows: [] });
 
 /**
- * The label filters return to a new drawing's (Reset Settings).
- * @param {LabelTablesSlice} slice
- */
-export const resetLabelFilters = (slice) => install(slice, createDefaultLabelFilters());
-
-/**
  * @param {LabelTablesSlice} slice
  * @param {LabelFilterMode} mode
  */
