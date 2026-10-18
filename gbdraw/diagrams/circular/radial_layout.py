@@ -64,21 +64,37 @@ AnnotationLabelRoom = Callable[[RadialBand, CircularAxisLayout, str, Mapping[str
 
 
 @dataclass(frozen=True)
-class _GcTrack:
-    """A GC row a placement window may keep room for (OV-1274), in the words its failure uses."""
+class _SwitchedTrack:
+    """A track row with an off option, in the words a fit failure offers it with (OV-1274, OV-1276)."""
 
-    # The diagnostic identifier (``keptInsideTracks``; utils/error-normalization.js names it).
+    # The diagnostic identifier (``keptInsideTracks``, ``slotTrack``; utils/error-normalization.js words it).
     diagnostic_id: str
     words: str
     off_option: str
-    width_option: str
+    # The option that narrows the row, or None.
+    width_option: str | None = None
 
 
-# The GC rows by renderer. Other rows kept inside are named by slot ID only.
-_GC_TRACKS: Mapping[str, _GcTrack] = {
-    "dinucleotide_content": _GcTrack("gc_content", "GC content", "--no-gc", "--gc_content_width"),
-    "dinucleotide_skew": _GcTrack("gc_skew", "GC skew", "--no-skew", "--gc_skew_width"),
+# The rows with an off option, by renderer. Other rows are named by slot ID only.
+_SWITCHED_TRACKS: Mapping[str, _SwitchedTrack] = {
+    "dinucleotide_content": _SwitchedTrack("gc_content", "GC content", "--no-gc", "--gc_content_width"),
+    "dinucleotide_skew": _SwitchedTrack("gc_skew", "GC skew", "--no-skew", "--gc_skew_width"),
+    "ticks": _SwitchedTrack("ticks", "scale", "--hide_scale"),
 }
+# Their diagnostic identifiers: the vocabulary of the Web error adapter.
+SWITCHED_TRACK_IDS: frozenset[str] = frozenset(track.diagnostic_id for track in _SWITCHED_TRACKS.values())
+
+
+def _switched_track_remedy(tracks: Sequence[_SwitchedTrack]) -> str:
+    """Turning ``tracks`` off (and narrowing those with a width option), as list items ending in ", ", or ""."""
+
+    narrowable = [(track, track.width_option) for track in tracks if track.width_option is not None]
+    remedy = ""
+    if narrowable:
+        words = " and ".join(track.words for track, _width in narrowable)
+        options = ", ".join([*(track.off_option for track, _width in narrowable), *(width for _track, width in narrowable)])
+        remedy = f"turn off or narrow the {words} track{'s' if len(narrowable) > 1 else ''} ({options}), "
+    return remedy + "".join(f"hide the {track.words} ({track.off_option}), " for track in tracks if track.width_option is None)
 
 
 # The owner of the center reservation band among the occupied bands.
@@ -112,12 +128,12 @@ class PlacementWindow:
         return max(float(self.inner_px), float(self.center_reserved_px))
 
     @property
-    def kept_gc_tracks(self) -> tuple[_GcTrack, ...]:
-        """The GC rows among the rows kept inside, each once, in slot order."""
+    def kept_switched_tracks(self) -> tuple[_SwitchedTrack, ...]:
+        """The rows with an off option among the rows kept inside, each once, in slot order."""
 
         if self.kept_inside_px <= LAYOUT_EPSILON:
             return ()
-        tracks = (_GC_TRACKS.get(slot.renderer) for slot in self.kept_inside_slots)
+        tracks = (_SWITCHED_TRACKS.get(slot.renderer) for slot in self.kept_inside_slots)
         return tuple(dict.fromkeys(track for track in tracks if track is not None))
 
 
@@ -164,7 +180,7 @@ def _cannot_fit_diagnostic(
     """Track row and usable band of a fit failure; the slot ID stays private.
 
     A pinned slot has no band to report, and an unbounded band is omitted. The
-    room kept below the band and the GC rows it is kept for (OV-1274) are named.
+    room kept below the band and the rows with an off option it is kept for (OV-1274) are named.
     """
 
     diagnostic: dict[str, object] = {"code": "TRACK_LAYOUT", "reason": "CANNOT_FIT"}
@@ -173,9 +189,9 @@ def _cannot_fit_diagnostic(
         diagnostic["outerPx"] = max(0, round(float(window.outer_px)))
     if window is not None and window.kept_inside_px > LAYOUT_EPSILON:
         diagnostic["keptInsidePx"] = round(float(window.kept_inside_px))
-        gc_tracks = window.kept_gc_tracks
-        if gc_tracks:
-            diagnostic["keptInsideTracks"] = [track.diagnostic_id for track in gc_tracks]
+        kept_tracks = window.kept_switched_tracks
+        if kept_tracks:
+            diagnostic["keptInsideTracks"] = [track.diagnostic_id for track in kept_tracks]
     if intent is not None:
         diagnostic["slotIndex"] = int(intent.slot_index)
     return diagnostic
@@ -1445,11 +1461,16 @@ class _InsideFitError(ValidationError):
         self.subject = subject
         self.placement_window = placement_window
         self.hint = hint
+        # The failed row, when it has an off option (OV-1276: the scale ticks).
+        self.slot_track = _SWITCHED_TRACKS.get(intent.renderer) if intent is not None else None
         kept = self._kept_inside()
+        diagnostic = _cannot_fit_diagnostic(intent, placement_window)
+        if self.slot_track is not None:
+            diagnostic["slotTrack"] = self.slot_track.diagnostic_id
         super().__init__(
             f"{self._between()}{f'; below it, {kept}' if kept else ''}. Move the slot, reduce widths, "
-            f"disable conflicting labels, {self._gc_remedy()}or use side=outside.{hint}",
-            diagnostic=_cannot_fit_diagnostic(intent, placement_window),
+            f"disable conflicting labels, {self._switch_remedy()}or use side=outside.{hint}",
+            diagnostic=diagnostic,
         )
 
     def _between(self) -> str:
@@ -1467,15 +1488,11 @@ class _InsideFitError(ValidationError):
         slot_ids = ", ".join(f"'{slot.slot_id}'" for slot in window.kept_inside_slots)
         return f"{window.kept_inside_px:.1f}px are kept for the tracks inside it ({slot_ids})"
 
-    def _gc_remedy(self) -> str:
-        """The remedy of the GC rows the window keeps room for (OV-1274), as a list item, or ""."""
+    def _switch_remedy(self) -> str:
+        """Turning off the failed row or the rows the window keeps room for (OV-1274, OV-1276), or ""."""
 
-        tracks = self.placement_window.kept_gc_tracks
-        if not tracks:
-            return ""
-        words = " and ".join(track.words for track in tracks)
-        options = ", ".join([*(track.off_option for track in tracks), *(track.width_option for track in tracks)])
-        return f"turn off or narrow the {words} track{'s' if len(tracks) > 1 else ''} ({options}), "
+        failed = () if self.slot_track is None else (self.slot_track,)
+        return _switched_track_remedy(tuple(dict.fromkeys((*failed, *self.placement_window.kept_switched_tracks))))
 
     def limited_by_center(self, reserved_radius_px: float, *, explicit_radius: bool) -> ValidationError:
         """Name the center reservation (definition text or explicit radius) as the cause."""
@@ -1483,17 +1500,17 @@ class _InsideFitError(ValidationError):
         kept = self._kept_inside()
         reserved = f"{float(reserved_radius_px):.1f}px{f' and {kept}' if kept else ''}"
         if explicit_radius:
-            gc_remedy = self._gc_remedy()
+            switch_remedy = self._switch_remedy()
             message = (
                 f"{self._between()} because center_reserved_radius reserves {reserved}. "
-                f"Set a smaller center_reserved_radius{f', {gc_remedy}' if gc_remedy else ' '}"
+                f"Set a smaller center_reserved_radius{f', {switch_remedy}' if switch_remedy else ' '}"
                 f"or place tracks outside.{self.hint}"
             )
         else:
             message = (
                 f"{self._between()} because the center definition text reserves {reserved}. "
                 "Shorten the species or strain text, reduce the definition font size, "
-                f"set a smaller center_reserved_radius, {self._gc_remedy()}or place tracks outside.{self.hint}"
+                f"set a smaller center_reserved_radius, {self._switch_remedy()}or place tracks outside.{self.hint}"
             )
         return ValidationError(
             message,

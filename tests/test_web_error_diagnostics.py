@@ -571,19 +571,19 @@ def test_circular_labels_that_do_not_fit_reach_the_web_as_label_layout():
 
 
 def test_the_gc_rows_kept_inside_a_placement_reach_the_web_by_name() -> None:
-    """OV-1274: the GC rows a placement keeps room for pass the adapter, and the Web wording owner names each."""
+    """OV-1274, OV-1276: the rows with an off option that a placement names pass the adapter by the engine's
+    vocabulary, and the Web wording owner words each."""
 
     import re
 
-    from gbdraw.diagrams.circular.radial_layout import _GC_TRACKS
-    from gbdraw.web_support.error_adapter import KEPT_INSIDE_TRACKS
+    from gbdraw.diagrams.circular.radial_layout import SWITCHED_TRACK_IDS
 
     wording = (Path(__file__).resolve().parents[1] / "gbdraw" / "web" / "js" / "utils" / "error-normalization.js").read_text(
         encoding="utf-8"
     )
-    block = wording[wording.index("const KEPT_INSIDE_TRACKS") :]
+    block = wording[wording.index("const SWITCHED_TRACKS") :]
     web_tracks = set(re.findall(r"\b([a-z_]+): \{ name:", block[: block.index("});")]))
-    assert {track.diagnostic_id for track in _GC_TRACKS.values()} == KEPT_INSIDE_TRACKS == web_tracks
+    assert SWITCHED_TRACK_IDS == web_tracks == {"gc_content", "gc_skew", "ticks"}
 
     context = serialize_web_error(
         ValidationError(
@@ -593,15 +593,18 @@ def test_the_gc_rows_kept_inside_a_placement_reach_the_web_by_name() -> None:
                 "reason": "CANNOT_FIT",
                 "keptInsidePx": 34,
                 "keptInsideTracks": ["gc_skew", "PRIVATE", "gc_skew"],
+                "slotTrack": "ticks",
             },
         ),
         operation="generate",
         stage="render",
     )["context"]
-    assert context == {"reason": "CANNOT_FIT", "keptInsidePx": 34, "keptInsideTracks": "gc_skew"}
+    assert context == {"reason": "CANNOT_FIT", "keptInsidePx": 34, "keptInsideTracks": "gc_skew", "slotTrack": "ticks"}
     unnamed = serialize_web_error(
-        ValidationError("PRIVATE", diagnostic={"code": "TRACK_LAYOUT", "keptInsideTracks": ["PRIVATE"]}),
+        ValidationError(
+            "PRIVATE", diagnostic={"code": "TRACK_LAYOUT", "keptInsideTracks": ["PRIVATE"], "slotTrack": "depth"}
+        ),
         operation="generate",
         stage="render",
     )["context"]
-    assert "keptInsideTracks" not in unnamed
+    assert "keptInsideTracks" not in unnamed and "slotTrack" not in unnamed

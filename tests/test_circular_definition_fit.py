@@ -240,7 +240,7 @@ def test_definition_that_cannot_be_wrapped_reports_the_definition_band() -> None
     payload = serialize_web_error(error, operation="generate", stage="render")
     assert payload["code"] == "TRACK_LAYOUT"
     assert payload["context"]["reason"] == "DEFINITION_RESERVED"
-    assert set(payload["context"]) <= {"reason", "slotIndex", "innerPx", "outerPx", "keptInsidePx", "keptInsideTracks"}
+    assert set(payload["context"]) <= {"reason", "slotIndex", "innerPx", "outerPx", "keptInsidePx", "keptInsideTracks", "slotTrack"}
 
 
 @pytest.mark.circular
@@ -301,16 +301,35 @@ def test_the_definition_band_failure_offers_the_gc_tracks_kept_inside(tmp_path: 
     assert context["keptInsideTracks"] == "gc_skew"
     assert 33 <= context["keptInsidePx"] <= 34
 
-    # With both rows off the features fit; the scale ticks are the next limit (no GC remedy).
+    # With both rows off no GC row is named or offered. (This figure still fails, on the scale ticks: OV-1276,
+    # whose window and remedy the next test pins.)
     error = _lambda_resolved_overlaps(tmp_path, "--no-gc", "--no-skew")
-    assert "Circular track slot 'ticks'" in str(error)
     assert "GC" not in str(error)
     assert "keptInsideTracks" not in serialize_web_error(error, operation="generate", stage="render")["context"]
 
 
 @pytest.mark.circular
+def test_the_room_kept_inside_names_every_row_and_offers_only_the_gc_rows(tmp_path: Path) -> None:
+    """OV-1274 (review N-1): a Depth row shares the kept room; only the GC rows travel to the Web as named rows.
+
+    tests/web/error-normalization.test.mjs words this context ("among them GC content and GC skew").
+    """
+
+    depth = tmp_path / "lambda.depth.tsv"
+    depth.write_text("".join(f"NC_001416.1\t{position}\t{10 + position % 7}\n" for position in range(1, 48503, 50)))
+    error = _lambda_resolved_overlaps(tmp_path, "--depth_track", str(depth))
+    message = str(error)
+    assert "90.8px are kept for the tracks inside it ('depth', 'gc_content', 'gc_skew')" in message
+    assert "turn off or narrow the GC content and GC skew tracks" in message
+    context = serialize_web_error(error, operation="generate", stage="render")["context"]
+    assert (context["keptInsidePx"], context["keptInsideTracks"]) == (91, "gc_content,gc_skew")
+    assert "slotTrack" not in context
+
+
+@pytest.mark.circular
 def test_the_definition_band_failure_starts_its_band_at_the_reserve(tmp_path: Path) -> None:
-    """OV-1276: a window with nothing kept inside it starts at the definition band, in the message and the context."""
+    """OV-1276: a window with nothing kept inside it starts at the definition band, in the message and the context;
+    the scale ticks that do not fit offer hiding the scale."""
 
     error = _lambda_resolved_overlaps(tmp_path, "--no-gc", "--no-skew")
     assert _layout_reason(error) == "DEFINITION_RESERVED"
@@ -318,5 +337,6 @@ def test_the_definition_band_failure_starts_its_band_at_the_reserve(tmp_path: Pa
         "Circular track slot 'ticks' cannot fit inside between 122.6px and 386.1px "
         "because the center definition text reserves 122.6px."
     ) in str(error)
+    assert "set a smaller center_reserved_radius, hide the scale (--hide_scale), or place tracks outside." in str(error)
     context = serialize_web_error(error, operation="generate", stage="render")["context"]
-    assert (context["innerPx"], context["outerPx"]) == (123, 386)
+    assert (context["innerPx"], context["outerPx"], context["slotTrack"]) == (123, 386, "ticks")

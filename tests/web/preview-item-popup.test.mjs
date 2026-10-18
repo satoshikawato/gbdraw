@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { createPreviewItemPopup, previewItemTarget } from '../../gbdraw/web/js/app/preview-item-popup.js';
+import { legendEntryKey } from '../../gbdraw/web/js/services/legend-svg.js';
+import { trackLegendRows } from '../../gbdraw/web/js/services/track-legend-rows.js';
 
 class FakeElement {
   constructor(attributes = {}, { parent = null, text = '', children = [] } = {}) {
@@ -78,7 +80,8 @@ const createPopup = ({
   requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }],
   recordRows = [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
   rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null, trackKinds = {},
-  countLegendCaptionFeatures = () => featureCount
+  countLegendCaptionFeatures = () => featureCount,
+  readLegendTrackKind = (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null
 } = {}) => {
   const steps = [];
   const form = {
@@ -100,7 +103,7 @@ const createPopup = ({
     readShownLegendName,
     readLegendRowRules: () => rules,
     countLegendCaptionFeatures,
-    readLegendTrackKind: (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null,
+    readLegendTrackKind,
     getCommittedRequest: () => ({ records: requestRecords }),
     readCommittedRecordRows: () => recordRows,
     readAlignmentInspector: () => alignment && { records: [alignment] },
@@ -329,6 +332,29 @@ test('the legend-entry view of a track row names its plot, not features (OV-1272
   const preparing = openView(created, { kind: 'legend-entry', key: 'GC content' }, false);
   assert.equal(preparing.subtitle, 'Content plot');
   assert.equal(counted, 0, 'a track row counts no features');
+});
+
+// Review N6: the row kind comes from Python's keys (trackLegendRows), never from the name. A feature row named
+// "GC content" holds that key, and the content track takes "GC content (2)" (D-15-65). The port is wired as
+// app-setup.js `readLegendTrackKind` wires it: displayedTrackLegendRows(...).get(legendEntryKey(entry))?.kind.
+test('a feature row named like a track row keeps the feature view (OV-1272)', () => {
+  const pythonRows = new Map([['GC content', { color: '#ff0000' }], ['GC content (2)', { color: '#a0a0a0' }]]);
+  const rows = trackLegendRows(
+    [{ slotId: null, kind: 'content', label: 'GC content', positiveColor: null, negativeColor: null }], pythonRows);
+  const created = createPopup({
+    entries: [
+      { caption: 'GC content', originalCaption: 'GC content', color: '#ff0000' },
+      { caption: 'GC content (2)', originalCaption: 'GC content (2)', color: '#a0a0a0' }
+    ],
+    featureTypes: ['CDS'], featureCount: 3,
+    readLegendTrackKind: (entry) => rows.get(legendEntryKey(entry))?.kind ?? null
+  });
+  const feature = openView(created, { kind: 'legend-entry', key: 'GC content' });
+  const track = openView(created, { kind: 'legend-entry', key: 'GC content (2)' });
+  assert.equal(feature.subtitle, '3 features');
+  assert.notEqual(feature.colorSource, track.colorSource);
+  assert.equal(track.subtitle, 'Content plot');
+  assert.equal(track.colorSource, 'Changes this legend swatch only. The plot keeps the color set in Settings.');
 });
 
 test('the record-definition view lists the facts of the displayed Result', () => {

@@ -257,12 +257,15 @@ export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default c
   'label-whitelist': 'Label whitelist', 'qualifier-priority': 'Qualifier priority', 'feature-visibility': 'Feature visibility',
   'label-overrides': 'Label overrides' });
 const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
-// OV-1274: the GC rows a Circular placement keeps room for below its band
-// (gbdraw/web_support/error_adapter.py `KEPT_INSIDE_TRACKS`), and the control that hides each.
-/** @type {Readonly<Record<string, { name: string, hide: string }>>} */
-const KEPT_INSIDE_TRACKS = Object.freeze({
-  gc_content: { name: 'GC content', hide: 'Hide GC Content' },
-  gc_skew: { name: 'GC skew', hide: 'Hide GC Skew' }
+// OV-1274, OV-1276: the Circular track rows with an off control that a failed
+// placement names (`keptInsideTracks`, `slotTrack`; gbdraw/diagrams/circular/radial_layout.py
+// `SWITCHED_TRACK_IDS`), the control that turns each off, and the setting that narrows it.
+/** @typedef {{ name: string, verb: string, control: string, width?: string }} SwitchedTrack */
+/** @type {Readonly<Record<string, SwitchedTrack>>} */
+const SWITCHED_TRACKS = Object.freeze({
+  gc_content: { name: 'GC content', verb: 'select', control: 'Hide GC Content', width: 'GC Content Width' },
+  gc_skew: { name: 'GC skew', verb: 'select', control: 'Hide GC Skew', width: 'GC Skew Width' },
+  ticks: { name: 'the scale', verb: 'clear', control: 'Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row)' }
 });
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
@@ -297,7 +300,8 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [innerPx]
  * @property {number} [outerPx]
  * @property {number} [keptInsidePx] The room kept below the band for the inside rows placed after it.
- * @property {string} [keptInsideTracks] The GC rows it is kept for (`KEPT_INSIDE_TRACKS` keys, comma-separated).
+ * @property {string} [keptInsideTracks] The rows with an off control it is kept for (`SWITCHED_TRACKS` keys, comma-separated).
+ * @property {string} [slotTrack] The failed row, when it has an off control (a `SWITCHED_TRACKS` key).
  * @property {number} [placementIndex]
  * @property {number} [queryRecordIndex]
  * @property {number} [subjectRecordIndex]
@@ -569,9 +573,10 @@ const contextFor = (value) => {
     context.labelFitCounts = value.labelFitCounts;
   }
   if (typeof value.keptInsideTracks === 'string' && value.keptInsideTracks.length <= 80) {
-    const tracks = [...new Set(value.keptInsideTracks.split(','))].filter((track) => Object.hasOwn(KEPT_INSIDE_TRACKS, track));
+    const tracks = [...new Set(value.keptInsideTracks.split(','))].filter((track) => Object.hasOwn(SWITCHED_TRACKS, track));
     if (tracks.length) context.keptInsideTracks = tracks.join(',');
   }
+  if (typeof value.slotTrack === 'string' && Object.hasOwn(SWITCHED_TRACKS, value.slotTrack)) context.slotTrack = value.slotTrack;
   for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
     'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
   ])) {
@@ -597,16 +602,21 @@ const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, 
   return '';
 };
 
-// OV-1274: the room a Circular placement keeps below its band for the inside
-// rows after it, and the remedy of the GC rows among them.
+// OV-1274, OV-1276: the room a Circular placement keeps below its band for the
+// inside rows after it (other rows may share it), and the off controls and widths
+// of the failed row and the kept rows that have them.
 /** @param {UserFacingContext} context */
-const keptInsideText = ({ keptInsidePx, keptInsideTracks }) => {
-  if (keptInsidePx === undefined) return '';
-  const tracks = keptInsideTracks ? keptInsideTracks.split(',').map((track) => KEPT_INSIDE_TRACKS[track]) : [];
-  if (!tracks.length) return ` Below it, ${keptInsidePx} px are kept for the tracks inside it.`;
-  const names = tracks.map((track) => track.name).join(' and ');
-  const hides = tracks.map((track) => track.hide).join(' or ');
-  return ` Below it, ${keptInsidePx} px are kept for ${names}: select ${hides}, or reduce ${tracks.length > 1 ? 'their widths' : 'its width'}.`;
+const trackRoomText = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
+  const kept = keptInsidePx !== undefined && keptInsideTracks ? keptInsideTracks.split(',') : [];
+  const keptNames = kept.map((track) => SWITCHED_TRACKS[track].name).join(' and ');
+  const room = keptInsidePx === undefined ? ''
+    : ` Below it, ${keptInsidePx} px are kept for the tracks inside it${keptNames ? `, among them ${keptNames}` : ''}.`;
+  const tracks = [...new Set([...(slotTrack ? [slotTrack] : []), ...kept])].map((track) => SWITCHED_TRACKS[track]);
+  if (!tracks.length) return room;
+  const offs = tracks.map((track, index) => `${index && tracks[index - 1].verb === track.verb ? '' : `${track.verb} `}${track.control}`);
+  const widths = tracks.flatMap((track) => (track.width ? [track.width] : []));
+  return `${room} To make room, ${offs.join(' or ')}${widths.length
+    ? `, or reduce ${widths.join(' or ')} (with Custom Track Slots on, the row width${widths.length > 1 ? 's' : ''})` : ''}.`;
 };
 
 /** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
@@ -659,7 +669,7 @@ export const normalizeUserFacingError = (value, {
     /** @type {number} */ (featureCount) > 1 ? `Features affected: ${featureCount}.` : ''
   ].filter(Boolean).map((text) => ` ${text}`).join('');
   const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
-  const kept = keptInsideText(result.context);
+  const kept = trackRoomText(result.context);
   const guidance = sessionVersionGuidance(result.context)
     || REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
   const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';

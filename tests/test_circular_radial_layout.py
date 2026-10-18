@@ -904,6 +904,8 @@ def test_cli_pinned_row_with_an_explicit_width_keeps_it(tmp_path: Path) -> None:
         "innerPx": 275,
         "outerPx": 386,
         "slotIndex": 1,
+        # OV-1276: the scale ticks offer hiding the scale.
+        "slotTrack": "ticks",
     }
 
 

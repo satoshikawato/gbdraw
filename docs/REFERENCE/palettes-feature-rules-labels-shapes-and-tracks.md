@@ -94,9 +94,14 @@ font size, set a smaller center reserved radius, or place tracks outside. When
 an explicit center reserved radius is the limit, the error names that radius
 instead; set a smaller radius or place tracks outside. When GC content or GC
 skew tracks lie inside the slot that could not be placed, the error also names
-the room kept for them and offers turning them off or narrowing them
-(`--no-gc`, `--no-skew`, `--gc_content_width`, `--gc_skew_width`; in the web
-app, **Hide GC Content**, **Hide GC Skew**, or their widths).
+the room kept for the tracks inside it and offers turning the GC tracks off or
+narrowing them (`--no-gc`, `--no-skew`, `--gc_content_width`,
+`--gc_skew_width`; in the web app, **Hide GC Content**, **Hide GC Skew**,
+**GC Content Width**, **GC Skew Width**, or the row widths when Custom Track
+Slots is on). When the scale ticks are the slot that could not be placed, the
+error also offers hiding the scale (`--hide_scale`; in the web app, clear
+**Show Coordinate Scale**, or remove the Ticks row when Custom Track Slots is
+on).
 
 GC-content mode can show deviation from the record mean or an absolute
 percentage. Window and step control smoothing and sampling: larger values
