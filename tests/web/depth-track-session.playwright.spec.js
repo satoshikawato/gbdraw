@@ -2509,6 +2509,104 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   expect(await browserDraft()).toEqual(resetDraft);
 });
 
+// Extend to (to_slot, LP-D17 / LP-D65): the slot editor's select stretches an
+// Overlay annotation from its anchor to a second slot; Undo restores None, and
+// Generate draws the span over both slots' bands.
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: Extend to draws an Overlay annotation from its anchor to the chosen slot`, async ({ page }) => {
+    test.setTimeout(300000);
+    const Mode = mode === 'circular' ? 'Circular' : 'Linear';
+    await openApp(page);
+    await page.evaluate(async ({ diagramMode, genbankText }) => {
+      const app = window.__GBDRAW_APP__;
+      app.setDiagramMode(diagramMode);
+      const file = new File([genbankText], 'extend-to.gbk', { type: 'text/plain', lastModified: 41 });
+      if (diagramMode === 'circular') {
+        app.cInputType = 'gb';
+        app.files.c_gb = file;
+      } else {
+        app.lInputType = 'gb';
+        app.setLinearSeqPrimaryFile(0, 'gb', file);
+      }
+      app.annotationSets.splice(0, app.annotationSets.length);
+      const set = app.addAnnotationSet('regions');
+      app.addCoordinateAnnotation(set, { start: 2000, end: 6000 });
+      const off = diagramMode === 'circular' ? 'inside' : 'below';
+      const row = (id, renderer, side, z, params) => ({ id, renderer, enabled: true, side, z, params,
+        ...(diagramMode === 'circular'
+          ? { width: null, radius: null, inner_gap_px: null, outer_gap_px: null }
+          : { height: '', spacing: '' }) });
+      const slots = app.adv[`${diagramMode}_track_slots`];
+      slots.splice(0, slots.length,
+        row('features', 'features', 'overlay', 0, diagramMode === 'circular' ? { lane_direction: 'split' } : {}),
+        row('gc', 'dinucleotide_content', off, 0, { nt: 'GC' }),
+        row('regions', 'annotations', 'overlay', -1,
+          { set_id: set.id, anchor_slot: 'features', layer: 'underlay', padding_px: 0, show_labels: false }));
+      app.adv[`${diagramMode}_track_slots_axis_index`] = 0;
+      app.adv[`${diagramMode}_track_slots_enabled`] = true;
+      await window.Vue.nextTick();
+    }, { diagramMode: mode, genbankText: readFileSync(hmmtDnaPath, 'utf8') });
+    const panelButton = await reveal(page.locator(`button[aria-controls="${mode}-custom-track-slots-panel"]`));
+    if (await panelButton.getAttribute('aria-expanded') !== 'true') await panelButton.click();
+    const extendTo = await reveal(page.getByRole('combobox', { name: `${Mode} track slot regions Extend to`, exact: true }));
+    const toSlot = () => page.evaluate((key) => window.__GBDRAW_APP__.adv[key]
+      .find((slot) => slot.id === 'regions').params.to_slot ?? null, `${mode}_track_slots`);
+    // None stands for an unset to_slot; the anchor is not offered (SAME-REJECT, LP-D21).
+    await expect(extendTo.locator('option:checked')).toHaveText('None');
+    expect(await extendTo.locator('option').evaluateAll((options) => options.map((option) => option.value))).toEqual(['None', 'gc']);
+    await extendTo.selectOption('gc');
+    await expect.poll(toSlot).toBe('gc');
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(toSlot).toBe(null);
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect.poll(toSlot).toBe('gc');
+
+    await generateAndWaitForResult(page);
+    const drawn = await page.evaluate(async (diagramMode) => {
+      const app = window.__GBDRAW_APP__;
+      const { state } = await import('./js/state.js');
+      const record = state.trackSlotResolvedGeometry.value.records[0];
+      const slots = Object.fromEntries(record.slots.map((slot) => [slot.slotId, slot]));
+      const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
+      const regionGroup = svg.querySelector('[data-gbdraw-slot-id="regions"]');
+      if (diagramMode === 'circular') {
+        const band = (slot) => {
+          const centre = slot.radiusFactor * record.axisRadiusPx;
+          return [centre - slot.widthPx / 2, centre + slot.widthPx / 2];
+        };
+        const path = regionGroup.querySelector('path');
+        const radii = [...path.getAttribute('d').matchAll(/A ([0-9.]+),/g)].map((match) => Number(match[1]));
+        return { features: band(slots.features), gc: band(slots.gc), regions: band(slots.regions),
+          drawn: [Math.min(...radii), Math.max(...radii)] };
+      }
+      const band = (slot) => (slot.renderer === 'features'
+        ? [slot.paintBand.topPx, slot.paintBand.bottomPx]
+        : slot.renderer === 'annotations'
+          ? [slot.resolvedOriginPx, slot.resolvedOriginPx + slot.heightPx]
+          : [slot.resolvedOriginPx - slot.heightPx / 2, slot.resolvedOriginPx + slot.heightPx / 2]);
+      const rect = regionGroup.querySelector('rect');
+      return { features: band(slots.features), gc: band(slots.gc), regions: band(slots.regions),
+        drawnHeight: Number(rect.getAttribute('height')) };
+    }, mode);
+    // The span runs from the far edge of gc over the whole features slot.
+    // Circular: gc lies inside the features ring, whose recorded band is its
+    // primary band; the span covers every feature lane (LANES-ALL, LP-D21), so
+    // it reaches at least that band's outer edge. Linear: gc lies below the
+    // axis, and the features paint band holds every lane.
+    if (mode === 'circular') {
+      expect(drawn.gc[1]).toBeLessThan(drawn.features[0]);
+      expect(drawn.regions[0]).toBeCloseTo(drawn.gc[0], 3);
+      expect(drawn.regions[1]).toBeGreaterThanOrEqual(drawn.features[1] - 1e-6);
+      drawn.drawn.forEach((edge, index) => expect(edge).toBeCloseTo(drawn.regions[index], 2));
+    } else {
+      expect(drawn.features[1]).toBeLessThan(drawn.gc[0]);
+      expect(drawn.regions[0]).toBeCloseTo(drawn.features[0], 3);
+      expect(drawn.regions[1]).toBeCloseTo(drawn.gc[1], 3);
+      expect(drawn.drawnHeight).toBeCloseTo(drawn.regions[1] - drawn.regions[0], 2);
+    }
+  });
+}
+
 test('Session commit failure restores the pre-import state', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 

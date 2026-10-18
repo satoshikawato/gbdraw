@@ -575,12 +575,7 @@ const coverTrackSlots = (coverage, tracks, mode) => {
     scalarFields.forEach((field) => coverTrackScalar(coverage, /** @type {Record<string, unknown>} */ (slot)[field], `${path}.${field}`));
     const params = slot.params;
     if (!isPlainObject(params)) return;
-    coverObject(coverage, params, `${path}.params`, [
-      'track_index', 'nt', 'positive_color', 'negative_color', 'tick_label_layout',
-      'preset', 'lane_direction', 'source_index', 'set_id', 'marks', 'lane_gap_px',
-      'padding_px', 'overflow', 'show_labels', 'anchor_slot', 'layer', 'cover_anchor',
-      'legend_label'
-    ]);
+    coverObject(coverage, params, `${path}.params`, TRACK_PARAM_KEY_NAMES);
   });
 };
 
@@ -1392,6 +1387,11 @@ const formatCanonicalTrackScalar = (value, { allowFactor = false } = {}) => {
   return unit === 'px' ? `${numeric}px` : String(numeric);
 };
 
+// The params of an annotation slot, the same in both modes.
+const ANNOTATION_TRACK_PARAM_KEYS = [
+  'set_id', 'marks', 'lane_gap_px', 'padding_px', 'overflow', 'show_labels',
+  'anchor_slot', 'to_slot', 'layer', 'cover_anchor', 'legend_label'
+];
 /** @type {Readonly<Record<'circular' | 'linear', Readonly<Record<string, Set<string>>>>>} */
 const TRACK_PARAM_KEYS = Object.freeze({
   circular: {
@@ -1401,10 +1401,7 @@ const TRACK_PARAM_KEYS = Object.freeze({
     dinucleotide_skew: new Set(['nt', 'positive_color', 'negative_color', 'legend_label']),
     depth: new Set(['track_index', 'legend_label']),
     sequence_conservation: new Set(['track_index', 'source_index', 'legend_label']),
-    annotations: new Set([
-      'set_id', 'marks', 'lane_gap_px', 'padding_px', 'overflow', 'show_labels',
-      'anchor_slot', 'layer', 'cover_anchor', 'legend_label'
-    ]),
+    annotations: new Set(ANNOTATION_TRACK_PARAM_KEYS),
     spacer: new Set(['legend_label'])
   },
   linear: {
@@ -1412,13 +1409,14 @@ const TRACK_PARAM_KEYS = Object.freeze({
     dinucleotide_content: new Set(['nt', 'legend_label']),
     dinucleotide_skew: new Set(['nt', 'positive_color', 'negative_color', 'legend_label']),
     depth: new Set(['track_index', 'legend_label']),
-    annotations: new Set([
-      'set_id', 'marks', 'lane_gap_px', 'padding_px', 'overflow', 'show_labels',
-      'anchor_slot', 'layer', 'cover_anchor', 'legend_label'
-    ]),
+    annotations: new Set(ANNOTATION_TRACK_PARAM_KEYS),
     spacer: new Set(['legend_label'])
   }
 });
+
+// Every params key a slot of either mode can carry into the recipe.
+const TRACK_PARAM_KEY_NAMES = [...new Set(Object.values(TRACK_PARAM_KEYS)
+  .flatMap((byRenderer) => Object.values(byRenderer).flatMap((keys) => [...keys])))];
 
 /**
  * @param {CanonicalRenderRequest['mode']} mode

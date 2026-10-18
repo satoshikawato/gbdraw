@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -51,6 +52,7 @@ for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot
 const {
   parseOptionalPixel,
   CustomTrackPlanValidationError,
+  validateTrackSlotBindingInvariants,
   assertValidCustomTrackPlan,
   validateCustomTrackPlan
 } = await import(
@@ -619,6 +621,111 @@ test('validates overlay anchors and does not treat Spacer, Ticks, disabled, or A
       rowCodes(plan, anchors.length).includes(code),
       `${anchorId} should report ${code}`
     );
+  }
+});
+
+// Extend to (`to_slot`): the Web reports, before Generate, every slot list
+// that Python's track-slot normalization refuses (gbdraw/tracks/parsing.py
+// validate_overlay_annotation_anchors), and no other. Both the editor's row
+// issues and the Generate/Save binding check are compared with Python.
+const SPAN_BINDING = {
+  circular: { modeLabel: 'Circular', layoutKind: 'circular',
+    supportedRenderers: ['features', 'ticks', 'dinucleotide_content', 'dinucleotide_skew', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['inside', 'outside', 'overlay'], anchorlessRenderers: ['ticks', 'spacer'] },
+  linear: { modeLabel: 'Linear', layoutKind: 'linear',
+    supportedRenderers: ['features', 'dinucleotide_content', 'dinucleotide_skew', 'depth', 'annotations', 'spacer'],
+    supportedSides: ['above', 'below', 'overlay'], anchorlessRenderers: ['spacer'] }
+};
+const spanStack = (mode, overlay) => {
+  const off = mode === 'circular' ? 'inside' : 'below';
+  const row = (id, renderer, params = {}, extra = {}) => ({ id, renderer, enabled: true, side: off, z: 0, params, ...extra });
+  return [
+    row('features', 'features', mode === 'circular' ? { lane_direction: 'split' } : {}, { side: 'overlay' }),
+    row('gc', 'dinucleotide_content', { nt: 'GC' }),
+    row('off', 'dinucleotide_skew', { nt: 'GC' }, { enabled: false }),
+    row('space', 'spacer'),
+    ...(mode === 'circular' ? [row('ticks', 'ticks')] : []),
+    row('notes', 'annotations', { set_id: 'review', layer: 'foreground' }, { z: 1 }),
+    row('low', 'dinucleotide_skew', { nt: 'AT' }, { z: -2 }),
+    row('high', 'dinucleotide_skew', { nt: 'GC' }, { z: 2 }),
+    { id: 'regions', renderer: 'annotations', enabled: true, side: 'overlay', z: -1, ...overlay,
+      params: Object.fromEntries(Object.entries({ set_id: 'review', anchor_slot: 'features', layer: 'underlay', ...overlay.params })
+        .filter(([, value]) => value !== undefined)) }
+  ];
+};
+const SPAN_CASES = [
+  ['valid', { params: { to_slot: 'gc' } }, []],
+  ['valid in either order', { params: { anchor_slot: 'gc', to_slot: 'features' } }, []],
+  ['unknown', { params: { to_slot: 'missing' } }, ['annotation_to_slot_unknown']],
+  ['disabled', { params: { to_slot: 'off' } }, ['annotation_to_slot_unknown']],
+  ['spacer', { params: { to_slot: 'space' } }, ['annotation_to_slot_ineligible']],
+  ['annotation', { params: { to_slot: 'notes' } }, ['annotation_to_slot_ineligible']],
+  ['same as anchor', { params: { to_slot: 'features' } }, ['annotation_to_slot_same']],
+  ['underlay z', { params: { to_slot: 'low' } }, ['annotation_underlay_z']],
+  ['foreground z', { z: 1, params: { layer: 'foreground', to_slot: 'high' } }, ['annotation_foreground_z']],
+  ['ticks', { params: { to_slot: 'ticks' } }, ['annotation_to_slot_ineligible']],
+  ['without overlay', { side: null, params: { anchor_slot: undefined, to_slot: 'gc' } }, ['annotation_to_slot_without_overlay']]
+];
+const pythonSpanFaults = (cases) => {
+  const script = `
+import json, sys
+from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, normalize_circular_track_slots, normalize_linear_track_slots
+out = []
+for case in json.load(sys.stdin):
+    circular = case["mode"] == "circular"
+    slot_type = CircularTrackSlot if circular else LinearTrackSlot
+    normalize = normalize_circular_track_slots if circular else normalize_linear_track_slots
+    try:
+        normalize([slot_type(**row) for row in case["slots"]])
+        out.append(None)
+    except ValueError as error:
+        out.append(str(error))
+print(json.dumps(out))
+`;
+  const result = spawnSync(process.env.PYTHON || 'python', ['-c', script], { input: JSON.stringify(cases), encoding: 'utf8' });
+  if (result.error) throw result.error;
+  assert.equal(result.status, 0, result.stderr);
+  return JSON.parse(result.stdout);
+};
+
+test('Extend to (to_slot) faults are the ones Python refuses, in both modes and both Web checks', () => {
+  const cases = [];
+  for (const mode of ['circular', 'linear']) {
+    for (const [name, overlay, codes] of SPAN_CASES) {
+      if (name === 'ticks' && mode === 'linear') continue;
+      const side = overlay.side === null ? { side: mode === 'circular' ? 'inside' : 'below' } : {};
+      cases.push({ mode, name, codes, slots: spanStack(mode, { ...overlay, ...side }) });
+    }
+  }
+  const python = pythonSpanFaults(cases.map(({ mode, slots }) => ({ mode, slots })));
+  cases.forEach(({ mode, name, codes, slots }, index) => {
+    const label = `${mode} ${name}`;
+    assert.equal(python[index] === null, codes.length === 0, `${label}: Python says ${python[index]}`);
+    const plan = validate({ mode, slots, axisIndex: 0, annotationSetIds: ['review'] });
+    const overlayRow = slots.length - 1;
+    assert.deepEqual(rowCodes(plan, overlayRow), codes, `${label}: row issues`);
+    assert.deepEqual([...plan.rowIssues.keys()].filter((row) => row !== overlayRow), [], `${label}: other rows`);
+    if (codes.length === 0) {
+      validateTrackSlotBindingInvariants(slots, SPAN_BINDING[mode]);
+    } else {
+      assert.throws(() => validateTrackSlotBindingInvariants(slots, SPAN_BINDING[mode]), undefined, `${label}: binding check`);
+    }
+  });
+});
+
+test('Extend to (to_slot) is written to the slot text and the payload, and None writes nothing', () => {
+  for (const mode of ['circular', 'linear']) {
+    const spec = mode === 'linear' ? buildLinearTrackSlotSpec : buildCircularTrackSlotSpec;
+    const parseSpec = mode === 'linear' ? parseLinearTrackSlotSpec : parseCircularTrackSlotSpec;
+    const payload = mode === 'linear' ? buildLinearTrackSlotPayload : buildCircularTrackSlotPayload;
+    const row = (toSlot) => ({ id: 'regions', renderer: 'annotations', enabled: true, side: 'overlay', z: -1,
+      params: { set_id: 'review', anchor_slot: 'features', to_slot: toSlot, layer: 'underlay' } });
+    const text = spec(row('gc'));
+    assert.match(text, /,to_slot=gc(,|$)/, `${mode}: ${text}`);
+    assert.equal(payload(parseSpec(text)).params.to_slot, 'gc', `${mode}: the text reads back`);
+    assert.equal(payload(row('gc')).params.to_slot, 'gc');
+    assert.equal(Object.hasOwn(payload(row('')).params, 'to_slot'), false, `${mode}: None`);
+    assert.doesNotMatch(spec(row('')), /to_slot/);
   }
 });
 

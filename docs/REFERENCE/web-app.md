@@ -383,6 +383,13 @@ Linear), **Track on Axis** for a row that can sit on the Axis, **Duplicate**,
 and **Remove** (Circular) or **Delete** (Linear). The arrow keys move through
 the menu and Escape closes it.
 
+An annotation row placed on its anchor (**Overlay anchor** in Circular, **On
+axis** in Linear) has an **Extend to** list: choose a second slot to stretch the
+overlay from its anchor to that slot (`to_slot`, see
+[Region annotations](../CLI_Reference.md#region-annotations)), or **None**. The
+list offers the anchor's slots except the anchor itself, and the setting applies
+on Generate. Moving the row off its anchor or changing its renderer clears it.
+
 Each Circular row keeps its inner and outer gap in a disclosure under the row;
 for a GC or AT content or skew row it also holds the dinucleotide, the legend
 label and, for skew, the two colors. Its summary names the dinucleotide and says

@@ -85,7 +85,11 @@ const MODES = {
       issue: (index) => editor.circularTrackSlotIssue(state.adv.circular_track_slots[index], index),
       reset: () => editor.resetCircularTrackSlotsFromSimpleControls(),
       canDuplicate: (slot) => editor.canDuplicateCircularTrackSlot(slot),
-      duplicate: (index) => editor.duplicateCircularTrackSlot(index)
+      duplicate: (index) => editor.duplicateCircularTrackSlot(index),
+      setPlacement: (slot, placement) => editor.updateCircularTrackSlotPlacement(slot, placement),
+      offAxis: 'outside',
+      referenceOptions: (slot, key) => editor.circularAnnotationAnchorOptions(slot, key).map((option) => option.id),
+      referenceKnown: (slot, key) => editor.circularAnnotationAnchorIsKnown(slot, key)
     };
   },
   linear: (slots, options) => {
@@ -99,7 +103,11 @@ const MODES = {
       issue: (index) => editor.linearTrackSlotIssue(state.adv.linear_track_slots[index], index),
       reset: () => editor.resetLinearTrackSlotsFromSimpleControls(),
       canDuplicate: (slot) => editor.canDuplicateLinearTrackSlot(slot),
-      duplicate: (index) => editor.duplicateLinearTrackSlot(index)
+      duplicate: (index) => editor.duplicateLinearTrackSlot(index),
+      setPlacement: (slot, placement) => editor.updateLinearTrackSlotPlacement(slot, placement),
+      offAxis: 'above',
+      referenceOptions: (slot, key) => editor.linearAnnotationAnchorOptions(slot, key).map((option) => option.id),
+      referenceKnown: (slot, key) => editor.linearAnnotationAnchorIsKnown(slot, key)
     };
   }
 };
@@ -142,6 +150,28 @@ for (const [mode, create] of Object.entries(MODES)) {
     assert.equal(editor.issue(index), '');
   });
 
+  // PR 2 of the underlay span (LP-D17, LP-D65): Extend to offers the slots the
+  // anchor select offers except the anchor itself (SAME-REJECT, LP-D21), and
+  // to_slot leaves the row with Overlay and with the annotations renderer.
+  test(`${mode}: Extend to offers the anchor's slots without the anchor and is cleared off Overlay`, () => {
+    const overlayRow = { ...(mode === 'circular' ? circularRow : linearRow)('regions', 'annotations',
+      { set_id: 'review', anchor_slot: 'features', to_slot: 'gc_skew', layer: 'underlay' }, 'overlay'), z: -1 };
+    const editor = create([...ROWS[mode](), overlayRow]);
+    const regions = () => editor.slots().find((slot) => slot.id === 'regions');
+    assert.deepEqual(editor.referenceOptions(regions()), ['features', 'gc_skew']);
+    assert.deepEqual(editor.referenceOptions(regions(), 'to_slot'), ['gc_skew']);
+    assert.equal(editor.referenceKnown(regions(), 'to_slot'), true);
+    regions().params.to_slot = 'features';
+    assert.equal(editor.referenceKnown(regions(), 'to_slot'), false, 'the anchor is not a valid Extend to slot');
+    regions().params.to_slot = 'gc_skew';
+    editor.setPlacement(regions(), editor.offAxis);
+    assert.equal(Object.hasOwn(regions().params, 'to_slot'), false);
+    assert.equal(Object.hasOwn(regions().params, 'anchor_slot'), false);
+    editor.setPlacement(regions(), 'overlay');
+    regions().params.to_slot = 'gc_skew';
+    editor.setRenderer(regions(), 'spacer');
+    assert.equal(Object.hasOwn(regions().params, 'to_slot'), false);
+  });
   // GX-01: Duplicate uses the availability term of the other row controls.
   test(`${mode}: Duplicate is unavailable while a Session operation runs`, () => {
     const editor = create(ROWS[mode]());

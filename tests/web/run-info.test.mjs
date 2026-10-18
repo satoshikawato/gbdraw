@@ -452,6 +452,34 @@ test('source recipe serializes validated object slots without dropping child fie
   assert.match(unsupportedRecipe.unavailableReason, /params\.nt|losslessly/i);
 });
 
+// The slot editor's Extend to writes to_slot; the recipe carries it as the CLI reads it.
+test('source recipe carries an annotation slot\'s to_slot in both modes', async () => {
+  for (const mode of ['circular', 'linear']) {
+    const session = structuredClone(mode === 'circular' ? circularGallerySession : linearGallerySession);
+    const row = (id, renderer, side, z, params) => (mode === 'circular'
+      ? { kind: 'circularTrackSlot', id, renderer, enabled: true, side, radius: null, width: null, z, params, innerGapPx: null, outerGapPx: null }
+      : { kind: 'linearTrackSlot', id, renderer, enabled: true, side, height: null, spacing: null, z, params });
+    const tracks = session.renderRequest.diagramOptions.tracks;
+    tracks[`${mode}TrackSlots`] = [
+      row('features', 'features', 'overlay', 0, mode === 'circular' ? { lane_direction: 'split' } : {}),
+      row('gc', 'dinucleotide_content', mode === 'circular' ? 'inside' : 'below', 0, { nt: 'GC' }),
+      row('regions', 'annotations', 'overlay', -1,
+        { set_id: 'regions', anchor_slot: 'features', to_slot: 'gc', layer: 'underlay' })
+    ];
+    tracks[`${mode}TrackAxisIndex`] = 0;
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, true, `${mode}: ${recipe.unavailableReason}`);
+    const tokens = recipe.args.filter((_, index) => recipe.args[index - 1] === `--${mode}_track_slot`);
+    const regions = tokens.find((token) => token.startsWith('regions:'));
+    const parsed = await evaluatePython([
+      `from gbdraw.tracks.${mode} import parse_${mode}_track_slot`,
+      `result = dict(parse_${mode}_track_slot(payload).params)`
+    ].join('\n'), regions);
+    assert.equal(parsed.to_slot, 'gc', `${mode}: ${regions}`);
+    assert.equal(parsed.anchor_slot, 'features');
+  }
+});
+
 test('source recipe distinguishes absent, null, and explicit empty track slots', async () => {
   const absent = structuredClone(circularGallerySession);
   delete absent.renderRequest.diagramOptions.tracks.circularTrackSlots;

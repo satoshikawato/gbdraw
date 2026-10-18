@@ -23,7 +23,7 @@ depth_min depth_max min_gc max_gc gc_tick_interval gc_axis_font_size depth_tick_
 depth_axis_font_size dinucleotide feature_width_circular depth_width_circular gc_content_width_circular
 gc_content_radius_circular gc_skew_width_circular gc_skew_radius_circular conservation_ring_width
 conservation_ring_gap center_reserved_radius multi_record_min_radius_ratio multi_record_column_gap_ratio
-multi_record_row_gap_ratio protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix
+multi_record_row_gap_ratio protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot to_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix
 placement strict compress reserve gapAfter gap_after innerRadius inner_radius outerRadius outer_radius`.split(/\s+/));
 /** @type {Readonly<Record<string, string>>} */
 const REASONS = Object.freeze({
@@ -35,7 +35,9 @@ const REASONS = Object.freeze({
   ANNOTATION_SET: 'Select an existing annotation set.', ANNOTATION_MARKS: 'Use supported annotation mark filters.',
   OVERFLOW: 'Choose error, compress, or clip.', LAYER: 'Choose foreground or underlay.',
   OVERLAY_ANCHOR: 'Select an eligible enabled anchor for an Overlay annotation track.',
-  OVERLAY_SIDE: 'Use Overlay when an anchor is selected.', DRAW_ORDER: 'Place underlay annotations below the anchor and foreground annotations above it.',
+  OVERLAY_SPAN: 'For Extend to, select an eligible enabled slot other than the anchor, or None.',
+  OVERLAY_SIDE: 'Use Overlay when an anchor or an Extend to slot is selected.',
+  DRAW_ORDER: 'Place underlay annotations below the anchor and the Extend to slot, and foreground annotations above them.',
   TRACK_RENDERER: 'Choose a renderer supported by the current diagram mode.', TRACK_SIDE: 'Choose a side supported by the current diagram mode and renderer.',
   TRACK_PARAMS: 'Use the parameters supported by the selected renderer.', TRACK_AXIS: 'Select one eligible enabled feature track as the axis.',
   TRACK_LANE: 'Use a supported feature lane and matching side.', CONSERVATION_SOURCE: 'Use the supported conservation workflow and select a comparison source.',
@@ -474,6 +476,8 @@ const TRACK_ISSUES = Object.freeze({
   conservation_source_missing: ['CONSERVATION_SOURCE'], features_multiple: ['FEATURES_COUNT'],
   annotation_anchor_unknown: ['OVERLAY_ANCHOR', 'anchor_slot'],
   annotation_anchor_ineligible: ['OVERLAY_ANCHOR', 'anchor_slot'], annotation_underlay_z: ['DRAW_ORDER', 'z'],
+  annotation_to_slot_unknown: ['OVERLAY_SPAN', 'to_slot'], annotation_to_slot_ineligible: ['OVERLAY_SPAN', 'to_slot'],
+  annotation_to_slot_same: ['OVERLAY_SPAN', 'to_slot'], annotation_to_slot_without_overlay: ['OVERLAY_SIDE', 'side'],
   annotation_foreground_z: ['DRAW_ORDER', 'z'], axis_side_conflict: ['TRACK_SIDE', 'side']
 });
 /**

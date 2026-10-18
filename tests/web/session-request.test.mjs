@@ -4694,8 +4694,8 @@ assert.deepEqual(
   nestedStyleOverride
 );
 
-// The slot editor has no control for to_slot (an overlay that spans from its
-// anchor slot to a second slot): Generate and a saved Session keep the value.
+// to_slot (the slot editor's Extend to: an overlay that spans from its anchor
+// slot to a second slot): Generate and a saved Session keep the value.
 for (const [spanState, spanFilesData, requestKey, configKey, gcSlot] of [
   [circularP3State, filesData, 'circularTrackSlots', 'circular_track_slots',
     { side: 'inside', width: null, radius: null, inner_gap_px: null, outer_gap_px: null }],
