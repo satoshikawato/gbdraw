@@ -1,5 +1,6 @@
 import json
 import math
+import random
 import re
 from pathlib import Path
 
@@ -951,6 +952,217 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     assert convex_polygons_intersect(_grown(moved.corners, 4.0), on_midpoint)
 
 
+def _draw_span_regions(slots: tuple[str, ...], style: RegionAnnotationStyle, *, mark: str = "bracket"):
+    """Two labelled regions over a record whose GC plots reach their band edges (REVIEW-1192 F1): GC 10 % on the
+    first half and 90 % on the second."""
+
+    rng = random.Random(7)
+    sequence = "".join(
+        rng.choice("GC") if rng.random() < (0.1 if (index // 5000) == 0 else 0.9) else rng.choice("AT")
+        for index in range(10000)
+    )
+    record = SeqRecord(Seq(sequence), id="r1", name="r1")
+    record.features = [
+        SeqFeature(FeatureLocation(start, start + 600, strand=1 if index % 2 else -1), type="CDS")
+        for index, start in enumerate(range(100, 9500, 900))
+    ]
+    regions = (
+        RegionAnnotation("a", CoordinateSpan(None, 1000, 3000), label="Region gyp", mark=mark, style=style),
+        RegionAnnotation("b", CoordinateSpan(None, 6000, 7500), label="IRb", mark=mark, style=style),
+    )
+    return build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            config_overrides={"labels.circular.scope": "none"},
+            tracks=CircularRequestTrackOptions(circular_track_slots=slots),
+        ),
+    )
+
+
+def _slot_bands(drawing) -> dict[str, tuple[float, float]]:
+    """Each slot's inner and outer radius, from the drawing's track slot geometry."""
+
+    geometry = drawing._gbdraw_track_slot_geometry["records"][0]
+    return {
+        slot["slotId"]: (
+            float(slot["radiusFactor"]) * float(geometry["axisRadiusPx"]) - 0.5 * float(slot["widthPx"]),
+            float(slot["radiusFactor"]) * float(geometry["axisRadiusPx"]) + 0.5 * float(slot["widthPx"]),
+        )
+        for slot in geometry["slots"]
+    }
+
+
+def _annotation_letter_radii(drawing) -> list[tuple[float, float]]:
+    """How near the centre and how far from it each annotation label's painted letters come."""
+
+    root = ElementTree.fromstring(drawing.tostring())
+    return [
+        _ink_radii(next(child for child in element if child.tag.endswith("}text")))
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-annotation-label")
+    ]
+
+
+@pytest.mark.parametrize(
+    "style",
+    [RegionAnnotationStyle(label_offset=4.0), RegionAnnotationStyle(label_offset=4.0, label_font_size=40, label_orientation="radial")],
+    ids=["14px", "40px-radial"],
+)
+def test_circular_span_label_room_moves_its_ring_by_the_room_and_keeps_the_features_on_the_axis(
+    style: RegionAnnotationStyle,
+) -> None:
+    # A span on an automatic inside ring, with an automatic ring between it and the features (REVIEW-1192 delta D1).
+    def draw(cover_anchor: str):
+        return _draw_span_regions(
+            (
+                "features:features",
+                "skew:dinucleotide_skew@side=inside",
+                "gc:dinucleotide_content@side=inside",
+                f"regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor={cover_anchor},z=5",
+            ),
+            style,
+        )
+
+    plain, span = _slot_bands(draw("false")), draw("true")
+    bands = _slot_bands(span)
+    # The span's room never moves the features off the axis.
+    assert bands["features"] == pytest.approx(plain["features"], abs=1e-6)
+    # The letters keep label_offset from the ring beyond them, and gc moves in no further than they need: they keep
+    # less than the rings' facing gap (1 % of the axis radius) more.
+    facing_gap = 0.01 * float(span._gbdraw_track_slot_geometry["records"][0]["axisRadiusPx"])
+    letters = _annotation_letter_radii(span)
+    assert len(letters) == 2
+    gap = bands["skew"][0] - max(far for _near, far in letters)
+    assert 4.0 - 1e-3 <= gap <= 4.0 + facing_gap + 1e-3, gap
+    assert min(near for near, _far in letters) - bands["gc"][1] >= 4.0 - 1e-3
+
+
+def test_circular_span_label_room_keeps_a_pinned_ring_and_moves_the_automatic_rings() -> None:
+    # REVIEW-1192 delta D2: a ring pinned outside the axis keeps its radius and width (GX-17); the automatic
+    # features ring under it moves in, so the letters keep label_offset from it.
+    def draw(cover_anchor: str):
+        return _draw_span_regions(
+            (
+                "outer_gc:dinucleotide_content@side=outside,r=1.08",
+                "features:features",
+                "gc:dinucleotide_content@side=inside",
+                f"regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor={cover_anchor},z=5",
+            ),
+            RegionAnnotationStyle(label_offset=4.0),
+            mark="line",
+        )
+
+    plain, span = _slot_bands(draw("false")), draw("true")
+    bands = _slot_bands(span)
+    assert bands["outer_gc"] == pytest.approx(plain["outer_gc"], abs=1e-6)
+    letters = _annotation_letter_radii(span)
+    assert letters and all(bands["outer_gc"][0] - far >= 4.0 - 1e-3 for _near, far in letters), letters
+
+
+def test_circular_rings_keep_their_places_when_they_cannot_make_the_label_room() -> None:
+    # OV-1207: a ring pinned below an annotation slot, already at its smallest width, cannot make the labels' room;
+    # the layout keeps the places it takes without the room (explicit radii win) instead of failing.
+    def bands(show_labels: str) -> dict[str, tuple[float, float]]:
+        slots = (
+            "features:features",
+            f"regions:annotations@side=inside,set_id=regions,w=20px,show_labels={show_labels}",
+            "gc:dinucleotide_content@side=inside,r=0.8",
+        )
+        return _slot_bands(_draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0)))
+
+    assert bands("true") == pytest.approx(bands("false"), abs=1e-6)
+
+
+def test_circular_span_label_room_on_an_inside_ring_leaves_the_outside_rows_in_place() -> None:
+    # REVIEW-1192 delta D3: a span on an inside ring moves that ring by its room; the tick ring outside and the
+    # features keep the places they have without the span.
+    def draw(cover_anchor: str):
+        return _draw_span_regions(
+            (
+                "ticks:ticks@side=outside",
+                "features:features",
+                "gc:dinucleotide_content@side=inside",
+                f"regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor={cover_anchor},z=5",
+            ),
+            RegionAnnotationStyle(label_offset=4.0),
+        )
+
+    plain, span = _slot_bands(draw("false")), draw("true")
+    bands = _slot_bands(span)
+    for slot_id in ("ticks", "features"):
+        assert bands[slot_id] == pytest.approx(plain[slot_id], abs=1e-6), slot_id
+    letters = _annotation_letter_radii(span)
+    assert letters and all(bands["features"][0] - far >= 4.0 - 1e-3 for _near, far in letters), letters
+
+
+@pytest.mark.parametrize(
+    "style",
+    [RegionAnnotationStyle(label_offset=4.0), RegionAnnotationStyle(label_offset=4.0, label_font_size=40, label_orientation="radial")],
+    ids=["14px", "40px-radial"],
+)
+def test_circular_span_label_room_past_the_axis_moves_the_outside_rows(style: RegionAnnotationStyle) -> None:
+    # A span on the features, the inside row next to the axis: its room reaches past the axis, so the features stay
+    # on the axis and the automatic outside rings move out of the letters' way (REVIEW-1192 F1, delta D3).
+    def draw(cover_anchor: str):
+        return _draw_span_regions(
+            (
+                "o2:dinucleotide_skew@side=outside",
+                "o1:dinucleotide_content@side=outside",
+                "features:features",
+                "gc:dinucleotide_content@side=inside",
+                f"regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor={cover_anchor},z=5",
+            ),
+            style,
+        )
+
+    plain, span = _slot_bands(draw("false")), draw("true")
+    bands = _slot_bands(span)
+    assert bands["features"] == pytest.approx(plain["features"], abs=1e-6)
+    letters = _annotation_letter_radii(span)
+    assert letters and all(bands["o1"][0] - far >= 4.0 - 1e-3 for _near, far in letters), letters
+
+
+def test_circular_rings_that_cannot_make_one_sides_label_room_keep_the_other_sides_room() -> None:
+    # REVIEW-1192 delta D4: the pinned GC ring inside cannot make the inside slot's room (OV-1207); the outside
+    # annotation slot still keeps its room, so the automatic ring beyond it keeps label_offset from its letters.
+    drawing = _draw_span_regions(
+        (
+            "ring:dinucleotide_content@side=outside",
+            "out:annotations@side=outside,set_id=regions,w=20px",
+            "features:features",
+            "in:annotations@side=inside,set_id=regions,w=20px",
+            "gc:dinucleotide_content@side=inside,r=0.8",
+        ),
+        RegionAnnotationStyle(label_offset=4.0),
+    )
+    bands = _slot_bands(drawing)
+    axis = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisRadiusPx"])
+    outside = [(near, far) for near, far in _annotation_letter_radii(drawing) if near > axis]
+    assert outside and all(bands["ring"][0] - far >= 4.0 - 1e-3 for _near, far in outside), outside
+    assert sum(bands["gc"]) / 2.0 == pytest.approx(0.8 * axis, abs=1e-6)
+
+
+def test_circular_span_label_room_past_the_axis_is_dropped_when_an_outside_row_cannot_make_it() -> None:
+    # REVIEW-1192 E1: a span on the features reaches past the axis; when the automatic outside ring under a pinned
+    # one cannot make that room, the retry drops it and the figure renders as on dev (explicit radii win).
+    drawing = _draw_span_regions(
+        (
+            "og:dinucleotide_content@side=outside,r=1.3,w=60px",
+            "o1:dinucleotide_content@side=outside",
+            "features:features",
+            "gc:dinucleotide_content@side=inside",
+            "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=true,z=5",
+        ),
+        RegionAnnotationStyle(label_offset=4.0),
+    )
+    bands = _slot_bands(drawing)
+    axis = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisRadiusPx"])
+    assert sum(bands["og"]) / 2.0 == pytest.approx(1.3 * axis, abs=1e-6)
+    assert bands["og"][1] - bands["og"][0] == pytest.approx(60.0, abs=1e-6)
+    assert len(_annotation_letter_radii(drawing)) == 2
+
+
 @pytest.mark.parametrize("mark", ["highlight", "band", "bracket", "line"])
 @pytest.mark.parametrize(
     "span",
@@ -962,41 +1174,27 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     ids=["cover_anchor", "to_slot-inside", "to_slot-outside"],
 )
 def test_circular_span_labels_keep_label_offset_beyond_every_covered_ring(span: str, mark: str) -> None:
-    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
-    record.features = [
-        SeqFeature(FeatureLocation(start, start + 600, strand=1 if index % 2 else -1), type="CDS")
-        for index, start in enumerate(range(100, 9500, 900))
-    ]
-    regions = (
-        RegionAnnotation("a", CoordinateSpan(None, 1000, 3000), label="Region gyp", mark=mark),
-        RegionAnnotation("b", CoordinateSpan(None, 6000, 7500), label="IRb", mark=mark),
-    )
-    drawing = build_circular_diagram(
-        record,
-        options=CircularDiagramOptions(
-            annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
-            config_overrides={"labels.circular.scope": "none"},
-            tracks=CircularRequestTrackOptions(
-                circular_track_slots=(
-                    "outer_gc:dinucleotide_content@side=outside",
-                    "features:features",
-                    "gc:dinucleotide_content@side=inside",
-                    f"regions:annotations@side=overlay,set_id=regions,{span},z=5",
-                )
-            ),
+    drawing = _draw_span_regions(
+        (
+            "outer_gc:dinucleotide_content@side=outside",
+            "features:features",
+            "gc:dinucleotide_content@side=inside",
+            f"regions:annotations@side=overlay,set_id=regions,{span},z=5",
         ),
+        RegionAnnotationStyle(),
+        mark=mark,
     )
 
-    geometry = drawing._gbdraw_track_slot_geometry["records"][0]
-    (slot,) = [slot for slot in geometry["slots"] if slot["slotId"] == "regions"]
-    span_outer = float(slot["radiusFactor"]) * float(geometry["axisRadiusPx"]) + 0.5 * float(slot["widthPx"])
+    bands = _slot_bands(drawing)
+    span_outer = bands["regions"][1]
     gaps = _circular_label_gaps(drawing)
-    root = ElementTree.fromstring(drawing.tostring())
-    for element in root.iter():
-        if element.attrib.get("data-gbdraw-annotation-label"):
-            (text,) = [child for child in element if child.tag.endswith("}text")]
-            near, _far = _ink_radii(text)
-            # The letters keep label_offset beyond the span's outer edge, off every ring it covers (OD-R1174 F1),
-            # and beyond their own mark's paint.
-            assert near - span_outer >= 4.0 - 1e-3, (element.attrib["data-gbdraw-annotation-label"], near - span_outer)
+    letters = _annotation_letter_radii(drawing)
+    assert len(letters) == 2
+    for near, far in letters:
+        # The letters keep label_offset beyond the span's outer edge, off every ring it covers (OD-R1174 F1),
+        # and beyond their own mark's paint.
+        assert near - span_outer >= 4.0 - 1e-3, near - span_outer
+        if "to_slot=outer_gc" not in span:
+            # The span reserves that room beyond itself, so the automatic ring beyond it keeps label_offset too.
+            assert bands["outer_gc"][0] - far >= 4.0 - 1e-3, bands["outer_gc"][0] - far
     assert gaps and all(gap >= 4.0 - 1e-3 for _side, gap in gaps.values()), gaps

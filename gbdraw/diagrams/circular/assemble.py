@@ -749,6 +749,32 @@ def _feature_label_obstacles(
     )
 
 
+@dataclass(frozen=True)
+class _AnnotationLabelRoom:
+    """The room one annotation slot's labels need beyond a band (``AnnotationLabelRoom``), measured by the labels'
+    own owner; a frozen value, so the label stage that replans the radial layout stays cacheable."""
+
+    track: ResolvedAnnotationTrack
+    record_index: int
+    record_length: int
+    font_family: str
+
+    def __call__(
+        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any], covers_slots: bool
+    ) -> float:
+        return circular_annotation_label_room(
+            self.track,
+            record_index=self.record_index,
+            record_length=self.record_length,
+            band=band,
+            side=side,
+            font_family=self.font_family,
+            params=annotation_track_params_from_mapping(params),
+            rings=(axis.paint_band_px,),
+            covers_slots=covers_slots,
+        )
+
+
 def _circular_annotation_label_rooms(
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None,
     *,
@@ -758,22 +784,10 @@ def _circular_annotation_label_rooms(
 ) -> dict[str, AnnotationLabelRoom]:
     """The room each annotation slot's labels need beyond its band, measured by the labels' own owner."""
 
-    def room_of(track: ResolvedAnnotationTrack) -> AnnotationLabelRoom:
-        def room(band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any]) -> float:
-            return circular_annotation_label_room(
-                track,
-                record_index=record_index,
-                record_length=record_length,
-                band=band,
-                side=side,
-                font_family=font_family,
-                params=annotation_track_params_from_mapping(params),
-                rings=(axis.paint_band_px,),
-            )
-
-        return room
-
-    return {slot_id: room_of(track) for slot_id, track in (annotation_track_layouts or {}).items()}
+    return {
+        slot_id: _AnnotationLabelRoom(track, record_index, record_length, font_family)
+        for slot_id, track in (annotation_track_layouts or {}).items()
+    }
 
 
 def _primary_radial_half_stroke_px(

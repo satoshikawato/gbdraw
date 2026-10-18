@@ -160,6 +160,9 @@ class CircularResolvedSlot:
     # An overlay stretched over the slots it covers (``to_slot``, or ``cover_anchor`` on a band): its labels keep
     # ``label_offset`` beyond the span's edge, as a Linear span's do.
     spans_slots: bool = False
+    # How far ``reserved_band_px`` reaches past the slot's own reservation, on the label side, for the labels of a
+    # span overlay that covers this slot: other slots keep out of it, but it does not move the slot itself.
+    span_label_room_px: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "params", freeze_layout_mapping(self.params))

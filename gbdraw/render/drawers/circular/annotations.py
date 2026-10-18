@@ -450,9 +450,11 @@ def circular_annotation_label_room(
     font_family: str,
     params: AnnotationTrackParams,
     rings: Sequence[RadialBand] = (),
+    covers_slots: bool = False,
 ) -> float:
     """How far the record's labels reach beyond the slot's ``band`` on their side (outward, or inward on an
-    ``inside`` slot), ``label_offset`` beyond the letters included, so the next ring keeps that gap (OV-1192).
+    ``inside`` slot), ``label_offset`` beyond the letters included, so the next ring keeps that gap (OV-1192);
+    for a span overlay, ``band`` is the stretched span band and ``covers_slots`` is set.
 
     Labels moved along their regions stay within this room (``circular_annotation_labels``)."""
 
@@ -467,6 +469,7 @@ def circular_annotation_label_room(
         font_family=font_family,
         params=params,
         rings=rings,
+        covers_slots=covers_slots,
     )
     return max((_reach(label, band.inner_px, band.outer_px, outward) for label in labels), default=0.0)
 
