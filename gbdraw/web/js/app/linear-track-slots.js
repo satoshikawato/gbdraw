@@ -14,7 +14,7 @@ import {
   normalizeOptionalText
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
-import { paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 
 import {
   applyLinearTrackOrderPlacements,
@@ -468,6 +468,9 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     drawing.adv.linear_track_slots_enabled = Boolean(enabled);
   };
 
+  /** @param {DrawingState} drawing @param {string} renderer */
+  const nextLinearTrackSlotId = (drawing, renderer) => nextNumberedId(DEFAULT_SLOT_IDS[renderer] || 'slot', drawing.adv.linear_track_slots);
+
   /** @param {unknown} [renderer] */
   const addLinearTrackSlot = (renderer = 'spacer') => {
     const drawing = state.drawings.linear;
@@ -476,16 +479,8 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
     if (!canAddLinearTrackRenderer(normalizedRenderer)) return;
     normalizeCurrentSlots();
-    const baseId = DEFAULT_SLOT_IDS[normalizedRenderer] || 'slot';
-    let nextId = baseId;
-    let suffix = 2;
-    const usedIds = new Set(drawing.adv.linear_track_slots.map((/** @type {LinearTrackSlot} */ slot) => String(slot.id || '')));
-    while (usedIds.has(nextId)) {
-      nextId = `${baseId}_${suffix}`;
-      suffix += 1;
-    }
     const slot = defaultSlot(normalizedRenderer, {
-      id: nextId,
+      id: nextLinearTrackSlotId(drawing, normalizedRenderer),
       side: normalizedRenderer === 'spacer' ? 'below' : undefined,
       height: normalizedRenderer === 'spacer' ? '12px' : '',
       params: normalizedRenderer === 'annotations'
@@ -525,7 +520,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     if (!canDuplicateLinearTrackSlot(source)) return;
     const copy = {
       ...source,
-      id: `${source.id || source.renderer}_copy`,
+      id: nextLinearTrackSlotId(drawing, normalizeRenderer(source.renderer)),
       params: cloneParams(source.params)
     };
     drawing.adv.linear_track_slots.splice(idx + 1, 0, copy);
@@ -819,17 +814,13 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
       drawing.adv.linear_track_slots_axis_index = previousAxisIndex - removedBeforeAxis;
     }
     const seriesCount = linearAvailableDepthTrackCountForState(state);
-    const existingIds = new Set(nextSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean));
+    /** @type {{ id?: unknown }[]} */
+    const takenSlots = [...nextSlots];
     const newSlots = additions.map((trackIndex) => {
       const preferredId = seriesCount <= 1 ? 'depth' : `depth_${trackIndex + 1}`;
-      let id = preferredId;
-      let suffix = 2;
-      while (existingIds.has(id)) {
-        id = `${preferredId}_${suffix}`;
-        suffix += 1;
-      }
-      existingIds.add(id);
-      return defaultSlot('depth', { id, side: 'below', params: { track_index: trackIndex } });
+      const slot = defaultSlot('depth', { id: nextNumberedId(preferredId, takenSlots), side: 'below', params: { track_index: trackIndex } });
+      takenSlots.push(slot);
+      return slot;
     });
     drawing.adv.linear_track_slots.splice(0, slots.length, ...nextSlots, ...newSlots);
     normalizeCurrentSlots();

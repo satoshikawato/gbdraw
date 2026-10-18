@@ -28,6 +28,7 @@ import {
 import { featureSlotEdits } from './track-slot-edits.js';
 import { ownEntry } from '../utils/own-entry.js';
 import {
+  nextNumberedId,
   paramsKeptOnRendererChange,
   parseOptionalCircularScalar,
   parseOptionalPixel,
@@ -309,18 +310,10 @@ export const circularTrackAxisIndexForEnabledSlots = (
  */
 export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [], nt = 'GC', placement = null) => {
   const normalizedRenderer = SUPPORTED_RENDERERS.includes(renderer) ? renderer : 'dinucleotide_skew';
-  const baseId = DEFAULT_SLOT_IDS[normalizedRenderer] || normalizedRenderer;
-  const existingIds = new Set(
-    (Array.isArray(existingSlots) ? existingSlots : [])
-      .map((slot) => String(slot?.id || '').trim())
-      .filter(Boolean)
+  const id = nextNumberedId(
+    DEFAULT_SLOT_IDS[normalizedRenderer] || normalizedRenderer,
+    Array.isArray(existingSlots) ? existingSlots : []
   );
-  let id = baseId;
-  let suffix = 2;
-  while (existingIds.has(id)) {
-    id = `${baseId}_${suffix}`;
-    suffix += 1;
-  }
 
   /** @type {Record<string, unknown>} */
   const params = {};
@@ -887,27 +880,28 @@ export const createCircularTrackSlotEditor = ({
     else delete slot.params.cover_anchor;
   };
 
-  /** @param {unknown} trackIndex @param {Set<string>} existingIds @param {unknown} desiredCount */
-  const makeDepthSlotForTrackIndex = (trackIndex, existingIds, desiredCount) => {
+  /**
+   * A managed Depth row for a series, added to `takenSlots`. Its ID is the
+   * preferred one numbered with the first unused number, except that the first
+   * series takes `depth` while its preferred `depth_1` is taken and `depth` is not.
+   * @param {unknown} trackIndex @param {{ id?: unknown }[]} takenSlots @param {unknown} desiredCount
+   */
+  const makeDepthSlotForTrackIndex = (trackIndex, takenSlots, desiredCount) => {
     const normalizedIndex = Math.max(0, Number(trackIndex) || 0);
     const preferredId = Number(desiredCount) > 1 ? `depth_${normalizedIndex + 1}` : 'depth';
-    let id = preferredId;
-    if (existingIds.has(id) && normalizedIndex === 0 && !existingIds.has('depth')) {
-      id = 'depth';
-    }
-    let suffix = 2;
-    while (existingIds.has(id)) {
-      id = `${preferredId}_${suffix}`;
-      suffix += 1;
-    }
-    existingIds.add(id);
-    return makeSlot({
+    const numberedId = nextNumberedId(preferredId, takenSlots);
+    const id = numberedId !== preferredId && normalizedIndex === 0 && nextNumberedId('depth', takenSlots) === 'depth'
+      ? 'depth'
+      : numberedId;
+    const slot = makeSlot({
       id,
       renderer: 'depth',
       params: {
         track_index: normalizedIndex
       }
     });
+    takenSlots.push(slot);
+    return slot;
   };
 
   const normalizeSlotsInPlace = () => {
@@ -1021,10 +1015,11 @@ export const createCircularTrackSlotEditor = ({
     );
     if (additions.length === 0 && nextSlots.length === slots.length) return;
     const seriesCount = circularAvailableDepthTrackCountForState(state);
-    const existingIds = new Set(nextSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean));
+    /** @type {{ id?: unknown }[]} */
+    const takenSlots = [...nextSlots];
     // The shortcut copies of the new rows are rows (the service types them as Record<string, unknown>).
     const newSlots = /** @type {CircularTrackSlot[]} */ (applyCircularGeometryShortcuts(
-      additions.map((trackIndex) => makeDepthSlotForTrackIndex(trackIndex, existingIds, seriesCount)),
+      additions.map((trackIndex) => makeDepthSlotForTrackIndex(trackIndex, takenSlots, seriesCount)),
       circularGeometryShortcutsForState(drawing)
     ));
     let preferredInsertIndex = -1;

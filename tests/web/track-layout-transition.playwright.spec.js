@@ -266,9 +266,9 @@ test('Linear Row actions run from the menu, and Delete moves focus to the next r
     await runRowAction(gc, 'Move below Axis');
     expect(await stackOrder(page, 'linear')).toEqual(['features', 'gc_content', 'gc_skew']);
     await runRowAction(gc, 'Duplicate');
-    expect(await stackOrder(page, 'linear')).toEqual(['features', 'gc_content', 'gc_content_copy', 'gc_skew']);
+    expect(await stackOrder(page, 'linear')).toEqual(['features', 'gc_content', 'gc_content_2', 'gc_skew']);
     await expect(menuItem(gc, 'Delete')).toHaveClass(/action-menu-item-danger/);
-    await runRowAction(slotRow(page, 'linear', 'gc_content_copy'), 'Delete');
+    await runRowAction(slotRow(page, 'linear', 'gc_content_2'), 'Delete');
     await expect(menuToggle(slotRow(page, 'linear', 'gc_skew'))).toBeFocused();
     await runRowAction(slotRow(page, 'linear', 'gc_skew'), 'Delete');
     await expect(menuToggle(gc)).toBeFocused();

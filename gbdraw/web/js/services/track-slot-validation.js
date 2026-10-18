@@ -791,6 +791,23 @@ export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntri
 );
 
 /**
+ * The ID of a track slot or annotation set that Add or Duplicate creates, in
+ * both modes: the default ID of its kind (a slot's renderer, `annotations` for
+ * a set) while nothing uses it, then that ID numbered `_2`, `_3`, and so on,
+ * taking the first unused number. A copy of `gc_skew_2` is therefore
+ * `gc_skew_3`, not `gc_skew_2_2`. IDs compare after trimming.
+ * @param {string} baseId
+ * @param {ReadonlyArray<{ id?: unknown } | null | undefined>} items
+ * @returns {string}
+ */
+export const nextNumberedId = (baseId, items) => {
+  const usedIds = new Set(items.map((item) => String(item?.id || '').trim()).filter(Boolean));
+  let id = baseId;
+  for (let suffix = 2; usedIds.has(id); suffix += 1) id = `${baseId}_${suffix}`;
+  return id;
+};
+
+/**
  * @param {unknown} values
  * @returns {Set<string>}
  */
