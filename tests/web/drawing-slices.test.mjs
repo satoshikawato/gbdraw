@@ -140,7 +140,8 @@ const MEMBERS = SLICES.flatMap(([, slice]) => slice.members);
 const MUTATING_METHODS = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin', 'add', 'delete', 'clear', 'set'];
 const ASSIGNMENT = /^\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])/;
 const DRAWING_RECEIVER = /(?:[\w$]*[dD]rawing|activeDrawing\s*\(\s*\)|drawings\s*(?:\??\.\s*[\w$]+|\[[^\]]*\]))\s*\??$/;
-// The template writes M3.13 replaces by writer ports; this list only shrinks.
+// The template writes M3.13 replaces by writer ports (M3.2-M3.8 listed each
+// binding as its slice came; M3.13 empties the list and deletes it).
 const TEMPLATE_WRITES_BEFORE_M3_13 = Object.freeze([
   'v-model.number="canvasPadding.top"', 'v-model.number="canvasPadding.left"',
   'v-model.number="canvasPadding.right"', 'v-model.number="canvasPadding.bottom"',
@@ -278,7 +279,7 @@ const SAMPLES = {
   }),
   // Load gives a palette's colors the comparison colors (`normalizePaletteColors`).
   palette: () => ({
-    selectedPalette: 'default', currentColors: normalizePaletteColors({ CDS: '#123456', tRNA: '#654321' }),
+    selectedPalette: 'mint', currentColors: normalizePaletteColors({ CDS: '#123456', tRNA: '#654321' }),
     pendingPaletteName: 'queued', pendingPaletteColors: normalizePaletteColors({ CDS: '#abcdef' })
   }),
   labelTables: () => ({

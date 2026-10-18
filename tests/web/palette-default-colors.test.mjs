@@ -10,7 +10,9 @@ import { createPaletteLoader } from '../../gbdraw/web/js/app/palettes.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { normalizePaletteColors } from '../../gbdraw/web/js/utils/color-utils.js';
-import { PALETTE_SLICE } from '../../gbdraw/web/js/services/drawing/palette.js';
+import {
+  PALETTE_SLICE, clearQueuedPalette, queuePalette, replaceDefaultColors, restoreArtifactQueuedPalette, selectPalette, setDefaultColors
+} from '../../gbdraw/web/js/services/drawing/palette.js';
 
 const ref = (value) => ({ value });
 const PALETTES = {
@@ -378,4 +380,30 @@ test('a palette named like an inherited member falls back to the default palette
     assert.equal(createPaletteLoader({ state }).applyPalettes(PALETTES), true);
     assert.equal(circular.selectedPalette.value, 'default', name);
   }
+});
+
+// An artifact owner set holds its queued palette colors by reference, and a
+// History restore gives the drawing that object (`restoreArtifactQueuedPalette`).
+// Every palette writer replaces the colors object, so none writes the owner
+// set's: a write into the frozen object would throw.
+test('a queued palette restored by reference is never written through', () => {
+  const owned = Object.freeze({ CDS: '#123456' });
+  const drawing = drawingOf({});
+  restoreArtifactQueuedPalette(drawing.slices.palette, 'forest', owned);
+  assert.equal(drawing.pendingPaletteColors.value, owned);
+  const writers = [
+    () => queuePalette(drawing.slices.palette, 'default', { CDS: '#000000' }),
+    () => restoreArtifactQueuedPalette(drawing.slices.palette, 'forest', owned),
+    () => clearQueuedPalette(drawing.slices.palette),
+    () => restoreArtifactQueuedPalette(drawing.slices.palette, 'forest', owned),
+    () => selectPalette(drawing.slices.palette, 'forest', { CDS: '#111111' }),
+    () => setDefaultColors(drawing.slices.palette, { tRNA: '#222222' }),
+    () => replaceDefaultColors(drawing.slices.palette, { CDS: '#333333' }),
+    () => PALETTE_SLICE.install(drawing.slices.palette, { pendingPaletteColors: { CDS: '#444444' } }),
+    () => restoreArtifactQueuedPalette(drawing.slices.palette, 'forest', owned),
+    () => PALETTE_SLICE.reset(drawing.slices.palette)
+  ];
+  writers.forEach((write) => write());
+  assert.deepEqual(owned, { CDS: '#123456' });
+  assert.notEqual(drawing.pendingPaletteColors.value, owned);
 });

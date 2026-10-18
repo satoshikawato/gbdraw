@@ -203,8 +203,10 @@ export const replaceAnnotationTarget = (slice, set, item, target) => {
  */
 export const setAnnotationTargetBound = (slice, set, item, field, value) => {
   const row = rowOf(slice, set, item);
-  // As Vue's `v-model.number` wrote it.
-  if (row) row.target[field] = /** @type {number} */ (value);
+  // As Vue's `v-model.number` wrote it: a draft bound keeps the input's text
+  // until it reads as a number (Save and the request read it with
+  // `normalizeAnnotationSets`), so the cast widens the target, not the value.
+  if (row) /** @type {Record<'start' | 'end', NumberInputValue>} */ (row.target)[field] = value;
 };
 
 /**
@@ -228,9 +230,12 @@ export const setAnnotationSelectorField = (slice, set, item, field, value) => {
  * @param {readonly AnnotationRecordBinding[]} bindings
  */
 export const bindAnnotationRecords = (slice, bindings) => {
-  const sets = membersOf(slice).annotationSets;
+  // The rows of the list by the row the drawing shows, once per call (a
+  // catalog binds every annotation).
+  /** @type {Map<AnnotationRow, AnnotationItem>} */
+  const rows = new Map(membersOf(slice).annotationSets.flatMap((set) => set.annotations).map((row) => [row, row]));
   bindings.forEach(({ annotation, record, metadata }) => {
-    const row = sets.flatMap((set) => set.annotations).find((candidate) => candidate === annotation);
+    const row = rows.get(annotation);
     if (!row) return;
     row.target.record = record && { ...record };
     row.metadata = metadata;
