@@ -849,7 +849,9 @@ narrow. While it is open, the figure is fitted to the room that remains, the
 Editor is closed, and the feature popup is hidden. **Cancel**, Escape, or a
 successful **Apply** closes the panel and brings back the popup, the Editor
 tab, and the zoom and pan from before the review; a Session saved during the
-review stores that earlier zoom and pan. A one-click **Align…** that applies
+review stores that earlier zoom and pan. A review of one mode that ends while
+the other mode is shown leaves that mode's zoom and pan as they are. A
+one-click **Align…** that applies
 without a review leaves the Editor, the popup, and the view as they are.
 
 The header carries the label **Apply required**: nothing changes until

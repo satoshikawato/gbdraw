@@ -3170,9 +3170,9 @@ test('a mode switch and back under an open review leaves the view the review giv
   expect(pageErrors).toEqual([]);
 });
 
-// OV-1089: the hold is the Linear review's. While Circular is shown, Escape leaves the review
-// pending and gives Circular neither the view from before it nor the Editor; back in Linear,
-// Escape ends it there and gives both back.
+// OV-1089: the held view is the Linear review's. Escape while Circular is shown ends the
+// review there and gives back the Editor (PD-OI-039 rev 4), but not Linear's view from before
+// the review: the Circular figure keeps its own.
 test('a Linear review ended in Circular gives the Linear view back to no other figure (OV-1089)', async ({ page }) => {
   test.setTimeout(600000);
   const pageErrors = [];
