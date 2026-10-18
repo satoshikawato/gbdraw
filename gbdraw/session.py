@@ -541,18 +541,16 @@ def _decode_drawing(
             "Sessions version 27 through 30 support internal CLI replay only and do not "
             "have a public typed-request conversion."
         )
-    from gbdraw.session_request_codec import (
-        CanonicalRequestCodecError,
-        decode_canonical_request,
-    )
+    from gbdraw.session_request_codec import CanonicalRequestCodecError
     from gbdraw.api.session_compat import (
-        canonical_payload_for_session_decode,
+        decode_session_request,
         promote_legacy_session_similarity_alignment_request,
     )
 
     try:
-        request = decode_canonical_request(
-            canonical_payload_for_session_decode(version, drawing.request),
+        request = decode_session_request(
+            version,
+            drawing.request,
             resource_paths=materialized.resource_paths,
             output_directory=materialized.output_directory,
         )

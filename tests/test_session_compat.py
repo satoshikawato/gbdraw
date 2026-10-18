@@ -2160,6 +2160,71 @@ def test_session_47_protein_results_of_a_reversed_record_move_to_the_search_fram
     assert _replay(resaved, tmp_path, "resaved") == expected
 
 
+# OV-1183: main's Web writers of Session 39, and of Session 40 before
+# `3bca0e8d9`, stored a reversed record's drawn-frame feature ID in
+# `*_feature_svg_id` and wrote no `*_view_feature_svg_id`. Each fixture is such
+# a Session that main's writer laid out (`cdd310134` and `7aad9e3e0`;
+# `tools/build_main_pairwise_rc_fixture.py`); its record 2 is reversed.
+_DRAWN_ID_SESSIONS = {39: "v39", 40: "v40-early"}
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("version", sorted(_DRAWN_ID_SESSIONS))
+def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: int,
+) -> None:
+    from gbdraw.api.record_planning import comparison_record_bindings, project_source_bound_results
+    from gbdraw.api.request_render import plan_request
+
+    monkeypatch.chdir(tmp_path)
+    source = _SESSION_FIXTURES / f"BGC0000708-BGC0000709-rc.{_DRAWN_ID_SESSIONS[version]}.gbdraw-session.json.gz"
+    document = load_session_document(source)
+    assert document.version == version
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        stored = session_to_request(materialized)
+        [table] = stored.options.linear_comparisons
+        assert table.drawn_feature_ids
+        rows = table.matches
+        assert "subject_view_feature_svg_id" not in rows.columns
+        adapted = adapt_session_request(stored, session_drawing_artifacts(document))
+        assert adapted.migration_report.unconverted_protein_results == ()
+        [converted] = adapted.request.options.linear_comparisons
+        plan = plan_request(adapted.request)
+        length = len(plan.records[1])
+        # Search frame: the reversed record's sides flip; each side names its
+        # source feature and its view; the forward record's side stays.
+        assert list(converted.matches["sstart"]) == [length + 1 - value for value in rows["sstart"]]
+        assert list(converted.matches["qstart"]) == list(rows["qstart"])
+        assert list(converted.matches["query_feature_svg_id"]) == list(rows["query_feature_svg_id"])
+        assert not set(converted.matches["subject_feature_svg_id"]) & set(rows["subject_feature_svg_id"])
+        # Drawn again, the rows are the ones main stored and drew.
+        drawn = comparison_record_bindings(plan.records, plan.provenance, search_frame=False)
+        [projected] = project_source_bound_results(adapted.request.options, drawn).options.linear_comparisons
+        for column in ("qstart", "qend", "sstart", "send"):
+            assert list(projected.matches[column]) == list(rows[column])
+        assert list(projected.matches["subject_view_feature_svg_id"]) == list(rows["subject_feature_svg_id"])
+        # Without the Session 40 reading the same rows are refused, and a
+        # table with view IDs is read strictly.
+        with pytest.raises(ValidationError, match="conflicts with its source feature ID"):
+            plan_request(replace(stored, options=replace(
+                stored.options, linear_comparisons=(replace(table, drawn_feature_ids=False),))))
+        tagged = rows.assign(subject_view_feature_svg_id=rows["subject_feature_svg_id"])
+        with pytest.raises(ValidationError, match="conflicts with its source feature ID"):
+            plan_request(replace(stored, options=replace(
+                stored.options, linear_comparisons=(replace(table, matches=tagged),))))
+
+    resaved = tmp_path / "resaved.gbdraw-session.json"
+    first = _replay(source, tmp_path, "replay", "--session_output", str(resaved))
+    saved = load_session_document(resaved)
+    assert saved.version == CURRENT_SESSION_VERSION == 48
+    with materialize_session(saved, output_directory=tmp_path) as materialized:
+        [written] = session_to_request(materialized).options.linear_comparisons
+        assert not written.drawn_feature_ids
+        assert list(written.matches["sstart"]) == list(converted.matches["sstart"])
+    # The re-save is read as F: no second conversion, the same drawing.
+    assert _replay(resaved, tmp_path, "resaved") == first
+
+
 @pytest.mark.linear
 def test_untagged_session_39_anchors_of_a_reversed_record_follow_their_record(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
