@@ -2591,7 +2591,7 @@ test('the docked review takes the popup, the Editor and the view, and gives them
 
   // A Session saved during the review holds the view from before it.
   const savedView = await evaluateWithRetainedPromise(page, async () => {
-    const { exportSession } = await import('./js/services/config.js');
+    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
     const result = await exportSession('saved during review');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
     const { zoom, canvasPan } = JSON.parse(text).ui;
@@ -2780,7 +2780,7 @@ test('a Session loaded under an open review keeps its own view and Editor when t
   await expect(page.locator('[data-similarity-alignment-canvas]')).toHaveCount(0);
   // A Session saved now holds the loaded view, not the view from before the review.
   const savedView = await evaluateWithRetainedPromise(page, async () => {
-    const { exportSession } = await import('./js/services/config.js');
+    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
     const result = await exportSession('saved after load');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
     const { zoom, canvasPan } = JSON.parse(text).ui;
@@ -2892,7 +2892,7 @@ test('the figure is fitted again whenever the room of the Result changes while R
   // No fit is a History step, and a Session saved now holds the view from before the review.
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoAtOpen);
   const savedView = await evaluateWithRetainedPromise(page, async () => {
-    const { exportSession } = await import('./js/services/config.js');
+    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
     const result = await exportSession('saved after a fit to the room');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
     const { zoom, canvasPan } = JSON.parse(text).ui;

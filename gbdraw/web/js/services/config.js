@@ -5441,8 +5441,8 @@ const importSessionDocument = async (e, options = {}) => {
       // A legacy configuration names no mode: it is the shown mode's settings.
       // It is read, confirmed and then applied as one step that a failure
       // rolls back (OV-710); its History is not restarted.
-      const legacyMode = state.mode.value === 'linear' ? 'linear' : 'circular';
-      const legacyDrawing = state.activeDrawing();
+      const legacyDrawing = /** @type {SessionLoadOptions} */ (options).shownDrawing();
+      const legacyMode = legacyDrawing.mode;
       const legacyConfig = readLegacyConfigPayload(parsed, legacyDrawing, legacyMode);
       const legacyRepairs = [...legacyConfig.repairs];
       const legacyOverrides = readPlainObject(legacyConfig.value.unmanagedConfigOverrides).value;
@@ -6567,6 +6567,8 @@ export const disposeSessionOperations = () => {
   state.sessionImportPending.value = false;
 };
 
+// `options.shownDrawing` returns the drawing shown at the time Save reads it
+// (the caller resolves it; a service never does);
 // `options.availability` is the Save and Load availability the composition
 // root composes from `sessionOperationAvailability` and the edits still
 // applying (R13); `options.recordDisplayRows` are the record display rows of
@@ -6577,6 +6579,7 @@ export const disposeSessionOperations = () => {
 /**
  * What the composition root passes to `exportSession`.
  * @typedef {object} SessionSaveOptions
+ * @property {() => DrawingState} shownDrawing
  * @property {(operation: 'save' | 'load') => SessionBusy | null} [availability]
  * @property {DownloadChoicePort} [askChoice]
  * @property {{ value?: Parameters<typeof bindRecordDisplayDrafts>[1] }} [recordDisplayRows]
@@ -6589,10 +6592,10 @@ export const disposeSessionOperations = () => {
  */
 
 /**
- * @param {string | null} [titleOverride]
- * @param {SessionSaveOptions} [options]
+ * @param {string | null} titleOverride
+ * @param {SessionSaveOptions} options
  */
-export const exportSession = (titleOverride = null, options = {}) => {
+export const exportSession = (titleOverride = null, options) => {
   if (sessionSaveInFlight) {
     recordSessionLifecycleEvent('session-save-joined');
     return sessionSaveInFlight.promise;
@@ -6616,8 +6619,9 @@ export const exportSession = (titleOverride = null, options = {}) => {
     // Only mutable draft configuration/navigation is copied. Adopted biological
     // payloads, resources, catalogs, caches and Results retain their existing owner.
     // Session 46 keeps each drawing as its mode's slice (PD-OI-086); the
-    // Features-list record is the shown Result's. `drawing` is the shown one.
-    const drawing = state.activeDrawing();
+    // Features-list record is the shown Result's. `drawing` is the shown one,
+    // which the caller resolves.
+    const drawing = options.shownDrawing();
     // Each drawing's drafts are written on the rows of their records (OV-278,
     // OV-325): a Session without a Web draft loads a draft selected by record ID on '#1'.
     const recordDisplayRows = /** @type {{ recordDisplayRows?: { value?: Parameters<typeof bindRecordDisplayDrafts>[1] } }} */ (options).recordDisplayRows?.value || [];
@@ -6701,12 +6705,13 @@ export const exportSession = (titleOverride = null, options = {}) => {
  * @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput
  */
 /**
- * What the composition root passes to `importSession`: the Save and Load availability (as `SessionSaveOptions`
- * has it) and a step to run before the Load starts, both read here; the required Load port
+ * What the composition root passes to `importSession`: the Save and Load availability and the shown drawing
+ * (as `SessionSaveOptions` has them; a legacy configuration is the shown drawing's settings) and a step to run
+ * before the Load starts, both read here; the required Load port
  * `confirmLoadRepairs`, which shows the list of what the file cannot fully restore and answers [Load] or
  * [Cancel] (every caller that loads decides; there is no default); every other option is passed on to
  * `importSessionDocument` unread.
- * @typedef {Pick<SessionSaveOptions, 'availability'> & { beforeImport?: () => void | Promise<void>,
+ * @typedef {Pick<SessionSaveOptions, 'availability' | 'shownDrawing'> & { beforeImport?: () => void | Promise<void>,
  *   confirmLoadRepairs: ConfirmLoadRepairs } & Record<string, unknown>} SessionLoadOptions
  */
 /**

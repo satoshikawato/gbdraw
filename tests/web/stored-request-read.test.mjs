@@ -17,6 +17,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -33,7 +34,8 @@ globalThis.alert = () => {};
 installSessionImportWorker();
 
 const REPO = new URL('../../', import.meta.url);
-const { importSession, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { setUnmanagedConfigOverrideValidator } = sessionConfig;
 const {
   readStoredRenderRequest, readPublishedRenderRequest, projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -41,6 +43,7 @@ const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-rep
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { importSession } = callerSession(sessionConfig, state);
 
 const read = (path) => {
   const raw = readFileSync(new URL(path, REPO));
@@ -324,7 +327,9 @@ test('the other diagram\'s request is read at Load: its repairs are listed, and 
   assert.ok(state.results.value.length > 0);
 });
 
-const { getCommittedCanonicalSession, exportSession } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig2 = await import('../../gbdraw/web/js/services/config.js');
+const { getCommittedCanonicalSession } = sessionConfig2;
+const { exportSession } = callerSession(sessionConfig2, state);
 const frame = () => {
   const intent = modeDrawing(state, 'linear').importedComparisonIntent;
   return [intent.disposition, intent.message];

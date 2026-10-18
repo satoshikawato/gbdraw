@@ -533,7 +533,7 @@ for (const mode of ['linear', 'circular']) {
       expect(await committedScaleInterval(fresh)).not.toBe(12345);
       expect((await snapshot(fresh)).request).toEqual(before.request);
       const rollback = await evaluateWithRetainedPromise(fresh, async () => {
-        const config = await import('./js/services/config.js');
+        const config = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
         const { state } = await import('./js/state.js');
         const prior = config.canonicalRenderArtifactOwner.capture();
         const catalog = window.Vue.toRaw(state.featureCatalog.value);

@@ -264,7 +264,7 @@ test('Save Session holds no fold state, Load Session folds the loaded cards, and
   await page.evaluate(() => { window.__GBDRAW_APP__.errorLog = null; });
   const rolledBack = await evaluateWithRetainedPromise(page, async (name) => {
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
-    const { importSession } = await import('./js/services/config.js');
+    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
     const { state } = await import('./js/state.js');
     let foldedInside = null;
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {

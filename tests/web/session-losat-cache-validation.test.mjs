@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -62,15 +63,16 @@ globalThis.alert = (message) => alerts.push(String(message));
 
 installSessionImportWorker();
 
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
   adoptCanonicalRenderArtifacts,
   getCommittedCanonicalSession,
-  importSession,
   serializeActiveRenderFiles,
   validateSessionLosatArtifacts,
   installShownDrawing
-} = await import('../../gbdraw/web/js/services/config.js');
+} = sessionConfig;
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { importSession } = callerSession(sessionConfig, state);
 const { promoteCanonicalRenderRequestToCurrent } = await import('../../gbdraw/web/js/services/session-request.js');
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');

@@ -233,7 +233,7 @@ const resetSettings = (page) => evaluateWithRetainedPromise(page, async () => { 
 // The Save is held (its own `beforeExport`) until the Result it raced is mounted.
 const displayWhileSaveHeld = async (page, resultIndex) => {
   await page.evaluate(async (index) => {
-    const service = await import('/gbdraw/web/js/services/config.js');
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
     window.releaseSave = release;

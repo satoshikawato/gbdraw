@@ -3634,6 +3634,7 @@ export const createAppSetup = () => {
   };
   /** @param {SessionFileInput} event */
   const loadSessionFromFile = (event) => importSessionFromFile(event, {
+    shownDrawing: state.activeDrawing,
     availability: sessionSaveLoadAvailability,
     // Before the Session replaces the current one: a font it names that this
     // page cannot draw asks first (receipt 〔読み込むとき〕); Cancel loads nothing.
@@ -5802,6 +5803,7 @@ export const createAppSetup = () => {
   };
 
   const saveSessionWithTitle = () => exportSession(null, {
+    shownDrawing: state.activeDrawing,
     availability: sessionSaveLoadAvailability,
     askChoice,
     recordDisplayRows: recordDisplayControls.allRows,

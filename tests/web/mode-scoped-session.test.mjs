@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -25,10 +26,12 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
 
-const { SESSION_VERSION, assertDrawingInputs, exportSession, importSession, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, assertDrawingInputs, installShownDrawing } = sessionConfig;
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 
 const MODES = ['circular', 'linear'];
 const save = async (title) => {

@@ -25,6 +25,7 @@ import { memberWriteSites, refValueWriteSites, templateMemberWrites } from './he
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -40,9 +41,11 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
-  exportSession, importSession, installShownDrawing, setUnmanagedConfigOverrideValidator
-} = await import('../../gbdraw/web/js/services/config.js');
+  installShownDrawing,
+  setUnmanagedConfigOverrideValidator
+} = sessionConfig;
 const { normalizeAnnotationSets } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { normalizeFeatureVisibilityRule } = await import('../../gbdraw/web/js/services/feature-visibility.js');
 const { normalizeSpecificRule } = await import('../../gbdraw/web/js/services/specific-color-rules.js');
@@ -50,6 +53,7 @@ const { normalizePaletteColors } = await import('../../gbdraw/web/js/utils/color
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const JS = join(ROOT, 'gbdraw', 'web', 'js');

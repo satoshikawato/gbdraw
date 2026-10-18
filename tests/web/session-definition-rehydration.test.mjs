@@ -4,6 +4,7 @@ import { File } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -21,8 +22,9 @@ globalThis.alert = () => {};
 
 installSessionImportWorker();
 
-const { importSession } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { importSession } = callerSession(sessionConfig, state);
 const session = await readFile(
   'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
   'utf8'

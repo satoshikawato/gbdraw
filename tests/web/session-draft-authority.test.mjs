@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -27,6 +28,7 @@ globalThis.alert = (message) => alerts.push(String(message));
 
 installSessionImportWorker();
 
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
   buildConfigData,
   buildEditorStateData,
@@ -34,16 +36,16 @@ const {
   buildOrthogroupStateData,
   buildRunStateData,
   buildUiStateData,
-  importSession,
   restoreCurrentWriterActiveConfig,
   serializeActiveRenderFiles,
   installShownDrawing
-} = await import('../../gbdraw/web/js/services/config.js');
+} = sessionConfig;
 const {
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
   validateCurrentWriterActiveConfig
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { importSession } = callerSession(sessionConfig, state);
 const { floatSettingsSection, returnSettingsSection } = await import('../../gbdraw/web/js/services/settings-pane-state.js');
 const {
   buildCanonicalRenderRequest,
@@ -1389,7 +1391,8 @@ assert.equal(state.errorLog.value,laterAlert);
 assert.deepEqual(rollbackState(),beforeLateRead);
 
 // The same sole Session owner keeps a late Save error from replacing a newer alert.
-const { exportSession } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig2 = await import('../../gbdraw/web/js/services/config.js');
+const { exportSession } = callerSession(sessionConfig2, state);
 let failLateSave;
 const lateSave = exportSession('late save', { beforeExport: () => new Promise((_, reject) => {
   failLateSave = reject;

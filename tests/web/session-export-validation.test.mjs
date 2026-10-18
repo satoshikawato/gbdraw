@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 if (!globalThis.crypto?.subtle) {
   Object.defineProperty(globalThis, 'crypto', {
@@ -30,18 +31,17 @@ globalThis.document = {
   })
 };
 
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
   adoptCanonicalRenderArtifacts,
-  exportSession,
   installShownDrawing,
   validateSessionLosatArtifacts
-} = await import(
-  '../../gbdraw/web/js/services/config.js'
-);
+} = sessionConfig;
 const { buildCanonicalRenderRequest } = await import(
   '../../gbdraw/web/js/services/session-request.js'
 );
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession } = callerSession(sessionConfig, state);
 
 let inputReads = 0;
 installShownDrawing('circular');

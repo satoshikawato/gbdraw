@@ -10,6 +10,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -25,10 +26,12 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, setUnmanagedConfigOverrideValidator, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 
 const fixture = (name) => {
   const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));

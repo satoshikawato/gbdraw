@@ -17,6 +17,7 @@ import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -41,10 +42,13 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
 };
 
 const { sessionLegendEditsByRowKey, splitDraftIntoModes } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
-  buildModeSliceData, importSession, setUnmanagedConfigOverrideValidator
-} = await import('../../gbdraw/web/js/services/config.js');
+  buildModeSliceData,
+  setUnmanagedConfigOverrideValidator
+} = sessionConfig;
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { importSession } = callerSession(sessionConfig, state);
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { normalizePaletteDefinitions } = await import('../../gbdraw/web/js/utils/color-utils.js');

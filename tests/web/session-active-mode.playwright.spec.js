@@ -286,7 +286,7 @@ test('failed import after draft application restores the prior mode, profiles, s
   const failure = await evaluateWithRetainedPromise(page, async () => {
     const name = 'tobacco-chloroplast.gbdraw-session.json';
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
-    const { importSession } = await import('./js/services/config.js');
+    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
       // A Gallery Session loads without a dialog; one would cancel the Load.
       confirmLoadRepairs: async () => false,

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 // Exercise the existing coordinator and gzip writer with browser I/O stubbed.
 globalThis.window = {
@@ -17,8 +18,10 @@ globalThis.document = {
   body: { appendChild: () => {} },
   createElement: () => ({ addEventListener: () => {}, click: () => {}, parentNode: null })
 };
-const { SESSION_VERSION, exportSession, buildConfigData, importSession, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, buildConfigData, installShownDrawing } = sessionConfig;
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 globalThis.alert = () => {};
 installSessionImportWorker();
 const { adoptCurrentSessionDocument, validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');

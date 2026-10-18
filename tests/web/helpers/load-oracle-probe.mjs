@@ -34,6 +34,7 @@ import { File, Blob } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { modeDrawing } from './drawing-state.mjs';
+import { callerSession } from './session-caller.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -79,9 +80,8 @@ globalThis.alert = () => {};
 const { installSessionImportWorker } = await import(treeUrl('tests/web/helpers/session-import-node.mjs'));
 installSessionImportWorker();
 
-const { importSession, exportSession, setUnmanagedConfigOverrideValidator, getCommittedCanonicalSession } = await import(
-  treeUrl('gbdraw/web/js/services/config.js')
-);
+const sessionConfig = await import(treeUrl('gbdraw/web/js/services/config.js'));
+const { setUnmanagedConfigOverrideValidator, getCommittedCanonicalSession } = sessionConfig;
 const validatorCalls = [];
 // The Worker's configuration check, run by Python (as load-repair-dialog does).
 setUnmanagedConfigOverrideValidator((payload) => {
@@ -101,6 +101,7 @@ print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
 });
 const { transformLegacyResultSvg } = await import(treeUrl('gbdraw/web/js/app/app-setup.js'));
 const { state } = await import(treeUrl('gbdraw/web/js/state.js'));
+const { importSession, exportSession } = callerSession(sessionConfig, state);
 
 const readInput = (arg) => {
   if (arg.startsWith('git:')) {

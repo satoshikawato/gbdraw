@@ -13,6 +13,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { callerSession } from './helpers/session-caller.mjs';
 
 globalThis.window = {
   Vue: {
@@ -29,7 +30,8 @@ globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { exportSession, importSession, setUnmanagedConfigOverrideValidator, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
 const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-settings.generated.js');
 const { readSessionDocument } = await import('../../gbdraw/web/js/services/session-authority.js');
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
@@ -37,6 +39,7 @@ setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validate
 // A Session older than 40 has its Results transformed through the composition root's port.
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state);
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');

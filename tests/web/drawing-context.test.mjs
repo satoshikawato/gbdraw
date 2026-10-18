@@ -116,11 +116,28 @@ test('the drawing-key scan finds each read form', () => {
   assert.deepEqual(stateReads('drawing.form; sourceState.adv; // state.form\nstate.mode.value'), []);
 });
 
+// `activeDrawing`, or a lookup of a drawing by the shown ID
+// (`drawingOf(state.activeDrawingId.value)`, `drawings.get(...)`), OV-1218.
+const resolvesShownDrawing = (source) => /\bactiveDrawing\b/.test(source)
+  || /\b(?:drawingOf\s*\(|drawings\s*(?:\.\s*get\s*\(|\[))[^()\]]*\bactiveDrawingId\b/.test(source);
+
 test('a service never resolves the active drawing', () => {
   const resolving = modules(join(JS, 'services'))
-    .filter((path) => /\bactiveDrawing\b/.test(readFileSync(path, 'utf8')))
+    .filter((path) => resolvesShownDrawing(readFileSync(path, 'utf8')))
     .map((path) => relative(JS, path));
   assert.deepEqual(resolving, [], 'the owner of the action passes the drawing');
+});
+
+test('the active-drawing scan finds each resolving form', () => {
+  for (const form of ['state.activeDrawing()', 'state.drawingOf(state.activeDrawingId.value)',
+    'drawingOf( activeDrawingId.value )', 'state.drawings.get(state.activeDrawingId.value)',
+    'drawings[state.activeDrawingId.value]']) {
+    assert.ok(resolvesShownDrawing(form), form);
+  }
+  for (const form of ['drawing.id === state.activeDrawingId.value', 'shownDrawingId: state.activeDrawingId.value',
+    'state.drawingOf(handle.drawingId)', 'managerOf(activeDrawingId())']) {
+    assert.ok(!resolvesShownDrawing(form), form);
+  }
 });
 
 test('Generate resolves its drawing once, at its entry', () => {
