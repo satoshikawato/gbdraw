@@ -5829,7 +5829,7 @@
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <p class="flex flex-wrap items-center gap-2">
                         <span v-for="(sentence, index) in labelFitNotice.report.notice" :key="index" class="font-semibold">{{ sentence }}</span>
-                        <button type="button" data-history-ignore class="btn btn-secondary text-xs h-7 px-2" @click="openLabelFitNotice">Choose a fix</button>
+                        <button v-if="labelFitNotice.report.rows.length" type="button" data-history-ignore class="btn btn-secondary text-xs h-7 px-2" @click="openLabelFitNotice">Choose a fix</button>
                     </p>
                 </div>
                 <!-- While the Generate error card shows, its recovery line is this notice. -->

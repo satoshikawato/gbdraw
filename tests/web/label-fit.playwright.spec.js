@@ -2,7 +2,8 @@
 // open the dialog after a Generate that drew nothing; crossing leaders show a
 // notice bar over the drawn figure, and its "Choose a fix" computes the rows
 // Generate did not search. Apply is one History step and Generates; Cancel
-// writes nothing.
+// writes nothing. Linear region labels over other labels (LP-D68) show the
+// notice with no fix (LP-D82).
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { test, expect } = require('@playwright/test');
@@ -37,6 +38,16 @@ const rowStatuses = (dialog) => dialog.locator('[data-label-fit-row]').evaluateA
 ));
 const shot = async (locator, name) => {
   if (SCREENSHOTS) await locator.screenshot({ path: join(SCREENSHOTS, name) });
+};
+// The page at desktop and phone width, for the PR's Before | After images.
+const pageShots = async (page, name) => {
+  if (!SCREENSHOTS) return;
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.getByText('Result Preview', { exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(SCREENSHOTS, `${name}-${width}.png`) });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
 };
 
 // LP-D52 (E-ROW): SARS-CoV-2 with labels Out overprints two embedded labels.
@@ -137,4 +148,77 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   expect(await undoCount(page)).toBe(before.undo);
   expect(await labelSettings(page)).toEqual(before.settings);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before.result);
+});
+
+// A 6 kb linear record with the given CDS features ([location, product]).
+const genbank = (name, features) => {
+  const sequence = 'acgt'.repeat(1500);
+  const origin = [];
+  for (let start = 0; start < sequence.length; start += 60) {
+    const groups = sequence.slice(start, start + 60).match(/.{1,10}/g).join(' ');
+    origin.push(`${String(start + 1).padStart(9)} ${groups}`);
+  }
+  const feature = ([location, product]) => [`     CDS             ${location}`,
+    `                     /product="${product}"`, `                     /gene="${product}"`];
+  return [`LOCUS       ${name.padEnd(16)}        6000 bp    DNA     linear   UNK 01-JAN-1980`,
+    `DEFINITION  ${name}.`, `ACCESSION   ${name}`, `VERSION     ${name}`, 'FEATURES             Location/Qualifiers',
+    ...features.flatMap(feature), 'ORIGIN', ...origin, '//', ''].join('\n');
+};
+// The labels are pinned at 10 pt, the size the OV-1155 cases were drawn at (a region label without
+// its own font takes the feature label size since #1202).
+const regionsTsv = (rows) => ['set_id\tid\tmark\tstart\tend\tlabel\tlabel_font_size',
+  ...rows.map(([id, start, end, label]) => `regions\t${id}\thighlight\t${start}\t${end}\t${label}\t10`), ''].join('\n');
+const annotationsPanel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
+const generateLinear = async (page, name, features, regions, { separateStrands = true } = {}) => {
+  test.setTimeout(600000);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
+  await page.evaluate(async ({ text, file, separate }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([text], file, { type: 'text/plain', lastModified: 1000 }));
+    app.form.show_labels_linear = 'all';
+    app.form.linear_track_layout = 'above';
+    app.form.separate_strands = separate;
+    await window.Vue.nextTick();
+  }, { text: genbank(name, features), file: `${name}.gb`, separate: separateStrands });
+  await annotationsPanel(page).locator('input[type=file]')
+    .setInputFiles({ name: 'regions.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(regionsTsv(regions)) });
+  await page.waitForFunction(() => window.__GBDRAW_APP__.annotationSets.length === 1);
+  await generateAndWaitForResult(page);
+};
+
+// LP-D68, LP-D77, LP-D82 (OV-1155): two close regions whose long labels overlap
+// each other. Nothing may move, so the figure is drawn with the overlap; the
+// notice counts it and offers no "Choose a fix", as the report has no rows.
+test('Linear region labels over other labels: the notice counts them and offers no fix', async ({ page }) => {
+  await generateLinear(page, 'adjacent', [['3000..3300', 'photosystem II protein D1']],
+    [['r0', 1000, 1100, 'First region with a long label'], ['r1', 1120, 1220, 'Second region with a long label']]);
+  const notice = page.getByTestId('label-fit-notice');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('Region labels overlap other labels or lines (1).');
+  await expect(notice.getByRole('button')).toHaveCount(0);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.labelFitReports.value[0].report.rows.length;
+  })).toBe(0);
+  await pageShots(page, 'linear-region-notice');
+});
+
+// LP-D82 (e'): on one strand the control region's label meets only the tRNA-Leu leader, so it
+// is drawn in front of the leader lines on a white backing, outside its
+// annotation's group. A click on it still selects that annotation's row.
+test('a region label drawn in front of the leader lines selects its annotation', async ({ page }) => {
+  await generateLinear(page, 'left_end',
+    [['190..210', 'tRNA-Leu'], ['complement(3000..3300)', 'photosystem II protein D1']],
+    [['r0', 1, 300, 'Mitochondrial control region']], { separateStrands: false });
+  await expect(page.getByTestId('label-fit-notice')).toHaveCount(0);
+  const front = page.locator('.origin-top svg [data-gbdraw-region-label-for]');
+  await expect(front).toHaveCount(1);
+  await expect(front.locator('rect')).toHaveAttribute('fill-opacity', '0.7');
+  await annotationsPanel(page).evaluate((details) => { details.open = true; });
+  await front.locator('text').click();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedAnnotation?.id)).toBe('r0');
+  await expect(annotationsPanel(page).locator('.border-blue-400')).toHaveCount(1);
 });

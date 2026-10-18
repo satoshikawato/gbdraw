@@ -20,7 +20,14 @@ from gbdraw.config.models import GbdrawConfig
 import gbdraw.labels.circular_fit as circular_fit_module
 import gbdraw.labels.circular_repair as circular_repair_module
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
-from gbdraw.labels.linear import check_linear_label_fit, linear_label_fit
+from gbdraw.labels.linear import (
+    FeatureLabelRow,
+    FeatureLabelRows,
+    RecordRegionLabels,
+    check_linear_label_fit,
+    keeps_feature_label_rows,
+    linear_label_fit,
+)
 from gbdraw.layout.spatial import Aabb
 from gbdraw.labels.circular_fit import (
     CircularLabelLayout,
@@ -42,6 +49,7 @@ from gbdraw.labels.fit import (
     LabelFitVerification,
     LabelShape,
     format_label_fit_report,
+    label_fit_notice,
     label_fit_outcome,
     label_fits_by_kind,
     overlapping_pairs,
@@ -705,6 +713,57 @@ def test_linear_labels_on_stacked_features_stop_with_the_separate_features_row()
     assert raised.value.report.rows == ()
     check_linear_label_fit(
         linear_label_fit([("rec", [label(0.0, 20.0, embedded=False)])], 8.0), verify, features_separated=False
+    )
+
+
+def _no_values(values: Mapping[str, object]) -> LabelFitVerification:
+    raise AssertionError(f"no config row expected: {dict(values)}")
+
+
+def test_region_labels_over_other_labels_warn_with_no_fix_and_never_stop() -> None:
+    """LP-D68, LP-D82: a figure with region labels over other labels or lines is drawn and warns
+    with the count; no setting is offered (the font and the line count never change)."""
+
+    regions = RecordRegionLabels((10.0, 12.0, 14.0), overlaps=7)
+    label_fit = linear_label_fit([("rec", [])], 8.0, [regions])
+    assert label_fit.outcome == "warn"
+    (record,) = label_fit.records
+    assert (record.label_kind, record.label_count, record.font_size, record.fit) == (
+        "linear_region", 3, 14.0, LabelFit(0, 0, region_overlaps=7)
+    )
+    with pytest.warns(LabelLeadersCrossWarning) as caught:
+        report = check_linear_label_fit(label_fit, _no_values, features_separated=False)
+    assert report is not None and report.drawn and report.region_overlaps == 7 and report.rows == ()
+    assert label_fit_notice(report) == ("Region labels overlap other labels or lines (7).",)
+    assert str(caught[0].message) == "3 region labels do not fit at 14 pt (7 region label overlaps). Drawn anyway."
+
+
+def test_feature_label_rows_are_kept_only_when_the_region_label_that_asked_for_them_clears() -> None:
+    """LP-D77, LP-D82 RGN-YIELD-ROW: region label 0 asks for a new row; a second figure that clears
+    region label 1 instead, with the same total, is not kept. One that clears label 0 is."""
+
+    rows = FeatureLabelRows((FeatureLabelRow(0, 3, 4),), overlaps=1, region_labels=((0, 0),))
+    before = linear_label_fit([("rec", [])], 8.0, [RecordRegionLabels((10.0, 10.0), 2, conflicted=(0, 1))], rows)
+    still_asking = linear_label_fit([("rec", [])], 8.0, [RecordRegionLabels((10.0, 10.0), 1, conflicted=(0,))])
+    cleared = linear_label_fit([("rec", [])], 8.0, [RecordRegionLabels((10.0, 10.0), 1, conflicted=(1,))])
+    assert not keeps_feature_label_rows(before, still_asking)
+    assert keeps_feature_label_rows(before, cleared)
+
+
+def test_overlapping_feature_labels_stop_and_name_the_region_count_too() -> None:
+    def label(start: float) -> dict:
+        return {
+            "start": start, "middle": start + 20.0, "middle_x": start + 20.0, "width_px": 40.0, "height_px": 10.0,
+            "middle_y": 20.0, "feature_middle_y": 50.0, "is_embedded": False, "leader_line": False,
+        }
+
+    label_fit = linear_label_fit([("rec", [label(0.0), label(10.0)])], 8.0, [RecordRegionLabels((10.0,), 2)])
+    assert label_fit.outcome == "stop"
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_linear_label_fit(label_fit, _no_values, features_separated=False)
+    assert str(raised.value) == (
+        "Labels do not fit: rec: 2 Linear labels at 8 pt (1 label pair overlaps, 0 leader pairs cross); "
+        "rec: 1 region label at 10 pt (2 region label overlaps). Nothing was drawn."
     )
 
 

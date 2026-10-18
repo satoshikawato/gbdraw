@@ -112,6 +112,7 @@ class LabelFitRecordPayload(TypedDict):
     overlapPairs: int
     crossingPairs: int
     definitionOverlaps: int
+    regionOverlaps: int
     refused: bool
     counts: str
 
@@ -122,6 +123,7 @@ class LabelFitReportPayload(TypedDict):
     overlapPairs: int
     crossingPairs: int
     definitionOverlaps: int
+    regionOverlaps: int
     notice: list[str]
     records: list[LabelFitRecordPayload]
     rows: list[LabelFitRowPayload]
@@ -191,12 +193,13 @@ def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
     return {
         "recordId": record.record_id,
         "labelKind": record.label_kind,
-        "labelKindTitle": f"{label_kind_words(record)} labels",
+        "labelKindTitle": f"{label_kind_words(record)} label{'' if record.label_count == 1 else 's'}",
         "labelCount": record.label_count,
         "fontSize": float(record.font_size),
         "overlapPairs": record.fit.overlap_pairs,
         "crossingPairs": record.fit.crossing_pairs,
         "definitionOverlaps": record.fit.definition_overlaps,
+        "regionOverlaps": record.fit.region_overlaps,
         "refused": record.refused,
         # A refused radial record has no counts; the reason stands in (OV-699).
         "counts": label_fit_record_counts(record),
@@ -212,6 +215,7 @@ def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> Labe
         "overlapPairs": report.overlap_pairs,
         "crossingPairs": report.crossing_pairs,
         "definitionOverlaps": report.definition_overlaps,
+        "regionOverlaps": report.region_overlaps,
         "notice": list(label_fit_notice(report)),
         "records": [_record_payload(record) for record in report.records],
         "rows": [label_fit_row_payload(row, mode) for row in report.rows],

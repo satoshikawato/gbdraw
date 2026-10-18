@@ -1,4 +1,5 @@
 import re
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -1671,6 +1672,291 @@ def test_linear_label_without_a_clear_place_keeps_its_default_place_off_the_name
     # bar there). (the ink centre is within half a pixel of the text anchor)
     assert 0.5 * (left + right) == pytest.approx(0.5 * sum(label["span"]), abs=0.5)
     assert right <= name[0] or left >= name[2] or bottom <= name[1] or top >= name[3]
+    # LP-D68: the conflict that remains is counted (the tRNA-Leu leader through the letters).
+    label_fit = drawing._gbdraw_linear_label_fit
+    assert [(record.label_kind, record.fit.region_overlaps) for record in label_fit.records] == [("linear_region", 1)]
+
+
+_REGION_STYLE = RegionAnnotationStyle(stroke="#7b68b5", stroke_width=0.6, fill="#7b68b5", fill_opacity=0.2)
+# OV-1155 cases (Step 0, LP-D80 study): (start, end, product, strand) features and (start, end, label) regions.
+_REGION_CASES = {
+    # A label wider than its region; only the tRNA-Leu leader runs through its letters.
+    "left_end": (((190, 210, "tRNA-Leu", 1), (3000, 3300, "photosystem II protein D1", -1)),
+                 ((1, 300, "Mitochondrial control region"),), 10.0),
+    # Two close regions with long labels: they overlap each other.
+    "adjacent": (((3000, 3300, "photosystem II protein D1", 1),),
+                 ((1000, 1100, "First region with a long label"), (1120, 1220, "Second region with a long label")), 10.0),
+    # The tRNA-Pro letters and the tRNA-Leu leader meet the 20 pt label.
+    "combo20": (((150, 170, "tRNA-Leu", 1), (420, 440, "tRNA-Pro", 1), (3000, 3300, "photosystem II protein D1", 1)),
+                ((1, 500, "Mitochondrial control region"),), 20.0),
+}
+
+
+def _region_case(name: str):
+    import warnings
+
+    features, regions, font = _REGION_CASES[name]
+    record = SeqRecord(Seq("ACGT" * 1500), id=name, name=name, description=name, annotations={"topology": "linear"})
+    record.features = [
+        SeqFeature(FeatureLocation(start - 1, end, strand=strand), type="CDS", qualifiers={"product": [product]})
+        for start, end, product, strand in features
+    ]
+    style = RegionAnnotationStyle(**{**_REGION_STYLE.__dict__, "label_font_size": font})
+    annotations = tuple(
+        RegionAnnotation(f"r{index}", CoordinateSpan(None, start, end), label=label, mark="highlight", style=style)
+        for index, (start, end, label) in enumerate(regions)
+    )
+    options = LinearDiagramOptions(
+        config_overrides={"labels.linear.scope": "all", "canvas.linear.track_layout": "above"},
+        annotations=AnnotationOptions(sets=(AnnotationSet("regions", annotations),)),
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        drawing = build_linear_diagram([record], options=options)
+    return drawing, [str(item.message) for item in caught if "region label" in str(item.message)]
+
+
+def _feature_label_ys(svg: str) -> dict[str, float]:
+    root = ElementTree.fromstring(svg)
+    parents = {child: parent for parent in root.iter() for child in parent}
+    return {
+        text.text: _text_ink_box(text, parents)[1]
+        for text in root.iter()
+        if text.tag.endswith("text") and text.attrib.get("data-label-feature-id")
+    }
+
+
+def _front_labels(svg: str) -> list[tuple[str, ElementTree.Element, ElementTree.Element]]:
+    """Each region label drawn in front (LP-D82): the annotation group id it names, its backing and its text."""
+
+    root = ElementTree.fromstring(svg)
+    found = []
+    for group in root.iter():
+        target = group.attrib.get("data-gbdraw-region-label-for")
+        if target:
+            (rect,) = [child for child in group if child.tag.endswith("rect")]
+            (text,) = [child for child in group if child.tag.endswith("text")]
+            found.append((target, rect, text))
+    return found
+
+
+def test_a_region_label_over_leader_lines_only_is_drawn_in_front_on_a_backing() -> None:
+    """LP-D82 (e'): the left_end label meets only the tRNA-Leu leader; it is drawn above the
+    record's leader lines on a white rounded box at 70 % opacity, and the leader behind it is no conflict."""
+
+    from gbdraw.api.diagram import label_fit_report
+
+    drawing, messages = _region_case("left_end")
+    svg = drawing.tostring()
+    root = ElementTree.fromstring(svg)
+
+    assert messages == [] and label_fit_report(drawing) is None
+    ((target, rect, text),) = _front_labels(svg)
+    assert text.text == "Mitochondrial control region" and text.attrib["font-size"] == "10.0"
+    assert (rect.attrib["fill"], rect.attrib["fill-opacity"]) == ("#ffffff", "0.7")
+    assert float(rect.attrib["rx"]) == pytest.approx(0.18 * 10.0)
+    # The annotation's own group keeps its box and draws no second copy of the letters.
+    (item,) = [group for group in root.iter() if group.attrib.get("id") == target]
+    assert item.attrib["data-gbdraw-annotation-label"] == "Mitochondrial control region"
+    assert not [child for child in item.iter() if child.tag.endswith("text")]
+    # The front layer comes after every leader line of the record.
+    order = list(root.iter())
+    front = next(element for element in order if element.attrib.get("data-gbdraw-region-label-for"))
+    leaders = [element for element in order if element.tag.endswith("line") and element.attrib.get("data-label-feature-id")]
+    assert leaders and all(order.index(line) < order.index(front) for line in leaders)
+
+
+def test_feature_labels_that_a_region_label_meets_move_to_another_row_and_both_ways_combine() -> None:
+    """LP-D82 (b) with (e'): the tRNA-Pro letters move to a new row on top (the figure is assembled
+    again with it), and the label, then over the leader lines only, comes in front on its backing."""
+
+    from gbdraw.api.diagram import label_fit_report
+
+    drawing, messages = _region_case("combo20")
+    svg = drawing.tostring()
+    ys = _feature_label_ys(svg)
+
+    assert messages == [] and label_fit_report(drawing) is None
+    assert [text.text for _target, _rect, text in _front_labels(svg)] == ["Mitochondrial control region"]
+    # tRNA-Pro took the row above tRNA-Leu's; the font and the line count never change.
+    assert ys["tRNA-Pro"] < ys["tRNA-Leu"] < ys["photosystem II protein D1"]
+
+
+def _hmmtdna_render(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], font: str):
+    """A renderer of HmmtDNA (``above``) with its rRNA and control regions as highlights, their labels at
+    ``font`` pt (``""``: the default region label font, the feature label size): name -> (SVG, stderr)."""
+
+    from gbdraw import cli
+
+    column, cell = ("\tlabel_font_size", f"\t{font}") if font else ("", "")
+    table = tmp_path / "regions.tsv"
+    table.write_text(
+        f"set_id\tid\tmark\tstart\tend\tlabel\tfill\tfill_opacity\tstroke\tstroke_width\tlegend_label{column}\n"
+        f"regions\trrna\thighlight\t648\t3229\trRNA genes\t#7b68b5\t0.2\t#7b68b5\t0.6\trRNA genes{cell}\n"
+        f"regions\tcontrol\thighlight\t16024\t16569\tControl region\t#d98e04\t0.25\t#d98e04\t0.6\tControl region{cell}\n"
+    )
+
+    def render(name: str) -> tuple[str, str]:
+        output = tmp_path / name
+        monkeypatch.setattr(sys, "argv", [
+            "gbdraw", "linear", "--gbk", str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"),
+            "--annotation_table", str(table), "--track_layout", "above", "--separate_strands", "--show_labels", "all",
+            "--legend", "right", "--gc", "-o", str(output), "-f", "svg",
+        ])
+        cli.main()
+        return output.with_suffix(".svg").read_text(), capsys.readouterr().err
+
+    return render
+
+
+def test_cli_moves_the_hmmtdna_trna_pro_label_off_the_control_region_label(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """HmmtDNA with 20 pt region labels (OV-1155 Step 0): "rRNA genes" goes into its box (LP-D75), and
+    tRNA-Pro, whose letters the "Control region" label meets, moves to another row (LP-D82 (b))."""
+
+    from gbdraw.diagrams.linear import annotation_labels
+
+    render = _hmmtdna_render(tmp_path, monkeypatch, capsys, "20")
+    svg, err = render("moved")
+    assert "WARNING" not in err and _front_labels(svg) == []
+    assert _label_candidates(svg) == {"rRNA genes": "inside", "Control region": "normal"}
+
+    # Without the move, the label keeps its overlap and warns, with no fix offered (LP-D77).
+    monkeypatch.setattr(annotation_labels, "_make_way", lambda *args, **kwargs: None)
+    kept, err = render("kept")
+    assert "WARNING: 2 region labels do not fit at 20 pt (1 region label overlap). Drawn anyway." in err
+    assert "Run again" not in err
+    assert _feature_label_ys(svg)["tRNA-Pro"] < _feature_label_ys(kept)["tRNA-Pro"]
+
+
+def test_cli_draws_the_hmmtdna_control_region_label_in_front_at_the_default_region_font(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """OV-1290: at the default region font (24 pt) "Control region" meets the tRNA-Pro letters; tRNA-Pro
+    moves to row 5, above "NADH dehydrogenase subunit 6" (row 4), and the label, then over the tRNA-Pro
+    and tRNA-Thr leaders only, comes in front on its backing. The backing stops at its mark's edge, so its
+    padding (0.18 em, past the 4 px ``label_offset`` at 24 pt) does not reach the tRNA-Thr glyph below."""
+
+    svg, err = _hmmtdna_render(tmp_path, monkeypatch, capsys, "")("default")
+    ys = _feature_label_ys(svg)
+
+    assert "WARNING" not in err
+    assert [(text.text, text.attrib["font-size"]) for _target, _rect, text in _front_labels(svg)] == [
+        ("Control region", "24.0")
+    ]
+    assert ys["tRNA-Pro"] < ys["NADH dehydrogenase subunit 6"] < ys["cytochrome b"] < ys["tRNA-Thr"]
+
+
+def test_a_backing_stops_at_its_own_marks_edge() -> None:
+    """OV-1290: the backing (0.18 em past the letters) does not cross ``mark_edge``, where the paint of
+    the label's mark (or the slot it keeps clear of) begins, ``label_offset`` from the letters, on either
+    side; where the padding fits before that edge, it is the full padding."""
+
+    from gbdraw.layout.spatial import Aabb
+    from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel
+
+    def backing(ink: Aabb, font_size: float, mark_edge: float) -> tuple[float, float, float, float]:
+        box = LinearAnnotationLabel(
+            "a", "Label", 0.0, 0.0, "middle", font_size, "#000", ink, ((0.0, 100.0),), mark_edge, backed=True
+        ).backing
+        return box.min_x, box.min_y, box.max_x, box.max_y
+
+    above, below = Aabb(0.0, -26.7, 148.0, -4.3), Aabb(0.0, 101.3, 148.0, 123.7)
+    assert backing(above, 24.0, -0.3) == pytest.approx((-4.32, -31.02, 152.32, -0.3))
+    assert backing(below, 24.0, 97.6) == pytest.approx((-4.32, 97.6, 152.32, 128.02))
+    assert backing(above, 10.0, -0.3) == pytest.approx((-1.8, -28.5, 149.8, -2.5))
+    assert backing(below, 10.0, 97.6) == pytest.approx((-1.8, 99.5, 149.8, 125.5))
+    # Letters inside their slot (a thin mark in a tall lane): the edge is the mark's, not the slot's.
+    inside = Aabb(0.0, -17.2, 148.0, 4.3)
+    assert backing(inside, 24.0, 8.3) == pytest.approx((-4.32, -21.52, 152.32, 8.3))
+
+
+def test_a_region_label_whose_overlap_no_way_clears_warns_with_no_fix() -> None:
+    """LP-D77, LP-D82: two region labels overlap each other; nothing may move, so the label stays on
+    one line where it was and the warning counts it, with no fix rows."""
+
+    from gbdraw.api.diagram import label_fit_report
+
+    drawing, messages = _region_case("adjacent")
+    report = label_fit_report(drawing)
+
+    assert report is not None and report.drawn and report.region_overlaps == 1 and report.rows == ()
+    assert messages == ["2 region labels do not fit at 10 pt (1 region label overlap). Drawn anyway."]
+    assert _front_labels(drawing.tostring()) == []
+
+
+def _label_candidates(svg: str) -> dict[str, str]:
+    """Each region label's drawn place: ``inside`` when its letters lie within its own mark's
+    rectangle, else ``normal``."""
+
+    root = ElementTree.fromstring(svg)
+    found = {}
+    for group in root.iter():
+        label = group.attrib.get("data-gbdraw-annotation-label")
+        texts = [child for child in group if child.tag.endswith("text")]
+        if not label or not texts:
+            continue
+        y = float(texts[0].attrib["y"])
+        rects = [child for child in group if child.tag.endswith("rect")]
+        inside = any(float(rect.attrib["y"]) <= y <= float(rect.attrib["y"]) + float(rect.attrib["height"]) for rect in rects)
+        found[label] = "inside" if inside else "normal"
+    return found
+
+
+# The OV-1155 matrix drew these region labels at 10 pt (their size before they took the feature label size).
+_HMMTDNA_REGIONS = (
+    "set_id\tid\tmark\tstart\tend\tlabel\tfill\tfill_opacity\tstroke\tstroke_width\tlegend_label\tlabel_font_size\n"
+    "regions\trrna\t{mark}\t648\t3229\trRNA genes\t#7b68b5\t0.2\t#7b68b5\t0.6\trRNA genes\t10\n"
+    "regions\tcontrol\t{mark}\t16024\t16569\tControl region\t#d98e04\t0.25\t#d98e04\t0.6\tControl region\t10\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("mark", "extra"),
+    [
+        ("highlight", ["--gc", "--track_layout", "above"]),
+        ("highlight", ["--gc", "--track_layout", "below"]),
+        ("bracket", ["--gc", "--track_layout", "below"]),
+        ("highlight", ["--linear_track_slot", "features:features@side=overlay",
+                       "--linear_track_slot", "gc:dinucleotide_content@side=below",
+                       "--linear_track_slot",
+                       "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,to_slot=gc,layer=foreground,z=5",
+                       "--linear_track_axis_index", "0"]),
+    ],
+)
+def test_linear_region_label_candidates_change_nothing_without_a_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mark: str, extra: list[str]
+) -> None:
+    """PD-OI-097 Must preserve: where the normal one-line place is clear, the figure is byte-identical
+    to the one placed without the other candidates (the OV-1155 matrix: HmmtDNA cases)."""
+
+    from gbdraw import cli
+    from gbdraw.diagrams.linear import annotation_labels
+
+    table = tmp_path / "regions.tsv"
+    table.write_text(_HMMTDNA_REGIONS.format(mark=mark))
+    gbk = str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk")
+
+    def render(name: str) -> bytes:
+        output = tmp_path / name
+        monkeypatch.setattr(sys, "argv", [
+            "gbdraw", "linear", "--gbk", gbk, "--annotation_table", str(table), "--separate_strands", "--show_labels",
+            "all", "--legend", "right", *extra, "-o", str(output), "-f", "svg",
+        ])
+        cli.main()
+        return output.with_suffix(".svg").read_bytes()
+
+    drawn = render("candidates")
+    place = annotation_labels._place_along_span
+
+    def normal_only(label, *, origin_y, obstacles, gap, **_rest):
+        return label.moved_to(place(label, origin_y, obstacles, gap))
+
+    monkeypatch.setattr(annotation_labels, "_choose_candidate", normal_only)
+    monkeypatch.setattr(annotation_labels, "_make_way", lambda *args, **kwargs: None)
+    assert drawn == render("normal")
+
 
 
 def _six_kb_label_and_name(region: RegionAnnotation, features: tuple[tuple[int, int, str], ...]):
@@ -1820,14 +2106,14 @@ def test_linear_moved_label_keeps_off_the_next_record_in_its_row(
 def test_linear_moved_label_letters_may_pass_the_bar_end(
     x: float, segment: tuple[float, float], hanging: tuple[float, float], placed: float
 ) -> None:
-    from gbdraw.diagrams.linear.annotation_labels import _place_along_span
+    from gbdraw.diagrams.linear.annotation_labels import LabelObstacle, _place_along_span
     from gbdraw.layout.spatial import Aabb
     from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel
 
-    label = LinearAnnotationLabel("a", "Label", x, 0.0, "middle", 10.0, "#000", Aabb(x - 20, -4, x + 20, 4), (segment,))
+    label = LinearAnnotationLabel("a", "Label", x, 0.0, "middle", 10.0, "#000", Aabb(x - 20, -4, x + 20, 4), (segment,), 8.0)
     feature_label = Aabb(hanging[0], -6.0, hanging[1], 6.0)
 
-    moved = label.moved_to(_place_along_span(label, 0.0, [feature_label], 3.0))
+    moved = label.moved_to(_place_along_span(label, 0.0, [LabelObstacle(feature_label, (0, "feature", 0))], 3.0))
     # Moved off the feature label with no stop at the bar end (Owner decision on OV-1157).
     assert moved.x == pytest.approx(placed)
     assert (moved.ink.min_x, moved.ink.max_x) == pytest.approx((-5.0, 35.0) if x < 500 else (965.0, 1005.0))
@@ -1839,7 +2125,7 @@ def test_linear_label_search_matches_a_full_scan() -> None:
 
     import random
 
-    from gbdraw.diagrams.linear.annotation_labels import _place_along_span
+    from gbdraw.diagrams.linear.annotation_labels import LabelObstacle, _place_along_span
     from gbdraw.layout.spatial import Aabb
     from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel
 
@@ -1852,7 +2138,7 @@ def test_linear_label_search_matches_a_full_scan() -> None:
             )
         )
         x = generator.uniform(segments[0][0], segments[0][1])
-        label = LinearAnnotationLabel("a", "Label", x, 0.0, "middle", 10.0, "#000", Aabb(x - 20, -4, x + 20, 4), segments)
+        label = LinearAnnotationLabel("a", "Label", x, 0.0, "middle", 10.0, "#000", Aabb(x - 20, -4, x + 20, 4), segments, 8.0)
         obstacles = [
             Aabb(left, generator.uniform(-12, 2), left + generator.uniform(0.0, 40.0), generator.uniform(3, 12))
             for left in (generator.uniform(-50.0, 1000.0) for _ in range(generator.randint(0, 40)))
@@ -1874,7 +2160,8 @@ def test_linear_label_search_matches_a_full_scan() -> None:
             for low, high in segments:
                 candidates |= {low, high, *(v for interval in blocked for v in interval if low <= v <= high)}
             expected = min(sorted(candidates), key=lambda value: (conflicts(value), abs(value - x)))
-        assert _place_along_span(label, 0.0, obstacles, gap) == pytest.approx(expected, abs=1e-9)
+        owned = [LabelObstacle(box, (0, "feature", index)) for index, box in enumerate(obstacles)]
+        assert _place_along_span(label, 0.0, owned, gap) == pytest.approx(expected, abs=1e-9)
 
 
 def test_linear_annotation_to_slot_uses_the_bands_each_record_has() -> None:

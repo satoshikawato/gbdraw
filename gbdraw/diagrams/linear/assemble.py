@@ -143,7 +143,13 @@ from ...layout.scalar_axis import (
     format_percent_tick,
     scalar_axis_tick_values,
 )
-from ...labels.linear import LINEAR_LABEL_FIT_ATTR, calculate_label_bounds, linear_label_fit
+from ...labels.linear import (
+    LINEAR_LABEL_FIT_ATTR,
+    FeatureLabelRows,
+    calculate_label_bounds,
+    linear_label_fit,
+    with_feature_label_rows,
+)
 from ...tracks import (
     LinearTrackSlot,
     ScalarSpec,
@@ -169,10 +175,14 @@ from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.linear.annotations import (
     linear_annotation_label_room,
     linear_annotation_track_content,
+    linear_region_label_front_content,
 )
 from .annotation_labels import (
     AnnotationLabelsBySlot,
+    LabelObstacle,
+    PlacedAnnotationLabels,
     linear_annotation_label_inks,
+    linear_feature_glyph_boxes,
     linear_feature_label_obstacles,
     place_linear_annotation_labels,
 )
@@ -1593,8 +1603,8 @@ def _linear_annotation_bounds(
             max_x = max(float(end) for _start, end in annotation.geometry_segments) * scale
             label = labels.get(annotation.id)
             if label is not None:
-                min_x = min(min_x, label.ink.min_x)
-                max_x = max(max_x, label.ink.max_x)
+                min_x = min(min_x, label.footprint.min_x)
+                max_x = max(max_x, label.footprint.max_x)
             bounds.append(
                 Aabb(
                     placement.x + min_x - half_stroke,
@@ -1612,43 +1622,54 @@ def _place_linear_annotation_labels_by_record(
     placements: Mapping[int, LinearRecordPlacement],
     plans: Sequence[LinearRecordVerticalPlan],
     collision_bands: Sequence[tuple[CollisionBand, ...]],
-    feature_labels: Sequence[Sequence[dict[str, object]]],
+    feature_labels: list[list[dict]],
+    feature_dicts: Sequence[FeatureDict],
+    feature_geometries: Sequence[LinearFeatureLaneGeometry],
+    separate_strands: bool,
+    feature_stroke_width: float,
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack],
     font_family: str,
     leader_stroke_width: float,
     gap: float,
-) -> list[AnnotationLabelsBySlot]:
-    """Each record's annotation labels, placed along their spans in record order.
+    new_rows: bool,
+) -> tuple[list[PlacedAnnotationLabels], list[list[dict]]]:
+    """Each record's annotation labels, placed along their spans in record order, and every
+    record's feature labels after the moves made for them (LP-D82).
 
     Obstacles are the record's own feature labels and leaders, every record's
     name and definition text, and, from the other records of the same row,
     their bars (the ``body`` collision bands the figure bounds read), feature
-    labels, leaders and the annotation labels placed before (LP-D42).
+    labels, leaders and the annotation labels placed before (LP-D42). Each
+    record's region labels come with the pairs that still overlap (LP-D68).
+    The record's feature glyphs bound the empty area inside a filled mark (LP-D75).
     """
 
-    own_inks = [
-        linear_feature_label_obstacles(
-            feature_labels[index] if index < len(feature_labels) else [], plans[index], leader_stroke_width
+    def own_ink(index: int) -> list[LabelObstacle]:
+        # Read when used: an earlier record's region labels may have moved its feature labels.
+        return linear_feature_label_obstacles(
+            feature_labels[index] if index < len(feature_labels) else [], plans[index], leader_stroke_width, index
         )
-        for index in range(len(records))
-    ]
-    placed: list[AnnotationLabelsBySlot] = []
+
+    placed: list[PlacedAnnotationLabels] = []
     for index, record in enumerate(records):
         here = placements[index]
-        obstacles = list(own_inks[index])
+        obstacles = own_ink(index)
         for other, there in placements.items():
             same_row = other != index and there.row == here.row
             dx, dy = there.x - here.x, there.axis_y - here.axis_y
             obstacles.extend(
-                Aabb(band.x_start - here.x, dy + band.top_y, band.x_end - here.x, dy + band.bottom_y)
-                for band in collision_bands[other]
+                LabelObstacle(
+                    Aabb(band.x_start - here.x, dy + band.top_y, band.x_end - here.x, dy + band.bottom_y),
+                    (other, "band", band_index),
+                )
+                for band_index, band in enumerate(collision_bands[other])
                 if band.x_end > band.x_start and (band.kind == "definition" or (same_row and band.kind == "body"))
             )
             if same_row:
-                inks = own_inks[other] + (
-                    linear_annotation_label_inks(placed[other], plans[other]) if other < index else []
+                inks = own_ink(other) + (
+                    linear_annotation_label_inks(placed[other].by_slot, plans[other], other) if other < index else []
                 )
-                obstacles.extend(box.translated(dx, dy) for box in inks)
+                obstacles.extend(item._replace(box=item.box.translated(dx, dy)) for item in inks)
         placed.append(
             place_linear_annotation_labels(
                 record_index=index,
@@ -1657,11 +1678,26 @@ def _place_linear_annotation_labels_by_record(
                 plan=plans[index],
                 annotation_track_layouts=annotation_track_layouts,
                 obstacles=obstacles,
+                feature_labels=feature_labels[index] if index < len(feature_labels) else [],
+                # Only a record with annotation labels to place reads its glyphs.
+                glyphs=linear_feature_glyph_boxes(
+                    feature_dicts[index],
+                    feature_geometries[index],
+                    plans[index],
+                    separate_strands=separate_strands,
+                    scale=here.sequence_width / max(1, len(record.seq)),
+                    stroke_width=feature_stroke_width,
+                )
+                if any(slot.renderer == "annotations" and slot.id in annotation_track_layouts for slot in plans[index].slots)
+                else (),
                 font_family=font_family,
+                leader_stroke_width=leader_stroke_width,
                 gap=gap,
+                new_rows=new_rows,
             )
         )
-    return placed
+        feature_labels = with_feature_label_rows(feature_labels, placed[-1].rows)
+    return placed, feature_labels
 
 
 def _collect_linear_primary_bounds(
@@ -2013,12 +2049,16 @@ def assemble_linear_diagram(
     alignment_anchor_centers: Sequence[float | None] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
     record_presentations: Sequence[RecordPresentation] | None = None,
+    feature_label_rows: FeatureLabelRows | None = None,
 ) -> Drawing:
     """
     Assembles a linear diagram of genomic records with optional BLAST comparison data,
     and returns the SVG canvas (not saved).
 
     ``record_presentations`` hold each record's label and subtitle.
+    ``feature_label_rows`` are feature label rows an earlier assembly of the
+    same figure proposed for its region labels (``LinearLabelFit.new_rows``,
+    LP-D82): this assembly places those labels there and plans room for them.
     """
     profile = canvas_config.profile
     cfg = profile.config
@@ -2242,6 +2282,8 @@ def assemble_linear_diagram(
         feature_lane_geometries=record_feature_lane_geometries,
         record_transforms=record_transforms,
     )
+    if feature_label_rows is not None:
+        all_labels = with_feature_label_rows(all_labels, feature_label_rows.rows)
     local_definition_line_kinds: list[frozenset[str]] | None = None
     row_definition_line_kinds: list[frozenset[str]] = [
         frozenset() for _record in records
@@ -2555,6 +2597,8 @@ def assemble_linear_diagram(
             sequence_widths=final_sequence_widths,
             record_transforms=record_transforms,
         )
+        if feature_label_rows is not None:
+            all_labels = with_feature_label_rows(all_labels, feature_label_rows.rows)
         record_vertical_plans, record_definition_geometries = _build_linear_record_vertical_plans(
             records=records,
             layout=linear_track_layout,
@@ -2885,20 +2929,40 @@ def assemble_linear_diagram(
         )
 
     # The API checks the drawn labels and offers the rows (LP-D48, LP-D52).
-    label_fit = linear_label_fit(
-        [(str(record.id), labels) for record, labels in zip(records, all_labels)], label_font_size
-    )
     # Annotation labels move along their spans off the feature labels and leaders (OV-845).
-    annotation_labels_by_record = _place_linear_annotation_labels_by_record(
+    placed_annotation_labels, all_labels = _place_linear_annotation_labels_by_record(
         records=records,
         placements=record_placements,
         plans=record_vertical_plans,
         collision_bands=record_collision_bands,
         feature_labels=all_labels,
+        feature_dicts=record_feature_dicts,
+        feature_geometries=record_feature_lane_geometries,
+        separate_strands=render_context.profile.strandedness,
+        feature_stroke_width=max(float(feature_config.block_stroke_width), float(feature_config.line_stroke_width)),
         annotation_track_layouts=annotation_track_layouts,
         font_family=str(cfg.objects.text.font_family),
         leader_stroke_width=float(cfg.labels.stroke_width.long),
         gap=float(cfg.labels.spacing.linear),
+        # One assembly more at most: one that places proposed rows proposes none.
+        new_rows=feature_label_rows is None,
+    )
+    annotation_labels_by_record = [placed.by_slot for placed in placed_annotation_labels]
+    label_fit = linear_label_fit(
+        [(str(record.id), labels) for record, labels in zip(records, all_labels)],
+        label_font_size,
+        [placed.region_labels for placed in placed_annotation_labels],
+        FeatureLabelRows(
+            tuple(row for placed in placed_annotation_labels for row in (*placed.rows, *placed.new_rows)),
+            sum(placed.new_row_overlaps for placed in placed_annotation_labels),
+            tuple(
+                (record_index, label)
+                for record_index, placed in enumerate(placed_annotation_labels)
+                for label in placed.proposers
+            ),
+        )
+        if any(placed.new_rows for placed in placed_annotation_labels)
+        else None,
     )
 
     total_records = len(records)
@@ -3132,6 +3196,41 @@ def assemble_linear_diagram(
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                         group_key=GroupKey(str(record_keys[record_index]), GroupKind.GC_SKEW, str(slot.id)),
                     )
+
+            # Backed region labels, in front of the record's leader lines (LP-D82 RGN-FRONT).
+            for slot in linear_track_layout.slots:
+                annotation_layout = annotation_track_layouts.get(slot.id)
+                front = (
+                    linear_region_label_front_content(
+                        annotation_layout,
+                        record_index=record_index,
+                        font_family=str(cfg.objects.text.font_family),
+                        labels=annotation_labels_by_record[record_index].get(slot.id, ()),
+                        dom_group_id=(
+                            _linear_track_slot_dom_id(
+                                slot_id=str(slot.id),
+                                renderer=str(slot.renderer),
+                                slot_index=int(slot.slot_index),
+                                record_index=record_index,
+                                record_count=total_records,
+                            )
+                            if user_slot_mode
+                            else None
+                        ),
+                    )
+                    if slot.renderer == "annotations" and annotation_layout is not None
+                    else None
+                )
+                if front is None:
+                    continue
+                front_group = place_content(
+                    canvas, front, GroupKey(str(record_keys[record_index]), GroupKind.LABEL_TEXT, str(slot.id))
+                )
+                front_group.translate(
+                    offset_x + canvas_config.horizontal_offset,
+                    offset_y + float(record_vertical_plan.slot_by_id(slot.id).origin_y),
+                )
+                canvas.add(front_group)
 
             if not feature_rendered:
                 add_record_group(

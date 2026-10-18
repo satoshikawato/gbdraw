@@ -178,8 +178,10 @@ from gbdraw.labels.fit import (
 )
 from gbdraw.labels.linear import (
     LINEAR_LABEL_FIT_ATTR,
+    FeatureLabelRows,
     LinearLabelFit,
     check_linear_label_fit,
+    keeps_feature_label_rows,
 )
 from gbdraw.layout.composition import (
     CompositionItem,
@@ -1981,6 +1983,7 @@ def assemble_linear_diagram_from_records(
     _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
+    _feature_label_rows: FeatureLabelRows | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Builds and assembles a linear diagram for the given records.
 
@@ -2396,6 +2399,7 @@ def assemble_linear_diagram_from_records(
         orthogroups=resolved_orthogroups,
         similarity_alignment=similarity_alignment,
         alignment_anchor_centers=_alignment_anchor_centers,
+        feature_label_rows=_feature_label_rows,
     )
     build_result = LinearDiagramBuildResult(
         drawing=canvas,
@@ -3593,15 +3597,18 @@ def _checked_circular_drawing(
     return drawing
 
 
-def _label_fit(drawing: Drawing) -> tuple[LabelFitReport, CircularLabelFitSearch] | None:
+def _label_fit(drawing: Drawing) -> tuple[LabelFitReport, CircularLabelFitSearch | None] | None:
+    """A drawn figure's report and the search of its rows (a Linear figure's report has none)."""
+
     report, search = getattr(drawing, _LABEL_FIT_ATTR, (None, None))
-    if isinstance(report, LabelFitReport) and isinstance(search, CircularLabelFitSearch):
+    if isinstance(report, LabelFitReport) and (search is None or isinstance(search, CircularLabelFitSearch)):
         return report, search
     return None
 
 
 def label_fit_report(drawing: Drawing) -> LabelFitReport | None:
-    """The report of a figure drawn with crossing label leaders, if any."""
+    """The report of a figure drawn with labels that do not fit (crossing leaders, labels over
+    the definition text, Linear region labels over other labels or lines), if any."""
 
     checked = _label_fit(drawing)
     return checked[0] if checked is not None else None
@@ -3622,7 +3629,7 @@ def label_fit_row(
     if isinstance(source, LabelsDoNotFitError):
         return source.row_search.row(kind, deadline=deadline) if source.row_search is not None else None
     checked = _label_fit(source)
-    return checked[1].row(kind, deadline=deadline) if checked is not None else None
+    return checked[1].row(kind, deadline=deadline) if checked is not None and checked[1] is not None else None
 
 
 def _circular_builder_options(
@@ -3806,7 +3813,9 @@ def _build_linear_diagram(
         )
     )
 
-    def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing | LinearDiagramBuildResult:
+    def assemble(
+        overrides: Mapping[str, LabelFitValue], feature_label_rows: FeatureLabelRows | None
+    ) -> Drawing | LinearDiagramBuildResult:
         return assemble_linear_diagram_from_records(
             records,
             cfg=with_config_overrides(cfg, overrides),
@@ -3861,6 +3870,7 @@ def _build_linear_diagram(
             _record_presentations=_record_presentations,
             _alignment_anchor_centers=_alignment_anchor_centers,
             _return_build_result=_return_build_result,
+            _feature_label_rows=feature_label_rows,
         )
 
     return _checked_linear_build(assemble, features_separated=bool(cfg.canvas.resolve_overlaps))
@@ -3876,17 +3886,31 @@ def _linear_label_fit(drawing: Drawing) -> LinearLabelFit:
 
 
 def _checked_linear_build(
-    assemble: Callable[[Mapping[str, LabelFitValue]], Drawing | LinearDiagramBuildResult],
+    assemble: Callable[[Mapping[str, LabelFitValue], FeatureLabelRows | None], Drawing | LinearDiagramBuildResult],
     *,
     features_separated: bool,
 ) -> Drawing | LinearDiagramBuildResult:
-    """Assemble a Linear figure and apply the label fit check to it."""
+    """Assemble a Linear figure and apply the label fit check to it.
 
-    result = assemble({})
+    A figure whose region labels need feature labels in a new row (LP-D82
+    ``RGN-YIELD-ROW``) is assembled once more with those rows, and that
+    figure is kept when ``keeps_feature_label_rows`` accepts it. A figure
+    drawn with labels that do not fit keeps its report (the Web notice).
+    """
+
+    def build(overrides: Mapping[str, LabelFitValue]) -> Drawing | LinearDiagramBuildResult:
+        first = assemble(overrides, None)
+        label_fit = _linear_label_fit(_linear_drawing(first))
+        if label_fit.new_rows is None:
+            return first
+        second = assemble(overrides, label_fit.new_rows)
+        return second if keeps_feature_label_rows(label_fit, _linear_label_fit(_linear_drawing(second))) else first
+
+    result = build({})
 
     def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
-            verified = _linear_drawing(assemble(overrides))
+            verified = _linear_drawing(build(overrides))
         except ValidationError as error:
             unfit = _unfit_row_verification(error)
             if unfit is None:
@@ -3895,9 +3919,10 @@ def _checked_linear_build(
         label_fit = _linear_label_fit(verified)
         return LabelFitVerification(label_fit.outcome, _drawing_size(verified), label_fit.fit)
 
-    check_linear_label_fit(
-        _linear_label_fit(_linear_drawing(result)), verify, features_separated=features_separated
-    )
+    drawing = _linear_drawing(result)
+    report = check_linear_label_fit(_linear_label_fit(drawing), verify, features_separated=features_separated)
+    if report is not None:
+        setattr(drawing, _LABEL_FIT_ATTR, (report, None))
     return result
 
 

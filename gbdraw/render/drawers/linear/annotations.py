@@ -37,6 +37,13 @@ from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_patter
 from gbdraw.svg.ids import stable_svg_id
 
 
+# A backed region label (LP-D82 ``RGN-FRONT``): a white box with rounded corners at 70 %
+# opacity, this many font sizes beyond the letters on every side and as the corner radius.
+BACKING_PADDING_EM = 0.18
+BACKING_FILL = "#ffffff"
+BACKING_OPACITY = 0.7
+
+
 @dataclass(frozen=True)
 class LinearAnnotationLabel:
     """One Linear annotation label as it is drawn (``dominant-baseline=central``).
@@ -44,7 +51,12 @@ class LinearAnnotationLabel:
     ``x`` and ``y`` anchor the text in record-local x and slot-local y;
     ``ink`` is the box of its painted letters in the same frame, and
     ``segments`` the x ranges of its marks: the label's centre may move along
-    them, never into a gap between them.
+    them, never into a gap between them. ``mark_edge`` is the y, on the
+    letters' side, where the paint of its mark (or the slot it keeps clear of)
+    begins, ``label_offset`` from the letters; the ``backing`` never crosses it
+    (OV-1290). ``boxes`` are the filled rectangles of a band or highlight
+    mark, where the label may sit instead (LP-D75). A ``backed`` label is
+    drawn in front of the record's leader lines on its ``backing`` (LP-D82).
     """
 
     annotation_id: str
@@ -56,6 +68,29 @@ class LinearAnnotationLabel:
     color: str
     ink: Aabb
     segments: tuple[tuple[float, float], ...]
+    mark_edge: float
+    boxes: tuple[Aabb, ...] = ()
+    backed: bool = False
+
+    @property
+    def backing(self) -> Aabb:
+        """The box a backed label is drawn on: the one geometry its drawer and its count read. It
+        stops at ``mark_edge``, so its padding never reaches past ``label_offset`` into its own
+        mark or the feature glyphs under it."""
+
+        box = self.ink.expanded(BACKING_PADDING_EM * self.font_size)
+        if self.ink.max_y <= self.mark_edge:
+            return Aabb(box.min_x, box.min_y, box.max_x, min(box.max_y, self.mark_edge))
+        return Aabb(box.min_x, max(box.min_y, self.mark_edge), box.max_x, box.max_y)
+
+    @property
+    def footprint(self) -> Aabb:
+        """What the drawn label covers: its backing when it has one, else its letters."""
+
+        return self.backing if self.backed else self.ink
+
+    def translated(self, dx: float, dy: float) -> LinearAnnotationLabel:
+        return replace(self, x=self.x + dx, y=self.y + dy, ink=self.ink.translated(dx, dy))
 
     def moved_to(self, x: float) -> LinearAnnotationLabel:
         return replace(self, x=x, ink=self.ink.translated(x - self.x, 0.0))
@@ -65,6 +100,47 @@ def _band_height_factor(mark: str) -> float:
     """The share of its lane a ``highlight`` or ``band`` rectangle fills."""
 
     return 1.0 if mark == "highlight" else 0.84
+
+
+def _lane_center(placement: PlacedRegionAnnotation, lane_height: float, padding_px: float) -> float:
+    """The slot-local y of the middle of a placement's lane."""
+
+    return padding_px + (placement.lane + 0.5) * lane_height
+
+
+def _band_rect(mark: str, lane_center: float, lane_height: float, x1: float, x2: float) -> tuple[float, float, float, float]:
+    """The ``(x, y, width, height)`` of one part of a ``band`` or ``highlight`` mark."""
+
+    height_factor = _band_height_factor(mark)
+    return x1, lane_center - 0.5 * height_factor * lane_height, max(0.1, x2 - x1), height_factor * lane_height
+
+
+def _solid_fill(annotation: ResolvedRegionAnnotation, style: RegionAnnotationStyle) -> str:
+    """The fill colour of a ``band`` or ``highlight`` mark without hatching (``none`` for none)."""
+
+    return style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
+
+
+def _label_boxes(
+    placement: PlacedRegionAnnotation,
+    style: RegionAnnotationStyle,
+    *,
+    lane_height: float,
+    padding_px: float,
+    scale: float,
+) -> tuple[Aabb, ...]:
+    """The filled rectangles of a mark a label may sit inside (LP-D75): a band or highlight
+    with a solid fill; a hatched, unfilled, bracket or line mark has none."""
+
+    annotation = placement.annotation
+    if annotation.mark not in {"band", "highlight"} or style.hatch or _solid_fill(annotation, style) == "none":
+        return ()
+    lane_center = _lane_center(placement, lane_height, padding_px)
+    boxes: list[Aabb] = []
+    for start, end in annotation.geometry_segments:
+        x, y, width, height = _band_rect(annotation.mark, lane_center, lane_height, float(start) * scale, float(end) * scale)
+        boxes.append(Aabb(x, y, x + width, y + height))
+    return tuple(boxes)
 
 
 def _label_anchor(style: RegionAnnotationStyle) -> TextAnchor:
@@ -96,7 +172,7 @@ def _label_rows(
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
-) -> list[tuple[ResolvedRegionAnnotation, RegionAnnotationStyle, float, tuple[float, float, float, float]]]:
+) -> list[tuple[PlacedRegionAnnotation, RegionAnnotationStyle, float, tuple[float, float, float, float]]]:
     """Each labelled region of the record: its style, the label's slot-local ``y`` and its ink offsets.
 
     The letters keep ``label_offset`` from the painted edge of the mark on the
@@ -139,10 +215,10 @@ def _label_rows(
             near = past_span_edge(reach, inset) + float(style.label_offset)
             y = -near - bottom if above else float(height_px) + near - top
         else:
-            lane_center = params.padding_px + (placement.lane + 0.5) * lane_height
+            lane_center = _lane_center(placement, lane_height, params.padding_px)
             near = reach.from_centre + float(style.label_offset)
             y = lane_center - near - bottom if above else lane_center + near - top
-        rows.append((annotation, style, y, offsets))
+        rows.append((placement, style, y, offsets))
     return rows
 
 
@@ -164,7 +240,7 @@ def linear_annotation_label_room(
 
     above = linear_annotation_labels_above(side, params)
     room = 0.0
-    for _annotation, style, y, (_left, _right, top, bottom) in _label_rows(
+    for _placement, style, y, (_left, _right, top, bottom) in _label_rows(
         track,
         record_index=record_index,
         side=side,
@@ -193,8 +269,10 @@ def linear_annotation_labels(
     """The labels of one record's annotation track at their ``label_position``."""
 
     scale = float(bar_length_px) / max(1, int(record_length))
+    _placements, lane_height = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
+    above = linear_annotation_labels_above(side, params)
     labels: list[LinearAnnotationLabel] = []
-    for annotation, style, y, (left, right, top, bottom) in _label_rows(
+    for placement, style, y, (left, right, top, bottom) in _label_rows(
         track,
         record_index=record_index,
         side=side,
@@ -203,6 +281,7 @@ def linear_annotation_labels(
         font_family=font_family,
         params=params,
     ):
+        annotation = placement.annotation
         segments = annotation.geometry_segments
         anchor = _label_anchor(style)
         if anchor == "start":
@@ -223,9 +302,31 @@ def linear_annotation_labels(
                 color=style.label_color,
                 ink=Aabb(x + left, y + top, x + right, y + bottom),
                 segments=tuple((float(start) * scale, float(end) * scale) for start, end in segments),
+                mark_edge=y + bottom + style.label_offset if above else y + top - style.label_offset,
+                # A clipped track may hide part of its marks.
+                boxes=()
+                if track.clipped
+                else _label_boxes(placement, style, lane_height=lane_height, padding_px=params.padding_px, scale=scale),
             )
         )
     return tuple(labels)
+
+
+def _track_group_id(track: ResolvedAnnotationTrack, record_index: int, dom_group_id: str | None) -> str:
+    return dom_group_id or f"gbdraw-annotation-track-{dom_token(track.slot_id)}-{record_index + 1}"
+
+
+def _label_text(label: LinearAnnotationLabel, font_family: str, y_offset_px: float = 0.0) -> Text:
+    return Text(
+        label.text,
+        insert=(label.x, y_offset_px + label.y),
+        fill=label.color,
+        stroke="none",
+        font_size=label.font_size,
+        font_family=font_family,
+        text_anchor=label.anchor,
+        dominant_baseline="central",
+    )
 
 
 def linear_annotation_track_content(
@@ -251,9 +352,7 @@ def linear_annotation_track_content(
     of a clipped track are the content's definitions.
     """
 
-    group_id = dom_group_id or (
-        f"gbdraw-annotation-track-{dom_token(track.slot_id)}-{record_index + 1}"
-    )
+    group_id = _track_group_id(track, record_index, dom_group_id)
     group = Group(id=group_id)
     definitions: dict[str, BaseElement] = {}
     if semantic_slot_id:
@@ -267,9 +366,7 @@ def linear_annotation_track_content(
         annotation = placement.annotation
         auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
-        lane_center = float(y_offset_px) + (
-            params.padding_px + (placement.lane + 0.5) * lane_height
-        )
+        lane_center = float(y_offset_px) + _lane_center(placement, lane_height, params.padding_px)
         item_id = annotation_dom_id(
             record_index=record_index,
             slot_id=track.slot_id,
@@ -298,13 +395,12 @@ def linear_annotation_track_content(
             if annotation.mark in {"band", "highlight"}:
                 if style.hatch:
                     definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
-                fill = hatch_pattern_paint(style.hatch) if style.hatch else (
-                    style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
-                )
+                fill = hatch_pattern_paint(style.hatch) if style.hatch else _solid_fill(annotation, style)
                 height_factor = _band_height_factor(annotation.mark)
+                rect_x, rect_y, rect_width, rect_height = _band_rect(annotation.mark, lane_center, lane_height, x1, x2)
                 rect = Rect(
-                    insert=(x1, lane_center - 0.5 * height_factor * lane_height),
-                    size=(max(0.1, x2 - x1), height_factor * lane_height),
+                    insert=(rect_x, rect_y),
+                    size=(rect_width, rect_height),
                     fill=fill,
                     fill_opacity=style.fill_opacity,
                     stroke="none" if auto_feature_underlay else style.stroke,
@@ -370,19 +466,9 @@ def linear_annotation_track_content(
                         item_group.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
 
         label = labels_by_id.get(annotation.id)
-        if label is not None:
-            item_group.add(
-                Text(
-                    label.text,
-                    insert=(label.x, float(y_offset_px) + label.y),
-                    fill=label.color,
-                    stroke="none",
-                    font_size=label.font_size,
-                    font_family=font_family,
-                    text_anchor=label.anchor,
-                    dominant_baseline="central",
-                )
-            )
+        # A backed label is drawn in front of the leader lines (linear_region_label_front_content).
+        if label is not None and not label.backed:
+            item_group.add(_label_text(label, font_family, float(y_offset_px)))
         group.add(item_group)
     clip_paths: list[BaseElement] = []
     if track.clipped:
@@ -404,9 +490,59 @@ def linear_annotation_track_content(
     return GroupContent.of(group, (*definitions.values(), *clip_paths))
 
 
+def linear_region_label_front_content(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    font_family: str,
+    labels: Sequence[LinearAnnotationLabel],
+    dom_group_id: str | None = None,
+) -> GroupContent | None:
+    """The track's backed labels in front of the record's leader lines (LP-D82 ``RGN-FRONT``), in
+    the track's slot-local frame; ``None`` when it has none.
+
+    Each label is drawn on its ``backing``, a white box with rounded corners at
+    70 % opacity. Its group names the annotation's item group
+    (``data-gbdraw-region-label-for``), where the Web selects the annotation.
+    """
+
+    backed = [label for label in labels if label.backed]
+    if not backed:
+        return None
+    group = Group(id=f"{_track_group_id(track, record_index, dom_group_id)}-front")
+    for label in backed:
+        item = Group()
+        item.attribs["data-gbdraw-region-label-for"] = annotation_dom_id(
+            record_index=record_index,
+            slot_id=track.slot_id,
+            set_id=track.set_id,
+            annotation_id=label.annotation_id,
+        )
+        box = label.backing
+        radius = BACKING_PADDING_EM * label.font_size
+        item.add(
+            Rect(
+                insert=(box.min_x, box.min_y),
+                size=(box.width, box.height),
+                rx=radius,
+                ry=radius,
+                fill=BACKING_FILL,
+                fill_opacity=BACKING_OPACITY,
+                stroke="none",
+            )
+        )
+        item.add(_label_text(label, font_family))
+        group.add(item)
+    return GroupContent.of(group)
+
+
 __all__ = [
+    "BACKING_FILL",
+    "BACKING_OPACITY",
+    "BACKING_PADDING_EM",
     "LinearAnnotationLabel",
     "linear_annotation_label_room",
     "linear_annotation_labels",
     "linear_annotation_track_content",
+    "linear_region_label_front_content",
 ]
