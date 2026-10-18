@@ -7168,6 +7168,7 @@ export const createAppSetup = () => {
     currentColors: drawingMember('currentColors'),
     editDefaultColor: resultsManager.editDefaultColor,
     paletteInstantPreviewEnabled,
+    setPaletteInstantPreview: resultsManager.setPaletteInstantPreview,
     appliedPaletteName,
     appliedPaletteColors,
     pendingPaletteName: drawingMember('pendingPaletteName'),

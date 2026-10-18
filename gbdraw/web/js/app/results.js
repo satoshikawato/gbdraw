@@ -100,6 +100,13 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     setAppliedPaletteState(drawing, drawing.selectedPalette.value, drawing.currentColors.value);
     clearPendingPaletteDraft(drawing);
   };
+  // The Instant Preview toggle's transition: turned on, it applies the shown
+  // drawing's queued palette (D-15-46).
+  /** @param {boolean} enabled */
+  const setPaletteInstantPreview = (enabled) => {
+    paletteInstantPreviewEnabled.value = Boolean(enabled);
+    if (enabled && String(state.activeDrawing().pendingPaletteName.value || '').trim() !== '') applyPaletteDraftToPreview();
+  };
   const syncPaletteDraftState = () => {
     const drawing = state.activeDrawing();
     if (paletteInstantPreviewEnabled.value) {
@@ -259,7 +266,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     setDefaultColor,
     editDefaultColor,
     editDefaultColors,
-    applyPaletteDraftToPreview,
+    setPaletteInstantPreview,
     syncPaletteDraftState
   };
 };

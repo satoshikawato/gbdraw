@@ -138,6 +138,25 @@ test('a queued switch (Instant Preview off) keeps the applied palette and queues
   assert.equal(JSON.stringify(state.appliedPaletteColors.value), applied);
 });
 
+// D-15-46 (M3): turning Instant Preview on applies the queued palette in the
+// toggle's own transition, not in a watcher; turning it off queues nothing.
+test('turning Instant Preview on applies the queued palette; turning it off keeps the applied one', async () => {
+  const { drawing, state, manager, choose } = setup({ instant: false });
+  manager.selectPalette('forest');
+  await choose('keep');
+  const colors = { ...drawing.currentColors.value };
+  manager.setPaletteInstantPreview(true);
+  assert.equal(state.paletteInstantPreviewEnabled.value, true);
+  assert.equal(drawing.pendingPaletteName.value, '');
+  assert.deepEqual(drawing.pendingPaletteColors.value, {});
+  assert.equal(state.appliedPaletteName.value, 'forest');
+  assert.deepEqual(state.appliedPaletteColors.value, colors);
+  manager.setPaletteInstantPreview(false);
+  assert.equal(state.paletteInstantPreviewEnabled.value, false);
+  assert.equal(drawing.pendingPaletteName.value, '');
+  assert.equal(state.appliedPaletteName.value, 'forest');
+});
+
 // Q5 A (Owner 2026-10-09): switching back to the applied palette while
 // another is queued asks like any switch when user colors exist; the queue then
 // clears and the colors apply live.

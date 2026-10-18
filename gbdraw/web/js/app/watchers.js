@@ -103,7 +103,7 @@ export const createAuxiliaryFileImports = (reactive) => {
  * }} featureActions The feature editor's label reaction and the rule owner's import of a rules TSV.
  * @property {{ refreshDiagramDragAffordances: () => void }} legendLayout
  *   The Legend layout owner's drag affordances.
- * @property {{ applyPaletteDraftToPreview: () => void, editDefaultColors: (drawing: DrawingState, colors: Record<string, string>) => void }} resultsManager
+ * @property {{ editDefaultColors: (drawing: DrawingState, colors: Record<string, string>) => void }} resultsManager
  *   The Results owner's palette draft projection and default color edit.
  * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
  * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any> | SessionBusy) | null} [refreshCircularRecordOrder]
@@ -164,7 +164,6 @@ export const setupWatchers = ({
     clickedPairwiseMatch,
     clickedLabel,
     files,
-    paletteInstantPreviewEnabled,
     semanticFileWatchersSuppressed,
     sessionResourceDiscoveryDeferred,
     sessionImportRollbackInProgress,
@@ -180,7 +179,7 @@ export const setupWatchers = ({
 
   const { syncLabelEditor } = featureActions;
   const { refreshDiagramDragAffordances } = legendLayout;
-  const { applyPaletteDraftToPreview, editDefaultColors } = resultsManager;
+  const { editDefaultColors } = resultsManager;
 
   /** @param {unknown} value */
   const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
@@ -198,16 +197,6 @@ export const setupWatchers = ({
     drawing.layoutPreferences.circular.multi.plotTitlePosition =
       singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
   };
-
-  watch(
-    () => paletteInstantPreviewEnabled.value,
-    (enabled) => {
-      const drawing = state.activeDrawing();
-      if (!enabled) return;
-      if (String(drawing.pendingPaletteName.value || '').trim() === '') return;
-      applyPaletteDraftToPreview();
-    }
-  );
 
   watch(
     () => layoutRepositionMode.value,
