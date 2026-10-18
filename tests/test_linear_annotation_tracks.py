@@ -567,9 +567,9 @@ def test_linear_to_slot_span_without_bodies_reserves_its_label_room(mark: str, l
     gc = _linear_bands(drawing, 1)["gc"]
 
     # OV-1159 (Owner LP-D64, LP-D42): record 2 has nothing to span, so the overlay keeps its place and
-    # adds no band space, but its labels keep their room: no letters on the GC plot ...
+    # its labels keep their room: no letters on the GC plot ...
     _assert_clear(_label_box(drawing, record_index=1), gc, "gc")
-    # ... the same room as an overlay that covers nothing, on the side with label text only.
+    # ... the same room as an overlay that covers nothing (OV-1171), on the side with label text only.
     if layer == "foreground":
         assert gc == pytest.approx(_linear_bands(build(""), 1)["gc"], abs=1e-9)
     else:
@@ -630,7 +630,6 @@ _DEPTH_ANCHOR_STACK = (
     "gc:dinucleotide_content@side=below",
     "skew:dinucleotide_skew@side=below",
 )
-_SMALL_LABELS = RegionAnnotationStyle(label_font_size=1.0, label_offset=0.5)
 
 
 @pytest.mark.parametrize("layer", ["underlay", "foreground"])
@@ -649,43 +648,54 @@ def test_linear_span_anchored_on_a_slot_without_data_keeps_its_labels_clear(mark
     _assert_clear(box, bands["gc"], "gc")
 
 
-@pytest.mark.parametrize(
-    ("layer", "mark", "style"),
-    [
-        *(
-            pytest.param(layer, mark, None, id=f"{layer}-{mark}")
-            for layer in ("underlay", "foreground")
-            for mark in _MARKS
-        ),
-        pytest.param("underlay", "highlight", _SMALL_LABELS, id="underlay-small-labels"),
-        pytest.param("foreground", "highlight", _SMALL_LABELS, id="foreground-small-labels"),
-    ],
+_ABOVE_DEPTH_STACK = (
+    "skew:dinucleotide_skew@side=above",
+    "gc:dinucleotide_content@side=above",
+    "depth:depth@side=above,track_index=0",
+    "features:features@side=overlay",
 )
-def test_linear_span_label_room_on_an_empty_slot_adds_only_label_room(
-    layer: str, mark: str, style: RegionAnnotationStyle | None
-) -> None:
-    spec = f"anchor_slot=depth,to_slot=features,layer={layer},z={-1 if layer == 'underlay' else 1}"
-    drawing = _bodyless_span(spec, *_DEPTH_ANCHOR_STACK, mark=mark, style=style)
-    no_text = _bodyless_span(spec, *_DEPTH_ANCHOR_STACK, mark=mark, style=style, label_text=False)
-    box = _label_box(drawing, record_index=1)
-    bands, plain = _linear_bands(drawing, 1), _linear_bands(no_text, 1)
-    axis_top = _record_body(no_text, 1)[0]
-    offset = 4.0 if style is None else style.label_offset
 
-    # OV-1170: the empty Depth slot stays missing, so the slots after it stay packed (no Depth spacing comes
-    # back) and the room adds only what the letters need, label_offset from the axis line or the GC plot.
-    assert bands["skew"][0] - bands["gc"][0] == pytest.approx(plain["skew"][0] - plain["gc"][0], abs=1e-6)
-    if layer == "foreground":
-        # Labels below the overlay: the overlay keeps its place; the GC plot starts label_offset below them.
-        assert bands["regions"] == pytest.approx(plain["regions"], abs=1e-6)
-        assert _paint_band(drawing, "gc", 1)[0] - box[1] == pytest.approx(offset, abs=1e-6)
-    else:
-        # Labels above the overlay, toward the axis: the overlay moves out only until they keep
-        # label_offset from the axis line. The GC plot keeps its place beside the overlay, or moves on
-        # only until it keeps label_offset from letters inside the overlay's band (beside a line).
-        assert box[0] - (-axis_top) == pytest.approx(offset, abs=1e-6)
-        beside = bands["regions"][0] + _paint_band(no_text, "gc", 1)[0] - plain["regions"][0]
-        assert _paint_band(drawing, "gc", 1)[0] == pytest.approx(max(beside, box[1] + offset), abs=1e-6)
+
+@pytest.mark.parametrize("label_text", [True, False], ids=["labels", "no-text"])
+@pytest.mark.parametrize("layer", ["underlay", "foreground"])
+@pytest.mark.parametrize("mark", _MARKS)
+@pytest.mark.parametrize("ends", [("features", "depth"), ("depth", "features")], ids=["features-depth", "depth-features"])
+@pytest.mark.parametrize(
+    ("stack", "axis_index"),
+    [pytest.param(_DEPTH_ANCHOR_STACK, 0, id="below"), pytest.param(_ABOVE_DEPTH_STACK, 3, id="above")],
+)
+def test_linear_span_with_nothing_to_cover_reserves_its_mark_like_a_plain_overlay(
+    stack: tuple[str, ...], axis_index: int, ends: tuple[str, str], mark: str, layer: str, label_text: bool
+) -> None:
+    anchor, to_slot = ends
+    z = f"layer={layer},z={-1 if layer == 'underlay' else 1}"
+
+    def build(spec: str):
+        return _bodyless_span(spec, *stack, mark=mark, label_text=label_text, axis_index=axis_index)
+
+    span, plain = build(f"anchor_slot={anchor},to_slot={to_slot},{z}"), build(f"anchor_slot={anchor},{z}")
+
+    def slots(drawing) -> dict[str, dict[str, object]]:
+        record = drawing._gbdraw_track_slot_geometry["records"][1]
+        def local(value: object) -> object:
+            # Record-axis-local values only: record 1 differs (its span has a body there).
+            return {k: v for k, v in value.items() if not k.startswith("absolute")} if isinstance(value, dict) else value
+
+        keys = ("resolvedOriginPx", "heightPx", "paintBand", "reserveBand")
+        return {slot["slotId"]: {key: local(slot[key]) for key in keys} for slot in record["slots"]}
+
+    # OV-1171: record 2 has neither lanes nor depth, so the span has nothing to cover there. It keeps its own
+    # band and reserves it, with its labels, as a plain overlay on its anchor does ...
+    assert slots(span) == slots(plain)
+    # ... so its mark lies over no slot but its anchor (no line across the GC or skew plot).
+    regions = slots(span)["regions"]
+    top = float(regions["resolvedOriginPx"])
+    bottom = top + float(regions["heightPx"])
+    for slot_id, slot in slots(span).items():
+        band = slot["paintBand"]
+        if slot_id in {"regions", anchor} or band is None:
+            continue
+        assert band["bottomPx"] <= top + 1e-6 or band["topPx"] >= bottom - 1e-6, (slot_id, band, (top, bottom))
 
 
 def _span_slot(

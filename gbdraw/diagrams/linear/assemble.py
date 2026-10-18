@@ -969,7 +969,7 @@ def _linear_annotation_slot_footprint(
 
     body_band = _slot_body_band(slot)
     params = annotation_track_params_from_mapping(slot.params)
-    room = (
+    label_overhang = (
         linear_annotation_label_room(
             annotation_layout,
             record_index=record_index,
@@ -980,9 +980,8 @@ def _linear_annotation_slot_footprint(
             params=params,
         )
         if annotation_layout is not None
-        else None
+        else 0.0
     )
-    label_overhang = 0.0 if room is None else room.beyond
     if linear_annotation_labels_above(slot.side, params):
         expanded = body_band.expand(label_overhang, 0.0)
     else:
@@ -994,7 +993,6 @@ def _linear_annotation_slot_footprint(
         paint_band=expanded if available else None,
         reserve_band=expanded,
         data_available=available,
-        label_band=(None if room is None or room.band is None else room.band.translate(body_band.top_y)),
     )
 
 
