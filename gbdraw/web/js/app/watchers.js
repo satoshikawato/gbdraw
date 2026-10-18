@@ -17,6 +17,7 @@ import {
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
 import { setDefaultColors } from '../services/drawing/palette.js';
+import { addWhitelistRules, appendBlacklistWords, setPriorityRules } from '../services/drawing/label-tables.js';
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 
 /**
@@ -491,14 +492,7 @@ export const setupWatchers = ({
     const drawing = state.activeDrawing();
     try {
       const { rules, count } = parsePriorityRules(text);
-      rules.forEach((rule) => {
-        const idx = drawing.manualPriorityRules.findIndex((/** @type {{ feat: string }} */ r) => r.feat === rule.feat);
-        if (idx >= 0) {
-          drawing.manualPriorityRules[idx].order = rule.order;
-        } else {
-          drawing.manualPriorityRules.push({ feat: rule.feat, order: rule.order });
-        }
-      });
+      setPriorityRules(drawing.slices.labelTables, rules);
       console.log(`Loaded ${count} priority rules.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
@@ -510,7 +504,7 @@ export const setupWatchers = ({
     const drawing = state.activeDrawing();
     try {
       const { rules, count } = parseWhitelistRules(text);
-      rules.forEach((rule) => drawing.manualWhitelist.push(rule));
+      addWhitelistRules(drawing.slices.labelTables, rules);
       console.log(`Loaded ${count} whitelist rules.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
@@ -523,9 +517,7 @@ export const setupWatchers = ({
     try {
       const { words, count } = parseBlacklistWords(text);
       if (words.length > 0) {
-        const existing = drawing.manualBlacklist.value ? drawing.manualBlacklist.value.trim() : '';
-        const separator = existing && !existing.endsWith(',') ? ', ' : '';
-        drawing.manualBlacklist.value = existing + separator + words.join(', ');
+        appendBlacklistWords(drawing.slices.labelTables, words);
         console.log(`Loaded ${count} blacklist words.`);
       }
     } catch (e) {

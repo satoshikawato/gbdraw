@@ -144,7 +144,7 @@ const DRAWING_RECEIVER = /(?:[\w$]*[dD]rawing|activeDrawing\s*\(\s*\)|drawings\s
 const TEMPLATE_WRITES_BEFORE_M3_13 = Object.freeze([
   'v-model.number="canvasPadding.top"', 'v-model.number="canvasPadding.left"',
   'v-model.number="canvasPadding.right"', 'v-model.number="canvasPadding.bottom"',
-  'v-model="currentColors[feat]"'
+  'v-model="currentColors[feat]"', 'v-model="manualBlacklist"'
 ]);
 
 // Comments and quoted strings blanked, so offsets stay and prose is no writer.
@@ -280,6 +280,14 @@ const SAMPLES = {
   palette: () => ({
     selectedPalette: 'default', currentColors: normalizePaletteColors({ CDS: '#123456', tRNA: '#654321' }),
     pendingPaletteName: 'queued', pendingPaletteColors: normalizePaletteColors({ CDS: '#abcdef' })
+  }),
+  labelTables: () => ({
+    labelTextBulkOverrides: { 'hypothetical protein': 'HP' },
+    canonicalLabelOverrideRows: [{ recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: '^kinase$', labelText: 'Kinase' }],
+    manualPriorityRules: [{ feat: 'CDS', order: 'gene,product' }],
+    filterMode: 'Whitelist',
+    manualBlacklist: 'putative',
+    manualWhitelist: [{ feat: 'CDS', qual: 'product', key: 'kinase' }]
   }),
   annotationSets: () => ({ annotationSets: normalizeAnnotationSets([{ id: 'sample-set', legendLabel: 'Sample', annotations: [
     { id: 'region_1', target: { kind: 'coordinateSpan', start: 10, end: 20 }, label: 'Sample region' }

@@ -20,7 +20,9 @@ import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
-import { PALETTE_SLICE, restoreArtifactQueuedPalette } from './drawing/palette.js';
+import { PALETTE_SLICE, queuedPaletteData, restoreArtifactQueuedPalette } from './drawing/palette.js';
+import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
+/** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 /** @import { PaletteColors, PaletteSlice } from './drawing/palette.js' */
 /** @import { GroupNamesData } from './drawing/group-names.js' */
 /** @import { HistoryArtifactHandle } from './history.js' */
@@ -387,8 +389,11 @@ const replaceFeatureEditState = (drawing, features = {}) => {
     featureVisibilityManualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules)
   });
   replacePlainObject(drawing.featureOverrides, clonePlainObject(features.featureOverrides));
-  replaceRefArray(drawing.canonicalLabelOverrideRows, features.labelOverrideRows);
-  replacePlainObject(drawing.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
+  LABEL_TABLES_SLICE.install(drawing.slices.labelTables, {
+    // A History step holds the rows the slice captured (the cast).
+    canonicalLabelOverrideRows: /** @type {StoredLabelOverrideRow[]} */ (cloneLabelOverrideRows(features.labelOverrideRows)),
+    labelTextBulkOverrides: /** @type {Record<string, string>} */ (clonePlainObject(features.labelTextBulkOverrides))
+  });
 };
 
 /**
@@ -493,11 +498,6 @@ const installCanvasPadding = (drawing, ui) => {
   CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: /** @type {CanvasPadding} */ (clonePlainObject(ui.canvasPadding)) });
 };
 // A History step holds the queued palette the palette slice captured (the cast).
-/** @param {{ readonly slices: { readonly palette: PaletteSlice } }} drawing */
-const queuedPaletteOf = (drawing) => {
-  const { pendingPaletteName, pendingPaletteColors } = PALETTE_SLICE.capture(drawing.slices.palette);
-  return { pendingPaletteName, pendingPaletteColors };
-};
 /**
  * @param {{ readonly slices: { readonly palette: PaletteSlice } }} drawing
  * @param {{ pendingPaletteName?: unknown, pendingPaletteColors?: unknown }} ui
@@ -577,7 +577,7 @@ const buildFallbackUiStateData = (state, drawing) => ({
   paletteInstantPreviewEnabled: Boolean(getRef(state.paletteInstantPreviewEnabled, false)),
   appliedPaletteName: getRef(state.appliedPaletteName, 'default'),
   appliedPaletteColors: clonePlainObject(getRef(state.appliedPaletteColors, {})),
-  ...queuedPaletteOf(drawing),
+  ...queuedPaletteData(drawing.slices.palette),
   legendCurrentOffset: { ...(state.legendCurrentOffset || {}) },
   diagramOffset: { ...(state.diagramOffset || {}) },
   lengthBarUserOffset: { ...(state.lengthBarUserOffset || {}) },
@@ -645,8 +645,7 @@ const buildFallbackFeatureStateData = (state, drawing) => ({
   featureColorOverrides: clonePlainObject(drawing.featureColorOverrides),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
   featureOverrides: clonePlainObject(drawing.featureOverrides),
-  labelOverrideRows: cloneLabelOverrideRows(getRef(drawing.canonicalLabelOverrideRows, [])),
-  labelTextBulkOverrides: clonePlainObject(drawing.labelTextBulkOverrides)
+  ...labelTextEditsData(drawing.slices.labelTables)
 });
 
 /**
@@ -1449,10 +1448,7 @@ export const createHistorySnapshotService = ({
         VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules
       ),
       featureOverrides: clonePlainObject(drawing.featureOverrides),
-      labelOverrideRows: cloneLabelOverrideRows(
-        getGeneratedArtifactRef(drawing.canonicalLabelOverrideRows, [])
-      ),
-      labelTextBulkOverrides: clonePlainObject(drawing.labelTextBulkOverrides)
+      ...labelTextEditsData(drawing.slices.labelTables)
     };
     const editorState = {
       legend: {
@@ -1807,8 +1803,7 @@ export const createHistorySnapshotService = ({
         featureColorOverrides: drawing.featureColorOverrides,
         featureVisibilityManualRules: VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules,
         featureOverrides: drawing.featureOverrides,
-        labelOverrideRows: getRef(drawing.canonicalLabelOverrideRows, []),
-        labelTextBulkOverrides: drawing.labelTextBulkOverrides
+        ...labelTextEditsData(drawing.slices.labelTables)
       }),
       editorState: buildEditorIntentData({
         legend: {

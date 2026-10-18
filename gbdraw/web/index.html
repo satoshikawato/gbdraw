@@ -5096,9 +5096,9 @@
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
                                         <p class="ui-hint">Only show labels matching case-insensitive Python regex. Examples: <span class="font-mono">(?i)NADH</span> and <span class="font-mono">(?P&lt;name&gt;NADH)</span>. Use <span class="font-mono">^...$</span> for exact matches.</p>
                                         <div v-for="(row, i) in manualWhitelist" :key="i" class="flex gap-1 mb-1">
-                                            <input v-model="row.feat" placeholder="Feat" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
-                                            <input v-model="row.qual" placeholder="Qual" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
-                                            <input v-model="row.key" placeholder="Pattern" class="form-input px-1 py-1 text-xs w-1/3" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.feat" @input="setWhitelistRuleField(row, 'feat', $event.target.value)" placeholder="Feat" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.qual" @input="setWhitelistRuleField(row, 'qual', $event.target.value)" placeholder="Qual" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.key" @input="setWhitelistRuleField(row, 'key', $event.target.value)" placeholder="Pattern" class="form-input px-1 py-1 text-xs w-1/3" :disabled="!semanticMutationAvailable">
                                             <button @click="removeWhitelistRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1">×</button>
                                         </div>
                                         <button @click="addWhitelistRule" :disabled="!semanticMutationAvailable" class="text-xs text-blue-600 font-bold">+ Add Rule</button>

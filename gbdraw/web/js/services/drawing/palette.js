@@ -84,6 +84,16 @@ const install = (slice, { selectedPalette, currentColors, pendingPaletteName, pe
   if (pendingPaletteColors) members.pendingPaletteColors.value = { ...pendingPaletteColors };
 };
 
+/**
+ * The queued palette as Save and a History step hold it (`ui.pendingPaletteName`,
+ * `ui.pendingPaletteColors`).
+ * @param {PaletteSlice} slice
+ */
+export const queuedPaletteData = (slice) => {
+  const { pendingPaletteName, pendingPaletteColors } = capture(slice);
+  return { pendingPaletteName, pendingPaletteColors };
+};
+
 /** @param {PaletteSlice} slice */
 const reset = (slice) => install(slice, createDefaultPaletteData());
 

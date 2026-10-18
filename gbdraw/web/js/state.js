@@ -42,6 +42,7 @@ import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './services/drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './services/drawing/color-rules.js';
 import { PALETTE_SLICE } from './services/drawing/palette.js';
+import { LABEL_TABLES_SLICE } from './services/drawing/label-tables.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -255,12 +256,6 @@ export const createDefaultPaletteDraftState = () => ({
   paletteInstantPreviewEnabled: false,
   appliedPaletteName: 'default',
   appliedPaletteColors: {}
-});
-
-export const createDefaultLabelFilterState = () => ({
-  filterMode: 'None',
-  manualBlacklist: 'hypothetical, uncharacterized, putative, unknown',
-  manualWhitelist: []
 });
 
 export const createDefaultEditorDraftState = () => ({
@@ -1037,7 +1032,7 @@ const createDrawingState = (drawingMode) => {
   const { featureVisibilityManualRules } = visibilityRules.view;
   const palette = PALETTE_SLICE.create();
   const { pendingPaletteName } = palette.view;
-  const labelFilters = createDefaultLabelFilterState();
+  const labelTables = LABEL_TABLES_SLICE.create();
   // The editor edits a slice owns (services/drawing/): the drawing shows its
   // view's members, and only the slice writes them, through its handle.
   const canvas = CANVAS_SLICE.create();
@@ -1071,8 +1066,8 @@ const createDrawingState = (drawingMode) => {
     // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
     featureStrokeOverrides: reactive({}),
     ...visibilityRules.view,
-    labelTextBulkOverrides: reactive({}), // { sourceText: text }
-    canonicalLabelOverrideRows: ref([]),
+    labelTextBulkOverrides: labelTables.view.labelTextBulkOverrides,
+    canonicalLabelOverrideRows: labelTables.view.canonicalLabelOverrideRows,
     legendEntries: ref([]), // LegendEntry[]; typed with its writers (OV-288 STATUS)
     deletedLegendEntries: ref([]),
     // OV-120: renamed rows the last Generate did not draw (GC off, Show Depth
@@ -1083,10 +1078,10 @@ const createDrawingState = (drawingMode) => {
     legendStrokeOverrides: reactive({}),
     addedLegendCaptions: ref(new Set()),
     ...colorRules.view,
-    manualPriorityRules: reactive([]),
-    filterMode: ref(labelFilters.filterMode),
-    manualBlacklist: ref(labelFilters.manualBlacklist),
-    manualWhitelist: reactive(labelFilters.manualWhitelist),
+    manualPriorityRules: labelTables.view.manualPriorityRules,
+    filterMode: labelTables.view.filterMode,
+    manualBlacklist: labelTables.view.manualBlacklist,
+    manualWhitelist: labelTables.view.manualWhitelist,
     ...palette.view,
     ...annotationSets.view,
     // Similarity group names, and dormant names keyed by member set (D-21).
@@ -1110,7 +1105,7 @@ const createDrawingState = (drawingMode) => {
     ),
     // The handles a slice's writers take.
     slices: Object.freeze({
-      visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle })
+      visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, labelTables: labelTables.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle })
   });
 };
 const circularDrawing = createDrawingState('circular');

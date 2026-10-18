@@ -220,6 +220,7 @@ export const createFeatureEditor = ({
     addPriorityRule: ruleActions.addPriorityRule,
     setLabelFilterMode: ruleActions.setLabelFilterMode,
     addWhitelistRule: ruleActions.addWhitelistRule,
+    setWhitelistRuleField: ruleActions.setWhitelistRuleField,
     removeWhitelistRule: ruleActions.removeWhitelistRule,
     removePriorityRule: ruleActions.removePriorityRule,
     addFeature: ruleActions.addFeature,

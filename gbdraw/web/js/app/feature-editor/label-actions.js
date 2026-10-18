@@ -4,7 +4,8 @@
 import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
-import { parseLabelOverrideTsv, replaceBulkLabelEdits, serializeLabelOverrideRows } from '../../services/label-override-table.js';
+import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
+import { replaceBulkLabelEdits } from '../../services/drawing/label-tables.js';
 import { escapeRegexLiteral } from '../../services/feature-selector.js';
 import {
   featureIdentityKeyOf,
@@ -660,7 +661,7 @@ export const createFeatureLabelActions = ({
     Object.values(drawing.featureOverrides).forEach((row) => {
       updateFeatureOverride(drawing.featureOverrides, row, Object.fromEntries(LABEL_FIELDS.map((field) => [field, null])));
     });
-    replaceBulkLabelEdits(drawing, bulk);
+    replaceBulkLabelEdits(drawing.slices.labelTables, bulk);
   };
 
   // A mounted label names its feature by rendered ID; the displayed Result's
@@ -1548,7 +1549,7 @@ export const createFeatureLabelActions = ({
       const bulk = { ...drawing.labelTextBulkOverrides };
       if (hasUntrackableMatch || matchedCount === 0) bulk[sourceText] = newText;
       else delete bulk[sourceText];
-      replaceBulkLabelEdits(drawing, bulk);
+      replaceBulkLabelEdits(drawing.slices.labelTables, bulk);
     } else if (choice === 'single' && targetKey) {
       const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(targetKey)}"]`);
       if (targetEl) {

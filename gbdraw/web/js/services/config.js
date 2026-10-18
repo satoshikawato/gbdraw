@@ -259,7 +259,9 @@ import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
-import { PALETTE_SLICE, clearQueuedPalette, queuePalette } from './drawing/palette.js';
+import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
+import { LABEL_TABLES_SLICE, clearLabelTextEdits, labelTextEditsData } from './drawing/label-tables.js';
+/** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
 const { nextTick, ref } = window.Vue;
 
@@ -492,11 +494,7 @@ const sanitizeExtractedFeaturesForSession = (features) => {
  * @param {unknown} rules
  */
 const replaceQualifierPriorityRules = (drawing, rules) => {
-  drawing.manualPriorityRules.splice(
-    0,
-    drawing.manualPriorityRules.length,
-    ...readQualifierPriorityRules(rules).value
-  );
+  LABEL_TABLES_SLICE.install(drawing.slices.labelTables, { manualPriorityRules: readQualifierPriorityRules(rules).value });
 };
 
 /** @param {unknown} value */
@@ -870,14 +868,6 @@ const serializeLinearComparisonPlan = (plan) => {
 // registry rows of `config` (mode-scoped-settings.generated.js) and nothing
 // else. App-level settings (LOSAT execution, Instant Preview, the rich popup)
 // and the Session's CLI provenance are saved outside the slices.
-// The palette a drawing queued for the next Generate, as Save and a History
-// step hold it (`ui.pendingPaletteName`, `ui.pendingPaletteColors`).
-/** @param {DrawingState} drawing */
-const queuedPaletteData = (drawing) => {
-  const { pendingPaletteName, pendingPaletteColors } = PALETTE_SLICE.capture(drawing.slices.palette);
-  return { pendingPaletteName, pendingPaletteColors };
-};
-
 /** @param {DrawingState} drawing */
 export const buildConfigData = (drawing) => ({
   form: drawing.form,
@@ -895,7 +885,7 @@ export const buildConfigData = (drawing) => ({
   rules: COLOR_RULES_SLICE.capture(drawing.slices.colorRules).manualSpecificRules,
   qualifierPriorityRules: readQualifierPriorityRules(drawing.manualPriorityRules).value,
   filterMode: drawing.filterMode.value,
-  whitelist: drawing.manualWhitelist,
+  whitelist: LABEL_TABLES_SLICE.capture(drawing.slices.labelTables).manualWhitelist,
   blacklistText: drawing.manualBlacklist.value,
   losatProgram: drawing.losatProgram.value,
   circularConservation: drawing.circularConservation,
@@ -1293,8 +1283,7 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
       featureOverrides: featureOverridesForState(drawing.featureOverrides),
       featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
       featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
-      labelOverrideRows: cloneJsonData(drawing.canonicalLabelOverrideRows.value),
-      labelTextBulkOverrides: cloneJsonData(drawing.labelTextBulkOverrides)
+      ...labelTextEditsData(drawing.slices.labelTables)
     },
     editorState: {
       legend: {
@@ -1309,7 +1298,7 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
     ui: {
       layoutPreferences: cloneJsonData(drawing.layoutPreferences[mode]),
       canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
-      ...queuedPaletteData(drawing),
+      ...queuedPaletteData(drawing.slices.palette),
       linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
       selectedFeatureRecordIdx
     }
@@ -2866,12 +2855,12 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   } else if (Object.prototype.hasOwnProperty.call(data, 'priorityRules')) {
     replaceQualifierPriorityRules(drawing, data.priorityRules);
   }
-  if (data.filterMode) drawing.filterMode.value = readFilterMode(data.filterMode).value;
   const storedWhitelist = readWhitelistRules(data.whitelist);
-  if (!storedWhitelist.kept) {
-    drawing.manualWhitelist.splice(0, drawing.manualWhitelist.length, ...storedWhitelist.value);
-  }
-  if (data.blacklistText !== undefined) drawing.manualBlacklist.value = readBlacklistText(data.blacklistText).value;
+  LABEL_TABLES_SLICE.install(drawing.slices.labelTables, {
+    filterMode: data.filterMode ? readFilterMode(data.filterMode).value : undefined,
+    manualWhitelist: storedWhitelist.kept ? undefined : storedWhitelist.value,
+    manualBlacklist: data.blacklistText === undefined ? undefined : readBlacklistText(data.blacklistText).value
+  });
   if (data.losatProgram) {
     drawing.losatProgram.value = readLosatProgram(data.losatProgram).value;
   }
@@ -4668,8 +4657,7 @@ const resetSessionBaseline = () => {
     VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
     clearObject(drawing.featureOverrides);
     clearObject(drawing.featureStrokeOverrides);
-    drawing.canonicalLabelOverrideRows.value = [];
-    clearObject(drawing.labelTextBulkOverrides);
+    clearLabelTextEdits(drawing.slices.labelTables);
     drawing.legendEntries.value = [];
     drawing.dormantLegendEntries.value = [];
   });
@@ -4725,7 +4713,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     losatExecution: buildLosatExecutionData(),
     appliedPaletteName: state.appliedPaletteName.value,
     appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
-    ...queuedPaletteData(drawing),
+    ...queuedPaletteData(drawing.slices.palette),
     legendCurrentOffset: { ...state.legendCurrentOffset },
     diagramOffset: { ...state.diagramOffset },
     lengthBarUserOffset: { ...state.lengthBarUserOffset },
@@ -4864,8 +4852,7 @@ export const buildFeatureStateData = (drawing) => ({
   featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
   featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
   featureOverrides: featureOverridesForState(drawing.featureOverrides),
-  labelOverrideRows: cloneJsonData(drawing.canonicalLabelOverrideRows.value),
-  labelTextBulkOverrides: cloneJsonData(drawing.labelTextBulkOverrides)
+  ...labelTextEditsData(drawing.slices.labelTables)
 });
 
 // The catalog features of the shown Result (artifact values).
@@ -4910,8 +4897,11 @@ const applyDrawingFeatureData = (drawing, features = {}) => {
     featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(readList(features.featureVisibilityManualRules).value)
   });
   replacePlainObject(drawing.featureOverrides, featureOverridesForState(features.featureOverrides));
-  drawing.canonicalLabelOverrideRows.value = cloneJsonData(readLabelOverrideRows(features.labelOverrideRows).value);
-  replacePlainObject(drawing.labelTextBulkOverrides, readStringMap(features.labelTextBulkOverrides).value);
+  LABEL_TABLES_SLICE.install(drawing.slices.labelTables, {
+    // The rows the reader kept are label table rows.
+    canonicalLabelOverrideRows: /** @type {StoredLabelOverrideRow[]} */ (readLabelOverrideRows(features.labelOverrideRows).value),
+    labelTextBulkOverrides: readStringMap(features.labelTextBulkOverrides).value
+  });
 };
 
 /** @param {DrawingState} drawing */

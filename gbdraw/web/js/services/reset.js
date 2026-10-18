@@ -4,7 +4,6 @@ import {
   createDefaultCircularConservation,
   createDefaultEditorDraftState,
   createDefaultForm,
-  createDefaultLabelFilterState,
   createDefaultLosat,
   createDefaultPaletteDraftState,
   createDefaultPriorityRule,
@@ -12,13 +11,13 @@ import {
 } from '../state.js';
 /** @import { DrawingState, LegendCaption, LegendEntry, state as AppState } from '../state.js' */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
-import { replaceBulkLabelEdits } from './label-override-table.js';
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
 import { PALETTE_SLICE, createDefaultPaletteData } from './drawing/palette.js';
+import { clearLabelTextEdits, resetLabelFilters } from './drawing/label-tables.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -107,16 +106,12 @@ const resetLayoutPreferenceState = (state, drawing) => {
  * @param {DrawingState} drawing
  */
 const resetRuleDraftState = (state, drawing) => {
-  const labelDefaults = createDefaultLabelFilterState();
   const editorDefaults = createDefaultEditorDraftState();
-  drawing.filterMode.value = labelDefaults.filterMode;
-  drawing.manualBlacklist.value = labelDefaults.manualBlacklist;
-  replaceReactiveArray(drawing.manualWhitelist, labelDefaults.manualWhitelist);
+  resetLabelFilters(drawing.slices.labelTables);
   COLOR_RULES_SLICE.reset(drawing.slices.colorRules);
   replaceReactiveObject(state.newSpecRule, createDefaultSpecificRule());
   state.selectedSpecificPreset.value = editorDefaults.selectedSpecificPreset;
   state.specificRulePresetLoading.value = editorDefaults.specificRulePresetLoading;
-  replaceReactiveArray(drawing.manualPriorityRules);
   replaceReactiveObject(state.newPriorityRule, createDefaultPriorityRule());
   state.newColorFeat.value = editorDefaults.newColorFeat;
   state.newColorVal.value = editorDefaults.newColorVal;
@@ -147,8 +142,7 @@ const resetEditorDraftState = (state, drawing) => {
 
   // The saved label table of a loaded Session goes with the bulk label edits,
   // also when the bulk map is already empty (R15-21).
-  replaceBulkLabelEdits(drawing, {});
-  drawing.canonicalLabelOverrideRows.value = [];
+  clearLabelTextEdits(drawing.slices.labelTables);
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
 

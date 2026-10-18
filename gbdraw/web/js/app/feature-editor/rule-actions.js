@@ -28,6 +28,11 @@ import {
 import { featureOverrideValue } from '../../services/feature-placement.js';
 import { replaceColorRules } from '../../services/drawing/color-rules.js';
 import { setDefaultColors } from '../../services/drawing/palette.js';
+import {
+  addWhitelistRules, removePriorityRule as removeDrawingPriorityRule, removeWhitelistRule as removeDrawingWhitelistRule,
+  setLabelFilterMode as setDrawingLabelFilterMode, setPriorityRules, setWhitelistRuleField as setDrawingWhitelistRuleField
+} from '../../services/drawing/label-tables.js';
+/** @import { StoredWhitelistRule } from '../../services/config-field-readers.js' */
 import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
@@ -698,27 +703,35 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.filterMode.value = value;
+    setDrawingLabelFilterMode(drawing.slices.labelTables, value);
   };
   const addWhitelistRule = () => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: '' });
+    addWhitelistRules(drawing.slices.labelTables, [{ feat: 'CDS', qual: 'product', key: '' }]);
+  };
+  /**
+   * @param {Readonly<StoredWhitelistRule>} rule A row of the drawing's whitelist.
+   * @param {keyof StoredWhitelistRule} field
+   * @param {string} value
+   */
+  const setWhitelistRuleField = (rule, field, value) => {
+    setDrawingWhitelistRuleField(state.activeDrawing().slices.labelTables, rule, field, value);
   };
   /** @param {number} index */
   const removeWhitelistRule = (index) => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.manualWhitelist.splice(index, 1);
+    removeDrawingWhitelistRule(drawing.slices.labelTables, index);
   };
   /** @param {number} index */
   const removePriorityRule = (index) => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    drawing.manualPriorityRules.splice(index, 1);
+    removeDrawingPriorityRule(drawing.slices.labelTables, index);
   };
 
   const addPriorityRule = () => {
@@ -726,12 +739,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!newPriorityRule.order) return;
-    const idx = drawing.manualPriorityRules.findIndex((/** @type {{ feat?: string, order?: string }} */ r) => r.feat === newPriorityRule.feat);
-    if (idx >= 0) {
-      drawing.manualPriorityRules[idx].order = newPriorityRule.order;
-    } else {
-      drawing.manualPriorityRules.push({ feat: newPriorityRule.feat, order: newPriorityRule.order });
-    }
+    setPriorityRules(drawing.slices.labelTables, [{ feat: newPriorityRule.feat, order: newPriorityRule.order }]);
   };
 
   const addSpecificRule = async () => {
@@ -1040,6 +1048,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     addPriorityRule,
     setLabelFilterMode,
     addWhitelistRule,
+    setWhitelistRuleField,
     removeWhitelistRule,
     removePriorityRule,
     addSpecificRule,
