@@ -49,7 +49,7 @@ def _normalize_definition_profile(profile: str) -> CircularDefinitionProfile:
 
 @dataclass(frozen=True)
 class CircularDefinitionStyle:
-    """What a Circular definition draws with: its line interval, font size and font family.
+    """What a Circular definition draws with: its line interval, font size, font family and profile.
 
     The shared-common profile (the plot title) draws in the plot title font
     size, the others in the definition font size. A render stage keys the
@@ -60,15 +60,18 @@ class CircularDefinitionStyle:
     interval: int
     font_size: float
     font_family: str
+    profile: CircularDefinitionProfile
 
     @classmethod
     def of(cls, cfg: GbdrawConfig, definition_profile: str) -> CircularDefinitionStyle:
         definition = cfg.objects.definition.circular
-        shared_common = _normalize_definition_profile(definition_profile) == "shared_common"
+        profile = _normalize_definition_profile(definition_profile)
+        shared_common = profile == "shared_common"
         return cls(
             interval=definition.interval,
             font_size=definition.plot_title_font_size if shared_common else definition.font_size,
             font_family=cfg.objects.text.font_family,
+            profile=profile,
         )
 
 
@@ -254,7 +257,6 @@ class DefinitionGroup:
         species: Optional[str] = None,
         strain: Optional[str] = None,
         plot_title: Optional[str] = None,
-        definition_profile: CircularDefinitionProfile | str = "full",
         definition_group_id: str | None = None,
         record_index: int = 0,
         record_count: int = 1,
@@ -274,9 +276,7 @@ class DefinitionGroup:
         self.species: str | None = species
         self.strain: str | None = strain
         self.plot_title: str | None = plot_title
-        self.definition_profile: CircularDefinitionProfile = _normalize_definition_profile(
-            str(definition_profile)
-        )
+        self.definition_profile: CircularDefinitionProfile = style.profile
         self.record_index = int(record_index)
         self.record_count = int(record_count)
         self.replicon: str | None = None

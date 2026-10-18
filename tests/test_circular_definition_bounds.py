@@ -34,7 +34,6 @@ def _definition(
         species="<i>Testus boundsii</i>",
         strain="strain A",
         plot_title=plot_title,
-        definition_profile=profile,
         definition_group_id=("plot_title" if profile == "shared_common" else None),
         record_presentation=RecordPresentation(label=record_label, subtitle=record_subtitle),
     )

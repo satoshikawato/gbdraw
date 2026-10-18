@@ -366,7 +366,6 @@ def add_record_definition_group_on_canvas(
         species=species,
         strain=strain,
         plot_title=plot_title,
-        definition_profile=definition_profile,
         definition_group_id=definition_group_id,
         record_index=record_index,
         record_count=record_count,

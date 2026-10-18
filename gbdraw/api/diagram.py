@@ -1366,7 +1366,6 @@ def _circular_plot_title_content(
         species=species,
         strain=strain,
         plot_title=plot_title,
-        definition_profile="shared_common",
         definition_group_id="plot_title",
         record_presentation=record_presentation,
     )

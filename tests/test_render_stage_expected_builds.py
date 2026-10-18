@@ -238,7 +238,8 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
         frozenset({"definition_content"}),
     ),
     # Linear: the definition; Circular: the record definition and the plot
-    # title, whose font size defaults to the definition font size.
+    # title, which draws with the definition line interval that follows the
+    # definition font size.
     "definition_font_size": frozenset(
         {"definition_content", "circular_definition_content", "circular_plot_title_content"}
     ),
