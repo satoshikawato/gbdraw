@@ -4,12 +4,14 @@
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
 /** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { DrawnTrack, TrackLegendRows } from '../services/track-legend-rows.js' */
-/** @import { DrawingState, LegendCaption, LegendEntry, RecordedLegendColor } from '../state.js' */
+/** @import { DrawingState } from '../state.js' */
+/** @import { LegendCaption, LegendEntry, RecordedLegendColor } from '../services/drawing/paint.js' */
 /** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
 import { appliedFeatureColors, readCommittedPaint, samePaint } from '../utils/color-utils.js';
 import { hasOwnEntry } from '../utils/own-entry.js';
-import { defaultLegendKeyOrder, isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
+import { defaultLegendKeyOrder, isLegendOrderEdited } from '../services/legend-svg.js';
+import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';

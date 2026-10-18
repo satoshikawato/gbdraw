@@ -1,5 +1,6 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry } from '../state.js' */
+/** @import { DrawingState } from '../state.js' */
+/** @import { LegendRow } from '../services/drawing/paint.js' */
 /** @import { SpecificRuleBuild } from '../services/specific-color-rules.js' */
 import { createLegendDragActions } from './legend/drag-actions.js';
 import { createLegendEntryActions } from './legend/entry-actions.js';
@@ -10,9 +11,9 @@ import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
   isCurrentLegendHorizontal,
-  legendEntryKey,
   legendRowKeys
 } from '../services/legend-svg.js';
+import { legendEntryKey } from '../services/drawing/paint.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../services/feature-visibility.js';
 import { registeredLegendFaces } from '../services/font-store.js';
@@ -62,7 +63,7 @@ export const createLegendManager = ({
   // key among Python's rows (OV-294).
   /** @param {DrawingState} drawing @param {number} index */
   const rowRulesAt = (drawing, index) => {
-    /** @type {LegendEntry | undefined} */
+    /** @type {LegendRow | undefined} */
     const entry = drawing.legendEntries.value[index];
     if (!entry) return [];
     const context = displayedLegendRowContext(state, drawing);

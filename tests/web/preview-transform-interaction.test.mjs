@@ -55,7 +55,7 @@ await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('services/feature-placement.js', 'services/feature-placement.js');
 await copyModule('services/json-clone.js', 'services/json-clone.js');
-for (const path of ['services/drawing/feature-edits.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js']) await copyModule(path, path);
+for (const path of ['services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js']) await copyModule(path, path);
 // No admitted catalog: features open as the Result draws them.
 await writeFile(
   join(tempDir, 'services', 'feature-catalog.js'),

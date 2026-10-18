@@ -164,7 +164,9 @@ import { convertMainSessionComparisonFrames } from './main-session-comparison-fr
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
-import { legendEntryKey, rekeyLegendRecords } from './legend-svg.js';
+import { rekeyLegendRecords } from './legend-svg.js';
+import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, clearSessionPaint, legendEntryKey } from './drawing/paint.js';
+/** @import { FeatureFill } from './drawing/paint.js' */
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
   buildValidatedProteinIdentityIndex,
@@ -944,29 +946,30 @@ const admittedFeatureCatalog = (catalog) => {
 };
 
 /** @param {DrawingState} drawing */
-export const buildEditorStateData = (drawing) => ({
-  legend: {
-    entries: cloneJsonArray(drawing.legendEntries.value),
-    deletedEntries: cloneJsonArray(drawing.deletedLegendEntries.value),
-    dormantEntries: cloneJsonArray(drawing.dormantLegendEntries.value),
-    originalOrder: cloneJsonArray(state.originalLegendOrder.value),
-    originalColors: cloneStringMap(state.originalLegendColors.value),
-    colorOverrides: cloneJsonObject(drawing.legendColorOverrides),
-    strokeOverrides: cloneJsonObject(drawing.legendStrokeOverrides),
-    addedCaptions: Array.from(drawing.addedLegendCaptions.value || [])
-      .map((caption) => String(caption || '').trim())
-      .filter(Boolean)
-  },
-  featureStrokes: {
-    overrides: cloneJsonObject(drawing.featureStrokeOverrides)
-  },
-  originalSvgStroke: {
-    color: state.originalSvgStroke.value?.color ?? null,
-    width: state.originalSvgStroke.value?.width ?? null
-  },
-  alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
-  featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
-});
+export const buildEditorStateData = (drawing) => {
+  const paint = captureLegendPaint(drawing.slices.paint);
+  return {
+    legend: {
+      entries: paint.legendEntries,
+      deletedEntries: paint.deletedLegendEntries,
+      dormantEntries: paint.dormantLegendEntries,
+      originalOrder: cloneJsonArray(state.originalLegendOrder.value),
+      originalColors: cloneStringMap(state.originalLegendColors.value),
+      colorOverrides: paint.legendColorOverrides,
+      strokeOverrides: paint.legendStrokeOverrides,
+      addedCaptions: paint.addedLegendCaptions.map((caption) => String(caption || '').trim()).filter(Boolean)
+    },
+    featureStrokes: {
+      overrides: paint.featureStrokeOverrides
+    },
+    originalSvgStroke: {
+      color: state.originalSvgStroke.value?.color ?? null,
+      width: state.originalSvgStroke.value?.width ?? null
+    },
+    alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
+    featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
+  };
+};
 
 /**
  * The losses of a stroke override map read at `at` (a dropped entry is
@@ -1258,13 +1261,16 @@ const applyEditorArtifactData = (normalized) => {
  * @param {Record<string, any>} normalized The result of `normalizeEditorStateData`.
  */
 const applyDrawingEditorData = (drawing, normalized) => {
-  drawing.legendEntries.value = normalized.legend.entries;
-  drawing.deletedLegendEntries.value = normalized.legend.deletedEntries;
-  drawing.dormantLegendEntries.value = normalized.legend.dormantEntries;
-  replacePlainObject(drawing.legendColorOverrides, normalized.legend.colorOverrides);
-  replacePlainObject(drawing.legendStrokeOverrides, normalized.legend.strokeOverrides);
-  drawing.addedLegendCaptions.value = new Set(normalized.legend.addedCaptions);
-  replacePlainObject(drawing.featureStrokeOverrides, normalized.featureStrokes.overrides);
+  const { legend, featureStrokes } = normalized;
+  PAINT_SLICE.install(drawing.slices.paint, {
+    legendEntries: legend.entries,
+    deletedLegendEntries: legend.deletedEntries,
+    dormantLegendEntries: legend.dormantEntries,
+    legendColorOverrides: legend.colorOverrides,
+    legendStrokeOverrides: legend.strokeOverrides,
+    addedLegendCaptions: legend.addedCaptions,
+    featureStrokeOverrides: featureStrokes.overrides
+  });
 };
 
 // ---- Session 46: one drawing's slice (`modes.<m>`, PD-OI-086) ----
@@ -1283,7 +1289,7 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
     config: cloneJsonData(buildConfigData(drawing)),
     features: {
       featureOverrides: featureOverridesForState(FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides),
-      featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
+      featureColorOverrides: captureFeatureFills(drawing.slices.paint),
       featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
       ...labelTextEditsData(drawing.slices.labelTables)
     },
@@ -4601,13 +4607,6 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   }
 };
 
-/** @param {Record<string, unknown>} target */
-const clearObject = (target) => {
-  Object.keys(target).forEach((key) => {
-    delete target[key];
-  });
-};
-
 // Both drawings return to their defaults before a Session installs its own.
 const resetSessionBaseline = () => {
   activePreviewRuntime?.clearActiveRuntime?.();
@@ -4658,13 +4657,10 @@ const resetSessionBaseline = () => {
   Object.values(state.drawings).forEach((/** @type {DrawingState} */ drawing) => {
     Object.assign(drawing.importedComparisonIntent, createImportedComparisonIntentState());
     GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
-    clearObject(drawing.featureColorOverrides);
     VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
     clearFeatureOverrides(drawing.slices.featureEdits);
-    clearObject(drawing.featureStrokeOverrides);
     clearLabelTextEdits(drawing.slices.labelTables);
-    drawing.legendEntries.value = [];
-    drawing.dormantLegendEntries.value = [];
+    clearSessionPaint(drawing.slices.paint);
   });
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
@@ -4854,7 +4850,7 @@ export const buildFeatureStateData = (drawing) => ({
   biologicalFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.biologicalFeatures?.value)),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
-  featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
+  featureColorOverrides: captureFeatureFills(drawing.slices.paint),
   featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
   featureOverrides: featureOverridesForState(FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides),
   ...labelTextEditsData(drawing.slices.labelTables)
@@ -4897,7 +4893,10 @@ export const applyFeatureStateData = (drawing, features = {}) => {
  */
 const applyDrawingFeatureData = (drawing, features = {}) => {
   // The readers Load lists what they cannot restore with (`sliceFieldRepairs`).
-  replacePlainObject(drawing.featureColorOverrides, cloneJsonObject(readFeatureColorEdits(features.featureColorOverrides).value));
+  PAINT_SLICE.install(drawing.slices.paint, {
+    // The edits the reader kept hold a color (`readCommittedPaint`): feature fills.
+    featureColorOverrides: /** @type {Record<string, FeatureFill>} */ (readFeatureColorEdits(features.featureColorOverrides).value)
+  });
   VISIBILITY_RULES_SLICE.install(drawing.slices.visibilityRules, {
     featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(readList(features.featureVisibilityManualRules).value)
   });

@@ -55,6 +55,7 @@ await copyModule('gbdraw/web/js/services/json-clone.js', 'services/json-clone.js
 await copyModule('gbdraw/web/js/services/drawing/slice-handle.js', 'services/drawing/slice-handle.js');
 await copyModule('gbdraw/web/js/services/drawing/group-names.js', 'services/drawing/group-names.js');
 await copyModule('gbdraw/web/js/services/drawing/feature-edits.js', 'services/drawing/feature-edits.js');
+await copyModule('gbdraw/web/js/services/drawing/paint.js', 'services/drawing/paint.js');
 await copyModule('gbdraw/web/js/utils/vue-raw.js', 'utils/vue-raw.js');
 // It reads location-part numbers with the decimal-number owner.
 await copyModule('gbdraw/web/js/utils/optional-positive-number.js', 'utils/optional-positive-number.js');

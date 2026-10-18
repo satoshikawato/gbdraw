@@ -53,7 +53,12 @@ await writeFile(
 for (const name of ['record-options.js', 'record-draw-selection.js']) {
   await writeFile(join(tempDir, 'services', name), await readFile(`gbdraw/web/js/services/${name}`, 'utf8'), 'utf8');
 }
-for (const name of ['optional-positive-number.js', 'error-normalization.js', 'download-names.js']) {
+// record-draw-selection.js deletes record edits through the drawing slices.
+await mkdir(join(tempDir, 'services', 'drawing'), { recursive: true });
+for (const name of ['drawing/feature-edits.js', 'drawing/paint.js', 'drawing/slice-handle.js', 'json-clone.js']) {
+  await writeFile(join(tempDir, 'services', name), await readFile(`gbdraw/web/js/services/${name}`, 'utf8'), 'utf8');
+}
+for (const name of ['reactivity.js', 'optional-positive-number.js', 'error-normalization.js', 'download-names.js']) {
   await writeFile(
     join(tempDir, 'utils', name),
     await readFile(`gbdraw/web/js/utils/${name}`, 'utf8'),

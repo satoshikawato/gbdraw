@@ -17,7 +17,6 @@ import {
 import {
   getAllFeatureLegendGroups,
   getLegendEntrySwatch as legendSwatch,
-  legendEntryKey,
   legendRowFeatureIds,
   legendRowName,
   legendRowShown,
@@ -32,6 +31,7 @@ import {
   setsFeatureStroke,
   SPECIFIC_COLOR_FILE_OWNER
 } from './legend-svg.js';
+import { legendEntryKey } from './drawing/paint.js';
 import { isCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { drawnLegendNames } from './legend-row-names.js';
@@ -944,8 +944,8 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
         // `legendGroups` is set together with `legendEntries` below.
         groups: /** @type {Element[]} */ (built.legendGroups)
       };
-      const legendEntries = new Map();
-      built.legendEntries = legendEntries;
+      const rowsByKey = new Map();
+      built.legendEntries = rowsByKey;
       built.legendGroups = getAllFeatureLegendGroups(svg);
       // A row of Python's is found by Python's key, also once renamed or
       // hidden; an editor row by its own key, unless a row of Python's has it.
@@ -961,9 +961,9 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
             throw new Error('Current SVG contains an ambiguous Legend binding.');
           }
           seen.set(caption, entry);
-          if (!legendEntries.has(caption)) legendEntries.set(caption, []);
+          if (!rowsByKey.has(caption)) rowsByKey.set(caption, []);
           // `get` holds the array set on the line above.
-          /** @type {Element[]} */ (legendEntries.get(caption)).push(entry);
+          /** @type {Element[]} */ (rowsByKey.get(caption)).push(entry);
         });
       });
       recordStructuralMetric('legendDomFullScanCount', 1, { phase, resultIndex });

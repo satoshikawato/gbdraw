@@ -23,6 +23,9 @@ import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
 import { PALETTE_SLICE, queuedPaletteData, restoreArtifactQueuedPalette } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
+import { PAINT_SLICE, captureFeatureFills, captureLegendPaint } from './drawing/paint.js';
+/** @import { FeatureFill, KeptLegendEntry, LegendEntry } from './drawing/paint.js' */
+/** @import { StrokeOverride } from './style-overrides.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { PaletteColors, PaletteSlice } from './drawing/palette.js' */
@@ -214,15 +217,6 @@ const replacePlainObject = (target, source) => {
   });
 };
 
-/**
- * @param {{ value?: unknown } | null | undefined} target
- * @param {unknown} source
- */
-const replaceRefArray = (target, source) => {
-  if (!target || typeof target !== 'object' || !('value' in target)) return;
-  target.value = Array.isArray(source) ? cloneJsonData(source) : [];
-};
-
 /** @param {FeatureEditsData} [features] */
 const buildFeatureIntentData = (features = {}) => ({
   featureColorOverrides: clonePlainObject(features.featureColorOverrides),
@@ -232,18 +226,19 @@ const buildFeatureIntentData = (features = {}) => ({
   labelTextBulkOverrides: clonePlainObject(features.labelTextBulkOverrides)
 });
 
-/** @param {EditorIntentData} [editorState] */
-const buildEditorIntentData = (editorState = {}) => ({
+// A drawing's Legend paint as a History step holds it (`editorState`).
+/** @param {ReturnType<typeof captureLegendPaint>} paint A capture (a copy). */
+const editorIntentOf = (paint) => ({
   legend: {
-    entries: cloneJsonData(editorState?.legend?.entries) || [],
-    deletedEntries: cloneJsonData(editorState?.legend?.deletedEntries) || [],
-    dormantEntries: cloneJsonData(editorState?.legend?.dormantEntries) || [],
-    colorOverrides: clonePlainObject(editorState?.legend?.colorOverrides),
-    strokeOverrides: clonePlainObject(editorState?.legend?.strokeOverrides),
-    addedCaptions: cloneJsonData(editorState?.legend?.addedCaptions) || []
+    entries: paint.legendEntries,
+    deletedEntries: paint.deletedLegendEntries,
+    dormantEntries: paint.dormantLegendEntries,
+    colorOverrides: paint.legendColorOverrides,
+    strokeOverrides: paint.legendStrokeOverrides,
+    addedCaptions: paint.addedLegendCaptions
   },
   featureStrokes: {
-    overrides: clonePlainObject(editorState?.featureStrokes?.overrides)
+    overrides: paint.featureStrokeOverrides
   }
 });
 
@@ -288,9 +283,17 @@ const applyFeatureIntentData = (state, drawing, features = {}) => {
       Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
     );
   }
-  replacePlainObject(drawing.featureColorOverrides, clonePlainObject(features.featureColorOverrides));
+  PAINT_SLICE.install(drawing.slices.paint, { featureColorOverrides: capturedFills(features) });
   replaceFeatureEditState(drawing, features);
 };
+
+// A captured step's feature color edits (History installs its copy as is, R11;
+// the cast: a captured copy of the drawing's fills is fills).
+/** @param {FeatureEditsData} features */
+const capturedFills = (features) => /** @type {Record<string, FeatureFill>} */ (clonePlainObject(features.featureColorOverrides));
+
+/** @param {unknown} rows @returns {KeptLegendEntry[]} A captured list of Legend rows (the cast), else none. */
+const capturedRows = (rows) => (Array.isArray(rows) ? /** @type {KeptLegendEntry[]} */ (rows) : []);
 
 /**
  * @param {HistorySnapshotDrawing} drawing
@@ -298,20 +301,16 @@ const applyFeatureIntentData = (state, drawing, features = {}) => {
  */
 const applyEditorIntentData = (drawing, editorState = {}) => {
   const legend = editorState.legend || {};
-  replaceRefArray(drawing.legendEntries, legend.entries);
-  replaceRefArray(drawing.deletedLegendEntries, legend.deletedEntries);
-  replaceRefArray(drawing.dormantLegendEntries, legend.dormantEntries);
-  replacePlainObject(drawing.legendColorOverrides, clonePlainObject(legend.colorOverrides));
-  replacePlainObject(drawing.legendStrokeOverrides, clonePlainObject(legend.strokeOverrides));
-  if (drawing.addedLegendCaptions?.value !== undefined) {
-    drawing.addedLegendCaptions.value = new Set(
-      Array.isArray(legend.addedCaptions) ? legend.addedCaptions.map((entry) => String(entry || '')) : []
-    );
-  }
-  replacePlainObject(
-    drawing.featureStrokeOverrides,
-    clonePlainObject(editorState?.featureStrokes?.overrides)
-  );
+  // A captured copy of the drawing's paint is its paint (the casts).
+  PAINT_SLICE.install(drawing.slices.paint, {
+    legendEntries: /** @type {LegendEntry[]} */ (capturedRows(legend.entries)),
+    deletedLegendEntries: capturedRows(legend.deletedEntries),
+    dormantLegendEntries: capturedRows(legend.dormantEntries),
+    legendColorOverrides: /** @type {Record<string, string>} */ (clonePlainObject(legend.colorOverrides)),
+    legendStrokeOverrides: /** @type {Record<string, StrokeOverride>} */ (clonePlainObject(legend.strokeOverrides)),
+    addedLegendCaptions: Array.isArray(legend.addedCaptions) ? legend.addedCaptions.map((entry) => String(entry || '')) : [],
+    featureStrokeOverrides: /** @type {Record<string, StrokeOverride>} */ (clonePlainObject(editorState?.featureStrokes?.overrides))
+  });
 };
 
 /**
@@ -647,7 +646,7 @@ const buildFallbackFeatureStateData = (state, drawing) => ({
   extractedFeatures: cloneJsonData(getRef(state.extractedFeatures, [])) || [],
   featureRecordIds: cloneJsonData(getRef(state.featureRecordIds, [])) || [],
   selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
-  featureColorOverrides: clonePlainObject(drawing.featureColorOverrides),
+  featureColorOverrides: captureFeatureFills(drawing.slices.paint),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
   featureOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides,
   ...labelTextEditsData(drawing.slices.labelTables)
@@ -665,7 +664,7 @@ const applyFallbackFeatureStateData = (state, drawing, features = {}) => {
     state.selectedFeatureRecordIdx,
     Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
   );
-  replacePlainObject(drawing.featureColorOverrides, clonePlainObject(features.featureColorOverrides));
+  PAINT_SLICE.install(drawing.slices.paint, { featureColorOverrides: capturedFills(features) });
   replaceFeatureEditState(drawing, features);
 };
 
@@ -1448,35 +1447,30 @@ export const createHistorySnapshotService = ({
       : buildFallbackUiStateData(state, drawing);
     const features = {
       selectedFeatureRecordIdx: getGeneratedArtifactRef(state.selectedFeatureRecordIdx, 0),
-      featureColorOverrides: clonePlainObject(drawing.featureColorOverrides),
+      featureColorOverrides: captureFeatureFills(drawing.slices.paint),
       featureVisibilityManualRules: cloneFeatureVisibilityRules(
         VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules
       ),
       featureOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides,
       ...labelTextEditsData(drawing.slices.labelTables)
     };
+    const paint = captureLegendPaint(drawing.slices.paint);
     const editorState = {
       legend: {
-        entries: cloneJsonData(getGeneratedArtifactRef(drawing.legendEntries, [])) || [],
-        deletedEntries: cloneJsonData(
-          getGeneratedArtifactRef(drawing.deletedLegendEntries, [])
-        ) || [],
-        dormantEntries: cloneJsonData(
-          getGeneratedArtifactRef(drawing.dormantLegendEntries, [])
-        ) || [],
+        entries: paint.legendEntries,
+        deletedEntries: paint.deletedLegendEntries,
+        dormantEntries: paint.dormantLegendEntries,
         originalOrder: cloneJsonData(
           getGeneratedArtifactRef(state.originalLegendOrder, [])
         ) || [],
         originalColors: clonePlainObject(
           getGeneratedArtifactRef(state.originalLegendColors, {})
         ),
-        colorOverrides: clonePlainObject(drawing.legendColorOverrides),
-        strokeOverrides: clonePlainObject(drawing.legendStrokeOverrides),
-        addedCaptions: Array.from(
-          getGeneratedArtifactRef(drawing.addedLegendCaptions, new Set()) || []
-        )
+        colorOverrides: paint.legendColorOverrides,
+        strokeOverrides: paint.legendStrokeOverrides,
+        addedCaptions: paint.addedLegendCaptions
       },
-      featureStrokes: { overrides: clonePlainObject(drawing.featureStrokeOverrides) },
+      featureStrokes: { overrides: paint.featureStrokeOverrides },
       originalSvgStroke: cloneJsonData(
         getGeneratedArtifactRef(state.originalSvgStroke, null)
       ) || {
@@ -1805,22 +1799,12 @@ export const createHistorySnapshotService = ({
       config,
       ui: drawingUiPart(ui),
       features: buildFeatureIntentData({
-        featureColorOverrides: drawing.featureColorOverrides,
+        featureColorOverrides: captureFeatureFills(drawing.slices.paint),
         featureVisibilityManualRules: VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules,
         featureOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides,
         ...labelTextEditsData(drawing.slices.labelTables)
       }),
-      editorState: buildEditorIntentData({
-        legend: {
-          entries: getRef(drawing.legendEntries, []),
-          deletedEntries: getRef(drawing.deletedLegendEntries, []),
-          dormantEntries: getRef(drawing.dormantLegendEntries, []),
-          colorOverrides: drawing.legendColorOverrides,
-          strokeOverrides: drawing.legendStrokeOverrides,
-          addedCaptions: Array.from(getRef(drawing.addedLegendCaptions, new Set()) || [])
-        },
-        featureStrokes: { overrides: drawing.featureStrokeOverrides }
-      }),
+      editorState: editorIntentOf(captureLegendPaint(drawing.slices.paint)),
       groupNames: buildGroupNameIntentData(drawing),
       fileLegendCaptions: buildFileLegendCaptionData(drawing)
     };

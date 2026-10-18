@@ -14,6 +14,8 @@ import {
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
 import { pythonLegendRows } from './legend-svg.js';
 import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
+import { paintOf, setFeatureStroke } from './drawing/paint.js';
+/** @import { PaintSlice } from './drawing/paint.js' */
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 /** @import { FeatureOverrideDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
@@ -407,7 +409,7 @@ const removeFeatureEdits = ({
 /**
  * @param {{
  *   featureEdits: FeatureEditsSlice,
- *   featureStrokeOverrides?: Record<string, any>,
+ *   paint?: PaintSlice,
  *   notices?: UnresolvedNotice[],
  *   replacedRecordKeys?: string[],
  *   previousRecords?: Record<string, any>[],
@@ -419,7 +421,7 @@ const removeFeatureEdits = ({
  */
 export const pruneUnmatchedFeatureOverrides = ({
   featureEdits,
-  featureStrokeOverrides = {},
+  paint,
   notices = [],
   replacedRecordKeys = [],
   previousRecords = [],
@@ -433,10 +435,10 @@ export const pruneUnmatchedFeatureOverrides = ({
   const present = new Set(presentFeatures.map(featureIdentityKeyOf).filter(Boolean));
   const presentStrokeKeys = new Set(presentFeatures.map(stableKeyOf).filter(Boolean));
   let removedStrokes = 0;
-  Object.keys(featureStrokeOverrides || {}).forEach((key) => {
+  Object.keys(paint ? paintOf(paint).featureStrokeOverrides : {}).forEach((key) => {
     const recordKey = key.split('\0')[0];
-    if (!key.includes('\0') || !replaced.has(recordKey) || presentStrokeKeys.has(key)) return;
-    delete featureStrokeOverrides[key];
+    if (!paint || !key.includes('\0') || !replaced.has(recordKey) || presentStrokeKeys.has(key)) return;
+    setFeatureStroke(paint, key, null);
     removedStrokes += 1;
   });
   return removedStrokes + removeFeatureEdits({

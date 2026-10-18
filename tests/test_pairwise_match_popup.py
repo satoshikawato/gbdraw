@@ -87,9 +87,25 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     (tmp_path / "record-draw-selection.mjs").write_text(
         (WEB_ROOT / "js" / "services" / "record-draw-selection.js")
         .read_text(encoding="utf-8")
-        .replace("../utils/download-names.js", "./download-names.mjs"),
+        .replace("../utils/download-names.js", "./download-names.mjs")
+        .replace("./drawing/feature-edits.js", "./drawing-feature-edits.mjs")
+        .replace("./drawing/paint.js", "./drawing-paint.mjs"),
         encoding="utf-8",
     )
+    # The drawing slices record-draw-selection.js deletes record edits through.
+    for name in ("feature-edits", "paint", "slice-handle"):
+        (tmp_path / f"drawing-{name}.mjs").write_text(
+            (WEB_ROOT / "js" / "services" / "drawing" / f"{name}.js")
+            .read_text(encoding="utf-8")
+            .replace("../../utils/reactivity.js", "./reactivity.mjs")
+            .replace("../json-clone.js", "./json-clone.mjs")
+            .replace("./slice-handle.js", "./drawing-slice-handle.mjs"),
+            encoding="utf-8",
+        )
+    for path in ("utils/reactivity.js", "services/json-clone.js"):
+        (tmp_path / path.split("/")[1].replace(".js", ".mjs")).write_text(
+            (WEB_ROOT / "js" / path).read_text(encoding="utf-8"), encoding="utf-8"
+        )
     (tmp_path / "download-names.mjs").write_text(
         (WEB_ROOT / "js" / "utils" / "download-names.js").read_text(encoding="utf-8"),
         encoding="utf-8",

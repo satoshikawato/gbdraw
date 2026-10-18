@@ -1,6 +1,7 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry } from '../../state.js' */
-import { legendEntryKey } from '../../services/legend-svg.js';
+/** @import { DrawingState } from '../../state.js' */
+/** @import { LegendRow } from '../../services/drawing/paint.js' */
+import { legendEntryKey, replaceLegendRows } from '../../services/drawing/paint.js';
 // Sort and Move compute the requested row order, write it into the
 // drawing's Legend intent, and show it through the root's port once (R1, R3,
 // R13): the executor orders the displayed Result's rows.
@@ -15,19 +16,18 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
   const { originalLegendOrder } = state;
 
   // Each row is moved as itself, never by its name: two rows may show one name.
-  /** @param {DrawingState} drawing @param {LegendEntry[]} ordered The listed rows in their new order. */
+  /** @param {DrawingState} drawing @param {readonly LegendRow[]} ordered The listed rows in their new order. */
   const applyLegendEntryOrder = (drawing, ordered) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    /** @type {LegendEntry[]} */
     const entries = drawing.legendEntries.value || [];
     if (ordered.every((entry, index) => entry === entries[index])) return;
-    drawing.legendEntries.value = ordered;
+    replaceLegendRows(drawing.slices.paint, ordered);
     showLegendStructure();
   };
 
-  /** @param {DrawingState} drawing @returns {LegendEntry[]} */
-  const listedRows = (drawing) => /** @type {LegendEntry[]} */ (drawing.legendEntries.value || []).filter((entry) => entry.caption);
+  /** @param {DrawingState} drawing @returns {LegendRow[]} */
+  const listedRows = (drawing) => (drawing.legendEntries.value || []).filter((entry) => entry.caption);
 
   // Moves the row at `from` to `to` (the Legend panel's drag handle and the
   // handle's arrow keys).
@@ -43,7 +43,7 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
     applyLegendEntryOrder(drawing, next);
   };
 
-  /** @param {LegendEntry[]} rows @param {(left: LegendEntry, right: LegendEntry) => number} compare */
+  /** @param {LegendRow[]} rows @param {(left: LegendRow, right: LegendRow) => number} compare */
   const stableSorted = (rows, compare) => rows.map((entry, index) => ({ entry, index }))
     .sort((left, right) => compare(left.entry, right.entry) || left.index - right.index)
     .map(({ entry }) => entry);
@@ -68,7 +68,7 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
     if (current.length < 2) return;
     if (originalLegendOrder.value.length === 0) return;
     // A renamed generated row keeps its key's place in the generated order.
-    /** @param {LegendEntry} entry */
+    /** @param {LegendRow} entry */
     const rank = (entry) => originalLegendOrder.value.indexOf(legendEntryKey(entry));
     applyLegendEntryOrder(drawing, stableSorted(current, (left, right) => {
       const [leftRank, rightRank] = [rank(left), rank(right)];

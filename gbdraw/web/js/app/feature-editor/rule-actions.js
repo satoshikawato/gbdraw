@@ -1,5 +1,6 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry } from '../../state.js' */
+/** @import { DrawingState } from '../../state.js' */
+/** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /** @import { SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, ShowNotice } from '../app-messages.js' */
@@ -37,7 +38,14 @@ import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
 } from '../../services/feature-visibility.js';
-import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
+import { legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
+import {
+  legendEntryKey,
+  replaceAddedLegendCaptions,
+  replaceFeatureFills,
+  setFeatureFill,
+  setLegendColor
+} from '../../services/drawing/paint.js';
 /** @import { PatternDraft } from './pattern-drafts.js' */
 /** @import { ColorFeature } from './color-actions.js' */
 
@@ -173,7 +181,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     /** @type {Array<{ caption: PythonLegendKey, color: string }>} */
     const ruleRows = drawing.manualSpecificRules.filter((/** @type {SpecificColorRule} */ rule) => rule.cap)
       .map((/** @type {SpecificColorRule} */ rule) => ({ caption: currentCaption(rule), color: rule.color }));
-    /** @type {LegendEntry[]} */
+    /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value || [];
     const takenRows = listed.filter(entry => takenKeys.has(legendEntryKey(entry)))
       .map(entry => ({ caption: legendEntryKey(entry), color: entry.color }));
@@ -296,19 +304,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {DrawingState} drawing
    * @param {{ caption: string, color: string }[]} intents
    * @param {{ caption: string, color: string }[]} removedRuleRows
+   * @returns {PythonLegendKey[]} The keys of the Legend colors the commit retires.
    */
-  const retireSupersededLegendColors = (drawing, intents, removedRuleRows) => {
+  const supersededLegendColors = (drawing, intents, removedRuleRows) => {
     const overrides = drawing.legendColorOverrides;
-    for (const { caption, color } of intents) {
-      if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) !== resolveColorToHex(color)) {
-        delete overrides[caption];
-      }
-    }
-    for (const { caption, color } of removedRuleRows) {
-      if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) === resolveColorToHex(color)) {
-        delete overrides[caption];
-      }
-    }
+    /** @param {string} caption @param {string} color @param {boolean} same */
+    const retires = (caption, color, same) => Object.hasOwn(overrides, caption)
+      && (resolveColorToHex(overrides[caption]) === resolveColorToHex(color)) === same;
+    // An intent's and a rule row's `caption` is its row's key.
+    return /** @type {PythonLegendKey[]} */ ([
+      ...intents.filter(({ caption, color }) => retires(caption, color, false)),
+      ...removedRuleRows.filter(({ caption, color }) => retires(caption, color, true))
+    ].map(({ caption }) => caption));
   };
   // OV-444 (OV-443, OV-445): this owner is the one writer of the rule table,
   // and every write goes through one line (`queueRuleWrite`), in the order it
@@ -445,7 +452,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     /** @type {Map<PythonLegendKey, PythonLegendKey>} */
     const replaced = new Map(placedKey && legendPlacement?.replaces && placedKey !== legendPlacement.at ? [[legendPlacement.at, placedKey]] : []);
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
-      .some((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
+      .some((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
       isCurrent: current,
@@ -474,12 +481,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       // `prepareRules` without `asGiven` wrote each rule as `normalizeSpecificRule` does.
       replaceColorRules(drawing.slices.colorRules, /** @type {readonly SpecificColorRule[]} */ (candidate.rules), sourceRows);
       patternDrafts.reconcile();
-      drawing.addedLegendCaptions.value = new Set([
+      replaceAddedLegendCaptions(drawing.slices.paint, [
         ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
         ...intents.map(intent => intent.caption)
       ]);
       refreshFeatureOverrides(extractedFeatures.value);
-      retireSupersededLegendColors(drawing, intents, removedRuleRows);
+      supersededLegendColors(drawing, intents, removedRuleRows).forEach((key) => setLegendColor(drawing.slices.paint, key, null));
       afterCommit(intents);
       applied = true;
       const legendRows = legend.apply();
@@ -944,15 +951,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const drawing = state.activeDrawing();
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
     if (!features || features.length === 0 || !ruleMatches.ready(features)) return;
-    migrateLegacyFeatureOverrides(drawing.featureColorOverrides, features);
+    // Edits stored under a legacy feature key move to the feature's key first.
+    const fills = { ...drawing.featureColorOverrides };
+    if (migrateLegacyFeatureOverrides(fills, features).migrated > 0) replaceFeatureFills(drawing.slices.paint, fills);
 
     for (const feat of features) {
       const rule = ruleMatches.first(feat);
       const key = featureOverrideKey(feat);
-      if (key) {
-        if (rule) drawing.featureColorOverrides[key] = { color: rule.color, caption: rule.cap };
-        else delete drawing.featureColorOverrides[key];
-      }
+      if (key) setFeatureFill(drawing.slices.paint, key, rule ? { color: rule.color, caption: rule.cap } : null);
     }
   };
 

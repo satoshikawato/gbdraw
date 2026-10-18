@@ -2,7 +2,8 @@
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
-/** @import { DiagramMode, DrawingState, LegendEntry, LinearSeq, PopupPosition } from '../state.js' */
+/** @import { DiagramMode, DrawingState, LinearSeq, PopupPosition } from '../state.js' */
+/** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -30,7 +31,8 @@ import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { drawnBlockStroke, drawsPythonLegendRow, legendEntryKey, legendStructureEdited } from '../services/legend-svg.js';
+import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
+import { legendEntryKey } from '../services/drawing/paint.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { readArtifactOfMode } from '../services/artifact-slot.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
@@ -2061,10 +2063,7 @@ export const createAppSetup = () => {
   const retireLegendStylesOfUnnamedCaptions = (change) => {
     const drawing = state.activeDrawing();
     return buildLegendStyleRetirement({
-      legendColorOverrides: drawing.legendColorOverrides,
-      legendStrokeOverrides: drawing.legendStrokeOverrides,
-      legendEntries: drawing.legendEntries,
-      dormantLegendEntries: drawing.dormantLegendEntries,
+      drawing,
       projectLegendEntries: () => { showEditorIntent({ domains: [...LIVE_EDIT_DOMAINS.legendRows, ...LIVE_EDIT_DOMAINS.strokes] }); },
       namedCaptions: () => trackDataLegendCaptions({
         annotationSets: drawing.annotationSets,
@@ -3942,13 +3941,13 @@ export const createAppSetup = () => {
   /** @param {DrawingState} drawing */
   const displayedIntentSignature = (drawing) => JSON.stringify([
     currentEditorProjectionState(drawing),
-    drawing.deletedLegendEntries.value.map((/** @type {LegendEntry} */ entry) => entry.originalCaption || entry.caption),
+    drawing.deletedLegendEntries.value.map((/** @type {KeptLegendRow} */ entry) => entry.originalCaption || entry.caption),
     [...(drawing.addedLegendCaptions.value || [])],
-    drawing.legendEntries.value.filter((/** @type {LegendEntry} */ entry) => /** @type {string} */ (entry.caption) !== entry.originalCaption)
-      .map((/** @type {LegendEntry} */ entry) => [entry.originalCaption, entry.caption]),
+    drawing.legendEntries.value.filter((/** @type {LegendRow} */ entry) => /** @type {string} */ (entry.caption) !== entry.originalCaption)
+      .map((/** @type {LegendRow} */ entry) => [entry.originalCaption, entry.caption]),
     // The direct additions, which no Result's inventory lists.
-    drawing.legendEntries.value.filter((/** @type {LegendEntry} */ entry) => !originalLegendOrder.value.includes(entry.originalCaption || entry.caption))
-      .map((/** @type {LegendEntry} */ entry) => entry.caption)
+    drawing.legendEntries.value.filter((/** @type {LegendRow} */ entry) => !originalLegendOrder.value.includes(entry.originalCaption || entry.caption))
+      .map((/** @type {LegendRow} */ entry) => entry.caption)
   ]);
   /** @param {DrawingState} drawing */
   const rememberDepartingResultProjection = (drawing) => {
@@ -4464,7 +4463,7 @@ export const createAppSetup = () => {
     if (!restores || !key) return handleLegendRenameChoice(choice);
     return history.runUndoableCheckpoint('Rename legend item', async () => {
       const deleted = state.activeDrawing().deletedLegendEntries.value;
-      const index = deleted.findIndex((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === key);
+      const index = deleted.findIndex((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === key);
       if (index >= 0) restoreLegendRows(() => restoreDeletedLegendEntries([index]));
       return handleLegendRenameChoice(choice);
     });
@@ -6395,7 +6394,7 @@ export const createAppSetup = () => {
   /** @param {DrawingState} drawing @returns {RecordEditData} */
   const recordEditData = (drawing) => ({
     featureEdits: drawing.slices.featureEdits,
-    featureStrokeOverrides: drawing.featureStrokeOverrides,
+    paint: drawing.slices.paint,
     annotationSets: drawing.annotationSets,
     removeAnnotation: (/** @type {object} */ annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]),
     recordDisplayDrafts: drawing.recordDisplayDrafts,

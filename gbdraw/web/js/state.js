@@ -44,6 +44,7 @@ import { COLOR_RULES_SLICE } from './services/drawing/color-rules.js';
 import { PALETTE_SLICE } from './services/drawing/palette.js';
 import { LABEL_TABLES_SLICE } from './services/drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
+import { PAINT_SLICE } from './services/drawing/paint.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -950,32 +951,8 @@ export const sessionOperationAvailability = (
 /** @import { ModeProfileName } from './mode-profiles.js' */
 /** @typedef {ModeProfileName} DiagramMode The diagram modes; `mode-profiles.js` owns the names. */
 
-/** @import { PythonLegendKey, RenderedFeatureId } from './services/legend-svg.js' */
+/** @import { PythonLegendKey } from './services/legend-svg.js' */
 /** @import { VisibilityFeature } from './services/feature-visibility.js' */
-/** @typedef {string & { readonly __brand: 'LegendCaption' }} LegendCaption The caption a Legend row shows, which a rename writes. */
-/**
- * The color a Legend row records, never its identity (OV-288): one the user
- * set (a Legend color, an editor row's color, the color of a rule's row), or,
- * for a row the palette colors, the swatch the displayed Result showed when
- * its Legend list was last extracted (a Generate, a Result display, Settings
- * Reset). That can be a draft palette color, not Python's swatch, and a
- * palette, Default colors or Reset edit does not refresh it by itself. A row
- * shows `displayedLegendRowColors` (app/candidate-render.js; OV-282, D-26).
- * @typedef {string & { readonly __brand: 'RecordedLegendColor' }} RecordedLegendColor
- */
-/**
- * A row of a drawing's Legend list. Its identity is Python's key
- * (`originalCaption`; an editor row's own caption); the caption and the
- * recorded color are display values their writers own (rename, Legend color),
- * never a row's identity or the features it reaches (OV-288).
- * @typedef {object} LegendEntry
- * @property {LegendCaption} caption
- * @property {PythonLegendKey} originalCaption
- * @property {RecordedLegendColor} color
- * @property {number} xPos
- * @property {number} yPos
- * @property {RenderedFeatureId[]} featureIds The features the row lists (older Sessions); empty: Python's row decides.
- */
 
 // The drawing of a diagram mode: its settings, its editor edits, and the
 // values derived from them, under their former `state` names and kinds (a ref
@@ -1040,6 +1017,7 @@ const createDrawingState = (drawingMode) => {
   const annotationSets = ANNOTATION_SETS_SLICE.create();
   const groupNames = GROUP_NAMES_SLICE.create();
   const featureEdits = FEATURE_EDITS_SLICE.create();
+  const paint = PAINT_SLICE.create();
   return Object.freeze({
     // Settings
     form,
@@ -1061,21 +1039,21 @@ const createDrawingState = (drawingMode) => {
     // Per-feature edits and Feature placements keyed by original-source
     // identity (design Q4, R2; services/feature-placement.js owns the row shape).
     ...featureEdits.view,
-    featureColorOverrides: reactive({}), // {featureKey: color}
-    // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
-    featureStrokeOverrides: reactive({}),
+    // The paint intent (R2): feature and Legend colors and strokes, and the
+    // Legend rows (services/drawing/paint.js).
+    featureColorOverrides: paint.view.featureColorOverrides,
+    featureStrokeOverrides: paint.view.featureStrokeOverrides,
     ...visibilityRules.view,
     labelTextBulkOverrides: labelTables.view.labelTextBulkOverrides,
     canonicalLabelOverrideRows: labelTables.view.canonicalLabelOverrideRows,
-    legendEntries: ref([]), // LegendEntry[]; typed with its writers (OV-288 STATUS)
-    deletedLegendEntries: ref([]),
+    legendEntries: paint.view.legendEntries,
+    deletedLegendEntries: paint.view.deletedLegendEntries,
     // OV-120: renamed rows the last Generate did not draw (GC off, Show Depth
     // off); their renames apply again when a Generate draws the row.
-    dormantLegendEntries: ref([]),
-    legendColorOverrides: reactive({}), // { caption: color }
-    // { caption: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth } }
-    legendStrokeOverrides: reactive({}),
-    addedLegendCaptions: ref(new Set()),
+    dormantLegendEntries: paint.view.dormantLegendEntries,
+    legendColorOverrides: paint.view.legendColorOverrides,
+    legendStrokeOverrides: paint.view.legendStrokeOverrides,
+    addedLegendCaptions: paint.view.addedLegendCaptions,
     ...colorRules.view,
     manualPriorityRules: labelTables.view.manualPriorityRules,
     filterMode: labelTables.view.filterMode,
@@ -1105,7 +1083,7 @@ const createDrawingState = (drawingMode) => {
     // The handles a slice's writers take.
     slices: Object.freeze({
       visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, labelTables: labelTables.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle,
-      featureEdits: featureEdits.handle })
+      featureEdits: featureEdits.handle, paint: paint.handle })
   });
 };
 const circularDrawing = createDrawingState('circular');

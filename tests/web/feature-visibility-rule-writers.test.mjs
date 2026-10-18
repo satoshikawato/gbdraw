@@ -20,8 +20,12 @@
 // inside a shorthand method is reported under the function name ''.
 // A drawing slice (js/services/drawing/) is no owner: it writes its members
 // only for its caller, so a call of a slice function that receives the handle
-// of a slice holding one of the names (`drawing.slices.<slice>`) is a write of
-// the function that calls it, except the slice's `capture`, which reads.
+// of a slice holding one of the names (`drawing.slices.<slice>`, or a name
+// equal to the handle's, such as a helper's `paint` parameter) is a write of
+// the function that calls it, except a slice's readers (`capture…` and
+// `…Of`) and the calls `READERS` lists. A handle held under another name is
+// not seen (the slices' own guard, tests/web/drawing-slices.test.mjs, covers
+// their members).
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -113,7 +117,7 @@ export const PAINT_INTENT_WRITERS = {
   'js/app/legend/stroke-actions.js': {
     resetAllStrokes: 'edit', resetLegendEntryStroke: 'edit', setLegendEntryStrokeColorValue: 'edit', writeStrokeField: 'edit'
   },
-  'js/app/legend/track-data-styles.js': { buildLegendStyleRetirement: 'retire', retireStyles: 'retire' },
+  'js/app/legend/track-data-styles.js': { buildLegendStyleRetirement: 'retire' },
   'js/app/run-analysis.js': { runAnalysisInternal: 'generate' },
   // Also History's checkpoint restore (`applyEditorStateData`, `applyFeatureStateData`).
   'js/services/config.js': { applyDrawingEditorData: 'session', applyDrawingFeatureData: 'session', resetSessionBaseline: 'session' },
@@ -214,7 +218,7 @@ const enclosingFunction = (functions, index) => functions
 // member, a `delete`), or a call that receives it. A name assigned without a
 // member access is a local binding. A name in `refs` is a Vue ref: its value
 // is written through `.value`, and the ref itself only by a call.
-const SLICE_READERS = /(?:^|\.)capture$/;
+const SLICE_READERS = /(?:^|\.)capture[\w$]*$|[\w$]Of$/;
 export const writerSites = (source, names, refs = []) => {
   const code = codeOnly(source);
   let functions = null;
@@ -224,11 +228,11 @@ export const writerSites = (source, names, refs = []) => {
   };
   const handles = Object.entries(DRAWING_SLICES)
     .filter(([, slice]) => slice.members.some((member) => names.includes(member))).map(([handle]) => handle);
-  const sliceCalls = handles.length === 0 ? [] : [...code.matchAll(
-    new RegExp(`\\bslices\\s*\\??\\.\\s*(?:${handles.join('|')})\\b`, 'g')
-  )].flatMap(({ index }) => {
+  const sliceCalls = handles.length === 0 ? [] : [...code.matchAll(new RegExp(
+    `(?:\\bslices\\s*\\??\\.\\s*|(?<![\\w$.]))(?:${handles.join('|')})\\b(?!\\s*(?:\\??\\.|\\[|:))`, 'g'
+  ))].flatMap(({ index }) => {
     const callee = enclosingCallee(code, index);
-    return callee && !KEYWORDS.has(callee) && !SLICE_READERS.test(callee) ? [at(index)] : [];
+    return callee && !KEYWORDS.has(callee) && !READERS.has(callee) && !SLICE_READERS.test(callee) ? [at(index)] : [];
   });
   return [...sliceCalls, ...[...code.matchAll(new RegExp(`(?<![\\w$])(?:${names.join('|')})\\b`, 'g'))].flatMap((match) => {
     const start = match.index;
@@ -384,8 +388,13 @@ test('the writer guard flags a direct edit and leaves reads alone', () => {
     'const restore = (drawing, rules) => {',
     `  SLICE.install(drawing.slices.${handle}, rules);`,
     `  return SLICE.capture(drawing?.slices.${handle});`,
+    '};',
+    // A helper's parameter named as the handle is the handle.
+    `const prune = (${handle}, key) => {`,
+    `  if (Object.keys(SLICE.rulesOf(${handle})).length) removeRule(${handle}, key);`,
+    `  return { ${handle}: ${handle}.rules, count: [${handle}].length };`,
     '};'
-  ].join('\n')), ['restore:2']);
+  ].join('\n')), ['restore:2', 'prune:6']);
   assert.match(ruleWriterProblems({ 'js/app/new-import.js': ['importRules:9'] }).join('\n'),
     /js\/app\/new-import\.js: importRules:9 writes featureVisibilityManualRules/);
   assert.match(ruleWriterProblems({}).join('\n'), /editFeatureVisibilityRules no longer writes/);

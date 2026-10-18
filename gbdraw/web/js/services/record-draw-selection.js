@@ -2,6 +2,8 @@
 import { downloadSafeName } from '../utils/download-names.js';
 import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
+import { paintOf, setFeatureStroke } from './drawing/paint.js';
+/** @import { PaintSlice } from './drawing/paint.js' */
 // Which records of a drawing are drawn (D-01..D-10, record-selection). A
 // drawing holds the keys of its OFF records in `recordsOff`: a Linear record
 // card's `uid`, or a Circular record's source selector `#N` (1-based position
@@ -269,7 +271,7 @@ export const linearCardHasSettings = (card) => Object.entries(RECORD_SETTINGS_DE
  * edits and Feature placements through their slice (`drawing.slices.featureEdits`).
  * @typedef {object} RecordEditData
  * @property {FeatureEditsSlice} [featureEdits]
- * @property {Record<string, unknown>} [featureStrokeOverrides] Keyed `<recordKey>\0…`.
+ * @property {PaintSlice} [paint] Its paint (`drawing.slices.paint`): the feature strokes, keyed `<recordKey>\0…`.
  * @property {readonly { readonly annotations: readonly { readonly target?: { readonly kind?: string, readonly recordKey?: unknown },
  *   readonly metadata?: Readonly<Record<string, unknown>> | null }[] }[]} [annotationSets]
  * @property {(annotation: object) => void} [removeAnnotation] Removes an annotation of `annotationSets` (the writer of their slice).
@@ -339,9 +341,10 @@ const forEachRecordEdit = (owners, data, visit) => {
     rowsOf(featureOverrides, (draftKey) => setFeatureOverrideRow(featureEdits, draftKey, null));
     rowsOf(featurePlacementOverrides, (draftKey) => setFeaturePlacementRow(featureEdits, draftKey, null));
   }
-  Object.keys(data.featureStrokeOverrides || {}).forEach((strokeKey) => {
+  const { paint } = data;
+  Object.keys(paint ? paintOf(paint).featureStrokeOverrides : {}).forEach((strokeKey) => {
     const key = strokeKey.includes('\0') ? match.ofRequestKey(strokeKey.split('\0')[0]) : undefined;
-    if (key !== undefined) visit(key, () => { delete /** @type {Record<string, unknown>} */ (data.featureStrokeOverrides)[strokeKey]; });
+    if (paint && key !== undefined) visit(key, () => setFeatureStroke(paint, strokeKey, null));
   });
   (data.annotationSets || []).forEach((set) => {
     [...set.annotations].forEach((item) => {

@@ -1,5 +1,6 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry } from '../../state.js' */
+/** @import { DrawingState } from '../../state.js' */
+/** @import { KeptLegendRow, LegendCaption, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
 /** @import { LegendRowName } from '../../services/legend-row-names.js' */
 /** @import { ColorRuleLegendGroup, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
@@ -12,11 +13,19 @@ import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } 
 import { exactRegexValue } from '../../services/feature-selector.js';
 import {
   drawnLegendRowStroke,
-  legendEntryKey,
   legendRowFeatureIds,
   legendRowKeys,
   setsFeatureStroke
 } from '../../services/legend-svg.js';
+import {
+  fillRecordOf,
+  legendEntryKey,
+  renameListedLegendRow,
+  replaceLegendRows,
+  setFeatureStroke,
+  setLegendColor,
+  setLegendStroke
+} from '../../services/drawing/paint.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys } from '../../services/specific-color-rules.js';
 import { isAutoFeatureUnderlay } from '../../services/feature-dom.js';
@@ -151,7 +160,7 @@ import {
 
 /**
  * The name of a row of the drawing's Legend lists (the Legend owner's `legendEntryName`).
- * @typedef {(entry: LegendEntry) => LegendRowName} LegendEntryNamePort
+ * @typedef {(entry: KeptLegendRow) => LegendRowName} LegendEntryNamePort
  */
 /**
  * The key of the Legend row a typed name names (the Legend owner's `findLegendRowNamed`, PD-OI-061
@@ -196,9 +205,9 @@ export const createFeatureColorActions = ({
   findLegendRowNamed = (typed, color) => {
     const drawing = state.activeDrawing();
     const named = [...drawing.legendEntries.value, ...drawing.deletedLegendEntries.value]
-      .filter((/** @type {LegendEntry} */ entry) => String(entry.caption).toLowerCase() === typed.toLowerCase());
+      .filter((entry) => String(entry.caption).toLowerCase() === typed.toLowerCase());
     const wanted = resolveColorToHex(String(color || '')) || String(color || '').trim().toLowerCase();
-    const found = named.find((/** @type {LegendEntry} */ entry) => (
+    const found = named.find((entry) => (
       (resolveColorToHex(String(entry.color || '')) || String(entry.color || '').trim().toLowerCase()) === wanted)) || named[0];
     return found ? legendEntryKey(found) : null;
   },
@@ -394,7 +403,7 @@ export const createFeatureColorActions = ({
       next.strokeWidth = widthVal;
     }
     if (hasOwn(next, 'strokeColor') || hasOwn(next, 'strokeWidth')) {
-      drawing.featureStrokeOverrides[key] = next;
+      setFeatureStroke(drawing.slices.paint, key, next);
     }
   };
 
@@ -405,7 +414,7 @@ export const createFeatureColorActions = ({
    */
   const clearFeatureStrokeOverride = (drawing, featureLike, fallbackSvgId = '') => {
     const key = featureStrokeKey(featureLike, fallbackSvgId);
-    if (key) delete drawing.featureStrokeOverrides[key];
+    if (key) setFeatureStroke(drawing.slices.paint, key, null);
   };
 
   // The stroke Python drew on a feature's block (its first part that is not
@@ -457,28 +466,27 @@ export const createFeatureColorActions = ({
   };
 
   // The listed row of a key (a feature's Legend item is its row's key).
-  /** @param {DrawingState} drawing @param {unknown} key @returns {LegendEntry | null} */
+  /** @param {DrawingState} drawing @param {unknown} key @returns {LegendRow | null} */
   const findLegendRow = (drawing, key) => {
     const text = normalizeCaption(key);
     if (!text) return null;
-    /** @type {LegendEntry[]} */
     const entries = drawing.legendEntries.value;
     return entries.find((entry) => legendEntryKey(entry) === text) || null;
   };
   // The listed row a name names, by the key the Legend owner finds for it (its
   // drawn name, else its name, the row in `color` first; review L-3).
-  /** @param {DrawingState} drawing @param {LegendRowName} name @param {string} color @returns {LegendEntry | null} */
+  /** @param {DrawingState} drawing @param {LegendRowName} name @param {string} color @returns {LegendRow | null} */
   const findLegendRowOfName = (drawing, name, color) => findLegendRow(drawing, findLegendRowNamed(String(name), color));
   // The row of a style scope's Legend name, which is the feature's row (a key)
   // or a name typed in the popup (`popupLegendCaption`): that row, else the
   // first row of that name.
-  /** @param {DrawingState} drawing @param {string} legendName @returns {LegendEntry | null} */
+  /** @param {DrawingState} drawing @param {string} legendName @returns {LegendRow | null} */
   const findScopeLegendRow = (drawing, legendName) => findLegendRow(drawing, legendName)
     || findLegendRowOfName(drawing, legendRowName(legendName), '');
   // OV-282 (D-26): the color a listed row shows, the palette's for a row the
   // palette colors; never the color the row recorded at the last Generate.
   // Without a row, nothing is derived (review L4).
-  /** @param {DrawingState} drawing @param {LegendEntry | null} entry */
+  /** @param {DrawingState} drawing @param {LegendRow | null} entry */
   const listedRowColor = (drawing, entry) => (entry ? displayedLegendRowColors(state, drawing, readDrawnTracks()).listed(entry) : undefined);
   /** @param {DrawingState} drawing @param {ColorFeature} feat @param {string} caption */
   const findExistingCaptionColor = (drawing, feat, caption) => {
@@ -662,7 +670,7 @@ export const createFeatureColorActions = ({
     caption,
     { requireLegend = true } = {}
   ) => {
-    const override = getFeatureOverride(drawing.featureColorOverrides, feature);
+    const override = fillRecordOf(getFeatureOverride(drawing.featureColorOverrides, feature));
     if (!override || !colorsMatch(override.color, color) || !captionsMatch(override.caption, caption)) {
       return false;
     }
@@ -705,7 +713,7 @@ export const createFeatureColorActions = ({
           normalizeCaption(getEffectiveLegendCaption(pendingRequest.feat));
         clickedFeature.value.legendName = fallbackCaption;
       } else if (pendingRequest?.source === 'legend') {
-        drawing.legendEntries.value = [...drawing.legendEntries.value];
+        replaceLegendRows(drawing.slices.paint, drawing.legendEntries.value);
       }
     }
 
@@ -744,7 +752,7 @@ export const createFeatureColorActions = ({
       }
     }
 
-    const overrideColor = getFeatureOverride(drawing.featureColorOverrides, feat)?.color;
+    const overrideColor = fillRecordOf(getFeatureOverride(drawing.featureColorOverrides, feat))?.color;
     if (overrideColor) {
       return resolveColorToHex(overrideColor) || overrideColor;
     }
@@ -918,11 +926,15 @@ export const createFeatureColorActions = ({
   // place in the order. The text control's open step holds the edit.
   /** @param {DrawingState} drawing @param {PythonLegendKey} sourceKey @param {string} newCaption */
   const renameLegendRow = (drawing, sourceKey, newCaption) => {
-    const legendEntry = drawing.legendEntries.value.find((/** @type {LegendEntry} */ entry) => legendEntryKey(entry) === sourceKey);
+    const legendEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === sourceKey);
     if (!legendEntry) return false;
-    // An entry without a key record (an older editor row) records its key first.
-    legendEntry.originalCaption = sourceKey;
-    legendEntry.caption = newCaption;
+    // An entry without a key record (an older editor row) records its key
+    // first. The rename's own step holds it. PAINT_INTENT_WRITERS does not
+    // list this writer: before the paint slice it wrote through the row, and
+    // the R2 guard sees neither that nor a handle held under another name.
+    // Listing it is an authority change (open: A1 STATUS M3.10, R2 rename).
+    const legendPaint = drawing.slices.paint;
+    renameListedLegendRow(legendPaint, legendEntry, { caption: /** @type {LegendCaption} */ (newCaption), originalCaption: sourceKey });
     showEditorIntent?.({ domains: RENAMED_ROW_DOMAINS });
     return true;
   };
@@ -944,7 +956,7 @@ export const createFeatureColorActions = ({
         ? (current, revise) => current.map(rule => (sourceRules.includes(rule) ? revise(rule, { cap: caption, color }) : rule))
         : (current) => featureRuleCandidate(current, features, color, caption);
       const retireOld = features.length > 0 && takesWholeRow(request.sourceKey, features);
-      const oldEntry = drawing.legendEntries.value.find((/** @type {LegendEntry} */ entry) => legendEntryKey(entry) === request.sourceKey);
+      const oldEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === request.sourceKey);
       return commitRuleWrite(rules, 'Rename legend item', {
         drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: oldEntry.color }] : [],
@@ -1064,7 +1076,7 @@ export const createFeatureColorActions = ({
     // typed name's row is the one the Legend owner finds by its drawn name, else by its name (PD-OI-061
     // scenario revision 5: a shown numbered name such as `CDS (2)` names that row).
     const targetKey = group ? groupLegendRowKeys(displayedLegendRowContext(state, drawing))(group) : findLegendRowNamed(newCaption, currentColor);
-    /** @param {LegendEntry[]} entries */
+    /** @template {KeptLegendRow} R @param {readonly R[]} entries @returns {R | null} */
     const rowOf = (entries) => entries.find((entry) => legendEntryKey(entry) === targetKey) || null;
     const listedTarget = rowOf(drawing.legendEntries.value);
     const deletedTarget = listedTarget ? null : rowOf(drawing.deletedLegendEntries.value);
@@ -1196,7 +1208,7 @@ export const createFeatureColorActions = ({
           // An intent's `caption` is its row's key; its `name` the rule's caption.
           const intent = intents.find(entry => captionsMatch(entry.name ?? entry.caption, caption)
             && colorsMatch(entry.color, color));
-          if (intent) drawing.legendColorOverrides[intent.caption] = intent.color;
+          if (intent) setLegendColor(drawing.slices.paint, /** @type {PythonLegendKey} */ (intent.caption), intent.color);
         }
         const committedCaptionOf = effectiveLegendCaptions();
         for (const feature of features) updateClickedFeatureLegendState(feature, committedCaptionOf(feature), color);
@@ -1407,7 +1419,7 @@ export const createFeatureColorActions = ({
 
     const requestedCaption = normalizeCaption(newCaption);
     if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption) || legendRowIsNamed(legendEntryKey(entry), requestedCaption)) {
-      drawing.legendEntries.value = [...drawing.legendEntries.value];
+      replaceLegendRows(drawing.slices.paint, drawing.legendEntries.value);
       return;
     }
 
@@ -1446,8 +1458,9 @@ export const createFeatureColorActions = ({
       const keys = legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (targetLegendName));
       // The choice does what the dialog showed: its default-color line, or rules.
       if (defaultColorType) {
-        // The row's swatch follows the default color again (svg-styles.js).
-        delete drawing.legendColorOverrides[defaultColorType];
+        // The row's swatch follows the default color again (svg-styles.js);
+        // the row of a default color is keyed by its feature type.
+        setLegendColor(drawing.slices.paint, /** @type {PythonLegendKey} */ (defaultColorType), null);
         setDefaultColor(drawing, defaultColorType, color);
         const merged = keys.filter((key) => key !== defaultColorType);
         if (merged.length && !(await applyColorToLegendSpecificRules(drawing, merged, color))) writeLegendRowColor(merged, color);
@@ -1623,8 +1636,8 @@ export const createFeatureColorActions = ({
     const rowStroke = setsFeatureStroke({ strokeWidth: override.strokeWidth })
       ? null
       : legendRowStrokeOf(drawing, svg, feature, clickedFeature.value.svg_id);
-    delete override.strokeColor;
-    if (!hasOwn(override, 'strokeWidth')) delete drawing.featureStrokeOverrides[key];
+    const { strokeColor: _removed, ...kept } = override;
+    setFeatureStroke(drawing.slices.paint, key, hasOwn(kept, 'strokeWidth') ? kept : null);
     clickedFeature.value.strokeColor = String(rowStroke?.strokeColor || '').trim()
       || drawnFeatureStroke(elements).originalStrokeColor || '';
     return true;
@@ -1794,7 +1807,7 @@ export const createFeatureColorActions = ({
         !colorsMatch(previousOverride.strokeColor, nextOverride.strokeColor)
         || normalizeStrokeWidthValue(previousOverride.strokeWidth)
           !== normalizeStrokeWidthValue(nextOverride.strokeWidth);
-      if (stateChanged) drawing.legendStrokeOverrides[overrideKey] = nextOverride;
+      if (stateChanged) setLegendStroke(drawing.slices.paint, overrideKey, nextOverride);
       return stateChanged;
     }).some(Boolean);
   };

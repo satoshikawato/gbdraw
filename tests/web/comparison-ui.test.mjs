@@ -22,8 +22,8 @@ await Promise.all([
     join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'record-draw-selection.js'),
     join(tempRoot, 'js', 'services', 'record-draw-selection.js')
   ),
-  // The feature-edits slice the record Delete settings writes through.
-  ...['services/drawing/feature-edits.js', 'services/drawing/slice-handle.js', 'services/json-clone.js', 'utils/reactivity.js']
+  // The feature-edits and paint slices the record Delete settings writes through.
+  ...['services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'services/json-clone.js', 'utils/reactivity.js']
     .map((path) => cp(join(repoRoot, 'gbdraw', 'web', 'js', path), join(tempRoot, 'js', path))),
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.js'),

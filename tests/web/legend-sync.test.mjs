@@ -233,6 +233,7 @@ const mockLegendEntry = (caption, color, x) => {
     originalLegendOrder: ref(['Alpha', 'Beta']),
     originalLegendColors: ref({ Alpha: '#112233', Beta: '#445566' }),
     legendStrokeOverrides: {},
+    featureStrokeOverrides: {},
     legendColorOverrides: {},
     manualSpecificRules: [],
     skipCaptureBaseConfig: ref(false)
@@ -331,7 +332,6 @@ const mockLegendEntry = (caption, color, x) => {
   // drew on the swatch (its base record when the Result has one); the
   // composition root shows it through the executor (EU U2a).
   state.extractedFeatures = ref([]);
-  state.featureStrokeOverrides = {};
   const strokeActions = createLegendStrokeActions({ state: withDrawings(state) });
   const betaSwatch = featureLegend.children[0].querySelector('path');
   betaSwatch.setAttribute('stroke', '#999999');

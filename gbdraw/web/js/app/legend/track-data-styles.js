@@ -1,5 +1,7 @@
 // @ts-check
 import { getDepthTrackFallbackLabel } from '../depth-tracks.js';
+import { retireLegendPaint } from '../../services/drawing/paint.js';
+/** @import { PaintSlice } from '../../services/drawing/paint.js' */
 
 /** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
@@ -57,45 +59,19 @@ export const trackDataLegendCaptions = ({
  * The renamed rows a Generate hid (OV-120) follow the same rule: a row whose
  * data is removed leaves `dormantLegendEntries` with its styles.
  * @param {{
- *   legendColorOverrides: Record<string, any>,
- *   legendStrokeOverrides: Record<string, any>,
- *   legendEntries: { value: any[] },
- *   dormantLegendEntries?: { value: any[] },
+ *   drawing: { readonly slices: { readonly paint: PaintSlice } },
  *   namedCaptions: () => Set<string>,
  *   projectLegendEntries: () => void
  * }} options
  * @returns {<T>(change: () => T) => T}
  */
-export const buildLegendStyleRetirement = ({
-  legendColorOverrides, legendStrokeOverrides, legendEntries, dormantLegendEntries, namedCaptions, projectLegendEntries
-}) => (
+export const buildLegendStyleRetirement = ({ drawing, namedCaptions, projectLegendEntries }) => (
   (change) => {
     const before = namedCaptions();
     const result = change();
     const after = namedCaptions();
-    /** @param {string} caption */
-    const retireStyles = (caption) => {
-      delete legendColorOverrides[caption];
-      delete legendStrokeOverrides[caption];
-    };
     const retired = new Set([...before].filter((caption) => !after.has(caption)));
-    retired.forEach(retireStyles);
-    let renameRetired = false;
-    const entries = (Array.isArray(legendEntries.value) ? legendEntries.value : []).map((entry) => {
-      const original = text(entry?.originalCaption);
-      const caption = text(entry?.caption);
-      if (!retired.has(original) || !caption || caption === original) return entry;
-      renameRetired = true;
-      return { ...entry, caption: original };
-    });
-    if (dormantLegendEntries && Array.isArray(dormantLegendEntries.value)) {
-      const dormant = dormantLegendEntries.value.filter((entry) => !retired.has(text(entry?.originalCaption)));
-      if (dormant.length !== dormantLegendEntries.value.length) dormantLegendEntries.value = dormant;
-    }
-    if (renameRetired) {
-      legendEntries.value = entries;
-      projectLegendEntries();
-    }
+    if (retired.size > 0 && retireLegendPaint(drawing.slices.paint, retired)) projectLegendEntries();
     return result;
   }
 );

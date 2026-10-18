@@ -2,7 +2,7 @@
 // slices (gbdraw/web/js/services/drawing/), which alone write them. The guard
 // asserts, without a member or slice literal:
 //   1. each slice's view holds exactly its members, every drawing shows each
-//      slice's view, and no member is in two slices;
+//      slice's view, every editor member is in exactly one slice;
 //   2. a slice imports only leaves (R13 layer 0, or a module that imports
 //      nothing) and other slices;
 //   3. Load, a History restore, and Reset write a slice through one install:
@@ -63,6 +63,7 @@ test('each slice view holds its members, every drawing shows it, and no member i
       assert.ok(DRAWING_EDITOR_KEYS.includes(member), `${name}.${member} is an editor member`);
     }
   }
+  assert.deepEqual(DRAWING_EDITOR_KEYS.filter((member) => !sliceOf.has(member)), [], 'every editor member is in a slice');
   const modules = readdirSync(SLICE_DIRECTORY).filter((file) => file.endsWith('.js')).sort();
   const exported = await Promise.all(modules.map((file) => import(join(SLICE_DIRECTORY, file))));
   const descriptors = new Set(exported.flatMap((module) => Object.values(module)
@@ -326,6 +327,17 @@ const SAMPLES = {
   canvas: () => ({ canvasPadding: { top: 12, right: 3, bottom: 7, left: 5 } }),
   // Load keeps the rows `canonicalFeatureOverrides` and the placement reader
   // of the drawing's mode accept.
+  // Load reads the Legend rows as `normalizeEditorStateData` gives them.
+  paint: () => ({
+    featureColorOverrides: { '["record-1","CDS_1"]': { color: '#123456', caption: 'Kinase' } },
+    featureStrokeOverrides: { 'record-1\u0000CDS_1': { strokeColor: '#654321', strokeWidth: 2 } },
+    legendEntries: [{ caption: 'Renamed CDS', originalCaption: 'CDS', color: '#abcdef', featureIds: [] }],
+    deletedLegendEntries: [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#fedcba', featureIds: [] }],
+    dormantLegendEntries: [{ caption: 'Coverage', originalCaption: 'depth', color: '#111111', featureIds: [] }],
+    legendColorOverrides: { CDS: '#abcdef' },
+    legendStrokeOverrides: { CDS: { strokeColor: '#222222', strokeWidth: 1.5 } },
+    addedLegendCaptions: ['Kinase']
+  }),
   featureEdits: (mode) => ({
     featureOverrides: { '["record-1","CDS_1"]': {
       recordKey: 'record-1', biologicalFeatureId: 'CDS_1', featureVisibility: 'off', labelVisibility: null, labelText: 'Sample', labelSourceText: null

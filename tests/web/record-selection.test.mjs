@@ -9,6 +9,7 @@ import test from 'node:test';
 import { createRecordSelection } from '../../gbdraw/web/js/app/record-selection.js';
 import { ANNOTATION_SETS_SLICE, removeAnnotations } from '../../gbdraw/web/js/services/drawing/annotation-sets.js';
 import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
 import {
   RECORD_SETTINGS_DEFAULTS,
   linearCardHasSettings,
@@ -195,9 +196,12 @@ test('Delete settings removes the record edits, annotations, pairs, and rotation
       [featureKey('uid-a', 'f3')]: { recordKey: 'uid-a', biologicalFeatureId: 'f3', placement: 'lane' }
     }
   });
+  const paint = PAINT_SLICE.create({
+    featureStrokeOverrides: { 'uid-a\0f1': { strokeColor: '#000000' }, 'uid-b\0f1': { strokeColor: '#111111' } }
+  });
   const data = {
     featureEdits: edits.handle,
-    featureStrokeOverrides: { 'uid-a\0f1': { color: '#000' }, 'uid-b\0f1': { color: '#111' } },
+    paint: paint.handle,
     annotationSets: annotations.view.annotationSets,
     removeAnnotation: (annotation) => removeAnnotations(annotations.handle, [annotation]),
     recordDisplayDrafts: [{ sourceUid: 'uid-a', selector: '#1' }, { sourceUid: 'uid-b', selector: '#1' }],
@@ -214,7 +218,7 @@ test('Delete settings removes the record edits, annotations, pairs, and rotation
   assert.equal(removeRecordEdits(owners, data), 9);
   assert.deepEqual(Object.values(edits.view.featureOverrides).map((row) => row.recordKey), ['uid-b']);
   assert.deepEqual(edits.view.featurePlacementOverrides, {});
-  assert.deepEqual(Object.keys(data.featureStrokeOverrides), ['uid-b\0f1']);
+  assert.deepEqual(Object.keys(paint.view.featureStrokeOverrides), ['uid-b\0f1']);
   assert.deepEqual(data.annotationSets[0].annotations.map((item) => item.id), ['bound-b', 'unbound']);
   assert.deepEqual(data.recordDisplayDrafts, [{ sourceUid: 'uid-b', selector: '#1' }]);
   assert.deepEqual(data.comparisonEdges, [{ queryUid: 'uid-b', subjectUid: 'uid-c' }]);

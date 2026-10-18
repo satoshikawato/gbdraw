@@ -1,6 +1,8 @@
 // @ts-check
-/** @import { DrawingState, LegendEntry } from '../state.js' */
-import { isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
+/** @import { DrawingState } from '../state.js' */
+/** @import { KeptLegendRow } from '../services/drawing/paint.js' */
+import { isLegendOrderEdited } from '../services/legend-svg.js';
+import { legendEntryKey } from '../services/drawing/paint.js';
 import { toRaw } from '../utils/vue-raw.js';
 
 // Which editor state each Result's bytes show (design §5.4). A Result
@@ -43,7 +45,7 @@ export const editorPaintState = (state, drawing) => ({
   // A deleted row strokes no feature (OV-293).
   strokes: JSON.stringify([
     drawing.featureStrokeOverrides, drawing.legendStrokeOverrides,
-    drawing.deletedLegendEntries.value.map((/** @type {LegendEntry} */ entry) => entry.originalCaption || entry.caption)
+    drawing.deletedLegendEntries.value.map((/** @type {KeptLegendRow} */ entry) => entry.originalCaption || entry.caption)
   ]),
   labels: JSON.stringify([
     Object.values(drawing.featureOverrides).map((row) => [

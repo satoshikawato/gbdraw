@@ -197,6 +197,7 @@ import {
 } from '../services/runtime-test-hooks.js';
 import { GROUP_NAMES_SLICE } from '../services/drawing/group-names.js';
 import { FEATURE_EDITS_SLICE } from '../services/drawing/feature-edits.js';
+import { replaceDormantLegendRows, replaceFeatureFills } from '../services/drawing/paint.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   createImportedComparisonIntentState,
@@ -221,7 +222,7 @@ import {
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
 /** @import { CircularConservationLike } from '../services/conservation-series.js' */
-/** @import { LegendEntry } from '../state.js' */
+/** @import { FeatureFill, LegendRow } from '../services/drawing/paint.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { RequestCanonicalComparison } from '../services/session-request.js' */
 /** @import { CanonicalFeatureOverride, CanonicalGeneratedProteinComparison, CanonicalLosslessCollinearityParameters, CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -2586,7 +2587,7 @@ export const createRunAnalysis = ({
       || Object.keys(drawing.featurePlacementOverrides || {}).length > 0
       || Object.keys(drawing.featureStrokeOverrides).length > 0
       || Object.keys(drawing.legendColorOverrides).length > 0 || Object.keys(drawing.legendStrokeOverrides).length > 0
-      || drawing.legendEntries.value.some((/** @type {LegendEntry} */ entry) => entry.originalCaption && /** @type {string} */ (entry.originalCaption) !== entry.caption)
+      || drawing.legendEntries.value.some((/** @type {LegendRow} */ entry) => entry.originalCaption && /** @type {string} */ (entry.originalCaption) !== entry.caption)
       || drawing.dormantLegendEntries.value.length > 0;
     // The committed records whose source this Generate replaces or drops. The
     // metadata of a Session without a feature catalog has no record keys.
@@ -5392,11 +5393,8 @@ export const createRunAnalysis = ({
       selectedOrthogroupId.value = workingSelectedOrthogroupId;
       featureExtractionPending.value = false;
       featureExtractionError.value = null;
-      Object.keys(drawing.featureColorOverrides).forEach((key) => delete drawing.featureColorOverrides[key]);
-      Object.assign(
-        drawing.featureColorOverrides,
-        cloneJsonValue(candidateCommit.featureColorOverrides, {})
-      );
+      // The compiler keeps the edits that hold a color (`normalizedFeatureColorOverrides`).
+      replaceFeatureFills(drawing.slices.paint, /** @type {Record<string, FeatureFill>} */ (cloneJsonValue(candidateCommit.featureColorOverrides, {})));
       // Feature strokes stay in the draft when this Result does not draw their
       // feature (the other mode's, or one this request leaves out); the next
       // Generate that draws the feature draws them again (R2, OIPC-C06, OV-84).
@@ -5440,7 +5438,7 @@ export const createRunAnalysis = ({
       // and the edits of records the request dropped; Python names them.
       featureEditRemovalCount.value = sourceReplaced ? pruneUnmatchedFeatureOverrides({
         featureEdits: drawing.slices.featureEdits,
-        featureStrokeOverrides: drawing.featureStrokeOverrides,
+        paint: drawing.slices.paint,
         notices: canonicalExecution.featureIdentityNotices,
         replacedRecordKeys: replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
           .map((feature) => String(feature.record_key)),
@@ -5451,7 +5449,7 @@ export const createRunAnalysis = ({
       }) : 0;
       // OV-120: a source replacement also retires the renames of the Legend
       // rows the new Result does not draw (as the OV-84 strokes).
-      if (sourceReplaced) drawing.dormantLegendEntries.value = [];
+      if (sourceReplaced) replaceDormantLegendRows(drawing.slices.paint, []);
       if (typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results

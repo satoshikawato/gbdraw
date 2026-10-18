@@ -9,7 +9,7 @@ import {
   createDefaultPriorityRule,
   createDefaultSpecificRule
 } from '../state.js';
-/** @import { DrawingState, LegendCaption, LegendEntry, state as AppState } from '../state.js' */
+/** @import { DrawingState, state as AppState } from '../state.js' */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
@@ -19,6 +19,7 @@ import { COLOR_RULES_SLICE } from './drawing/color-rules.js';
 import { PALETTE_SLICE, createDefaultPaletteData } from './drawing/palette.js';
 import { clearLabelTextEdits, resetLabelFilters } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
+import { resetPaintEdits } from './drawing/paint.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -125,20 +126,10 @@ const resetRuleDraftState = (state, drawing) => {
  */
 const resetEditorDraftState = (state, drawing) => {
   const editorDefaults = createDefaultEditorDraftState();
-  clearReactiveObject(drawing.featureColorOverrides);
   VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
-  clearReactiveObject(drawing.featureStrokeOverrides);
-  clearReactiveObject(drawing.legendColorOverrides);
-  clearReactiveObject(drawing.legendStrokeOverrides);
-  drawing.deletedLegendEntries.value = [];
-  drawing.dormantLegendEntries.value = [];
   // R15-14: every renamed row, a feature row's or a track row's, returns to
   // the caption Python draws, its key.
-  drawing.legendEntries.value = drawing.legendEntries.value.map((/** @type {LegendEntry} */ entry) => {
-    const drawn = /** @type {LegendCaption} */ (/** @type {string} */ (entry.originalCaption));
-    return entry.caption === drawn ? entry : { ...entry, caption: drawn };
-  });
-  drawing.addedLegendCaptions.value = new Set();
+  resetPaintEdits(drawing.slices.paint);
 
   // The saved label table of a loaded Session goes with the bulk label edits,
   // also when the bulk map is already empty (R15-21).

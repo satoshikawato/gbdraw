@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-session-feature-metadata-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'services', 'drawing'), { recursive: true });
 await mkdir(join(tempDir, 'contracts'), { recursive: true });
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 
@@ -23,7 +23,8 @@ const copyModule = async (sourceRelative, targetRelative) => {
 await copyModule('gbdraw/web/js/services/session-feature-recovery.js', 'services/session-feature-recovery.js');
 await copyModule('gbdraw/web/js/services/feature-metadata-extraction.js', 'services/feature-metadata-extraction.js');
 // feature-metadata-extraction.js reads the Linear Region fields through record-options.js.
-for (const name of ['services/record-options.js', 'services/record-draw-selection.js', 'utils/download-names.js']) {
+for (const name of ['services/record-options.js', 'services/record-draw-selection.js', 'utils/download-names.js',
+  'services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js']) {
   await copyModule(`gbdraw/web/js/${name}`, name);
 }
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');

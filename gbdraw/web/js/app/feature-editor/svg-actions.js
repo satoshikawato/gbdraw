@@ -23,7 +23,8 @@ import { buildFeatureSequenceFastas } from '../../services/feature-sequence-fast
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
-import { COMPARISON_LEGEND_SELECTOR, legendEntryKey } from '../../services/legend-svg.js';
+import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
+import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
 import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
@@ -547,7 +548,7 @@ export const createFeatureSvgActions = ({
    */
   const buildClickedFeaturePayload = (drawing, feat, featureElement = null, renderedSvgId = undefined) => {
     const defaultLabel = getFeatureCaption(feat);
-    const existingOverride = getFeatureOverride(drawing.featureColorOverrides, feat);
+    const existingOverride = fillRecordOf(getFeatureOverride(drawing.featureColorOverrides, feat));
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
     const locationText = formatFeatureLocation(feat);
     const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
@@ -918,7 +919,7 @@ export const createFeatureSvgActions = ({
   const openPreviewItemPopup = ({ element, item }, eventLike) => {
     if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
     if (item.kind === 'legend-entry') {
-      /** @type {import('../../state.js').LegendEntry[]} */
+      /** @type {import('../../services/drawing/paint.js').LegendEntry[]} */
       const entries = state.activeDrawing().legendEntries.value || [];
       const { key } = item;
       const entry = entries.find((row) => legendEntryKey(row) === key || String(row.caption) === key);
