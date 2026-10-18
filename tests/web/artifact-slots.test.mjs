@@ -197,3 +197,30 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
   assert.equal(selected('linear', 'circular', circularResult), linearResult);
   assert.equal(selected('circular', 'linear', linearResult), undefined);
 });
+
+// OV-111: a label rerender installs through the artifact owner of the drawing
+// whose Result it draws again, which may differ from the drawing shown (a Load
+// can show Circular with the Linear artifact displayed); the artifact of
+// another drawing is refused and keeps its values.
+test('a rerender lands in the artifact of its Result\'s drawing', async () => {
+  await fillCircularArtifact();
+  const before = { results: state.results.value, featureCatalog: state.featureCatalog.value };
+  const redrawn = {
+    featureCatalog: { schema: 5, items: [{ id: 'redrawn' }] }, extractedFeatures: [{ id: 'f2' }],
+    biologicalFeatures: [{ id: 'b2' }], results: [{ name: 'a.svg', content: '<svg id="a2"/>' }],
+    labelFitReports: []
+  };
+  /** @type {unknown[][]} */
+  const installed = [];
+  const installResults = (/** @type {unknown[]} */ results) => { installed.push(results); state.results.value = results; };
+  assert.throws(() => snapshots.installRedrawnArtifact('linear', redrawn, { installResults }), /drawing linear.*drawing circular/);
+  assert.deepEqual(installed, []);
+  assert.strictEqual(state.results.value, before.results);
+  assert.strictEqual(state.featureCatalog.value, before.featureCatalog);
+
+  snapshots.installRedrawnArtifact('circular', redrawn, { installResults });
+  assert.deepEqual(installed, [redrawn.results], 'the Results commit through the caller');
+  for (const key of ['featureCatalog', 'extractedFeatures', 'biologicalFeatures', 'labelFitReports']) {
+    assert.strictEqual(state[key].value, redrawn[key], key);
+  }
+});

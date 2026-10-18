@@ -7,6 +7,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
+/** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
@@ -1442,6 +1443,8 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
  * @property {() => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
  * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
+ * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: unknown[]) => void }) => void} installRedrawnArtifact
+ *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
  * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
@@ -1492,6 +1495,7 @@ export const createRunAnalysis = ({
   captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet,
+  installRedrawnArtifact,
   restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity = null,
   runGeneratedArtifactReplacement = null,
@@ -1563,7 +1567,6 @@ export const createRunAnalysis = ({
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
-    labelFitReports,
     featureEditRemovalCount,
     featureEditorStatus,
     featureExtractionPending,
@@ -1577,6 +1580,7 @@ export const createRunAnalysis = ({
     typeof captureGeneratedArtifactHandle !== 'function'
     || typeof captureGeneratedArtifactOwnerSet !== 'function'
     || typeof installGeneratedArtifactOwnerSet !== 'function'
+    || typeof installRedrawnArtifact !== 'function'
     || typeof restoreGeneratedArtifactHandle !== 'function'
   ) {
     throw new Error('createRunAnalysis requires generated artifact transaction handlers.');
@@ -6179,13 +6183,20 @@ export const createRunAnalysis = ({
       // OV-873: the new Results have new identities, which key the Legend and
       // title moves History records; the rerender draws the same moves, so a
       // step begun after its request takes the change as drawn (D-40).
+      // OV-111: they install into the artifact of the drawing whose Result they draw.
       adoptDrawnWrite(() => {
-        featureCatalog.value = execution.catalog;
-        extractedFeatures.value = execution.commit.featureState.extractedFeatures;
-        biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
-        results.value = execution.commit.results;
-        // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
-        labelFitReports.value = execution.labelFitReports;
+        installRedrawnArtifact(drawing.id, {
+          featureCatalog: execution.catalog,
+          extractedFeatures: execution.commit.featureState.extractedFeatures,
+          biologicalFeatures: execution.commit.featureState.biologicalFeatures,
+          results: execution.commit.results,
+          // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
+          labelFitReports: execution.labelFitReports
+        }, {
+          installResults(nextResults) {
+            results.value = nextResults;
+          }
+        });
         // The preview owner selects the Result (R13). It registers readiness only
         // when fewer Results leave the selection out of range; the reflow's own
         // expectation, registered next, replaces it, so the binder reports a
@@ -6227,7 +6238,6 @@ export const createRunAnalysis = ({
    *   it, an editor edit's rerender.
    */
   const runLabelReflow = async ({ settings } = {}) => {
-    const drawing = committedDrawing(getCommittedCanonicalSession?.());
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!settings) editorRerenderRequested = true;
@@ -6246,6 +6256,8 @@ export const createRunAnalysis = ({
       while (!reflowWaits() && activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
         const historyRequestedAt = pendingReflowRequestedAt;
+        // Each iteration draws the drawing of the committed Session it starts from.
+        const drawing = committedDrawing(getCommittedCanonicalSession?.());
         let decorationContinuity;
         try {
           decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);

@@ -962,6 +962,12 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  */
 
 /**
+ * @typedef {Readonly<{ featureCatalog: unknown, extractedFeatures: readonly unknown[],
+ *   biologicalFeatures: readonly unknown[], results: unknown[], labelFitReports: readonly unknown[] }>} RedrawnArtifact
+ *   What a label rerender draws again of its Result's drawing (OV-111).
+ */
+
+/**
  * @template {DrawingView} D
  * @param {HistorySnapshotServiceOptions<D>} options
  */
@@ -1261,6 +1267,28 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.appliedPaletteColors, ownerSet.appliedPaletteColors || {});
     restoreArtifactQueuedPalette(drawing.slices.palette, ownerSet.pendingPaletteName || '', ownerSet.pendingPaletteColors || {});
     if (replacesShownResults) clearSimilarityGroupCopyFeedback?.();
+  };
+
+  // OV-111: a label rerender's Results and the catalog that describes them
+  // install into the artifact of `drawingId`, the drawing whose Result they
+  // draw again. A rerender draws the displayed artifact (a switch waits for
+  // it, OIPC-C07), so the artifact a slot keeps is refused. The caller commits
+  // the Results (R1).
+  /**
+   * @param {DrawingId} drawingId
+   * @param {RedrawnArtifact} redrawn
+   * @param {{ installResults: (results: unknown[]) => void }} options
+   */
+  const installRedrawnArtifact = (drawingId, redrawn, { installResults }) => {
+    const displayed = displayedArtifactDrawing();
+    if (displayed.id !== drawingId) {
+      throw new Error(`A rerender of drawing ${drawingId} cannot install into the artifact of drawing ${displayed.id}.`);
+    }
+    setGeneratedArtifactRef(state.featureCatalog, redrawn.featureCatalog);
+    setGeneratedArtifactRef(state.extractedFeatures, redrawn.extractedFeatures);
+    setGeneratedArtifactRef(state.biologicalFeatures, redrawn.biologicalFeatures);
+    installResults(redrawn.results);
+    setGeneratedArtifactRef(state.labelFitReports, redrawn.labelFitReports);
   };
 
   // E1: the displayed artifact, by reference, key by key, as the artifact of
@@ -2104,6 +2132,7 @@ export const createHistorySnapshotService = ({
     captureArtifactSlot,
     installArtifactSlot,
     installGeneratedArtifactOwnerSet,
+    installRedrawnArtifact,
     registerCapture,
     registerDrawingCommittedSession,
     registerModeTransition,
