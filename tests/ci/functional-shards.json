@@ -181,6 +181,7 @@
       "tests/web/hidden-feature-list.playwright.spec.js",
       "tests/web/history-comparison.playwright.spec.js",
       "tests/web/joint-display-placement.playwright.spec.js",
+      "tests/web/live-generate-random-walk.playwright.spec.js",
       "tests/web/losat-display-pair-reuse.playwright.spec.js",
       "tests/web/record-display-discovery.playwright.spec.js",
       "tests/web/result-element-settings.playwright.spec.js",
