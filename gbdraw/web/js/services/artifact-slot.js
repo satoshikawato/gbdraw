@@ -39,7 +39,8 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   generatedMode: (mode) => mode,
   generatedMultiRecordCanvas: () => false,
   generatedCircularPlotTitlePosition: () => 'none',
-  // An empty slot has no Result to project a palette onto: it keeps the applied one.
+  // An empty slot has no Result to project a palette onto: it keeps the applied one,
+  // as a slot whose applied palette is null does (`installArtifactSlot`).
   appliedPaletteName: (_mode, current) => current,
   appliedPaletteColors: (_mode, current) => current,
   similarityAlignmentResetReceipt: () => null,
@@ -98,6 +99,25 @@ export const createArtifactSlot = ({
     retainedBytes: Math.max(0, Number(retainedBytes) || 0)
   });
 };
+
+/**
+ * `slot` with `values` in place of its own, or, with no slot, `drawing`'s
+ * empty slot with `values`. History and the Instant Preview toggle write the
+ * slot values of a drawing that is not shown this way (OV-1168, OV-1195).
+ * @param {Readonly<ArtifactSlot> | null} slot
+ * @param {DrawingIdentity} drawing
+ * @param {Readonly<Record<string, unknown>>} values
+ * @returns {Readonly<ArtifactSlot>}
+ */
+export const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
+  drawing,
+  values: { ...slot?.values, ...values },
+  legendInventory: slot?.legendInventory,
+  matchSequenceOwner: slot?.matchSequenceOwner ?? null,
+  runtimeState: slot?.runtimeState ?? null,
+  transportIdentity: slot?.transportIdentity ?? null,
+  retainedBytes: slot?.retainedBytes ?? 0
+});
 
 /**
  * A value of drawing `drawingId`'s artifact: read from the displayed artifact while that drawing

@@ -2950,15 +2950,6 @@ const restorePendingPaletteFromSession = (drawing, ui = {}) => {
 };
 
 /**
- * @param {DrawingState} drawing
- * @param {SavedPaletteFields} [ui]
- */
-const restorePaletteStateFromSession = (drawing, ui = {}) => {
-  restoreAppliedPaletteFromSession(drawing, ui);
-  restorePendingPaletteFromSession(drawing, ui);
-};
-
-/**
  * The descriptor each file was saved or loaded as, keyed by that file.
  * @type {WeakMap<object, RawSessionResourceDescriptor>}
  */
@@ -4736,9 +4727,11 @@ export const applySessionUiData = (ui) => {
 /**
  * @param {DrawingState} drawing
  * @param {SavedUiFields} [ui] What `buildUiStateData` wrote (History, the Load rollback).
- * @param {{ restorePreviewNavigation?: boolean }} [options]
+ * @param {{ restorePreviewNavigation?: boolean, artifact?: boolean }} [options] `artifact: false`: the
+ *   drawing is not shown, so its artifact slot values (the applied palette) are its slot's, not the displayed
+ *   artifact's; History writes them there (OV-1168).
  */
-export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true } = {}) => {
+export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true, artifact = true } = {}) => {
   applySessionUiData(ui);
   // The drawing's own input type (OIC-030); the Load rollback restores each drawing's.
   const inputType = inputTypeKeyOf(drawing);
@@ -4768,7 +4761,8 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
       : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition);
   }
 
-  restorePaletteStateFromSession(drawing, ui);
+  if (artifact) restoreAppliedPaletteFromSession(drawing, ui);
+  restorePendingPaletteFromSession(drawing, ui);
   restoreLayoutPreferences(drawing, ui);
 
   if (ui.legendCurrentOffset) {

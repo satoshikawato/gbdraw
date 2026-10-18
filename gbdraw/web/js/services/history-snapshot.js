@@ -14,7 +14,9 @@ import {
   mapResourceBackedCanonicalComparison
 } from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
-import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
+import {
+  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot, readArtifactOfDrawing, withArtifactSlotValues
+} from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 /** @import { CanvasPadding, CanvasSlice } from './drawing/canvas.js' */
@@ -958,7 +960,7 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  *   The Settings restore.
  * @property {((drawing: D, options: { includePreviewNavigation: boolean }) => HistorySnapshotData) | null} [buildUiStateData]
  *   The UI capture; `includePreviewNavigation` adds pan, zoom, and tab state.
- * @property {((drawing: D, ui: HistorySnapshotData, options?: { restorePreviewNavigation: boolean }) => unknown) | null} [applyUiStateData]
+ * @property {((drawing: D, ui: HistorySnapshotData, options?: { restorePreviewNavigation: boolean, artifact?: boolean }) => unknown) | null} [applyUiStateData]
  *   The UI restore.
  * @property {((ui: SessionUiData) => unknown) | null} [applySessionUiData]
  *   The restore of the Session-level `ui` values, which writes each one present.
@@ -1275,6 +1277,15 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.labelFitReports, redrawn.labelFitReports);
   };
 
+  // E1: each drawing's generated artifact. The shown drawing's artifact is the
+  // installed state; another drawing's waits here, by its drawing ID and by
+  // reference, until the mode transition installs it (no entry: the drawing
+  // has no artifact yet, or is shown). The transition and Session Load (with
+  // its rollback) write whole slots; History and the Instant Preview toggle
+  // write a hidden drawing's slot values (`writeArtifactValues`).
+  /** @type {Map<DrawingId, Readonly<ArtifactSlot>>} */
+  const artifactSlots = new Map();
+
   // E1: the displayed artifact, by reference, key by key, as the artifact of
   // the drawing it belongs to (`displayedArtifactDrawing`).
   const captureArtifactSlot = () => createArtifactSlot({
@@ -1290,9 +1301,9 @@ export const createHistorySnapshotService = ({
   });
 
   // Installs `drawing`'s slot, or its empty slot (no Result, no committed
-  // Session, the defaults of the drawing's mode), as the displayed artifact.
-  // Nothing outside the slot changes, so the draft, the editor intent and the
-  // caches stay shared.
+  // Session, the defaults of the drawing's mode), as the displayed artifact;
+  // a null value of the slot installs the empty slot's. Nothing outside the
+  // slot changes, so the draft, the editor intent and the caches stay shared.
   /**
    * @param {Readonly<ArtifactSlot> | null} slot
    * @param {{ drawing: DrawingIdentity, ui?: { canvasPan?: { x: number, y: number } } }} options
@@ -1303,9 +1314,8 @@ export const createHistorySnapshotService = ({
       throw new Error(`The artifact of drawing ${slot.drawingId} cannot be installed for drawing ${drawing.id}.`);
     }
     ARTIFACT_SLOT_KEYS.forEach((key) => {
-      setGeneratedArtifactRef(state[key], slot
-        ? slot.values[key]
-        : ARTIFACT_SLOT_EMPTY[key](drawing.mode, getGeneratedArtifactRef(state[key], null)));
+      setGeneratedArtifactRef(state[key], slot?.values[key]
+        ?? ARTIFACT_SLOT_EMPTY[key](drawing.mode, getGeneratedArtifactRef(state[key], null)));
     });
     if (slot?.matchSequenceOwner) state.matchSequenceRegistry?.replaceTrustedOwner?.(slot.matchSequenceOwner);
     else state.matchSequenceRegistry?.reset?.();
@@ -1687,25 +1697,19 @@ export const createHistorySnapshotService = ({
     && before.identity.compactSignature === after?.identity?.compactSignature
   );
 
-  // The alignment plan, its Reset receipt, and record translations; intents
-  // and checkpoints capture and restore them together. The receipt is an
-  // artifact slot value, the shown Result's: a drawing that is not shown
-  // keeps its own in its slot, so its intent holds none and a restore of it
-  // writes none (OV-1168 class, A3 review 2 M1).
-  /** @param {{ receipt: boolean }} options */
-  const captureAlignmentState = ({ receipt }) => ({
-    ...(receipt ? { receipt: getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null) } : {}),
+  // The alignment plan, its Reset receipt, and record translations of
+  // drawing `drawingId`; intents and checkpoints capture and restore them
+  // together. The receipt is an artifact slot value, the drawing's own
+  // (`readSlotValues`, OV-1195).
+  /** @param {DrawingId} drawingId */
+  const captureAlignmentState = (drawingId) => ({
+    receipt: readSlotValues(drawingId, ['similarityAlignmentResetReceipt']).similarityAlignmentResetReceipt,
     plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
     recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
   });
-  /** @param {AlignmentStateData | null | undefined} alignmentState @param {{ receipt: boolean }} options */
-  const installAlignmentState = (alignmentState, { receipt }) => {
-    if (receipt) {
-      setGeneratedArtifactRef(
-        state.similarityAlignmentResetReceipt,
-        cloneJsonData(alignmentState?.receipt) || null
-      );
-    }
+  /** @param {AlignmentStateData | null | undefined} alignmentState @param {DrawingId} drawingId */
+  const installAlignmentState = (alignmentState, drawingId) => {
+    writeArtifactValues(drawingId, { similarityAlignmentResetReceipt: cloneJsonData(alignmentState?.receipt) || null });
     setGeneratedArtifactRef(state.similarityAlignmentPlan, cloneJsonData(alignmentState?.plan) || null);
     setGeneratedArtifactRef(
       state.linearRecordTranslations,
@@ -1807,17 +1811,32 @@ export const createHistorySnapshotService = ({
         linearComparisonPlan: cloneLinearComparisonPlanMetadata(drawing.linearComparisonPlan)
       });
 
-  // OV-1168: the `ui` values of the artifact slot (the applied palette) are
-  // the shown Result's; a drawing that is not shown keeps its own in its slot,
-  // so its intent holds none and a restore of it writes none.
   /** @param {DrawingId} drawingId */
   const isShown = (drawingId) => drawingId === state.activeDrawingId?.value;
-  /** @param {Record<string, unknown>} ui */
-  const withoutSlotUi = (ui) => {
-    const drawingUi = { ...ui };
-    ARTIFACT_SLOT_KEYS.forEach((key) => { delete drawingUi[key]; });
-    return drawingUi;
+  // OV-1168, OV-1195: the artifact slot values in a drawing's intent (the
+  // applied palette in `ui`, the alignment Reset receipt) are its own
+  // artifact's: the displayed one's while it is shown, else the slot that
+  // keeps it. A drawing with no slot has the empty slot's (null: it takes
+  // the displayed palette when it is shown).
+  /** @param {DrawingId} drawingId @param {readonly (keyof typeof ARTIFACT_SLOT_EMPTY)[]} keys */
+  const readSlotValues = (drawingId, keys) => Object.fromEntries(keys.map((key) => [key, readArtifactOfDrawing(
+    drawingId, state.activeDrawingId?.value, artifactSlots,
+    () => getGeneratedArtifactRef(state[key], null), (slot) => slot.values[key]
+  ) ?? null]));
+  /**
+   * Writes slot values of drawing `drawingId`: into the displayed artifact
+   * while it is shown, else into its slot.
+   * @param {DrawingId} drawingId
+   * @param {Readonly<Partial<Record<keyof typeof ARTIFACT_SLOT_EMPTY, unknown>>>} values
+   */
+  const writeArtifactValues = (drawingId, values) => {
+    if (isShown(drawingId)) {
+      Object.entries(values).forEach(([key, value]) => setGeneratedArtifactRef(state[key], value));
+      return;
+    }
+    artifactSlots.set(drawingId, withArtifactSlotValues(artifactSlots.get(drawingId) ?? null, drawingOfId(drawingId), values));
   };
+  const UI_SLOT_KEYS = /** @type {const} */ (['appliedPaletteName', 'appliedPaletteColors']);
 
   // Synchronous: History captures it without an await (OV-922).
   /** @param {DrawingId} drawingId */
@@ -1826,7 +1845,7 @@ export const createHistorySnapshotService = ({
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
       : buildFallbackUiStateData(state, drawing);
-    const uiIntent = buildUiIntentData(isShown(drawingId) ? ui : withoutSlotUi(ui), drawing);
+    const uiIntent = buildUiIntentData({ ...ui, ...readSlotValues(drawingId, UI_SLOT_KEYS) }, drawing);
     uiIntent.selectedFeatureRecordIdx = getRef(state.selectedFeatureRecordIdx, 0);
     // B17, D-15-50: the composition offsets of this drawing's Results.
     const compositionDeltas = captures.composition ? cloneJsonData(captures.composition(drawingId)) : null;
@@ -1844,7 +1863,7 @@ export const createHistorySnapshotService = ({
       editorState: editorIntentOf(captureLegendPaint(drawing.slices.paint)),
       groupNames: buildGroupNameIntentData(drawing),
       files: buildIntentFilesData(state, drawing, fileStore),
-      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState({ receipt: isShown(drawingId) }) } : {}),
+      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       orthogroupState: buildOrthogroupIntentData({
         selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
         selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, '')
@@ -1905,7 +1924,10 @@ export const createHistorySnapshotService = ({
     const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
     if (domains.has('files')) setGeneratedArtifactRef(suppressRef, true);
     try {
-      const ui = isShown(drawingId) ? intent.ui || {} : withoutSlotUi(intent.ui || {});
+      // A drawing that is not shown takes its slot values in its slot.
+      const { appliedPaletteName, appliedPaletteColors, ...drawingUi } = intent.ui || {};
+      const shown = isShown(drawingId);
+      const ui = shown ? intent.ui || {} : drawingUi;
       if (domains.has('ui')) {
         const inputType = inputTypeKeyOf(drawing);
         if (ui[inputType]) setRef(state[inputType], ui[inputType]);
@@ -1932,9 +1954,12 @@ export const createHistorySnapshotService = ({
 
       if (domains.has('ui')) {
         if (typeof applyUiStateData === 'function') {
-          applyUiStateData(drawing, ui, { restorePreviewNavigation: false });
+          applyUiStateData(drawing, ui, { restorePreviewNavigation: false, artifact: shown });
         } else {
           applyFallbackUiStateData(state, drawing, ui);
+        }
+        if (!shown && intent.ui && Object.hasOwn(intent.ui, 'appliedPaletteName')) {
+          writeArtifactValues(drawingId, { appliedPaletteName, appliedPaletteColors });
         }
         if (Object.hasOwn(ui, 'selectedFeatureRecordIdx')) {
           setRef(state.selectedFeatureRecordIdx, Number.isInteger(ui.selectedFeatureRecordIdx)
@@ -1945,7 +1970,7 @@ export const createHistorySnapshotService = ({
       if (domains.has('files')) {
         applyFilesData(state, drawing, intent.files || {}, fileStore, normalizeLinearSeqList);
       }
-      if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState, { receipt: isShown(drawingId) });
+      if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState, drawingId);
       if (domains.has('features')) applyFeatureIntentData(state, drawing, intent.features || {});
       if (domains.has('editorState')) applyEditorIntentData(drawing, intent.editorState || {});
       if (domains.has('groupNames')) applyGroupNameIntentData(drawing, intent.groupNames || {});
@@ -1953,7 +1978,7 @@ export const createHistorySnapshotService = ({
       await nextTick();
       // The mounted Result is the shown drawing's: a drawing that is not shown
       // takes the restored intent when it is shown again (D-15-51).
-      if (afterApplyHistoryIntent && isShown(drawingId)) {
+      if (afterApplyHistoryIntent && shown) {
         await afterApplyHistoryIntent(intent, { ...context, domains });
       }
     } finally {
@@ -1970,7 +1995,7 @@ export const createHistorySnapshotService = ({
     const checkpoint = cloneJsonData({
       config: buildDrawingConfig(drawing),
       files: buildFilesData(state, drawing, fileStore),
-      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState({ receipt: isShown(drawingId) }) } : {}),
+      ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       ...generated,
       ...(generated.ui ? { ui: withoutSessionUi(generated.ui) } : {}),
       editorState
@@ -2014,7 +2039,7 @@ export const createHistorySnapshotService = ({
       await nextTick();
 
       applyFilesData(state, drawing, snapshot.files || {}, fileStore, normalizeLinearSeqList);
-      if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState, { receipt: isShown(drawingId) });
+      if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState, drawingId);
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
       if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
@@ -2081,8 +2106,10 @@ export const createHistorySnapshotService = ({
     compareGeneratedArtifactHandles,
     drawingHistory,
     sessionHistory,
+    artifactSlots,
     captureArtifactSlot,
     installArtifactSlot,
+    writeArtifactValues,
     installGeneratedArtifactOwnerSet,
     installRedrawnArtifact,
     registerCapture,

@@ -543,3 +543,38 @@ test('an Undo of Reset from the other drawing keeps a later step of the hidden d
   await app.undoHistory();
   assert.equal(circular.form.prefix, 'later');
 });
+
+// OV-1195: a hidden drawing's artifact slot values (here Linear's alignment
+// Reset receipt) are captured and restored on its own slot.
+test('an Undo of Reset from Circular gives Linear its alignment receipt back', async () => {
+  const app = createAppSetup();
+  show(app, 'linear');
+  const receipt = { binding: 'fake', directions: [], referenceDeltaX: null };
+  state.similarityAlignmentResetReceipt.value = receipt;
+  await app.resetSettings();
+  assert.equal(state.similarityAlignmentResetReceipt.value, null);
+  show(app, 'circular');
+  assert.equal(await app.undoHistory(), true);
+  assert.equal(state.similarityAlignmentResetReceipt.value, null, 'the shown Circular slot takes no receipt');
+  show(app, 'linear');
+  assert.deepEqual(state.similarityAlignmentResetReceipt.value, receipt);
+  state.similarityAlignmentResetReceipt.value = null;
+});
+
+// OV-1168: Reset all drawings resets every drawing's applied palette, the
+// hidden one's in its slot, and its Undo gives each drawing its own back.
+test('Reset all drawings resets each drawing\'s applied palette and its Undo restores each', async () => {
+  const app = createAppSetup();
+  show(app, 'linear');
+  state.appliedPaletteName.value = 'linear-palette';
+  show(app, 'circular');
+  state.appliedPaletteName.value = 'circular-palette';
+  await app.resetSettings();
+  assert.equal(state.appliedPaletteName.value, 'default');
+  show(app, 'linear');
+  assert.equal(state.appliedPaletteName.value, 'default', 'the hidden drawing\'s applied palette is reset too');
+  await app.undoHistory();
+  assert.equal(state.appliedPaletteName.value, 'linear-palette');
+  show(app, 'circular');
+  assert.equal(state.appliedPaletteName.value, 'circular-palette');
+});

@@ -3106,13 +3106,9 @@ export const createAppSetup = () => {
     }
     setCircularConservationSourceFiles(drawing, sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
   };
-  // E1: each drawing's generated artifact. The shown drawing's artifact is the
-  // installed state; another drawing's waits here, by its drawing ID and by
-  // reference, until the mode transition installs it (no entry: the drawing
-  // has no artifact yet, or is shown). Only the transition and Session Load
-  // (with its rollback) write it.
-  /** @type {Map<DrawingId, Readonly<ArtifactSlot>>} */
-  const artifactSlots = new Map();
+  // E1: the artifacts of the drawings not shown, which the History snapshot
+  // service keeps (its `writeArtifactValues` writes their slot values).
+  const { artifactSlots } = historySnapshots;
   // The diagram Worker keeps the resources of every drawing's committed
   // request: the shown drawing's and each kept slot's.
   setDiagramResourceRetainSource(() => [
@@ -5277,6 +5273,16 @@ export const createAppSetup = () => {
       // OV-1166 (Q-DR-6 A): every drawing's multi-record layout takes a new
       // drawing's defaults (its sides unset), whatever the canvas was before.
       resetSettingsState(state);
+      // OV-1168, OV-1195: the artifact of a drawing not shown takes what the
+      // reset gives the displayed one: the default palette applied, and no
+      // alignment Reset receipt (the plan is cleared below).
+      Object.values(state.drawings).filter(({ id }) => id !== state.activeDrawingId.value).forEach(({ id }) => {
+        historySnapshots.writeArtifactValues(id, {
+          appliedPaletteName: appliedPaletteName.value,
+          appliedPaletteColors: { ...appliedPaletteColors.value },
+          similarityAlignmentResetReceipt: null
+        });
+      });
       // OV-1167 (Q-DR-7 B): the comparison rings are derived again from the
       // kept ring files, as a new drawing with those files uploaded has them.
       reconcileCircularConservation(state.drawings.circular);
