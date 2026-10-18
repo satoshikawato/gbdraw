@@ -3375,3 +3375,77 @@ for (const previousSuppressed of [false, true]) {
   );
   console.log('history saved label table tests passed');
 }
+
+// A3: one History manager per drawing behind a router. The managers share one
+// byte budget, in which the steps of drawings that are not shown go first, and
+// one file retention, which keeps a file while any manager names it (OV-112).
+{
+  const { createHistoryRouter } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
+  assert.equal(typeof createHistoryRouter, 'function');
+  const drawingIds = ['circular', 'linear'];
+  const fileA = makeFile('a.gb', 10);
+  const fileB = makeFile('b.gb', 10);
+  const makeRouter = (maxBytes) => {
+    const fileStore = createHistoryFileStore();
+    const shown = ref('linear');
+    const values = { circular: '', linear: '' };
+    const files = { circular: null, linear: null };
+    const router = createHistoryRouter({
+      drawingIds,
+      activeDrawingId: () => shown.value,
+      maxBytes,
+      estimateFileBytes: fileStore.estimateBytes,
+      retainOnlyFiles: fileStore.retainOnly,
+      managerOptions: (drawingId) => {
+        const buildState = () => ({
+          value: values[drawingId],
+          file: files[drawingId] ? fileStore.describeFile(files[drawingId]) : null
+        });
+        const applyState = (snapshot) => {
+          values[drawingId] = snapshot.value;
+          files[drawingId] = snapshot.file ? fileStore.restoreFile(snapshot.file) : null;
+        };
+        return { buildIntent: buildState, applyIntent: applyState, buildCheckpoint: buildState, applyCheckpoint: applyState };
+      }
+    });
+    return { router, shown, values, files, fileStore };
+  };
+
+  // The size of one step, measured with no limit.
+  const probe = makeRouter(Number.MAX_SAFE_INTEGER);
+  await probe.router.captureBaseline();
+  await probe.router.runUndoable('Probe', () => { probe.values.linear = 'x'.repeat(400); });
+  const stepBytes = probe.router.getDiagnostics().retainedEntryBytes;
+  assert.ok(stepBytes > 0);
+
+  // Two steps exceed the budget; one fits. The hidden drawing's step goes.
+  const { router, shown, values, files, fileStore } = makeRouter(Math.floor(stepBytes * 1.5));
+  files.linear = fileA;
+  await router.captureBaseline();
+  // The file's id as History names it (`describeFile` gives a released file a new one).
+  const fileAId = router.managerOf('linear').getCurrentIntent().file.fileId;
+  await router.runUndoable('Linear edit', () => { values.linear = 'x'.repeat(400); files.linear = null; });
+  assert.equal(router.canUndo(), true);
+  shown.value = 'circular';
+  assert.equal(router.canUndo(), false, 'the router answers for the shown drawing');
+  await router.runUndoable('Circular edit', () => { values.circular = 'y'.repeat(400); });
+  assert.equal(router.canUndo(), true, 'the shown drawing keeps its step');
+  assert.equal(router.managerOf('linear').canUndo(), false, 'the hidden drawing loses its step first');
+  assert.equal(router.managerOf('linear').historyLimitMessage.value.length > 0, true);
+  assert.equal(fileStore.has(fileAId), false, 'no manager names file A any more');
+
+  // A file stays while any manager names it: the Linear step names file B,
+  // and a Circular step's release keeps it.
+  shown.value = 'linear';
+  files.linear = fileB;
+  await router.captureBaseline();
+  const fileBId = router.managerOf('linear').getCurrentIntent().file.fileId;
+  await router.runUndoable('Remove B', () => { files.linear = null; });
+  shown.value = 'circular';
+  await router.runUndoable('Circular edit 2', () => { values.circular = 'z'; });
+  assert.equal(fileStore.has(fileBId), true, 'the Linear step still names file B');
+  shown.value = 'linear';
+  await router.undo();
+  assert.equal(files.linear?.name, 'b.gb');
+  assert.equal(values.circular, 'z', 'Undo in Linear leaves Circular unchanged');
+}

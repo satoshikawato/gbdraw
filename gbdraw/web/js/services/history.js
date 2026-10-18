@@ -298,11 +298,16 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {(value: unknown) => string} [signatureFor]
  *   The signature that detects a change; JSON by default.
  * @property {HistoryFileRetention | null} [fileStore]
- *   The file store that keeps the files that entries name (F-05).
+ *   The file store that keeps the files that entries name (F-05); read only
+ *   when no `budget` is given.
  * @property {(() => Iterable<string>) | null} [collectCurrentFileIds]
  *   The ids of the files bound now, from the snapshot service.
  * @property {number} [maxActions] Undo entries kept.
- * @property {number} [maxBytes] Retained bytes allowed before the oldest entries drop.
+ * @property {number} [maxBytes] Retained bytes allowed before the oldest entries drop; read
+ *   only when no `budget` is given.
+ * @property {HistoryBudget} [budget]
+ *   The byte budget and file retention this manager shares with the other
+ *   drawings' managers (`createHistoryRouter`); its own by default.
  * @property {<T>(value: T) => { value: T }} [makeRef]
  *   Creates a reactive box (Vue `ref` in the app); a plain box by default.
  * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
@@ -311,6 +316,65 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The composition root's busy answer for one Undo or Redo step (E1: a step
  *   that switches the diagram mode waits as the mode buttons do).
  */
+
+/**
+ * What the shared budget reads from and drops in one History manager.
+ * @typedef {object} HistoryBudgetMember
+ * @property {() => number} entryBytes The bytes its entries retain.
+ * @property {() => Set<string>} retainedFileIds The files its current intent and entries name.
+ * @property {() => boolean} dropOldestStep
+ *   Drops its oldest Undo entry, or its Redo entries when no Undo entry is left;
+ *   `false` when it holds none.
+ * @property {() => void} noteEvicted Shows that its older History was discarded.
+ *
+ * The byte budget and file retention of every drawing's History (OV-112).
+ * @typedef {object} HistoryBudget
+ * @property {(member: HistoryBudgetMember) => void} join
+ * @property {(member: HistoryBudgetMember) => void} enforce
+ *   Drops steps until the retained bytes fit: those of the other members first,
+ *   then `member`'s, oldest first; then releases the files no member names.
+ * @property {() => void} releaseUnreferencedFiles
+ */
+
+/**
+ * @typedef {object} HistoryBudgetOptions
+ * @property {number} [maxBytes] Retained bytes allowed across the members.
+ * @property {HistoryFileRetention['estimateBytes'] | null} [estimateFileBytes] The file store's estimate.
+ * @property {HistoryFileRetention['retainOnly'] | null} [retainOnlyFiles] The file store's release.
+ */
+/**
+ * @param {HistoryBudgetOptions} [options]
+ * @returns {HistoryBudget}
+ */
+export const createHistoryBudget = ({ maxBytes = DEFAULT_MAX_BYTES, estimateFileBytes = null, retainOnlyFiles = null } = {}) => {
+  /** @type {Set<HistoryBudgetMember>} */
+  const members = new Set();
+  const retainedFileIds = () => {
+    /** @type {Set<string>} */
+    const ids = new Set();
+    members.forEach((member) => member.retainedFileIds().forEach((id) => ids.add(id)));
+    return ids;
+  };
+  const overBudget = () => {
+    let bytes = 0;
+    members.forEach((member) => { bytes += member.entryBytes(); });
+    if (estimateFileBytes) bytes += estimateFileBytes(retainedFileIds());
+    return bytes > maxBytes;
+  };
+  const releaseUnreferencedFiles = () => {
+    if (retainOnlyFiles) retainOnlyFiles(retainedFileIds());
+  };
+  /** @param {HistoryBudgetMember} member */
+  const enforce = (member) => {
+    [...[...members].filter((other) => other !== member), member].forEach((candidate) => {
+      let dropped = false;
+      while (overBudget() && candidate.dropOldestStep()) dropped = true;
+      if (dropped) candidate.noteEvicted();
+    });
+    releaseUnreferencedFiles();
+  };
+  return { join: (member) => { members.add(member); }, enforce, releaseUnreferencedFiles };
+};
 
 /** @param {HistoryManagerOptions} options */
 export const createHistoryManager = ({
@@ -326,6 +390,9 @@ export const createHistoryManager = ({
   collectCurrentFileIds = null,
   maxActions = DEFAULT_MAX_ACTIONS,
   maxBytes = DEFAULT_MAX_BYTES,
+  budget = createHistoryBudget({
+    maxBytes, estimateFileBytes: fileStore?.estimateBytes, retainOnlyFiles: fileStore?.retainOnly
+  }),
   makeRef = makeBox,
   mutationAvailability = () => null,
   stepAvailability = () => null
@@ -584,14 +651,7 @@ export const createHistoryManager = ({
     return ids;
   };
 
-  const retainedFileBytes = () => (
-    fileStore?.estimateBytes ? fileStore.estimateBytes(collectRetainedFileIds()) : 0
-  );
-
-  const releaseUnreferencedFiles = () => {
-    if (!fileStore?.retainOnly) return;
-    fileStore.retainOnly(collectRetainedFileIds());
-  };
+  const { releaseUnreferencedFiles } = budget;
 
   /**
    * The handles whose bytes an entry names in addition to its own `byteSize`.
@@ -681,23 +741,32 @@ export const createHistoryManager = ({
     return (await captureIntent()).signature !== open.beforeSignature;
   };
 
+  const HISTORY_LIMIT_MESSAGE = 'Older undo history was discarded to stay within the history limit.';
+  /** @type {HistoryBudgetMember} */
+  const budgetMember = {
+    entryBytes: () => totalEntryBytes,
+    retainedFileIds: collectRetainedFileIds,
+    dropOldestStep: () => {
+      if (undoStack.length > 0) {
+        removeEntryBytes(undoStack.shift());
+        return true;
+      }
+      if (redoStack.length === 0) return false;
+      clearRedo();
+      return true;
+    },
+    noteEvicted: () => { historyLimitMessage.value = HISTORY_LIMIT_MESSAGE; }
+  };
+  budget.join(budgetMember);
+
   const enforceLimits = () => {
     let evicted = false;
     while (undoStack.length > maxActions) {
       removeEntryBytes(undoStack.shift());
       evicted = true;
     }
-
-    while (undoStack.length > 0 && totalEntryBytes + retainedFileBytes() > maxBytes) {
-      removeEntryBytes(undoStack.shift());
-      evicted = true;
-    }
-    if (totalEntryBytes + retainedFileBytes() > maxBytes) clearRedo();
-
-    historyLimitMessage.value = evicted
-      ? 'Older undo history was discarded to stay within the history limit.'
-      : '';
-    releaseUnreferencedFiles();
+    historyLimitMessage.value = evicted ? HISTORY_LIMIT_MESSAGE : '';
+    budget.enforce(budgetMember);
   };
 
   const captureBaseline = async (_label = 'Baseline') => {
@@ -1791,4 +1860,80 @@ export const createHistoryManager = ({
     undo,
     undoLabel
   };
+};
+
+/**
+ * @typedef {HistoryBudgetOptions & {
+ *   drawingIds: readonly string[],
+ *   activeDrawingId: () => string,
+ *   managerOptions: (drawingId: string) => HistoryManagerOptions
+ * }} HistoryRouterOptions
+ *   The drawings, each with its own History; the shown drawing, whose History
+ *   Undo and Redo walk; the capture and restore of one drawing's History; and
+ *   the budget every drawing's History shares.
+ */
+
+// PD-OI-090: each drawing has its own History. The router keeps the manager
+// API and routes it to the shown drawing's manager; a save point, a baseline,
+// and the settings-step listener cover every drawing, and a mutation or
+// traversal pending in any drawing is pending. The managers share one byte
+// budget and one file retention (`createHistoryBudget`).
+/** @param {HistoryRouterOptions} options */
+export const createHistoryRouter = ({
+  drawingIds,
+  activeDrawingId,
+  managerOptions,
+  ...budgetOptions
+}) => {
+  const budget = createHistoryBudget(budgetOptions);
+  const managers = new Map(drawingIds.map((drawingId) => /** @type {const} */ ([
+    drawingId,
+    createHistoryManager({ ...managerOptions(drawingId), budget })
+  ])));
+  /** @param {string} drawingId */
+  const managerOf = (drawingId) => {
+    const manager = managers.get(drawingId);
+    if (!manager) throw new Error(`No History exists for drawing ${drawingId}.`);
+    return manager;
+  };
+  const every = () => [...managers.values()];
+  /** @param {string} key */
+  const activeMember = (key) => (
+    /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (managerOf(activeDrawingId()))))[key];
+  const template = managerOf(drawingIds[0]);
+  /** @type {Record<string, unknown>} */
+  const routed = {};
+  Object.entries(template).forEach(([key, value]) => {
+    if (typeof value === 'function') {
+      routed[key] = (/** @type {unknown[]} */ ...args) => (
+        /** @type {(...args: unknown[]) => unknown} */ (activeMember(key)))(...args);
+    } else {
+      Object.defineProperty(routed, key, { enumerable: true, get: () => activeMember(key) });
+    }
+  });
+  const router = /** @type {typeof template} */ (/** @type {unknown} */ (routed));
+  return Object.assign(router, {
+    managerOf,
+    captureBaseline: async (/** @type {string} */ label = 'Baseline') => {
+      for (const manager of every()) await manager.captureBaseline(label);
+    },
+    initializeIntentBaseline: async (
+      /** @type {string} */ label = 'Intent baseline',
+      /** @type {{ isCurrent?: () => boolean }} */ options = {}
+    ) => {
+      for (const manager of every()) {
+        if (!await manager.initializeIntentBaseline(label, options)) return false;
+      }
+      return true;
+    },
+    markSavePoint: () => every().forEach((manager) => manager.markSavePoint()),
+    hasChangesSinceSavePoint: async () => {
+      for (const manager of every()) if (await manager.hasChangesSinceSavePoint()) return true;
+      return false;
+    },
+    /** @param {Parameters<typeof template.setSettingsStepListener>[0]} listener */
+    setSettingsStepListener: (listener) => every().forEach((manager) => manager.setSettingsStepListener(listener)),
+    mutationPending: () => every().some((manager) => manager.mutationPending()),
+    traversalPending: () => every().some((manager) => manager.traversalPending())
+  });
 };
