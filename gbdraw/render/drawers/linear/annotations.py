@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 
 from svgwrite.base import BaseElement
 
@@ -12,11 +14,16 @@ from gbdraw.svg.elements import ClipPath, Group, Line, Path, Rect, Text
 from gbdraw.annotations import (
     AnnotationTrackParams,
     ResolvedAnnotationTrack,
+    ResolvedRegionAnnotation,
     apply_feature_underlay_dom_attributes,
     effective_annotation_style,
     is_auto_feature_underlay,
     linear_annotation_labels_above,
 )
+from gbdraw.annotations.layout import PlacedRegionAnnotation
+from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink
+from gbdraw.layout.spatial import Aabb
+from gbdraw.layout.text_geometry import TextAnchor
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
@@ -39,6 +46,157 @@ def annotation_dom_id(
     return f"gbdraw-annotation-{_dom_token(slot_id)}-{_dom_token(annotation_id)}-{digest}"
 
 
+_LABEL_ANCHOR_SHARE: Mapping[TextAnchor, float] = {"start": 0.0, "middle": 0.5, "end": 1.0}
+_DEFAULT_LABEL_FONT_SIZE = 10.0
+
+
+@dataclass(frozen=True)
+class LinearAnnotationLabel:
+    """One Linear annotation label as it is drawn (``dominant-baseline=central``).
+
+    ``x`` and ``y`` anchor the text in record-local x and slot-local y;
+    ``ink`` is the box of its painted letters in the same frame, and ``span``
+    the x range of its mark, along which the label may move.
+    """
+
+    annotation_id: str
+    text: str
+    x: float
+    y: float
+    anchor: TextAnchor
+    font_size: float
+    color: str
+    ink: Aabb
+    span: tuple[float, float]
+
+    def moved_to(self, x: float) -> LinearAnnotationLabel:
+        return replace(self, x=x, ink=self.ink.translated(x - self.x, 0.0))
+
+
+def _label_ink_offsets(
+    text: str, font_family: str, font_size: float
+) -> tuple[float, float, float, float, float]:
+    """The advance of ``text`` and its ink box from the start of the advance and its central baseline:
+    advance, left, right, top, bottom."""
+
+    ink = text_ink(text, font_family)
+    metrics = get_font_vertical_metrics(font_family)
+    shift = None if metrics is None else dominant_baseline_shift_em("central", metrics)
+    if ink is None or shift is None:
+        # A font that cannot be read: an em box with the fallback width of calculate_bbox_dimensions.
+        width = 0.6 * len(text) * font_size
+        return width, 0.0, width, -0.5 * font_size, 0.5 * font_size
+    return (
+        ink.advance * font_size,
+        ink.left * font_size,
+        ink.right * font_size,
+        (shift - ink.top) * font_size,
+        (shift - ink.bottom) * font_size,
+    )
+
+
+def _label_clearance(annotation: ResolvedRegionAnnotation, params: AnnotationTrackParams) -> float:
+    """How far a label's letters keep from its lane edge: half the mark's stroke plus ``label_offset``."""
+
+    style = effective_annotation_style(annotation, params)
+    half_stroke = 0.0 if is_auto_feature_underlay(annotation) else 0.5 * float(style.stroke_width)
+    return half_stroke + float(style.label_offset)
+
+
+def linear_annotation_label_room(
+    annotation: ResolvedRegionAnnotation,
+    params: AnnotationTrackParams,
+    font_family: str,
+) -> float:
+    """How far a label's painted letters reach beyond its lane edge (0 without a drawn label)."""
+
+    if not (params.show_labels and annotation.label):
+        return 0.0
+    style = effective_annotation_style(annotation, params)
+    size = float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE)
+    _advance, _left, _right, top, bottom = _label_ink_offsets(annotation.label, font_family, size)
+    return _label_clearance(annotation, params) + (bottom - top)
+
+
+def _record_lanes(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    height_px: float,
+    params: AnnotationTrackParams,
+) -> tuple[list[PlacedRegionAnnotation], float]:
+    """The record's placements and the height of one lane."""
+
+    placements = [item for item in track.placements if item.annotation.record_index == record_index]
+    lane_count = max((item.lane for item in placements), default=-1) + 1
+    usable_height = max(1.0, float(height_px) - 2.0 * params.padding_px)
+    lane_height = 14.0 if track.clipped else usable_height / max(1, lane_count)
+    return placements, lane_height
+
+
+def linear_annotation_labels(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    record_length: int,
+    bar_length_px: float,
+    side: str,
+    height_px: float,
+    font_family: str,
+    params: AnnotationTrackParams,
+) -> tuple[LinearAnnotationLabel, ...]:
+    """The labels of one record's annotation track at their ``label_position`` (OV-844).
+
+    A label lies beyond its lane on the side ``linear_annotation_labels_above``
+    picks, with its painted letters ``label_offset`` clear of the mark's
+    stroke (``linear_annotation_label_room``).
+    """
+
+    if not params.show_labels:
+        return ()
+    placements, lane_height = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
+    scale = float(bar_length_px) / max(1, int(record_length))
+    above = linear_annotation_labels_above(side, params)
+    labels: list[LinearAnnotationLabel] = []
+    for placement in placements:
+        annotation = placement.annotation
+        if not annotation.label:
+            continue
+        style = effective_annotation_style(annotation, params)
+        size = float(style.label_font_size or _DEFAULT_LABEL_FONT_SIZE)
+        advance, left, right, top, bottom = _label_ink_offsets(annotation.label, font_family, size)
+        lane_top = params.padding_px + placement.lane * lane_height
+        clearance = _label_clearance(annotation, params)
+        y = lane_top - clearance - bottom if above else lane_top + lane_height + clearance - top
+        segments = annotation.geometry_segments
+        anchor: TextAnchor
+        if style.label_position == "start":
+            label_bp, anchor = float(segments[0][0]), "start"
+        elif style.label_position == "end":
+            label_bp, anchor = float(segments[-1][1]), "end"
+        else:
+            label_bp, anchor = float(annotation.geometry_midpoint_bp), "middle"
+        x = label_bp * scale
+        origin = x - _LABEL_ANCHOR_SHARE[anchor] * advance
+        labels.append(
+            LinearAnnotationLabel(
+                annotation_id=annotation.id,
+                text=annotation.label,
+                x=x,
+                y=y,
+                anchor=anchor,
+                font_size=size,
+                color=style.label_color,
+                ink=Aabb(origin + left, y + top, origin + right, y + bottom),
+                span=(
+                    min(float(start) for start, _end in segments) * scale,
+                    max(float(end) for _start, end in segments) * scale,
+                ),
+            )
+        )
+    return tuple(labels)
+
+
 def linear_annotation_track_content(
     track: ResolvedAnnotationTrack,
     *,
@@ -47,15 +205,17 @@ def linear_annotation_track_content(
     record_length: int,
     bar_length_px: float,
     y_offset_px: float,
-    side: str,
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
+    labels: Sequence[LinearAnnotationLabel] = (),
     dom_group_id: str | None = None,
     semantic_slot_id: str | None = None,
 ) -> GroupContent:
     """Build an annotation track in record-local coordinates (render stage ``annotation_content``).
 
+    ``labels`` are the track's placed labels (``linear_annotation_labels``,
+    moved by the record's label placement), drawn with their annotations.
     The hatch patterns the marks use, in order of first use, and the clip path
     of a clipped track are the content's definitions.
     """
@@ -68,12 +228,9 @@ def linear_annotation_track_content(
     if semantic_slot_id:
         group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
         group.attribs["data-gbdraw-slot-renderer"] = "annotations"
-    placements = [item for item in track.placements if item.annotation.record_index == record_index]
-    lane_count = max((item.lane for item in placements), default=-1) + 1
-    usable_height = max(1.0, float(height_px) - 2.0 * params.padding_px)
-    lane_height = 14.0 if track.clipped else usable_height / max(1, lane_count)
+    placements, lane_height = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
     scale = float(bar_length_px) / max(1, int(record_length))
-    label_direction = -1.0 if linear_annotation_labels_above(side, params) else 1.0
+    labels_by_id = {label.annotation_id: label for label in labels}
 
     for placement in placements:
         annotation = placement.annotation
@@ -182,24 +339,17 @@ def linear_annotation_track_content(
                     if cap_end:
                         item_group.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
 
-        if params.show_labels and annotation.label:
-            label_bp: float
-            if style.label_position == "start":
-                label_bp, anchor = annotation.geometry_segments[0][0], "start"
-            elif style.label_position == "end":
-                label_bp, anchor = annotation.geometry_segments[-1][1], "end"
-            else:
-                label_bp, anchor = annotation.geometry_midpoint_bp, "middle"
-            label_y = lane_center + label_direction * (0.5 * lane_height + style.label_offset)
+        label = labels_by_id.get(annotation.id)
+        if label is not None:
             item_group.add(
                 Text(
-                    annotation.label,
-                    insert=(float(label_bp) * scale, label_y),
-                    fill=style.label_color,
+                    label.text,
+                    insert=(label.x, float(y_offset_px) + label.y),
+                    fill=label.color,
                     stroke="none",
-                    font_size=style.label_font_size or 10.0,
+                    font_size=label.font_size,
                     font_family=font_family,
-                    text_anchor=anchor,
+                    text_anchor=label.anchor,
                     dominant_baseline="central",
                 )
             )
@@ -224,4 +374,10 @@ def linear_annotation_track_content(
     return GroupContent.of(group, (*definitions.values(), *clip_paths))
 
 
-__all__ = ["annotation_dom_id", "linear_annotation_track_content"]
+__all__ = [
+    "LinearAnnotationLabel",
+    "annotation_dom_id",
+    "linear_annotation_label_room",
+    "linear_annotation_labels",
+    "linear_annotation_track_content",
+]
