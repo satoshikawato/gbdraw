@@ -333,21 +333,28 @@ export const createRecordDisplayControls = ({
     });
   };
   watch([() => state.featureCatalog.value, () => state.processing?.value, allRows], refreshCommittedRows, { flush: 'post' });
-  watch(() => sources.value.map(({ scope, sourceUid, source, paired }) => ({ scope, sourceUid, source, paired })),
-    (/** @type {RecordDisplaySource[]} */ current, /** @type {RecordDisplaySource[]} */ previous = []) => {
-      if (state.semanticFileWatchersSuppressed?.value || state.sessionImportRollbackInProgress?.value) return;
-      const replaced = previous.filter((old) => {
-        const next = current.find((entry) => entry.scope === old.scope && entry.sourceUid === old.sourceUid);
-        return old.source && (!next || next.source !== old.source || next.paired !== old.paired);
-      });
-      // A replaced source's drafts go from its mode's drawing.
-      replaced.forEach((source) => {
-        const drafts = drawingOfRow(source).recordDisplayDrafts;
-        for (let index = drafts.length - 1; index >= 0; index -= 1) {
-          if (drafts[index].sourceUid === source.sourceUid) drafts.splice(index, 1);
-        }
-      });
-    }, { flush: 'sync' });
+  /** @returns {RecordDisplaySource[]} */
+  const sourceTuples = () => sources.value.map(({ scope, sourceUid, source, paired }) => ({ scope, sourceUid, source, paired }));
+  // The transition of every write of a row source (a file, an input type, the
+  // Linear cards): `mutate` writes it, then the drafts of each source it
+  // replaced or removed go from that source's mode's drawing (R10). Load, its
+  // rollback, and a History restore install the drafts they read or captured.
+  /** @template T @param {() => T} mutate @returns {T} */
+  const changeRecordSources = (mutate) => {
+    const previous = sourceTuples();
+    const result = mutate();
+    const current = sourceTuples();
+    previous.filter((old) => {
+      const next = current.find((entry) => entry.scope === old.scope && entry.sourceUid === old.sourceUid);
+      return old.source && (!next || next.source !== old.source || next.paired !== old.paired);
+    }).forEach((replaced) => {
+      const drafts = drawingOfRow(replaced).recordDisplayDrafts;
+      for (let index = drafts.length - 1; index >= 0; index -= 1) {
+        if (drafts[index].sourceUid === replaced.sourceUid) drafts.splice(index, 1);
+      }
+    });
+    return result;
+  };
   const hasPendingChanges = computed(() => {
     const drawing = state.activeDrawing();
     void state.processing?.value;
@@ -496,7 +503,7 @@ export const createRecordDisplayControls = ({
       drawing.recordDisplayDrafts.splice(insertAt, 0, cloneJsonData(checkpoint.draft));
     }
   };
-  return { rows, allRows, draftFor, surfaceFor, hasPendingChanges,
+  return { rows, allRows, draftFor, surfaceFor, hasPendingChanges, changeRecordSources,
     // The data of isCurrentFeature (services/feature-identity.js), refreshed
     // for the committed request before it is read (R13).
     sourceBinding: () => {

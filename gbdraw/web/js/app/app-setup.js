@@ -1726,6 +1726,9 @@ export const createAppSetup = () => {
     linearRecordErrorFor: linearRecordSelector.errorFor,
     runUndoable: history.runUndoable,
     getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
+  // Every write of a record source (a Circular file, an input type, the Linear
+  // cards) runs through it, so a replaced source's display drafts go.
+  const { changeRecordSources } = recordDisplayControls;
   window.__GBDRAW_HISTORY__ = history;
   // R13: owners receive this port, not the record display controls. The check
   // is pure (services/feature-identity.js) over the record display's binding.
@@ -5997,7 +6000,7 @@ export const createAppSetup = () => {
     const nextValue = value ?? null;
     const previous = files[field];
     if (previous === nextValue) return;
-    files[field] = nextValue;
+    changeRecordSources(() => { files[field] = nextValue; });
     if (nextValue) pendingCircularUpload = nextValue;
     // An upload into an empty slot starts reading another input (after an
     // Input switch), whose records the OFF list does not name.
@@ -6194,7 +6197,7 @@ export const createAppSetup = () => {
     }
     // Removing a File can remove the last source of a Depth series.
     retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(() => {
-      linearSeqs.splice(0, linearSeqs.length, ...next);
+      changeRecordSources(() => linearSeqs.splice(0, linearSeqs.length, ...next));
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
     pendingLinearRecordExpansions.forEach((_, uid) => {
@@ -6588,7 +6591,7 @@ export const createAppSetup = () => {
     if (busy) return busy;
     const next = value === 'gff' ? 'gff' : 'gb';
     if (cInputType.value === next) return { status: 'ok' };
-    cInputType.value = next;
+    changeRecordSources(() => { cInputType.value = next; });
     // The other input's records are not the ones the OFF list names.
     const drawing = state.drawings.circular;
     if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
@@ -6602,7 +6605,7 @@ export const createAppSetup = () => {
     const next = value === 'gff' ? 'gff' : 'gb';
     if (lInputType.value === next) return false;
     similarityAlignmentActions?.clearForMutation?.('source type changed.');
-    lInputType.value = next;
+    changeRecordSources(() => { lInputType.value = next; });
     return true;
   };
 

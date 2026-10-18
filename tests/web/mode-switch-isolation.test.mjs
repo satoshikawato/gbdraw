@@ -15,7 +15,7 @@
 //      edit;
 //   3. the Depth panels read the drawing's series and never write them (OV-109).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 globalThis.window = {
@@ -170,22 +170,29 @@ test('the mode transition writes no drawing member and commits no Result edit', 
     'app-setup.js runs no profile transition on a switch');
 });
 
-// The text of every `watch(...)` call in app-setup.js (balanced parentheses).
-const appSetupWatchCalls = () => [...APP_SETUP.matchAll(/\bwatch\(/g)].map(({ index }) => {
+// The text of every `watch(...)` call in a module (balanced parentheses).
+const watchCalls = (source) => [...source.matchAll(/\bwatch\(/g)].map(({ index }) => {
   let depth = 0;
-  for (let end = index + 'watch'.length; end < APP_SETUP.length; end += 1) {
-    if (APP_SETUP[end] === '(') depth += 1;
-    if (APP_SETUP[end] === ')' && --depth === 0) return APP_SETUP.slice(index, end + 1);
+  for (let end = index + 'watch'.length; end < source.length; end += 1) {
+    if (source[end] === '(') depth += 1;
+    if (source[end] === ')' && --depth === 0) return source.slice(index, end + 1);
   }
   throw new Error(`the watch call at ${index} has no end`);
 });
-// The settings fits that were watchers: each control, Reset, and setup call them (A2).
-const SETTINGS_FITS = /\b(ensureDepthTrackConfigCount|reconcileCircularConservation|syncCircularConservationSeries|refreshCircularConservationSlots|syncCircularConservationSlots)\b/;
+const APP_DIR = new URL('../../gbdraw/web/js/app/', import.meta.url);
+const appModules = readdirSync(APP_DIR, { recursive: true }).filter((file) => String(file).endsWith('.js'))
+  .map((file) => [String(file), readFileSync(new URL(String(file), APP_DIR), 'utf8')]);
+// The settings fits and drafts the former settings watchers wrote: each
+// control, Reset, Load, Generate, and setup write them in their transitions
+// (A2, D-15-46). A drawing write by a helper a callback calls is not seen,
+// except through these names.
+const SETTINGS_WRITES = /\b(ensureDepthTrackConfigCount|reconcileCircularConservation|syncCircularConservationSeries|refreshCircularConservationSlots|syncCircularConservationSlots|recordDisplayDrafts|layoutPreferences)\b/;
 
-test('no app-setup watcher fits a drawing\'s settings (A2: Depth series, comparison rings)', () => {
-  const calls = appSetupWatchCalls();
-  assert.ok(calls.length > 0, 'the watch calls were found');
-  assert.deepEqual(calls.filter((text) => SETTINGS_FITS.test(text)).map((text) => text.slice(0, 160)), []);
+test('no watcher of an app module writes a drawing (A2: settings watchers)', () => {
+  const calls = appModules.flatMap(([file, source]) => watchCalls(source).map((text) => ({ file, text })));
+  assert.ok(calls.some(({ file }) => file === 'app-setup.js'), 'the watch calls were found');
+  assert.deepEqual(calls.filter(({ text }) => SETTINGS_WRITES.test(text) || DRAWING_WRITE.test(text))
+    .map(({ file, text }) => `${file}: ${text.slice(0, 160)}`), []);
 });
 
 test('the Depth panels read the drawing series and never write them (OV-109)', () => {
