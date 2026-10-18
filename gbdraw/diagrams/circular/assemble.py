@@ -295,6 +295,7 @@ def _prepare_circular_annotation_tracks(
             params=params,
             available_extent_px=available,
             bp_per_px=bp_per_px,
+            label_font_size=circular_label_font_size(canvas_config.profile.config, len(gb_record.seq)),
         )
         layouts[slot.id] = layout
         updated.append(

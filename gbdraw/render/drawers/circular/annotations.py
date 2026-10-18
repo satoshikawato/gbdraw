@@ -15,6 +15,7 @@ from gbdraw.svg.elements import ClipPath, Group, Path, Text
 from gbdraw.annotations import (
     AnnotationTrackParams,
     ResolvedAnnotationTrack,
+    annotation_label_font_size,
     apply_feature_underlay_dom_attributes,
     effective_annotation_style,
     is_auto_feature_underlay,
@@ -28,7 +29,6 @@ from gbdraw.layout.text_geometry import Point, convex_polygons_intersect, segmen
 from gbdraw.render.drawers.annotation_marks import (
     annotation_dom_id,
     cap_size,
-    label_font_size,
     label_ink_offsets,
     mark_reach,
     past_span_edge,
@@ -347,7 +347,7 @@ def circular_annotation_labels(
         else:
             centre = 0.5 * (lane_inner + lane_outer)
             mark_edge = centre + reach.from_centre if outward else centre - reach.from_centre
-        size = label_font_size(style)
+        size = annotation_label_font_size(style, track.label_font_size)
         entries.append(
             (
                 annotation,

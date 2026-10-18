@@ -202,6 +202,7 @@ class RegionAnnotationStyle:
     fill_opacity: float = 0.2
     hatch: HatchStyle | None = None
     label_color: str = "#202020"
+    # None: the font size of the feature labels of the drawing (annotation_label_font_size).
     label_font_size: float | None = None
     label_orientation: Literal["auto", "horizontal", "tangent", "radial", "arc"] = "auto"
     label_position: Literal["center", "start", "end"] = "center"
@@ -492,6 +493,13 @@ def effective_annotation_style(
     return params.style_override or annotation.style
 
 
+def annotation_label_font_size(style: RegionAnnotationStyle, feature_label_font_size: float) -> float:
+    """A region label's font size: its style's own, else ``feature_label_font_size``, the font size the
+    feature labels of its drawing use."""
+
+    return float(feature_label_font_size if style.label_font_size is None else style.label_font_size)
+
+
 __all__ = [
     "AnnotationOptions",
     "AnnotationSet",
@@ -506,6 +514,7 @@ __all__ = [
     "ResolvedAnnotationBundle",
     "ResolvedRegionAnnotation",
     "ResolutionWarning",
+    "annotation_label_font_size",
     "annotation_track_params_from_mapping",
     "effective_annotation_style",
     "linear_annotation_labels_above",

@@ -7,7 +7,12 @@ from typing import Callable, Mapping, Sequence
 
 from gbdraw.exceptions import ValidationError
 
-from .models import AnnotationTrackParams, ResolvedRegionAnnotation
+from .models import (
+    AnnotationTrackParams,
+    ResolvedRegionAnnotation,
+    annotation_label_font_size,
+    effective_annotation_style,
+)
 
 
 @dataclass(frozen=True)
@@ -26,6 +31,8 @@ class ResolvedAnnotationTrack:
     placements: tuple[PlacedRegionAnnotation, ...]
     required_extent_px: float
     occupied_bounds: tuple[tuple[float, float], ...]
+    # The feature label font size of the drawing: the size of a label whose style sets none.
+    label_font_size: float
     clipped: bool = False
     lane_gap_px: float = 3.0
 
@@ -159,8 +166,12 @@ def layout_annotation_track(
     available_extent_px: float | None = None,
     lane_extent_px: float = 14.0,
     bp_per_px: Mapping[int, float] | None = None,
+    label_font_size: float,
 ) -> ResolvedAnnotationTrack:
-    """Pack one set and calculate its radial/vertical required extent."""
+    """Pack one set and calculate its radial/vertical required extent.
+
+    ``label_font_size`` is the font size the feature labels of the drawing use;
+    a label whose style sets no font size takes it."""
 
     track_params = params or AnnotationTrackParams(set_id=set_id)
     if track_params.set_id != set_id:
@@ -173,19 +184,19 @@ def layout_annotation_track(
         if item.set_id == set_id
         and (track_params.marks is None or item.mark in track_params.marks)
     )
-    font_default = 10.0
 
     def label_width(annotation: ResolvedRegionAnnotation) -> float:
         if not track_params.show_labels or not annotation.label:
             return 0.0
-        font_size = annotation.style.label_font_size or font_default
-        width_px = len(annotation.label) * float(font_size) * 0.6
+        style = effective_annotation_style(annotation, track_params)
+        width_px = len(annotation.label) * annotation_label_font_size(style, label_font_size) * 0.6
         scale = float((bp_per_px or {}).get(annotation.record_index, 1.0))
         return width_px * scale
 
     def padding(annotation: ResolvedRegionAnnotation) -> float:
         scale = float((bp_per_px or {}).get(annotation.record_index, 1.0))
-        cap = annotation.style.stroke_width * 2.0 if annotation.mark == "bracket" else 0.0
+        stroke_width = effective_annotation_style(annotation, track_params).stroke_width
+        cap = stroke_width * 2.0 if annotation.mark == "bracket" else 0.0
         return (track_params.padding_px + cap) * scale
 
     highlight_track = track_params.marks == ("highlight",)
@@ -240,6 +251,7 @@ def layout_annotation_track(
         placements=placements,
         required_extent_px=float(required),
         occupied_bounds=occupied,
+        label_font_size=float(label_font_size),
         clipped=clipped,
         lane_gap_px=lane_gap,
     )

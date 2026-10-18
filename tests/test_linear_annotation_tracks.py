@@ -247,6 +247,11 @@ def test_linear_annotation_cover_anchor_expands_overlay_to_feature_band() -> Non
     assert covered_height > uncovered_height
 
 
+# The region label font the placement scenarios below were laid out with. A region label without its own
+# font takes the feature label font of the drawing (24 pt on these short records).
+_SCENARIO_LABEL_STYLE = RegionAnnotationStyle(label_font_size=10.0)
+
+
 def _cover_anchor_drawing(
     track_layout: str, *, highlight: bool = True, slots: tuple[str, ...] = (), label: str | None = None
 ):
@@ -255,7 +260,9 @@ def _cover_anchor_drawing(
         SeqFeature(FeatureLocation(120, 250, strand=1), type="CDS"),
         SeqFeature(FeatureLocation(400, 700, strand=-1), type="CDS"),
     ]
-    tint = RegionAnnotation("tint", CoordinateSpan(None, 100, 300), label=label, mark="highlight")
+    tint = RegionAnnotation(
+        "tint", CoordinateSpan(None, 100, 300), label=label, mark="highlight", style=_SCENARIO_LABEL_STYLE
+    )
     return assemble_linear_diagram_from_records(
         [record],
         cfg=apply_config_overrides(
@@ -749,7 +756,7 @@ def _build_linear_span(
                         CoordinateSpan(parse_record_selector(f"#{index}"), 100, 300),
                         label=f"Span {index}" if label_text else None,
                         mark=mark,
-                        **({} if style is None else {"style": style}),
+                        style=style or _SCENARIO_LABEL_STYLE,
                     )
                     for index in range(1, record_count + 1)
                 ),
@@ -1305,7 +1312,13 @@ def _leader_zone_drawing(*, feature_names: tuple[str, ...], track_layout: str = 
         )
         for index, name in enumerate(feature_names)
     ]
-    tint = RegionAnnotation("tint", CoordinateSpan(None, 1000, 5000), label="Region of interest", mark="highlight")
+    tint = RegionAnnotation(
+        "tint",
+        CoordinateSpan(None, 1000, 5000),
+        label="Region of interest",
+        mark="highlight",
+        style=_SCENARIO_LABEL_STYLE,
+    )
     return assemble_linear_diagram_from_records(
         [record],
         cfg=apply_config_overrides(
@@ -1623,7 +1636,11 @@ def test_linear_label_of_an_origin_wrapping_region_stays_over_its_marks() -> Non
 
 def test_linear_label_wider_than_its_region_moves_off_a_leader() -> None:
     region = RegionAnnotation(
-        "narrow", CoordinateSpan(None, 2900, 3200), label="A long label for a short region", mark="highlight"
+        "narrow",
+        CoordinateSpan(None, 2900, 3200),
+        label="A long label for a short region",
+        mark="highlight",
+        style=_SCENARIO_LABEL_STYLE,
     )
     (label,) = _span_label_marks(_six_kb_drawing(region, ((2905, 2925, "tRNA-Leu"),)))
     centre = 0.5 * (label["ink"][0] + label["ink"][2])
@@ -1636,7 +1653,11 @@ def test_linear_label_wider_than_its_region_moves_off_a_leader() -> None:
 
 def test_linear_label_without_a_clear_place_keeps_its_default_place_off_the_name() -> None:
     region = RegionAnnotation(
-        "control", CoordinateSpan(None, 1, 300), label="Mitochondrial control region", mark="highlight"
+        "control",
+        CoordinateSpan(None, 1, 300),
+        label="Mitochondrial control region",
+        mark="highlight",
+        style=_SCENARIO_LABEL_STYLE,
     )
     drawing = _six_kb_drawing(region, ((190, 210, "tRNA-Leu"),))
     (label,) = _span_label_marks(drawing)
@@ -1677,7 +1698,13 @@ def _six_kb_label_and_name(region: RegionAnnotation, features: tuple[tuple[int, 
 def test_linear_moved_label_may_hang_past_the_bar_end(
     start: int, end: int, feature: tuple[int, int, str], past: str
 ) -> None:
-    region = RegionAnnotation("control", CoordinateSpan(None, start, end), label="Mitochondrial control region", mark="highlight")
+    region = RegionAnnotation(
+        "control",
+        CoordinateSpan(None, start, end),
+        label="Mitochondrial control region",
+        mark="highlight",
+        style=_SCENARIO_LABEL_STYLE,
+    )
     label, name, (bar_start, bar_end), (view_left, view_right), drawing = _six_kb_label_and_name(region, (feature,))
     left, top, right, bottom = label["ink"]
     centre = 0.5 * (left + right)
@@ -1723,10 +1750,10 @@ def _row_drawing(track_layout: str, separate_strands: bool, regions_of_b: bool):
             (3000, 3300, "ATP synthase subunit", 1),
         ),
     )
-    regions = [RegionAnnotation("a", CoordinateSpan(parse_record_selector("#1"), 5101, 6000), label="Mitochondrial control region", mark="highlight")]
+    regions = [RegionAnnotation("a", CoordinateSpan(parse_record_selector("#1"), 5101, 6000), label="Mitochondrial control region", mark="highlight", style=_SCENARIO_LABEL_STYLE)]
     if regions_of_b:
         regions.append(
-            RegionAnnotation("b", CoordinateSpan(parse_record_selector("#2"), 1, 400), label="Left end region of B", mark="highlight")
+            RegionAnnotation("b", CoordinateSpan(parse_record_selector("#2"), 1, 400), label="Left end region of B", mark="highlight", style=_SCENARIO_LABEL_STYLE)
         )
     return assemble_linear_diagram_from_records(
         [first, second],

@@ -262,6 +262,7 @@ def _prepare_linear_annotation_tracks(
     canvas_config: LinearCanvasConfigurator,
     profile: LinearRenderProfile,
     record_depth_tracks: list[list[DepthTrackSpec]] | None,
+    label_font_size: float,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[
     list[LinearTrackSlot] | None,
@@ -295,6 +296,7 @@ def _prepare_linear_annotation_tracks(
         bundle,
         canvas_config=canvas_config,
         auto_slot_ids=auto_slot_ids,
+        label_font_size=label_font_size,
     )
     return updated_slots, bundle, layouts, auto_slot_ids
 
@@ -306,9 +308,13 @@ def _layout_linear_annotation_tracks(
     *,
     canvas_config: LinearCanvasConfigurator,
     auto_slot_ids: frozenset[str],
+    label_font_size: float,
     sequence_widths: list[float] | None = None,
 ) -> tuple[list[LinearTrackSlot], dict[str, ResolvedAnnotationTrack]]:
-    """Resolve annotation lanes for the axis widths used by final rendering."""
+    """Resolve annotation lanes for the axis widths used by final rendering.
+
+    ``label_font_size`` is the feature label font size of the diagram, the size of a region label whose style
+    sets none."""
 
     if sequence_widths is not None and len(sequence_widths) != len(records):
         raise ValueError("sequence_widths must contain one width for every record")
@@ -352,6 +358,7 @@ def _layout_linear_annotation_tracks(
             params=params,
             available_extent_px=available,
             bp_per_px=bp_per_px,
+            label_font_size=label_font_size,
         )
         layouts[slot.id] = layout
         updated_slots.append(
@@ -371,6 +378,7 @@ def _add_linear_feature_underlays(
     auto_slot_ids: frozenset[str],
     *,
     canvas_config: LinearCanvasConfigurator,
+    label_font_size: float,
 ) -> tuple[
     list[LinearTrackSlot],
     ResolvedAnnotationBundle,
@@ -413,6 +421,7 @@ def _add_linear_feature_underlays(
         merged,
         canvas_config=canvas_config,
         auto_slot_ids=updated_auto_ids,
+        label_font_size=label_font_size,
     )
     return (
         updated_slots,
@@ -2044,6 +2053,12 @@ def assemble_linear_diagram(
             depth_track_tables=[[table] for table in depth_tables],
         )
     user_slot_mode = linear_track_slots is not None
+    # One feature label font size for the diagram; region labels without their own font take it too.
+    label_font_size = _resolve_linear_diagram_label_font_size(
+        records,
+        canvas_config=canvas_config,
+        profile=profile,
+    )
     (
         linear_track_slots,
         resolved_annotations,
@@ -2056,6 +2071,7 @@ def assemble_linear_diagram(
         canvas_config=canvas_config,
         profile=profile,
         record_depth_tracks=record_depth_tracks,
+        label_font_size=label_font_size,
         record_transforms=record_transforms,
     )
     if linear_track_slots is None:
@@ -2168,6 +2184,7 @@ def assemble_linear_diagram(
         annotation_track_layouts,
         auto_annotation_slot_ids,
         canvas_config=canvas_config,
+        label_font_size=label_font_size,
     )
     effective_linear_track_axis_index = (
         linear_track_axis_index + private_underlay_prefix_count
@@ -2497,6 +2514,7 @@ def assemble_linear_diagram(
                     resolved_annotations,
                     canvas_config=canvas_config,
                     auto_slot_ids=auto_annotation_slot_ids,
+                    label_font_size=label_font_size,
                     sequence_widths=final_sequence_widths,
                 )
             )
@@ -2866,11 +2884,6 @@ def assemble_linear_diagram(
             record_keys=record_keys,
         )
 
-    label_font_size = _resolve_linear_diagram_label_font_size(
-        records,
-        canvas_config=canvas_config,
-        profile=profile,
-    )
     # The API checks the drawn labels and offers the rows (LP-D48, LP-D52).
     label_fit = linear_label_fit(
         [(str(record.id), labels) for record, labels in zip(records, all_labels)], label_font_size
