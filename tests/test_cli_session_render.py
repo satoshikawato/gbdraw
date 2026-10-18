@@ -465,7 +465,7 @@ def test_a_fresh_cli_render_builds_no_derived_protein_entries(
     def not_built(*_args: Any, **_kwargs: Any) -> Any:
         raise AssertionError("the CLI built derived entries nobody reads")
 
-    monkeypatch.setattr(request_render_module, "serialize_orthogroups_payload", not_built)
+    monkeypatch.setattr(request_render_module, "derived_losatp_identity", not_built)
     session = json.loads(_fresh_protein_session(tmp_path, monkeypatch).read_text(encoding="utf-8"))
     assert session["losatCache"]["entries"]
     assert session["losatDerivedCache"] == {"entries": []}

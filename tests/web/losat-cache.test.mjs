@@ -745,7 +745,8 @@ assert.throws(
 // asynchronous I/O is controlled so an exception/cancel occurs while the loan
 // is active, rather than after the loop has already released its index.
 const {
-  LINEAR_COMPARISON_MODES, buildLosatJobSpecs, canonicalGridDisplayPairs, resolveLinearComparisonPlan
+  LINEAR_COMPARISON_MODES, buildLosatJobSpecs, canonicalGridDisplayPairs, numberLosatDisplayPairs,
+  resolveLinearComparisonPlan
 } = await import(pathToFileURL(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-comparisons.js')));
 const runSource = await readFile(join(repoRoot, 'gbdraw/web/js/app/run-analysis.js'), 'utf8');
 // Exercise the actual Generate merge boundary, including its user-facing error.
@@ -890,6 +891,7 @@ const exercisePairLoop = async ({failure = null, promote = false, mutateSource =
     buildCacheFilename() { return 'pair.tsv'; },
     pendingJobKeys: new Set(), losatJobs: [], losatProgram: {value: 'blastp'}, losat: {outfmt: '6'}
   };
+  context.pairNumbers = numberLosatDisplayPairs(context.preparedJobs.map(({spec}) => spec), [], null);
   const execute = new Function('context', `return (async () => {
     const {${Object.keys(context).join(',')}} = context;
     ${loopSource}
@@ -935,8 +937,10 @@ await exercisePairLoop(); // Retry must acquire a new index.
   });
   const context = {
     useProteinBlastp: false, useCollinearBlastp: true,
-    drawing: { linearRecordLayoutEnabled: { value: true }, linearRecordRows },
-    linearSeqs, canonicalGridDisplayPairs, comparisonResolution,
+    linearSeqs, comparisonResolution,
+    pairNumbers: numberLosatDisplayPairs(
+      specs, comparisonResolution.edges, canonicalGridDisplayPairs(linearSeqs, linearRecordRows)
+    ),
     preparedJobs: specs.map((spec) => ({
       spec, losatArgs: [], cacheMetadata: { search: `${spec.queryUid}->${spec.subjectUid}` }, batch: {}
     })),

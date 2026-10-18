@@ -617,6 +617,13 @@ included) is recomputed once from the raw cache.
 A zero-hit pair is accepted in either form, a header-only `canonicalTsv` or
 `rows: []`, but not both. Session version and the envelope schema are unchanged.
 
+OV-1063 (D-90): one Python owner (`gbdraw.analysis.protein_artifacts`) builds a
+derived entry's identity, key, provenance, and pair numbering for the Web
+lookup, the Web converter, and the Python API. The identity's `semantics` token
+is now `derived-option-conformance-v2`, so entries keyed by the earlier
+identities are cache misses and are recomputed; no reader or migrator reads
+them. Session version 47 and derived envelope schema 3 are unchanged.
+
 Generated protein FASTA, raw QUERY/SUBJECT fields, protein maps, and derived
 references use deterministic session-internal handles of the form
 `h_[a-z2-7]{26}`. Those handles bind a record instance to a complete CDS

@@ -738,8 +738,8 @@ def test_web_request_does_not_build_derived_losat_entries(
         raise AssertionError("a Web Generate must not build derived payloads")
 
     with monkeypatch.context() as patch:
-        patch.setattr(api_request_render, "serialize_orthogroups_payload", fail)
-        patch.setattr(api_request_render, "_comparison_frame_payload", fail)
+        patch.setattr(api_request_render, "derived_losatp_identity", fail)
+        patch.setattr(api_request_render, "derived_pair_payload", fail)
         reply = render("web")
     assert _reply_digest(reply) == _RECORDED_PROTEIN_REPLY_DIGESTS[mode]
 

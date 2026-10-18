@@ -3657,19 +3657,21 @@ def test_web_protein_cache_keys_validate_once_and_preserve_direction_and_options
 def test_web_losatp_pairwise_payload_uses_display_view_transform(
     tmp_path: Path,
     stage_web_losatp_transport,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     namespace = _load_web_helper_namespace()
-    # D-66: each pair's table is the text of the one canonical encoder.
+    # D-66: each pair's table is the text of the one canonical encoder, which
+    # the derived-entry owner (gbdraw.analysis.protein_artifacts) calls.
+    import gbdraw.session_request_codec as session_request_codec
     from gbdraw.session_request_codec import encode_canonical_table
 
-    assert namespace["encode_canonical_table"] is encode_canonical_table
     encoded_tables: list[str] = []
 
     def recording_encoder(frame: object, *, name: str = "table") -> str:
         encoded_tables.append(encode_canonical_table(frame, name=name))
         return encoded_tables[-1]
 
-    namespace["encode_canonical_table"] = recording_encoder
+    monkeypatch.setattr(session_request_codec, "encode_canonical_table", recording_encoder)
     hits = pd.DataFrame.from_records(
         [_hit_row("qa", "sb")],
         columns=COMPARISON_COLUMNS,

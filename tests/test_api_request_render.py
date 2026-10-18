@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 import inspect
 from pathlib import Path
 from types import SimpleNamespace
@@ -106,216 +107,237 @@ def _protein_record(record_id: str, protein_id: str) -> SeqRecord:
     return record
 
 
-def _derived_identity_test_context(
-    *,
-    options: LinearDiagramOptions | None = None,
-    source_mode: str = "collinear",
-    effective_unit_kinds: tuple[str, str] | None = None,
-) -> SimpleNamespace:
-    records = (_seqrecord("a"), _seqrecord("b"))
-    request = LinearDiagramRequest(
-        records=(
-            RecordInput(
-                source=InMemoryRecordSource(records[0]),
-                record_key="record-1",
-            ),
-            RecordInput(
-                source=InMemoryRecordSource(records[1]),
-                record_key="record-2",
-            ),
-        ),
-        options=options or LinearDiagramOptions(),
-    )
-    metadata = diagram_module.LinearDiagramMetadata(
-        protein_comparisons=(
-            DataFrame(columns=request_render_module.COMPARISON_COLUMNS),
-        ),
-        collinearity_result=(
-            SimpleNamespace(
-                blocks=(
-                    SimpleNamespace(
-                        anchors=(
-                            SimpleNamespace(
-                                query_unit_kind=effective_unit_kinds[0],
-                                subject_unit_kind=effective_unit_kinds[1],
-                            ),
-                        )
-                    ),
-                ),
-                unblocked_anchors=(),
+# OV-1063: one owner (gbdraw.analysis.protein_artifacts) computes the identity,
+# key, provenance and pair payloads of a derived LOSATP entry. The Web lookup
+# key (the `buildProteinLosatCacheKeys` reply), the Web converter and the
+# Python API give one entry for one run.
+
+
+def _load_web_helpers() -> dict[str, object]:
+    helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    namespace: dict[str, object] = {}
+    exec(helpers_js.split("`", 1)[1].rsplit("`", 1)[0], namespace)
+    return namespace
+
+
+def _grid_request(request: LinearDiagramRequest, rows: tuple[int, ...]) -> LinearDiagramRequest:
+    """The request with each record in one canonical grid cell (a CLI row grid)."""
+
+    columns: dict[int, int] = {}
+    placed = []
+    for record_input, row in zip(request.records, rows, strict=True):
+        columns[row] = columns.get(row, 0) + 1
+        placed.append(
+            replace(
+                record_input,
+                presentation=RecordPresentation(grid_row=row, grid_column=columns[row]),
             )
-            if effective_unit_kinds is not None
-            else None
-        ),
-    )
-    manifest = SimpleNamespace(
-        record_instances={
-            "record-1": {
-                "runtimeBindingHash": "sha256:runtime-1",
-                "displayBindingHash": "sha256:display-1",
-            },
-            "record-2": {
-                "runtimeBindingHash": "sha256:runtime-2",
-                "displayBindingHash": "sha256:display-2",
-            },
-        }
-    )
-    artifacts = request_render_module._PreparedLinearArtifacts(
-        cache=None,
-        extraction=SimpleNamespace(identity_manifest=manifest),
-        nucleotide_entries=(),
-        passthrough_derived_entries=(),
-        source_mode=source_mode,
-    )
-    raw_entries = (
-        {
-            "key": "visible",
-            "queryRecordInstanceKey": "record-1",
-            "subjectRecordInstanceKey": "record-2",
-        },
-        {
-            "key": "reverse-hidden",
-            "queryRecordInstanceKey": "record-2",
-            "subjectRecordInstanceKey": "record-1",
-        },
-        {
-            "key": "self-hidden",
-            "queryRecordInstanceKey": "record-1",
-            "subjectRecordInstanceKey": "record-1",
-        },
-    )
-    return SimpleNamespace(
-        records=records,
-        request=request,
-        metadata=metadata,
-        artifacts=artifacts,
-        raw_entries=raw_entries,
-    )
+        )
+    return replace(request, records=tuple(placed), layout=LinearMultiRecordOptions())
 
 
-def _derived_entry_for_params(
-    params: LosslessCollinearityParameters | None,
-) -> dict[str, object]:
-    context = _derived_identity_test_context(
-        options=LinearDiagramOptions(collinearity_params=params)
-    )
-    (entry,) = request_render_module._build_current_derived_entries(
-        context.metadata,
-        context.request,
-        context.records,
-        context.artifacts,
-        context.raw_entries,
-    )
-    return dict(entry)
+def _web_derived_settings(request: LinearDiagramRequest, mode: str, explicit: bool) -> dict[str, object]:
+    """The converter settings as the Web options form sends them (camelCase)."""
+
+    options = request.options
+    params = options.collinearity_params or LosslessCollinearityParameters()
+    return {
+        "mode": mode,
+        "maxHits": 5,
+        "bitscore": options.bitscore,
+        "evalue": options.evalue,
+        "identity": options.identity,
+        "alignmentLength": options.alignment_length,
+        "collinearMinAnchors": params.min_anchors,
+        "collinearMaxUnitGap": params.max_unit_gap,
+        "collinearUnitMode": str(options.collinearity_unit_mode),
+        "collinearColorMode": str(options.collinearity_color_mode),
+        "collinearAnchorMode": str(options.collinearity_anchor_mode),
+        "collinearMergeOrientation": str(params.merge_orientation),
+        "collinearMaxDiagonalDrift": params.max_diagonal_drift,
+        "collinearMaxConflictsInMergeGap": params.max_conflicts,
+        "collinearMaxParalogLinksPerOrthogroup": options.collinear_max_paralog_links_per_orthogroup,
+        "collinearSearchScope": str(options.collinearity_search_scope),
+        "collinearInferOrthogroups": options.collinear_infer_orthogroups,
+        "orthogroupMembershipMode": str(options.orthogroup_membership_mode),
+        "orthogroupMemberMaxHits": None,
+        "explicitDisplayPairs": explicit,
+    }
 
 
-def test_derived_identity_includes_hidden_reverse_and_self_raw_inputs(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context = _derived_identity_test_context()
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-
-    (entry,) = request_render_module._build_current_derived_entries(
-        context.metadata,
-        context.request,
-        context.records,
-        context.artifacts,
-        context.raw_entries,
-    )
-
-    identity = entry["payload"]["identity"]
-    assert identity["rawCacheKeys"] == [
-        "reverse-hidden",
-        "self-hidden",
-        "visible",
-    ]
-    assert identity["pairs"][0]["rawCacheKeys"] == ["visible"]
-
-    changed_entries = tuple(
-        {**raw_entry, "key": "reverse-recomputed"}
-        if raw_entry["key"] == "reverse-hidden"
-        else raw_entry
-        for raw_entry in context.raw_entries
-    )
-    (changed,) = request_render_module._build_current_derived_entries(
-        context.metadata,
-        context.request,
-        context.records,
-        context.artifacts,
-        changed_entries,
-    )
-    assert changed["key"] != entry["key"]
+_CONVERTER_ARGUMENTS = (
+    ("mode", "mode"), ("max_hits", "maxHits"), ("bitscore", "bitscore"), ("evalue", "evalue"),
+    ("identity", "identity"), ("alignment_length", "alignmentLength"),
+    ("collinear_min_anchors", "collinearMinAnchors"), ("collinear_max_unit_gap", "collinearMaxUnitGap"),
+    ("collinear_unit_mode", "collinearUnitMode"), ("collinear_color_mode", "collinearColorMode"),
+    ("collinear_anchor_mode", "collinearAnchorMode"),
+    ("collinear_max_diagonal_drift", "collinearMaxDiagonalDrift"),
+    ("collinear_max_conflicts_in_merge_gap", "collinearMaxConflictsInMergeGap"),
+    ("collinear_max_paralog_links_per_orthogroup", "collinearMaxParalogLinksPerOrthogroup"),
+    ("collinear_search_scope", "collinearSearchScope"),
+    ("orthogroup_membership_mode", "orthogroupMembershipMode"),
+    ("orthogroup_member_max_hits", "orthogroupMemberMaxHits"),
+    ("collinear_merge_orientation", "collinearMergeOrientation"),
+    ("collinear_infer_orthogroups", "collinearInferOrthogroups"),
+    ("explicit_display_pairs", "explicitDisplayPairs"),
+)
 
 
 @pytest.mark.parametrize(
-    "changed_params",
+    ("mode", "rows", "display"),
     (
-        LosslessCollinearityParameters(min_anchors=2),
-        LosslessCollinearityParameters(max_unit_gap=1),
-        LosslessCollinearityParameters(max_diagonal_drift=1),
-        LosslessCollinearityParameters(max_conflicts=0),
-        LosslessCollinearityParameters(merge_orientation="strand"),
+        # Similarity groups on the default chain: the edges number the pairs.
+        ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}),
+        # Collinear on a CLI row grid with search scope 'all': the grid
+        # displays (0, 1) and (0, 2), numbered in search order (OV-1069).
+        ("collinear", (1, 2, 2), {(0, 1): 0, (0, 2): 1}),
     ),
-    ids=(
-        "min-anchors",
-        "max-unit-gap",
-        "max-diagonal-drift",
-        "max-conflicts",
-        "merge-orientation",
-    ),
+    ids=("orthogroup", "collinear-grid"),
 )
-def test_derived_identity_changes_with_each_lossless_collinearity_parameter(
+def test_web_lookup_converter_and_api_build_one_derived_entry(
     monkeypatch: pytest.MonkeyPatch,
-    changed_params: LosslessCollinearityParameters,
+    tmp_path: Path,
+    stage_web_losatp_transport,
+    mode: str,
+    rows: tuple[int, ...] | None,
+    display: dict[tuple[int, int], int],
 ) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-    baseline = _derived_entry_for_params(LosslessCollinearityParameters())
-    unchanged = _derived_entry_for_params(LosslessCollinearityParameters())
-    changed = _derived_entry_for_params(changed_params)
+    import json
 
-    collinear = baseline["payload"]["identity"]["collinear"]
-    assert {
-        name: collinear[name]
-        for name in (
-            "minAnchors",
-            "maxGeneGap",
-            "maxDiagonalDrift",
-            "maxConflictsInMergeGap",
-            "mergeOrientation",
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from gbdraw.comparisons.losat_jobs import losatp_job_specs
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    request, _identities = _request(mode, tmp_path)
+    if rows is not None:
+        request = replace(
+            _grid_request(request, rows),
+            options=replace(request.options, collinearity_search_scope="all"),
         )
-    } == {
-        "minAnchors": 1,
-        "maxGeneGap": 0,
-        "maxDiagonalDrift": 0,
-        "maxConflictsInMergeGap": 1,
-        "mergeOrientation": "either",
+    source_mode = "orthogroup" if mode == "similarity_groups" else mode
+    explicit = rows is not None
+
+    # The Python API path.
+    built = build_request_diagram(request)
+    (api_entry,) = built.losat_derived_cache_entries
+    manifest = built.protein_identity_manifest
+    raw_by_pair = {
+        (entry["queryRecordInstanceKey"], entry["subjectRecordInstanceKey"]): entry
+        for entry in built.losat_cache_entries
     }
-    assert collinear["parameterIdentity"] == {
-        "model": "lossless",
-        "parameters": {
-            "minAnchors": 1,
-            "maxUnitGap": 0,
-            "maxDiagonalDrift": 0,
-            "maxConflicts": 1,
-            "mergeOrientation": "either",
-        },
-    }
-    assert unchanged["key"] == baseline["key"]
-    assert changed["key"] != baseline["key"]
+
+    # The Web inputs: the records as `extractCdsProteinFasta` reads them, and
+    # the searches in the order of `buildLosatJobSpecs` (the twin of losatp_job_specs).
+    helpers = _load_web_helpers()
+    web_records = []
+    for index, record_input in enumerate(request.records):
+        extracted = json.loads(str(helpers["extract_cds_protein_fasta"](
+            str(record_input.source.path), "genbank", None, None, None, "0", index, f"record-{index}",
+        )))
+        web_records.append({
+            "recordIndex": index,
+            "recordId": extracted["record_id"],
+            "recordInstanceKey": extracted["record_instance_key"],
+            "proteinMap": extracted["protein_map"],
+            "runtimeBindingHash": extracted["runtime_binding_hash"],
+            "displayBindingHash": extracted["display_binding_hash"],
+            "viewTransform": {"length": extracted["record_length"], "reverse": False},
+        })
+    specs = losatp_job_specs(
+        source_mode,
+        record_count=len(request.records),
+        pairs=tuple(display),
+        infer_orthogroups=request.options.collinear_infer_orthogroups,
+        search_scope=str(request.options.collinearity_search_scope),
+    )
+    searches = [raw_by_pair[(f"record-{query}", f"record-{subject}")] for query, subject in specs]
+    numbers = [
+        {"displayPair": (query, subject) in display, "pairIndex": display.get((query, subject), min(query, subject))}
+        for query, subject in specs
+    ]
+    settings = _web_derived_settings(request, source_mode, explicit)
+
+    # The Web lookup key: the derived key of the raw-key reply.
+    reply = json.loads(str(helpers["build_protein_losat_cache_keys_json"](
+        json.dumps(manifest),
+        json.dumps([
+            {
+                "queryRecordInstanceKey": entry["queryRecordInstanceKey"],
+                "subjectRecordInstanceKey": entry["subjectRecordInstanceKey"],
+                "expectedOptions": {"program": entry["program"], "outfmt": entry["outfmt"], "args": entry["args"]},
+            }
+            for entry in searches
+        ]),
+        json.dumps({
+            "settings": settings,
+            "records": [
+                {key: record[key] for key in ("recordIndex", "recordInstanceKey", "viewTransform")}
+                for record in web_records
+            ],
+            "pairs": numbers,
+        }),
+    )))
+    assert "error" not in reply, reply
+    assert reply["keys"] == [entry["key"] for entry in searches]
+
+    # The Web converter.
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, {
+        "records": [
+            {key: value for key, value in record.items() if key != "recordInstanceKey"}
+            for record in web_records
+        ],
+        "pairs": [
+            {
+                **number,
+                "queryIndex": query,
+                "subjectIndex": subject,
+                "cacheKey": entry["key"],
+                "blastText": entry["text"],
+            }
+            for (query, subject), number, entry in zip(specs, numbers, searches, strict=True)
+        ],
+    })
+    canonical_path = tmp_path / "canonical.json"
+    converted = json.loads(str(helpers["convert_losatp_blastp_pairs_to_genomic_payload"](
+        str(pairs_path),
+        str(raw_tsv_path),
+        canonical_resource_path=str(canonical_path),
+        **{argument: settings[name] for argument, name in _CONVERTER_ARGUMENTS},
+    )))
+    assert "error" not in converted, converted
+
+    api_payload = api_entry["payload"]
+    typed_name = "collinearityResult" if source_mode == "collinear" else "orthogroupResult"
+    assert reply["derived"]["key"] == converted["identityKey"] == api_entry["key"]
+    assert converted["identity"] == api_payload["identity"]
+    assert converted["provenance"] == api_payload["provenance"]
+    assert converted["pairs"] == api_payload["pairs"]
+    assert [(pair["pair_index"], pair["query_index"], pair["subject_index"]) for pair in api_payload["pairs"]] == [
+        (number, query, subject) for (query, subject), number in display.items()
+    ]
+    assert json.loads(canonical_path.read_text(encoding="utf-8")) == api_payload[typed_name]
+    assert set(api_payload) == {"identity", "provenance", "pairs", typed_name}
 
 
-def test_omitted_and_explicit_collinearity_defaults_share_derived_identity() -> None:
-    assert _derived_entry_for_params(None)["key"] == _derived_entry_for_params(
-        LosslessCollinearityParameters()
-    )["key"]
+def _derived_settings_key(options: LinearDiagramOptions, mode: str) -> str:
+    from gbdraw.analysis.protein_artifacts import (
+        DerivedLosatpPair,
+        DerivedLosatpRecord,
+        derived_losatp_cache_key,
+        derived_losatp_identity,
+    )
+
+    request = LinearDiagramRequest(
+        records=(_memory_input("a"), _memory_input("b")),
+        options=options,
+    )
+    settings = request_render_module._request_derived_settings(request, mode)
+    return derived_losatp_cache_key(derived_losatp_identity(
+        settings,
+        [DerivedLosatpRecord(index, f"runtime-{index}", f"display-{index}", 6, False) for index in (0, 1)],
+        [DerivedLosatpPair(0, 1, "raw-0-1", True, 0), DerivedLosatpPair(1, 0, "raw-1-0", False)],
+    ))
 
 
 @pytest.mark.parametrize(
@@ -328,212 +350,134 @@ def test_omitted_and_explicit_collinearity_defaults_share_derived_identity() -> 
                 losatp_member_max_hits=6,
             )
         ),
+        LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(min_anchors=2)),
+        LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(max_unit_gap=1)),
+        LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(max_diagonal_drift=1)),
+        LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(max_conflicts=0)),
+        LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(merge_orientation="strand")),
         LinearDiagramOptions(collinearity_unit_mode="cds"),
         LinearDiagramOptions(collinearity_anchor_mode="all"),
         LinearDiagramOptions(collinearity_search_scope="all"),
         LinearDiagramOptions(collinearity_color_mode="orientation_identity"),
         LinearDiagramOptions(collinear_max_paralog_links_per_orthogroup=3),
         LinearDiagramOptions(collinear_infer_orthogroups=False),
+        LinearDiagramOptions(bitscore=60),
+        LinearDiagramOptions(evalue=1e-6),
+        LinearDiagramOptions(identity=71),
+        LinearDiagramOptions(alignment_length=30),
     ),
     ids=(
-        "member-hits",
-        "unit-mode",
-        "anchor-mode",
-        "search-scope",
-        "color-mode",
-        "paralog-links",
-        "inference",
+        "member-hits", "min-anchors", "max-unit-gap", "max-diagonal-drift", "max-conflicts",
+        "merge-orientation", "unit-mode", "anchor-mode", "search-scope", "color-mode",
+        "paralog-links", "inference", "bitscore", "evalue", "identity", "alignment-length",
     ),
 )
-def test_collinear_derived_identity_changes_with_each_active_option(
-    monkeypatch: pytest.MonkeyPatch,
+def test_each_active_request_option_reaches_the_derived_identity(
     changed_options: LinearDiagramOptions,
 ) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-    baseline_context = _derived_identity_test_context()
-    changed_context = _derived_identity_test_context(options=changed_options)
-    (baseline,) = request_render_module._build_current_derived_entries(
-        baseline_context.metadata,
-        baseline_context.request,
-        baseline_context.records,
-        baseline_context.artifacts,
-        baseline_context.raw_entries,
-    )
-    (changed,) = request_render_module._build_current_derived_entries(
-        changed_context.metadata,
-        changed_context.request,
-        changed_context.records,
-        changed_context.artifacts,
-        changed_context.raw_entries,
+    assert _derived_settings_key(changed_options, "collinear") != _derived_settings_key(
+        LinearDiagramOptions(), "collinear"
     )
 
-    assert changed["key"] != baseline["key"]
 
-
-def test_derived_identity_excludes_inactive_and_render_only_options(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-
-    def build_entry(options: LinearDiagramOptions, source_mode: str) -> dict[str, object]:
-        context = _derived_identity_test_context(
-            options=options,
-            source_mode=source_mode,
-        )
-        (entry,) = request_render_module._build_current_derived_entries(
-            context.metadata,
-            context.request,
-            context.records,
-            context.artifacts,
-            context.raw_entries,
-        )
-        return dict(entry)
-
-    collinear = build_entry(LinearDiagramOptions(), "collinear")
-    collinear_irrelevant = build_entry(
+def test_inactive_and_render_only_request_options_keep_the_derived_identity() -> None:
+    collinear = _derived_settings_key(LinearDiagramOptions(), "collinear")
+    assert _derived_settings_key(LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters()), "collinear") == collinear
+    assert _derived_settings_key(
         LinearDiagramOptions(
-            losat_search=LosatSearchOptions(
-                program="losatp",
-                losatp_mode="collinear",
-                losatp_max_hits=99,
-            ),
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear", losatp_max_hits=99),
             pairwise_match_style="curve",
         ),
         "collinear",
-    )
-    assert collinear_irrelevant["key"] == collinear["key"]
-
-    orthogroup = build_entry(LinearDiagramOptions(), "orthogroup")
-    orthogroup_irrelevant = build_entry(
+    ) == collinear
+    orthogroup = _derived_settings_key(LinearDiagramOptions(), "orthogroup")
+    assert _derived_settings_key(
         LinearDiagramOptions(
-            losat_search=LosatSearchOptions(
-                program="losatp",
-                losatp_mode="similarity_groups",
-                losatp_max_hits=99,
-            ),
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="similarity_groups", losatp_max_hits=99),
             collinearity_unit_mode="cds",
             collinearity_anchor_mode="all",
             collinearity_search_scope="all",
         ),
         "orthogroup",
-    )
-    assert orthogroup_irrelevant["key"] == orthogroup["key"]
-    assert "collinear" not in orthogroup["payload"]["identity"]
+    ) == orthogroup
 
 
-def test_collinear_derived_provenance_records_requested_and_effective_units(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-    context = _derived_identity_test_context(
-        options=LinearDiagramOptions(collinearity_unit_mode="auto"),
-        effective_unit_kinds=("locus", "cds"),
-    )
-    (entry,) = request_render_module._build_current_derived_entries(
-        context.metadata,
-        context.request,
-        context.records,
-        context.artifacts,
-        context.raw_entries,
-    )
-
-    provenance = entry["payload"]["provenance"]
-    assert provenance["upstreamRawKeys"] == [
-        "reverse-hidden",
-        "self-hidden",
-        "visible",
-    ]
-    assert provenance["collinear"]["unitMode"] == {
-        "requested": "auto",
-        "effectiveKinds": ["cds", "locus"],
-    }
-
-@pytest.mark.parametrize("mode", ("orthogroup", "collinear"))
-def test_empty_api_derived_result_passes_current_session_validation(
-    mode: str,
-) -> None:
-    records = (
-        _protein_record("source-a", "protein-a"),
-        _protein_record("source-b", "protein-b"),
-    )
-    record_keys = ("record-1", "record-2")
-    extraction = extract_web_stable_cds_proteins(
-        records,
-        record_instance_keys=record_keys,
-        record_source_ids=tuple(record.id for record in records),
-    )
-    request = LinearDiagramRequest(
-        records=tuple(
-            RecordInput(
-                source=InMemoryRecordSource(record),
-                record_key=record_key,
-            )
-            for record, record_key in zip(records, record_keys, strict=True)
-        ),
-        options=LinearDiagramOptions(
-            losat_search=LosatSearchOptions(
-                program="losatp",
-                losatp_mode=(
-                    "similarity_groups" if mode == "orthogroup" else mode
-                ),
-            )
-        ),
-    )
-    metadata = diagram_module.LinearDiagramMetadata(
-        protein_comparisons=(
-            DataFrame(columns=request_render_module.COMPARISON_COLUMNS),
+def test_a_row_grid_request_reads_as_explicit_display_pairs() -> None:
+    def explicit(records: tuple[RecordInput, ...], mode: str = "collinear") -> bool:
+        request = LinearDiagramRequest(
+            records=records, options=LinearDiagramOptions(), layout=LinearMultiRecordOptions()
         )
-    )
-    artifacts = request_render_module._PreparedLinearArtifacts(
-        cache=None,
-        extraction=extraction,
-        nucleotide_entries=(),
-        passthrough_derived_entries=(),
-        source_mode=mode,
-    )
+        return request_render_module._request_derived_settings(request, mode).explicit_display_pairs
 
-    (entry,) = request_render_module._build_current_derived_entries(
-        metadata,
-        request,
-        records,
-        artifacts,
-        (),
+    cell = lambda row, column: RecordPresentation(grid_row=row, grid_column=column)  # noqa: E731
+    gridded = (_memory_input("a", presentation=cell(1, 1)), _memory_input("b", presentation=cell(2, 1)))
+    assert explicit(gridded) is True
+    assert explicit(gridded, "orthogroup") is False
+    rows_only = tuple(
+        _memory_input(name, presentation=RecordPresentation(grid_row=row)) for name, row in (("a", 1), ("b", 2))
     )
+    assert explicit(rows_only) is False
+    assert explicit((_memory_input("a"), _memory_input("b"))) is False
+    assert explicit(gridded[:1]) is False
+
+
+@pytest.mark.parametrize("mode", ("similarity_groups", "collinear"))
+def test_api_builds_no_derived_entry_without_one_raw_entry_per_search(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str
+) -> None:
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    request, _identities = _request(mode, tmp_path)
+    plan = plan_request(request)
+    built = build_request_diagram(request)
+    linear_artifacts = request_render_module._prepare_linear_artifacts(
+        plan.request, plan.records, CurrentRequestArtifacts(), plan.inputs, extraction=None,
+    )
+    raw = tuple(built.losat_cache_entries)
+
+    def build(raw_entries: tuple[object, ...]) -> tuple[object, ...]:
+        return request_render_module._build_current_derived_entries(
+            built.linear_metadata, plan.request, plan.records, linear_artifacts, raw_entries,
+        )
+
+    (entry,) = build(raw)
+    assert entry["key"] == built.losat_derived_cache_entries[0]["key"]
+    # A hidden search (the reverse direction) enters the identity by its raw key.
+    reverse = next(item for item in raw if (item["queryRecordInstanceKey"], item["subjectRecordInstanceKey"]) == ("record-1", "record-0"))
+    (changed,) = build(tuple({**item, "key": "rerun"} if item is reverse else item for item in raw))
+    assert changed["key"] != entry["key"]
+    # Without that raw entry, or with two for one search, the payload was not
+    # computed from these raw results: no entry.
+    assert build(tuple(item for item in raw if item is not reverse)) == ()
+    assert build((*raw, {**reverse, "key": "other"})) == ()
+
+
+@pytest.mark.parametrize("mode", ("similarity_groups", "collinear"))
+def test_a_zero_hit_api_entry_holds_header_only_tables(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str
+) -> None:
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from gbdraw.analysis.protein_colinearity import parse_losatp_outfmt6
+    from tests.test_render_stage_protein_analysis import _request
+
+    def no_hits(_query_fasta, _subject_fasta, **kwargs):
+        kwargs["raw_output_callback"]("")
+        kwargs["runtime_callback"]({"kind": "losat", "version": "test", "program": "blastp"})
+        return parse_losatp_outfmt6("")
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", no_hits)
+    request, _identities = _request(mode, tmp_path)
+    (entry,) = build_request_diagram(request).losat_derived_cache_entries
 
     # D-66: the pair holds the canonical table text, header only for zero hits.
-    assert "rows" not in entry["payload"]["pairs"][0]
-    assert entry["payload"]["pairs"][0]["canonicalTsv"] == (
-        "\t".join(request_render_module.COMPARISON_COLUMNS) + "\n"
-    )
-    assert entry["payload"]["pairs"][0]["tsv"] == ""
-    assert entry["payload"]["pairs"][0]["hit_count"] == 0
-    assert entry["payload"]["orthogroups"] == []
-    manifest = extraction.identity_manifest
-    assert manifest is not None
-    validate_current_session_artifacts(
-        {
-            "losatCache": {"entries": []},
-            "losatDerivedCache": {"entries": [entry]},
-            "proteinIdentityManifest": manifest.to_dict(),
-        }
-    )
-    artifacts = CurrentRequestArtifacts(
-        losat_derived_cache_entries=(entry,),
-        protein_identity_manifest=manifest.to_dict(),
-    )
-    assert artifacts.losat_derived_cache_entries == (entry,)
+    for pair in entry["payload"]["pairs"]:
+        assert "rows" not in pair
+        assert pair["canonicalTsv"].startswith("\t".join(request_render_module.COMPARISON_COLUMNS))
+        assert pair["canonicalTsv"].count("\n") == 1
+        assert pair["tsv"] == ""
+        assert pair["hit_count"] == 0
 
 
 def test_current_request_artifacts_validate_the_manifest_once_for_many_raw_entries(
@@ -2232,15 +2176,16 @@ def test_cli_reports_each_successful_annotation_warning_once(mode, tmp_path, cap
 # The CLI and the Python API never enter it.
 _RECORDED_DERIVED_ENTRIES = {
     # Recorded at the base (a86dd2d74) from the three-record protein fixture;
-    # re-recorded when each pair's `rows` became `canonicalTsv` (D-66). With that
-    # one field removed, the entries hash the same before and after.
+    # re-recorded when each pair's `rows` became `canonicalTsv` (D-66), and when
+    # one owner built the identity, key and pairs (OV-1063: semantics v2, the
+    # write-only `orthogroups` member gone).
     "similarity_groups": (
-        "f5aa5b79803bd4ca67e87922533997ce7e9321a366e8bd364a75035fd46dbb81",
-        "86e606aff4366006595716a696d28b2c7b9b69694d1dcd1bd0e0400b15acfbd1",
+        "e10ac6954efc9c1cd2f6ee093bfb81c3a607a4f14618ceb6f5ccb4a662436621",
+        "097d0b1c970c6b9e4a0787b8a6c5598667685b20835b5554685c7c334155946d",
     ),
     "collinear": (
-        "d131cef9967e00ad7e5969c9fa640c63a7d36c64a2b9f8545ec6a6b9e044d844",
-        "b27d9221aa7da7b6499f301446a9ed3d48d818251a6f75a242e6aabae0e15f79",
+        "80998de10bc21b4bda4d6fd070c65ca353227450bf7d97014379983ff602824a",
+        "6a59b52539839598e99b2421bb4f5ca8df5c7b0f7cee54cd131d52c22769d494",
     ),
 }
 
@@ -2252,6 +2197,64 @@ def _derived_entries_digest(entries: object) -> str:
     return hashlib.sha256(
         json.dumps([dict(entry) for entry in entries], sort_keys=True).encode()
     ).hexdigest()
+
+
+def _derived_identity_test_context(*, source_mode: str = "orthogroup") -> SimpleNamespace:
+    """Two records, one displayed table, a typed result and one raw entry per search."""
+
+    records = (_seqrecord("a"), _seqrecord("b"))
+    request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(source=InMemoryRecordSource(record), record_key=f"record-{index + 1}")
+            for index, record in enumerate(records)
+        ),
+        options=LinearDiagramOptions(),
+    )
+    metadata = diagram_module.LinearDiagramMetadata(
+        protein_comparisons=(DataFrame(columns=request_render_module.COMPARISON_COLUMNS),),
+        orthogroups=OrthogroupResult({}, {}),
+    )
+    manifest = SimpleNamespace(
+        record_instances={
+            f"record-{index}": {
+                "runtimeBindingHash": f"sha256:runtime-{index}",
+                "displayBindingHash": f"sha256:display-{index}",
+            }
+            for index in (1, 2)
+        }
+    )
+    artifacts = request_render_module._PreparedLinearArtifacts(
+        cache=None,
+        extraction=SimpleNamespace(identity_manifest=manifest),
+        nucleotide_entries=(),
+        passthrough_derived_entries=(),
+        source_mode=source_mode,
+    )
+    raw_entries = tuple(
+        {
+            "schema": 4,
+            "kind": "raw-losat",
+            "identityKind": "protein",
+            "idEncoding": "runtime-handle-v1",
+            "program": "blastp",
+            "text": "",
+            "key": f"raw-{query}-{subject}",
+            "queryProteinSetHash": "sha256:proteins",
+            "subjectProteinSetHash": "sha256:proteins",
+            "queryRuntimeBindingHash": f"sha256:runtime-{query}",
+            "subjectRuntimeBindingHash": f"sha256:runtime-{subject}",
+            "queryRecordInstanceKey": f"record-{query}",
+            "subjectRecordInstanceKey": f"record-{subject}",
+        }
+        for query, subject in ((1, 1), (1, 2), (2, 1), (2, 2))
+    )
+    return SimpleNamespace(
+        records=records,
+        request=request,
+        metadata=metadata,
+        artifacts=artifacts,
+        raw_entries=raw_entries,
+    )
 
 
 def _build_derived_entries(context: SimpleNamespace) -> tuple[object, ...]:
@@ -2284,8 +2287,8 @@ def test_derived_entries_are_built_outside_the_web_switch_only(
 
     with request_render_module._without_derived_losat_entries():
         with monkeypatch.context() as patch:
-            patch.setattr(request_render_module, "serialize_orthogroups_payload", fail)
-            patch.setattr(request_render_module, "_comparison_frame_payload", fail)
+            patch.setattr(request_render_module, "derived_losatp_identity", fail)
+            patch.setattr(request_render_module, "derived_pair_payload", fail)
             skipped = build_request_diagram(request)
 
     assert skipped.losat_derived_cache_entries == ()

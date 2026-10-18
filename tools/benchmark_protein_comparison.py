@@ -619,7 +619,8 @@ def path_browser_inputs(root, pc, cc, names=("sparse-2", "path-24", "gallery-col
             ids = [f"record_{i}" for i in range(count)]
             inventory = {"generator": name, "inputSha256": digest(json_bytes(canonical((pm, tables))))}
         records_payload = [{"recordIndex": i, "recordId": ids[i],
-                            "proteinCacheKey": f"{name}-record-{i}",
+                            "runtimeBindingHash": f"{name}-record-{i}",
+                            "displayBindingHash": f"{name}-record-{i}",
                             "proteinMap": {pid: asdict(p) for pid, p in pm.items() if p.record_index == i},
                             "viewTransform": {"length": lengths[i], "reverse": False}}
                            for i in range(len(ids))]
