@@ -545,3 +545,23 @@ test('independent Linear typography follows linked, imported, and History journe
     ruler: window.__GBDRAW_APP__.adv.ruler_label_font_size
   }))).toEqual({ linked: true, scale: 30, ruler: 30 });
 });
+
+// OV-1270 (PD-OI-081): a Record Labels size of zero or less is refused by its
+// setting, as the CLI and Python refuse it, and the typed value stays.
+test('a Record Labels style size of zero or less is refused by its setting', async ({ page }) => {
+  test.setTimeout(120000);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.getByTestId('linear-genbank-1').setInputFiles(genbankPath);
+  await page.getByLabel('Titles and Record Labels', { exact: true }).press('Enter');
+  await page.getByLabel('Subtitle style', { exact: true }).focus();
+  await page.keyboard.press('Space');
+  const size = page.getByLabel('Subtitle style size', { exact: true });
+  for (const typed of ['-1', '0']) {
+    await size.fill(typed);
+    await size.press('Tab');
+    const run = await runDiagram(page);
+    expect(run.errorSummary).toContain('Setting: objects.definition.linear.line_styles.subtitle.font_size. Use a finite value greater than zero.');
+    await expect(size).toHaveValue(typed);
+  }
+});

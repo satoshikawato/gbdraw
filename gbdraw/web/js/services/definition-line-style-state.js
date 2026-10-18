@@ -91,6 +91,18 @@ export const readDefinitionLineStyles = (source) => {
 };
 
 /**
+ * The setting path of the first stored font size the engine refuses (zero or
+ * less, or not a number), or ''. PD-OI-081 refuses these on every surface, so
+ * Generate names the setting instead of drawing it as Auto (OV-1270).
+ * @param {unknown} source
+ * @returns {string}
+ */
+export const refusedDefinitionLineFontSizePath = (source) => {
+  const leaf = readDefinitionLineStyles(source).leaves?.find((item) => item.at.endsWith('.font_size'));
+  return leaf ? `objects.definition.linear.line_styles${leaf.at}` : '';
+};
+
+/**
  * @param {unknown} source
  * @returns {Record<DefinitionLineStyleKind, DefinitionLineStyle>}
  */

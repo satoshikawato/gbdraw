@@ -107,7 +107,8 @@ import {
   serializeFeatureVisibilityRules
 } from '../services/feature-visibility.js';
 import {
-  normalizeDefinitionLineStyleState
+  normalizeDefinitionLineStyleState,
+  refusedDefinitionLineFontSizePath
 } from '../services/definition-line-style-state.js';
 import { requireLinearLabelVisibilityMode } from '../services/linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
@@ -3667,6 +3668,8 @@ export const createRunAnalysis = ({
           drawing.adv.linear_length_visibility,
           'Linear Length / Coordinates visibility'
         );
+        const refusedLineFontSize = refusedDefinitionLineFontSizePath(drawing.adv.linear_definition_line_styles);
+        if (refusedLineFontSize) throw diagnosticError('INPUT_INVALID', { configPath: refusedLineFontSize, reason: 'POSITIVE' });
         drawing.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(drawing.adv.linear_definition_line_styles);
         drawing.form.plot_title = normalizedPlotTitle;
         drawing.adv.plot_title_position = normalizedPlotTitlePosition;
