@@ -772,3 +772,59 @@ def test_circular_annotation_label_clears_the_axis_circle_on_its_way() -> None:
     # The letters keep label_offset beyond the axis paint, so they keep more than that from the tint.
     assert _nearest_distance(_label_ink_corners(text)) - axis_outer == pytest.approx(4.0, abs=1e-6)
     assert mark_gap > 4.0
+
+
+def _ink_radii(text) -> tuple[float, float]:
+    """How near the circle centre and how far from it a drawn label's painted letters come."""
+
+    corners = _label_ink_corners(text)
+    return _nearest_distance(corners), max(math.hypot(x, y) for x, y in corners)
+
+
+@pytest.mark.parametrize("side", ["outside", "inside"])
+@pytest.mark.parametrize("orientation", ["tangent", "radial", "horizontal"])
+@pytest.mark.parametrize("pinned", [False, True], ids=["auto", "pinned-annotations"])
+def test_circular_annotation_labels_keep_label_offset_from_automatic_rings(
+    side: str, orientation: str, pinned: bool
+) -> None:
+    style = RegionAnnotationStyle(label_font_size=14, label_offset=4.0, label_orientation=orientation)
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    record.features = [SeqFeature(FeatureLocation(100, 900, strand=1), type="CDS")]
+    regions = tuple(
+        RegionAnnotation(f"r{index}", CoordinateSpan(None, start, start + 900), label=text, mark="bracket", style=style)
+        for index, (start, text) in enumerate(((300, "Region gyp"), (3500, "rRNA genes"), (6500, "Wide region label")))
+    )
+    radius = ",r=0.8" if side == "inside" and pinned else ",r=1.2" if pinned else ""
+    rings_beyond = (f"gc:dinucleotide_content@side={side}", f"skew:dinucleotide_skew@side={side}")
+    annotations = f"regions:annotations@side={side},set_id=regions,w=20px{radius}"
+    # Slots are listed from the outermost ring inward, so the GC rings lie on the labels' side.
+    slots = (*rings_beyond, annotations) if side == "outside" else (annotations, *rings_beyond)
+    drawing = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            config_overrides={"labels.circular.scope": "none"},
+            tracks=CircularRequestTrackOptions(circular_track_slots=("features:features", *slots)),
+        ),
+    )
+
+    geometry = drawing._gbdraw_track_slot_geometry["records"][0]
+    rings = {
+        slot["slotId"]: (
+            float(slot["radiusFactor"]) * float(geometry["axisRadiusPx"]) - 0.5 * float(slot["widthPx"]),
+            float(slot["radiusFactor"]) * float(geometry["axisRadiusPx"]) + 0.5 * float(slot["widthPx"]),
+        )
+        for slot in geometry["slots"]
+        if slot["slotId"] in {"gc", "skew"}
+    }
+    root = ElementTree.fromstring(drawing.tostring())
+    texts = [element for element in root.iter() if element.tag.rsplit("}", 1)[-1] == "text" and element.text in {
+        region.label for region in regions
+    }]
+    assert len(texts) == len(regions)
+    for text in texts:
+        near, far = _ink_radii(text)
+        for slot_id, (inner, outer) in rings.items():
+            # The automatic rings keep out of the labels' room: label_offset beyond the letters (OV-1192).
+            gap = max(inner - far, near - outer)
+            assert gap >= 4.0 - 1e-6, (text.text, slot_id, gap)

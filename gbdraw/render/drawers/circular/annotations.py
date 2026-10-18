@@ -71,7 +71,8 @@ class CircularAnnotationLabel:
 
     ``x`` and ``y`` anchor the text around the circle centre, ``rotation`` turns
     it about that point (degrees, clockwise), and ``corners`` are the corners of
-    the box of its painted letters after the turn, in the same frame.
+    the box of its painted letters after the turn, in the same frame;
+    ``ink_radii`` are how near the centre and how far from it those letters come.
     """
 
     annotation_id: str
@@ -82,6 +83,8 @@ class CircularAnnotationLabel:
     font_size: float
     color: str
     corners: tuple[tuple[float, float], ...]
+    ink_radii: tuple[float, float]
+    label_offset: float
 
     @property
     def ink_bounds(self) -> Aabb:
@@ -237,6 +240,7 @@ def circular_annotation_labels(
                 continue
             radius = _label_radius(edge + gap if outward else edge - gap, outward, direction, offsets)
         x, y = radius * math.cos(theta), radius * math.sin(theta)
+        ink_radii = _ink_extent(radius, direction, offsets)
         left, right, top, bottom = offsets
         cos, sin = math.cos(turn), math.sin(turn)
         labels.append(
@@ -252,9 +256,44 @@ def circular_annotation_labels(
                     (x + cx * cos - cy * sin, y + cx * sin + cy * cos)
                     for cx, cy in ((left, top), (right, top), (right, bottom), (left, bottom))
                 ),
+                ink_radii=ink_radii,
+                label_offset=gap,
             )
         )
     return tuple(labels)
+
+
+def circular_annotation_label_room(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    record_length: int,
+    band: RadialBand,
+    side: str,
+    font_family: str,
+    params: AnnotationTrackParams,
+    rings: Sequence[RadialBand] = (),
+) -> float:
+    """How far the record's labels reach beyond the slot's ``band`` on their side (outward, or inward on an
+    ``inside`` slot), ``label_offset`` beyond the letters included, so the next ring keeps that gap (OV-1192)."""
+
+    outward = side != "inside"
+    room = 0.0
+    for label in circular_annotation_labels(
+        track,
+        record_index=record_index,
+        record_length=record_length,
+        inner_radius_px=band.inner_px,
+        outer_radius_px=band.outer_px,
+        side=side,
+        font_family=font_family,
+        params=params,
+        rings=rings,
+    ):
+        near, far = label.ink_radii
+        reach = far + label.label_offset - band.outer_px if outward else band.inner_px - near + label.label_offset
+        room = max(room, reach)
+    return room
 
 
 def circular_annotation_track_content(
@@ -438,4 +477,9 @@ def circular_annotation_track_content(
     return GroupContent.of(group, (*definitions.values(), *clip_paths))
 
 
-__all__ = ["CircularAnnotationLabel", "circular_annotation_labels", "circular_annotation_track_content"]
+__all__ = [
+    "CircularAnnotationLabel",
+    "circular_annotation_label_room",
+    "circular_annotation_labels",
+    "circular_annotation_track_content",
+]

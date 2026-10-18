@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from typing import Any, Collection, Literal, Mapping, Sequence, TypedDict
+from typing import Any, Callable, Collection, Literal, Mapping, Sequence, TypedDict
 
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasGeometry
@@ -58,6 +58,9 @@ PREFERRED_MIN_NUMERIC_WIDTH_FRACTION = 0.4
 PREFERRED_MIN_SKEW_WIDTH_FRACTION = 0.4
 
 PlacementPolicy = Literal["hard", "preferred", "auto", "overlay"]
+# How far an annotation slot's labels reach beyond its band, gap included: for the band, the axis, and the slot's
+# side and params.
+AnnotationLabelRoom = Callable[[RadialBand, CircularAxisLayout, str, Mapping[str, Any]], float]
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,8 @@ class _RadialSlotIntent:
     reserve: bool
     placement_policy: PlacementPolicy
     params: Mapping[str, Any]
+    # The room of an annotation slot's labels on their side, for a band (``AnnotationLabelRoom`` on this axis).
+    label_room: Callable[[RadialBand], float] | None = None
 
 
 def _cannot_fit_diagnostic(intent: "_RadialSlotIntent | None", window: Any = None) -> dict[str, object]:
@@ -507,6 +512,8 @@ def _slot_intents(
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     preferred_anchor_slot_ids: Collection[str] = (),
+    axis: CircularAxisLayout,
+    annotation_label_rooms: Mapping[str, AnnotationLabelRoom],
 ) -> list[_RadialSlotIntent]:
     axis_radius_px = float(geometry.radius)
     preferred_ids = {str(slot_id) for slot_id in preferred_anchor_slot_ids}
@@ -592,9 +599,18 @@ def _slot_intents(
                 reserve=slot.reserve,
                 placement_policy=placement_policy,
                 params=slot.params,
+                label_room=_bound_label_room(annotation_label_rooms.get(slot.id), axis, slot)
+                if slot.renderer == "annotations" and slot.side != "overlay"
+                else None,
             )
         )
     return intents
+
+
+def _bound_label_room(
+    room: AnnotationLabelRoom | None, axis: CircularAxisLayout, slot: NormalizedCircularTrackSlot
+) -> Callable[[RadialBand], float] | None:
+    return None if room is None else lambda band: room(band, axis, slot.side, slot.params)
 
 
 def _measure_radial_slot(
@@ -692,6 +708,14 @@ def _measure_radial_slot(
     band = _band_from_center_width(anchor_radius_px, resolved_width)
     draw_band = None if renderer == "spacer" else band
     reserved_band = band
+    if intent.label_room is not None:
+        # An annotation slot reserves its labels' room on their side, so other rings keep clear of the letters.
+        room = intent.label_room(band)
+        reserved_band = (
+            RadialBand(band.inner_px - room, band.outer_px)
+            if intent.side == "inside"
+            else RadialBand(band.inner_px, band.outer_px + room)
+        )
     if renderer == "depth" and depth_config is not None:
         reserved_band = _depth_reserved_band_for_draw_band(
             band,
@@ -1927,6 +1951,7 @@ class _RadialLayoutInputs(TypedDict):
     depth_config: DepthAxisStyle | None
     center_reserved_radius_explicit: bool
     keep_preset_lanes: bool
+    annotation_label_rooms: Mapping[str, AnnotationLabelRoom]
 
 
 def resolve_circular_radial_layout(
@@ -1940,8 +1965,14 @@ def resolve_circular_radial_layout(
     preferred_anchor_slot_ids: Collection[str] = (),
     depth_config: DepthAxisStyle | None = None,
     center_reserved_radius_explicit: bool = False,
+    annotation_label_rooms: Mapping[str, AnnotationLabelRoom] | None = None,
 ) -> CircularRadialLayout:
     """Resolve every slot band; a failed inside placement names its cause.
+
+    ``annotation_label_rooms`` measure, per annotation slot ID, the room its
+    labels need beyond its band; an annotation slot reserves that room, so
+    rings placed around it keep clear of the letters. Two pinned slots keep
+    their radii even when one reaches into the other's label room.
 
     When an inside slot cannot be placed but the same slots fit without the
     center reservation, the ``TRACK_LAYOUT`` diagnostic reason is
@@ -1959,6 +1990,7 @@ def resolve_circular_radial_layout(
         depth_config=depth_config,
         center_reserved_radius_explicit=center_reserved_radius_explicit,
         keep_preset_lanes=True,
+        annotation_label_rooms=annotation_label_rooms or {},
     )
     try:
         return _resolve_circular_radial_layout(
@@ -2000,6 +2032,7 @@ def _resolve_circular_radial_layout(
     depth_config: DepthAxisSource | None = None,
     center_reserved_radius_explicit: bool = False,
     keep_preset_lanes: bool = True,
+    annotation_label_rooms: Mapping[str, AnnotationLabelRoom],
 ) -> CircularRadialLayout:
     axis_radius_px = float(geometry.radius)
     axis = CircularAxisLayout(
@@ -2020,6 +2053,8 @@ def _resolve_circular_radial_layout(
         geometry=geometry,
         cfg=cfg,
         preferred_anchor_slot_ids=preferred_anchor_slot_ids,
+        axis=axis,
+        annotation_label_rooms=annotation_label_rooms,
     )
     resolved_by_index: dict[int, CircularResolvedSlot] = {}
     intent_by_index = {intent.slot_index: intent for intent in intents}
@@ -2032,6 +2067,8 @@ def _resolve_circular_radial_layout(
     # pinned row with an Auto width is placed with the inside rows around it; at
     # full width it bounds only the outside rows.
     anchored_blockers: list[tuple[str, RadialBand]] = []
+    # Pinned slots are checked against each other without annotation label rooms: explicit radii win.
+    pinned_occupied = list(occupied)
     for intent in intents:
         if intent.slot_index in resolved_by_index:
             continue
@@ -2052,8 +2089,9 @@ def _resolve_circular_radial_layout(
             if resolved.reserved_band_px is not None:
                 anchored_blockers.append((intent.slot_id, resolved.reserved_band_px))
             continue
-        if _slot_reserves(intent) and resolved.reserved_band_px is not None:
-            conflict = _reserved_overlap_any(resolved.reserved_band_px, occupied)
+        pinned_band = resolved.packing_band_px if intent.label_room is not None else resolved.reserved_band_px
+        if _slot_reserves(intent) and pinned_band is not None:
+            conflict = _reserved_overlap_any(pinned_band, pinned_occupied)
             if conflict is not None:
                 diagnostic = _cannot_fit_diagnostic(intent)
                 if conflict[0] == "definition":
@@ -2070,6 +2108,8 @@ def _resolve_circular_radial_layout(
                 else resolved.reserved_band_px
             )
             occupied.append((intent.slot_id, band))
+            if pinned_band is not None:
+                pinned_occupied.append((intent.slot_id, pinned_band))
 
     default_axis_gap_px = _default_spacing_px(axis_radius_px)
     outside_axis_gap_px = max(

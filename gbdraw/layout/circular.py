@@ -99,6 +99,12 @@ class CircularAxisLayout:
     radius_px: float
     stroke_width_px: float
 
+    @property
+    def paint_band_px(self) -> RadialBand:
+        """The ring the axis circle's stroke paints."""
+        half_stroke = 0.5 * float(self.stroke_width_px)
+        return RadialBand(float(self.radius_px) - half_stroke, float(self.radius_px) + half_stroke)
+
 
 @dataclass(frozen=True)
 class CircularTickLayout:
