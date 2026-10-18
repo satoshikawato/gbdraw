@@ -1551,6 +1551,20 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
     { role: 'query', available: true, reason: '' },
     { role: 'subject', available: true, reason: '' }
   ]);
+  // OV-1264: in a narrow popup a span line wraps between its parts, never
+  // inside a coordinate pair or between a length and its unit.
+  await matchDialog.evaluate((dialog) => { dialog.style.width = '240px'; });
+  const spanLines = matchDialog.locator('[data-match-span-line]');
+  await expect(spanLines).toHaveCount(2);
+  const unbroken = await spanLines.evaluateAll((lines) => lines.map((line) => ({
+    lines: Math.round(line.getBoundingClientRect().height / parseFloat(getComputedStyle(line).lineHeight)),
+    parts: [...line.querySelectorAll('.whitespace-nowrap')].map((part) => [part.textContent, part.getClientRects().length])
+  })));
+  expect(unbroken.some(({ lines }) => lines > 1)).toBe(true);
+  for (const { parts } of unbroken) {
+    expect(parts.map(([text]) => text)).toEqual([expect.stringMatching(/^\d+\.\.\d+$/), expect.stringMatching(/^[\d,]+ bp$/)]);
+    expect(parts.map(([, rects]) => rects)).toEqual([1, 1]);
+  }
   await matchDialog.getByRole('button', { name: 'Close match popup' }).click();
 
   // CO-05: a short row reports its line through the reader's diagnostic.

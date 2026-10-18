@@ -119,7 +119,8 @@ def assign_annotation_lanes(
             collisions = lane_bounds.get((annotation.record_index, lane), ())
             if overflow == "error" and any(_overlaps(bounds, occupied) for occupied in collisions):
                 raise ValidationError(
-                    f"Annotation {annotation.set_id}/{annotation.id} conflicts in explicit lane {lane}."
+                    f"Annotation {annotation.set_id}/{annotation.id} conflicts in explicit lane {lane}.",
+                    diagnostic={"code": "TRACK_INVALID", "reason": "ANNOTATION_LANE_CONFLICT"},
                 )
         else:
             lane = 0

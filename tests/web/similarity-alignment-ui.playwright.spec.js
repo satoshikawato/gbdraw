@@ -3160,13 +3160,61 @@ test('a mode switch and back under an open review leaves the view the review giv
   await page.setViewportSize({ width: 1400, height: 1000 });
   await roomSettled(page);
   expect(await previewView(page)).toEqual(shown);
-  // Circular has no Similarity tab, so the switch left the Editor on its Features tab.
-  const { tab } = await editorDrawer(page);
+  // Circular has no Similarity tab, so the switch left the Editor on its Features tab; the
+  // review gives back the tab it closed (OV-1255).
+  expect((await editorDrawer(page)).tab).toBe('features');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => previewView(page)).toEqual(before);
-  expect(await editorDrawer(page)).toEqual({ open: true, tab });
+  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
   expect(pageErrors).toEqual([]);
+});
+
+// OV-1089: the held view is the Linear review's. Escape while Circular is shown ends the
+// review there and gives back the Editor (PD-OI-039 rev 4), but not Linear's view from before
+// the review: the Circular figure keeps its own.
+test('a Linear review ended in Circular gives the Linear view back to no other figure (OV-1089)', async ({ page }) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  const { before, dialog } = await openReviewOverOwnView(page);
+  const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
+  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
+  await expect.poll(shownMode).toBe('circular');
+  // PD-OI-039 rev 4: the review stays open across the switch (Circular has no Result here, so
+  // its panel has no Result area to dock in), and Escape ends it there.
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDialogOpen)).toBe(true);
+  const circular = await previewView(page);
+  expect(circular).not.toEqual(before);
+  await page.locator('body').focus();
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDialogOpen)).toBe(false);
+  await expect(dialog).toHaveCount(0);
+  await roomSettled(page);
+  expect(await previewView(page)).toEqual(circular);
+  expect((await editorDrawer(page)).open).toBe(true);
+  expect(pageErrors).toEqual([]);
+});
+
+// OV-1255: Apply's new Result leaves the Similarity groups tab without groups for a while; the
+// review still gives back the tab it closed, as Cancel does.
+test('a successful Apply of a review opened from the Editor reopens the Similarity groups tab', async ({ page }, testInfo) => {
+  test.setTimeout(600000);
+  await loadAmbiguousSession(page, testInfo);
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  const drawer = page.locator('.right-drawer');
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
+  const reference = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
+    .find(({ anchor }) => anchor.recordKey === 'record_b').key);
+  await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
+  await drawer.getByRole('button', { name: 'Review alignment options…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
+  expect(await editorDrawer(page)).toEqual({ open: false, tab: 'orthogroups' });
+  await chooseUnresolved(page, dialog);
+  await applyReview(page, dialog);
+  await expect.poll(() => editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
 });
 
 // The majanivirus og_13 review opens with records that need a choice.

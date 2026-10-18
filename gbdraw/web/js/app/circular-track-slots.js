@@ -34,6 +34,7 @@ import {
   paramsKeptOnRendererChange,
   parseOptionalCircularScalar,
   parseOptionalPixel,
+  trackAddBlockReason,
   validateCustomTrackPlan
 } from '../services/track-slot-validation.js';
 import {
@@ -805,17 +806,18 @@ export const createCircularTrackSlotEditor = ({
     else delete slot.params.anchor_slot;
   };
 
-  /** @param {unknown} renderer */
-  const canAddCircularTrackRenderer = (renderer) => {
-    const drawing = state.drawings.circular;
+  /** Why Add track cannot add this renderer, or '' (OV-1254). @param {unknown} renderer */
+  const circularTrackAddBlockReason = (renderer) => {
     const normalizedRenderer = String(renderer || '').trim();
-    if (!UI_RENDERERS.includes(normalizedRenderer)) return false;
-    if (normalizedRenderer === 'annotations') return annotationSetIds(drawing).length > 0;
-    if (normalizedRenderer === 'depth') {
-      return circularAvailableDepthTrackCountForState(state) > 0;
-    }
-    return true;
+    return trackAddBlockReason(normalizedRenderer, {
+      supported: UI_RENDERERS.includes(normalizedRenderer),
+      annotationSetCount: annotationSetIds(state.drawings.circular).length,
+      depthSeriesCount: circularAvailableDepthTrackCountForState(state)
+    });
   };
+
+  /** @param {unknown} renderer */
+  const canAddCircularTrackRenderer = (renderer) => circularTrackAddBlockReason(renderer) === '';
 
   // Duplicate shares the availability of the other row controls (GX-01).
   /** @param {CircularTrackSlot | null | undefined} slot */
@@ -1584,29 +1586,18 @@ export const createCircularTrackSlotEditor = ({
     return `Hidden by ${controlLabel}.`;
   };
 
+  // A placement select (the Annotations row's) moves the row across the Axis
+  // boundary as the row menu does; writing its side alone made the boundary
+  // follow it and flipped the other rows (OV-1263).
   /** @param {CircularTrackSlot | null | undefined} slot @param {unknown} placement */
   const updateCircularTrackSlotPlacement = (slot, placement) => {
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!slot || !SUPPORTED_RENDERERS.includes(slot.renderer)) return;
-    if (normalizeOptionalText(placement) === null) {
-      slot.side = null;
-      if (slot.renderer === 'features') {
-        slot.params = cloneParams(slot.params);
-        delete slot.params.lane_direction;
-      }
-      return;
-    }
-    applyPlacementDefaults(slot, placement);
-    if (slot.renderer === 'annotations') {
-      slot.params = cloneParams(slot.params);
-      if (normalizePlacement(placement) === 'overlay') {
-        bindOnlyCircularAnnotationAnchor(slot);
-      } else {
-        OVERLAY_ANNOTATION_PARAMS.forEach((key) => { delete slot.params[key]; });
-      }
-    }
-    normalizeSlotsInPlace();
+    if (!slot || !SUPPORTED_RENDERERS.includes(slot.renderer) || normalizeOptionalText(placement) === null) return;
+    const index = drawing.adv.circular_track_slots.indexOf(slot);
+    if (index < 0 || effectiveSlotPlacement(slot, drawing.form.track_type) === normalizePlacement(placement)) return;
+    return moveCircularTrackSlotToPlacement(drawing, index, placement);
   };
 
   /** @param {CircularTrackSlot | null | undefined} slot @param {unknown} laneDirection */
@@ -1927,6 +1918,7 @@ export const createCircularTrackSlotEditor = ({
     setCircularDinucleotide,
     setCircularTrackSlotNt,
     canAddCircularTrackRenderer,
+    circularTrackAddBlockReason,
     canDuplicateCircularTrackSlot,
     circularTrackSlotEffectiveEnabled,
     circularTrackSlotHiddenBySuppress,

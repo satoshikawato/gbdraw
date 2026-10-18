@@ -54,9 +54,8 @@ import {
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import { applyCircularSuppressControlsToSlots } from './circular-track-slots.js';
 import {
-  applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
-  inferLegacyAxisIndexFromFeature
+  placeCircularTrackStack
 } from '../services/circular-track-slot-model.js';
 import {
   normalizeFileList,
@@ -107,7 +106,8 @@ import {
   serializeFeatureVisibilityRules
 } from '../services/feature-visibility.js';
 import {
-  normalizeDefinitionLineStyleState
+  normalizeDefinitionLineStyleState,
+  refusedDefinitionLineFontSizePath
 } from '../services/definition-line-style-state.js';
 import { requireLinearLabelVisibilityMode } from '../services/linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
@@ -3153,32 +3153,21 @@ export const createRunAnalysis = ({
           drawing.adv.circular_track_slots_axis_index,
           Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots.length : 0
         );
-        const circularTrackSlots = useCircularTrackSlots
-          ? applyCircularSuppressControlsToSlots(
-              applyCircularTrackOrderPlacements(
-                drawing.adv.circular_track_slots,
-                drawing.adv.nt,
-                drawing.form.track_type,
-                circularTrackAxisIndex
-              ),
-              drawing.form,
-              drawing.adv.nt
+        // The rows' sides follow one Axis index, and Generate stores that index (OV-1263).
+        const placedCircularTrackStack = useCircularTrackSlots
+          ? placeCircularTrackStack(
+              drawing.adv.circular_track_slots,
+              drawing.adv.nt,
+              drawing.form.track_type,
+              circularTrackAxisIndex
             )
+          : null;
+        const circularTrackSlots = placedCircularTrackStack
+          ? applyCircularSuppressControlsToSlots(placedCircularTrackStack.slots, drawing.form, drawing.adv.nt)
           : [];
-        if (useCircularTrackSlots) {
+        if (placedCircularTrackStack) {
           drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...circularTrackSlots);
-          const circularTrackOnAxisIndex = circularTrackSlots.findIndex((slot) => slot?.side === 'overlay');
-          const normalizedCircularTrackAxisIndex = circularTrackOnAxisIndex >= 0
-            ? circularTrackOnAxisIndex
-            : (
-                circularTrackAxisIndex === null
-                  ? inferLegacyAxisIndexFromFeature(circularTrackSlots, drawing.form.track_type)
-                  : circularTrackAxisIndex
-              );
-          drawing.adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
-            normalizedCircularTrackAxisIndex,
-            circularTrackSlots.length
-          );
+          drawing.adv.circular_track_slots_axis_index = placedCircularTrackStack.axisIndex;
         }
         // Numeric settings (plot title font size, center radius, label
         // spacing, multi-record ratios, ring geometry) are projected literally
@@ -3667,6 +3656,8 @@ export const createRunAnalysis = ({
           drawing.adv.linear_length_visibility,
           'Linear Length / Coordinates visibility'
         );
+        const refusedLineFontSize = refusedDefinitionLineFontSizePath(drawing.adv.linear_definition_line_styles);
+        if (refusedLineFontSize) throw diagnosticError('INPUT_INVALID', { configPath: refusedLineFontSize, reason: 'POSITIVE' });
         drawing.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(drawing.adv.linear_definition_line_styles);
         drawing.form.plot_title = normalizedPlotTitle;
         drawing.adv.plot_title_position = normalizedPlotTitlePosition;

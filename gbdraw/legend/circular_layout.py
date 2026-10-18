@@ -221,23 +221,27 @@ def _build_gradient_layout(
         + float(label_height)
         + (row_height * SINGLE_GRADIENT_TRAILING_GAP_RATIO)
     )
+    # The centered title can be wider than the bar; center the bar under it so
+    # that the whole block starts at x=0 and fits the reserved width.
+    width = max(bar_width, float(title_width))
+    bar_x = (width - bar_width) / 2.0
     single_entry = CircularSingleGradientEntryLayout(
         key=entry.key,
         properties=entry.properties,
-        title_x=bar_width / 2.0,
+        title_x=width / 2.0,
         title_y=0.0,
-        bar_x=0.0,
+        bar_x=bar_x,
         bar_y=bar_y,
-        min_label_x=0.0,
-        max_label_x=bar_width,
+        min_label_x=bar_x,
+        max_label_x=bar_x + bar_width,
         scale_label_y=scale_label_y,
     )
     return CircularGradientLegendLayout(
         compact=False,
-        width=max(bar_width, float(title_width)),
+        width=width,
         height=max(0.0, height),
         bar_width=bar_width,
-        bar_x=0.0,
+        bar_x=bar_x,
         min_label_text=min_gradient_label_text(entry.properties.get("min_value", 0)),
         scale_y=scale_label_y,
         compact_entries=(),

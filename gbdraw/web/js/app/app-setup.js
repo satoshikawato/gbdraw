@@ -1775,8 +1775,6 @@ export const createAppSetup = () => {
     releasePreviewViewport,
     heldPreviewViewport
   } = createPanZoom(state);
-  // The Session writer and the artifact checkpoint save the view the pan/zoom owner holds.
-  setHeldPreviewViewportReader(heldPreviewViewport);
   const { startResizing } = createSidebarResize(state);
 
   const { ruleMatchingPending } = state;
@@ -1894,7 +1892,19 @@ export const createAppSetup = () => {
   // of a drawn element) is bound to the same computed.
   // `figure` is the identity of the Result of the review's mode (`mode`) that the review last
   // showed its draft on.
-  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, popup: unknown, mode: 'circular' | 'linear', figure: string } | null} */ (null));
+  // `drawerTab` is the Editor tab the review closed: Apply's new Result can leave a tab
+  // unavailable for a while, which moves the shown tab (OV-1255).
+  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, drawerTab: string, popup: unknown, mode: 'circular' | 'linear', figure: string } | null} */ (null));
+  // The hold belongs to the review's mode (OV-1089): while the other mode is shown, its figure
+  // is not the held one, so the end of the review does not give it the held view and its
+  // captures keep its own view.
+  const similarityAlignmentHoldShown = () => {
+    const takeover = similarityAlignmentTakeover.value;
+    return !takeover || takeover.mode === (mode.value === 'circular' ? 'circular' : 'linear');
+  };
+  // The Session writer and the artifact checkpoint save the view the pan/zoom owner holds for
+  // the shown mode. The departing mode's slot is captured before a switch changes `mode`.
+  setHeldPreviewViewportReader(() => (similarityAlignmentHoldShown() ? heldPreviewViewport() : null));
   const previewPopupsHeldNow = computed(() => similarityAlignmentTakeover.value !== null);
   const previewPopupsHeld = () => previewPopupsHeldNow.value;
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
@@ -1971,8 +1981,11 @@ export const createAppSetup = () => {
     focusSearchToggle: () => /** @type {HTMLElement | null} */ (document.querySelector('[data-preview-search-toggle]'))?.focus()
   });
 
+  // A Result switch closes the feature popup through its close owner: the
+  // popup belongs to the Result it was opened on (OV-1269).
   watch(selectedResultIndex, () => {
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+    closeFeaturePopup();
   });
   watch(svgContent, () => {
     similarityAlignmentPorts.refreshCanvas();
@@ -5008,10 +5021,13 @@ export const createAppSetup = () => {
   const endSimilarityAlignmentTakeover = () => {
     const takeover = similarityAlignmentTakeover.value;
     if (!takeover || similarityAlignmentApplying) return;
+    // The held view is the review's mode's: ended while the other mode is shown, the review
+    // does not write it onto that mode's figure (OV-1089).
+    const restore = similarityAlignmentHoldShown();
     similarityAlignmentTakeover.value = null;
-    if (takeover.drawerOpen) rightDrawerActions.openRightDrawerTab(rightDrawerTab.value);
+    if (takeover.drawerOpen) rightDrawerActions.openRightDrawerTab(takeover.drawerTab);
     // The drawer narrows the visible frame, so the view returns after it.
-    releasePreviewViewport({ restore: true });
+    releasePreviewViewport({ restore });
     // Open in the feature search row retargeted the hidden popup for the fitted view.
     if (clickedFeature.value && clickedFeature.value !== takeover.popup) void featureActions.showFeaturePopupAtFeature();
   };
@@ -5022,7 +5038,7 @@ export const createAppSetup = () => {
     }
     // A review shown again while an Apply is pending keeps what the first one took.
     const reviewMode = mode.value === 'circular' ? 'circular' : 'linear';
-    similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, popup: clickedFeature.value,
+    similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, drawerTab: rightDrawerTab.value, popup: clickedFeature.value,
       mode: reviewMode, figure: reviewModeFigure(reviewMode) };
     // The figure is fitted again only while it shows the draft.
     holdPreviewViewport(similarityAlignmentActions.isDraftArtifactCurrent);
@@ -7003,7 +7019,7 @@ export const createAppSetup = () => {
     setCircularDinucleotide: circularTrackSlotEditor.setCircularDinucleotide,
     setCircularTrackSlotNt: circularTrackSlotEditor.setCircularTrackSlotNt,
     addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
-    canAddCircularTrackRenderer: circularTrackSlotEditor.canAddCircularTrackRenderer,
+    circularTrackAddBlockReason: circularTrackSlotEditor.circularTrackAddBlockReason,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
     canDuplicateCircularTrackSlot: circularTrackSlotEditor.canDuplicateCircularTrackSlot,
     removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
@@ -7059,7 +7075,7 @@ export const createAppSetup = () => {
     resetLinearTrackSlotsFromSimpleControls: linearTrackSlotEditor.resetLinearTrackSlotsFromSimpleControls,
     setLinearTrackSlotsEnabled: linearTrackSlotEditor.setLinearTrackSlotsEnabled,
     addLinearTrackSlot: linearTrackSlotEditor.addLinearTrackSlot,
-    canAddLinearTrackRenderer: linearTrackSlotEditor.canAddLinearTrackRenderer,
+    linearTrackAddBlockReason: linearTrackSlotEditor.linearTrackAddBlockReason,
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
     canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
     removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
