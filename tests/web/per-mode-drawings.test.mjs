@@ -20,7 +20,7 @@ const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/servic
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-settings.generated.js');
 const MODE_SCOPED_ROWS = MODE_SCOPED_SETTINGS.rows;
-const { DRAWING_SLICES } = await import('./helpers/drawing-state.mjs');
+const { DRAWING_SLICES, SLICE_READERS } = await import('./helpers/drawing-state.mjs');
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
 
 const MODES = ['circular', 'linear'];
@@ -199,14 +199,12 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
 // `install` and `reset` included, changes its own drawing and leaves the sha256
 // of the other drawing's captures as it was. The table names each writer that
 // a slice module exports, so a new writer fails until it is listed here; an
-// export that only reads or builds a value is listed apart and, given a
+// export that only reads or builds a value, and each slice's `capture`, is
+// listed in `SLICE_READERS` (shared with the R2 writer guard) and, given a
 // handle, changes neither drawing. Each writer runs after its slice holds the
 // seed, whose rows the writers address by identity (their own view's rows).
 const SLICE_DIRECTORY = new URL('../../gbdraw/web/js/services/drawing/', import.meta.url);
-const NOT_WRITERS = new Set([
-  'legendEntryKey', 'fillRecordOf', 'paintOf', 'captureLegendPaint', 'captureFeatureFills', 'featureEditsOf',
-  'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData'
-]);
+const NOT_WRITERS = new Set(SLICE_READERS.filter((name) => !name.includes('.')));
 const legendRow = (caption, originalCaption, color) => ({ caption, originalCaption, color, xPos: 0, yPos: 0, featureIds: [] });
 const SEEDS = {
   canvas: () => ({ canvasPadding: { top: 1, right: 2, bottom: 3, left: 4 } }),
@@ -360,13 +358,17 @@ const hashOf = (drawing) => createHash('sha256').update(JSON.stringify(Object.en
 test('every slice writer, install, and reset changes its own drawing only (M6 isolation, sha256 of the captures)', () => {
   assert.deepEqual(Object.keys(modules).sort(), Object.keys(DRAWING_SLICES).sort(), 'a module exports each slice');
   const listed = new Set();
+  const captures = [];
   for (const [name, module] of Object.entries(modules)) {
+    captures.push(`${Object.keys(module).find((key) => module[key] === DRAWING_SLICES[name])}.capture`);
     const functions = Object.entries(module).filter(([, value]) => typeof value === 'function').map(([key]) => key);
     assert.deepEqual(functions.filter((key) => !NOT_WRITERS.has(key)).sort(), Object.keys(WRITES[name]).sort(),
       `${name}: the table lists every writer the module exports`);
     functions.filter((key) => NOT_WRITERS.has(key)).forEach((key) => listed.add(key));
   }
   assert.deepEqual([...NOT_WRITERS].filter((key) => !listed.has(key)), [], 'each listed non-writer is a slice export');
+  assert.deepEqual(SLICE_READERS.filter((key) => key.includes('.')).sort(), captures.sort(),
+    'each slice\'s capture is listed under the name its module exports the slice by');
   const saved = Object.fromEntries(MODES.map((mode) => [mode, Object.fromEntries(Object.entries(DRAWING_SLICES)
     .map(([name, slice]) => [name, slice.capture(state.drawings[mode].slices[name])]))]));
   for (const mode of MODES) {
@@ -378,6 +380,7 @@ test('every slice writer, install, and reset changes its own drawing only (M6 is
       const writes = [
         ['install', (h) => slice.install(h, seed), (h) => slice.reset(h)],
         ['reset', (h) => slice.reset(h)],
+        ['capture', (h) => slice.capture(h), undefined, 'reads'],
         ...Object.entries(WRITES[name]).map(([writer, write]) => [writer, (h) => write(h, drawing)]),
         ...[...listed].filter((key) => Object.hasOwn(modules[name], key))
           // A builder of a value may reject a handle; it still writes nothing.

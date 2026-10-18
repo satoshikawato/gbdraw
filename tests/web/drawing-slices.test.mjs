@@ -4,7 +4,9 @@
 // while their controls keep writing them (plan-r2 §13 item 3). The guard
 // asserts, without a member or slice literal:
 //   1. each slice's view holds exactly its members, every drawing shows each
-//      slice's view, every editor and settings member is in exactly one slice;
+//      slice's view, and no member is in two slices (the drawing's members
+//      are the slices' by construction, helpers/drawing-state.mjs;
+//      tests/web/drawing-context.test.mjs checks them against state.js);
 //   2. a slice imports only leaves (R13 layer 0, or a module that imports
 //      nothing) and other slices;
 //   3. Load, a History restore, and Reset write a slice through one install:
@@ -18,7 +20,8 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { webLayerOf } from '../../tools/web-owner-graph-detectors.mjs';
-import { DRAWING_DRAFT_KEYS, DRAWING_EDITOR_KEYS, DRAWING_SLICES } from './helpers/drawing-state.mjs';
+import { DRAWING_EDITOR_KEYS, DRAWING_SLICES } from './helpers/drawing-state.mjs';
+import { memberWriteSites, templateMemberWrites } from './helpers/drawing-writes.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -52,7 +55,6 @@ const SLICE_DIRECTORY = join(JS, 'services', 'drawing');
 const FIXTURES = join(ROOT, 'tests', 'fixtures', 'sessions');
 const MODES = Object.keys(state.drawings);
 const SLICES = Object.entries(DRAWING_SLICES);
-const SLICED_KEYS = [...DRAWING_DRAFT_KEYS, ...DRAWING_EDITOR_KEYS];
 
 test('each slice view holds its members, every drawing shows it, and no member is in two slices', async () => {
   const sliceOf = new Map();
@@ -63,10 +65,8 @@ test('each slice view holds its members, every drawing shows it, and no member i
     for (const member of slice.members) {
       assert.ok(!sliceOf.has(member), `${member} is in ${sliceOf.get(member)} and ${name}`);
       sliceOf.set(member, name);
-      assert.ok(SLICED_KEYS.includes(member), `${name}.${member} is an editor or settings member`);
     }
   }
-  assert.deepEqual(SLICED_KEYS.filter((member) => !sliceOf.has(member)), [], 'every editor and settings member is in a slice');
   const modules = readdirSync(SLICE_DIRECTORY).filter((file) => file.endsWith('.js')).sort();
   const exported = await Promise.all(modules.map((file) => import(join(SLICE_DIRECTORY, file))));
   const descriptors = new Set(exported.flatMap((module) => Object.values(module)
@@ -127,108 +127,9 @@ test('install(capture(x)) gives back x, also after reset, on the Session 46 fixt
   }
 });
 
-// 4. Only a slice writes its members (R15; D-15-44: the rows of a list slice
-// are the slice's too). The type checker sees a write through a typed drawing,
-// whose views are read-only. This scan covers the untyped holders: in each
-// module outside services/drawing/, a write through `<drawing>.<member>` (an
-// assignment to it, to its `.value`, an element, or a field, a mutating
-// method, `++` or `--`, `delete`, or `Object.assign` into it) whose receiver
-// is a drawing by name (an identifier that ends in `drawing` or `Drawing`,
-// `activeDrawing()`, `drawings.<mode>`, or `drawings[<mode>]`), and any write
-// through a drawing's computed key (`drawing[key]`, which may name a member);
-// and in the template, a `v-model` (or `v-model:<arg>`) on a member or on a
-// row of a `v-for` over one (nested rows too), and a handler that writes
-// through either. A name that is a member's (a helper's parameter or a
-// destructured member) counts as the member. Blind spots: an alias under
-// another name (a member or a row held in a local, a slice handle held in a
-// local) and a drawing held under another name; the type checker sees those
-// where the holder is typed.
-// The settings are not scanned: their controls write them (plan-r2 §13 item 3).
-const MEMBERS = SLICES.flatMap(([, slice]) => slice.members).filter((member) => DRAWING_EDITOR_KEYS.includes(member));
-const MUTATING_METHODS = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin', 'add', 'delete', 'clear', 'set'];
-const ASSIGNMENT = /^\s*(?:(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])|\+\+|--)/;
-const PREFIX_WRITE = /(?:\bdelete|\+\+|--)\s*$/;
-const DRAWING_RECEIVER = /(?:[\w$]*[dD]rawing|activeDrawing\s*\(\s*\)|drawings\s*(?:\??\.\s*[\w$]+|\[[^\]]*\]))\s*\??$/;
-// Comments and quoted strings blanked, so offsets stay and prose is no writer.
-const codeOnly = (source) => source.replace(
-  /\/\*[\s\S]*?\*\/|\/\/[^\n]*|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, (text) => text.replace(/[^\n]/g, ' ')
-);
-// Whether the code after a name writes through it.
-const writesThrough = (after) => {
-  let rest = after;
-  let last = '';
-  for (let step; (step = rest.match(/^\s*(?:\??\.\s*([\w$]+)|\[[^\]]*\])/)); rest = rest.slice(step[0].length)) last = step[1] || '';
-  return (MUTATING_METHODS.includes(last) && /^\s*\(/.test(rest)) || ASSIGNMENT.test(rest);
-};
-const lineOf = (text, index) => text.slice(0, index).split('\n').length;
-
-export const memberWriteSites = (source, members = MEMBERS) => {
-  const code = codeOnly(source);
-  const sites = [...code.matchAll(new RegExp(`\\??\\.\\s*(${members.join('|')})\\b`, 'g'))].flatMap((match) => {
-    const before = code.slice(0, match.index);
-    if (!DRAWING_RECEIVER.test(before)) return [];
-    const receiver = before.match(/[\w$]+(?:\(\s*\))?(?:\??\.[\w$]+(?:\(\s*\))?|\[[^\]]*\])*\??$/)?.[0] ?? '';
-    const start = match.index - receiver.length;
-    const writes = writesThrough(code.slice(match.index + match[0].length))
-      || PREFIX_WRITE.test(code.slice(0, start))
-      || /\bObject\.assign\s*\(\s*$/.test(code.slice(0, start));
-    return writes ? [`${match[1]}:${lineOf(code, match.index)}`] : [];
-  });
-  // A drawing's computed key may name any member: a write through it counts.
-  const computedKey = [...code.matchAll(/(?:[\w$]*[dD]rawing|activeDrawing\s*\(\s*\))\s*(?:\?\.)?\s*\[[^\]]*\]/g)].flatMap((match) => {
-    const before = code.slice(0, match.index);
-    const writes = writesThrough(code.slice(match.index + match[0].length))
-      || PREFIX_WRITE.test(before) || /\bObject\.assign\s*\(\s*$/.test(before);
-    return writes ? [`[computed]:${lineOf(code, match.index)}`] : [];
-  });
-  // A name that is a member's (a parameter, a destructured member, an alias
-  // under its name): a write through it, `delete`, or `Object.assign` into it.
-  // A rebinding of the name is no write of a member.
-  const bare = [...code.matchAll(new RegExp(`(?<![\\w$.])(${members.join('|')})\\b`, 'g'))].flatMap((match) => {
-    const before = code.slice(0, match.index);
-    const after = code.slice(match.index + match[0].length);
-    const step = /^\s*(?:\??\.|\[)/.test(after);
-    const writes = (step && (writesThrough(after) || PREFIX_WRITE.test(before)))
-      || /\bObject\.assign\s*\(\s*$/.test(before);
-    return writes ? [`${match[1]}:${lineOf(code, match.index)}`] : [];
-  });
-  return [...sites, ...computedKey, ...bare].sort((left, right) => Number(left.split(':')[1]) - Number(right.split(':')[1]));
-};
-
-// The markup of the element whose start tag holds `index` (a void element: its tag).
-const elementRange = (html, index) => {
-  const start = html.lastIndexOf('<', index);
-  const name = html.slice(start + 1).match(/^[\w-]+/)[0];
-  if (/^(?:input|img|br|hr|meta|link)$/i.test(name)) return [start, html.indexOf('>', index) + 1];
-  const tag = new RegExp(`<(/?)${name}\\b`, 'g');
-  tag.lastIndex = start;
-  for (let depth = 0, found; (found = tag.exec(html));) {
-    if ((depth += found[1] ? -1 : 1) === 0) return [start, html.indexOf('>', found.index) + 1];
-  }
-  return [start, html.length];
-};
-const BINDINGS = /\s(v-model(?::[\w-]+)?(?:\.[\w.]+)?|@[\w.:-]+|v-on:[\w.:-]+)="([^"]*)"/g;
-
-export const templateMemberWrites = (html, members = MEMBERS) => {
-  /** Rows of a `v-for` over a member or over another such row, by the element range they name. */
-  const rows = [];
-  const named = (at) => new Set([...members, ...rows.filter(({ start, end }) => start <= at && at < end).map(({ name }) => name)]);
-  for (const match of html.matchAll(/v-for="\(?\s*([\w$]+)[^"]*?\s+(?:in|of)\s+([\w$]+)[^"]*"/g)) {
-    if (!named(match.index).has(match[2])) continue;
-    const [start, end] = elementRange(html, match.index);
-    rows.push({ name: match[1], start, end });
-  }
-  return [...html.matchAll(BINDINGS)].flatMap((match) => {
-    const [text, attribute, expression] = match;
-    const names = [...named(match.index)];
-    const code = codeOnly(expression);
-    const uses = [...code.matchAll(new RegExp(`(?<![\\w$.])(?:${names.join('|')})\\b`, 'g'))];
-    const writes = attribute.startsWith('v-model') ? uses.some((use) => use.index === code.search(/\S/))
-      : uses.some((use) => writesThrough(code.slice(use.index + use[0].length)));
-    return writes ? [`${text.trim()}:${lineOf(html, match.index)}`] : [];
-  });
-};
-
+// 4. Only a slice writes its members: the slice write scan
+// (helpers/drawing-writes.mjs) finds no write in any module outside
+// services/drawing/ or in the template, and flags planted ones.
 const webModules = (url = new URL('./', `file://${JS}/`), prefix = '') => readdirSync(url, { withFileTypes: true }).flatMap((entry) => {
   const path = `${prefix}${entry.name}`;
   if (entry.isDirectory()) return webModules(new URL(`${entry.name}/`, url), `${path}/`);
@@ -244,7 +145,7 @@ test('only a slice writes its members: no module and no template binding writes 
 });
 
 test('the slice write scan flags a planted write and leaves reads alone', () => {
-  const [member, other] = MEMBERS;
+  const [member, other] = DRAWING_EDITOR_KEYS;
   const writes = memberWriteSites([
     `const edit = (drawing, state, otherDrawing) => {`,
     `  drawing.${member}.push(row);`,
@@ -256,6 +157,8 @@ test('the slice write scan flags a planted write and leaves reads alone', () => 
     `  --state.activeDrawing().${other}.value.top;`,
     `  state.activeDrawing()[key].value = value;`,
     `  delete drawing[key];`,
+    `  state.drawings[state.mode.value][key].value = 1;`,
+    `  state.drawings.circular[side].top = 1;`,
     `};`,
     `const read = (drawing, saved) => {`,
     `  // drawing.${member}.push(row) in prose is no writer`,
@@ -264,7 +167,7 @@ test('the slice write scan flags a planted write and leaves reads alone', () => 
     `};`
   ].join('\n'), [member, other]);
   assert.deepEqual(writes, [`${member}:2`, `${member}:3`, `${member}:4`, `${other}:5`, `${other}:6`, `${member}:7`, `${other}:8`,
-    '[computed]:9', '[computed]:10']);
+    '[computed]:9', '[computed]:10', '[computed]:11', '[computed]:12']);
   // A helper that holds a member under its name (the M3.9 blind spot).
   assert.deepEqual(memberWriteSites([
     `const prune = ({ ${member} = {}, ${other} }, key) => {`,

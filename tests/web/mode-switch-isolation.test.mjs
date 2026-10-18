@@ -2,9 +2,11 @@
 // open items). Each mode has its own drawing, so the switch sets `mode`, swaps
 // the artifact slots, and writes no setting or edit:
 //   1. no watcher's source changes on a switch except the ones that watch the
-//      mode itself, and no watcher follows a drawing's palette or padding or an
-//      auxiliary table's file (M3.12: their edits are the writers' callers' and
-//      the file input's transition);
+//      mode itself (each drawing holds its own palette colors and padding
+//      here, so a watcher that followed the shown drawing's would see its
+//      source change), the watchers write no editor member (the slice write
+//      scan, helpers/drawing-writes.mjs), and no watcher imports an auxiliary
+//      table's file (M3.12: the file input's transition does);
 //   2. the transition writes no drawing member and does not commit a Result
 //      edit;
 //   3. the Depth panels read the drawing's series and never write them (OV-109).
@@ -24,7 +26,9 @@ globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw/web/js/app/watchers.js');
+const { memberWriteSites } = await import('./helpers/drawing-writes.mjs');
 const APP_SETUP = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+const WATCHERS = readFileSync(new URL('../../gbdraw/web/js/app/watchers.js', import.meta.url), 'utf8');
 
 // Any port of the watcher owner: a function that does nothing.
 const port = () => new Proxy({}, { get: () => () => {} });
@@ -74,9 +78,7 @@ const { resetModeTransientUi, importAuxiliaryTable } = setupWatchers({
 
 test('a mode switch changes the source of no drawing watcher', () => {
   assert.ok(watchers.length > 0, 'the watchers were registered');
-  // M3.12: no watcher follows a drawing's palette or padding; their edits
-  // apply through the writers' callers.
-  assert.deepEqual(watchers.filter(({ line }) => /\bdrawing\.(?:currentColors|canvasPadding)\b/.test(line)).map(({ line }) => line), []);
+  assert.deepEqual(memberWriteSites(WATCHERS), [], 'the watchers write no editor member of a drawing');
 
   // Distinct values in each drawing, so a watcher that followed the shown
   // drawing would see its source change.

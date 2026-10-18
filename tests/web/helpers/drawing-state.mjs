@@ -26,6 +26,22 @@ export const DRAWING_SLICES = Object.freeze({
   settings: SETTINGS_SLICE
 });
 
+// The calls of a slice module that only read or build a value: each slice's
+// `capture`, under the name its module exports the slice by, and the exports
+// listed. Given a handle, each changes neither drawing (the M6 table in
+// tests/web/per-mode-drawings.test.mjs, which also fails on an export it does
+// not list), so a call of one is no write of its caller (R2,
+// tests/web/feature-visibility-rule-writers.test.mjs). Any other call that
+// receives a handle writes.
+export const SLICE_READERS = Object.freeze([
+  ...Object.keys({
+    CANVAS_SLICE, GROUP_NAMES_SLICE, ANNOTATION_SETS_SLICE, VISIBILITY_RULES_SLICE, COLOR_RULES_SLICE, PALETTE_SLICE,
+    LABEL_TABLES_SLICE, FEATURE_EDITS_SLICE, PAINT_SLICE, SETTINGS_SLICE
+  }).map((slice) => `${slice}.capture`),
+  'legendEntryKey', 'fillRecordOf', 'paintOf', 'captureLegendPaint', 'captureFeatureFills', 'featureEditsOf',
+  'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData'
+]);
+
 // The members of a drawing, as its slices name them: the settings (the draft
 // keys) and the editor slices' members, in the order the drawing spreads them.
 export const DRAWING_DRAFT_KEYS = SETTINGS_SLICE.members;

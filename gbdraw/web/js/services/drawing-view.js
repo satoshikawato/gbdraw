@@ -38,7 +38,10 @@
  */
 
 /**
- * The settings of a drawing that no slice owns yet.
+ * The settings members of a drawing that typed modules read; the others are
+ * not typed here yet. The settings slice (drawing/settings.js) installs,
+ * captures, and resets all of its members; their controls write them
+ * (plan-r2 §13 item 3).
  * @typedef {object} DrawingSettings
  * @property {unknown} form
  * @property {unknown} adv

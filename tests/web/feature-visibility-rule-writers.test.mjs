@@ -22,14 +22,15 @@
 // only for its caller, so a call of a slice function that receives the handle
 // of a slice holding one of the names (`drawing.slices.<slice>`, or a name
 // equal to the handle's, such as a helper's `paint` parameter) is a write of
-// the function that calls it, except a slice's readers (`capture…` and
-// `…Of`) and the calls `READERS` lists. A handle held under another name is
-// not seen (the slices' own guard, tests/web/drawing-slices.test.mjs, covers
+// the function that calls it, except the slice readers that `SLICE_READERS`
+// lists by name (tests/web/helpers/drawing-state.mjs; the M6 table proves
+// each changes neither drawing) and the calls `READERS` lists. A handle held
+// under another name is not seen (the slices' own guard, tests/web/drawing-slices.test.mjs, covers
 // their members).
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
-import { DRAWING_SLICES } from './helpers/drawing-state.mjs';
+import { DRAWING_SLICES, SLICE_READERS } from './helpers/drawing-state.mjs';
 
 const WEB_ROOT = new URL('../../gbdraw/web/', import.meta.url);
 const NAME = 'featureVisibilityManualRules';
@@ -218,7 +219,6 @@ const enclosingFunction = (functions, index) => functions
 // member, a `delete`), or a call that receives it. A name assigned without a
 // member access is a local binding. A name in `refs` is a Vue ref: its value
 // is written through `.value`, and the ref itself only by a call.
-const SLICE_READERS = /(?:^|\.)capture[\w$]*$|[\w$]Of$/;
 export const writerSites = (source, names, refs = []) => {
   const code = codeOnly(source);
   let functions = null;
@@ -232,7 +232,7 @@ export const writerSites = (source, names, refs = []) => {
     `(?:\\bslices\\s*\\??\\.\\s*|(?<![\\w$.]))(?:${handles.join('|')})\\b(?!\\s*(?:\\??\\.|\\[|:))`, 'g'
   ))].flatMap(({ index }) => {
     const callee = enclosingCallee(code, index);
-    return callee && !KEYWORDS.has(callee) && !READERS.has(callee) && !SLICE_READERS.test(callee) ? [at(index)] : [];
+    return callee && !KEYWORDS.has(callee) && !READERS.has(callee) && !SLICE_READERS.includes(callee) ? [at(index)] : [];
   });
   return [...sliceCalls, ...[...code.matchAll(new RegExp(`(?<![\\w$])(?:${names.join('|')})\\b`, 'g'))].flatMap((match) => {
     const start = match.index;
@@ -387,14 +387,22 @@ test('the writer guard flags a direct edit and leaves reads alone', () => {
   assert.deepEqual(ruleWriters([
     'const restore = (drawing, rules) => {',
     `  SLICE.install(drawing.slices.${handle}, rules);`,
-    `  return SLICE.capture(drawing?.slices.${handle});`,
+    `  return VISIBILITY_RULES_SLICE.capture(drawing?.slices.${handle});`,
     '};',
     // A helper's parameter named as the handle is the handle.
     `const prune = (${handle}, key) => {`,
     `  if (Object.keys(SLICE.rulesOf(${handle})).length) removeRule(${handle}, key);`,
     `  return { ${handle}: ${handle}.rules, count: [${handle}].length };`,
     '};'
-  ].join('\n')), ['restore:2', 'prune:6']);
+  ].join('\n')), ['restore:2', 'prune:6', 'prune:6']);
+  // A slice reader is one by the shared list, not by its name.
+  assert.deepEqual(paintWriters([
+    'const clear = (drawing, paint) => {',
+    '  clearStrokesOf(drawing.slices.paint);',
+    '  captureAndClearStrokes(paint);',
+    '  return [paintOf(paint), PAINT_SLICE.capture(paint), captureLegendPaint(drawing.slices.paint)];',
+    '};'
+  ].join('\n')), ['clear:2', 'clear:3']);
   assert.match(ruleWriterProblems({ 'js/app/new-import.js': ['importRules:9'] }).join('\n'),
     /js\/app\/new-import\.js: importRules:9 writes featureVisibilityManualRules/);
   assert.match(ruleWriterProblems({}).join('\n'), /editFeatureVisibilityRules no longer writes/);
