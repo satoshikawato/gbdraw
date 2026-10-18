@@ -3173,7 +3173,7 @@ test('a mode switch and back under an open review leaves the view the review giv
 // OV-1089: the hold is the Linear review's. While Circular is shown, Escape leaves the review
 // pending and gives Circular neither the view from before it nor the Editor; back in Linear,
 // Escape ends it there and gives both back.
-test('a Linear review stays with Linear: Escape in Circular changes neither the Circular view nor the Editor', async ({ page }) => {
+test('a Linear review ended in Circular gives the Linear view back to no other figure (OV-1089)', async ({ page }) => {
   test.setTimeout(600000);
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
@@ -3181,22 +3181,18 @@ test('a Linear review stays with Linear: Escape in Circular changes neither the 
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
   await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('circular'));
   await expect.poll(shownMode).toBe('circular');
-  await expect(dialog).toHaveCount(0);
+  // PD-OI-039 rev 4: the review stays open across the switch (Circular has no Result here, so
+  // its panel has no Result area to dock in), and Escape ends it there.
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDialogOpen)).toBe(true);
   const circular = await previewView(page);
   expect(circular).not.toEqual(before);
+  await page.locator('body').focus();
   await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDialogOpen)).toBe(false);
+  await expect(dialog).toHaveCount(0);
   await roomSettled(page);
   expect(await previewView(page)).toEqual(circular);
-  expect((await editorDrawer(page)).open).toBe(false);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDialogOpen)).toBe(true);
-  await page.evaluate(() => window.__GBDRAW_APP__.setDiagramMode('linear'));
-  await expect.poll(shownMode).toBe('linear');
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole('heading', { name: 'Review alignment' }).focus();
-  await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
-  await expect.poll(() => previewView(page)).toEqual(before);
-  expect(await editorDrawer(page)).toEqual({ open: true, tab: 'orthogroups' });
+  expect((await editorDrawer(page)).open).toBe(true);
   expect(pageErrors).toEqual([]);
 });
 
