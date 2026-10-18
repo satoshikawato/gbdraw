@@ -1,4 +1,7 @@
 // @ts-check
+
+import { SESSION_VERSION, SUPPORTED_SESSION_VERSIONS } from '../contracts/schema.generated.js';
+
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame', 'convertStoredProteinResultFrames',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
@@ -128,6 +131,8 @@ const REASONS = Object.freeze({
   SELECT_RECORD_FOR_REGION: 'Choose a Record before setting a region on a multi-record file.',
   DISCOVERY_PENDING: 'Wait for the record list to finish loading, then retry.',
   SESSION_FORMAT: 'Choose a gbdraw Session file.',
+  SESSION_TOO_NEW: 'This Session was saved by a newer gbdraw.',
+  SESSION_VERSION_UNSUPPORTED: 'This gbdraw does not read this Session version.',
   SESSION_TOO_OLD: 'This Session was saved by gbdraw 0.11.0 or older, or by gbdraw.app before 0.12.0, and this version cannot read it. Generate the diagram again from its input files.',
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
   EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
@@ -285,6 +290,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [queryRecordIndex]
  * @property {number} [subjectRecordIndex]
  * @property {string} [labelFitCounts] Python's sentence of the label fit counts, shown as sent.
+ * @property {number} [sessionVersion] The version of a Session file this app does not read.
  */
 
 /**
@@ -537,6 +543,7 @@ const contextFor = (value) => {
   const caption = typeof value.featureCaption === 'string' ? value.featureCaption.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 80).trimEnd() : '';
   if (caption) context.featureCaption = caption;
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
+  if (Number.isSafeInteger(value.sessionVersion)) context.sessionVersion = value.sessionVersion;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
   // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
@@ -551,6 +558,29 @@ const contextFor = (value) => {
     }
   }
   return context;
+};
+
+// OV-1253: the CLI's words for a Session version this app does not read
+// (gbdraw/session_io.py `validate_session`), with the versions it reads.
+const SUPPORTED_SESSION_VERSION_TEXT = (() => {
+  /** @type {[number, number][]} */
+  const runs = [];
+  for (const version of SUPPORTED_SESSION_VERSIONS) {
+    const last = runs[runs.length - 1];
+    if (last && version === last[1] + 1) last[1] = version;
+    else runs.push([version, version]);
+  }
+  const words = runs.map(([first, end]) => (first === end ? String(first) : `${first}\u2013${end}`));
+  return words.length > 1 ? `${words.slice(0, -1).join(', ')}, and ${words[words.length - 1]}` : words.join('');
+})();
+/** @param {UserFacingContext} context */
+const sessionVersionGuidance = ({ reason, sessionVersion }) => {
+  if (sessionVersion === undefined) return '';
+  if (reason === 'SESSION_TOO_NEW') return `Session version ${sessionVersion} is newer than this gbdraw supports (${SESSION_VERSION}).`;
+  if (reason === 'SESSION_VERSION_UNSUPPORTED') {
+    return `Unsupported session version: ${sessionVersion}. This gbdraw reads Session versions ${SUPPORTED_SESSION_VERSION_TEXT}.`;
+  }
+  return '';
 };
 
 /** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
@@ -603,7 +633,8 @@ export const normalizeUserFacingError = (value, {
     /** @type {number} */ (featureCount) > 1 ? `Features affected: ${featureCount}.` : ''
   ].filter(Boolean).map((text) => ` ${text}`).join('');
   const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
-  const guidance = REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
+  const guidance = sessionVersionGuidance(result.context)
+    || REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
   const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
   // The context keeps Python's zero-based index; people count from one.
   const position = result.context.position !== undefined ? ` At character ${result.context.position + 1}.` : '';

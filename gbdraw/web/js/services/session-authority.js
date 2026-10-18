@@ -176,7 +176,12 @@ export const readSessionInput = (value) => {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_TOO_OLD' });
   }
   if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
-    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+    // OV-1253: a Session names its version, as the CLI does; another file keeps the generic refusal.
+    throw diagnosticError('INPUT_INVALID', value.format === 'gbdraw-session' ? {
+      field: 'schema',
+      reason: version > SESSION_VERSION ? 'SESSION_TOO_NEW' : 'SESSION_VERSION_UNSUPPORTED',
+      sessionVersion: version
+    } : { field: 'schema', reason: 'FIELDS' });
   }
   if (value.format !== 'gbdraw-session') throw formatInvalid();
   return /** @type {SessionEnvelope} */ (value); // `format` and `version` were checked above

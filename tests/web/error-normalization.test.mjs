@@ -32,6 +32,14 @@ const obsoleteSlots = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: '
   { operation: 'session-load' });
 assert.match(obsoleteSlots.summary, /Recreate Custom Track Slots with the current schema\..*Load a supported Session file/);
 assert.equal(operationErrorTitle('session-load'), 'Session not loaded');
+// OV-1253: a Session version this app does not read is named with the versions
+// it reads, in the CLI's words (gbdraw/session_io.py `validate_session`).
+const versionRefusal = (reason, sessionVersion) => normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation',
+  context: { field: 'schema', reason, sessionVersion } }, { operation: 'session-load' }).summary;
+assert.match(versionRefusal('SESSION_TOO_NEW', 49), /Session version 49 is newer than this gbdraw supports \(48\)\./);
+assert.match(versionRefusal('SESSION_VERSION_UNSUPPORTED', 34),
+  /Unsupported session version: 34\. This gbdraw reads Session versions 27–33, 39–42, 44, and 46–48\./);
+assert.doesNotMatch(versionRefusal('SESSION_TOO_NEW', 99), /Check the required fields/);
 // The LOSATP-mode reason is true with and without an Upload pair: a Selected
 // plan whose pairs all run LOSAT raises it too.
 const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage: 'request-validation',

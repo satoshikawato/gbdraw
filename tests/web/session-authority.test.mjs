@@ -513,9 +513,10 @@ assert.throws(() => validateSessionAuthorityInventory({
     assert.equal(refusal({ format: 'gbdraw-session', version }), format, `version ${JSON.stringify(version)}`);
   }
   for (const version of [49, 45, 43, 38, 34, 26, 0, -1]) {
-    // B51 (Q2): a Session older than 27 is refused as an old version.
-    assert.equal(refusal({ format: 'gbdraw-session', version }), version === 26 ? 'INPUT_INVALID:SESSION_TOO_OLD' : fields,
-      `version ${version}`);
+    // B51 (Q2): a Session older than 27 is refused as an old version; OV-1253:
+    // a newer one, and one in a gap, are refused as such.
+    const reason = version === 26 ? 'SESSION_TOO_OLD' : version > 48 ? 'SESSION_TOO_NEW' : 'SESSION_VERSION_UNSUPPORTED';
+    assert.equal(refusal({ format: 'gbdraw-session', version }), `INPUT_INVALID:${reason}`, `version ${version}`);
     // The version is read before the format.
     assert.equal(refusal({ format: 'other', version }), fields, `version ${version}, other format`);
   }
