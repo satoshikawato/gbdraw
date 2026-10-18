@@ -278,7 +278,7 @@ and [typed Python alignment](./REFERENCE/python-api.md#typed-linear-similarity-g
 
 ## Sessions, Run Info, and reproducing a figure
 
-gbdraw 0.14.0 saves Sessions as session version 47, with
+gbdraw 0.14.0 saves Sessions as session version 48, with
 canonical `renderRequest` schema 9. These format numbers are separate from
 the gbdraw version. A Session now keeps
 the settings and edits of Circular and Linear mode separately, and **Save
