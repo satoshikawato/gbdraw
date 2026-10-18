@@ -18,10 +18,7 @@ from .api.request_render import (
     diagram_request_output_paths,
     render_request,
 )
-from .api.session_compat import (
-    SessionCompatibleRequestRenderResult,
-    render_session_compatible_request,
-)
+from .api.session_compat import render_session_compatible_request
 from .features.overrides import log_feature_identity_notices
 from .api.record_planning import (
     depth_track_inputs_from_cli,
@@ -1719,7 +1716,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     if source_session is not None:
         # A Linear request renders to one session-compatible result, never a batch.
         render_result = cast(
-            SessionCompatibleRequestRenderResult,
+            RequestRenderResult,
             render_session_compatible_request(
                 canonical_request,
                 source_session,
@@ -1727,10 +1724,10 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             ),
         )
         legacy_protein_raw_candidates = (
-            render_result.legacy_protein_raw_candidates
+            render_result.migration_report.protein_raw_candidates
         )
         legacy_protein_derived_evidence = (
-            render_result.legacy_protein_derived_evidence
+            render_result.migration_report.protein_derived_evidence
         )
     else:
         try:

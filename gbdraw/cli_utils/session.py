@@ -49,8 +49,10 @@ from gbdraw.session_migration import (
 )
 
 if TYPE_CHECKING:
-    from gbdraw.api.request_render import CircularBatchRenderResult
-    from gbdraw.api.session_compat import SessionCompatibleRequestRenderResult
+    from gbdraw.api.request_render import (
+        CircularBatchRenderResult,
+        RequestRenderResult,
+    )
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
     from gbdraw.session import SessionDocument
@@ -647,7 +649,7 @@ def _session_sidecar_path(
 
 def _rendered_drawing_build(
     plan: Any,
-    rendered: SessionCompatibleRequestRenderResult | CircularBatchRenderResult,
+    rendered: RequestRenderResult | CircularBatchRenderResult,
     *,
     source_version: int,
 ) -> tuple[Any, dict[str, Any] | None]:

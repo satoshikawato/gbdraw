@@ -514,9 +514,9 @@ _PROTEIN_ARTIFACTS = ("losatCache", "losatDerivedCache", "proteinIdentityManifes
 
 
 def _circular_batch_session_with_protein_artifacts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, raw_entries: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, raw_entries: bool, batch: bool = True
 ) -> Path:
-    """A Circular batch Session over the records of a protein Session, holding its artifacts.
+    """A Circular batch Session (``batch=False``: one Circular diagram) over the records of a protein Session, holding its artifacts.
 
     A Session keeps its LOSATP artifacts when the drawing changes mode; the
     raw entries, the Python API's derived entries and the manifest are real.
@@ -528,9 +528,12 @@ def _circular_batch_session_with_protein_artifacts(
         RecordInput(source=GenBankInputSource(tmp_path / f"rec{index}.gbk"))
         for index in range(3)
     )
-    session = build_session_document(
+    request: CircularDiagramRequest | CircularBatchRequest = (
         CircularBatchRequest(records=records, output_policy=CircularBatchOutputPolicy(output_prefix="batch"))
-    ).to_dict()
+        if batch
+        else CircularDiagramRequest(records=records[:1])
+    )
+    session = build_session_document(request).to_dict()
     for key in _PROTEIN_ARTIFACTS:
         session[key] = linear[key]
     if not raw_entries:
@@ -610,18 +613,41 @@ def test_a_circular_replay_keeps_the_legacy_protein_evidence_of_its_session(
     assert json.dumps(resaved, sort_keys=True) == json.dumps(saved, sort_keys=True)
 
 
-def test_a_circular_batch_replay_drops_legacy_evidence_that_current_derived_entries_supersede(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("batch", [False, True], ids=["one-diagram", "batch"])
+def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_entries_supersede(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, batch: bool
 ) -> None:
-    """OV-1119: a batch follows the one-diagram rule for legacy derived evidence."""
+    """OV-1119: both shapes drop superseded derived evidence and keep the raw candidates."""
 
-    source = _circular_batch_session_with_protein_artifacts(tmp_path, monkeypatch, raw_entries=True)
+    source = _circular_batch_session_with_protein_artifacts(tmp_path, monkeypatch, raw_entries=True, batch=batch)
     session = json.loads(source.read_text(encoding="utf-8"))
     assert session["losatDerivedCache"]["entries"]
     legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
-    session["legacyArtifacts"] = {"proteinDerivedEvidence": {"schema": 1, "entries": [legacy_derived]}}
+    legacy_raw = {"schema": 2, "kind": "raw-losat", "key": "legacy-key", "text": "p_r_old\tp_r_other\n", "program": "blastp"}
+    # A writer that quarantined both kinds; read them back in the on-disk shape.
+    legacy_path = tmp_path / "legacy.gbdraw-session.json"
+    legacy_genome = tmp_path / "legacy-genome.gb"
+    SeqIO.write(
+        [SeqRecord(Seq("ATGCGCAT" * 50), id="legacy1", annotations={"molecule_type": "DNA"})],
+        legacy_genome,
+        "genbank",
+    )
+    save_session_document(
+        legacy_path,
+        drawings=[
+            SessionDrawingSpec(
+                CircularDiagramRequest(
+                    records=(RecordInput(source=GenBankInputSource(legacy_genome), cardinality=RecordCardinality.FIRST),)
+                ),
+                state={"losatCache": {"entries": [legacy_raw]}, "losatDerivedCache": {"entries": [legacy_derived]}},
+            )
+        ],
+    )
+    legacy = load_session_document(legacy_path).to_dict()["legacyArtifacts"]
+    session["legacyArtifacts"] = legacy
     write_session_json(source, session)
     replayed = tmp_path / "replayed.gbdraw-session.json"
     _cli(monkeypatch, "render", "--session", str(source), "-o", str(tmp_path / "out" / "replayed"),
          "-f", "svg", "--session_output", str(replayed))
-    assert "legacyArtifacts" not in load_session_document(replayed).to_dict()
+    resaved = load_session_document(replayed).to_dict().get("legacyArtifacts")
+    assert resaved is not None and set(resaved) == {"proteinRawCandidates"}
