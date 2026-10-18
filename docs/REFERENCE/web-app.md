@@ -171,6 +171,8 @@ settings change. Other manual positions have no new regeneration guarantee.
 generation keeps the last successful Result. While a diagram is generating,
 **Undo** and **Redo** and their keyboard shortcuts are unavailable, and the
 header names the reason; settings edits stay available and are recorded.
+Undo history has a memory limit. When a large diagram reaches it, the oldest
+steps are discarded and a notice says so; the step just taken stays undoable.
 
 **Save Session** saves the current Result and supported settings draft together.
 **Load Session** displays that saved Result without applying a newer draft.

@@ -303,6 +303,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The ids of the files bound now, from the snapshot service.
  * @property {number} [maxActions] Undo entries kept.
  * @property {number} [maxBytes] Retained bytes allowed before the oldest entries drop.
+ * @property {(message: string) => void} [onHistoryLimit]
+ *   Told when the limits dropped older steps, with the sentence that says so.
  * @property {<T>(value: T) => { value: T }} [makeRef]
  *   Creates a reactive box (Vue `ref` in the app); a plain box by default.
  * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
@@ -326,6 +328,7 @@ export const createHistoryManager = ({
   collectCurrentFileIds = null,
   maxActions = DEFAULT_MAX_ACTIONS,
   maxBytes = DEFAULT_MAX_BYTES,
+  onHistoryLimit = () => {},
   makeRef = makeBox,
   mutationAvailability = () => null,
   stepAvailability = () => null
@@ -355,7 +358,6 @@ export const createHistoryManager = ({
   // open intent before `restoring` included (E1: the mode switch waits for them).
   const traversals = makeRef(0);
   const capturing = makeRef(false);
-  const historyLimitMessage = makeRef('');
   const diagnostics = {
     intentBuilds: 0,
     artifactCheckpointBuilds: 0,
@@ -681,22 +683,28 @@ export const createHistoryManager = ({
     return (await captureIntent()).signature !== open.beforeSignature;
   };
 
-  const enforceLimits = () => {
+  // OV-1260: the step just recorded, undone, or redone (`kept`) stays even
+  // when it alone is over the byte limit; the oldest other steps drop first.
+  /** @param {HistoryEntry | null} [kept] */
+  const enforceLimits = (kept = null) => {
     let evicted = false;
     while (undoStack.length > maxActions) {
       removeEntryBytes(undoStack.shift());
       evicted = true;
     }
 
-    while (undoStack.length > 0 && totalEntryBytes + retainedFileBytes() > maxBytes) {
+    const overLimit = () => totalEntryBytes + retainedFileBytes() > maxBytes;
+    while (undoStack.length > 0 && undoStack[0] !== kept && overLimit()) {
       removeEntryBytes(undoStack.shift());
       evicted = true;
     }
-    if (totalEntryBytes + retainedFileBytes() > maxBytes) clearRedo();
+    if (overLimit()) {
+      const keptRedo = redoStack.filter((entry) => entry === kept);
+      redoStack.filter((entry) => entry !== kept).forEach(removeEntryBytes);
+      redoStack.splice(0, redoStack.length, ...keptRedo);
+    }
 
-    historyLimitMessage.value = evicted
-      ? 'Older undo history was discarded to stay within the history limit.'
-      : '';
+    if (evicted) onHistoryLimit('Older undo history was discarded to stay within the history limit.');
     releaseUnreferencedFiles();
   };
 
@@ -848,7 +856,7 @@ export const createHistoryManager = ({
       bytes: entry.byteSize
     });
     clearRedo();
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     settingsStepListener(entry.changes);
     return true;
@@ -1074,7 +1082,7 @@ export const createHistoryManager = ({
       bytes: entry.byteSize
     });
     clearRedo();
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     notifyCheckpointCapture(options, 'after-end');
     settingsStepListener(buildIntentPatch(transaction.beforeIntent ?? {}, intent.intent));
@@ -1146,7 +1154,7 @@ export const createHistoryManager = ({
     entry.fileIds = new Set([...entry.before.fileIds, ...after.fileIds]);
     addEntryBytes(entry);
     setCurrentCheckpoint(after);
-    enforceLimits();
+    enforceLimits(entry);
     return true;
   };
 
@@ -1410,7 +1418,7 @@ export const createHistoryManager = ({
     });
     pushUndoEntry(entry);
     clearRedo();
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     emitHistoryDiagnostic({
       type: 'commit',
@@ -1580,7 +1588,7 @@ export const createHistoryManager = ({
     await refreshCurrentIntent();
     pushUndoEntry(command);
     clearRedo();
-    enforceLimits();
+    enforceLimits(command);
     touch();
     return true;
   };
@@ -1699,7 +1707,7 @@ export const createHistoryManager = ({
     }
     undoStack.pop();
     redoStack.push(entry);
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     return true;
   });
@@ -1727,7 +1735,7 @@ export const createHistoryManager = ({
     }
     redoStack.pop();
     undoStack.push(entry);
-    enforceLimits();
+    enforceLimits(entry);
     touch();
     return true;
   });
@@ -1775,7 +1783,6 @@ export const createHistoryManager = ({
     keepRedrawnResult,
     adoptDrawnWrite,
     intentStepSerial: () => intentStepSerial,
-    historyLimitMessage,
     traversalPending: () => traversals.value > 0,
     initializeIntentBaseline,
     markSavePoint,

@@ -24,7 +24,9 @@ const artifactFor = (id, { fingerprinted = true, compactSignature = 's' } = {}) 
 // `services/history-snapshot.js` returns one.
 const createGenerateHistory = ({ maxBytes = Number.MAX_SAFE_INTEGER, fingerprinted = true } = {}) => {
   let artifact = artifactFor('loaded', { fingerprinted });
+  const limitMessages = [];
   const history = createHistoryManager({
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: async () => ({}),
     applyIntent: async () => {},
     buildCheckpoint: () => {
@@ -52,7 +54,8 @@ const createGenerateHistory = ({ maxBytes = Number.MAX_SAFE_INTEGER, fingerprint
     editArtifact: (compactSignature) => {
       artifact = { ...artifact, identity: { ...artifact.identity, compactSignature } };
     },
-    retainedBytes: () => history.getDiagnostics().retainedEntryBytes
+    retainedBytes: () => history.getDiagnostics().retainedEntryBytes,
+    limitMessage: () => limitMessages.at(-1) ?? ''
   };
 };
 
@@ -68,7 +71,7 @@ const undoAll = async (history) => {
 };
 
 test('six Generates keep every entry when the unique artifacts fit the limit', async () => {
-  const { history, generate, currentId, retainedBytes } = createGenerateHistory({
+  const { history, generate, currentId, retainedBytes, limitMessage } = createGenerateHistory({
     maxBytes: 7500
   });
   await history.initializeIntentBaseline('Loaded session');
@@ -76,28 +79,28 @@ test('six Generates keep every entry when the unique artifacts fit the limit', a
 
   assert.equal(history.getUndoCount(), 6);
   assert.equal(retainedBytes(), 7 * ARTIFACT_BYTES, 'loaded + six generated artifacts');
-  assert.equal(history.historyLimitMessage.value, '');
+  assert.equal(limitMessage(), '');
   assert.equal(await undoAll(history), 6);
   assert.equal(currentId(), 'loaded');
   assert.equal(retainedBytes(), 7 * ARTIFACT_BYTES, 'Undo moves entries to Redo; they stay retained');
 });
 
 test('evicting the oldest entry keeps the artifact that the next entry still names', async () => {
-  const { history, generate, currentId, retainedBytes } = createGenerateHistory({
+  const { history, generate, currentId, retainedBytes, limitMessage } = createGenerateHistory({
     maxBytes: 5500
   });
   await history.initializeIntentBaseline('Loaded session');
   for (const id of GENERATED_IDS.slice(0, 4)) await generate(id);
   assert.equal(history.getUndoCount(), 4);
   assert.equal(retainedBytes(), 5 * ARTIFACT_BYTES);
-  assert.equal(history.historyLimitMessage.value, '');
+  assert.equal(limitMessage(), '');
 
   // The fifth entry exceeds the limit: evicting "Generate a" releases only the
   // loaded artifact, because "Generate b" still names artifact a as `before`.
   await generate('e');
   assert.equal(history.getUndoCount(), 4);
   assert.equal(retainedBytes(), 5 * ARTIFACT_BYTES);
-  assert.equal(history.historyLimitMessage.value, LIMIT_MESSAGE);
+  assert.equal(limitMessage(), LIMIT_MESSAGE);
 
   await generate('f');
   assert.equal(history.getUndoCount(), 4);
@@ -105,6 +108,25 @@ test('evicting the oldest entry keeps the artifact that the next entry still nam
   assert.equal(history.undoLabel(), 'Generate f');
   assert.equal(await undoAll(history), 4);
   assert.equal(currentId(), 'b', 'the oldest kept entry restores the artifact it names');
+});
+
+// OV-1260: a Generate whose two artifacts alone are over the limit (the Vnig
+// Gallery Session) stays undoable; the older steps drop and the drop is told.
+test('a Generate over the byte limit stays undoable and redoable', async () => {
+  const { history, generate, currentId, limitMessage } = createGenerateHistory({ maxBytes: 1500 });
+  await history.initializeIntentBaseline('Loaded session');
+  await generate('a');
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(limitMessage(), '', 'no older step dropped');
+  await generate('b');
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.undoLabel(), 'Generate b');
+  assert.equal(limitMessage(), LIMIT_MESSAGE);
+  assert.equal(await history.undo(), true);
+  assert.equal(currentId(), 'a');
+  assert.equal(history.getRedoCount(), 1);
+  assert.equal(await history.redo(), true);
+  assert.equal(currentId(), 'b');
 });
 
 test('a Generate after Undo releases the truncated Redo artifacts once', async () => {
@@ -139,7 +161,7 @@ test('artifacts without a shared identity still count per handle', async () => {
   for (const id of GENERATED_IDS) await unfingerprinted.generate(id);
   assert.equal(unfingerprinted.history.getUndoCount(), 3);
   assert.equal(unfingerprinted.retainedBytes(), 6 * ARTIFACT_BYTES);
-  assert.equal(unfingerprinted.history.historyLimitMessage.value, LIMIT_MESSAGE);
+  assert.equal(unfingerprinted.limitMessage(), LIMIT_MESSAGE);
   assert.equal(await undoAll(unfingerprinted.history), 3);
   assert.equal(unfingerprinted.currentId(), 'c');
 

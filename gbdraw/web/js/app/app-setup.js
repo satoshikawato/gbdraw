@@ -1640,6 +1640,9 @@ export const createAppSetup = () => {
       specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
+  // An operation's outcome shows in the notice banner (no native alert).
+  const noticeBanner = createNoticeBanner({ reactive });
+  const showNotice = noticeBanner.show;
   const history = createHistoryManager(/** @type {HistoryManagerOptions} */ ({
     buildIntent: historySnapshots.buildHistoryIntent,
     applyIntent: (...args) => followRuleEdits(
@@ -1655,6 +1658,8 @@ export const createAppSetup = () => {
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
     collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
+    // OV-1260: dropped older steps are told, not silent.
+    onHistoryLimit: (text) => showNotice({ text, tone: 'warning' }),
     makeRef: ref,
     mutationAvailability: sessionOperationAvailability,
     // An Undo or Redo of a mode switch waits as the mode buttons do (E1).
@@ -1664,13 +1669,10 @@ export const createAppSetup = () => {
   }));
   // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
-  // Confirmations ask with the app's choice dialog, and an
-  // operation's outcome shows in the notice banner (no native confirm or alert).
+  // Confirmations ask with the app's choice dialog (no native confirm).
   const choicePrompt = createChoicePrompt({ reactive });
-  const noticeBanner = createNoticeBanner({ reactive });
   const askChoice = choicePrompt.ask;
   const askText = choicePrompt.askText;
-  const showNotice = noticeBanner.show;
   // The Font section: the drawing's text font and the fonts loaded in this page.
   const fontSettings = createFontSettings({
     state,
