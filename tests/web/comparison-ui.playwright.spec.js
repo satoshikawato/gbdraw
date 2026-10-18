@@ -745,13 +745,17 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
     }).count(),
     matchHeight: await page.getByRole('spinbutton', {
       name: 'Comparison match height'
+    }).count(),
+    // OV-1128 B: under the closed Advanced disclosure.
+    paralogLinks: await page.getByRole('spinbutton', {
+      name: 'Paralog links per group', exact: true, includeHidden: true
     }).count()
   });
   await chooseLosatMode('LOSATN');
   await expect(losatpMode).toHaveCount(0);
   expect(await controlCounts()).toEqual({
     blastnTask: 1, gencode: 0, pairwiseHits: 0, groupHits: 0, collinearGap: 0,
-    matchStyle: 1, matchHeight: 1
+    matchStyle: 1, matchHeight: 1, paralogLinks: 0
   });
   await expect(page.getByRole('combobox', {
     name: 'LOSATN task'
@@ -761,7 +765,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   await expect(losatpMode).toHaveCount(0);
   expect(await controlCounts()).toEqual({
     blastnTask: 0, gencode: 3, pairwiseHits: 0, groupHits: 0, collinearGap: 0,
-    matchStyle: 1, matchHeight: 1
+    matchStyle: 1, matchHeight: 1, paralogLinks: 0
   });
   const recordOptions = page.locator('details[data-linear-record-options]').first();
   const recordSummary = recordOptions.locator(':scope > summary');
@@ -785,15 +789,15 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   const proteinCases = [
     ['orthogroup', {
       blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 1, collinearGap: 0,
-      matchStyle: 1, matchHeight: 1
+      matchStyle: 1, matchHeight: 1, paralogLinks: 1
     }],
     ['collinear', {
       blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 1, collinearGap: 1,
-      matchStyle: 1, matchHeight: 1
+      matchStyle: 1, matchHeight: 1, paralogLinks: 0
     }],
     ['pairwise', {
       blastnTask: 0, gencode: 0, pairwiseHits: 1, groupHits: 0, collinearGap: 0,
-      matchStyle: 1, matchHeight: 1
+      matchStyle: 1, matchHeight: 1, paralogLinks: 0
     }]
   ];
   for (const [value, expected] of proteinCases) {
@@ -808,6 +812,21 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       });
       await expect(scope).toHaveValue('adjacent');
       await expect(scope.locator('option:checked')).toHaveText('Adjacent pairs');
+      // Collinear shows Paralog links per group only while it infers orthogroups.
+      const infer = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons', exact: true });
+      const paralogLinks = page.getByRole('spinbutton', {
+        name: 'Paralog links per group', exact: true, includeHidden: true
+      });
+      await infer.check();
+      await expect(paralogLinks).toHaveCount(1);
+      await expect(page.locator('[data-linear-advanced-comparison]'))
+        .toContainText('Advanced collinear search');
+      await infer.uncheck();
+      await expect(paralogLinks).toHaveCount(0);
+    }
+    if (value === 'orthogroup') {
+      await expect(page.locator('[data-linear-advanced-comparison]'))
+        .toContainText('Advanced similarity groups');
     }
   }
 

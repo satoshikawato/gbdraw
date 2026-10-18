@@ -2013,6 +2013,61 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     assert.equal(losatCalls, 2, 'resolved protein artifacts must bypass further LOSAT execution');
     assert.deepEqual(state.losatCacheInfo.value, warmCacheInfo);
+
+    // OV-1128 B (D-114): a Similarity groups Generate draws, records and keys with the stored
+    // paralog links per group. The committed result was drawn with 3, so it is reused and the
+    // request records 3.
+    const pairwiseCommittedRequest = committedRenderRequest;
+    const pairwiseCanonicalComparisons = state.files.linearCanonicalComparisons;
+    const groupSettings = {
+      proteinBlastpCandidateLimit: null,
+      orthogroupMembershipMode: state.activeDrawing().losat.blastp.orthogroupMembershipMode,
+      orthogroupMemberMaxHits: null,
+      collinearMaxParalogLinksPerOrthogroup: 3
+    };
+    // Similarity groups compares every adjacent pair.
+    state.activeDrawing().linearComparisonPlan.mode = 'adjacent';
+    state.activeDrawing().losat.blastp.mode = 'orthogroup';
+    state.activeDrawing().losat.blastp.orthogroupMemberMaxHits = null;
+    state.activeDrawing().losat.blastp.collinearMaxParalogLinksPerOrthogroup = 3;
+    state.files.linearCanonicalComparisons = [{
+      kind: 'orthogroupResult',
+      encoding: 'canonicalJson',
+      file: new AuditFile(['{"schema":3,"kind":"orthogroupResult","value":{}}\n'], 'groups.json')
+    }, {
+      kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: groupSettings
+    }];
+    committedRenderRequest = {
+      ...pairwiseCommittedRequest,
+      comparisons: [{ kind: 'orthogroupResult' }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: groupSettings
+      }]
+    };
+    const groupResult = result('lazy-linear-groups.svg', 'lazy-linear-groups');
+    workerResponses.push(response(groupResult, validCatalog(groupResult.name)));
+    assert.deepEqual(
+      await runner.runAnalysis(resolveLinearComparisonPlan({
+        plan: state.activeDrawing().linearComparisonPlan,
+        sequences: state.linearSeqs,
+        layout: [],
+        losatProgram: state.activeDrawing().losatProgram.value,
+        blastpMode: state.activeDrawing().losat.blastp.mode
+      })),
+      { status: 'ok' },
+      JSON.stringify(state.errorLog.value)
+    );
+    assert.equal(losatCalls, 2, 'the same paralog links reuse the committed groups');
+    assert.equal(
+      workerMessages.filter(({ type }) => type === 'run').at(-1).payload.request.comparisons
+        .find(({ kind }) => kind === 'generatedProteinComparison').settings.collinearMaxParalogLinksPerOrthogroup,
+      3,
+      'a Similarity groups Generate records the stored paralog links per group'
+    );
+    state.activeDrawing().linearComparisonPlan.mode = 'selected';
+    state.activeDrawing().losat.blastp.mode = 'pairwise';
+    state.activeDrawing().losat.blastp.collinearMaxParalogLinksPerOrthogroup = 2;
+    state.files.linearCanonicalComparisons = pairwiseCanonicalComparisons;
+    committedRenderRequest = pairwiseCommittedRequest;
     committedRenderRequest = {
       ...committedRenderRequest,
       comparisons: [{ kind: 'precomputedProteinComparison' }, {

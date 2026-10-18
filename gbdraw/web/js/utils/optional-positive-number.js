@@ -43,6 +43,21 @@ export const classifyOptionalPositiveNumber = (value) => {
     : classified;
 };
 
+// An integer setting that the current request does not use for rendering
+// (a mode-inactive protein parameter or a LOSAT execution choice) keeps its
+// documented fallback; projected render values use projectOptionalNumber.
+/**
+ * @template F
+ * @param {unknown} value
+ * @param {F} fallback
+ * @param {number} minimum
+ * @returns {number | F}
+ */
+export const integerSettingOr = (value, fallback, minimum) => {
+  const { value: numeric } = classifyOptionalNumber(value);
+  return typeof numeric === 'number' && Number.isInteger(numeric) && numeric >= minimum ? numeric : fallback;
+};
+
 /**
  * R7 request projection: blank -> null, number -> the same number, anything
  * else -> typed INPUT_INVALID. It never converts or range-checks a value; the

@@ -205,7 +205,8 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   });
   const active = (featureVisibility) => ({
     featureVisibility, mode: 'orthogroup', candidateLimit: null, bitscore: 50, evalue: 1e-2,
-    identity: 0, alignmentLength: 0, orthogroupMembershipMode: 'anchor_core_v1', memberMaxHits: null
+    identity: 0, alignmentLength: 0, orthogroupMembershipMode: 'anchor_core_v1', memberMaxHits: null,
+    maxParalogLinks: 2
   });
   const reuse = (session, visibility) => canReuseResolvedProteinArtifacts({
     canonicalComparisons: comparisons, committedSession: session,
@@ -218,4 +219,20 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   assert.equal(reuse(sessionWith(hideRule), hideRule), true, 'the same rules reuse');
   assert.equal(reuse(sessionWith(`${hideRule.trimEnd()}\n\n`), hideRule), true, 'rules compare after normalization');
   assert.equal(reuse({ ...sessionWith(hideRule), resources: {} }, hideRule), false, 'an unreadable committed table declines');
+
+  // OV-1128 B: Similarity groups draws with the paralog links per group, so a changed value declines reuse.
+  const reuseParalogs = (committed, current) => canReuseResolvedProteinArtifacts({
+    canonicalComparisons: comparisons,
+    committedSession: {
+      ...sessionWith(null),
+      renderRequest: {
+        ...sessionWith(null).renderRequest,
+        comparisons: [{ ...marker, settings: { collinearMaxParalogLinksPerOrthogroup: committed } }, { kind: 'orthogroupResult' }]
+      }
+    },
+    sequences: [{ uid: 'a', region_record_id: '' }],
+    active: { ...active(''), maxParalogLinks: current }
+  });
+  assert.equal(reuseParalogs(3, 3), true, 'the same paralog links reuse');
+  assert.equal(reuseParalogs(3, 2), false, 'changed paralog links decline Similarity groups reuse');
 }

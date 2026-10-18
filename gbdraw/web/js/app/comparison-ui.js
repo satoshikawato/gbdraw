@@ -54,7 +54,8 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
   ADVANCED: Object.freeze({
     RECORD_LAYOUT: 'record-layout',
     LOSAT_CACHE: 'losat-cache',
-    COLLINEAR_DETAILS: 'collinear-details'
+    COLLINEAR_DETAILS: 'collinear-details',
+    PARALOG_LINKS: 'paralog-links'
   })
 });
 
@@ -401,14 +402,15 @@ const projectSettingsSectionKeys = ({
   return Object.freeze(keys);
 };
 
-/** @param {SettingsSectionInput & { dormantDraftCount: number }} input */
+/** @param {SettingsSectionInput & { dormantDraftCount: number, inferOrthogroups: boolean }} input */
 const projectSectionKeys = ({
   intentKey,
   planned,
   losatModeKey,
   losatpModeKey,
   selectedTopology,
-  dormantDraftCount
+  dormantDraftCount,
+  inferOrthogroups
 }) => {
   const settings = projectSettingsSectionKeys({
     intentKey,
@@ -430,13 +432,17 @@ const projectSectionKeys = ({
   if (planned.hasLosat) {
     advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_CACHE);
   }
-  if (
-    planned.hasLosat &&
+  const adjacentLosatp = planned.hasLosat &&
     !selectedTopology &&
-    losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATP &&
-    losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.COLLINEAR_BLOCKS
+    losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATP;
+  const collinear = adjacentLosatp && losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.COLLINEAR_BLOCKS;
+  if (collinear) advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.COLLINEAR_DETAILS);
+  // Paralog links per group shows wherever groups are drawn with it (OV-1128 B).
+  if (
+    (adjacentLosatp && losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.SIMILARITY_GROUPS)
+    || (collinear && inferOrthogroups)
   ) {
-    advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.COLLINEAR_DETAILS);
+    advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.PARALOG_LINKS);
   }
   return Object.freeze({
     settings,
@@ -598,6 +604,7 @@ export const projectLinearComparisonLosatpModeSelection = ({
  *   adjacentEdgeKeys?: readonly string[],
  *   losatProgram?: string,
  *   blastpMode?: string,
+ *   inferOrthogroups?: boolean,
  *   filters?: ComparisonFilterValues
  * }} [options]
  */
@@ -607,6 +614,7 @@ export const projectLinearComparisonUi = ({
   adjacentEdgeKeys = [],
   losatProgram = 'blastn',
   blastpMode = 'orthogroup',
+  inferOrthogroups = false,
   filters = {}
 } = {}) => {
   const normalizedPlan = normalizeLinearComparisonPlan(plan);
@@ -630,7 +638,8 @@ export const projectLinearComparisonUi = ({
     losatModeKey,
     losatpModeKey,
     selectedTopology,
-    dormantDraftCount
+    dormantDraftCount,
+    inferOrthogroups
   });
   const issues = projectIssues(resolution?.errors, activeEdges);
 

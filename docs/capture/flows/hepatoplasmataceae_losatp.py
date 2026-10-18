@@ -300,7 +300,7 @@ def _configure_all_record_collinear(
     advanced.get_by_label("Collinear diagonal drift", exact=True).fill("0")
     advanced.get_by_label("Collinear merge conflicts", exact=True).fill("1")
     expect(
-        advanced.get_by_label("Collinear paralog links per group", exact=True)
+        advanced.get_by_label("Paralog links per group", exact=True)
     ).to_have_value("2")
     page.get_by_label("Output Prefix", exact=True).fill(output_prefix)
     return settings, advanced
