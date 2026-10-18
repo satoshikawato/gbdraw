@@ -1824,15 +1824,18 @@ export const createAppSetup = () => {
     const request = getCommittedCanonicalRenderRequest();
     return request ? drawnTracks(request) : loadedTracks(getLoadedTrackSettings());
   };
+  // The Legend rows Python drew for the displayed Result's tracks, by key.
+  /** @param {DrawingState} drawing */
+  const displayedTrackLegendRows = (drawing) => {
+    const { pythonRows, sharedLegendKeys } = displayedLegendRowContext(state, drawing);
+    return trackLegendRows(readDrawnTracks(), pythonRows, sharedLegendKeys);
+  };
   // The keys of the displayed Result's Legend rows whose drawn track the draft
   // hides (OV-1198, OV-1215): the live compile deletes them, and the Legend
   // list leaves them out, so a hidden track's rows leave and return with it.
   /** @param {DrawingState} drawing @returns {string[]} */
-  const hiddenTrackLegendRows = (drawing) => {
-    const { pythonRows, sharedLegendKeys } = displayedLegendRowContext(state, drawing);
-    return hiddenTrackLegendKeys(trackLegendRows(readDrawnTracks(), pythonRows, sharedLegendKeys),
-      drawing === state.drawings.linear ? 'linear' : 'circular', drawing);
-  };
+  const hiddenTrackLegendRows = (drawing) => hiddenTrackLegendKeys(displayedTrackLegendRows(drawing),
+    drawing === state.drawings.linear ? 'linear' : 'circular', drawing);
   const svgActions = createSvgStyles({
     state,
     watch,
@@ -5994,6 +5997,7 @@ export const createAppSetup = () => {
     readShownLegendName: legendActions.shownLegendName,
     readLegendRowRules: (entry) => legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, state.activeDrawing())),
     countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
+    readLegendTrackKind: (entry) => displayedTrackLegendRows(state.activeDrawing()).get(legendEntryKey(entry))?.kind ?? null,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     readAlignmentInspector: () => similarityAlignmentActions.activePlanInspector.value,
     readCommittedRecordRows: recordDisplayControls.committedRecordRows,

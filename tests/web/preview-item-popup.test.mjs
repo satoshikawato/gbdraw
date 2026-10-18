@@ -77,7 +77,8 @@ const createPopup = ({
   renameLegendRow = null, legendRenameSettled = async () => {}, readShownLegendName = undefined,
   requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }],
   recordRows = [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
-  rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null
+  rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null, trackKinds = {},
+  countLegendCaptionFeatures = () => featureCount
 } = {}) => {
   const steps = [];
   const form = {
@@ -98,7 +99,8 @@ const createPopup = ({
     readLegendEntryColor: (entry) => entry.color,
     readShownLegendName,
     readLegendRowRules: () => rules,
-    countLegendCaptionFeatures: () => featureCount,
+    countLegendCaptionFeatures,
+    readLegendTrackKind: (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null,
     getCommittedRequest: () => ({ records: requestRecords }),
     readCommittedRecordRows: () => recordRows,
     readAlignmentInspector: () => alignment && { records: [alignment] },
@@ -300,6 +302,33 @@ test('the legend-entry view names the rule behind the color and the feature coun
     { kind: 'legend-entry', key: 'x' });
   assert.equal(single.subtitle, '1 feature');
   assert.equal(single.colorSource, 'Set on individual features');
+});
+
+test('the legend-entry view of a track row names its plot, not features (OV-1272)', () => {
+  let counted = 0;
+  const created = createPopup({
+    entries: [
+      { caption: 'GC content', originalCaption: 'GC content', color: '#a0a0a0' },
+      { caption: 'GC skew (+)', originalCaption: 'GC skew (+)', color: '#6dded3' },
+      { caption: 'Depth', originalCaption: 'Depth', color: '#333333' }
+    ],
+    featureTypes: ['CDS'], featureCount: 0,
+    // A rule whose caption spells a track row does not draw it.
+    rules: [{ feat: 'CDS', qual: 'product', val: 'x' }],
+    trackKinds: { 'GC content': 'content', 'GC skew (+)': 'skew', Depth: 'depth' },
+    countLegendCaptionFeatures: () => { counted += 1; return 0; }
+  });
+  const views = ['GC content', 'GC skew (+)', 'Depth'].map((key) => openView(created, { kind: 'legend-entry', key }));
+  assert.deepEqual(views.map((view) => view.subtitle), ['Content plot', 'Skew plot', 'Depth plot']);
+  views.forEach((view) => {
+    assert.equal(view.colorSource, 'Changes this legend swatch only. The plot keeps the color set in Settings.');
+    assert.deepEqual(view.ruleLines, []);
+  });
+  assert.deepEqual([views[0].title, views[0].name, views[0].dialogLabel], ['GC content', 'GC content', 'Legend item: GC content']);
+  // Not counted as features while the matches prepare either.
+  const preparing = openView(created, { kind: 'legend-entry', key: 'GC content' }, false);
+  assert.equal(preparing.subtitle, 'Content plot');
+  assert.equal(counted, 0, 'a track row counts no features');
 });
 
 test('the record-definition view lists the facts of the displayed Result', () => {

@@ -93,6 +93,25 @@ test('a Legend row opens its popup; rename, remove, keyboard, and Layout edit', 
   expect(exported).not.toContain('data-gbdraw-preview-item');
 });
 
+// OV-1272: a GC content or GC skew row names its plot, not a feature count,
+// and says that its Color changes the swatch only.
+test('a GC content or GC skew Legend row popup names its plot, not features', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSessionFile(page, HMMT_SESSION);
+
+  for (const [key, subtitle] of [['GC content', 'Content plot'], ['GC skew (+)', 'Skew plot']]) {
+    await clickCentre(legendRow(page, key).locator('path').first());
+    const dialog = page.getByRole('dialog', { name: `Legend item: ${key}`, exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('[data-preview-item-subtitle]')).toHaveText(subtitle);
+    await expect(dialog.locator('[data-preview-legend-color-source]'))
+      .toHaveText('Changes this legend swatch only. The plot keeps the color set in Settings.');
+    await page.keyboard.press('Escape');
+    await expect(popup(page)).toHaveCount(0);
+  }
+});
+
 test('a record definition opens its popup; its edits write the record settings', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);

@@ -257,6 +257,13 @@ export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default c
   'label-whitelist': 'Label whitelist', 'qualifier-priority': 'Qualifier priority', 'feature-visibility': 'Feature visibility',
   'label-overrides': 'Label overrides' });
 const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
+// OV-1274: the GC rows a Circular placement keeps room for below its band
+// (gbdraw/web_support/error_adapter.py `KEPT_INSIDE_TRACKS`), and the control that hides each.
+/** @type {Readonly<Record<string, { name: string, hide: string }>>} */
+const KEPT_INSIDE_TRACKS = Object.freeze({
+  gc_content: { name: 'GC content', hide: 'Hide GC Content' },
+  gc_skew: { name: 'GC skew', hide: 'Hide GC Skew' }
+});
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
 const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
@@ -289,6 +296,8 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [codepoint]
  * @property {number} [innerPx]
  * @property {number} [outerPx]
+ * @property {number} [keptInsidePx] The room kept below the band for the inside rows placed after it.
+ * @property {string} [keptInsideTracks] The GC rows it is kept for (`KEPT_INSIDE_TRACKS` keys, comma-separated).
  * @property {number} [placementIndex]
  * @property {number} [queryRecordIndex]
  * @property {number} [subjectRecordIndex]
@@ -559,8 +568,12 @@ const contextFor = (value) => {
   if (typeof value.labelFitCounts === 'string' && value.labelFitCounts.length <= 80 && /^[\x20-\x7e]+$/.test(value.labelFitCounts)) {
     context.labelFitCounts = value.labelFitCounts;
   }
-  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
-    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
+  if (typeof value.keptInsideTracks === 'string' && value.keptInsideTracks.length <= 80) {
+    const tracks = [...new Set(value.keptInsideTracks.split(','))].filter((track) => Object.hasOwn(KEPT_INSIDE_TRACKS, track));
+    if (tracks.length) context.keptInsideTracks = tracks.join(',');
+  }
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
+    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
   ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
@@ -582,6 +595,18 @@ const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, 
     return `Unsupported session version: ${sessionVersion}. This gbdraw reads Session versions ${readSessionVersions}.`;
   }
   return '';
+};
+
+// OV-1274: the room a Circular placement keeps below its band for the inside
+// rows after it, and the remedy of the GC rows among them.
+/** @param {UserFacingContext} context */
+const keptInsideText = ({ keptInsidePx, keptInsideTracks }) => {
+  if (keptInsidePx === undefined) return '';
+  const tracks = keptInsideTracks ? keptInsideTracks.split(',').map((track) => KEPT_INSIDE_TRACKS[track]) : [];
+  if (!tracks.length) return ` Below it, ${keptInsidePx} px are kept for the tracks inside it.`;
+  const names = tracks.map((track) => track.name).join(' and ');
+  const hides = tracks.map((track) => track.hide).join(' or ');
+  return ` Below it, ${keptInsidePx} px are kept for ${names}: select ${hides}, or reduce ${tracks.length > 1 ? 'their widths' : 'its width'}.`;
 };
 
 /** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
@@ -634,6 +659,7 @@ export const normalizeUserFacingError = (value, {
     /** @type {number} */ (featureCount) > 1 ? `Features affected: ${featureCount}.` : ''
   ].filter(Boolean).map((text) => ` ${text}`).join('');
   const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
+  const kept = keptInsideText(result.context);
   const guidance = sessionVersionGuidance(result.context)
     || REASONS[/** @type {string} */ (result.context.reason)] || DEFINITIONS[result.code][2] || '';
   const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
@@ -652,7 +678,7 @@ export const normalizeUserFacingError = (value, {
     ? 'This file is not a gbdraw Session: it is not valid JSON.' : '';
   const continuation = result.operation === 'align' && result.context.field === 'direction'
     && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
-  result.summary = (notASession || `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${labelFit}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`)
+  result.summary = (notASession || `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${kept}${labelFit}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`)
     .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),

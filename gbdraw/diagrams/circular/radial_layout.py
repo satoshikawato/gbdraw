@@ -64,15 +64,48 @@ AnnotationLabelRoom = Callable[[RadialBand, CircularAxisLayout, str, Mapping[str
 
 
 @dataclass(frozen=True)
+class _GcTrack:
+    """A GC row a placement window may keep room for (OV-1274), in the words its failure uses."""
+
+    # The diagnostic identifier (``keptInsideTracks``; utils/error-normalization.js names it).
+    diagnostic_id: str
+    words: str
+    off_option: str
+    width_option: str
+
+
+# The GC rows by renderer. Other rows kept inside are named by slot ID only.
+_GC_TRACKS: Mapping[str, _GcTrack] = {
+    "dinucleotide_content": _GcTrack("gc_content", "GC content", "--no-gc", "--gc_content_width"),
+    "dinucleotide_skew": _GcTrack("gc_skew", "GC skew", "--no-skew", "--gc_skew_width"),
+}
+
+
+@dataclass(frozen=True)
+class _KeptInsideSlot:
+    slot_id: str
+    renderer: str
+
+
+@dataclass(frozen=True)
 class PlacementWindow:
     inner_px: float
     outer_px: float
     # The reserved band (tick labels) may reach below inner_px to this edge of
     # a pinned row, as it may touch the row below it in top-down packing.
     reserved_inner_px: float | None = None
-    # The room kept below inner_px for the inside rows placed after this window's rows, and their slot IDs.
+    # The room kept below inner_px for the inside rows placed after this window's rows, and those rows.
     kept_inside_px: float = 0.0
-    kept_inside_slot_ids: tuple[str, ...] = ()
+    kept_inside_slots: tuple[_KeptInsideSlot, ...] = ()
+
+    @property
+    def kept_gc_tracks(self) -> tuple[_GcTrack, ...]:
+        """The GC rows among the rows kept inside, each once, in slot order."""
+
+        if self.kept_inside_px <= LAYOUT_EPSILON:
+            return ()
+        tracks = (_GC_TRACKS.get(slot.renderer) for slot in self.kept_inside_slots)
+        return tuple(dict.fromkeys(track for track in tracks if track is not None))
 
 
 @dataclass(frozen=True)
@@ -112,16 +145,24 @@ class _RadialSlotIntent:
     span_label_rooms: tuple[_SpanLabelRoom, ...] = ()
 
 
-def _cannot_fit_diagnostic(intent: "_RadialSlotIntent | None", window: Any = None) -> dict[str, object]:
+def _cannot_fit_diagnostic(
+    intent: "_RadialSlotIntent | None", window: PlacementWindow | None = None
+) -> dict[str, object]:
     """Track row and usable band of a fit failure; the slot ID stays private.
 
-    A pinned slot has no band to report, and an unbounded band is omitted.
+    A pinned slot has no band to report, and an unbounded band is omitted. The
+    room kept below the band and the GC rows it is kept for (OV-1274) are named.
     """
 
     diagnostic: dict[str, object] = {"code": "TRACK_LAYOUT", "reason": "CANNOT_FIT"}
     if window is not None and float(window.outer_px) < float("inf"):
         diagnostic["innerPx"] = max(0, round(float(window.inner_px)))
         diagnostic["outerPx"] = max(0, round(float(window.outer_px)))
+    if window is not None and window.kept_inside_px > LAYOUT_EPSILON:
+        diagnostic["keptInsidePx"] = round(float(window.kept_inside_px))
+        gc_tracks = window.kept_gc_tracks
+        if gc_tracks:
+            diagnostic["keptInsideTracks"] = [track.diagnostic_id for track in gc_tracks]
     if intent is not None:
         diagnostic["slotIndex"] = int(intent.slot_index)
     return diagnostic
@@ -1394,7 +1435,7 @@ class _InsideFitError(ValidationError):
         kept = self._kept_inside()
         super().__init__(
             f"{self._between()}{f'; below it, {kept}' if kept else ''}. Move the slot, reduce widths, "
-            f"disable conflicting labels, or use side=outside.{hint}",
+            f"disable conflicting labels, {self._gc_remedy()}or use side=outside.{hint}",
             diagnostic=_cannot_fit_diagnostic(intent, placement_window),
         )
 
@@ -1410,8 +1451,18 @@ class _InsideFitError(ValidationError):
         window = self.placement_window
         if window.kept_inside_px <= LAYOUT_EPSILON:
             return ""
-        slot_ids = ", ".join(f"'{slot_id}'" for slot_id in window.kept_inside_slot_ids)
+        slot_ids = ", ".join(f"'{slot.slot_id}'" for slot in window.kept_inside_slots)
         return f"{window.kept_inside_px:.1f}px are kept for the tracks inside it ({slot_ids})"
+
+    def _gc_remedy(self) -> str:
+        """The remedy of the GC rows the window keeps room for (OV-1274), as a list item, or ""."""
+
+        tracks = self.placement_window.kept_gc_tracks
+        if not tracks:
+            return ""
+        words = " and ".join(track.words for track in tracks)
+        options = ", ".join([*(track.off_option for track in tracks), *(track.width_option for track in tracks)])
+        return f"turn off or narrow the {words} track{'s' if len(tracks) > 1 else ''} ({options}), "
 
     def limited_by_center(self, reserved_radius_px: float, *, explicit_radius: bool) -> ValidationError:
         """Name the center reservation (definition text or explicit radius) as the cause."""
@@ -1419,15 +1470,17 @@ class _InsideFitError(ValidationError):
         kept = self._kept_inside()
         reserved = f"{float(reserved_radius_px):.1f}px{f' and {kept}' if kept else ''}"
         if explicit_radius:
+            gc_remedy = self._gc_remedy()
             message = (
                 f"{self._between()} because center_reserved_radius reserves {reserved}. "
-                f"Set a smaller center_reserved_radius or place tracks outside.{self.hint}"
+                f"Set a smaller center_reserved_radius{f', {gc_remedy}' if gc_remedy else ' '}"
+                f"or place tracks outside.{self.hint}"
             )
         else:
             message = (
                 f"{self._between()} because the center definition text reserves {reserved}. "
                 "Shorten the species or strain text, reduce the definition font size, "
-                f"set a smaller center_reserved_radius, or place tracks outside.{self.hint}"
+                f"set a smaller center_reserved_radius, {self._gc_remedy()}or place tracks outside.{self.hint}"
             )
         return ValidationError(
             message,
@@ -1911,18 +1964,18 @@ def _future_unresolved_inside_span_px(
     feature_dict: Mapping[str, Any] | None,
     depth_config: DepthAxisSource | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
-) -> tuple[float, tuple[str, ...]]:
-    """The smallest span the unresolved inside rows after ``start_pos`` need, and their slot IDs."""
+) -> tuple[float, tuple[_KeptInsideSlot, ...]]:
+    """The smallest span the unresolved inside rows after ``start_pos`` need, and those rows."""
 
     span = 0.0
-    slot_ids: list[str] = []
+    slots: list[_KeptInsideSlot] = []
     outer_neighbor = current_outer_intent
     for future in ordered_intents[start_pos + 1:]:
         if future.slot_index in resolved_by_index:
             break
         if future.side != "inside" or future.placement_policy == "hard":
             break
-        slot_ids.append(future.slot_id)
+        slots.append(_KeptInsideSlot(future.slot_id, future.renderer))
         span += _gap_between_inner_outer_tracks(future, outer_neighbor) + _minimum_future_inside_width_px(
             future,
             axis_radius_px=axis_radius_px,
@@ -1933,7 +1986,7 @@ def _future_unresolved_inside_span_px(
             depth_config=depth_config,
         )
         outer_neighbor = future
-    return span, tuple(slot_ids)
+    return span, tuple(slots)
 
 
 def _inner_limit_with_reserved_future_span(
@@ -2002,7 +2055,7 @@ def _inside_placement_window(
             if band is not None
         )
         inner_limit = reserved_inner_limit + gap_to_future_hard
-    future_span, future_slot_ids = _future_unresolved_inside_span_px(
+    future_span, future_slots = _future_unresolved_inside_span_px(
         ordered_intents,
         start_pos=start_pos,
         current_outer_intent=current_outer_intent,
@@ -2030,7 +2083,7 @@ def _inside_placement_window(
         inner_limit,
         float(inside_max_outer),
         kept_inside_px=float(future_span),
-        kept_inside_slot_ids=future_slot_ids,
+        kept_inside_slots=future_slots,
     )
 
 

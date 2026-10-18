@@ -240,7 +240,7 @@ def test_definition_that_cannot_be_wrapped_reports_the_definition_band() -> None
     payload = serialize_web_error(error, operation="generate", stage="render")
     assert payload["code"] == "TRACK_LAYOUT"
     assert payload["context"]["reason"] == "DEFINITION_RESERVED"
-    assert set(payload["context"]) <= {"reason", "slotIndex", "innerPx", "outerPx"}
+    assert set(payload["context"]) <= {"reason", "slotIndex", "innerPx", "outerPx", "keptInsidePx", "keptInsideTracks"}
 
 
 @pytest.mark.circular
@@ -263,3 +263,46 @@ def test_the_definition_band_message_names_the_tracks_kept_inside(tmp_path: Path
     assert "cannot fit inside between 189.6px and 386.1px" in message
     assert "the center definition text reserves 122.6px" in message
     assert "and 67.1px are kept for the tracks inside it ('gc_content', 'gc_skew')" in message
+
+
+def _lambda_resolved_overlaps(tmp_path: Path, *extra: str) -> ValidationError:
+    from gbdraw.circular import circular_main
+
+    with pytest.raises(ValidationError) as caught:
+        circular_main(
+            [
+                "--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"),
+                "--separate_strands", "--track_type", "tuckin", "-l", "left", "--resolve_overlaps",
+                "-o", str(tmp_path / "out"), "-f", "svg", *extra,
+            ]
+        )
+    return caught.value
+
+
+@pytest.mark.circular
+def test_the_definition_band_failure_offers_the_gc_tracks_kept_inside(tmp_path: Path) -> None:
+    """OV-1274: the GC rows' kept room is a context key, and turning them off or narrowing them is a remedy."""
+
+    error = _lambda_resolved_overlaps(tmp_path)
+    assert _layout_reason(error) == "DEFINITION_RESERVED"
+    assert (
+        "set a smaller center_reserved_radius, turn off or narrow the GC content and GC skew tracks "
+        "(--no-gc, --no-skew, --gc_content_width, --gc_skew_width), or place tracks outside."
+    ) in str(error)
+    context = serialize_web_error(error, operation="generate", stage="render")["context"]
+    assert context["keptInsidePx"] == 67
+    assert context["keptInsideTracks"] == "gc_content,gc_skew"
+
+    # Only the row still drawn is kept and named.
+    error = _lambda_resolved_overlaps(tmp_path, "--no-gc")
+    assert "turn off or narrow the GC skew track (--no-skew, --gc_skew_width)" in str(error)
+    assert "--no-gc" not in str(error)
+    context = serialize_web_error(error, operation="generate", stage="render")["context"]
+    assert context["keptInsideTracks"] == "gc_skew"
+    assert 33 <= context["keptInsidePx"] <= 34
+
+    # With both rows off the features fit; the scale ticks are the next limit (no GC remedy).
+    error = _lambda_resolved_overlaps(tmp_path, "--no-gc", "--no-skew")
+    assert "Circular track slot 'ticks'" in str(error)
+    assert "GC" not in str(error)
+    assert "keptInsideTracks" not in serialize_web_error(error, operation="generate", stage="render")["context"]

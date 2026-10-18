@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry, LinearSeq } from '../state.js' */
+/** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 // The legend-entry and record-definition popups of the preview. A click (or
 // Enter) on a Legend row or a record definition opens the match popup frame
 // with a `previewItem`; this owner derives what the popup shows from the
@@ -71,6 +72,8 @@ import {
  *   The color rules that draw a row of the displayed Result.
  * @property {(caption: string) => number} countLegendCaptionFeatures
  *   The number of features whose legend entry is `caption`.
+ * @property {(entry: LegendEntry) => DrawnTrack['kind'] | null} readLegendTrackKind
+ *   The kind of the track whose row this is in the displayed Result (`trackLegendRows`); null: a feature row.
  * @property {() => { records?: readonly RequestRecordLike[] } | null} getCommittedRequest
  *   The request of the displayed Result.
  * @property {() => { records?: readonly AlignmentDecisionLike[] } | null} readAlignmentInspector
@@ -128,19 +131,28 @@ const colorRuleText = (rule) => {
   return `${feature} where ${qualifier || 'a qualifier'} matches “${pattern}”`;
 };
 
+// OV-1272: a track row names its plot; it lists no features, and its Color
+// edits only the swatch (the plot's color is a Settings value).
+/** @type {Readonly<Record<DrawnTrack['kind'], string>>} */
+const TRACK_ROW_SUBTITLE = Object.freeze({ content: 'Content plot', skew: 'Skew plot', depth: 'Depth plot' });
+const TRACK_ROW_COLOR_SOURCE = 'Changes this legend swatch only. The plot keeps the color set in Settings.';
+
 /**
  * The legend-entry popup view.
  * @param {{ entry: LegendEntry, name: string, index: number, color: string, rules: readonly ColorRuleLike[],
- *   featureCount: number | null, featureTypes: ReadonlySet<string> }} input `name`: the name the Legend draws.
+ *   featureCount: number | null, featureTypes: ReadonlySet<string>, trackKind: DrawnTrack['kind'] | null }} input
+ *   `name`: the name the Legend draws. `trackKind`: the kind of the track whose row it is; null: a feature row.
  */
-const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, featureTypes }) => {
+const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, featureTypes, trackKind }) => {
   const key = text(legendEntryKey(entry));
-  const ruleLines = rules.map(colorRuleText);
-  const colorSource = ruleLines.length
-    ? (ruleLines.length === 1 ? 'From this color rule:' : `From these ${ruleLines.length} color rules:`)
-    : featureTypes.has(key)
-      ? `Default color of ${key} features`
-      : 'Set on individual features';
+  const ruleLines = trackKind ? [] : rules.map(colorRuleText);
+  const colorSource = trackKind
+    ? TRACK_ROW_COLOR_SOURCE
+    : ruleLines.length
+      ? (ruleLines.length === 1 ? 'From this color rule:' : `From these ${ruleLines.length} color rules:`)
+      : featureTypes.has(key)
+        ? `Default color of ${key} features`
+        : 'Set on individual features';
   return {
     kind: /** @type {const} */ ('legend-entry'),
     identity: `legend:${key}`,
@@ -149,9 +161,11 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
     name,
     color,
     title: name,
-    subtitle: featureCount == null
-      ? 'Counting features…'
-      : `${NUMBER.format(featureCount)} feature${featureCount === 1 ? '' : 's'}`,
+    subtitle: trackKind
+      ? TRACK_ROW_SUBTITLE[trackKind]
+      : featureCount == null
+        ? 'Counting features…'
+        : `${NUMBER.format(featureCount)} feature${featureCount === 1 ? '' : 's'}`,
     colorSource,
     ruleLines
   };
@@ -270,7 +284,7 @@ const CIRCULAR_EDIT_HINTS = {
 /** @param {PreviewItemPopupOptions} options */
 export const createPreviewItemPopup = ({
   state, computed, revealSetting, readLegendEntryColor, readShownLegendName = (caption) => caption, readLegendRowRules, countLegendCaptionFeatures,
-  getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
+  readLegendTrackKind, getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
   legendRenameSettled
 }) => {
   /** @returns {LegendEntry[]} */
@@ -282,19 +296,23 @@ export const createPreviewItemPopup = ({
     const index = entries.findIndex((entry) => text(legendEntryKey(entry)) === key);
     const entry = entries[index];
     if (!entry) return null;
+    const trackKind = readLegendTrackKind(entry);
     /** @type {readonly ColorRuleLike[]} */
     let rules = [];
     /** @type {number | null} */
     let featureCount = null;
-    try {
-      rules = readLegendRowRules(entry);
-      if (matchesReady) featureCount = countLegendCaptionFeatures(text(legendEntryKey(entry)));
-    } catch {
-      // The rule matches are still preparing: the popup shows the color alone.
+    // A track row has no rules and no features to read.
+    if (!trackKind) {
+      try {
+        rules = readLegendRowRules(entry);
+        if (matchesReady) featureCount = countLegendCaptionFeatures(text(legendEntryKey(entry)));
+      } catch {
+        // The rule matches are still preparing: the popup shows the color alone.
+      }
     }
     const featureTypes = new Set(state.extractedFeatures.value.map((feature) => text(feature?.type)));
     return buildLegendEntryView({
-      entry, name: readShownLegendName(text(legendEntryKey(entry))), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes
+      entry, name: readShownLegendName(text(legendEntryKey(entry))), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes, trackKind
     });
   };
 

@@ -61,8 +61,11 @@ LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES ANNOTATION_LANE_CONFLICT CIRCULAR_SETTING LINEAR_SETTING
 ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GZIP_INPUT GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER""".split())
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
-    "row column columnCount seriesIndex slotIndex innerPx outerPx placementIndex queryRecordIndex subjectRecordIndex".split()
+    "row column columnCount seriesIndex slotIndex innerPx outerPx keptInsidePx placementIndex queryRecordIndex "
+    "subjectRecordIndex".split()
 )
+# The GC rows a track placement keeps room for below its band (``keptInsideTracks``, OV-1274).
+KEPT_INSIDE_TRACKS = frozenset({"gc_content", "gc_skew"})
 
 # The engine computes a Result from the request alone, so an unclassified failure
 # in these stages repeats for the same inputs (RENDER_FAILED offers no Retry).
@@ -218,6 +221,12 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
         value = diagnostic[key]
         if type(value) is int and 0 <= value <= 10_000_000:
             context[key] = value
+    # A context value is a bounded scalar: the GC rows travel as one comma-separated text.
+    kept_tracks = diagnostic.get("keptInsideTracks")
+    if diagnostic["code"] == "TRACK_LAYOUT" and isinstance(kept_tracks, list):
+        known = [track for track in kept_tracks if track in KEPT_INSIDE_TRACKS]
+        if known:
+            context["keptInsideTracks"] = ",".join(dict.fromkeys(known))
     # Python words the label fit counts (gbdraw.labels.fit); the Web shows the sentence as sent.
     counts = diagnostic.get("labelFitCounts")
     if diagnostic["code"] == "LABEL_LAYOUT" and isinstance(counts, str):

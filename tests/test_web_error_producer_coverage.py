@@ -41,7 +41,7 @@ NATIVE_TABLE_BASELINE = {"_EXACT": 25, "_TEMPLATES": 20, "_CONSTRAINTS": 22}
 # annotation input checks, CLI adapter and table reader messages, and internal
 # renderer state. One total, so a site that moves to another module does not
 # change it.
-UNPROVEN_BASELINE = 1196
+UNPROVEN_BASELINE = 1187
 
 
 def _package_sources() -> list[Path]:
@@ -235,7 +235,12 @@ def test_python_diagnostic_vocabulary_matches_the_web_wording_owner():
     web_fields = set(re.findall(r"[a-zA-Z_]+", text[text.index("const FIELDS") : text.index("const REASONS")]))
     assert error_adapter.DIAGNOSTIC_CODES <= web_codes
     assert error_adapter.DIAGNOSTIC_REASONS <= web_reasons
-    assert error_adapter._DIAGNOSTIC_INTEGER_KEYS | {"configPath"} <= web_context_keys
+    assert error_adapter._DIAGNOSTIC_INTEGER_KEYS | {"configPath", "keptInsideTracks"} <= web_context_keys
+    # OV-1274: every GC row the placement may name passes the adapter and has the Web's words.
+    from gbdraw.diagrams.circular.radial_layout import _GC_TRACKS
+
+    web_kept_tracks = set(re.findall(r"\b([a-z_]+): \{ name:", _web_block("const KEPT_INSIDE_TRACKS")))
+    assert {track.diagnostic_id for track in _GC_TRACKS.values()} == error_adapter.KEPT_INSIDE_TRACKS == web_kept_tracks
     assert error_adapter.FIELDS <= web_fields
     # The engine-stage fallback (B9) and its bounded exception-class context.
     assert "RENDER_FAILED" in web_codes
