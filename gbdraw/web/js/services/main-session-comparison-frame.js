@@ -4,9 +4,12 @@
 // complement. Comparison tables now use the search frame (D-18, PD-OI-073),
 // so Load rewrites those stored tables once; a re-saved Session keeps the
 // search frame. The table is read and rewritten by Python (one table reader).
+// Sessions up to 47 stored the protein results of such a record in the drawn
+// frame; Python converts them once the stored figure is shown (OV-1145, D-128).
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
-import { base64ToBytes, bytesToText, textToBase64, textToBytes } from './byte-utils.js';
+import { base64ToBytes, bytesToText, sha256Hex, textToBase64, textToBytes } from './byte-utils.js';
 import { isResourceBackedCanonicalComparison } from './canonical-comparisons.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import {
   DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION, MAIN_DISPLAY_FRAME_SESSION_VERSION
 } from '../contracts/schema.generated.js';
@@ -14,6 +17,7 @@ import {
 /** @import { SequenceRecord } from './record-discovery.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { ResourceDescriptor } from './diagram-resource-staging.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
 /** @import { SessionChecked31, SessionChecked39, SessionChecked40, SessionChecked46 } from '../contracts/session.generated.js' */
 /**
@@ -32,6 +36,14 @@ import {
 /** @typedef {UnvalidatedFields<keyof RawSessionResourceDescriptor>} StoredResource */
 /** @typedef {{ length: number, reverse: boolean }} EndpointFrame */
 /** @typedef {{ tableText: string, queryFrame: EndpointFrame, subjectFrame: EndpointFrame }} TableConversion */
+/** @typedef {Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>>} DrawingResources */
+/**
+ * One drawing's committed request and the resources it names, as the Worker
+ * stages them (`convertStoredProteinResultFrames`).
+ * @typedef {{ version: number, canonicalRequest: unknown, resources: DrawingResources }} ProteinResultConversion
+ */
+/** @typedef {{ renderRequest?: unknown, resources?: DrawingResources }} StoredDrawing A committed drawing. */
+/** @typedef {{ data: string, size: number }} ConvertedResource The base64 bytes and size Python returned. */
 /**
  * The record discovery the conversion reads a record length from.
  * @typedef {{
@@ -47,6 +59,13 @@ let tableConverter = null;
 export const setMainSessionComparisonFrameConverter = (converter) => {
   tableConverter = typeof converter === 'function' ? converter : null;
 };
+// And the Worker protein result conversion (OV-1145).
+/** @type {((request: ProteinResultConversion) => Promise<unknown>) | null} */
+let proteinResultConverter = null;
+/** @param {typeof proteinResultConverter} converter */
+export const setStoredProteinResultFrameConverter = (converter) => {
+  proteinResultConverter = typeof converter === 'function' ? converter : null;
+};
 
 /**
  * The entry of `list` a stored index names: the index is read as a property
@@ -61,14 +80,36 @@ const entryAt = (list, index) => list.find((_, position) => String(position) ===
 /**
  * @param {Record<string, unknown>} resources `readSessionDocument` kept each descriptor it could read.
  * @param {unknown} resourceId
+ * @returns {StoredResource | null} null for a file the Session does not hold
+ */
+const heldResource = (resources, resourceId) => {
+  const entry = /** @type {StoredResource} */ (resources[String(resourceId)]);
+  return entry && typeof entry.data === 'string' ? entry : null;
+};
+
+/**
+ * @param {Record<string, unknown>} resources
+ * @param {unknown} resourceId
  * @returns {File | null} null for a file the Session does not hold
  */
 const resourceFile = (resources, resourceId) => {
-  const entry = /** @type {StoredResource} */ (resources[String(resourceId)]);
-  if (!entry || typeof entry.data !== 'string') return null;
-  return new File([base64ToBytes(entry.data)], String(entry.name || resourceId), {
+  const entry = heldResource(resources, resourceId);
+  if (!entry) return null;
+  return new File([base64ToBytes(String(entry.data))], String(entry.name || resourceId), {
     type: String(entry.type || 'text/plain')
   });
+};
+
+/**
+ * @param {StoredRecord} record
+ * @returns {{ primary: unknown, fasta: unknown } | { primary: unknown, fasta?: undefined }} the resource IDs of its
+ *   source files: a GFF3 source names its FASTA file too
+ */
+const recordResourceIds = (record) => {
+  const source = /** @type {StoredSource} */ (record?.source);
+  return source?.kind === 'gffFasta'
+    ? { primary: source.gffResourceId, fasta: source.fastaResourceId }
+    : { primary: source?.resourceId };
 };
 
 /**
@@ -78,11 +119,10 @@ const resourceFile = (resources, resourceId) => {
  * @returns {Promise<number | null>} null when the Session does not hold the record's files
  */
 const selectedRecordLength = async (record, resources, discover) => {
-  const source = /** @type {StoredSource} */ (record?.source);
-  const gffFasta = source?.kind === 'gffFasta';
-  const file = resourceFile(resources, gffFasta ? source.gffResourceId : source?.resourceId);
-  const fastaFile = gffFasta ? resourceFile(resources, source.fastaResourceId) : null;
-  if (!file || (gffFasta && !fastaFile)) return null;
+  const ids = recordResourceIds(record);
+  const file = resourceFile(resources, ids.primary);
+  const fastaFile = ids.fasta === undefined ? null : resourceFile(resources, ids.fasta);
+  if (!file || (ids.fasta !== undefined && !fastaFile)) return null;
   const catalog = fastaFile
     ? await discover.gffFasta({ gffFile: file, fastaFile })
     : await discover.sequence({ file, format: 'genbank' });
@@ -127,27 +167,120 @@ const storedRecordReverses = (record) => {
 };
 
 /**
+ * Whether a stored Linear request holds a protein result that touches one of
+ * its reverse-complemented records. A precomputed table touches its two
+ * records; a typed result the records its `generatedProteinComparison`
+ * marker's pairs name, or every record when no marker names one. A reversed
+ * record whose files the Session does not hold is the request reader's to
+ * drop (OV-869). Indices are read as property keys, as `entryAt` reads them.
+ * @param {unknown} stored
+ * @param {Record<string, unknown>} resources
+ * @returns {boolean}
+ */
+const storesReversedProteinResult = (stored, resources) => {
+  const request = /** @type {UnvalidatedFields<keyof CanonicalLinearRenderRequest>} */ (stored);
+  if (request?.mode !== 'linear' || !Array.isArray(request.comparisons) || !Array.isArray(request.records)) return false;
+  /** @type {readonly unknown[]} */
+  const comparisons = request.comparisons;
+  /** @type {readonly unknown[]} */
+  const records = request.records;
+  const reversed = new Set(records.flatMap((item, position) => {
+    const record = /** @type {StoredRecord} */ (item);
+    const ids = recordResourceIds(record);
+    const held = heldResource(resources, ids.primary) && (ids.fasta === undefined || heldResource(resources, ids.fasta));
+    return storedRecordReverses(record) && held ? [String(position)] : [];
+  }));
+  /** @param {unknown} item */
+  const touches = (item) => {
+    const pair = /** @type {UnvalidatedFields<'queryRecordIndex' | 'subjectRecordIndex'>} */ (item);
+    return reversed.has(String(pair?.queryRecordIndex)) || reversed.has(String(pair?.subjectRecordIndex));
+  };
+  const named = comparisons.flatMap((item) => {
+    const marker = /** @type {UnvalidatedFields<'kind' | 'pairs'>} */ (item);
+    return marker?.kind === 'generatedProteinComparison' && Array.isArray(marker.pairs)
+      ? /** @type {readonly unknown[]} */ (marker.pairs) : [];
+  });
+  return reversed.size > 0 && comparisons.some((item) => {
+    const comparison = /** @type {ResourceBackedComparison} */ (item);
+    if (!isResourceBackedCanonicalComparison(comparison)) return false;
+    return comparison.kind === 'precomputedProteinComparison' ? touches(comparison) : named.length === 0 || named.some(touches);
+  });
+};
+
+/**
  * Whether a Session up to 47 stores protein results of a reverse-complemented
  * Linear record, which it stored in the drawn frame; Session 48 stores them in
  * the search frame and Python converts older ones (OV-1145). Both committed
  * requests are read: the shown one and the other mode's.
- * @param {{ version?: unknown, renderRequest?: unknown, otherModeResult?: unknown }} data
+ * @param {{ version?: unknown, renderRequest?: unknown, otherModeResult?: unknown, resources?: unknown }} data
  * @returns {boolean}
  */
 export const storesDrawnFrameProteinResults = (data) => {
   if (!(Number(data?.version) <= DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION)) return false;
   const other = /** @type {UnvalidatedFields<'renderRequest'>} */ (data?.otherModeResult);
-  return [data?.renderRequest, other?.renderRequest].some((stored) => {
-    const request = /** @type {UnvalidatedFields<keyof CanonicalLinearRenderRequest>} */ (stored);
-    if (request?.mode !== 'linear' || !Array.isArray(request.comparisons) || !Array.isArray(request.records)) return false;
-    /** @type {readonly unknown[]} */
-    const comparisons = request.comparisons;
-    /** @type {readonly unknown[]} */
-    const records = request.records;
-    return comparisons.some((item) => isResourceBackedCanonicalComparison(
-      /** @type {ResourceBackedComparison} */ (item)
-    )) && records.some((record) => storedRecordReverses(/** @type {StoredRecord} */ (record)));
-  });
+  const resources = /** @type {Record<string, unknown>} */ (data?.resources ?? {});
+  return [data?.renderRequest, other?.renderRequest].some((stored) => storesReversedProteinResult(stored, resources));
+};
+
+const PROTEIN_RESULT_CONVERSION = /** @type {const} */ ({ stage: 'helper', operation: 'convertStoredProteinResultFrames' });
+
+/**
+ * B-LOAD (D-128): the protein results that each committed drawing of a
+ * Session up to 47 stored for a reversed record, in the search frame. Python
+ * converts each drawing whose results touch one (one converter, no JS copy);
+ * the bytes come back by stored resource ID. A failure throws, so the Load
+ * changes nothing (PD-OI-046).
+ * @param {number} version
+ * @param {ReadonlyArray<StoredDrawing | null | undefined>} drawings
+ * @param {{ convert?: typeof proteinResultConverter }} [options]
+ * @returns {Promise<Map<string, ConvertedResource>>} empty when no drawing needs it
+ */
+export const convertStoredProteinResultFrames = async (version, drawings, { convert = proteinResultConverter } = {}) => {
+  /** @type {Map<string, ConvertedResource>} */
+  const converted = new Map();
+  if (!(version <= DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION)) return converted;
+  for (const drawing of drawings) {
+    const resources = drawing?.resources ?? {};
+    if (!drawing || !storesReversedProteinResult(drawing.renderRequest, resources)) continue;
+    if (!convert) throw diagnosticError('HELPER_PROTOCOL', {}, PROTEIN_RESULT_CONVERSION);
+    const response = /** @type {UnvalidatedFields<'result', UnvalidatedFields<'resources'>>} */ (await convert(
+      { version, canonicalRequest: drawing.renderRequest, resources }
+    ));
+    const returned = response?.result?.resources;
+    if (!returned || typeof returned !== 'object' || Array.isArray(returned)) {
+      throw diagnosticError('RESULT_INVALID', {}, PROTEIN_RESULT_CONVERSION);
+    }
+    for (const [resourceId, value] of Object.entries(returned)) {
+      const item = /** @type {UnvalidatedFields<keyof ConvertedResource>} */ (value);
+      const previous = converted.get(resourceId);
+      if (typeof item?.data !== 'string' || !Number.isSafeInteger(item.size) || Number(item.size) < 0
+        || (previous && previous.data !== item.data)) {
+        throw diagnosticError('RESULT_INVALID', {}, PROTEIN_RESULT_CONVERSION);
+      }
+      converted.set(resourceId, { data: item.data, size: Number(item.size) });
+    }
+  }
+  return converted;
+};
+
+/**
+ * `resources` with the converted bytes under their stored IDs: each keeps its
+ * other fields, takes the new size, and a checksum it held is computed again.
+ * @param {Record<string, unknown>} resources
+ * @param {ReadonlyMap<string, ConvertedResource>} converted
+ * @returns {Promise<Record<string, unknown>>} `resources` itself when it holds none of them
+ */
+export const withConvertedResources = async (resources, converted) => {
+  const ids = Object.keys(resources).filter((resourceId) => converted.has(resourceId));
+  if (ids.length === 0) return resources;
+  const next = { ...resources };
+  for (const resourceId of ids) {
+    const { checksum, ...descriptor } = /** @type {RawSessionResourceDescriptor} */ (resources[resourceId]);
+    const { data, size } = /** @type {ConvertedResource} */ (converted.get(resourceId));
+    next[resourceId] = { ...descriptor, encoding: 'base64', data, size,
+      ...(checksum ? { checksum: await sha256Hex(base64ToBytes(data)) } : {}) };
+  }
+  return next;
 };
 
 /**

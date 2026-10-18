@@ -615,7 +615,11 @@ const HARNESS_CANNOT_LOAD = new Map([
   // Their comparison tables are converted to the display frame by a Worker
   // (`convertMainSessionComparisonFrames`; OV-775, C-OD19 F2).
   ['q-frame-main-web-losatn.v42.gbdraw-session.json.gz', 'comparison conversion Worker'],
-  ['q-frame-main-web-upload.v42.gbdraw-session.json.gz', 'comparison conversion Worker']
+  ['q-frame-main-web-upload.v42.gbdraw-session.json.gz', 'comparison conversion Worker'],
+  // Their protein results of a reversed record are converted to the search frame by a Worker
+  // (`convertStoredProteinResultFrames`; OV-1145).
+  ['BGC0000708-BGC0000713.v47.gbdraw-session.json.gz', 'protein result conversion Worker'],
+  ['majanivirus_collinear-rc.v47.gbdraw-session.json.gz', 'protein result conversion Worker']
 ]);
 const REQUEST_ROW_CODES = new Set(['request-dropped', 'other-result-set-dropped', 'request-part-dropped', 'request-reference-dropped']);
 const requestRow = ({ code, path }) => REQUEST_ROW_CODES.has(code) || /^(otherModeResult\.)?renderRequest\b/.test(path);

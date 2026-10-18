@@ -1591,10 +1591,12 @@ const FEATURES_NEED_DIAGRAM_WORKER = new Set([
   'scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz',
   'mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz'
 ]);
+// A Session 47 that stored protein results of a reversed record converts them with Python (OV-1145).
 const NEEDS_DIAGRAM_WORKER = new Set([
   'feature-edits-circular.v33.gbdraw-session.json.gz', 'feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz',
   'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'q-frame-main-web-losatn.v42.gbdraw-session.json.gz',
-  'q-frame-main-web-upload.v42.gbdraw-session.json.gz'
+  'q-frame-main-web-upload.v42.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.v47.gbdraw-session.json.gz',
+  'majanivirus_collinear-rc.v47.gbdraw-session.json.gz'
 ]);
 // G2b (E-OD02): the document Save writes after each of those Loads reads
 // again with no repair of the document reader (`readSessionDocument`); the
