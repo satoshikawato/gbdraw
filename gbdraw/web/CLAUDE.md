@@ -114,7 +114,9 @@ in the same change.
 | Vue mount and exports | `js/app.js` |
 | Composition and dependency wiring | `js/app/app-setup.js` |
 | Reactive state and computed values | `js/state.js` |
-| Each diagram mode's drawing (settings, editor edits, derived values) | `js/state.js` (`drawings`, `activeDrawing`; R15) |
+| The drawings by ID and the shown drawing (settings, editor edits, derived values) | `js/state.js` (`drawingOf`, `drawingList`, `activeDrawingId`, `activeDrawing`, and `drawingOfMode` until B; R15) |
+| The slices of a drawing's editor edits and settings, their only writers, and their install, capture, and reset for Session Load, History, and Reset | `js/services/drawing/` (R15) |
+| Typed Vue reactivity for drawing members (`ref`, `reactive`, `computed`) | `js/utils/reactivity.js` (R14) |
 | Registry of what a mode's Session slice holds | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
 | Session 46 mode slices and the split of a Session 27–44 draft into them | `js/services/mode-scoped-migration.js` (Python twin: `split_draft_into_modes` in `gbdraw/session_io.py`) |
 | Generate-button orchestration | `js/app/run-analysis.js` |
@@ -127,12 +129,13 @@ in the same change.
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
 | Load's reading of saved color and stroke edits (a Legend row's `colorOverrides` and `strokeOverrides`, a feature's stroke overrides) for Session Load and the Session 46 Legend reading | `js/services/style-overrides.js` (Python: `_legend_color_overrides`, `_stroke_override_map`, `_stroke_width` in `gbdraw/session_io.py`) |
-| History transactions and availability | `js/services/history.js`, `js/app/history-inputs.js`, `js/services/history-snapshot.js` |
+| History transactions and availability: one History per drawing and the project stream behind one router, with a shared byte budget and file retention | `js/services/history.js` (`createHistoryRouter`), `js/app/history-inputs.js`, `js/services/history-snapshot.js` |
 | Error producer contract and user-facing wording | `js/utils/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
 | Numeric draft projection | `js/utils/optional-positive-number.js` (`projectOptionalNumber`) |
 | GenBank header reading | `js/services/genbank-header.js` |
 | Managed Depth slot reconciliation | `js/services/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |
 | Editor intent shown on the displayed Result: the edit transition, the port, and the preparation of a History step or a Result display (R3) | `js/app/app-setup.js` (`editEditorIntent`, `showEditorIntent`, `projectMountedEditorIntent`); it compiles with `compilePlanBundle` in `js/app/candidate-render.js` and reconciles with `reconcileMountedResult` in `js/services/svg-result-ingestion.js` |
+| The drawing switch, the shown drawing, and the artifact of each drawing that is not shown | `js/app/app-setup.js` (`selectDrawing`); the artifacts wait by drawing ID in the slot store (`createArtifactSlotStore` in `js/services/artifact-slot.js`, created by `js/services/history-snapshot.js`), which the switch and Session Load change only through its named operations; the one writer of `activeDrawingId` is `installShownDrawing` in `js/services/config.js` |
 | Render-worker client and lifecycle | `js/services/diagram-generation.js` |
 | Pyodide typed rendering | `js/workers/diagram-generation-worker.js` |
 | The Worker's package recipe, and the Pyodide snapshot of that runtime (capture, checks, restore; served only by a test server) | `js/workers/pyodide-snapshot.js` (builder: `tools/build_pyodide_snapshot.mjs`) |
@@ -201,8 +204,9 @@ before optional geometry reflow: a paint edit (R2) through the port
 `showEditorIntent` (R3), a label edit through the label owner
 (`app/feature-editor/label-actions.js`). A stroke action, a Legend row color,
 and a Legend row deletion are each one transition, `editEditorIntent` in
-`app/app-setup.js`: the action writes the active drawing's intent, the port
-shows it when it changed, and both are one History step. The other paint edits
+`app/app-setup.js`: the action writes the intent of the drawing it resolved,
+through that drawing's paint slice (R15), the port shows it when it changed,
+and both are one step in that drawing's History (R11). The other paint edits
 are History steps of their own that show through the same port (R2). If
 canonical output requires creating or removing geometry and no mounted target exists,
 queue the owning automatic rerender in the same action and replace the Result
@@ -281,28 +285,29 @@ successful source-replacing Generate (`pruneUnmatchedFeatureOverrides` in
 (`removeUnresolvedFeatureEdits`), or **Delete settings** of a record whose
 drawing is turned off, which deletes that record's per-feature edits, Feature
 placements, and the annotations that target that record. Result selection,
-mount, record selection (including turning a record's drawing on or off), mode
-change, hiding, and reflow never touch them. A source-replacing Generate keeps
+mount, record selection (including turning a record's drawing on or off), a
+drawing switch, hiding, and reflow never touch them. A source-replacing Generate keeps
 the rows of records that are turned off. Per-feature edits
-(`featureOverrides`) and Feature placements live in the drawing of the mode
-they were made in (R15) and are keyed by
-`JSON.stringify([recordKey, biologicalFeatureId])`. Both modes can use the same
-record key for the same feature (`record-1` in a Gallery or Python Session);
-each drawing holds its own row, so a request, the live projection, and every
-reconcile read only the rows of their own drawing and records, and the other
-drawing keeps its rows. Only `services/feature-placement.js` builds a draft
+(`featureOverrides`) and Feature placements live in the drawing they were made
+in (R15) and are keyed by
+`JSON.stringify([recordKey, biologicalFeatureId])`. Two drawings can use the
+same record key for the same feature (`record-1` in a Gallery or Python
+Session); each drawing holds its own row, so a request, the live projection,
+and every reconcile read only the rows of their own drawing and records, and
+every other drawing keeps its rows. Only `services/feature-placement.js` builds a draft
 key. A selected-feature annotation target (`featureIdentity`) belongs to its
 drawing the same way, and `annotationOptionsPayload` in
 `services/annotation-state.js` gives a request only the targets of its records.
 A row or target of a Session 41–44 that names its mode (`scope`) keeps that
 field only until the Session 46 split moves it into that mode's drawing.
 
-The paint intent of a drawing is its Legend rows (`legendEntries`, with the
-`deletedLegendEntries`, `dormantLegendEntries`, and `addedLegendCaptions`
-lists) and its color and stroke edits (`legendColorOverrides`,
-`legendStrokeOverrides`, `featureColorOverrides`, `featureStrokeOverrides`).
-The edits that write it are History steps that show what they change through
-`showEditorIntent` (R3):
+The paint intent of a drawing is its paint slice (`services/drawing/paint.js`,
+R15): its Legend rows (`legendEntries`, with the `deletedLegendEntries`,
+`dormantLegendEntries`, and `addedLegendCaptions` lists) and its color and
+stroke edits (`legendColorOverrides`, `legendStrokeOverrides`,
+`featureColorOverrides`, `featureStrokeOverrides`). Only that module writes
+them. The edits that call its writers are History steps that show what they
+change through `showEditorIntent` (R3):
 
 - a stroke action, a Legend row color, and a Legend row deletion, each
   wrapped by `editEditorIntent`;
@@ -324,13 +329,17 @@ binding of a Result install or rebuild it outside these steps (Python's Legend
 rows and colors, and the edits a source-replacing Generate prunes). The Legend
 name input also writes an unchanged copy of the list outside a step, so that it
 shows the row's name again after a refused or cancelled rename. No other code
-writes the paint intent; a new writer, or a writer that moves to another route,
-is an authority-only change.
+calls the paint slice's writers; a new caller, or a caller that moves to
+another route, is an authority-only change.
 
 Guards: `tests/web/feature-visibility-rule-writers.test.mjs`
-(`PAINT_INTENT_WRITERS`: each function that writes the paint intent by its
-name, by module, with its route; a write through an alias, such as a row read
-from the list, is not seen); `tests/web/non-edit-state-preservation.playwright.spec.js` with
+(`PAINT_INTENT_WRITERS`: each function that writes the paint intent, directly
+or by calling a slice function with the paint or visibility-rules slice
+handle, by its name, by module, with its route; a slice reader is one only by
+the `SLICE_READERS` list in `tests/web/helpers/drawing-state.mjs`, which the
+isolation table in `tests/web/per-mode-drawings.test.mjs` proves changes no
+drawing; a write through an alias, such as a row read from the list or a
+handle held under another name, is not seen); `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
 and after non-edit operations); the disjoint-Result binding test in
 `tests/web/feature-label-visual-unit.test.mjs`;
@@ -390,7 +399,7 @@ kept. A change to a live-edit path is done when the case for its edit kind in
 `tests/web/live-generate-parity.playwright.spec.js` passes with the popup
 opened and not, and with Auto Reflow on and off when the path reads it
 (`queueLabelReflow` without `force`). Each path that shows the editor intent
-(a live edit, Undo, Redo, a Result display, a mode switch, Reset Settings,
+(a live edit, Undo, Redo, a Result display, a drawing switch, Reset Settings,
 Session Load, and the automatic rerender) has rows in the spec's work
 allowlist (`WORK_ALLOWLIST`), each pinning the compile stages a case runs, the
 Worker requests it sends, and its compile count. A difference the Result may show
@@ -407,7 +416,7 @@ the edits made on another Result, also after Undo, Save, and Load),
 `tests/web/live-generate-parity.playwright.spec.js` (the matrix of edit kinds
 and editor states) with `tests/web/live-generate-parity-legend.playwright.spec.js`
 and `tests/web/live-generate-parity-track-data.playwright.spec.js` (Legend edits,
-track-data changes, and mode switches): a live edit equals the next Generate;
+track-data changes, and drawing switches): a live edit equals the next Generate;
 and the `projection-shapes` baseline in
 `tests/web/owner-graph-baseline.test.mjs`.
 
@@ -555,8 +564,21 @@ records an edit that loses no lane, and restores install state as is (R11).
 
 Every edit of a Feature Visibility rule (the Features panel and the popup's
 product and protein ID scopes) runs through `editFeatureVisibilityRules` in
-`app/feature-editor/visibility-actions.js`, which writes the rules, projects
-them, and follows with the labels as one History step.
+`app/feature-editor/visibility-actions.js`, which writes the drawing's rules
+through its visibility-rules slice (R15), projects them, and follows with the
+labels as one History step.
+
+No watcher writes a drawing. A transition that changes a drawing calls the
+reaction of that change explicitly: the palette draft sync after a color edit,
+the canvas padding after a padding edit, the label override rows after a bulk
+label edit, the Circular multi-record layout defaults after the multi-record
+toggle, the queued palette when Instant Preview turns on
+(`setPaletteInstantPreview` in `app/results.js`), and the annotation record
+bindings at the end of a record discovery and a drawing switch
+(`rebindAnnotationRecords` in `app/app-setup.js`). An auxiliary table import
+(default colors, color table, qualifier priority, whitelist, blacklist) is a
+transition of its file input (`importAuxiliaryTable` in `app/watchers.js`)
+that writes the drawing it resolved, through that drawing's slices.
 
 Guards: `tests/web/depth-slot-lifecycle.test.mjs` (the same cases through the
 Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`,
@@ -570,6 +592,37 @@ or Reset Settings).
 
 ### R11: History transaction boundaries
 
+- Each drawing has its own History, and the project has one project stream,
+  behind one router (`createHistoryRouter` in `services/history.js`) that the
+  composition root creates. A transaction, `undo`, `redo`, and availability go
+  to the shown drawing's History; a step closes in the History that opened it,
+  also after a drawing switch. Undo and Redo walk only the shown drawing's
+  steps and the project steps, and never switch or change another drawing
+  (PD-OI-090, OIC-030): Undo takes the newer top step of the two, Redo the
+  older. A new project step clears every Redo; a new drawing step clears its
+  own and the project's.
+- A step that changes a value of a drawing belongs whole to that drawing; the
+  Session-level values it also changes are part of its entry and are restored
+  with it where they are still as it left them. A project step is an operation
+  on every drawing (Reset Settings, which resets all drawings, in one step) or
+  a step that changes only Session-level values (the Session title, Auto
+  Reflow, PNG DPI, Instant Preview, the LOSAT execution and threads, the
+  Feature panel tab, and the drafts; R15-23 Q-DR-8). Such a step records only
+  the Session-level changes made since it opened. A Session-level change made
+  outside any step marks nothing unsaved and rides with the next step; the
+  drawing switch's own transient reset is no change.
+- Turning Instant Preview on is one project step with a part for each
+  drawing: it applies every drawing's queued palette, and its Undo brings each
+  queue back (R15-23 Q-DR-5, OV-1160). Turning it off changes only the flag.
+- A step captures and restores the artifact slot values of a drawing that is
+  not shown (the applied palette, the alignment Reset receipt) in that
+  drawing's own slot, through the one port of `services/history-snapshot.js`
+  keyed by drawing ID (`readSlotValues`, `writeArtifactValues`). It never
+  writes them to the shown Result (OV-1168, OV-1195).
+- The Histories share one byte budget, which evicts the steps of the drawings
+  that are not shown first, then project steps, then the shown drawing's,
+  oldest first within each; and one file retention, which keeps a file while
+  any History or binding names it.
 - A transaction belongs to one owner, a control or a gesture. Starting another
   owner's transaction first settles the open one. A legend or diagram drag passes
   a per-gesture owner.
@@ -602,11 +655,12 @@ or Reset Settings).
   the action that started on the step with its label, and under the step's
   current name when no action has that label.
 - Undo, Redo, and the header buttons share one reactive availability
-  (`historyAvailability`), busy while an artifact replacement or checkpoint is
+  (`historyAvailability`) of the shown drawing's History, busy while an artifact replacement or checkpoint is
   open or an action owns the open intent.
-- The History intent holds every file binding by reference
-  (`buildIntentFilesData` in `services/history-snapshot.js`), the BLAST rows and
-  comparison sequences of a LOSAT-cache replay included: its ring rows and the
+- A drawing's History intent holds, by reference (`buildIntentFilesData` in
+  `services/history-snapshot.js`), the file bindings of the input slots its
+  drawing uses and the auxiliary table files its own steps imported, the BLAST
+  rows and comparison sequences of a LOSAT-cache replay included: its ring rows and the
   managed track slots' `series_key` name those rows. Only the generated Linear
   comparisons stay in artifact checkpoints.
 - The feature catalog of the current Results (Generate's, or the automatic
@@ -628,7 +682,8 @@ or Reset Settings).
   displayed.
 - The Result picker is navigation (`data-history-ignore`), so a Result switch
   records no step, although the extracted legend entries follow the displayed
-  Result.
+  Result. A drawing switch (`selectDrawing`, R15) is navigation as well: it
+  settles the departing drawing's open step and records no step.
 
 Guards:
 
@@ -636,7 +691,7 @@ Guards:
   `tests/web/history-inputs.playwright.spec.js`: control kind, input means, focus
   state, and last-in-first-out Undo; each changed control adds exactly one step.
 - `tests/web/history-generated-authority.playwright.spec.js`: checkpoint Undo and
-  Redo, a mode round trip, and Undo while Generate runs.
+  Redo, a drawing round trip that records no step, and Undo while Generate runs.
 - `tests/web/multi-result-edit-matrix.playwright.spec.js`: Undo and Redo of
   drags on one batch Result while another Result is displayed (B17), a
   Result switch after a legend sort that records no step (B18), Undo and Redo
@@ -647,7 +702,7 @@ Guards:
   and checkpoint Undo and Redo (also
   `tests/web/session-draft-authority.test.mjs` for the rollback).
 - `tests/web/non-edit-state-preservation.playwright.spec.js` (G-H rows): Undo^n
-  Redo^n through mixed edits and a mode round trip, and Reset Settings Undo and
+  Redo^n through mixed edits and a drawing round trip, and Reset Settings Undo and
   Redo, leave user-owned state unchanged.
 - `tests/web/session-operation-consistency.test.mjs`: Undo availability during
   Generate.
@@ -681,7 +736,8 @@ tip is a reachable disclosure).
 Modules sit in layers, lowest first: leaves (`utils/`, `contracts/`,
 `config.js`, `web-ux-profile.js`, `mode-profiles.js`,
 `mode-profiles.generated.js`, `mode-scoped-settings.generated.js`), then
-state-free `services/`, then
+state-free `services/` (among them the drawing slices in `services/drawing/`:
+a slice module imports only leaves and other slice modules), then
 `state.js`, then the two state-bound services (`services/config.js`,
 `services/reset.js`), the only services that import `state.js`, then owner
 modules (`app/*.js` and `app/*/` factories), then the composition roots
@@ -708,6 +764,8 @@ is a leaf: like every leaf its modules import only leaves.
 - `state.<name> = <function>` outside `state.js` is a backdoor: a value an owner
   needs from a higher layer arrives as a port or on an existing data path
   (Result metadata, the admitted catalog).
+- `state` is frozen: no module adds or replaces a `state` member. A drawing's
+  slice members are written only by their slice module (R15).
 - A heavy derived value (`rulePreparation`) is triggered from one place per
   flow: the composition root's projection, the Generate compiler, or the owner
   of its input. An owner that only reads the result awaits `pending` rather
@@ -811,7 +869,15 @@ authority-only change. A new module is checked from its first commit.
   Lowering or removing an entry is optional. Adding or raising an entry is an
   authority-only change.
 - Distinct identity values (a Python key, a display caption, a swatch color, a
-  feature id) take distinct named types, not one shared `string` alias.
+  feature id, a drawing ID) take distinct named types, not one shared `string`
+  alias. A drawing's identity is its `DrawingId`; its mode is its `mode`
+  member and is never parsed from the ID.
+- `state.js` and `services/drawing/` create a drawing's members with
+  `utils/reactivity.js`, which types Vue's `ref`, `reactive`, and `computed`.
+  Other modules see a slice's members as a readonly view (`DeepReadonly`), so a
+  write outside the slice module does not type-check. The view is a type only,
+  not a Vue `readonly` proxy: the vendored production build drops such a write
+  silently.
 
 Guards: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
 run, declared factory parameters, no suppression, type-import direction, no
@@ -824,34 +890,74 @@ nothing else.
 
 ### R15: Drawing context and mode-scoped settings
 
-Each diagram mode has one drawing, `state.drawings.circular` and
-`state.drawings.linear` (`createDrawingState` in `state.js`). A drawing holds
-that mode's settings (`form`, `adv`, the LOSAT search fields, the comparison
-plan, record display, the layout slot), its editor edits (per-feature edits and
-placements, colors and color rules, label tables and filters, Legend edits,
-annotation sets, canvas padding), and the values derived from them, under their
-former `state` names. Nothing else holds them, and the two drawings share no
-member object, so a setting or an edit made in one mode never reaches the other
-(PD-OI-086).
+A project has one or more drawings, held by ID in `state.drawings`
+(`createDrawingState` in `state.js`). `state.activeDrawingId` names the shown
+drawing, and `state.activeDrawing()` returns it. A drawing's ID (`DrawingId`)
+is given when it is created and never changes, and its `mode` is fixed at
+creation (PD-OI-090). A drawing holds its settings (`form`, `adv`, the LOSAT
+search fields, the comparison plan, record display, the layout slot), its
+editor edits (per-feature edits and placements, colors and color rules, label
+tables and filters, Legend edits, annotation sets, canvas padding), and the
+values derived from them, under their former `state` names. Nothing else holds
+them, and two drawings share no member object, so a setting or an edit made in
+one drawing never reaches another (PD-OI-090).
 
-- `state` keeps only what both modes share: the input files, the LOSAT caches,
-  the LOSAT execution and thread settings, app settings (Auto Reflow, PNG DPI,
-  palette Instant Preview), the Session title, the shown Result and its
-  artifacts (each mode keeps its own Result, `services/artifact-slot.js`), and
-  transient flags. Every `state` key and drawing member is in exactly one class
-  in `tests/web/helpers/drawing-state.mjs`. A value both modes should share is
-  a Product decision: record it in the Product Contract before moving it out
-  of the drawing.
-- A state-free service never resolves the active drawing: it takes the
-  `drawing` it reads, or the mode whose drawing it reads (for example the
-  mode of the Result it handles). An owner resolves `state.activeDrawing()`, the
-  drawing of the shown mode, once per action, or the drawing of the mode its
-  action is about, and passes it down. Generate resolves its drawing once, at
-  the entry of `runAnalysis`; its request, validation, and commit use that
-  drawing only. A reflow or rerender of a committed Result uses the drawing of
-  that Result's mode.
-- A mode switch (`transitionDiagramMode`) writes no drawing (R10). History
-  stays one manager, and a switch is one step (R11).
+- The members are grouped into slices, one module each in `services/drawing/`:
+  paint, feature edits, color rules, visibility rules, label tables, palette,
+  annotation sets, group names, canvas, and settings. Each member is in exactly
+  one slice. A slice's writers take its handle, `drawing.slices.<name>`
+  (`services/drawing/slice-handle.js`).
+- A slice module is the only writer of its editor edits. Its writers are named
+  for the edit they make, and other modules read the slice through the
+  drawing's readonly view (R14).
+- Each slice module also installs, captures, and resets its slice. Session
+  Load, the History restore and capture, Save, and Reset Settings call those
+  three functions and no other copy; Reset Settings resets every slice through
+  its own `reset`.
+- Settings stay written by their controls and owner transitions (R7, R10).
+  Only their install, capture, and reset go through the settings slice.
+
+- `state` keeps only what every drawing shares: the input files, the LOSAT
+  caches, the LOSAT execution and thread settings, app settings (Auto Reflow,
+  PNG DPI, palette Instant Preview), the Session title, the shown drawing's
+  Result and artifacts (the artifacts of each drawing that is not shown wait
+  in its slot in the slot store, `services/artifact-slot.js`), and transient
+  flags. Every `state` key is in
+  exactly one class in `tests/web/helpers/drawing-state.mjs`. A value that
+  drawings should share is a Product decision: record it in the Product
+  Contract before moving it out of the drawing.
+- A service never resolves the active drawing: it takes the `drawing` it
+  reads (Session Save and the legacy configuration Load take it as
+  `shownDrawing` from their caller). An owner resolves `state.activeDrawing()`
+  once per action, or the drawing its action is about by its `DrawingId`
+  (`state.drawingOf`), and passes it down. No helper resolves it again. Until
+  the Session format holds a list of drawings, a site about the drawing of one
+  mode resolves it through `state.drawingOfMode(mode)`, the one lookup by mode,
+  whose callers may only decrease. Generate resolves its
+  drawing once, at the entry of `runAnalysis`; its request, validation, and
+  commit use that drawing only. A reflow or rerender of a committed Result uses
+  the drawing that Result belongs to, and installs through that drawing's
+  artifact owner.
+- The drawing switch is `selectDrawing` in `app/app-setup.js`. It and a
+  Session replacement (Load, a new Session) show a drawing through the one
+  writer of `activeDrawingId`, `installShownDrawing` in `services/config.js`.
+  The switch is navigation: it writes no drawing value, copies or resets
+  nothing, and records no History step (PD-OI-090, R10, R11).
+- The switch waits while Generate, a label rerender, Session Save or Load, a
+  History restore, an open History transaction, or the matching of a color
+  rule table edit runs (OV-1100, PD-OI-090 scenario revision 2).
+- Before it switches, it settles the departing drawing: its open step, its
+  pending rule-pattern drafts, the feature selection, and the shown Result's
+  projection. It then keeps that drawing's artifact in its slot, installs the
+  arriving drawing's slot, and resets transient UI. Reset Settings and the
+  Instant Preview step change the slot of a drawing that is not shown in that
+  slot, and History restores it through its slot port (R11); none of them
+  writes it to the shown Result.
+- Each drawing has its own History (R11).
+- Until the Session format holds a list of drawings, the store holds exactly
+  the drawings `circular` and `linear` (read through `state.drawingList()`,
+  `state.drawingOf(id)`, and `state.drawingOfMode(mode)`), and Save writes them as
+  `modes.circular` and `modes.linear`.
 - A Session 46 saves each drawing as `modes.circular` and `modes.linear`.
   `gbdraw/web_support/mode_scoped_settings.py` is the one registry of what a
   slice holds (domain, path, modes, row key, migration token);

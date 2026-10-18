@@ -270,16 +270,16 @@ const RESULT_REPLACEMENT_CAPABILITIES = Object.freeze([
   'Result content commit',
   'SVG serialization'
 ]);
-const resultReplacementCount = (detected, path, capability) => (
+const operatorCount = (detected, path, capability) => (
   detected.operatorMatchesByCapability[capability]
     .find((entry) => entry.path === path)?.count || 0
 );
-const resultReplacementOperators = (detected, path, capability) => {
-  const count = resultReplacementCount(detected, path, capability);
+const operatorEntries = (detected, path, capability) => {
+  const count = operatorCount(detected, path, capability);
   return count ? [{ path, count }] : [];
 };
 const totalResultReplacementCount = (detected, path) => RESULT_REPLACEMENT_CAPABILITIES
-  .reduce((total, capability) => total + resultReplacementCount(detected, path, capability), 0);
+  .reduce((total, capability) => total + operatorCount(detected, path, capability), 0);
 
 // IN-01 and GE-02 (Web GUI audit 2026-09-30, D-04 and D-05) retire the live
 // definition and stroke rewrites, and A1 of the post-audit follow-ups (W8 G-J)
@@ -305,7 +305,7 @@ const retiringReplacementOperators = (detected, path, capability) => {
   const ceiling = RETIRING_REPLACEMENT_CEILINGS[path];
   assert.ok(totalResultReplacementCount(detected, path) <= ceiling,
     `${path}: retiring Result replacement may only contract (ceiling ${ceiling})`);
-  return resultReplacementOperators(detected, path, capability);
+  return operatorEntries(detected, path, capability);
 };
 // The retiring owners that sort before `boundary`, in detector (path) order.
 const retiringOperatorsBefore = (detected, boundary, capability) => Object.keys(
@@ -314,16 +314,32 @@ const retiringOperatorsBefore = (detected, boundary, capability) => Object.keys(
   .flatMap((path) => retiringReplacementOperators(detected, path, capability));
 // After A1, the Result switch and Save flushes of the remaining owners never
 // write (T6 of the post-audit follow-ups). Their Result content commit counts
-// may shrink without editing this guard; they may not grow.
+// may shrink without editing this guard; they may not grow. Generate's second
+// commit (the label reflow) may leave app/run-analysis.js for the artifact
+// owner of its Result's drawing (OV-111, D-15-49).
 const RESULT_COMMIT_KEEPER_CEILINGS = Object.freeze({
   'app/preview-runtime.js': 4,
+  'app/run-analysis.js': 2,
   'services/config.js': 4
 });
 const keeperCommitOperators = (detected, path) => {
   const ceiling = RESULT_COMMIT_KEEPER_CEILINGS[path];
-  assert.ok(resultReplacementCount(detected, path, 'Result content commit') <= ceiling,
+  assert.ok(operatorCount(detected, path, 'Result content commit') <= ceiling,
     `${path}: Result content commit may only contract (ceiling ${ceiling})`);
-  return resultReplacementOperators(detected, path, 'Result content commit');
+  return operatorEntries(detected, path, 'Result content commit');
+};
+// DRAWINGS-A moves the History transactions out of the composition root into
+// History's own owner (D-15-55): app/app-setup.js may only shed its History
+// operators, and services/history.js may hold only what app/app-setup.js sheds.
+const HISTORY_SHED_CEILING = 3;
+const HISTORY_ROUTER_CEILING = 10;
+const historyOperators = (detected, path) => {
+  const shed = operatorCount(detected, 'app/app-setup.js', 'History');
+  assert.ok(shed <= HISTORY_SHED_CEILING,
+    `app/app-setup.js: History operators may only contract (ceiling ${HISTORY_SHED_CEILING})`);
+  assert.ok(shed + operatorCount(detected, 'services/history.js', 'History') <= HISTORY_ROUTER_CEILING,
+    `services/history.js: History operators may only take what app/app-setup.js sheds (ceiling ${HISTORY_ROUTER_CEILING} together)`);
+  return operatorEntries(detected, path, 'History');
 };
 const importersWithRetiringOwners = (target, required, retiring) => {
   const actual = importersOf(target);
@@ -816,15 +832,15 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'workers/losat-threaded-worker.js', count: 2 }
     ],
     History: [
-      { path: 'app/app-setup.js', count: 3 },
+      ...historyOperators(detected, 'app/app-setup.js'),
       { path: 'services/history-snapshot.js', count: 2 },
-      { path: 'services/history.js', count: 7 }
+      ...historyOperators(detected, 'services/history.js')
     ],
     'Result content commit': [
       ...retiringOperatorsBefore(detected, 'app/preview-runtime.js', 'Result content commit'),
       ...keeperCommitOperators(detected, 'app/preview-runtime.js'),
       ...retiringReplacementOperators(detected, 'app/results.js', 'Result content commit'),
-      { path: 'app/run-analysis.js', count: 2 },
+      ...keeperCommitOperators(detected, 'app/run-analysis.js'),
       ...retiringReplacementOperators(detected, 'app/svg-styles.js', 'Result content commit'),
       ...keeperCommitOperators(detected, 'services/config.js')
     ],
@@ -952,6 +968,23 @@ test('kept Result content commit owners may contract but never grow', () => {
       } else {
         assert.throws(() => keeperCommitOperators(detected, path), /may only contract/);
       }
+    }
+  }
+});
+
+test('History operators may move from the composition root into History but never grow', () => {
+  const historyCode = (count) => 'beginCheckpoint(label);\n'.repeat(count);
+  for (const [shed, owner] of [[3, 7], [0, 10], [2, 8], [0, 0], [3, 0], [4, 6], [3, 8], [0, 11]]) {
+    const detected = detectPrivilegedWebCapabilities(new Map([
+      ['app/app-setup.js', historyCode(shed)], ['services/history.js', historyCode(owner)]
+    ]));
+    assert.equal(operatorCount(detected, 'app/app-setup.js', 'History'), shed);
+    assert.equal(operatorCount(detected, 'services/history.js', 'History'), owner);
+    if (shed <= HISTORY_SHED_CEILING && shed + owner <= HISTORY_ROUTER_CEILING) {
+      assert.deepEqual(historyOperators(detected, 'services/history.js'),
+        owner ? [{ path: 'services/history.js', count: owner }] : []);
+    } else {
+      assert.throws(() => historyOperators(detected, 'services/history.js'), /may only (contract|take)/);
     }
   }
 });
