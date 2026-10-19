@@ -571,9 +571,8 @@ const legendRenameDialog = reactive({
   // R15-3 (OV-285): the Python key of the deleted row the new caption names;
   // '' when the target is listed. Its Merge restores that row first.
   deletedTargetKey: /** @type {PythonLegendKey | ''} */ (''),
-  // PD-OI-061 revision 4: the new caption is the name of a color rule that no
-  // Legend row shows.
-  targetRuleOnly: false,
+  // Why the dialog asks: its one sentence (`legendNameConflictReason`, OV-649).
+  reason: '',
   // PD-OI-061 scenario revision 5: the name the renamed row is drawn with
   // after "Keep both", and the target row's drawn name after it ('' when the
   // target is not drawn or its drawn name stays).

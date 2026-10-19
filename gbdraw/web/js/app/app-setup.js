@@ -4437,6 +4437,18 @@ export const createAppSetup = () => {
   const updateLegendEntryColorShown = (index, color) => (
     legendRowHasRules(index) ? updateLegendEntryColor(index, color) : editLegendEntryColor(index, color)
   );
+  const setLegendRowDefaultColorWithHistory = undoableAction('Change legend color', featureActions.setLegendRowDefaultColor);
+  // OV-1281: the Legend item popup's Color. On a row that a type's default
+  // color draws it sets that default color, so the features and the legend
+  // change together (OIC-029); any other row takes the Legend color edit.
+  /** @param {number} index @param {string} color */
+  const updateLegendEntryColorInPopup = async (index, color) => {
+    const entry = state.activeDrawing().legendEntries.value[index];
+    if (entry && await featureActions.isLegendRowDefaultColored(legendEntryKey(entry))) {
+      return setLegendRowDefaultColorWithHistory(legendEntryKey(entry), color);
+    }
+    return updateLegendEntryColorShown(index, color);
+  };
   const setLegendEntryStrokeColorValueWithHistory = editEditorIntent(
     'Change legend stroke color',
     setLegendEntryStrokeColorValue
@@ -5998,6 +6010,7 @@ export const createAppSetup = () => {
     readLegendRowRules: (entry) => legendRowRules(legendEntryKey(entry), displayedLegendRowContext(state, state.activeDrawing())),
     countLegendCaptionFeatures: featureActions.countLegendCaptionFeatures,
     readLegendTrackKind: (entry) => displayedTrackLegendRows(state.activeDrawing()).get(legendEntryKey(entry))?.kind ?? null,
+    readLegendRowDefaultColorType: (entry) => featureActions.legendRowDefaultColorType(legendEntryKey(entry)),
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     readAlignmentInspector: () => similarityAlignmentActions.activePlanInspector.value,
     readCommittedRecordRows: recordDisplayControls.committedRecordRows,
@@ -7468,6 +7481,7 @@ export const createAppSetup = () => {
     commitPreviewItemField: previewItemPopup.commitField,
     deletedLegendEntryColor,
     updateLegendEntryColor: updateLegendEntryColorShown,
+    updateLegendEntryColorInPopup,
     renameLegendEntry,
     // A Legend row delete is one History step of the intent, which Undo and
     // Redo show through the port and lay out as Python does, canvas included

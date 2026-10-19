@@ -717,11 +717,13 @@ assert.equal(featureStyleScopeDialog.show, true);
 assert.equal(featureStyleScopeDialog.kind, 'stroke');
 assert.equal(featureStyleScopeDialog.strokeColor, '#111111');
 assert.equal(featureStyleScopeDialog.strokeWidth, 2.5);
-assert.equal(clickedFeature.value, null);
+assert.equal(clickedFeature.value?.svg_id, strokeFeature.svg_id, 'OV-1278: the popup stays open while the dialog asks');
 assert.equal(strokeAttributes.get('stroke'), '#111111');
 assert.equal(strokeAttributes.get('stroke-width'), '1');
 assert.equal(await actions.handleFeatureStyleScopeChoice('cancel'), false);
 assert.equal(featureStyleScopeDialog.show, false);
+assert.deepEqual([clickedFeature.value?.svg_id, clickedFeature.value?.strokeWidth], [strokeFeature.svg_id, 1],
+  'OV-1278: Cancel leaves the popup open with the stroke the feature has');
 
 clickedFeature.value = {
   svg_id: strokeFeature.svg_id,
@@ -1281,8 +1283,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const ruleOwned = ruleRows();
   await ruleOwned.renameActions.renameLegendEntry(0, 'Special');
   assert.equal(ruleOwned.legendRenameDialog.show, true, 'a rename onto a color rule\'s row asks');
-  assert.deepEqual([ruleOwned.legendRenameDialog.mode, ruleOwned.legendRenameDialog.mergeAvailable, ruleOwned.legendRenameDialog.targetRuleOnly],
-    ['target', true, false]);
+  assert.deepEqual([ruleOwned.legendRenameDialog.mode, ruleOwned.legendRenameDialog.mergeAvailable, ruleOwned.legendRenameDialog.reason],
+    ['target', true, '"Special" already exists with another color.']);
   assert.equal(ruleOwned.committed.length, 0);
   await ruleOwned.renameActions.handleLegendRenameChoice('merge');
   assert.deepEqual(committedFor(ruleOwned, 't1'), [['t1', 'Special', '#ff0000']]);
@@ -1297,7 +1299,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.equal(asked.legendRenameDialog.show, true, 'a rename onto the name of a rule without a row asks');
     assert.deepEqual([asked.legendRenameDialog.mode, asked.legendRenameDialog.mergeAvailable, asked.legendRenameDialog.targetCaption,
       asked.legendRenameDialog.targetColor, asked.legendRenameDialog.keepBothName], ['target', true, 'Connector', '#5a5a5a', 'Connector']);
-    assert.equal(asked.legendRenameDialog.targetRuleOnly, true, 'OV-586: the dialog says the name is a color rule\'s, not a Legend item\'s');
+    assert.equal(asked.legendRenameDialog.reason, '"Connector" is the name of a color rule with another color.',
+      'OV-586: the dialog says the name is a color rule\'s, not a Legend item\'s');
     assert.equal(asked.committed.length, 0);
     await asked.renameActions.handleLegendRenameChoice('merge');
     assert.deepEqual(committedFor(asked, 't1'), [['t1', 'Connector', '#5a5a5a']]);
@@ -1310,8 +1313,15 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const otherType = ruleRows();
   await otherType.renameActions.renameLegendEntry(0, 'Tail');
   assert.deepEqual([otherType.legendRenameDialog.show, otherType.legendRenameDialog.mergeAvailable], [true, false]);
+  assert.equal(otherType.legendRenameDialog.reason, '"Tail" is the name of a color rule with another color.');
   await otherType.renameActions.handleLegendRenameChoice('merge');
   assert.equal(otherType.committed.length, 0, 'a Merge that is not offered is refused');
+  // OV-649 (Owner, Q-01 a): in the renamed row's own color the reason is the
+  // feature type, not the color.
+  const sameColorOtherType = ruleRows({ rules: [specialRule, connectorRule, { ...cdsRule, color: '#e8b441' }] });
+  await sameColorOtherType.renameActions.renameLegendEntry(0, 'Tail');
+  assert.deepEqual([sameColorOtherType.legendRenameDialog.show, sameColorOtherType.legendRenameDialog.mergeAvailable,
+    sameColorOtherType.legendRenameDialog.reason], [true, false, '"Tail" is the name of a color rule for another feature type.']);
 
   // A pick joins the group without the conflict dialog: a group that draws a
   // row, and one that draws none.
@@ -1338,8 +1348,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.deepEqual(committedFor(twinTyped, 't1'), [['t1', 'Twin', '#222222']]);
   const twinAsked = ruleRows({ rules: twins });
   await twinAsked.renameActions.renameLegendEntry(0, 'Twin');
-  assert.deepEqual([twinAsked.legendRenameDialog.show, twinAsked.legendRenameDialog.targetColor, twinAsked.legendRenameDialog.targetRuleOnly],
-    [true, '#111111', true], 'in another color the first group of the name is the target');
+  assert.deepEqual([twinAsked.legendRenameDialog.show, twinAsked.legendRenameDialog.targetColor, twinAsked.legendRenameDialog.reason],
+    [true, '#111111', '"Twin" is the name of a color rule with another color.'], 'in another color the first group of the name is the target');
   // Other features share the feature's row: the scope question stays, and
   // neither answer is followed by the conflict dialog.
   for (const [scope, ids] of [['single', ['t1']], ['group', ['t1', 't3']]]) {

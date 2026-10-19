@@ -6728,7 +6728,7 @@
                                         <h3 id="preview-legend-color-heading" tabindex="-1" data-dialog-initial-focus class="feature-popup-heading">Color</h3>
                                         <div class="flex items-center gap-2">
                                             <input type="color" :value="previewItemView.color"
-                                                   @change="updateLegendEntryColor(previewItemView.index, $event.target.value)"
+                                                   @change="updateLegendEntryColorInPopup(previewItemView.index, $event.target.value)"
                                                    :aria-label="`Color of ${previewItemView.name}`"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="h-7 w-10 cursor-pointer rounded border border-slate-300 p-0">
@@ -7296,15 +7296,7 @@
                                 Rename "<span class="font-semibold text-slate-800">{{ shownLegendName(legendRenameDialog.sourceKey) }}</span>" to "<span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span>"?
                             </p>
                             <div v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                <p v-if="legendRenameDialog.targetRuleOnly">
-                                    "{{ legendRenameDialog.newCaption }}" is the name of a color rule with another color.
-                                </p>
-                                <p v-else-if="!legendRenameDialog.mergeAvailable">
-                                    "{{ legendRenameDialog.newCaption }}" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item' : 'already exists' }} and draws a different feature type, so the two cannot be merged.
-                                </p>
-                                <p v-else>
-                                    "{{ legendRenameDialog.newCaption }}" {{ legendRenameDialog.deletedTargetKey ? 'is a deleted Legend item.' : 'already exists with another color.' }}
-                                </p>
+                                <p data-legend-rename-reason>{{ legendRenameDialog.reason }}</p>
                                 <p v-if="legendRenameDialog.targetNameAfter" class="mt-2">
                                     The existing "{{ shownLegendName(legendRenameDialog.targetKey) }}" becomes "{{ legendRenameDialog.targetNameAfter }}".
                                 </p>

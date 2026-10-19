@@ -80,7 +80,7 @@ const createPopup = ({
   requestRecords = [{ recordKey: 'uid-1', presentation: { label: 'Old name' } }],
   recordRows = [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' }],
   rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null, trackKinds = {},
-  countLegendCaptionFeatures = () => featureCount,
+  countLegendCaptionFeatures = () => featureCount, defaultColorTypes = {},
   readLegendTrackKind = (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null
 } = {}) => {
   const steps = [];
@@ -104,6 +104,7 @@ const createPopup = ({
     readLegendRowRules: () => rules,
     countLegendCaptionFeatures,
     readLegendTrackKind,
+    readLegendRowDefaultColorType: (entry) => defaultColorTypes[entry.originalCaption || entry.caption] ?? null,
     getCommittedRequest: () => ({ records: requestRecords }),
     readCommittedRecordRows: () => recordRows,
     readAlignmentInspector: () => alignment && { records: [alignment] },
@@ -301,6 +302,11 @@ test('the legend-entry view names the rule behind the color and the feature coun
   const byType = openView(createPopup(), { kind: 'legend-entry', key: 'tRNA' }, false);
   assert.equal(byType.subtitle, 'Counting features…');
   assert.equal(byType.colorSource, 'Default color of tRNA features');
+  // OV-1281: once the matches are ready, a row the default color draws says that its Color sets it.
+  assert.equal(openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' } }), { kind: 'legend-entry', key: 'tRNA' }).colorSource,
+    'Default color of tRNA features. A change sets the tRNA default color (tRNA features without their own color or rule, also hidden ones).');
+  assert.equal(openView(createPopup({ defaultColorTypes: { tRNA: 'tRNA' } }), { kind: 'legend-entry', key: 'tRNA' }, false).colorSource,
+    'Default color of tRNA features', 'before the matches are ready the popup does not say what Color sets');
   const single = openView(createPopup({ entries: [{ caption: 'x', color: '#000000' }], featureTypes: [], featureCount: 1 }),
     { kind: 'legend-entry', key: 'x' });
   assert.equal(single.subtitle, '1 feature');

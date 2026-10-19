@@ -276,6 +276,9 @@ export const createFeatureEditor = ({
     applyColorToSelectedFeatures: colorActions.applyColorToSelectedFeatures,
     applyStrokeToSelectedFeatures: colorActions.applyStrokeToSelectedFeatures,
     setFeatureColor: colorActions.setFeatureColor,
+    legendRowDefaultColorType: colorActions.legendRowDefaultColorType,
+    isLegendRowDefaultColored: colorActions.isLegendRowDefaultColored,
+    setLegendRowDefaultColor: colorActions.setLegendRowDefaultColor,
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,

@@ -1122,7 +1122,9 @@ or rules that draw the row, the feature type's default color, or colors set on
 individual features. **Color** and **Legend name** edit the row as the Legend
 tab does, with the same **Merge into "<name>"**, **Keep both**, or **Cancel**
 choice for a name another row uses, and **Remove from legend** moves the row to the Legend tab's
-**Deleted items**. The popup of a GC content, GC skew, or Depth row names its
+**Deleted items**. On a row that the feature type's default color draws, **Color**
+sets that type's default color, as **Legend item** in the **Color Change Scope**
+dialog does, so the features and the legend change together in one History step. The popup of a GC content, GC skew, or Depth row names its
 plot (**Content plot**, **Skew plot**, **Depth plot**) instead of a feature
 count; its **Color** changes the legend swatch only, and the plot keeps the
 color set in Settings. A click on a record definition (the Linear record label on
@@ -1191,11 +1193,15 @@ keeps `CDS (2)` as written, and the numbering of `CDS` skips it. Rows of one
 name and one swatch are one row, so **Keep both** with an equal swatch gives
 one row and its button names it without a number. When the rename takes only
 some features of a row, their new row goes right after the row of that name,
-so the legend draws the name the dialog showed. In the color scope, legend name, and
+so the legend draws the name the dialog showed. Renaming a row that a feature type's default
+color draws keeps its features drawn when you later clear that type in **Feature Types**; set
+their **Feature visibility** to **Off** to hide them. In the color scope, legend name, and
 **Reset fill color** dialogs, whether a fill color in the popup or the Features
 list, a popup stroke edit, or a legend rename opens them, each choice is one
 History step and **Cancel** records none. After a choice the dialog stays open with its buttons
-disabled and shows **Applying an edit…** until the edit is applied. The first
+disabled and shows **Applying an edit…** until the edit is applied. A choice or **Cancel** in the
+**Color Change Scope** or **Stroke Change Scope** dialog leaves the feature popup that opened it
+open with the feature's fill and stroke, so a stroke edit can follow a fill edit. The first
 choice after a page or Session load can wait several seconds while the Python
 runtime starts. A legend row that a color rule draws under the name of a
 generated row in another color (the two are then numbered, such as `rRNA (1)`

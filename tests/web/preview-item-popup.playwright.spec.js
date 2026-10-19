@@ -50,7 +50,7 @@ test('a Legend row opens its popup; rename, remove, keyboard, and Layout edit', 
   const dialog = page.getByRole('dialog', { name: 'Legend item: tRNA', exact: true });
   await expect(dialog).toBeVisible();
   await expectPlacedBeside(page, legendPoint);
-  await expect(dialog.locator('[data-preview-legend-color-source]')).toHaveText('Default color of tRNA features');
+  await expect(dialog.locator('[data-preview-legend-color-source]')).toHaveText(/^Default color of tRNA features\. A change sets the tRNA default color/);
 
   // Rename: one History step, shown in the Legend panel's rows.
   const before = await undoCount(page);
@@ -110,6 +110,51 @@ test('a GC content or GC skew Legend row popup names its plot, not features', as
     await page.keyboard.press('Escape');
     await expect(popup(page)).toHaveCount(0);
   }
+});
+
+// OV-1281 (Owner, Q-09 a): on a row that a feature type's default color draws
+// (no Specific color rule, no color of its own on a feature), the popup's Color
+// sets that type's Default color as the scope dialog's Legend item choice does
+// (OIC-029): the features and the legend change together, as one History step.
+test('a default-colored Legend row popup Color sets the type\'s default color', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSessionFile(page, HMMT_SESSION);
+  const state = () => page.evaluate(async () => {
+    const { state: s } = await import('./js/state.js');
+    const app = window.__GBDRAW_APP__;
+    const svg = app.svgContainer.querySelector('svg');
+    const fills = app.extractedFeatures.filter((feature) => feature.type === 'tRNA').map((feature) => {
+      const element = svg.querySelector(`[id="${CSS.escape(feature.svg_id)}"]`);
+      const shape = element?.matches('path, rect, polygon') ? element : element?.querySelector('path, rect, polygon');
+      return shape?.getAttribute('fill') || null;
+    }).filter(Boolean);
+    const swatch = svg.querySelector('#legend g[data-legend-key="tRNA"] path[fill]')?.getAttribute('fill') || null;
+    return { fills: [...new Set(fills)], swatch, defaultColor: app.currentColors.tRNA, overrides: { ...s.activeDrawing().legendColorOverrides } };
+  });
+  const before = await state();
+  expect(before.fills.length).toBe(1);
+
+  await clickCentre(legendRow(page, 'tRNA').locator('path').first());
+  const dialog = page.getByRole('dialog', { name: 'Legend item: tRNA', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('[data-preview-legend-color-source]')).toHaveText(
+    'Default color of tRNA features. A change sets the tRNA default color (tRNA features without their own color or rule, also hidden ones).');
+  const steps = await undoCount(page);
+  await dialog.getByLabel('Color of tRNA', { exact: true }).fill('#c026d3');
+  await settle(page);
+  await expect.poll(state).toEqual({ fills: ['#c026d3'], swatch: '#c026d3', defaultColor: '#c026d3', overrides: before.overrides });
+  expect(await undoCount(page), 'one History step').toBe(steps + 1);
+
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  await expect.poll(state).toEqual(before);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  await expect.poll(state).toEqual({ fills: ['#c026d3'], swatch: '#c026d3', defaultColor: '#c026d3', overrides: before.overrides });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  await settle(page);
+  await expect.poll(state, 'Generate draws the same').toEqual({ fills: ['#c026d3'], swatch: '#c026d3', defaultColor: '#c026d3', overrides: before.overrides });
 });
 
 test('a record definition opens its popup; its edits write the record settings', async ({ page }) => {
