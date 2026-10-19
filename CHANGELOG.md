@@ -272,6 +272,25 @@ write-up of a release.
   inputs kept changing, an error says so and offers Retry table import, which
   stays available after later changes, instead of the file being dropped
   silently (OV-1206).
+- Web app: **Remove** on the **Default colors file**, **Specific rules file**,
+  **Priority File (TSV)**, **Whitelist File**, and **Blacklist File** cards
+  now takes back what that file loaded, in Circular and Linear, and keeps
+  every edit you made by hand before or after the load, including a file row
+  you edited. One **Undo** brings back the card and what it loaded. Loading
+  another file on a card takes back the earlier file's rows first. Rows that a
+  **Preset scheme** added count as yours: Remove and a new rules file keep
+  them, and a rules file loaded after a preset adds its rows after the preset
+  rows (#1222, OV-1280).
+- Web app: the Legend popup of a row drawn by a feature type's default color
+  no longer says "Default color of <type> features." before the sentence that
+  says what **Color** sets (OV-1336).
+- Sessions: Session 48 also records what each Web file card loaded: Specific
+  rules rows keep their `fromFile` mark, Whitelist and Qualifier priority rows
+  carry `importedFrom`, and `config.fileImports` holds Default colors and
+  Blacklist words. In a Session up to 47, Remove on the Specific rules card
+  takes back `fromFile` rows, including the rows of a **Preset scheme** saved
+  then, which were marked like a rules file's rows; its other rows read as
+  rows added by hand (#1222).
 - The "Labels do not fit" error for radial labels without room now says so
   instead of showing overlap and crossing counts (OV-1194).
 - Web app feature popup: the header shows the gene name, the product on up to
