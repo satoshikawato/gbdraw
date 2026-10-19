@@ -68,7 +68,7 @@ from ...labels.circular import (
     x_overlap,
     y_overlap,
 )
-from ...labels.circular_fit import CircularLabelLayout
+from ...labels.circular_fit import CircularLabelFitProbe, CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
 from ...labels.circular_types import CircularLabel, CircularLabelCandidate, CircularLabelCandidateCache
 from ...labels.fit import FITS, LabelFit, LabelFitValue, LabelKind
@@ -727,7 +727,7 @@ def _circular_annotation_labels_by_slot(
             obstacles=obstacles,
             covers_slots=slot.spans_slots,
         )
-        obstacles = obstacles.with_polygons([label.corners for label in labels[slot.id]])
+        obstacles = obstacles.with_labels(labels[slot.id])
     return labels
 
 
@@ -743,7 +743,7 @@ def _feature_label_obstacles(
         canvas_config.profile.config.labels.stroke_width.for_length_param(canvas_config.length_param)
     )
     return CircularLabelObstacles(
-        polygons=tuple(part for shape in shapes for part in shape.parts),
+        shapes=tuple(shape.parts for shape in shapes),
         segments=tuple(segment for shape in shapes for segment in zip(shape.leader, shape.leader[1:])),
         clearance=spacing,
         segment_clearance=spacing + half_stroke,
@@ -1940,8 +1940,12 @@ def _record_label_layout(
     *,
     definition_text: Sequence[Aabb],
     radial_refused: bool,
+    region_labels: Sequence[CircularAnnotationLabel] = (),
 ) -> CircularLabelLayout | None:
-    """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings."""
+    """The drawn labels' fit by kind, and a probe that places horizontal outer labels with other settings.
+
+    Region labels cut to fit their circle are a ``circular_region`` kind that only warns (LP-D87).
+    """
 
     total_length = len(gb_record.seq)
     label_counts: dict[LabelKind, int] = {}
@@ -1954,33 +1958,48 @@ def _record_label_layout(
             else "circular_outer"
         )
         label_counts[kind] = label_counts.get(kind, 0) + 1
-    if not label_counts or place_labels is None:
+    placed = bool(label_counts) and place_labels is not None
+    cuts = sum(label.cut for label in region_labels)
+    if not placed and not cuts:
         return None
     cfg = profile.config
     horizontal = profile.label_placement == "horizontal"
 
-    def probe(overrides: Mapping[str, LabelFitValue]) -> LabelFit:
-        probe_profile = replace(profile, config=with_config_overrides(cfg, overrides))
-        try:
-            labels = place_labels(probe_profile, probe=True)
-        except CircularLabelProbeStopped as stopped:
-            # The dense candidate already overlaps; crossings are not counted.
-            return LabelFit(overlap_pairs=stopped.overlap_pairs, crossing_pairs=0)
-        return circular_label_fits(labels, total_length).get("circular_outer", FITS)
+    probe: CircularLabelFitProbe | None = None
+    if place_labels is not None and horizontal and label_counts.get("circular_outer"):
+        placer = place_labels
+
+        def probe_outer(overrides: Mapping[str, LabelFitValue]) -> LabelFit:
+            probe_profile = replace(profile, config=with_config_overrides(cfg, overrides))
+            try:
+                labels = placer(probe_profile, probe=True)
+            except CircularLabelProbeStopped as stopped:
+                # The dense candidate already overlaps; crossings are not counted.
+                return LabelFit(overlap_pairs=stopped.overlap_pairs, crossing_pairs=0)
+            return circular_label_fits(labels, total_length).get("circular_outer", FITS)
+
+        probe = probe_outer
+
+    counts: dict[LabelKind, int] = dict(label_counts) if placed else {}
+    kind_fits = circular_label_fits(drawn_labels, total_length, definition_text=definition_text) if placed else {}
+    if cuts:
+        counts["circular_region"] = len(region_labels)
+        kind_fits["circular_region"] = LabelFit(0, 0, region_cuts=cuts)
 
     outer_offsets = cfg.labels.unified_adjustment.outer_labels
     return CircularLabelLayout(
         record_id=str(gb_record.id),
         placement="horizontal" if horizontal else "radial",
         font_size=circular_label_font_size(cfg, total_length),
-        label_counts=label_counts,
-        kind_fits=circular_label_fits(drawn_labels, total_length, definition_text=definition_text),
+        label_counts=counts,
+        kind_fits=kind_fits,
         x_radius_offset=float(outer_offsets.x_radius_offset),
         y_radius_offset=float(outer_offsets.y_radius_offset),
         label_spacing=float(cfg.labels.spacing.circular),
         refused=radial_refused,
         features_separated=bool(profile.resolve_overlaps),
-        probe=probe if horizontal and label_counts.get("circular_outer") else None,
+        probe=probe,
+        region_font_size=max((label.font_size for label in region_labels), default=0.0),
     )
 
 
@@ -2856,6 +2875,7 @@ def add_record_on_circular_canvas(
         ),
         definition_text=definition_text,
         radial_refused=radial_refused,
+        region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
     )
     source_content_bounds = _collect_circular_primary_bounds(
         radial_layout=radial_layout,

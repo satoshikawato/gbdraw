@@ -994,3 +994,32 @@ test('a Linear region label or axis tick is never an editable feature label (OV-
   }
   assert.deepEqual(harness.state.editableLabels.value.map((entry) => entry.featureId), ['labeled']);
 });
+
+test('a curved Circular region label is never an editable feature label (OV-1210, OV-1291)', () => {
+  const curved = (id, bbox) => `<text id="${id}" data-fake-bbox="${bbox}"><textPath href="#${id}-path">label</textPath></text>`;
+  const svg = new DOMParser().parseFromString([
+    '<svg>',
+    '<g id="record_group_1">',
+    '<path data-gbdraw-feature-id="labeled" data-fake-bbox="0 0 10 10" />',
+    '<path data-gbdraw-feature-id="unlabeled" data-fake-bbox="50 0 10 10" />',
+    curved('feature-label', '2 3 6 4'),
+    '</g>',
+    '<g id="gbdraw-annotation-track-regions_1-1">',
+    '<g id="gbdraw-annotation-regions_1-rrna" data-gbdraw-annotation-id="rrna">',
+    '<path data-fake-bbox="50 20 10 4" />', curved('region-label', '50 12 10 4'),
+    '</g>',
+    '</g>',
+    '</svg>'
+  ].join(''), 'image/svg+xml').documentElement;
+  const harness = buildHarness({ svg, featureId: 'labeled' });
+  harness.state.mode.value = 'circular';
+  harness.state.generatedMode.value = 'circular';
+  harness.state.extractedFeatures.value = [featureFor('labeled'), featureFor('unlabeled')];
+  harness.actions.syncLabelEditor();
+  const byId = (id) => svg.querySelector(`#${id}`);
+  assert.equal(byId('feature-label').getAttribute('data-label-editable'), 'true');
+  assert.equal(byId('feature-label').getAttribute('data-label-feature-id'), 'labeled');
+  assert.equal(byId('region-label').getAttribute('data-label-editable'), null);
+  assert.equal(byId('region-label').getAttribute('data-label-feature-id'), null);
+  assert.deepEqual(harness.state.editableLabels.value.map((entry) => entry.featureId), ['labeled']);
+});

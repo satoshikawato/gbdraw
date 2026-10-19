@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `66`
+- Contract revision: `67`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -1803,6 +1803,60 @@ Status: active Product authority
 
   - Scope: the record's receipt for scenario revision `9` is recorded below;
     the scenario revision `7` and `8` receipts keep their text and their
+    SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
+    retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 67 changes: `PD-OI-097` is replaced for scenario revision `10`
+  (concern `product.circular-outer-label-fit`). It comes from the Product
+  Decision Owner `satoshikawato`'s replies of `2026-10-19` on Circular region
+  (annotation) labels drawn along their circle that are longer than the
+  circle allows (OV-1210). Each quotation below is the part of a reply that
+  carries the answer; Replies 1 to 22 are those of the Revision 50, 53, and 66
+  entries.
+  - Reply 23 (scenario revision `10`, `2026-10-19`), to the question
+    「Q2（OV-1210）：円のかなりの部分を回るほど長いラベルはどう描きますか？（ページの f2, f3）」
+    the selected option and its description:
+    「常に曲線＋欠けたら警告」
+    「常に曲線で描き、円周に収まらない分は欠ける。欠けたときは警告を出す。」
+    and the answer:
+    「常に曲線＋欠けたら警告」
+    (`RGN-CUT-WARN`)
+  - Reply 23 states no rationale, preserved or retired effect, or accepted
+    risk for this choice, and the change receipt below adds none.
+  - Reply 24 (`2026-10-19`), approving the receipt texts below, to the
+    question
+    「Q5（OV-1210）：PD-OI-097 rev 10 の受領文です。Choice に RGN-CUT-WARN を加え、Rationale の末尾に「Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。」を足し、Decision date を 2026-10-19 にします。ほかの欄（Must preserve を含む）は rev 9 のままです。この受領文を承認しますか？（ページの「実装と受領文の確認」）」
+    the selected option and its description:
+    「承認 (推奨)」
+    「このとおり Contract rev 67 に記録し、この返答を Reply 24 として引用して SHA-256 を計算する。そのあと review を経て PR を開く（merge は Owner）。末尾の「…」もこのまま。」
+    and the answer:
+    「承認 (推奨)」
+    The record's scenario revision `10` receipt and the change receipt below
+    are the approved texts.
+    So the record's scenario revision `10` receipt appends
+    「Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。」 to the Rationale of scenario revision `9`; its other
+    fields are those of scenario revision `9`, with the decision date of the
+    last reply.
+  - The receipt of this change (SHA-256, UTF-8, excluding the final newline:
+    `6192643855d405eb55379ad7f92cae6f12745c54938f4ae9355ccc495219c81e`):
+
+    ```text
+    PRODUCT_DECISION
+    Concern: product.circular-outer-label-fit
+    Scenario revision: 10
+    Choice: RGN-CUT-WARN
+    Rationale: not stated
+    Must preserve: not stated
+    May retire: not stated
+    Accepted residual risk: not stated
+    Owner: Satoshi Kawato
+    Decision date: 2026-10-19
+    ```
+
+  - Scope: the record's receipt for scenario revision `10` is recorded below;
+    the scenario revision `7`, `8`, and `9` receipts keep their text and their
     SHA-256. `PD-OI-088` applies unchanged. No other record is amended or
     retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
@@ -6486,18 +6540,22 @@ Decision date: 2026-10-16
 ### PD-OI-097: Labels that do not fit
 
 - Concern key: `product.circular-outer-label-fit`
-- Scenario revision: `9`
-- Supersedes: `PD-OI-097`, scenario revision `8`. Scenario revision `9`
+- Scenario revision: `10`
+- Supersedes: `PD-OI-097`, scenario revision `9`. Scenario revision `10`
+  keeps every outcome of scenario revision `9` and adds `RGN-CUT-WARN`; it
+  keeps every field of scenario revision `9` except the Rationale, to which
+  Reply 24 of the Revision 67 entry appends the Circular region labels cut to
+  fit their circle, and the decision date. Scenario revision `9`
   keeps every outcome of scenario revision `8` and adds `REGION-WARN`,
   `RGN-FRONT`, and `RGN-YIELD-ROW`; it keeps every field of scenario revision
   `8` except the Rationale and the May retire, to each of which Reply 22 of
   the Revision 66 entry appends the exception for Linear region labels. Scenario revision `8` kept every outcome
   and field of scenario revision `7` and added `YIELD-REPAIRED-ONLY`.
 - Status: `ACCEPTED`
-- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW`
-- Normative outcome: exactly the complete approved scenario revision `9`
+- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN`
+- Normative outcome: exactly the complete approved scenario revision `10`
   `PRODUCT_DECISION` receipt and its JSON representation below. The
-  scenario revision `7` and `8` receipts are kept as they were approved.
+  scenario revision `7`, `8`, and `9` receipts are kept as they were approved.
 - Decision source (scenario revision `7`): the Owner replies quoted verbatim in
   the Revision 50 entry above. The receipt reproduces the approved field texts
   without translation or additional terms. Dependent runtime requires this
@@ -6523,6 +6581,16 @@ Decision date: 2026-10-16
   runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `9`; UTF-8, excluding the final newline):
   `65994020bd2ce347daa2d39f5e7fb470b7fe1d3efdf5600fcd43a4201ad3065d`.
+- Decision source (scenario revision `10`): the Owner replies of `2026-10-19`
+  quoted verbatim in the Revision 67 entry above; Reply 24 approves the fourth
+  receipt and JSON below. They keep the fields of scenario revision `9`, add
+  the choice and the Rationale sentence of Reply 24, and carry the decision
+  date of the last reply, without translation or additional terms. The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `10`; UTF-8, excluding the final newline):
+  `ae0bca6a9a6e4778ebc0a1bc9b12976a34eb389d874eab7c8e8857d502d5ee16`.
 
 ```text
 PRODUCT_DECISION
@@ -6601,6 +6669,35 @@ Decision date: 2026-10-19
   "scenarioRevision": 9,
   "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW",
   "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
+}
+```
+
+Scenario revision `10` receipt, approved by `satoshikawato` on `2026-10-19` (Reply 24 of the Revision 67 entry):
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 10
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 10,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。",
   "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じに描く。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。",
   "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）",
   "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。",
