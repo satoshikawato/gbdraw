@@ -3,6 +3,7 @@
 // OV-420 (a pairwise match with no similarity group showed a "Similarity
 // group" section holding the query product).
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -242,4 +243,11 @@ test('a popup built before a language switch keeps its hover rows: sections and 
     buildPairwiseMatchHoverRows(english).map((row) => [row.label, row.value]),
     [['Kind', 'pairwise'], ['Identity', '91.2'], ['Query', '100..400'], ['Subject', '200..500']]
   );
+});
+
+test('the collinear block summary shows "vs" in the muted style before the subject record', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const summary = html.slice(html.indexOf('data-collinear-summary'));
+  const subjectLine = summary.split('\n').find((line) => line.includes('block.subject.recordId'));
+  assert.match(subjectLine, /<span class="match-muted">\{\{ t\('vs'\) \}\}\{\{ ' ' \}\}<\/span><span class="font-semibold">\{\{ clickedPairwiseMatch\.block\.subject\.recordId \}\}<\/span>/);
 });
