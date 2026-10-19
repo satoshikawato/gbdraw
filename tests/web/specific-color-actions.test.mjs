@@ -330,13 +330,15 @@ test('a This feature only rule on a cropped record paints its feature live as Ge
 // The mounted Result as `pythonLegendRows` (services/legend-svg.js) reads it:
 // Python's Legend rows, each its key and the fill Python drew its swatch in.
 const resultSvg = (rows) => {
-  const element = (attributes, children = []) => ({
+  const element = (attributes, children = [], localName = 'g') => ({
+    localName,
+    children,
     getAttribute: (name) => attributes[name] ?? null,
     hasAttribute: (name) => name in attributes,
     querySelector: () => null,
     querySelectorAll: () => children
   });
-  const legend = element({}, rows.map(([key, fill, attributes = {}]) => element({ 'data-legend-key': key, ...attributes }, [element({ fill })])));
+  const legend = element({}, rows.map(([key, fill, attributes = {}]) => element({ 'data-legend-key': key, ...attributes }, [element({ fill }, [], 'path')])));
   return { getElementById: (id) => (id === 'legend' ? legend : null) };
 };
 const mounted = (rows) => {
