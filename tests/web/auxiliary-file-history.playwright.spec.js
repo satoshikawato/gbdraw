@@ -184,18 +184,16 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   const linearBefore = await linear();
   await reveal(page.getByLabel('Specific rules file', { exact: true }));
   await page.getByRole('button', { name: 'Remove Specific rules file', exact: true }).click();
-  // The rows go at once; the Legend rows of a drawing not shown follow when it
-  // is shown again, from its own Result (REVIEW-2 N1).
-  const removedRows = { rules: [['cytochrome', false]], legend: ['Hand', 'Imported'] };
+  // The rows and their Legend rows go at once, in the Remove's step (REVIEW-3 R3-B1).
   const removed = { rules: [['cytochrome', false]], legend: ['Hand'] };
-  await expect.poll(circular).toEqual(removedRows);
+  await expect.poll(circular).toEqual(removed);
   expect(await linear()).toEqual(linearBefore);
   // One step: Undo brings back the card and the Circular rows.
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(circular).toEqual(loaded);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.files.t_color?.name ?? null)).toBe('rules.tsv');
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
-  await expect.poll(circular).toEqual(removedRows);
+  await expect.poll(circular).toEqual(removed);
   // Shown again, the Circular figure is drawn without the file's row.
   await switchMode(page, 'circular');
   await expect.poll(shownLegend, { timeout: 120_000 }).toEqual(['Hand']);

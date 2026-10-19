@@ -1925,6 +1925,8 @@ export const createAppSetup = () => {
     runUndoableCheckpoint: history.runUndoableCheckpoint,
     closeAfterDialogChoice: dialogChoice.closeAfterChoice,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
+    // A closure: the slots are declared later in this root.
+    redrawWhenShown: (drawing) => redrawWhenShown(drawing),
     readDrawnTracks,
     getCommittedSession: getCommittedCanonicalSession,
     readResourceRecordCount: readCommittedResourceRecordCount,
@@ -3189,6 +3191,17 @@ export const createAppSetup = () => {
   // rollback) write it.
   /** @type {Record<'circular' | 'linear', Readonly<ArtifactSlot> | null>} */
   const artifactSlots = { circular: null, linear: null };
+  // OV-1280: the kept Results whose drawing changed its rules while it was not
+  // shown (a file card's Remove), drawn again when shown. Keyed by the Result,
+  // so a Load or a Generate, which keeps another Result, drops the request.
+  /** @type {WeakSet<object>} */
+  const keptResultsToRedraw = new WeakSet();
+  /** @param {DrawingState} drawing Not shown. */
+  const redrawWhenShown = (drawing) => {
+    const slot = artifactSlots[drawing === state.drawings.linear ? 'linear' : 'circular'];
+    const kept = slot ? slot.values.results[slot.values.selectedResultIndex] : null;
+    if (kept) keptResultsToRedraw.add(kept);
+  };
   // The Results of both modes. The per-Result caches (Legend inventories,
   // retired Legend entries, projected editor state) keep a stashed Result's
   // entries while the other mode is shown.
@@ -3345,15 +3358,11 @@ export const createAppSetup = () => {
       }
     },
     afterReady(context) {
-      // OV-1280: a Result shown again by a mode switch settles what its
-      // drawing's rules owe it from a change made while it was not shown; a
-      // Result Python drew from the current rules owes nothing (REVIEW-2 N3).
-      if (context.bindingOptions.modeArrival) {
-        featureActions.settleWhenShown(state.activeDrawing()).catch((error) => {
-          console.error('The Legend could not follow the rules changed while this mode was not shown.', normalizeUserFacingError(error));
-        });
-      } else if (context.phase === 'generate' || context.phase === 'label-reflow') {
-        featureActions.forgetWhenShown(state.activeDrawing());
+      // OV-1280: a Result a mode switch shows again is drawn again when its
+      // drawing asked for it while it was not shown (`redrawWhenShown`).
+      if (context.bindingOptions.modeArrival
+        && keptResultsToRedraw.delete(results.value[Number(selectedResultIndex.value) || 0])) {
+        featureActions.requestAutomaticRerender();
       }
       // D-36: a label rerender pays the redraw its drawing owes when, as its
       // Result is ready, no later rerender runs and its figure shows the

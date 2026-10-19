@@ -23,7 +23,9 @@ Session 48 also records which rows, colors, and Blacklist words each file card
 of the Web app loaded, so **Remove** on the card takes back only that file's
 effect. In an older Session, Whitelist and Priority rows read as rows added by
 hand, and Remove keeps them; Specific rules rows that came from a rules file
-were marked so already, and Remove takes them back. In a Session 48 that the
+were marked so already, and Remove takes them back. Rows that a built-in
+**Preset scheme** added count as yours, and Remove keeps them; an older Session
+stored them like a rules file's rows, so there Remove takes them back. In a Session 48 that the
 CLI or the Python API writes, the settings read from its color, priority,
 blacklist, and whitelist files count as those files' cards.
 

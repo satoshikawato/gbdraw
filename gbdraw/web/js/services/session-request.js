@@ -5221,7 +5221,7 @@ export const projectCanonicalSessionRequest = ({
     if (!deferResourceContent) {
       projectedSpecificRules = readSessionTable('specific-colors', () => parseSpecificRules(
         resourceTextFromRef(resources, colorTableRef)
-      )).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
+      )).rules;
     }
   }
   let projectedWhitelist = deferResourceContent && Array.isArray(storedConfig?.whitelist)

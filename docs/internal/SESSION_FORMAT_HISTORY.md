@@ -78,7 +78,9 @@ writes and reads it; the card key (`t_color`, `whitelist`,
 
 - A row that a file added carries its card's mark (`markedRows`, `isCardRow`): a `rules`
   row keeps `fromFile: true`, the mark Sessions have stored since main's
-  2026-01-14 writer (D-ORIGIN-1); a `whitelist` or `qualifierPriorityRules`
+  2026-01-14 writer (D-ORIGIN-1), set only by the rules-file import and the CLI
+  `-t` reading: a built-in preset's rows carry no mark and are the user's
+  (D-21); a `whitelist` or `qualifierPriorityRules`
   row carries `importedFrom` with its card key. A priority row whose hand
   order the file replaced keeps that order in `handOrder`. A row edited by
   hand after the load loses its mark and is the user's.
@@ -90,7 +92,8 @@ writes and reads it; the card key (`t_color`, `whitelist`,
 
 A Session up to 47 has no `importedFrom` and no `fileImports`: its whitelist
 and priority rows read as hand rows, and Remove keeps them; its `fromFile`
-rules rows are the Specific rules card's, as they were. A Session 48 without a
+rules rows are the Specific rules card's, as they were, including the rows of a
+preset, which the earlier writer stored with `fromFile` too. A Session 48 without a
 draft (CLI `--session_output`, the Python API) reads the rows its `-t`,
 whitelist, and priority files, and its `-d` and blacklist files, put into the
 request as that card's rows (`FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION` in

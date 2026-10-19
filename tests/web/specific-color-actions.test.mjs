@@ -5,6 +5,7 @@ import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js'
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
+import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
 import { readFileSync } from 'node:fs';
 import {
   createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, prepareSpecificColorImport,
@@ -32,7 +33,9 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
     svgResultIdentity: { value:'before' }, fileLegendCaptions: { value:new Set() }, addedLegendCaptions: { value:new Set() },
     legendEntries: { value:[] }, files: {t_color:null}, legendColorOverrides: {},
     newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}, labelReflowProcessing: { value:false },
-    editableLabels: { value: [] }, manualPriorityRules: []
+    editableLabels: { value: [] }, manualPriorityRules: [],
+    deletedLegendEntries: { value: [] }, dormantLegendEntries: { value: [] }, legendStrokeOverrides: {},
+    specificRulePresets: [], selectedSpecificPreset: { value: '' }, specificRulePresetLoading: { value: false }
   };
   // The automatic rerender's busy flag, with the Vue `watch` the owner waits on.
   const watchers = new Set();
@@ -75,66 +78,6 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
   }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;},isRedrawOwed:()=>false}, nextTick:async()=>{}, watch, ...options});
   return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rekeyed:()=>lastRekeyed, rerenders:()=>rerenders, setRerendering};
 };
-// REVIEW-2 N1 (OV-1280): Remove on the Specific rules card while another mode
-// is shown takes the file's rows out of that drawing at once; its Legend
-// follows when it is shown again, through the commit a Remove in the shown
-// drawing runs: the same rows, the same keys (a caption a hand rule shares in
-// another color, a file rule captioned like a type's row), the same re-keyed
-// rows. Until then its Legend is as it was.
-test('a Specific rules removal in a drawing not shown gives its Legend, once shown, what a shown removal gives', async () => {
-  const hand = { feat: 'CDS', qual: 'gene', val: 'a', color: '#445566', cap: 'Hypothetical' };
-  const fileRules = [
-    { feat: 'CDS', qual: 'gene', val: 'b', color: '#123456', cap: 'Hypothetical', fromFile: true },
-    { feat: 'CDS', qual: 'gene', val: 'b', color: '#654321', cap: 'CDS', fromFile: true }
-  ];
-  const drawn = [['CDS', '#54bcf8'], ['Hypothetical [#445566]', '#445566'], ['Hypothetical [#123456]', '#123456'], ['CDS [#654321]', '#654321']];
-  const arrange = (s) => {
-    s.state.originalLegendOrder = { value: drawn.map(([key]) => key) };
-    s.state.svgContainer = mounted(drawn);
-    s.state.manualSpecificRules.splice(0, s.state.manualSpecificRules.length, { ...hand }, ...fileRules.map((rule) => ({ ...rule })));
-    s.state.legendEntries.value = drawn.map(([key, color]) => ({ caption: key, originalCaption: key, color }));
-    s.state.addedLegendCaptions.value = new Set(drawn.slice(1).map(([key]) => key));
-    let intents = null;
-    s.setLegendPreparation(async (next) => { intents = next; });
-    return () => ({ intents, previous: s.previousIntents(), rekeyed: [...(s.rekeyed() || [])] });
-  };
-  const shown = setup();
-  const shownLegend = arrange(shown);
-  assert.equal(await shown.actions.removeImportedSpecificRules(shown.state), true);
-  const expected = shownLegend();
-  assert.deepEqual(expected.rekeyed, [['Hypothetical [#445566]', 'Hypothetical']]);
-
-  const hidden = setup();
-  const hiddenLegend = arrange(hidden);
-  hidden.state.mode = { value: 'linear' };
-  withModeDrawings(hidden.state, { circular: hidden.state, linear: { manualSpecificRules: [] } });
-  const listed = JSON.stringify([hidden.state.legendEntries.value, [...hidden.state.addedLegendCaptions.value]]);
-  assert.equal(await hidden.actions.removeImportedSpecificRules(hidden.state), true);
-  assert.deepEqual(hidden.state.manualSpecificRules, [hand]);
-  assert.equal(JSON.stringify([hidden.state.legendEntries.value, [...hidden.state.addedLegendCaptions.value]]), listed,
-    'its Legend waits until it is shown');
-  hidden.state.mode.value = 'circular';
-  assert.equal(await hidden.actions.settleWhenShown(hidden.state), true);
-  assert.deepEqual(hiddenLegend(), expected);
-  assert.equal(hidden.rerenders(), 1, 'and its Result is drawn again');
-  assert.equal(await hidden.actions.settleWhenShown(hidden.state), false, 'once');
-});
-
-// REVIEW-2 N3: a Result Python draws from the drawing's current rules (a
-// Generate, a label rerender: the root calls `forgetWhenShown`) owes nothing,
-// so showing the drawing later asks for no redraw.
-test('a Generate after a Specific rules removal in a drawing not shown clears what that drawing owes', async () => {
-  const s = setup();
-  s.state.manualSpecificRules.push({ feat: 'CDS', qual: 'gene', val: 'b', color: '#123456', cap: 'Imported', fromFile: true });
-  s.state.mode = { value: 'linear' };
-  withModeDrawings(s.state, { circular: s.state, linear: { manualSpecificRules: [] } });
-  assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
-  s.state.mode.value = 'circular';
-  s.actions.forgetWhenShown(s.state);
-  assert.equal(await s.actions.settleWhenShown(s.state), false);
-  assert.equal(s.rerenders(), 0);
-});
-
 // Review 3 (OV-262 in the Features drawer): with the type's default color
 // Auto, the drawer's color input shows the applied palette's color, as
 // Generate draws it.
@@ -1226,4 +1169,163 @@ test('saved rules and an imported color table are read without the color IDs of 
   assert.deepEqual(read.map(createRuleLegendCaptions(read)), ['Complex IV [#ffe700]', 'Complex IV [#1f77b4]', 'Complex I [#ffe700]']);
   const text = saved.map((rule) => [rule.feat, rule.qual, rule.val, rule.color, rule.cap].join('\t')).join('\n');
   assert.deepEqual(prepareSpecificColorImport(text).nextRules.map((rule) => rule.cap), ['Complex IV', 'Complex IV', 'Complex I [#ffe700]']);
+});
+
+// REVIEW-3 R3-B1 (OV-1280): Remove on the Specific rules card while another
+// mode is shown finishes that drawing's change at once, in the Remove's own
+// step: its rules and its Legend records (rows, added captions, Legend colors,
+// re-keyed rows), by the keys of its own stored Legend rows, as the shown
+// path allocates them (a caption a hand rule shares in another color, a file
+// rule captioned like a type's row). Nothing is owed but a redraw when the
+// drawing is shown again, which the root ties to that drawing's Result.
+const hiddenRemoval = (options = {}) => {
+  const hand = { feat: 'CDS', qual: 'gene', val: 'a', color: '#445566', cap: 'Hypothetical' };
+  const fileRules = [
+    { feat: 'CDS', qual: 'gene', val: 'b', color: '#123456', cap: 'Hypothetical', fromFile: true },
+    { feat: 'CDS', qual: 'gene', val: 'b', color: '#654321', cap: 'CDS', fromFile: true },
+    { feat: 'CDS', qual: 'gene', val: 'b', color: '#abcdef', cap: 'Imported', fromFile: true }
+  ];
+  const drawn = [['CDS', '#54bcf8'], ['Hypothetical [#445566]', '#445566'], ['Hypothetical [#123456]', '#123456'],
+    ['CDS [#654321]', '#654321'], ['Imported', '#abcdef']];
+  const redraws = [];
+  const s = setup(undefined, { redrawWhenShown: (drawing) => { redraws.push(drawing); }, ...options });
+  s.state.manualSpecificRules.splice(0, s.state.manualSpecificRules.length, { ...hand }, ...fileRules.map((rule) => ({ ...rule })));
+  // The user renamed the file rule's row before the Remove.
+  s.state.legendEntries.value = drawn.map(([key, color]) => ({ caption: key === 'Imported' ? 'Imported protein' : key, originalCaption: key, color }));
+  s.state.addedLegendCaptions.value = new Set(drawn.slice(1).map(([key]) => key));
+  Object.assign(s.state.legendColorOverrides, { 'Imported': '#abcdef', 'CDS': '#000000' });
+  s.state.mode = { value: 'linear' };
+  withModeDrawings(s.state, { circular: s.state, linear: { manualSpecificRules: [] } });
+  const legend = () => ({
+    entries: s.state.legendEntries.value.map((entry) => [entry.originalCaption, entry.caption]),
+    added: [...s.state.addedLegendCaptions.value],
+    colors: { ...s.state.legendColorOverrides }
+  });
+  return { s, hand, drawn, redraws, legend };
+};
+const removedLegend = {
+  entries: [['CDS', 'CDS'], ['Hypothetical', 'Hypothetical']],
+  added: ['Hypothetical'],
+  colors: { 'CDS': '#000000' }
+};
+
+test('a Specific rules removal in a drawing not shown takes back its Legend rows at once, so a Save before it is shown lists none', async () => {
+  const { s, hand, redraws, legend } = hiddenRemoval();
+  assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
+  // What Save Session writes for the drawing now.
+  assert.deepEqual(s.state.manualSpecificRules, [hand]);
+  assert.deepEqual(legend(), removedLegend);
+  assert.deepEqual([...s.state.fileLegendCaptions.value], []);
+  assert.deepEqual(redraws, [s.state], 'one redraw asked for when it is shown again');
+  assert.equal(s.rerenders(), 0, 'nothing is drawn while it is not shown');
+
+  // The shown path allocates the same keys: its re-keyed row and its rows.
+  const shown = setup();
+  shown.state.manualSpecificRules.splice(0, 0, { ...hand }, { feat: 'CDS', qual: 'gene', val: 'b', color: '#123456', cap: 'Hypothetical', fromFile: true });
+  shown.state.originalLegendOrder = { value: ['CDS', 'Hypothetical [#445566]', 'Hypothetical [#123456]'] };
+  shown.state.svgContainer = mounted([['CDS', '#54bcf8'], ['Hypothetical [#445566]', '#445566'], ['Hypothetical [#123456]', '#123456']]);
+  let intents = null;
+  shown.setLegendPreparation(async (next) => { intents = next; });
+  assert.equal(await shown.actions.removeImportedSpecificRules(shown.state), true);
+  assert.deepEqual([...shown.rekeyed()], [['Hypothetical [#445566]', 'Hypothetical']]);
+  assert.deepEqual(intents.map((intent) => intent.caption), removedLegend.added);
+});
+
+// R3-B1 route 4: a row Python no longer draws leaves no rename behind, so the
+// next Generate of that drawing does not fail on it.
+test('a renamed Legend row of a removed file rule leaves no rename for the next Generate of a drawing not shown', async () => {
+  const { s, drawn } = hiddenRemoval();
+  assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: { resultNames: ['figure'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    legendEntries: s.state.legendEntries.value,
+    originalLegendOrder: drawn.map(([key]) => key)
+  });
+  assert.deepEqual(plan.operationsByResult[0].legendRenames.filter(({ from }) => from === 'Imported'), []);
+});
+
+// R3-B1 route 2: the Remove's step holds the whole change, so Undo then Redo,
+// also after the drawing was shown, gives the Remove again.
+test('Undo then Redo of a Specific rules removal in a drawing not shown gives the removal again', () => withDocument(async () => {
+  // The checkpoint holds what History's snapshot of the other mode holds.
+  const { s, legend } = hiddenRemoval({ createHistory: (state) => createHistoryManager({
+    buildIntent: () => ({}), applyIntent: () => {},
+    buildCheckpoint: () => structuredClone({ rules: state.manualSpecificRules, entries: state.legendEntries.value,
+      added: [...state.addedLegendCaptions.value], colors: { ...state.legendColorOverrides } }),
+    applyCheckpoint: ({ rules, entries, added, colors }) => {
+      state.manualSpecificRules.splice(0, Infinity, ...structuredClone(rules));
+      state.legendEntries.value = structuredClone(entries);
+      state.addedLegendCaptions.value = new Set(added);
+      Object.keys(state.legendColorOverrides).forEach((key) => { delete state.legendColorOverrides[key]; });
+      Object.assign(state.legendColorOverrides, colors);
+    } }) });
+  await s.history.initializeIntentBaseline();
+  const before = legend();
+  // components.js `clearFile`: the card's Remove is one checkpoint step.
+  await s.history.runUndoableCheckpoint('Remove Specific rules file', () => s.actions.removeImportedSpecificRules(s.state));
+  assert.deepEqual(legend(), removedLegend);
+  s.state.mode.value = 'circular';
+  await s.history.undo();
+  assert.deepEqual(legend(), before);
+  await s.history.redo();
+  assert.deepEqual(legend(), removedLegend);
+  assert.equal(s.state.manualSpecificRules.some((rule) => rule.fromFile), false);
+}));
+
+// R3-B1 route 3: nothing waits for the drawing to be shown, so a switch to it
+// and back before anything was prepared leaves its Legend as the Remove wrote it.
+test('a mode switch to a drawing whose file rules were removed while it was not shown, and back, changes nothing', async () => {
+  const { s, redraws, legend } = hiddenRemoval();
+  const removal = s.actions.removeImportedSpecificRules(s.state);
+  s.state.mode.value = 'circular';
+  s.state.mode.value = 'linear';
+  assert.equal(await removal, true);
+  assert.deepEqual(legend(), removedLegend);
+  assert.deepEqual(redraws, [s.state]);
+});
+
+// D-21 (Q-ORIGIN-1 = A): preset rows are the user's, as hand-made rows are:
+// Remove and a new rules file never take them, in any drawing.
+const withPreset = (s, text) => {
+  s.state.specificRulePresets.splice(0, Infinity, { id: 'preset', path: 'preset.tsv' });
+  s.state.selectedSpecificPreset.value = 'preset';
+  const fetched = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, text: async () => text });
+  return s.actions.applySpecificRulePreset().finally(() => { globalThis.fetch = fetched; });
+};
+const presetText = 'CDS\tgene\ta\t#0000ff\tPreset\n';
+const fileText = 'CDS\tgene\tb\t#ff0000\tFile\n';
+const rows = (s) => s.state.manualSpecificRules.map((rule) => [rule.cap, rule.fromFile === true]);
+
+test('a preset applied after a rules file keeps its rows when the card is removed (D-21)', async () => {
+  const s = setup();
+  assert.equal(await s.actions.importSpecificRules(fileText), 1);
+  assert.deepEqual(rows(s), [['File', true]]);
+  await withPreset(s, presetText);
+  assert.deepEqual(rows(s), [['Preset', false]]);
+  assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
+  assert.deepEqual(rows(s), [['Preset', false]]);
+});
+
+test('a rules file after a preset adds its rows after the preset rows, and Remove gives the preset rows back (D-21)', async () => {
+  const s = setup();
+  await withPreset(s, presetText);
+  assert.equal(await s.actions.importSpecificRules(fileText), 1);
+  assert.deepEqual(rows(s), [['Preset', false], ['File', true]]);
+  assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
+  assert.deepEqual(rows(s), [['Preset', false]]);
+});
+
+// watchers.js: a rules file loaded in one mode takes back the card's earlier
+// rows in the other drawing; a preset there has none.
+test('a rules file loaded in one mode leaves a preset of the drawing not shown as it is (D-21)', async () => {
+  const redraws = [];
+  const s = setup(undefined, { redrawWhenShown: (drawing) => { redraws.push(drawing); } });
+  await withPreset(s, presetText);
+  s.state.mode = { value: 'linear' };
+  withModeDrawings(s.state, { circular: s.state, linear: { manualSpecificRules: [] } });
+  const listed = JSON.stringify([s.state.manualSpecificRules, s.state.legendEntries.value]);
+  assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
+  assert.equal(JSON.stringify([s.state.manualSpecificRules, s.state.legendEntries.value]), listed);
+  assert.deepEqual(redraws, []);
 });

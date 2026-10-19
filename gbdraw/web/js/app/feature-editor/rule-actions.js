@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../../state.js' */
-/** @import { PythonLegendKey } from '../../services/legend-svg.js' */
-/** @import { SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
+/** @import { PythonLegendKey, SwatchColor } from '../../services/legend-svg.js' */
+/** @import { LegendRowContext, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
@@ -11,7 +11,7 @@ import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-util
 import { isCardRow, parseSpecificRules, serializeSpecificRules, specificRulesFileCaptions, unmarkCardRow, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
-  buildLegendIntents, createRuleLegendCaptions, legendRowRules, normalizeSpecificRule, prepareSpecificColorImport, rekeyedRuleRows,
+  buildLegendIntents, createRuleLegendCaptions, legendRowRules, prepareSpecificColorImport, rekeyedRuleRows,
   ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
@@ -30,7 +30,7 @@ import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
 } from '../../services/feature-visibility.js';
-import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
+import { legendEntryKey, legendRowTakesPlace, rekeyLegendRecords, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
 /** @import { PatternDraft } from './pattern-drafts.js' */
 /** @import { ColorFeature } from './color-actions.js' */
 
@@ -94,10 +94,17 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
  * @property {AskChoice} [askChoice] The root's choice dialog: a pattern that may match slowly asks first.
  * @property {ShowNotice} [showNotice] The root's notice banner.
  * @property {RevealSetting} [revealSetting] Without a settings pane, the field takes the focus where it is.
+ * @property {RedrawWhenShownPort} [redrawWhenShown]
+ */
+
+/**
+ * The root's request that a drawing not shown, whose rules a change made
+ * meanwhile, be drawn again when it is shown (OV-1280).
+ * @typedef {(drawing: DrawingState) => void} RedrawWhenShownPort
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus(), redrawWhenShown = () => {} }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -152,21 +159,19 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {DrawingState} drawing
    * @param {Partial<SpecificColorRule>[]} candidateRules
    * @param {Array<{ caption?: string, color?: string }>} retiredLegendIntents
-   * @param {readonly SpecificColorRule[]} [currentRules] The rules the Result was drawn with: the
-   *   drawing's, or those a change made while it was not shown replaced (`settleWhenShown`).
    */
-  const candidateLegendIntents = (drawing, candidateRules, retiredLegendIntents, currentRules = drawing.manualSpecificRules) => {
+  const candidateLegendIntents = (drawing, candidateRules, retiredLegendIntents) => {
     const displayed = displayedLegendRowContext(state, drawing);
     const candidateMatches = ruleMatcher(candidateRules);
     const used = new Set([...displayed.features].map(feature => candidateMatches.first(feature)).filter(Boolean));
     const { rendererRows, takenKeys } = ruleCommitLegendRows({
       ...displayed,
-      rules: [...currentRules, ...candidateRules,
+      rules: [...drawing.manualSpecificRules, ...candidateRules,
         ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
     });
-    const currentCaption = createRuleLegendCaptions([...currentRules], rendererRows);
+    const currentCaption = createRuleLegendCaptions(drawing.manualSpecificRules, rendererRows);
     /** @type {Array<{ caption: PythonLegendKey, color: string }>} */
-    const ruleRows = currentRules.filter((/** @type {SpecificColorRule} */ rule) => rule.cap)
+    const ruleRows = drawing.manualSpecificRules.filter((/** @type {SpecificColorRule} */ rule) => rule.cap)
       .map((/** @type {SpecificColorRule} */ rule) => ({ caption: currentCaption(rule), color: rule.color }));
     /** @type {LegendEntry[]} */
     const listed = drawing.legendEntries.value || [];
@@ -177,27 +182,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,
       previousIntents: [...ruleRows, ...takenRows, ...retiredLegendIntents],
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),
-      rekeyed: rekeyedRuleRows(currentRules, candidateRules, rendererRows)
+      rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows)
     };
   };
-  // The intents of the rows a commit draws, without those the user deleted from the Legend.
-  /**
-   * @template {{ caption: string }} T
-   * @param {DrawingState} drawing
-   * @param {readonly T[]} intents
-   */
-  const undeletedIntents = (drawing, intents) => intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
-    .some((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === intent.caption));
-  // The rule rows a commit leaves the Legend: those it draws in the place of those it replaced.
-  /**
-   * @param {DrawingState} drawing
-   * @param {ReadonlySet<string | undefined>} previousCaptions
-   * @param {readonly { caption: string }[]} intents
-   */
-  const nextAddedLegendCaptions = (drawing, previousCaptions, intents) => new Set([
-    ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
-    ...intents.map(intent => intent.caption)
-  ]);
   // OV-43 (Owner decision 2026-10-06, option A), narrowed by R14-8 (U3a 1d):
   // a rule table change asks for the automatic rerender when the displayed
   // Result cannot show the Legend rows it regroups (`legendRowsShowable`): a
@@ -461,7 +448,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const replaced = new Map(placedKey && legendPlacement?.replaces && placedKey !== legendPlacement.at ? [[legendPlacement.at, placedKey]] : []);
     // The rows the Legend owner keeps in their place under a new key (OV-645, OV-1235).
     const inPlace = new Map([...rekeyed, ...replaced]);
-    const legend = await prepareFileLegendEntries(undeletedIntents(drawing, intents), {
+    const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
+      .some((/** @type {LegendEntry} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
       isCurrent: current,
@@ -496,7 +484,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       }));
       patternDrafts.reconcile();
       drawing.fileLegendCaptions.value = specificRulesFileCaptions(candidate.rules);
-      drawing.addedLegendCaptions.value = nextAddedLegendCaptions(drawing, previousCaptions, intents);
+      drawing.addedLegendCaptions.value = new Set([
+        ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
+        ...intents.map(intent => intent.caption)
+      ]);
       refreshFeatureOverrides(extractedFeatures.value);
       retireSupersededLegendColors(drawing, intents, removedRuleRows);
       afterCommit(intents);
@@ -832,20 +823,73 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
   // OV-1280 (D-19): Remove on the Specific rules card takes back the rows its
   // file added (`fromFile`, D-ORIGIN-1); true when there were none. The shown
-  // drawing commits as any rule write does. A drawing that is not shown loses
-  // the rows at once, written as History restores it (`history-snapshot.js`,
-  // the other mode's config): only its own rows, matched against nothing the
-  // shown figure holds (REVIEW-1 B1). Its Legend rows and its figure follow
-  // when it is shown again (`settleWhenShown`): only its own Result tells the
-  // keys Python gives its rows (REVIEW-2 N1).
+  // drawing commits as any rule write does. A drawing that is not shown is
+  // written at once, inside the card's History step, as History restores it
+  // (`history-snapshot.js`, the other mode's config and Legend records), from
+  // nothing the shown figure holds (REVIEW-1 B1): its rows, and the Legend
+  // records of the rows only the file's rules drew, by the keys the shown
+  // path's allocation gives them on the drawing's own listed rows; a row a
+  // kept rule now draws under another key moves to it (REVIEW-3 R3-B1). So a
+  // Save, an Undo or a Redo finds the whole change. Its figure is drawn again
+  // when it is shown (`redrawWhenShown`, which the root ties to its Result).
   /**
-   * The rule change each drawing not shown owes its Legend and its figure: the
-   * rules its Result was drawn with, and the table that replaced them.
-   * @type {WeakMap<DrawingState, { drawnWith: SpecificColorRule[], table: string }>}
+   * The Legend state of a drawing not shown as the allocation reads Python's
+   * rows: the rows it lists, by key, in the color each lists. Python's fills
+   * and swatch lines are its Result's, which its mode's slot keeps and this
+   * owner does not read; no feature is read, so no row is taken.
+   * @param {DrawingState} drawing
+   * @param {readonly SpecificColorRule[]} rules
+   * @returns {LegendRowContext}
    */
-  const owedWhenShown = new WeakMap();
-  /** @param {readonly Partial<SpecificColorRule>[]} rules */
-  const ruleTableOf = (rules) => JSON.stringify(rules.map((rule) => normalizeSpecificRule(rule)));
+  const listedLegendRowContext = (drawing, rules) => {
+    /** @type {LegendEntry[]} */
+    const listed = drawing.legendEntries.value || [];
+    return {
+      rules,
+      // The color a row lists stands for the fill Python drew it in.
+      pythonRows: new Map(listed.map((entry) => [legendEntryKey(entry),
+        { key: legendEntryKey(entry), color: /** @type {SwatchColor} */ (String(entry.color)) }])),
+      originalLegendOrder: listed.map((entry) => legendEntryKey(entry)),
+      features: []
+    };
+  };
+  /** @param {DrawingState} drawing Not shown. */
+  const takeBackFileRulesOfHiddenDrawing = (drawing) => {
+    /** @type {SpecificColorRule[]} */
+    const before = [...drawing.manualSpecificRules];
+    const kept = withoutImportedRows(before, 't_color');
+    const { rendererRows } = ruleCommitLegendRows(listedLegendRowContext(drawing, before));
+    const keyBefore = createRuleLegendCaptions(before, rendererRows);
+    const keptKeys = new Set(kept.filter((rule) => rule.cap).map(keyBefore));
+    const goneRows = before.filter((rule) => rule.cap && isCardRow(rule, 't_color'))
+      .map((rule) => ({ caption: keyBefore(rule), color: rule.color }))
+      .filter(({ caption }) => !keptKeys.has(caption));
+    /** @type {Set<string>} */
+    const gone = new Set(goneRows.map(({ caption }) => caption));
+    /** @param {readonly LegendEntry[]} entries */
+    const listedOnly = (entries) => entries.filter((entry) => !gone.has(legendEntryKey(entry)));
+    retireSupersededLegendColors(drawing, [], goneRows);
+    const moved = rekeyLegendRecords({
+      entries: listedOnly(drawing.legendEntries.value || []),
+      deletedEntries: listedOnly(drawing.deletedLegendEntries.value || []),
+      dormantEntries: listedOnly(drawing.dormantLegendEntries.value || []),
+      colorOverrides: { ...drawing.legendColorOverrides },
+      strokeOverrides: { ...drawing.legendStrokeOverrides },
+      addedCaptions: [...drawing.addedLegendCaptions.value].filter((caption) => !gone.has(caption))
+    }, rekeyedRuleRows(before, kept, rendererRows));
+    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...kept);
+    drawing.fileLegendCaptions.value = specificRulesFileCaptions(kept);
+    drawing.legendEntries.value = moved.entries;
+    drawing.deletedLegendEntries.value = moved.deletedEntries;
+    drawing.dormantLegendEntries.value = moved.dormantEntries;
+    for (const [store, records] of /** @type {const} */ ([
+      [drawing.legendColorOverrides, moved.colorOverrides], [drawing.legendStrokeOverrides, moved.strokeOverrides]
+    ])) {
+      Object.keys(store).forEach((key) => { delete store[key]; });
+      Object.assign(store, records);
+    }
+    drawing.addedLegendCaptions.value = new Set(moved.addedCaptions);
+  };
   /** @param {DrawingState} drawing */
   const removeImportedSpecificRules = (drawing) => {
     if (!drawing.manualSpecificRules.some((/** @type {SpecificColorRule} */ rule) => isCardRow(rule, 't_color'))) return Promise.resolve(true);
@@ -853,45 +897,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), 'Remove specific rules file', { drawing });
     }
     return queueRuleWrite(async () => {
-      /** @type {SpecificColorRule[]} */
-      const drawnWith = owedWhenShown.get(drawing)?.drawnWith || [...drawing.manualSpecificRules];
-      const kept = withoutImportedRows([...drawing.manualSpecificRules], 't_color');
-      drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...kept);
-      drawing.fileLegendCaptions.value = specificRulesFileCaptions(kept);
-      owedWhenShown.set(drawing, { drawnWith, table: ruleTableOf(kept) });
+      takeBackFileRulesOfHiddenDrawing(drawing);
+      redrawWhenShown(drawing);
       return true;
     });
   };
-  // A drawing shown again settles what it owes: while it still holds the table
-  // that replaced the rules its Result was drawn with (an Undo gave back that
-  // Result's own rules, a Redo the table again), its Legend rows follow as the
-  // shown commit's do, as part of the change History recorded, and its Result
-  // is drawn again. False when it owed nothing.
-  /** @param {DrawingState} drawing Shown. */
-  const settleWhenShown = async (drawing) => {
-    const owed = owedWhenShown.get(drawing);
-    owedWhenShown.delete(drawing);
-    if (!owed || ruleTableOf(drawing.manualSpecificRules) !== owed.table) return false;
-    const current = () => drawing === state.activeDrawing() && ruleTableOf(drawing.manualSpecificRules) === owed.table;
-    const shown = await queueRuleWrite(async () => {
-      const candidate = await prepareRules([...drawing.manualSpecificRules]);
-      if (!candidate || !current()) return false;
-      const { intents, previousIntents, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, [], owed.drawnWith);
-      const legend = await prepareFileLegendEntries(undeletedIntents(drawing, intents), {
-        drawing, previousFileIntents: previousIntents, isCurrent: current, placement: null, rekeyed
-      });
-      if (!legend || !current()) return false;
-      drawing.addedLegendCaptions.value = nextAddedLegendCaptions(drawing, new Set(previousIntents.map(intent => intent.caption)), intents);
-      retireSupersededLegendColors(drawing, intents, removedRuleRows);
-      projectPaletteAndRules({ prepareRules: false, legendRows: legend.apply() });
-      return true;
-    });
-    ports.requestAutomaticRerender();
-    return shown === true;
-  };
-  // A Result Python draws from the drawing's current rules owes nothing (REVIEW-2 N3).
-  /** @param {DrawingState} drawing */
-  const forgetWhenShown = (drawing) => { owedWhenShown.delete(drawing); };
 
   const applySpecificRulePreset = async () => {
     const drawing = state.activeDrawing();
@@ -1159,8 +1169,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     commitSpecificRules,
     importSpecificRules,
     removeImportedSpecificRules,
-    settleWhenShown,
-    forgetWhenShown,
     followRestoredRules,
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,

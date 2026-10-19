@@ -7,7 +7,7 @@ import { normalizeTsvCell } from '../utils/tsv-cell.js';
  * A row of a pre-normalization table (Sessions 31-39) that was repaired or dropped.
  * @typedef {{ row: number, repair: 'joined' | 'dropped' | 'invalid' }} TableRepair
  */
-/** @typedef {{ feat: string, qual: string, val: string, color: string, cap: string, fromFile: true }} ParsedSpecificRule */
+/** @typedef {{ feat: string, qual: string, val: string, color: string, cap: string }} ParsedSpecificRule */
 /**
  * What the serializers read of a row; a row that is not an object writes nothing.
  * @typedef {{ feat?: unknown, qual?: unknown, val?: unknown, color?: unknown, cap?: unknown, key?: unknown, order?: unknown }} EditorTableRow
@@ -157,8 +157,7 @@ export const parseSpecificRules = (text) => {
       qual,
       val,
       color,
-      cap: captionRaw,
-      fromFile: true
+      cap: captionRaw
     };
     const identity = JSON.stringify([rule.feat, rule.qual, rule.val, rule.color, rule.cap]);
     if (identities.has(identity)) continue;
