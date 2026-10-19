@@ -1,4 +1,5 @@
 // @ts-check
+import { t } from '../utils/i18n.js';
 export const LINEAR_LABEL_VISIBILITY_MODES = Object.freeze(['auto', 'show', 'hide']);
 
 /**
@@ -43,8 +44,8 @@ export const resolveLinearLabelVisibility = (mode, { hasSharedRow = false } = {}
  */
 export const describeLinearLabelVisibility = (mode, options = {}) => {
   const selected = requireLinearLabelVisibilityMode(mode);
-  if (selected !== 'auto') return selected === 'show' ? 'Show' : 'Hide';
-  return `Auto · ${resolveLinearLabelVisibility(selected, options) ? 'Shown' : 'Hidden'}`;
+  if (selected !== 'auto') return selected === 'show' ? t('Show') : t('Hide');
+  return resolveLinearLabelVisibility(selected, options) ? t('Auto · Shown') : t('Auto · Hidden');
 };
 
 /** Each current visibility field, its older boolean field, and its label. */

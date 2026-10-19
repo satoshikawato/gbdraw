@@ -5,6 +5,7 @@
 // (app/record-display-options.js) edit it.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { t } from '../utils/i18n.js';
 
 /** @import { RecordEntryInput } from './record-options.js' */
 /** @import { FieldReading } from '../utils/field-reading.js' */
@@ -267,9 +268,9 @@ export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse
   return {
     effectiveCircular,
     startEnabled,
-    disabledReason: cropped ? 'Display start is unavailable for a cropped record.'
-      : !lengthKnown ? 'Record length is unavailable.'
-        : !effectiveCircular ? 'Display start requires a circular record.' : '',
+    disabledReason: cropped ? t('Display start is unavailable for a cropped record.')
+      : !lengthKnown ? t('Record length is unavailable.')
+        : !effectiveCircular ? t('Display start requires a circular record.') : '',
     currentStart,
     // OV-374: the Display start field shows the requested start, kept while
     // the field is disabled, or else the current one; never an empty field.
