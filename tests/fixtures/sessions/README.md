@@ -228,6 +228,15 @@ became the file name without the extension (D-03,
 `test_losat_circular_rings.py`). The commands and hashes are in
 `precomputed-ring.provenance.json`.
 
+`legacy-font-size-zero-linear-cli.v30.gbdraw-session.json.gz` and
+`legacy-font-size-zero-circular-cli.v30.gbdraw-session.json.gz` are Linear and
+Circular CLI Sessions written by release tag `0.13.0` with `--label_font_size 0`
+(and, Circular, `--legend_font_size 0`) in `cliInvocation`. That writer drew
+them. They are the positive fixtures for the legacy replay, which reads a
+stored font size of 0 or less as Auto with the Web's notice (OV-1282, D-PYB-7,
+`test_stored_font_size.py`). The commands and hashes are in
+`legacy-font-size.provenance.json`.
+
 `cli-linear-tables.v40-early.gbdraw-session.json.gz`,
 `cli-linear-tables.v40.gbdraw-session.json.gz`,
 `cli-linear-tables.v41.gbdraw-session.json.gz`,

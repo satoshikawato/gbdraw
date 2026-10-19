@@ -10,7 +10,8 @@
       "command": "python -m gbdraw.cli linear --gbk F1.gb -o legacy-font-linear -f svg --label_font_size 0 --session_output legacy-font-linear.gbdraw-session.json",
       "storedAt": "cliInvocation.args --label_font_size",
       "sessionVersion": 30,
-      "drewWith0.13.0": true
+      "drewWith0.13.0": true,
+      "sha256": "0c7cdf184102a8076823c72dc053227f888d618153f553ad3ca0c8f6947efaf8"
     },
     "legacy-font-size-zero-circular-cli.v30.gbdraw-session.json.gz": {
       "sourceCommit": "8be9e3a5a2e1bc4cd983b502716ae44330396f28",
@@ -19,7 +20,8 @@
       "command": "python -m gbdraw.cli circular --gbk F1.gb -o legacy-font-circular -f svg --label_font_size 0 --legend_font_size 0 --session_output legacy-font-circular.gbdraw-session.json",
       "storedAt": "cliInvocation.args --label_font_size --legend_font_size",
       "sessionVersion": 30,
-      "drewWith0.13.0": true
+      "drewWith0.13.0": true,
+      "sha256": "563213d84029a817e424f27941291b39b0c4ba9e0f62f7156b2f926dcfd8c05a"
     }
   }
 }

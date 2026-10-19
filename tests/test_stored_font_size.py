@@ -311,7 +311,7 @@ def test_the_packaged_config_is_read_only_when_a_size_is_replaced(monkeypatch: p
     calls: list[tuple[str, str]] = []
     real = codec.load_config_toml
 
-    def counting(directory: str, name: str) -> dict:
+    def counting(directory: str, name: str) -> dict[str, object]:
         calls.append((directory, name))
         return real(directory, name)
 

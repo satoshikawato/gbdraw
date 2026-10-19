@@ -1954,7 +1954,7 @@ def with_stored_font_sizes_as_auto(payload: Mapping[str, Any]) -> dict[str, Any]
     copies; the stored request stays as saved.
     """
 
-    packaged: list[Mapping[str, Any]] = []  # Read on the first replacement only.
+    packaged: list[Mapping[str, object]] = []  # Read on the first replacement only.
     packaged_base = object()
 
     def lookup(tree: object, path: str) -> object:
