@@ -904,3 +904,44 @@ def test_linear_plot_title_keeps_plain_text_around_inline_italics(
     assert plot_title_group is not None
     assert "".join(plot_title_group.itertext()) == "Erythromycin A biosynthetic gene cluster from Saccharopolyspora erythraea"
     assert _extract_group_italic_tspan_texts(root, "plot_title") == ["Saccharopolyspora erythraea"]
+
+
+def test_web_helpers_crop_before_reverse_complementing(tmp_path: Path) -> None:
+    """N-2: the Web helpers and Session re-reads use the planner's order (OV-1279)."""
+    import json
+
+    from gbdraw.web_support.feature_metadata import (
+        extract_features_from_genbank_payload,
+        extract_features_from_gff_fasta_payload,
+    )
+
+    rng = random.Random(350)
+    sequence = "".join(rng.choice("ACGT") for _ in range(90))
+    record = SeqRecord(Seq(sequence), id="RecA", annotations={"molecule_type": "DNA"})
+    record.features = [SeqFeature(FeatureLocation(14, 29, strand=1), type="CDS", qualifiers={"locus_tag": ["a"]})]
+    gb_path = tmp_path / "rec.gb"
+    SeqIO.write([record], gb_path, "genbank")
+    fasta_path = tmp_path / "rec.fa"
+    fasta_path.write_text(f">RecA\n{sequence}\n", encoding="utf-8")
+    gff_path = tmp_path / "rec.gff3"
+    gff_path.write_text("##gff-version 3\nRecA\tt\tCDS\t15\t29\t.\t+\t0\tID=a;locus_tag=a\n", encoding="utf-8")
+    helpers_js = (Path(__file__).resolve().parents[1] / "gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    helpers: dict[str, object] = {}
+    exec(helpers_js.split("`", 1)[1].rsplit("`", 1)[0], helpers)
+
+    def reads(region: str, reverse: str) -> tuple[object, ...]:
+        fasta = json.loads(helpers["extract_first_fasta"](str(gb_path), "genbank", region, None, reverse))  # type: ignore[operator]
+        loaded = helpers["_load_single_linear_record_for_proteins"](  # type: ignore[operator]
+            str(gff_path), "gff", str(fasta_path), region, None, reverse
+        )
+        return (
+            fasta["fasta"].split("\n", 1)[1],
+            str(loaded.seq),
+            extract_features_from_genbank_payload(gb_path, region, None, reverse)["features"],
+            extract_features_from_gff_fasta_payload(gff_path, fasta_path, region_spec=region, reverse_flag=reverse)["features"],
+        )
+
+    flagged = reads("11-70", "1")
+    assert flagged == reads("11-70:rc", "0")
+    assert flagged[1] == str(Seq(sequence[10:70]).reverse_complement())
+    assert flagged[1] != str(Seq(sequence).reverse_complement()[10:70])

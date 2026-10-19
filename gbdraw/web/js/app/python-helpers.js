@@ -267,7 +267,8 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
     """Extract the first record as FASTA for LOSAT input."""
     from Bio import SeqIO
     from io import StringIO
-    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
+    from gbdraw.io.record_select import parse_record_selector, select_record
+    from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
     try:
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
         if fmt not in fmt_map:
@@ -286,10 +287,8 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         else:
             records = select_record(records, selector)
         reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
-        records = reverse_records(records, reverse)
-        if region_spec:
-            from gbdraw.io.regions import apply_region_specs, parse_region_specs
-            records = apply_region_specs(records, parse_region_specs([region_spec]))
+        specs = parse_region_specs([region_spec]) if region_spec else []
+        records = crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
         record = records[0]
         handle = StringIO()
         SeqIO.write(record, handle, "fasta")
@@ -503,8 +502,8 @@ def _web_feature_view_hash_parts(record, source_feature_position):
 def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, source_feature_catalogs=None):
     from Bio import SeqIO
     from gbdraw.features.source import build_source_feature_catalog
-    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
-    from gbdraw.io.regions import apply_region_specs, parse_region_specs
+    from gbdraw.io.record_select import parse_record_selector, select_record
+    from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
 
     selector = parse_record_selector(_normalize_web_record_selector(record_selector))
     reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
@@ -515,7 +514,6 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         records = select_record(records, selector) if selector is not None else [records[0]]
         if source_feature_catalogs is not None:
             source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
-        records = reverse_records(records, reverse)
     elif fmt == "gff":
         if not fasta_path:
             raise ValueError("GFF3 protein extraction requires a FASTA path.")
@@ -526,14 +524,13 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
             selected_features_set=["CDS"],
             keep_all_features=True,
             record_selectors=[_normalize_web_record_selector(record_selector) or ""],
-            reverse_flags=[reverse],
             source_feature_catalogs=source_feature_catalogs,
         )
         records = records[:1]
     else:
         raise ValueError(f"Unsupported format: {fmt}")
-    if region_spec:
-        records = apply_region_specs(records, parse_region_specs([region_spec]))
+    specs = parse_region_specs([region_spec]) if region_spec else []
+    records = crop_then_reverse_records(records, specs, [reverse] * len(records))[0]
     if not records:
         raise ValueError("No records found")
     return records[0]

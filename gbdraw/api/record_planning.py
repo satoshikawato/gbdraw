@@ -40,9 +40,8 @@ from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta
 from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector,
-    reverse_records,
 )
-from gbdraw.io.regions import RegionSpec, assign_region_specs, crop_record_to_region, parse_region_spec
+from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_reverse_records, parse_region_spec
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.api.prepared import register_prepared_resource_value
 from gbdraw.render_stages import render_stage
@@ -1272,19 +1271,9 @@ def _apply_collection_options(
     """
 
     try:
-        assignments = assign_region_specs(records, options.regions) if options.regions else {}
+        records, cropped = crop_then_reverse_records(records, options.regions, pending_reverse, log=logger)
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
-    records = [
-        crop_record_to_region(
-            record,
-            replace(region, reverse_complement=region.reverse_complement or reverse),
-            log=logger,
-        )
-        if (region := assignments.get(index)) is not None
-        else reverse_records((record,), reverse, log=logger)[0]
-        for index, (record, reverse) in enumerate(zip(records, pending_reverse, strict=True))
-    ]
     # Labels and subtitles apply by place through effective_record_presentation.
     for field_name in ("labels", "subtitles"):
         if len(getattr(options, field_name)) > len(records):
@@ -1295,7 +1284,7 @@ def _apply_collection_options(
             )
     for record, item in zip(records, provenance, strict=True):
         _apply_provenance_annotations(record, item)
-    return records, frozenset(assignments)
+    return records, cropped
 
 
 def _detached_record(record: SeqRecord) -> SeqRecord:

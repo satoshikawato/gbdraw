@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 import re
 from pathlib import PurePath, PureWindowsPath
@@ -376,11 +376,37 @@ def apply_region_specs(
     ]
 
 
+def crop_then_reverse_records(
+    records: Sequence[SeqRecord],
+    specs: Sequence[RegionSpec],
+    reverse: Sequence[bool],
+    *,
+    log: logging.Logger | None = None,
+) -> tuple[list[SeqRecord], frozenset[int]]:
+    """Crop each record a spec selects, then reverse-complement it (OV-1279).
+
+    The one owner of that order: a record's ``reverse`` flag applies after its
+    crop, as the spec's own ``:rc`` does, so both spellings draw one window and
+    asking for both reverses once. A record no spec selects is only reversed.
+    Returns the records and the indexes of the cropped ones.
+    """
+
+    assignments = assign_region_specs(records, specs) if specs else {}
+    oriented = [
+        crop_record_to_region(record, replace(spec, reverse_complement=spec.reverse_complement or flag), log=log)
+        if (spec := assignments.get(index)) is not None
+        else reverse_records((record,), flag, log=log)[0]
+        for index, (record, flag) in enumerate(zip(records, reverse, strict=True))
+    ]
+    return oriented, frozenset(assignments)
+
+
 __all__ = [
     "RegionSpec",
     "apply_region_specs",
     "assign_region_specs",
     "crop_record_to_region",
+    "crop_then_reverse_records",
     "parse_region_spec",
     "parse_region_specs",
 ]
