@@ -702,7 +702,7 @@ def test_runnable_gallery_support_downloads_exist() -> None:
         "tobacco-chloroplast": {
             "./files/chloroplast_specific_table.tsv",
             "./files/qualifier_priority.tsv",
-            "./files/nicotiana-tabacum-regions.tsv",
+            "./files/nicotiana-tabacum-regions-span.tsv",
         },
         "BGC0000708-BGC0000713": {
             "./files/BGC0000708-BGC0000713_default_colors.tsv",
@@ -957,25 +957,28 @@ def test_tobacco_gallery_session_keeps_chloroplast_region_annotations(
         .get("annotations", {})
         .get("sets", [])
     )
-    assert len(annotation_sets) == 1
-    assert annotation_sets[0]["id"] == "plastome_regions"
-    annotations = annotation_sets[0]["annotations"]
-    assert [annotation["label"] for annotation in annotations] == [
-        "LSC",
-        "IRb",
-        "SSC",
-        "IRa",
+    # The named region lines, then the tint the Underlay span draws.
+    assert [annotation_set["id"] for annotation_set in annotation_sets] == [
+        "plastome_regions",
+        "plastome_tint",
     ]
-    actual_spans = [
-        (annotation["target"]["start"], annotation["target"]["end"])
-        for annotation in annotations
-    ]
-    assert actual_spans == [
+    expected_spans = [
         (1, 86686),
         (86687, 112029),
         (112030, 130600),
         (130601, 155943),
     ]
+    for annotation_set, labels in zip(
+        annotation_sets,
+        (["LSC", "IRb", "SSC", "IRa"], ["", "", "", ""]),
+        strict=True,
+    ):
+        annotations = annotation_set["annotations"]
+        assert [annotation["label"] for annotation in annotations] == labels
+        assert [
+            (annotation["target"]["start"], annotation["target"]["end"])
+            for annotation in annotations
+        ] == expected_spans
 
 
 @pytest.mark.gallery
