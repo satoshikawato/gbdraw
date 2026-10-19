@@ -657,8 +657,10 @@ const createLayoutPreferences = () => ({
   const applyState = async (snapshot) => {
     value = snapshot.value;
   };
+  const limitMessages = [];
   const history = createHistoryManager({
     maxActions: 2,
+    onHistoryLimit: (message) => limitMessages.push(message),
     buildIntent: buildState,
     applyIntent: applyState,
     buildCheckpoint: buildState,
@@ -672,6 +674,9 @@ const createLayoutPreferences = () => ({
     });
   }
   assert.equal(history.getUndoCount(), 2);
+  // OV-1365: the step-count window drops its oldest step silently; only the
+  // byte limit is announced.
+  assert.deepEqual(limitMessages, []);
   await history.undo();
   assert.equal(value, 2);
   await history.undo();
