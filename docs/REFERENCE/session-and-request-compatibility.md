@@ -151,7 +151,7 @@ the features they name:
     `hash=` annotation targets of these Sessions hold source hashes or values
     a user typed. They load as saved and now match the feature with that
     source hash on every record.
-  - A label whitelist row that **Whitelist only** wrote for a feature without
+  - A label whitelist row that the former **Whitelist only** action wrote for a feature without
     a unique qualifier holds its rendered ID and is not renamed either.
 - A catalog of schema 3 or 4 reads as schema 5 without selector values until
   the next Generate. A feature whose rendered ID carries its source hash was

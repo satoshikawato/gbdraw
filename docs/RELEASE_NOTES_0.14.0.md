@@ -38,11 +38,22 @@ inputs, comparing, rendering, and finishing. When a comparison reuses a cached
 search, the status says so. The status shows stages, not a percentage or a
 time estimate. If you cancel, or the run fails, the previous Result stays.
 
+In the Result preview, **×** at the end of the **Search features** row hides the
+search bar, and **Search** in the bottom toolbar shows it again with the same
+query and matches. A click on a Legend row or a record definition in the
+preview opens the Legend item popup or the record popup while **Layout edit**
+is off.
+
+A loaded Circular Session shows its saved Result without reading the embedded
+source again: **Source records** says **Records not inspected** until you select
+**Inspect source records** or **Generate Diagram**.
+
 Circular and Linear mode now keep their own settings, edits, and Result.
 **Generate Diagram** replaces only the Result of the mode you are in, and
 switching modes changes no setting; a mode without a Result says **No Circular
-Result yet** or **No Linear Result yet**. Input files, LOSAT run settings, and
-the rich feature popup are shared by both modes. **Reset Settings** resets both
+Result yet** or **No Linear Result yet**. The Circular inputs and the Linear File
+cards stay separate inputs that a mode switch keeps; LOSAT run settings and the
+rich feature popup are shared by both modes. **Reset Settings** resets both
 modes, and one **Undo** restores both, except the rich feature popup.
 
 **Load Session** asks **Replace the current work?** before it replaces unsaved
@@ -56,8 +67,9 @@ and reverse-complements record 6 (LvMJNV) with that record's **Reverse complemen
 setting, so its links to the neighboring genomes no longer cross.
 
 In Linear mode, **Generate Diagram** with a pair set to **Upload BLAST TSV**
-but no file opens a **BLAST TSV missing** dialog. It offers **Choose BLAST TSV
-for #i → #j…**, **Set to No comparison and Generate**, or **Cancel**.
+but no file opens a **BLAST TSV missing** dialog. It offers **Choose file…** for each
+missing pair, **Skip these comparisons and Generate**, or **Cancel**; **Generate**
+appears once every file is chosen.
 
 Choose which records of a file are drawn. Each Linear record card has **Draw
 this record**, and a file with several records has **Choose records…**, a list
@@ -164,8 +176,8 @@ In the feature popup, **Edit** groups its controls by when they apply:
 (feature placement and record rotation) apply on Generate. To start a record at
 a feature, open **Rotate record using this feature** and choose **Put this
 feature at**: **Start of the record** (the default), **End of the record**, or
-**Custom position**. **Apply on Generate** collects the rotations of several
-records for one **Generate Diagram**; **Apply and regenerate** redraws that
+**Custom position**. **Apply when I Generate** collects the rotations of several
+records for one **Generate Diagram**; **Apply now** redraws that
 record at once.
 
 The Features list and **Search features** keep hidden features, each with a
@@ -276,6 +288,10 @@ each target record has one unambiguous anchor. See
 [command-line alignment](./REFERENCE/command-line.md#strict-similarity-group-alignment),
 and [typed Python alignment](./REFERENCE/python-api.md#typed-linear-similarity-group-alignment).
 
+In Linear mode, **Paralog links per group** also appears in LOSATP **Similarity
+groups** mode, and a Similarity groups Generate draws with the value it shows.
+Before, every such Generate drew with 2.
+
 ## Sessions, Run Info, and reproducing a figure
 
 gbdraw 0.14.0 saves Sessions as session version 48, with
@@ -345,6 +361,14 @@ region from the GC track to the feature track. It works in Circular and Linear,
 from the command line, Python, a Session, and the web app, where the
 annotation slot's **Extend to** list sets it. See
 [Region annotations](./CLI_Reference.md#region-annotations).
+
+A region label without its own `label_font_size` is drawn at the feature label
+font size of its diagram. In Circular, labels with `label_orientation` `auto`
+(the default) or `arc` are drawn along their circle; a label longer than its
+circle is cut with an ellipsis and a warning. In Linear, a region label that
+meets feature labels or leader lines is moved along its region, moves those
+feature labels to another row, or is drawn in front of the leader lines; when
+none of these clears it, it warns.
 
 Small label defects of horizontal Circular labels, up to 100 per record, are
 now repaired by moving outer and inner labels slightly: overlapping labels,
@@ -537,7 +561,7 @@ Some command-line input that 0.13 accepted now stops the run with a message:
   an error that names the file and line. The feature override and feature
   placement tables are unchanged.
 
-In the web app, **Override File (-d)** import checks Default colors the same
+In the web app, **Default colors file** import checks Default colors the same
 way, and **Load Session** drops a stored Legend entry color outside that set and
 names the entry in the Load notice.
 
@@ -644,10 +668,11 @@ each export format needs.
 - After you load a Session saved by 0.13.0, its Result keeps the 0.13.0 feature IDs
   on cropped or reverse-complemented records until you click **Generate Diagram**. Colors
   are unaffected. An SVG downloaded before **Generate Diagram** carries the old IDs.
-- A label whitelist row that **Whitelist only** saved before 0.14.0, for a feature
-  without a unique qualifier, names the feature by its old drawn ID. On a cropped
-  or reverse-complemented record it no longer matches that feature, and its label
-  is no longer whitelisted. Use **Whitelist only** on the feature again to add a
-  row that matches.
+- A label whitelist row that the former **Whitelist only** action saved before 0.14.0,
+  for a feature without a unique qualifier, names the feature by its old drawn ID.
+  On a cropped or reverse-complemented record it no longer matches that feature,
+  and its label is no longer whitelisted. To show the label, set **Label visibility**
+  to **On** in the feature popup, or add a matching row under **Labels** →
+  **LABEL FILTERING** → **Whitelist**.
 
 [Documentation home](./DOCS.md) | [Beta history](./RELEASE_NOTES_0.14.0b0.md)
