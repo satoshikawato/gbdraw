@@ -1703,8 +1703,11 @@ def test_linear_label_without_a_clear_place_moves_the_feature_label_off_it_and_c
     left, top, right, bottom = _text_ink_box(text, parents)
     assert text.text == "Mitochondrial control region" and text.attrib["font-size"] == "10.0"
     assert right <= name[0] or left >= name[2] or bottom <= name[1] or top >= name[3]
-    # Without an underline the label keeps its default place and its counted conflict, and tRNA-Leu its row.
-    plain = _six_kb_drawing(region, ((190, 210, "tRNA-Leu"),), {"labels.linear.line": "none"})
+    # Without an underline or a box (OV-1357) the label keeps its default place and its counted conflict, and
+    # tRNA-Leu its row.
+    plain = _six_kb_drawing(
+        region, ((190, 210, "tRNA-Leu"),), {"labels.linear.line": "none", "labels.linear.protection": "halo"}
+    )
     assert [record.fit.region_overlaps for record in plain._gbdraw_linear_label_fit.records] == [1]
     assert _leader_rise(svg, "tRNA-Leu") > _leader_rise(plain.tostring(), "tRNA-Leu")
     assert (rect.attrib["fill"], rect.attrib["fill-opacity"]) == ("#ffffff", "0.7")
@@ -1967,7 +1970,8 @@ def test_a_region_label_whose_overlap_no_way_clears_warns_with_no_fix() -> None:
 
 def _region_label_crossings(svg: str) -> list[tuple[str, str]]:
     """Each (region label, feature id) whose drawn letters, or backing when it is drawn in front, meet that
-    feature label's letters or its underline (a horizontal line bound to the label, with its stroke)."""
+    feature label's letters, its underline (a horizontal line bound to the label, with its stroke) or its white
+    box (a rect bound to the label, OV-1357)."""
 
     root = ElementTree.fromstring(svg)
     parents = {child: parent for parent in root.iter() for child in parent}
@@ -1980,6 +1984,10 @@ def _region_label_crossings(svg: str) -> list[tuple[str, str]]:
         feature = element.attrib.get("data-label-feature-id")
         if feature and tag(element) == "text":
             features.append((feature, _text_ink_box(element, parents)))
+        elif feature and tag(element) == "rect":
+            dx, dy = _translation(element, parents)
+            x, y = dx + float(element.attrib["x"]), dy + float(element.attrib["y"])
+            features.append((feature, (x, y, x + float(element.attrib["width"]), y + float(element.attrib["height"]))))
         elif (
             feature and tag(element) == "line" and element.attrib["y1"] == element.attrib["y2"]
             # Not an underline's white casing, which only cuts leaders and is drawn behind every region label.
@@ -2049,6 +2057,19 @@ def test_a_region_label_over_a_feature_label_or_its_underline_is_counted(build) 
     counted = sum(record.fit.region_overlaps for record in drawing._gbdraw_linear_label_fit.records)
 
     assert len(crossing) <= counted
+
+
+def test_a_region_label_keeps_off_a_feature_label_box() -> None:
+    """OV-1357: at 24 pt a feature label's box reaches 0.18 em (4.32 px) past its letters, beyond the 3 px a
+    region label keeps from them. The box belongs to what the label draws, so the "Control region" label,
+    drawn behind the record, keeps off it as off the letters, and nothing is left to count."""
+
+    drawing = _six_kb(200, 900, "Control region", ((100, 120, "tRNA-Leu"), (300, 330, "tRNA-Ser")), 24.0)
+    svg = drawing.tostring()
+
+    assert [element for element in ElementTree.fromstring(svg).iter() if element.tag.endswith("rect") and element.attrib.get("data-label-feature-id")]
+    assert _region_label_crossings(svg) == []
+    assert [record.fit.region_overlaps for record in drawing._gbdraw_linear_label_fit.records] in ([], [0])
 
 
 def _label_candidates(svg: str) -> dict[str, str]:

@@ -143,7 +143,7 @@ from ...layout.scalar_axis import (
     format_percent_tick,
     scalar_axis_tick_values,
 )
-from ...labels.label_style import widest_leader_px
+from ...labels.label_style import FeatureLabelStyle, widest_leader_px
 from ...labels.linear import (
     LINEAR_LABEL_FIT_ATTR,
     FeatureLabelRows,
@@ -1630,7 +1630,7 @@ def _place_linear_annotation_labels_by_record(
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack],
     font_family: str,
     leader_stroke_width: float,
-    underline: bool,
+    label_style: FeatureLabelStyle,
     gap: float,
     new_rows: bool,
     label_frames: Sequence[LinearLabelFrame] | None,
@@ -1653,7 +1653,7 @@ def _place_linear_annotation_labels_by_record(
 
     def own_ink(index: int) -> list[LabelObstacle]:
         return linear_feature_label_obstacles(
-            labels_of(index), plans[index], leader_stroke_width, index, underline=underline
+            labels_of(index), plans[index], leader_stroke_width, index, label_style=label_style
         )
 
     label_row_of = {index: row for row in linear_label_rows(label_frames, len(records)) for index, _x in row}
@@ -1700,7 +1700,7 @@ def _place_linear_annotation_labels_by_record(
                 else (),
                 font_family=font_family,
                 leader_stroke_width=leader_stroke_width,
-                underline=underline,
+                label_style=label_style,
                 gap=gap,
                 new_rows=new_rows,
                 label_x=next(x for other, x in label_row if other == index),
@@ -2958,7 +2958,7 @@ def assemble_linear_diagram(
         annotation_track_layouts=annotation_track_layouts,
         font_family=str(cfg.objects.text.font_family),
         leader_stroke_width=widest_leader_px(label for labels in all_labels for label in labels),
-        underline=render_context.profile.label_style.underline,
+        label_style=render_context.profile.label_style,
         gap=float(cfg.labels.spacing.linear),
         # One assembly more at most: one that places proposed rows proposes none.
         new_rows=feature_label_rows is None,

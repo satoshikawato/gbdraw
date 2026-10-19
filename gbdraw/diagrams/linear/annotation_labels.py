@@ -38,6 +38,7 @@ from gbdraw.core.text import text_ink_offsets
 from gbdraw.features.objects import FeatureObject
 from gbdraw.labels.fit import LabelFit
 from gbdraw.labels.label_ink import linear_label_ink
+from gbdraw.labels.label_style import FeatureLabelStyle
 from gbdraw.labels.linear import (
     FeatureLabelRow,
     RecordRegionLabels,
@@ -50,6 +51,7 @@ from gbdraw.labels.linear import (
 )
 from gbdraw.layout.linear import LinearFeatureLaneGeometry
 from gbdraw.layout.spatial import Aabb
+from gbdraw.render.drawers.label_backing import feature_label_box_bounds
 from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel, linear_annotation_labels
 
 from .track_slots import LinearRecordVerticalPlan
@@ -105,19 +107,32 @@ def _feature_label_box(label: Mapping[str, object]) -> Aabb:
 
 
 def _feature_label_obstacles(
-    label: Mapping[str, object], owner: ObstacleOwner, origin_y: float, leader_half_width: float, *, underline: bool
+    label: Mapping[str, object],
+    owner: ObstacleOwner,
+    origin_y: float,
+    leader_half_width: float,
+    *,
+    label_style: FeatureLabelStyle,
 ) -> list[LabelObstacle]:
-    """One feature label's letters and leader line, from its record's bar start and axis. Its drawn
-    underline (``underline``: the style draws one) belongs to the letters, not to the leader: a backed
-    region label may not cover it (LP-D102)."""
+    """One feature label's drawing and leader line, from its record's bar start and axis. What the
+    ``label_style`` draws with the letters, its underline (LP-D102) and its white box (OV-1357), belongs to
+    the letters, not to the leader: a region label keeps off it, and a backed one may not cover it."""
 
     letters = _feature_label_box(label)
     leader = linear_leader_polyline(dict(label))
-    line = linear_label_ink(label, leader, underline=True).underline_box if underline and leader else None
-    if line is not None:
+    if leader and (label_style.underline or label_style.protection == "box"):
+        ink = linear_label_ink(label, leader, underline=label_style.underline)
+        drawn = [
+            box
+            for box in (
+                ink.underline_box,
+                feature_label_box_bounds(ink, leader) if label_style.protection == "box" else None,
+            )
+            if box is not None
+        ]
         letters = Aabb(
-            min(letters.min_x, line.min_x), min(letters.min_y, line.min_y),
-            max(letters.max_x, line.max_x), max(letters.max_y, line.max_y),
+            min(box.min_x for box in (letters, *drawn)), min(box.min_y for box in (letters, *drawn)),
+            max(box.max_x for box in (letters, *drawn)), max(box.max_y for box in (letters, *drawn)),
         )
     obstacles = [LabelObstacle(letters.translated(0.0, origin_y), owner)]
     for (x1, y1), (x2, y2) in zip(leader, leader[1:]):
@@ -137,16 +152,17 @@ def linear_feature_label_obstacles(
     leader_stroke_width: float,
     record_index: int,
     *,
-    underline: bool,
+    label_style: FeatureLabelStyle,
 ) -> list[LabelObstacle]:
-    """A record's feature label boxes (with their underlines) and leader lines, from its bar start and axis."""
+    """A record's feature label boxes (with what ``label_style`` draws with their letters) and leader lines,
+    from its bar start and axis."""
 
     origin_y = _features_origin_y(plan)
     return [
         obstacle
         for index, label in enumerate(feature_labels)
         for obstacle in _feature_label_obstacles(
-            label, (record_index, "feature", index), origin_y, 0.5 * float(leader_stroke_width), underline=underline
+            label, (record_index, "feature", index), origin_y, 0.5 * float(leader_stroke_width), label_style=label_style
         )
     ]
 
@@ -317,7 +333,7 @@ def _choose_candidate(
 
 class _Record(NamedTuple):
     """What the record's feature labels move within: their dicts, their origin and leader width,
-    whether they are underlined, the ink they must not newly meet (feature glyphs, the axis and other tracks), and where the
+    their style (what is drawn with their letters), the ink they must not newly meet (feature glyphs, the axis and other tracks), and where the
     label fit counts them: the x of the record's start in its row and the feature labels of the
     row's other records, each with its x (``LinearLabelFrame``)."""
 
@@ -325,7 +341,7 @@ class _Record(NamedTuple):
     labels: list[dict[str, object]]
     origin_y: float
     leader_half_width: float
-    underline: bool
+    label_style: FeatureLabelStyle
     inks: tuple[LabelObstacle, ...]
     label_x: float = 0.0
     row_labels: tuple[tuple[Sequence[dict[str, object]], float], ...] = ()
@@ -380,7 +396,7 @@ def _another_row(
     for row in [*rows, *([top + 1] if new_rows else [])]:
         moved = linear_label_in_row(dict(label), side, row)
         boxes = _feature_label_obstacles(
-            moved, owner, record.origin_y, record.leader_half_width, underline=record.underline
+            moved, owner, record.origin_y, record.leader_half_width, label_style=record.label_style
         )
         room = row > top
         # A new row is placed by the next assembly, whose plan makes its room: that one checks it.
@@ -463,7 +479,7 @@ def place_linear_annotation_labels(
     glyphs: Sequence[Aabb] = (),
     font_family: str,
     leader_stroke_width: float = 0.0,
-    underline: bool,
+    label_style: FeatureLabelStyle,
     gap: float,
     new_rows: bool = True,
     label_x: float = 0.0,
@@ -475,8 +491,8 @@ def place_linear_annotation_labels(
     labels and leaders, the record names and definition text, the other
     records of its row), from this record's bar start and axis; ``glyphs``
     the record's feature glyph boxes (``linear_feature_glyph_boxes``). The
-    record's ``feature_labels`` may make way (LP-D82), with their underlines
-    when ``underline`` (the style draws them); ``new_rows`` allows a move to
+    record's ``feature_labels`` may make way (LP-D82), with what their
+    ``label_style`` draws with their letters; ``new_rows`` allows a move to
     a new row. ``label_x`` and ``row_labels`` are where the label fit
     counts the row's feature labels (the record's start and the other records'
     labels, each with its start); no move makes that count larger. A placed
@@ -489,7 +505,7 @@ def place_linear_annotation_labels(
         list(feature_labels),
         _features_origin_y(plan),
         0.5 * float(leader_stroke_width),
-        underline,
+        label_style,
         tuple(
             LabelObstacle(box, (record_index, "ink", index))
             for index, box in enumerate(_track_inks(plan, "", glyphs, sequence_width))

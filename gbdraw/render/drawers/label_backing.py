@@ -152,7 +152,8 @@ def backing_rect(box: Aabb, font_size: float, *, opacity: float = BACKING_OPACIT
 
 def feature_label_backing(label: FeatureLabelInk, leader: Sequence[tuple[float, float]]) -> Aabb:
     """A feature label's box in the frame of its ``ink``: stopped short of its underline by the line's gap
-    when it has one, else at the end of its drawn ``leader`` on the side the leader arrives from."""
+    when it has one, else at the end of its ``leader`` on the side the leader arrives from (where the label's
+    underline ends it when the leader stops above the letters)."""
 
     line = label.underline
     if line is not None and line[1] != line[2]:
@@ -162,7 +163,7 @@ def feature_label_backing(label: FeatureLabelInk, leader: Sequence[tuple[float, 
         return backing_box(label.ink, label.font_size, edge_y=edge)
     if not leader:
         return backing_box(label.ink, label.font_size)
-    end_x, end_y = label.to_label_frame(leader[-1])
+    end_x, end_y = label.to_label_frame(line[0] if line is not None else leader[-1])
     ink = label.ink
     out_x = max(ink.min_x - end_x, end_x - ink.max_x)
     out_y = max(ink.min_y - end_y, end_y - ink.max_y)
@@ -171,6 +172,20 @@ def feature_label_backing(label: FeatureLabelInk, leader: Sequence[tuple[float, 
         return backing_box(ink, label.font_size, edge_x=edge)
     edge = max(end_y, ink.max_y) if end_y > 0.5 * (ink.min_y + ink.max_y) else min(end_y, ink.min_y)
     return backing_box(ink, label.font_size, edge_y=edge)
+
+
+def feature_label_box_bounds(label: FeatureLabelInk, leader: Sequence[tuple[float, float]]) -> Aabb:
+    """The drawing-frame bounds of the box ``feature_label_box`` draws for ``label`` and ``leader``, turned
+    with its letters: what the box covers, for the region labels that keep off it (OV-1357)."""
+
+    box = feature_label_backing(label, leader)
+    if label.rotation_deg == 0.0:
+        return box
+    corners = [label.from_label_frame(corner) for corner in (
+        (box.min_x, box.min_y), (box.max_x, box.min_y), (box.min_x, box.max_y), (box.max_x, box.max_y)
+    )]
+    xs, ys = [x for x, _ in corners], [y for _, y in corners]
+    return Aabb(min(xs), min(ys), max(xs), max(ys))
 
 
 def feature_label_box(label: FeatureLabelInk, leader: Sequence[tuple[float, float]], feature_id: str | None) -> Rect:
@@ -194,6 +209,7 @@ __all__ = [
     "backing_rect",
     "feature_label_backing",
     "feature_label_box",
+    "feature_label_box_bounds",
     "label_halo",
     "underline_casing",
     "UnderlineCasing",
