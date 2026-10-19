@@ -20,8 +20,7 @@ import {
   recordedLegendOrder,
   rekeyLegendRecords,
   resultLegendRows,
-  shownLegendRowNames,
-  writeDrawingLegendRecords
+  shownLegendRowNames
 } from '../../services/legend-svg.js';
 import { diffLegendIntents, legendRowRules } from '../../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
@@ -411,35 +410,51 @@ export const createLegendEntryActions = ({
   // Moves the drawing's Legend records, the generated inventory and colors,
   // and the open Stroke options of each re-keyed row to its new key
   // (`rekeyLegendRecords`, OV-660); returns `entries`, the list being
-  // written, moved.
+  // written, moved. For a drawing that is not shown (`hidden`: the Specific
+  // rules file card's Remove, OV-1280), the records of the `removed` keys go
+  // too, the moved list is written here, and the inventory, colors, and
+  // Stroke options, which are the shown Result's, stay.
   /**
    * @param {DrawingState} drawing
    * @param {EntryRecord[]} entries
    * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} moves
+   * @param {{ removed: ReadonlySet<string> } | null} [hidden]
    * @returns {EntryRecord[]}
    */
-  const moveLegendRecords = (drawing, entries, moves) => {
+  const moveLegendRecords = (drawing, entries, moves, hidden = null) => {
+    /** @param {EntryRecord[]} list @returns {EntryRecord[]} */
+    const kept = (list) => (hidden ? list.filter((entry) => !hidden.removed.has(legendEntryKey(entry))) : list);
     /** @type {Set<string>} */
     const strokeOptionsOpen = state.legendStrokeOptionsOpen || new Set();
     const moved = rekeyLegendRecords({
-      entries,
-      deletedEntries: /** @type {EntryRecord[]} */ (drawing.deletedLegendEntries.value || []),
-      dormantEntries: /** @type {EntryRecord[]} */ (drawing.dormantLegendEntries.value || []),
+      entries: kept(entries),
+      deletedEntries: kept(/** @type {EntryRecord[]} */ (drawing.deletedLegendEntries.value || [])),
+      dormantEntries: kept(/** @type {EntryRecord[]} */ (drawing.dormantLegendEntries.value || [])),
       colorOverrides: { ...drawing.legendColorOverrides },
       strokeOverrides: { ...drawing.legendStrokeOverrides },
-      addedCaptions: [...drawing.addedLegendCaptions.value],
-      originalOrder: /** @type {string[]} */ (originalLegendOrder.value),
-      originalColors: /** @type {Record<string, string>} */ (originalLegendColors.value),
-      strokeOptionsOpen: [...strokeOptionsOpen]
+      addedCaptions: [...drawing.addedLegendCaptions.value].filter((caption) => !hidden?.removed.has(caption)),
+      originalOrder: hidden ? [] : /** @type {string[]} */ (originalLegendOrder.value),
+      originalColors: hidden ? {} : /** @type {Record<string, string>} */ (originalLegendColors.value),
+      strokeOptionsOpen: hidden ? [] : [...strokeOptionsOpen]
     }, moves);
-    // The list being written goes back to the caller, which writes it.
-    const { entries: movedEntries, deletedEntries, dormantEntries, colorOverrides, strokeOverrides, addedCaptions } = moved;
-    writeDrawingLegendRecords(drawing, { deletedEntries, dormantEntries, colorOverrides, strokeOverrides, addedCaptions });
+    drawing.deletedLegendEntries.value = moved.deletedEntries;
+    drawing.dormantLegendEntries.value = moved.dormantEntries;
+    for (const [store, records] of /** @type {const} */ ([
+      [drawing.legendColorOverrides, moved.colorOverrides], [drawing.legendStrokeOverrides, moved.strokeOverrides]
+    ])) {
+      Object.keys(store).forEach((key) => { delete store[key]; });
+      Object.assign(store, records);
+    }
+    drawing.addedLegendCaptions.value = new Set(moved.addedCaptions);
+    if (hidden) {
+      drawing.legendEntries.value = moved.entries;
+      return moved.entries;
+    }
     originalLegendOrder.value = moved.originalOrder;
     originalLegendColors.value = moved.originalColors;
     strokeOptionsOpen.clear();
     moved.strokeOptionsOpen.forEach((caption) => strokeOptionsOpen.add(caption));
-    return movedEntries;
+    return moved.entries;
   };
 
   // The drawing's Legend intent that names a Result's rows.
@@ -842,6 +857,7 @@ export const createLegendEntryActions = ({
     legendEntryName,
     legendRowIsNamed,
     legendRowName,
+    moveLegendRecords,
     onLegendGeometryChanged,
     prepareFileLegendEntries,
     readLegendRowNames,

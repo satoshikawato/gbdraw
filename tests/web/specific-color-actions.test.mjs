@@ -75,7 +75,10 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
       state.legendEntries.value=intents;
       state.results.value=[{name:'figure',content:'after'}];
     } };
-  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;},isRedrawOwed:()=>false}, nextTick:async()=>{}, watch, ...options});
+  },
+  // The Legend owner's writer, which the take-back of a drawing not shown calls (OV-1280, AUTH-ORIGIN-1).
+  moveLegendRecords: (...args) => createLegendManager({ state: withDrawings(state), commitLegendRowRules: () => true }).moveLegendRecords(...args),
+  projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;},isRedrawOwed:()=>false}, nextTick:async()=>{}, watch, ...options});
   return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rekeyed:()=>lastRekeyed, rerenders:()=>rerenders, setRerendering};
 };
 // Review 3 (OV-262 in the Features drawer): with the type's default color

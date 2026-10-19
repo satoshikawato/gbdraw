@@ -30,9 +30,7 @@ import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
 import {
   displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
 } from '../../services/feature-visibility.js';
-import {
-  legendEntryKey, legendRowTakesPlace, rekeyLegendRecords, shownLegendKeys, shownPythonLegendRow, writeDrawingLegendRecords
-} from '../../services/legend-svg.js';
+import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
 /** @import { PatternDraft } from './pattern-drafts.js' */
 /** @import { ColorFeature } from './color-actions.js' */
 
@@ -75,10 +73,21 @@ import {
  */
 
 /**
+ * The Legend owner's move of a drawing's Legend records to the re-keyed keys
+ * (`moveLegendRecords` in app/legend/entry-actions.js); with `hidden`, for a
+ * drawing not shown, it also drops the records of the `removed` keys and
+ * writes the drawing's Legend list.
+ * @typedef {(drawing: DrawingState, entries: LegendEntry[], moves: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
+ *   hidden?: { removed: ReadonlySet<string> } | null) => unknown} MoveLegendRecordsPort
+ */
+
+/**
  * @typedef {object} FeatureRuleActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: { caption: PythonLegendKey, after: PythonLegendKey } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
+ * @property {MoveLegendRecordsPort} moveLegendRecords
+ *   The Legend owner's move of a drawing's Legend records; this owner calls it only for a drawing not shown.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
@@ -99,7 +108,7 @@ import {
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -824,7 +833,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // nothing the shown figure holds (REVIEW-1 B1): its rows, and the Legend
   // records of the rows only the file's rules drew, found by the keys the
   // drawing stores for them (`listedRuleRowRemoval`); a kept rule's row whose
-  // key changes moves to it (REVIEW-3 R3-B1). So a Save, an Undo or a Redo
+  // key changes moves to it (REVIEW-3 R3-B1). The Legend owner writes the
+  // Legend records (`moveLegendRecords`). So a Save, an Undo or a Redo
   // finds the whole change. When it is shown, the display draws its figure
   // again if its Legend cannot show the rules (app-setup.js, the rule table
   // its Result was last shown with).
@@ -837,21 +847,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const [entries, deletedEntries, dormantEntries] = [drawing.legendEntries, drawing.deletedLegendEntries, drawing.dormantLegendEntries]
       .map((list) => list.value || []);
     const { gone, rekeyed } = listedRuleRowRemoval(before, kept, [...entries, ...deletedEntries, ...dormantEntries].map(legendEntryKey));
-    /** @type {Set<string>} */
-    const goneKeys = new Set(gone.map(({ caption }) => caption));
-    /** @param {readonly LegendEntry[]} list */
-    const listedOnly = (list) => list.filter((entry) => !goneKeys.has(legendEntryKey(entry)));
     retireSupersededLegendColors(drawing, [], gone);
     drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...kept);
     drawing.fileLegendCaptions.value = specificRulesFileCaptions(kept);
-    writeDrawingLegendRecords(drawing, rekeyLegendRecords({
-      entries: listedOnly(entries),
-      deletedEntries: listedOnly(deletedEntries),
-      dormantEntries: listedOnly(dormantEntries),
-      colorOverrides: { ...drawing.legendColorOverrides },
-      strokeOverrides: { ...drawing.legendStrokeOverrides },
-      addedCaptions: [...drawing.addedLegendCaptions.value].filter((caption) => !goneKeys.has(caption))
-    }, rekeyed));
+    moveLegendRecords(drawing, entries, rekeyed, { removed: new Set(gone.map(({ caption }) => caption)) });
   };
   /** @param {DrawingState} drawing */
   const removeImportedSpecificRules = (drawing) => {

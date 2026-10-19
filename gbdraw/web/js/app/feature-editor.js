@@ -45,6 +45,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
  * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
+ * @property {import('./feature-editor/rule-actions.js').MoveLegendRecordsPort} moveLegendRecords
+ *   The Legend owner's move of a drawing's Legend records (a drawing not shown: the Specific rules file card's Remove).
  * @property {FeatureSelectionPort | null} [featureSelection]
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
@@ -93,6 +95,7 @@ export const createFeatureEditor = ({
   isCurrentFeature,
   nextTick,
   prepareFileLegendEntries,
+  moveLegendRecords,
   featureSelection = null,
   commitActiveResultEdit = null,
   showEditorIntent,
@@ -123,7 +126,7 @@ export const createFeatureEditor = ({
   // created before it call them through this object only.
   const editorPorts = /** @type {FeatureEditorPorts} */ ({});
   const ruleActions = createFeatureRuleActions({
-    state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
+    state, prepareFileLegendEntries, moveLegendRecords, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
     ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice,
     revealSetting
   });

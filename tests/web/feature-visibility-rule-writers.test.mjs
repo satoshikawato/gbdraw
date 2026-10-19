@@ -99,6 +99,7 @@ export const PAINT_INTENT_WRITERS = {
     deleteLegendEntry: 'edit',
     // Also Reset Settings, after its projection.
     extractLegendEntries: 'generate',
+    moveLegendRecords: 'rule',
     restoreDeletedLegendEntries: 'restore',
     // Also the rule commit's callback and the color scope choice.
     writeLegendRowColor: 'edit'
@@ -115,9 +116,6 @@ export const PAINT_INTENT_WRITERS = {
   'js/services/history-snapshot.js': {
     applyEditorIntentData: 'history', applyFallbackFeatureStateData: 'history', applyFeatureIntentData: 'history'
   },
-  // The rule commit's re-key (`moveLegendRecords`) and the Specific rules
-  // card's take-back in a drawing not shown, inside the card's step (OV-1280).
-  'js/services/legend-svg.js': { writeDrawingLegendRecords: 'rule' },
   'js/services/record-draw-selection.js': { forEachRecordEdit: 'retire' },
   // Also the Session baseline (`resetSessionBaseline`).
   'js/services/reset.js': { resetEditorDraftState: 'reset' },

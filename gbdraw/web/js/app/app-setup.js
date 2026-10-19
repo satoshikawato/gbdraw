@@ -1935,6 +1935,7 @@ export const createAppSetup = () => {
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
+    moveLegendRecords: legendActions.moveLegendRecords,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     showEditorIntent: (options) => showEditorIntent(options),
