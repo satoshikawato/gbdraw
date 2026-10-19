@@ -658,7 +658,7 @@ export const DefaultColorScopeLine = {
     <span data-default-color-scope-sentence>
       <template v-if="line.kind === 'replaces'">
         Replaces your {{ line.type }} default color
-        <span class="inline-block w-3 h-3 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span>
+        <span class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span>
         <span class="font-mono">{{ line.color }}</span>.
       </template>
       <template v-else>Sets the {{ line.type }} default color ({{ line.type }} features without their own color or rule, also hidden ones).</template>
