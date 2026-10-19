@@ -138,6 +138,77 @@ const extractCalls = (source, file) => {
   return calls;
 };
 
+const NAMED_ENTITIES = { quot: '"', amp: '&', lt: '<', gt: '>', apos: '\'', '#39': '\'', nbsp: ' ' };
+const ENTITY = /&(#x[0-9A-Fa-f]+|#\d+|[A-Za-z][A-Za-z0-9]*);/g;
+const X_TEMPLATE = /<script\b[^>]*type="text\/x-template"[^>]*>[\s\S]*?<\/script>/g;
+
+/**
+ * Decodes the entities of the list above and numeric references the way the
+ * browser does; any other named entity stays as written, so the check below
+ * can refuse it.
+ */
+const decodeEntities = (text) => text.replace(ENTITY, (whole, name) => {
+  if (name[0] === '#' && name[1] !== 'x' && name[1] !== 'X') return String.fromCodePoint(Number(name.slice(1)));
+  if (name[0] === '#' && /^#[xX]/.test(name)) return String.fromCodePoint(parseInt(name.slice(2), 16));
+  return NAMED_ENTITIES[name] ?? whole;
+});
+
+/**
+ * index.html as Vue compiles it: the browser decodes entities in the page
+ * before Vue reads the in-DOM root, but an x-template's text reaches Vue as
+ * written, so the x-template blocks stay undecoded.
+ */
+const compiledHtml = (html) => {
+  let result = '';
+  let last = 0;
+  for (const block of html.matchAll(X_TEMPLATE)) {
+    result += decodeEntities(html.slice(last, block.index)) + block[0];
+    last = block.index + block[0].length;
+  }
+  return result + decodeEntities(html.slice(last));
+};
+
+/**
+ * The start tags of `html` that break on a raw `"` inside a double-quoted
+ * attribute value and that hold a t(), tn() or tx() call. Such a quote ends
+ * the value early (write `&quot;` in index.html outside x-templates).
+ * @returns {string[]} one `file:line: ...` problem per tag
+ */
+const rawQuoteProblems = (html, file) => {
+  const problems = [];
+  const tags = /<[A-Za-z][^\s/>]*(?:"[^"]*"|'[^']*'|[^'">])*>?/g;
+  for (const tag of html.matchAll(tags)) {
+    const text = tag[0];
+    if (!/(?<![\w$.])(?:tn|tx|t)\(/.test(text)) continue;
+    // Walk the attributes the way an HTML parser does.
+    let at = text.search(/\s/);
+    let broken = false;
+    while (at >= 0 && at < text.length && !broken) {
+      while (/\s/.test(text[at] ?? '')) at += 1;
+      if (at >= text.length || text[at] === '>' || text[at] === '/') break;
+      const name = /^[^\s=>/]+/.exec(text.slice(at))?.[0] ?? '';
+      if (!name || /["'()<]/.test(name)) { broken = true; break; }
+      at += name.length;
+      while (/\s/.test(text[at] ?? '')) at += 1;
+      if (text[at] !== '=') continue;
+      at += 1;
+      while (/\s/.test(text[at] ?? '')) at += 1;
+      const quote = text[at];
+      if (quote === '"' || quote === '\'') {
+        const close = text.indexOf(quote, at + 1);
+        if (close < 0) { broken = true; break; }
+        at = close + 1;
+        if (at < text.length && !/[\s>/]/.test(text[at])) broken = true;
+      } else at += (/^[^\s>]*/.exec(text.slice(at))?.[0] ?? '').length;
+    }
+    if (broken) {
+      const line = html.slice(0, tag.index).split('\n').length;
+      problems.push(`${file}:${line}: a double-quoted attribute holds a raw "; write &quot; (${text.slice(0, 60).replace(/\s+/g, ' ')}...)`);
+    }
+  }
+  return problems;
+};
+
 const sourceFiles = () => [
   join(webRoot, 'index.html'),
   ...readdirSync(jsRoot, { recursive: true })
@@ -148,8 +219,13 @@ const sourceFiles = () => [
     .map((path) => join(jsRoot, path))
 ];
 
+const sourceText = (path) => {
+  const source = readFileSync(path, 'utf8');
+  return path.endsWith('.html') ? compiledHtml(source) : source;
+};
+
 const sourceCalls = () => sourceFiles().flatMap((path) => (
-  extractCalls(readFileSync(path, 'utf8'), relative(webRoot, path).split(sep).join('/'))
+  extractCalls(sourceText(path), relative(webRoot, path).split(sep).join('/'))
 ));
 
 const placeholdersOf = (text) => [...new Set([...text.matchAll(PLACEHOLDER)].map((match) => match[1]))].sort();
@@ -194,6 +270,40 @@ test('extraction refuses a key that is not a literal', () => {
     'sample:1: argument 2 of tn() is not a string literal',
     'sample:1: t() key holds an HTML entity; write the character'
   ]);
+});
+
+test('index.html keys are read after the browser decodes entities, x-templates and modules as written', () => {
+  const html = [
+    '<div :title="t(\'Change &quot;{from}&quot; to {to} &amp; &#x41; &#66;\')"></div>',
+    '<script type="text/x-template" id="a">{{ t(\'Keep "{name}" as is\') }}</script>',
+    '<p>{{ t(\'Fish &amp; chips\') }} {{ t(\'Wait&nbsp;now &copy;\') }}</p>',
+    '<script type="text/x-template" id="b">{{ t(\'A &amp; B\') }}</script>'
+  ].join('\n');
+  assert.deepEqual(extractCalls(compiledHtml(html), 'sample').map((call) => call.key ?? call.problem), [
+    'Change "{from}" to {to} & A B',
+    'Keep "{name}" as is',
+    'Fish & chips',
+    'sample:3: t() key holds an HTML entity; write the character',
+    'sample:4: t() key holds an HTML entity; write the character'
+  ]);
+});
+
+test('a raw double quote inside a double-quoted attribute with a translation call is refused', () => {
+  const html = [
+    '<i18n-text :text="t(\'Change &quot;{from}&quot; to\')"></i18n-text>',
+    '<i18n-text :text="t(\'Change "{from}" to\')"></i18n-text>',
+    '<span :title="t(\'Say " now\')">x</span>',
+    '<span title="plain" :aria-label="t(\'Fine\')">{{ t(\'Say "hi"\') }}</span>',
+    '<span title="Say "hi"">no call</span>'
+  ].join('\n');
+  assert.deepEqual(rawQuoteProblems(html, 'sample').map((problem) => problem.slice(0, 56)), [
+    'sample:2: a double-quoted attribute holds a raw "; write',
+    'sample:3: a double-quoted attribute holds a raw "; write'
+  ]);
+});
+
+test('index.html has no raw double quote inside a double-quoted translated attribute', () => {
+  assert.deepEqual(rawQuoteProblems(readFileSync(join(webRoot, 'index.html'), 'utf8'), 'index.html'), []);
 });
 
 test('every t(), tn() and tx() call in the Web UI has a literal key', () => {

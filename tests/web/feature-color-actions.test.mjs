@@ -1401,7 +1401,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   // a typed rename only when the user types it, and the list under the field
   // is the only place that offers a group.
   const template = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
-  const nameField = template.match(/<input\b[^>]*aria-label="Feature legend name"[^>]*>/)?.[0] || '';
+  const nameField = template.match(/<input\b[^>]*aria-label="t\('Feature legend name'\)"[^>]*>/)?.[0] || '';
   assert.match(nameField, /@change="handleLegendNameCommit"/, 'the popup has its Legend name field');
   assert.doesNotMatch(nameField, /\blist=/, 'the Legend name field suggests no group');
   assert.doesNotMatch(template, /<datalist\b[^>]*legend-name/);

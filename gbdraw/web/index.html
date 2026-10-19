@@ -1895,6 +1895,7 @@
            pane's end, 8 px seam), under a 28 px mark when there is a warning. */
         .settings-pane { --generate-room: 5.875rem; }
         .settings-pane:has(.generate-bar > div) { --generate-room: 9.875rem; }
+        .generate-bar-short { display: none; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) { --generate-room: 4.5rem; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]):has(.generate-bar > div) { --generate-room: 6.5rem; }
         .settings-scroll, .settings-pane[data-settings-display="rail"] > .settings-index { margin-bottom: var(--generate-room); }
@@ -1977,6 +1978,7 @@
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn { height: 60px; padding: 0; border-radius: 10px; font-size: 10px; line-height: 1.1; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn > span { flex-direction: column; gap: 2px; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-long { display: none; }
+        .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-short { display: inline; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > div { display: none; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .help-tip { display: block; margin: 0 0 4px; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .help-tip > .help-tip-trigger {
@@ -5707,7 +5709,7 @@
             <button data-history-managed type="button" :aria-label="t('Generate Diagram')" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
                 :aria-describedby="circularConservationLayoutWarning ? 'generate-layout-warning' : null"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
-                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> <span>{{ t('Generate') }}<span class="generate-bar-long"> {{ t('Diagram') }}</span></span></span>
+                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> <span class="generate-bar-short">{{ t('Generate') }}</span><span class="generate-bar-long">{{ t('Generate Diagram') }}</span></span>
                 <span v-else class="flex items-center justify-center gap-2"><gbdraw-loader class="gbdraw-loader-on-fill text-xl"></gbdraw-loader> <span class="generate-bar-long">{{ generationCancelRequested ? t('Canceling...') : t('Processing...') }}</span></span>
             </button>
             </div>
@@ -6625,7 +6627,7 @@
                             <template v-if="clickedFeature.qualifierRows.length > 0">
                                 <div class="flex justify-end -mb-1">
                                     <button type="button" @click="copyClickedFeatureQualifiers" class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                                            title="Copy every qualifier as /key=&quot;value&quot; lines">
+                                            :title="t('Copy every qualifier as /key=&quot;value&quot; lines')">
                                         <i class="ph ph-copy" aria-hidden="true"></i><span>{{ t('Copy qualifiers') }}</span>
                                     </button>
                                 </div>
@@ -7114,7 +7116,7 @@
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="label-text-scope-title" class="text-lg font-bold text-slate-800 mb-2">{{ t('Label Text Scope') }}</h3>
                             <p id="label-text-scope-description" class="text-sm text-slate-600 mb-4">
-                                <i18n-text :text="t('Change "{from}" to "{to}"?')"><template #from><span class="font-semibold text-slate-800">{{ labelTextScopeDialog.sourceText }}</span></template><template #to><span class="font-semibold text-slate-800">{{ labelTextScopeDialog.newText }}</span></template></i18n-text>
+                                <i18n-text :text="t('Change &quot;{from}&quot; to &quot;{to}&quot;?')"><template #from><span class="font-semibold text-slate-800">{{ labelTextScopeDialog.sourceText }}</span></template><template #to><span class="font-semibold text-slate-800">{{ labelTextScopeDialog.newText }}</span></template></i18n-text>
                             </p>
 
                             <div class="flex flex-col gap-2">
@@ -7304,7 +7306,7 @@
                                 {{ legendRenameDialog.mode === 'scope' ? t('Legend Name Scope') : t('Legend Name Conflict') }}
                             </h3>
                             <p v-if="legendRenameDialog.mode === 'scope'" id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                <i18n-text :text="t('Rename "{from}" to "{to}"?')"><template #from><span class="font-semibold text-slate-800">{{ shownLegendName(legendRenameDialog.sourceKey) }}</span></template><template #to><span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span></template></i18n-text>
+                                <i18n-text :text="t('Rename &quot;{from}&quot; to &quot;{to}&quot;?')"><template #from><span class="font-semibold text-slate-800">{{ shownLegendName(legendRenameDialog.sourceKey) }}</span></template><template #to><span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span></template></i18n-text>
                             </p>
                             <div v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
                                 <p data-legend-rename-reason>{{ legendRenameDialog.reason }}</p>
@@ -7416,7 +7418,7 @@
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">{{ t('Reset Fill Color') }}</h3>
                             <p id="reset-color-description" class="text-sm text-slate-600 mb-4">
-                                <i18n-text :text="t('There are {count} other features with the legend name "{name}".')"><template #count><span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span></template><template #name><span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span></template></i18n-text>
+                                <i18n-text :text="t('There are {count} other features with the legend name &quot;{name}&quot;.')"><template #count><span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span></template><template #name><span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span></template></i18n-text>
                                 <br>{{ t('How do you want to reset the color?') }}
                             </p>
 

@@ -7,6 +7,7 @@ import { loadPageVue } from './helpers/vue-runtime.mjs';
 const Vue = loadPageVue();
 globalThis.window = { Vue, setTimeout, clearTimeout };
 const { createOrthogroupEditor } = await import('../../gbdraw/web/js/app/orthogroups.js');
+const { t } = await import('../../gbdraw/web/js/utils/i18n.js');
 const { rekeyOrthogroupOverrides } = await import('../../gbdraw/web/js/services/orthogroup-feature-metadata.js');
 const { ref, reactive } = Vue;
 
@@ -148,6 +149,7 @@ test('the Description field shows only the group\'s own edit and follows its fir
   const render = Vue.compile(markup);
   // What the composition root hands the template (app/app-setup.js).
   const bindings = {
+    t,
     orthogroupDescriptionFieldText: editor.orthogroupDescriptionFieldText,
     setOrthogroupDescriptionOverride: editor.setOrthogroupDescriptionOverride,
     get selectedOrthogroup() { return editor.selectedOrthogroup.value; }
