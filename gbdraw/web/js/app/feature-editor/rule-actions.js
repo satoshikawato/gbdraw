@@ -8,7 +8,7 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
-import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
+import { parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, legendRowRules, prepareSpecificColorImport, rekeyedRuleRows,
@@ -369,7 +369,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
     const revised = new Map();
     const rules = build(current, (row, patch) => {
-      const next = { ...row, ...patch };
+      // An edited row is the user's: it loses its file card (OV-1280).
+      const { importedFrom: _importedFrom, ...next } = { ...row, ...patch };
       revised.set(next, row);
       return next;
     });
@@ -473,6 +474,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         if (!row) return rule;
         Object.assign(row, rule);
         if (!Object.hasOwn(rule, 'fromFile')) delete row.fromFile;
+        if (!Object.hasOwn(rule, 'importedFrom')) delete row.importedFrom;
         return row;
       }));
       patternDrafts.reconcile();
@@ -717,6 +719,22 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (busy) return busy;
     drawing.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: '' });
   };
+  // An edited row is the user's: it loses its file card (OV-1280).
+  /**
+   * @param {number} index
+   * @param {'feat' | 'qual' | 'key'} field
+   * @param {string} value
+   */
+  const editWhitelistRule = (index, field, value) => {
+    const drawing = state.activeDrawing();
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    const row = drawing.manualWhitelist[index];
+    if (!row) return undefined;
+    row[field] = value;
+    delete row.importedFrom;
+    return undefined;
+  };
   /** @param {number} index */
   const removeWhitelistRule = (index) => {
     const drawing = state.activeDrawing();
@@ -739,7 +757,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (!newPriorityRule.order) return;
     const idx = drawing.manualPriorityRules.findIndex((/** @type {{ feat?: string, order?: string }} */ r) => r.feat === newPriorityRule.feat);
     if (idx >= 0) {
-      drawing.manualPriorityRules[idx].order = newPriorityRule.order;
+      // The row is the user's now: it loses its file card (OV-1280).
+      drawing.manualPriorityRules.splice(idx, 1, { feat: newPriorityRule.feat, order: newPriorityRule.order });
     } else {
       drawing.manualPriorityRules.push({ feat: newPriorityRule.feat, order: newPriorityRule.order });
     }
@@ -797,6 +816,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       'Import specific color rules', { drawing, isCurrent });
     return applied === true ? importedCount : false;
   };
+  // OV-1280 (D-19): Remove on the Specific rules card takes back the rows its
+  // file added; true when there were none.
+  /** @param {DrawingState} drawing */
+  const removeImportedSpecificRules = (drawing) => (drawing.manualSpecificRules.some((/** @type {SpecificColorRule} */ rule) => rule.importedFrom === 't_color')
+    ? commitSpecificRules((current) => withoutImportedRows(current, 't_color'), 'Remove specific rules file', { drawing })
+    : Promise.resolve(true));
 
   const applySpecificRulePreset = async () => {
     const drawing = state.activeDrawing();
@@ -1052,6 +1077,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     setLabelFilterMode,
     addWhitelistRule,
     removeWhitelistRule,
+    editWhitelistRule,
     removePriorityRule,
     addSpecificRule,
     applySpecificRulePreset,
@@ -1062,6 +1088,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     },
     commitSpecificRules,
     importSpecificRules,
+    removeImportedSpecificRules,
     followRestoredRules,
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,

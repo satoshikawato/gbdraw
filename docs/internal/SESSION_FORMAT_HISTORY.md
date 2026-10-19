@@ -12,7 +12,7 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 48 stores protein results in the search frame
+## Unreleased: Session 48 stores protein results in the search frame and what each file card loaded
 
 Session version 48 stores the protein results of a reverse-complemented Linear
 record in the record's search frame (the selected and cropped record on its
@@ -68,7 +68,30 @@ writer at `cdd310134` and `7aad9e3e0`) are the positive fixtures.
 The derived LOSATP identity token becomes `derived-option-conformance-v3`:
 derived entries written before are cache misses and are recomputed once from
 the raw cache, while the stored results are still reused, so no search runs
-again. No other field changed.
+again.
+
+Session 48 also stores what each Web file card loaded into a mode slice, so
+that **Remove** on the card gives the settings as if the file had never been
+loaded (OV-1280, D-19). One owner, `gbdraw/web/js/services/file-imports.js`,
+writes and reads it; the card key (`t_color`, `whitelist`,
+`qualifier_priority`, `d_color`, `blacklist`) is the identity:
+
+- A row that a file added carries `importedFrom` with its card key: `rules`
+  (`t_color`), `whitelist`, and `qualifierPriorityRules`. A priority row whose
+  hand order the file replaced keeps that order in `handOrder`. A row without
+  `importedFrom`, or edited by hand after the load, is the user's.
+- `config.fileImports` (registered in `gbdraw/web_support/mode_scoped_settings.py`)
+  keeps, for `d_color`, each feature type's file color and the hand color it
+  replaced (`handColor`, `null` for the palette's), and for `blacklist`, the
+  file's words and the text before the load. Remove takes a value back only
+  while it still holds the file's value.
+
+A Session up to 47 has no marks; its rows read as hand rows, and Remove keeps
+them. A Session 48 without a draft (CLI `--session_output`, the Python API)
+reads the rows its `-t`, whitelist, and priority files, and its `-d` and
+blacklist files, put into the request as that card's rows
+(`FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION` in `gbdraw/session_io.py`); a CLI
+re-save keeps the draft's marks. No other field changed.
 
 ## Unreleased: Session 47 keys the Legend edits by the row key
 

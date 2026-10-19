@@ -1,12 +1,12 @@
 const { test, expect } = require('@playwright/test');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
 
 const cases = [
   { label: 'Default colors file', key: 'd_color', text: 'CDS\t#123456\n', value: 'a.currentColors.CDS', expected: '#123456' },
-  { label: 'Specific rules file', key: 't_color', text: 'CDS\tproduct\tNADH\t#123456\tImported\n', value: 'a.manualSpecificRules', expected: [{ feat: 'CDS', qual: 'product', val: 'NADH', color: '#123456', cap: 'Imported', fromFile: true }] },
-  { label: 'Priority File (TSV)', key: 'qualifier_priority', text: 'CDS\tgene,product\n', value: 'a.manualPriorityRules', expected: [{ feat: 'CDS', order: 'gene,product' }] },
-  { label: 'Whitelist File', key: 'whitelist', text: 'CDS\tgene\tmygene\n', value: 'a.manualWhitelist', expected: [{ feat: 'CDS', qual: 'gene', key: 'mygene' }] },
+  { label: 'Specific rules file', key: 't_color', text: 'CDS\tproduct\tNADH\t#123456\tImported\n', value: 'a.manualSpecificRules', expected: [{ feat: 'CDS', qual: 'product', val: 'NADH', color: '#123456', cap: 'Imported', fromFile: true, importedFrom: 't_color' }] },
+  { label: 'Priority File (TSV)', key: 'qualifier_priority', text: 'CDS\tgene,product\n', value: 'a.manualPriorityRules', expected: [{ feat: 'CDS', order: 'gene,product', importedFrom: 'qualifier_priority' }] },
+  { label: 'Whitelist File', key: 'whitelist', text: 'CDS\tgene\tmygene\n', value: 'a.manualWhitelist', expected: [{ feat: 'CDS', qual: 'gene', key: 'mygene', importedFrom: 'whitelist' }] },
   { label: 'Blacklist File', key: 'blacklist', text: 'mygene\n', value: 'a.manualBlacklist', expected: 'mygene' }
 ];
 
@@ -36,6 +36,98 @@ for (const sample of cases) {
     await expect.poll(inspect).toEqual(before);
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
     await expect.poll(inspect).toEqual({ file: 'import.tsv', value: expected });
+  });
+}
+
+// OV-1280 (D-19): Remove on a card leaves the settings as if its file had
+// never been loaded, with every hand edit made before or after the load; one
+// Undo brings back the card and what it loaded.
+const removeCases = [
+  { label: 'Default colors file', key: 'd_color', text: 'CDS\t#123456\ntRNA\t#654321\n',
+    loaded: { CDS: '#123456', tRNA: '#abcdef' }, removed: { CDS: '#111111', tRNA: '#abcdef' } },
+  { label: 'Specific rules file', key: 't_color', text: 'CDS\tproduct\talpha\t#123456\tAlpha\nCDS\tproduct\tbeta\t#222222\tBeta\n',
+    loaded: [['hand', '#445566', null], ['alpha', '#123456', 't_color'], ['beta', '#999999', null]],
+    removed: [['hand', '#445566', null], ['beta', '#999999', null]] },
+  { label: 'Priority File (TSV)', key: 'qualifier_priority', text: 'CDS\tproduct,gene\nrRNA\tnote\n',
+    loaded: [['CDS', 'product,gene', 'qualifier_priority'], ['tRNA', 'product', null], ['rRNA', 'locus_tag', null]],
+    removed: [['CDS', 'gene', null], ['tRNA', 'product', null], ['rRNA', 'locus_tag', null]] },
+  { label: 'Whitelist File', key: 'whitelist', text: 'CDS\tgene\talpha\nCDS\tgene\tbeta\n',
+    loaded: [['mine', null], ['alpha', 'whitelist'], ['betas', null]], removed: [['mine', null], ['betas', null]] },
+  { label: 'Blacklist File', key: 'blacklist', text: 'alpha\nbeta\n',
+    loaded: 'hypothetical, alpha, beta, mine', removed: 'hypothetical, mine' }
+];
+
+for (const sample of removeCases) {
+  test(`Remove on the ${sample.label} card takes back only what the file loaded, and Undo restores it (OV-1280)`, async ({ page }) => {
+    await openApp(page);
+    const inspect = () => page.evaluate((key) => {
+      const a = window.__GBDRAW_APP__;
+      const values = {
+        d_color: () => ({ CDS: a.currentColors.CDS, tRNA: a.currentColors.tRNA }),
+        t_color: () => a.manualSpecificRules.map((rule) => [rule.val, rule.color, rule.importedFrom ?? null]),
+        qualifier_priority: () => a.manualPriorityRules.map((rule) => [rule.feat, rule.order, rule.importedFrom ?? null]),
+        whitelist: () => a.manualWhitelist.map((rule) => [rule.key, rule.importedFrom ?? null]),
+        blacklist: () => a.manualBlacklist
+      };
+      return { file: a.files[key]?.name || null, value: values[key]() };
+    }, sample.key);
+    // A hand edit before the load.
+    await page.evaluate(async (key) => {
+      const a = window.__GBDRAW_APP__;
+      a.form.labels_mode = 'out';
+      if (key === 'd_color') a.currentColors.CDS = '#111111';
+      if (key === 't_color') {
+        Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'hand', color: '#445566', cap: '' });
+        await a.addSpecificRule();
+      }
+      if (key === 'qualifier_priority') {
+        for (const [feat, order] of [['CDS', 'gene'], ['tRNA', 'product']]) {
+          Object.assign(a.newPriorityRule, { feat, order });
+          a.addPriorityRule();
+        }
+      }
+      if (key === 'whitelist') {
+        a.filterMode = 'Whitelist';
+        a.addWhitelistRule();
+        a.editWhitelistRule(0, 'key', 'mine');
+      }
+      if (key === 'blacklist') {
+        a.filterMode = 'Blacklist';
+        a.manualBlacklist = 'hypothetical';
+      }
+    }, sample.key);
+    const before = await inspect();
+    await page.getByLabel(sample.label, { exact: true }).setInputFiles({ name: 'import.tsv', mimeType: 'text/plain', buffer: Buffer.from(sample.text) });
+    await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files[key]); }, sample.key);
+    // The card's section may be closed; its file input names the card.
+    await reveal(page.getByLabel(sample.label, { exact: true }));
+    // A hand edit after the load, of a value the file set where there is one.
+    const field = { whitelist: ['input[placeholder="Pattern"]', 2, 'betas'],
+      blacklist: ['textarea[placeholder="hypothetical, unknown"]', 0, 'hypothetical, alpha, beta, mine'] }[sample.key];
+    if (field) {
+      await page.locator(field[0]).nth(field[1]).fill(field[2]);
+      // A text field's edit is its own History step once the field loses focus.
+      await page.evaluate(() => document.activeElement?.blur());
+    } else {
+      await page.evaluate(async (key) => {
+        const a = window.__GBDRAW_APP__;
+        if (key === 'd_color') a.currentColors.tRNA = '#abcdef';
+        if (key === 't_color') await a.setSpecificRuleField(2, 'color', '#999999');
+        if (key === 'qualifier_priority') {
+          Object.assign(a.newPriorityRule, { feat: 'rRNA', order: 'locus_tag' });
+          a.addPriorityRule();
+        }
+      }, sample.key);
+    }
+    const loaded = { file: 'import.tsv', value: sample.loaded };
+    await expect.poll(inspect).toEqual(loaded);
+    const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    await page.getByRole('button', { name: `Remove ${sample.label}`, exact: true }).click();
+    await expect.poll(inspect).toEqual({ file: null, value: sample.removed });
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount + 1);
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(inspect).toEqual(loaded);
+    expect(before.file).toBeNull();
   });
 }
 
@@ -154,7 +246,7 @@ test('Generate waits for the Specific rules and Priority File imports still appl
   expect(await page.evaluate(() => {
     const a = window.__GBDRAW_APP__;
     return { priority: JSON.parse(JSON.stringify(a.manualPriorityRules)), rules: a.manualSpecificRules.map((rule) => rule.cap) };
-  })).toEqual({ priority: [{ feat: 'CDS', order: 'gene,product' }], rules: ['Imported'] });
+  })).toEqual({ priority: [{ feat: 'CDS', order: 'gene,product', importedFrom: 'qualifier_priority' }], rules: ['Imported'] });
 });
 
 // OV-1205: a Priority File uploaded while the Specific rules are

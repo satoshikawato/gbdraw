@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
+/** @import { FileImports, PriorityRuleRow } from './services/file-imports.js' */
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
 import { DEFAULT_LINEAR_RECORD_GAP_PX } from './services/config-field-readers.js';
@@ -1071,7 +1072,9 @@ const createDrawingState = (drawingMode) => {
     addedLegendCaptions: ref(new Set()),
     fileLegendCaptions: ref(new Set()),
     manualSpecificRules: reactive([]),
-    manualPriorityRules: reactive([]),
+    manualPriorityRules: reactive(/** @type {PriorityRuleRow[]} */ ([])),
+    // What the Default colors and Blacklist files set, for their Remove (OV-1280).
+    fileImports: reactive(/** @type {FileImports} */ ({})),
     filterMode: ref(labelFilters.filterMode),
     manualBlacklist: ref(labelFilters.manualBlacklist),
     manualWhitelist: reactive(labelFilters.manualWhitelist),

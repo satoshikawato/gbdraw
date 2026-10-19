@@ -48,7 +48,9 @@ const { canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWat
       owner.calls += 1;
       if (owner.outcome === false) inputs += 3;
       return owner.outcome;
-    }
+    },
+    // The other drawing holds no rows of an earlier rules file (OV-1280).
+    removeImportedSpecificRules: async () => true
   }, { get: (target, key) => target[key] ?? (() => {}) }),
   legendLayout: port(),
   resultsManager: port(),

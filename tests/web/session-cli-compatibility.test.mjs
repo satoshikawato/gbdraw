@@ -617,6 +617,16 @@ const LOADED_TABLES = {
   '--qualifier_priority': (drawing, file) => drawing.manualPriorityRules.length === fixtureRows(file),
   '--feature_override_table': drawing => Object.keys(drawing.featureOverrides).length > 0
 };
+// OV-1280 (D-19): from Session 48 on, the rows and colors a CLI table option
+// gives are its file card's, so Remove on the card takes them back; an older
+// Session's rows read as rows added by hand.
+const CARD_ROWS = {
+  '-t': drawing => drawing.manualSpecificRules.map(rule => rule.importedFrom ?? null),
+  '-d': drawing => [drawing.fileImports.d_color?.CDS?.color ?? null],
+  '--label_whitelist': drawing => drawing.manualWhitelist.map(rule => rule.importedFrom ?? null),
+  '--qualifier_priority': drawing => drawing.manualPriorityRules.map(rule => rule.importedFrom ?? null)
+};
+const CARD_MARKS = { '-t': 't_color', '-d': '#123456', '--label_whitelist': 'whitelist', '--qualifier_priority': 'qualifier_priority' };
 // A Session of the request and resources the Web renders.
 const renderedSession = async ({ renderRequest, resources }) => JSON.stringify({
   format: 'gbdraw-session', version: SESSION_VERSION, createdAt: '2026-10-09T00:00:00.000Z', renderRequest,
@@ -711,6 +721,16 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
           const index = entry.args.indexOf(option);
           if (index >= 0) assert.ok(loaded(drawing, entry.args[index + 1]), `${entry.id}, ${source}: ${option}`);
         }
+        // A case's older Session (`id@v40`) is the CLI Session of its entry.
+        const marked = !(source === 'CLI Session' && entry.id.includes('@'));
+        for (const [option, rows] of Object.entries(CARD_ROWS)) {
+          const values = rows(drawing);
+          if (entry.args.includes(option)) {
+            assert.deepEqual(values, values.map(() => (marked ? CARD_MARKS[option] : null)), `${entry.id}, ${source}: ${option} card`);
+          }
+        }
+        // Blacklist words given on the command line have no card.
+        assert.equal(drawing.fileImports.blacklist, undefined, `${entry.id}, ${source}: blacklist card`);
         const generated = path.join(directory, entry.id, `${source} Generate.json`);
         await writeFile(generated, await renderedSession(await nextGenerate()));
         checks.push({ label: `${entry.id}: ${source}, Generate`, session: generated, via: 'python' });

@@ -8,7 +8,7 @@ import { isPlainObject } from '../utils/contract-shape.js';
 
 /**
  * A rule as the normalization reads it: a table row, a stored rule, or a rule built from a Legend row.
- * @typedef {Readonly<{ feat?: unknown, qual?: unknown, val?: unknown, color?: unknown, cap?: unknown, fromFile?: unknown }> | null | undefined} SpecificRuleInput
+ * @typedef {Readonly<{ feat?: unknown, qual?: unknown, val?: unknown, color?: unknown, cap?: unknown, fromFile?: unknown, importedFrom?: unknown }> | null | undefined} SpecificRuleInput
  */
 
 /** @param {unknown} value */
@@ -17,8 +17,11 @@ const normalizeText = (value) => String(value ?? '').trim();
 const normalizeColor = (value) => String(resolveColorToHex(normalizeText(value)) || '').toLowerCase();
 
 /**
+ * A row keeps `importedFrom` while it is the row the Specific rules file added
+ * (OV-1280); `fromFile` says its caption is a file's (a file or a preset).
  * @param {SpecificRuleInput} rule
  * @param {{ fromFile?: boolean }} [options]
+ * @returns {SpecificColorRule}
  */
 export const normalizeSpecificRule = (rule, { fromFile = Boolean(rule?.fromFile) } = {}) => ({
   feat: normalizeText(rule?.feat),
@@ -26,7 +29,8 @@ export const normalizeSpecificRule = (rule, { fromFile = Boolean(rule?.fromFile)
   val: normalizeText(rule?.val),
   color: normalizeColor(rule?.color),
   cap: normalizeText(rule?.cap),
-  ...(fromFile ? { fromFile: true } : {})
+  ...(fromFile ? { fromFile: true } : {}),
+  ...(rule?.importedFrom === 't_color' ? { importedFrom: /** @type {const} */ ('t_color') } : {})
 });
 
 /** @param {SpecificRuleInput} rule */
@@ -318,6 +322,7 @@ const uniqueLegendKey = (reserved, preferred) => {
  * @property {string} color
  * @property {string} cap
  * @property {boolean} [fromFile]
+ * @property {'t_color'} [importedFrom] The Specific rules file added the row (OV-1280).
  */
 
 /**
@@ -596,10 +601,12 @@ export const diffLegendIntents = (currentEntries, desiredIntents) => {
  */
 export const prepareSpecificColorImport = (text, currentRules = []) => {
   const { rules } = parseSpecificRules(text);
+  // The file's rows replace the rows the card's earlier file added (OV-1280).
   const retainedRules = (Array.isArray(currentRules) ? currentRules : [])
-    .filter((rule) => !rule?.fromFile)
+    .filter((rule) => rule?.importedFrom !== 't_color')
     .map((rule) => normalizeSpecificRule(rule));
-  const nextRules = [...retainedRules, ...savedSpecificRules(rules).map((rule) => normalizeSpecificRule(rule, { fromFile: true }))];
+  const nextRules = [...retainedRules, ...savedSpecificRules(rules)
+    .map((rule) => normalizeSpecificRule({ ...rule, importedFrom: 't_color' }, { fromFile: true }))];
   return {
     nextRules,
     importedCount: rules.length

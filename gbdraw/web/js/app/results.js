@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { PaletteColorsDialog } from '../state.js' */
 import { buildPaletteColorOverrideRows, normalizePaletteColors } from '../utils/color-utils.js';
+import { withImportedDefaultColors, withoutImportedDefaultColors } from '../services/file-imports.js';
+/** @import { FileImports } from '../services/file-imports.js' */
 
 // The palette dialog body names up to three keys (Q6 A, Owner 2026-10-09).
 /** @param {string[]} keys */
@@ -30,6 +32,7 @@ const describeKeys = (keys) => {
  * @property {{ value: Record<string, string> }} currentColors
  * @property {{ value: string }} pendingPaletteName
  * @property {{ value: Record<string, string> }} pendingPaletteColors
+ * @property {FileImports} fileImports What the Default colors file set (OV-1280).
  */
 
 /**
@@ -165,6 +168,8 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     if (choice === 'keep') rows.forEach(([key, color]) => { colors[key] = color; });
     drawing.selectedPalette.value = paletteName;
     drawing.currentColors.value = colors;
+    // A switch that drops the user colors drops the file's with them (OV-1280).
+    if (choice !== 'keep') delete drawing.fileImports.d_color;
     // The applied palette queues nothing: switching back to it while another
     // is queued applies its colors live (Q5 A, Owner 2026-10-09).
     if (paletteInstantPreviewEnabled.value || paletteName === appliedPaletteName.value) {
@@ -189,6 +194,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   /** @param {ResultsManagerDrawing} drawing */
   const resetColors = (drawing) => {
     drawing.currentColors.value = getPaletteBaseColors(paletteNameOf(drawing));
+    delete drawing.fileImports.d_color;
     syncPaletteDraftState();
   };
 
@@ -240,7 +246,30 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     }
   };
 
+  // OV-1280 (D-19): a Default colors file's colors over the drawing's, and
+  // their Remove: each type takes back its user color, else the palette's.
+  /**
+   * @param {ResultsManagerDrawing} drawing
+   * @param {Record<string, string>} colors
+   */
+  const importDefaultColors = (drawing, colors) => {
+    const imported = withImportedDefaultColors(drawing.currentColors.value, colors, (type) => readUserDefaultColor(drawing, type));
+    drawing.currentColors.value = imported.colors;
+    drawing.fileImports.d_color = imported.imported;
+  };
+  /** @param {ResultsManagerDrawing} drawing */
+  const removeImportedDefaultColors = (drawing) => {
+    const imported = drawing.fileImports.d_color;
+    if (!imported) return;
+    drawing.currentColors.value = withoutImportedDefaultColors(
+      drawing.currentColors.value, imported, getPaletteBaseColors(paletteNameOf(drawing))
+    );
+    delete drawing.fileImports.d_color;
+  };
+
   return {
+    importDefaultColors,
+    removeImportedDefaultColors,
     requestPaletteChange,
     selectPalette,
     requestResetColors,

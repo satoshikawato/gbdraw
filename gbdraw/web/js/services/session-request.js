@@ -14,14 +14,19 @@ import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/c
 import {
   EDITOR_TABLE_OPTIONS,
   editorTableRef,
+  importedWhitelistRows,
+  parseBlacklistWords,
   parseColorTable,
   parsePriorityRules,
   parseSpecificRules,
   parseWhitelistRules,
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
-  serializeSpecificRules
+  serializeSpecificRules,
+  withImportedBlacklistWords,
+  withImportedDefaultColors
 } from './file-imports.js';
+/** @import { FileImports } from './file-imports.js' */
 import {
   buildBulkLabelProjection,
   parseLabelOverrideTsv,
@@ -4700,7 +4705,8 @@ export const projectCanonicalSessionRequest = ({
   repairLegacyTableRows = false,
   sessionResourceTable = null,
   deferResourceContent = false,
-  adoptCanonicalPayloads = false
+  adoptCanonicalPayloads = false,
+  markCardFileRows = false
 }) => {
   // Every request reaches the projection at the current schema: a stored one
   // through its reader (`readStoredRenderRequest`), a new one from the writer.
@@ -5243,6 +5249,18 @@ export const projectCanonicalSessionRequest = ({
       projectedPriorityRules = readLegacyTable('qualifier-priority', qualifierPriorityRef, parsePriorityRules).rules;
     }
   }
+  // OV-1280: a Session 48 without a Web draft (CLI, Python) holds its tables
+  // only as the cards' files, so each row read from one is its card's row.
+  const fromCardFiles = markCardFileRows && !deferResourceContent;
+  if (fromCardFiles) {
+    if (colorTableRef?.resourceId) {
+      projectedSpecificRules = projectedSpecificRules.map((/** @type {Record<string, unknown>} */ rule) => ({ ...rule, importedFrom: 't_color' }));
+    }
+    if (whitelistRef) projectedWhitelist = importedWhitelistRows(projectedWhitelist);
+    if (qualifierPriorityRef) {
+      projectedPriorityRules = projectedPriorityRules.map((/** @type {{ feat: string, order: string }} */ rule) => ({ ...rule, importedFrom: 'qualifier_priority' }));
+    }
+  }
   const visibilityRef = editorTableRef(options, 'visibility');
   const projectedFeatureVisibilityRules = !deferResourceContent && visibilityRef
     ? readSessionTable('feature-visibility', () => parseFeatureVisibilityRules(
@@ -5670,6 +5688,15 @@ export const projectCanonicalSessionRequest = ({
   const projectedBlacklistText = Array.isArray(overrides.label_blacklist)
     ? overrides.label_blacklist.join(', ')
     : String(overrides.label_blacklist || '');
+  /** @type {FileImports} */
+  const projectedFileImports = {};
+  if (fromCardFiles && defaultColorsRef?.resourceId) {
+    projectedFileImports.d_color = withImportedDefaultColors({}, projectedDefaultColors, () => null).imported;
+  }
+  const blacklistImport = withImportedBlacklistWords('', parseBlacklistWords(projectedBlacklistText).words).imported;
+  if (fromCardFiles && explicitBindings?.blacklist != null && blacklistImport?.words.join(', ') === projectedBlacklistText) {
+    projectedFileImports.blacklist = blacklistImport;
+  }
   let inputType = records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb';
   // CLI rendering can normalize GFF records to GenBank resources. Without a
   // saved Web draft, initialize the input selector from the original bindings.
@@ -5713,6 +5740,7 @@ export const projectCanonicalSessionRequest = ({
         : (projectedBlacklistText.trim() ? 'Blacklist' : 'None'),
       whitelist: projectedWhitelist,
       blacklistText: projectedBlacklistText,
+      fileImports: projectedFileImports,
       linearRecordLayout: linearLayout,
       annotationSets: draftAnnotationSetsOfRequest(options.annotations?.sets),
       recordDisplayDrafts: records.flatMap((record, index) => (record.display?.isCircular != null || record.display?.startCoordinate != null) ? [{

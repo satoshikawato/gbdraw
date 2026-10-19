@@ -148,15 +148,20 @@ assert.equal(
   1
 );
 
+// OV-1280: the file's rows replace the rows the card's earlier file added; a
+// preset's rows and rows of an older Session (`fromFile` without the card)
+// stay with the hand rows.
 const prepared = prepareSpecificColorImport(
   'CDS\tgene\talpha\t#112233\tAlpha\nCDS\tproduct\tbeta\t#112233\tAlpha\n',
   [
-    { feat: 'CDS', qual: 'gene', val: 'old', color: '#999999', cap: 'Old', fromFile: true },
+    { feat: 'CDS', qual: 'gene', val: 'old', color: '#999999', cap: 'Old', fromFile: true, importedFrom: 't_color' },
+    { feat: 'CDS', qual: 'gene', val: 'preset', color: '#999999', cap: 'Preset', fromFile: true },
     { feat: 'tRNA', qual: 'gene', val: 'manual', color: '#445566', cap: 'Manual' }
   ]
 );
-assert.equal(prepared.nextRules.length, 3);
-assert.equal(prepared.nextRules.filter((rule) => rule.fromFile).length, 2);
+assert.deepEqual(prepared.nextRules.map((rule) => [rule.val, rule.fromFile ?? false, rule.importedFrom ?? null]), [
+  ['preset', true, null], ['manual', false, null], ['alpha', true, 't_color'], ['beta', true, 't_color']
+]);
 // Import assembles the full draft; allocation belongs to Python preparation.
 assert.deepEqual(prepareSpecificColorImport(
   'CDS\tgene\talpha\t#112233\tAlpha\nCDS\tgene\tbeta\t#445566\tAlpha\n', []

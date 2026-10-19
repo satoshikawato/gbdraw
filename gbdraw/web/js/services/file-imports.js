@@ -263,3 +263,154 @@ export const parseBlacklistWords = (text) => {
 
   return { words, count: words.length };
 };
+
+// OV-1280 (D-19): what a file card's file put into a drawing, so Remove on the
+// card takes it back and leaves the drawing as if the file had never been
+// loaded. A card is named by its `files` slot. The rows a file adds to a list
+// carry `importedFrom: <card>` (Specific rules, Whitelist, Qualifier priority);
+// a priority row whose order the file replaced keeps the order it had as
+// `handOrder`. The drawing's `fileImports` keeps what a file set in the Default
+// colors (each type's color and the user color it replaced, `null` for the
+// palette's) and in the Blacklist text (its words and the text before). An edit
+// of a row makes it the user's (the mark goes), and so does a later change of a
+// value the file set: Remove keeps both. Rows without a mark (Sessions before
+// 48, hand rows) are the user's.
+/** @typedef {'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority'} FileImportCard */
+/** @typedef {{ color: string, handColor: string | null }} ImportedDefaultColor */
+/** @typedef {{ words: string[], before: string }} ImportedBlacklist */
+/**
+ * What a drawing's Default colors and Blacklist files set (`fileImports`).
+ * @typedef {{ d_color?: Record<string, ImportedDefaultColor>, blacklist?: ImportedBlacklist }} FileImports
+ */
+/** @typedef {{ feat: string, order: string, importedFrom?: 'qualifier_priority', handOrder?: string }} PriorityRuleRow */
+/** @typedef {{ feat: string, qual: string, key: string, importedFrom?: 'whitelist' }} WhitelistRuleRow */
+
+/** @param {unknown} left @param {unknown} right */
+const sameColor = (left, right) => String(left ?? '').toLowerCase() === String(right ?? '').toLowerCase();
+
+/**
+ * The Default colors with a file's colors, and what the file set.
+ * @param {Readonly<Record<string, string>>} current
+ * @param {Readonly<Record<string, string>>} colors The file's colors by feature type.
+ * @param {(type: string) => string | null} userColorOf The user color a type has now (`null`: the palette's).
+ * @returns {{ colors: Record<string, string>, imported: Record<string, ImportedDefaultColor> }}
+ */
+export const withImportedDefaultColors = (current, colors, userColorOf) => ({
+  colors: { ...current, ...colors },
+  imported: Object.fromEntries(Object.entries(colors)
+    .map(([type, color]) => [type, { color, handColor: userColorOf(type) }]))
+});
+
+/**
+ * The Default colors without what a file set: each type that still has the
+ * file's color takes back its user color, else the palette's (none: no entry).
+ * @param {Readonly<Record<string, string>>} current
+ * @param {Readonly<Record<string, ImportedDefaultColor>>} imported
+ * @param {Readonly<Record<string, string>>} paletteColors
+ * @returns {Record<string, string>}
+ */
+export const withoutImportedDefaultColors = (current, imported, paletteColors) => {
+  const colors = { ...current };
+  Object.entries(imported).forEach(([type, { color, handColor }]) => {
+    if (!sameColor(colors[type], color)) return;
+    const restored = handColor ?? paletteColors[type];
+    if (restored === undefined) delete colors[type];
+    else colors[type] = restored;
+  });
+  return colors;
+};
+
+/**
+ * The Blacklist text after a file's words: the words follow the text.
+ * @param {string} before
+ * @param {readonly string[]} words
+ */
+const blacklistWithWords = (before, words) => {
+  const existing = before ? before.trim() : '';
+  const separator = existing && !existing.endsWith(',') ? ', ' : '';
+  return existing + separator + words.join(', ');
+};
+
+/**
+ * @param {string} text
+ * @param {readonly string[]} words The file's words (none: no change).
+ * @returns {{ text: string, imported: ImportedBlacklist | null }}
+ */
+export const withImportedBlacklistWords = (text, words) => (words.length > 0
+  ? { text: blacklistWithWords(text, words), imported: { words: [...words], before: text } }
+  : { text, imported: null });
+
+/**
+ * The Blacklist text without a file's words: the text before when it is
+ * unchanged since, else the text with each of the words (its last occurrence
+ * and the separator before it) taken out.
+ * @param {string} text
+ * @param {Readonly<ImportedBlacklist>} imported
+ */
+export const withoutImportedBlacklistWords = (text, { words, before }) => {
+  if (text === blacklistWithWords(before, words)) return before;
+  const parts = text.split(/([,\n])/);
+  [...words].reverse().forEach((word) => {
+    let at = -1;
+    for (let index = parts.length - 1; index >= 0 && at < 0; index -= 2) {
+      if (parts[index].trim() === word) at = index;
+    }
+    if (at > 0) parts.splice(at - 1, 2);
+    else if (at === 0 && parts.length > 1) {
+      parts.splice(0, 2);
+      parts[0] = parts[0].replace(/^\s+/, '');
+    } else if (at === 0) parts[0] = '';
+  });
+  return parts.join('');
+};
+
+/**
+ * Adds a Qualifier priority file's rules: a rule replaces the order of its
+ * feature type's row, which keeps the user order it had (`handOrder`).
+ * @param {PriorityRuleRow[]} rows The drawing's rows, changed in place.
+ * @param {readonly { feat: string, order: string }[]} rules
+ */
+export const importPriorityRows = (rows, rules) => {
+  rules.forEach(({ feat, order }) => {
+    const row = rows.find((entry) => entry.feat === feat);
+    if (!row) {
+      rows.push({ feat, order, importedFrom: 'qualifier_priority' });
+      return;
+    }
+    if (row.importedFrom !== 'qualifier_priority') {
+      row.handOrder = row.order;
+      row.importedFrom = 'qualifier_priority';
+    }
+    row.order = order;
+  });
+};
+
+/**
+ * Takes back a Qualifier priority file's rules: a row it added goes, a row
+ * whose order it replaced takes back its user order.
+ * @param {PriorityRuleRow[]} rows Changed in place.
+ */
+export const removeImportedPriorityRows = (rows) => {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const { feat, importedFrom, handOrder } = rows[index];
+    if (importedFrom !== 'qualifier_priority') continue;
+    if (handOrder === undefined) rows.splice(index, 1);
+    else rows.splice(index, 1, { feat, order: handOrder });
+  }
+};
+
+/**
+ * The rows of a list without those `card`'s file added.
+ * @template {{ importedFrom?: string }} T
+ * @param {readonly T[]} rows
+ * @param {FileImportCard} card
+ * @returns {T[]}
+ */
+export const withoutImportedRows = (rows, card) => rows.filter((row) => row.importedFrom !== card);
+
+/**
+ * The rows a Whitelist file adds, marked with their card.
+ * @param {readonly { feat: string, qual: string, key: string }[]} rules
+ * @returns {WhitelistRuleRow[]}
+ */
+export const importedWhitelistRows = (rules) => rules.map((rule) => ({ ...rule, importedFrom: 'whitelist' }));

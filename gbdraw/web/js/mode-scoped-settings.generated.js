@@ -207,6 +207,7 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "filterMode"},
     {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "whitelist"},
     {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "blacklistText"},
+    {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "fileImports"},
     {"domain": "config", "key": null, "migrate": "own", "modes": "linear", "path": "losatProgram"},
     {"domain": "config", "key": null, "migrate": "own", "modes": "circular", "path": "circularConservation"},
     {"domain": "config", "key": null, "migrate": "by-leaf", "modes": "both", "path": "unmanagedConfigOverrides"},

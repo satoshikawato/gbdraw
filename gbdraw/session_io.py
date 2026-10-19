@@ -92,10 +92,14 @@ CURRENT_SESSION_VERSION = 48
 # (``originalCaption``) instead of the shown caption (PD-OI-061 revision 5)
 # and adds each slice's ``adv.font_family`` (PD-OI-098); version 48 stores
 # the protein results of a reverse-complemented Linear record in its search
-# frame (OV-1145).
+# frame (OV-1145) and what each file card's file put into a slice, for Remove
+# on the card (OV-1280).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
 ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
+# From version 48 a Session without a Web draft (CLI, Python API) holds each
+# table only as its file card's file: the Web reads every row as that file's.
+FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION = 48
 # From version 41 the record display and feature placement drafts of a flat draft are checked.
 DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
@@ -7205,6 +7209,7 @@ __all__ = [
     "NUCLEOTIDE_LOSAT_CACHE_SCHEMA",
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
+    "FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION",
     "MODE_SCOPED_SESSION_MIN_VERSION",
     "ROW_KEYED_LEGEND_SESSION_MIN_VERSION",
     "SESSION_FORMAT",
