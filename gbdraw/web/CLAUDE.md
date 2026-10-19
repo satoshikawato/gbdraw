@@ -315,6 +315,9 @@ change through `showEditorIntent` (R3):
   feature fill, a Legend row fill that rules draw, and the Legend rows, names,
   and colors the rules draw;
 - a Change Scope choice;
+- the Specific rules file card Remove for a drawing that is not shown, which
+  calls `moveLegendRecords` (`takeBackFileRulesOfHiddenDrawing` in
+  `app/feature-editor/rule-actions.js`);
 - a Legend rename, the Restore of deleted Legend rows, and the Sort and Move
   of Legend rows;
 - an edit of another owner that retires the paint edits of what it removed,
