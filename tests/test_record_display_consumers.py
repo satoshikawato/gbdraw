@@ -210,12 +210,13 @@ def test_plan_labels_select_projected_coverage_and_connect_leaders(mode, placeme
     import gbdraw.diagrams.circular.assemble as circular
     import gbdraw.diagrams.linear.precalc as linear
     owner = circular if mode == "circular" else linear
-    symbol = "prepare_label_list" if mode == "circular" else "prepare_label_list_linear"
+    symbol = "prepare_label_list" if mode == "circular" else "linear_record_labels"
     prepare = getattr(owner, symbol)
     captured = []
     def capture(*args, **kwargs):
         result = prepare(*args, **kwargs)
-        captured.append((args[0], result))
+        # A Linear record's labels are placed in their row in place, after this returns.
+        captured.append((args[0], result if mode == "circular" else result.labels))
         return result
     monkeypatch.setattr(owner, symbol, capture)
     intervals = {"ordinary": [(2000, 3000)], "cut": [(2000, 7000)],
@@ -392,12 +393,12 @@ def test_dense_rotated_labels_keep_collision_bounds_and_actual_leader_endpoints(
     from gbdraw.labels.circular import _count_label_overlaps
     from gbdraw.labels.linear import calculate_label_bounds
     owner = circular if mode == "circular" else linear
-    symbol = "prepare_label_list" if mode == "circular" else "prepare_label_list_linear"
+    symbol = "prepare_label_list" if mode == "circular" else "linear_record_labels"
     real = getattr(owner, symbol)
     captured = []
     def capture(*args, **kwargs):
         result = real(*args, **kwargs)
-        captured.append(result)
+        captured.append(result if mode == "circular" else result.labels)
         return result
     monkeypatch.setattr(owner, symbol, capture)
     record = _record()

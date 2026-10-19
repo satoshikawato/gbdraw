@@ -146,6 +146,7 @@ from ...layout.scalar_axis import (
 from ...labels.linear import (
     LINEAR_LABEL_FIT_ATTR,
     FeatureLabelRows,
+    LinearLabelFrame,
     calculate_label_bounds,
     linear_label_fit,
     with_feature_label_rows,
@@ -2460,6 +2461,8 @@ def assemble_linear_diagram(
     ]
     boundary_gap_resolutions: list[AxisGapResolution] = []
     multi_record_plan = None
+    # Where each record's feature labels are stacked and counted: its row and its start in it (OV-1188).
+    label_frames: list[LinearLabelFrame] | None = None
 
     def resolve_first_axis_y() -> float:
         return max(
@@ -2548,6 +2551,10 @@ def assemble_linear_diagram(
             multi_record_plan.placement_for_index(index).sequence_width
             for index in range(len(records))
         ]
+        label_frames = [
+            LinearLabelFrame(rows_by_record[index], multi_record_plan.placement_for_index(index).x)
+            for index in range(len(records))
+        ]
         if annotation_track_layouts:
             linear_track_slots, annotation_track_layouts = (
                 _layout_linear_annotation_tracks(
@@ -2596,6 +2603,7 @@ def assemble_linear_diagram(
             feature_lane_geometries=record_feature_lane_geometries,
             sequence_widths=final_sequence_widths,
             record_transforms=record_transforms,
+            label_frames=label_frames,
         )
         if feature_label_rows is not None:
             all_labels = with_feature_label_rows(all_labels, feature_label_rows.rows)
@@ -2963,6 +2971,7 @@ def assemble_linear_diagram(
         )
         if any(placed.new_rows for placed in placed_annotation_labels)
         else None,
+        frames=label_frames,
     )
 
     total_records = len(records)

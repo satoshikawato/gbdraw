@@ -16,7 +16,7 @@ from ..config.models import LinearRenderProfile
 from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
 from ..core.record_metadata import _source_feature_index
-from ..core.text import calculate_bbox_dimensions
+from ..core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
 from ..auto_sizes import determine_length_parameter
 from ..layout.linear_coords import normalize_position_to_linear_track
 from ..layout.linear import (
@@ -44,8 +44,8 @@ from .fit import (
     LabelFitVerification,
     LabelFitValue,
     LabelShape,
+    crossing_pairs,
     label_fit_outcome,
-    label_fits_by_kind,
     overlapping_pairs,
     raise_or_warn,
     switch_row,
@@ -487,7 +487,39 @@ def _passes_orthogroup_label_eligibility(
     return top_member_ids is not None and bool(identities.intersection(top_member_ids))
 
 
-def prepare_label_list_linear(
+class LinearLabelFrame(NamedTuple):
+    """Where a record's feature labels are stacked and counted: its Linear row and the x of the record's
+    start in that row. A record translation moves the record with its labels (OV-1188)."""
+
+    row: int
+    x: float
+
+
+def linear_label_rows(frames: Sequence[LinearLabelFrame] | None, record_count: int) -> list[list[tuple[int, float]]]:
+    """The records of each Linear row in row order, each with the x of its start (``frames``; each of the
+    ``record_count`` records alone in its row without them)."""
+
+    resolved = list(frames) if frames is not None else [LinearLabelFrame(index, 0.0) for index in range(record_count)]
+    if len(resolved) != record_count:
+        raise ValueError("label frames must give one frame for every record")
+    rows: dict[int, list[tuple[int, float]]] = {}
+    for index, frame in sorted(enumerate(resolved), key=lambda item: (item[1].row, item[1].x, item[0])):
+        rows.setdefault(frame.row, []).append((index, frame.x))
+    return list(rows.values())
+
+
+class LinearRecordLabels(NamedTuple):
+    """One record's feature labels before ``place_linear_label_row`` stacks them: ``labels`` in placement
+    order (an external one has no row yet), and what the row needs of the record."""
+
+    labels: list[dict]
+    top_feature_y: float
+    bottom_feature_y: float
+    max_label_height: float
+    alignment_width: float
+
+
+def linear_record_labels(
     feature_dict,
     genome_length,
     alignment_width,
@@ -504,22 +536,18 @@ def prepare_label_list_linear(
     feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
     record_transform: RecordDisplayTransform | None = None,
     label_filtering: Mapping[str, Any] | None = None,
-):
-    """
-    Prepares a list of labels for linear genome visualization with proper track organization.
+) -> LinearRecordLabels:
+    """One record's feature labels, measured and put on or beside their features.
 
     A feature outside the label display scope (``labels_overrides_only``, or
     not selected by orthogroup eligibility) is labeled only by its per-feature
     override. ``label_filtering``: the compiled maps when the caller holds them.
+    A label is as wide as its text's advance in SVG px, the box the renderer
+    anchors the text on (OV-1294).
     """
     cfg = profile.config
-    embedded_labels = []
-    external_labels = []
-    track_dict = defaultdict(list)
-    external_track_indexes: dict[str, IntervalIndex] = {}
-    external_label_by_id: dict[int, dict] = {}
+    labels: list[dict] = []
     feature_track_positions = {}  # Store feature track positions
-    track_layout_normalized = str(track_layout).strip().lower()
     axis_gap_factor = (
         (float(track_axis_gap) / float(cds_height))
         if (track_axis_gap is not None and float(cds_height) > 0.0)
@@ -536,8 +564,6 @@ def prepare_label_list_linear(
         else cfg.labels.font_size.linear.for_length_param(length_param)
     )
     label_rendering = profile.label_rendering
-    label_spacing_px = float(cfg.labels.spacing.linear)
-    external_bucket_size = _external_label_bucket_size(alignment_width)
     force_above_feature = profile.label_placement == "above_feature"
     if force_above_feature and label_rendering != "auto":
         raise ValueError(
@@ -613,7 +639,8 @@ def prepare_label_list_linear(
             continue
 
         # Calculate label dimensions and positions
-        bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
+        bbox_width_px, _ = calculate_svg_bbox_dimensions(feature_label_text, font_family, font_size, interval)
+        _, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
         if bbox_height_px > max_bbox_height:
             max_bbox_height = bbox_height_px
         # Find the longest segment and its middle point
@@ -754,60 +781,95 @@ def prepare_label_list_linear(
                     "leader_end_y": label_y + label_contact_y_offset,
                 }
             )
-            track_dict["track_0"].append(label_entry)
+            labels.append(label_entry)
         elif label_rendering != "external_only" and bbox_width_px < longest_segment_length_in_pixels:
             label_entry.update({"middle_y": feature_y, "is_embedded": True, "track_id": "track_0"})
-            track_dict["track_0"].append(label_entry)
+            labels.append(label_entry)
         elif label_rendering != "embedded_only":
-            # For external labels: find lowest possible track
             label_entry.update({"middle_y": 0, "is_embedded": False})
+            labels.append(label_entry)
 
-            # Find lowest track where label can be placed without overlaps
-            best_track = _find_lowest_available_track_indexed(
-                track_dict,
-                external_track_indexes,
-                external_label_by_id,
-                label_entry,
-            )
-            label_entry["track_id"] = f"track_{best_track}"
-            track_dict[f"track_{best_track}"].append(label_entry)
-            external_label_id = len(external_label_by_id)
-            external_label_by_id[external_label_id] = label_entry
-            _insert_external_label_index(
-                external_track_indexes,
-                f"track_{best_track}",
-                external_label_id,
-                label_entry,
-                external_bucket_size,
-            )
+    return LinearRecordLabels(
+        labels, top_feature_y_limit, bottom_feature_y_limit, max_bbox_height, float(alignment_width)
+    )
 
-    # Process embedded labels
-    if "track_0" in track_dict:
-        if force_above_feature:
-            above_feature_collision_gap = max(1.0, max_bbox_height * 0.05)
-            _resolve_above_feature_label_overlaps(track_dict["track_0"], above_feature_collision_gap)
-        for label in track_dict["track_0"]:
-            embedded_labels.append(label)
 
-    track_height = max_bbox_height + label_spacing_px
-    for track_id in sorted(track_dict.keys()):
-        if track_id == "track_0":
-            continue
+def place_linear_label_row(
+    records: Sequence[tuple[LinearRecordLabels, float]],
+    *,
+    profile: LinearRenderProfile,
+    track_layout: str,
+) -> list[list[dict]]:
+    """Stack the feature labels of the records in one Linear row, each with the x of its start in the
+    row (records in row order), so that no two labels of the row overlap (OV-1188).
 
-        track_labels = track_dict[track_id]
-        track_num = int(track_id.split("_")[1])
+    The external labels take the lowest row free where the row draws them, in record order, and the
+    rows of a side are one row pitch apart from the outermost feature of the row; labels drawn above
+    their features (``above_feature``) move away from the axis off each other. A record's labels keep
+    record coordinates, and the first record's external labels take the rows they take alone. Returns
+    each record's labels: those on their features first, then the external ones by row.
+    """
 
-        for label in track_labels:
+    if not records:
+        return []
+    spacing_px = float(profile.config.labels.spacing.linear)
+    below = str(track_layout).strip().lower() == "below"
+    labelled = [record for record, _x in records if record.labels]
+    max_height = max((record.max_label_height for record in labelled), default=0.0)
+    top_feature_y = min((record.top_feature_y for record in labelled), default=0.0)
+    bottom_feature_y = max((record.bottom_feature_y for record in labelled), default=0.0)
+    bucket_size = _external_label_bucket_size(max(record.alignment_width for record, _x in records))
+
+    # The external labels in row coordinates: the packer reads only their x span.
+    track_dict: defaultdict[str, list[dict]] = defaultdict(list)
+    track_indexes: dict[str, IntervalIndex] = {}
+    framed_by_id: dict[int, dict] = {}
+    for record, x in records:
+        for label in record.labels:
+            if label["is_embedded"]:
+                continue
+            framed = {**label, "start": float(label["start"]) + x, "end": float(label["end"]) + x}
+            track_id = f"track_{_find_lowest_available_track_indexed(track_dict, track_indexes, framed_by_id, framed)}"
+            label["track_id"] = framed["track_id"] = track_id
+            track_dict[track_id].append(framed)
+            framed_id = len(framed_by_id)
+            framed_by_id[framed_id] = framed
+            _insert_external_label_index(track_indexes, track_id, framed_id, framed, bucket_size)
+
+    if profile.label_placement == "above_feature":
+        # Every label is on its feature here; the resolver reads their anchor and box x.
+        on_features = [(label, x) for record, x in records for label in record.labels]
+        framed_labels = [
+            {
+                **label,
+                "middle_x": float(label["middle_x"]) + x,
+                "feature_anchor_x": float(label["feature_anchor_x"]) + x,
+            }
+            for label, x in on_features
+        ]
+        _resolve_above_feature_label_overlaps(framed_labels, max(1.0, max_height * 0.05))
+        for (label, _x), framed in zip(on_features, framed_labels):
+            label["middle_y"] = framed["middle_y"]
+            if framed["leader_line"]:
+                label["leader_line"] = True
+                _update_linear_label_leader_end(label)
+
+    track_height = max_height + spacing_px
+    placed: list[list[dict]] = []
+    for record, _x in records:
+        external = sorted(
+            (label for label in record.labels if not label["is_embedded"]), key=lambda label: label["track_id"]
+        )
+        for label in external:
             # Compact vertical positioning for external labels: row N of its side
             # (``linear_label_in_row`` moves a label to another row of it).
-            if track_layout_normalized == "below" or label["secondary_below"]:
-                label["row_origin_y"], label["row_pitch"] = bottom_feature_y_limit, track_height
+            if below or label["secondary_below"]:
+                label["row_origin_y"], label["row_pitch"] = bottom_feature_y, track_height
             else:
-                label["row_origin_y"], label["row_pitch"] = top_feature_y_limit, -track_height
-            label["middle_y"] = label["row_origin_y"] + label["row_pitch"] * track_num
-            external_labels.append(label)
-
-    return embedded_labels + external_labels
+                label["row_origin_y"], label["row_pitch"] = top_feature_y, -track_height
+            label["middle_y"] = label["row_origin_y"] + label["row_pitch"] * linear_label_row(label)
+        placed.append([label for label in record.labels if label["is_embedded"]] + external)
+    return placed
 
 
 def linear_label_row(label: Mapping[str, object]) -> int:
@@ -881,19 +943,47 @@ def linear_leader_polyline(label: dict) -> tuple[Point, ...]:
     return ((label["middle"], label["feature_middle_y"]), (label["middle"], label_edge_y))
 
 
-def linear_label_shapes(labels: list[dict]) -> list[LabelShape]:
-    """One record's drawn Linear labels as the fit count sees them."""
+def linear_label_shapes(labels: Sequence[dict], x: float = 0.0) -> list[LabelShape]:
+    """One record's drawn Linear labels as the fit count sees them, moved ``x`` right (the record's
+    start in its row)."""
 
     return [
-        LabelShape("linear", (tuple(_label_corners(label)),), linear_leader_polyline(label))
+        LabelShape(
+            "linear",
+            (translate_points(_label_corners(label), x, 0.0),),
+            translate_points(linear_leader_polyline(label), x, 0.0),
+        )
         for label in labels
     ]
+
+
+def _linear_row_label_fits(row: Sequence[tuple[Sequence[dict], float]]) -> tuple[list[LabelFit], bool]:
+    """The fit of each record's drawn feature labels in one Linear row (records in row order, each with
+    the x of its start), counted together with the shared rule (their layout boxes and leaders): a pair
+    of labels of two records counts for the later record (OV-1188). Also whether an overlapping pair
+    has a label drawn on its feature."""
+
+    owners: list[int] = []
+    labels: list[dict] = []
+    shapes: list[LabelShape] = []
+    for position, (record_labels, x) in enumerate(row):
+        owners.extend([position] * len(record_labels))
+        labels.extend(record_labels)
+        shapes.extend(linear_label_shapes(record_labels, x))
+    counts = [[0, 0] for _record in row]
+    overlaps = overlapping_pairs([shape.parts for shape in shapes], touching=False)
+    for left, right in overlaps:
+        counts[max(owners[left], owners[right])][0] += 1
+    for left, right in crossing_pairs([shape.leader for shape in shapes]):
+        counts[max(owners[left], owners[right])][1] += 1
+    embedded_overlap = any(labels[left]["is_embedded"] or labels[right]["is_embedded"] for left, right in overlaps)
+    return [LabelFit(overlap, crossing) for overlap, crossing in counts], embedded_overlap
 
 
 def linear_record_label_fit(labels: Sequence[dict]) -> LabelFit:
     """One record's drawn feature labels counted with the shared rule (their layout boxes and leaders)."""
 
-    return label_fits_by_kind(linear_label_shapes(list(labels)), touching=False).get("linear", FITS)
+    return _linear_row_label_fits([(labels, 0.0)])[0][0]
 
 
 # The drawing attribute that carries a Linear figure's label fit to the check.
@@ -952,28 +1042,30 @@ def linear_label_fit(
     font_size: float,
     region_labels: Sequence[RecordRegionLabels] | None = None,
     new_rows: FeatureLabelRows | None = None,
+    *,
+    frames: Sequence[LinearLabelFrame] | None = None,
 ) -> LinearLabelFit:
     """Count one figure's drawn Linear labels with the shared rule (LP-D48 SCOPE-ALL-LABELS).
 
-    ``region_labels`` are each record's region labels as their placer counted
-    them (LP-D68); a record whose region labels overlap other labels or lines
-    gets a ``linear_region`` record, which only warns.
+    The feature labels of the records in one row (``frames``, where their
+    labels were stacked; each record alone in its row without them) are
+    counted together (OV-1188). ``region_labels`` are each record's region
+    labels as their placer counted them (LP-D68); a record whose region labels
+    overlap other labels or lines gets a ``linear_region`` record, which only warns.
     """
 
     regions = list(region_labels) if region_labels is not None else [RecordRegionLabels()] * len(record_labels)
-    failing: list[LabelFitRecord] = []
+    fits: list[LabelFit] = [FITS] * len(record_labels)
     embedded_overlap = False
-    for (record_id, labels), region in zip(record_labels, regions, strict=True):
-        fit = linear_record_label_fit(labels)
+    for row in linear_label_rows(frames, len(record_labels)):
+        row_fits, row_embedded_overlap = _linear_row_label_fits([(record_labels[index][1], x) for index, x in row])
+        embedded_overlap = embedded_overlap or row_embedded_overlap
+        for (index, _x), fit in zip(row, row_fits, strict=True):
+            fits[index] = fit
+    failing: list[LabelFitRecord] = []
+    for (record_id, labels), region, fit in zip(record_labels, regions, fits, strict=True):
         if not fit.fits:
             failing.append(LabelFitRecord(record_id, "linear", len(labels), font_size, fit))
-            if fit.overlap_pairs and not embedded_overlap:
-                embedded_overlap = any(
-                    labels[left]["is_embedded"] or labels[right]["is_embedded"]
-                    for left, right in overlapping_pairs(
-                        [shape.parts for shape in linear_label_shapes(list(labels))], touching=False
-                    )
-                )
         if region.overlaps:
             failing.append(
                 LabelFitRecord(
@@ -1036,6 +1128,8 @@ __all__ = [
     "FeatureLabelRow",
     "FeatureLabelRows",
     "LinearLabelFit",
+    "LinearLabelFrame",
+    "LinearRecordLabels",
     "RecordRegionLabels",
     "calculate_label_bounds",
     "check_linear_label_fit",
@@ -1043,13 +1137,15 @@ __all__ = [
     "linear_label_fit",
     "linear_label_in_row",
     "linear_label_row",
+    "linear_label_rows",
     "linear_label_side",
     "linear_record_label_fit",
+    "linear_record_labels",
+    "place_linear_label_row",
     "with_feature_label_rows",
     "calculate_label_y_bounds",
     "check_label_overlap",
     "find_lowest_available_track",
     "linear_label_shapes",
     "linear_leader_polyline",
-    "prepare_label_list_linear",
 ]

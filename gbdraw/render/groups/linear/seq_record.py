@@ -12,7 +12,7 @@ from ....canvas.linear import LinearCanvasGeometry
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.linear.labels import LabelDrawer
-from ....labels.linear import linear_leader_polyline, prepare_label_list_linear
+from ....labels.linear import linear_leader_polyline, linear_record_labels, place_linear_label_row
 from ....config.models.render_profiles import LinearRenderProfile
 from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
 from ....features.factory import FeatureBuildResult
@@ -398,7 +398,7 @@ class SeqRecordGroup:
             if self.precalculated_labels is not None:
                 label_list = self.precalculated_labels
             else:
-                label_list = prepare_label_list_linear(
+                record_labels = linear_record_labels(
                     feature_dict,
                     record_length,
                     alignment_width,
@@ -417,6 +417,9 @@ class SeqRecordGroup:
                     feature_lane_geometry=self.feature_lane_geometry,
                     record_transform=self.record_transform,
                 )
+                label_list = place_linear_label_row(
+                    [(record_labels, 0.0)], profile=self.profile, track_layout=self.track_layout
+                )[0]
 
         record_group = self.draw_record(
             feature_dict,

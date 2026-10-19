@@ -12,7 +12,7 @@ from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.labels.circular import prepare_label_list
-from gbdraw.labels.linear import prepare_label_list_linear
+from gbdraw.labels.linear import linear_record_labels, place_linear_label_row
 from gbdraw.linear import _get_args as get_linear_args
 
 circular_assemble_module
@@ -52,17 +52,9 @@ def _linear_policy_labels(label_rendering: str) -> list[dict]:
         "fits": _feature("fits", 1, 300, "A"),
         "external": _feature("external", 500, 510, "very long label that cannot fit inside a ten base feature"),
     }
-    return prepare_label_list_linear(
-        features,
-        1000,
-        1000,
-        1.0,
-        20,
-        False,
-        "middle",
-        None,
-        LinearRenderProfile(cfg),
-    )
+    profile = LinearRenderProfile(cfg)
+    record_labels = linear_record_labels(features, 1000, 1000, 1.0, 20, False, "middle", None, profile)
+    return place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout="middle")[0]
 
 
 def _circular_policy_labels(label_rendering: str) -> list[dict]:

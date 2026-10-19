@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import re
+import warnings
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from pathlib import Path
@@ -16,6 +18,7 @@ from pandas import DataFrame
 from svgwrite.container import Group
 
 import gbdraw.labels.linear as linear_labels_module
+import gbdraw.linear as linear_cli_module
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
@@ -40,9 +43,14 @@ from gbdraw.labels.linear import (
     _linear_label_aabb,
     _rotated_label_rects_intersect,
     calculate_label_bounds,
+    LinearLabelFrame,
     find_lowest_available_track,
-    prepare_label_list_linear,
+    linear_label_fit,
+    linear_record_labels,
+    place_linear_label_row,
 )
+from gbdraw.core.text import TEXT_ANCHOR_SHARE, calculate_svg_bbox_dimensions, text_ink_offsets
+from gbdraw.exceptions import LabelLeadersCrossWarning
 from gbdraw.render.drawers.linear.labels import LabelDrawer
 from tests.utils.linear_render_context import make_linear_record_render_context
 
@@ -181,9 +189,17 @@ def _prepare_linear_labels(
         label_filtering,
     )
 
-    return prepare_label_list_linear(
+    return _labels_alone(feature_dict, len(record.seq), canvas_cfg, profile)
+
+
+def _labels_alone(
+    feature_dict: dict, record_length: int, canvas_cfg: LinearCanvasConfigurator, profile: LinearRenderProfile
+) -> list[dict]:
+    """One record's feature labels placed alone in its row."""
+
+    record_labels = linear_record_labels(
         feature_dict,
-        len(record.seq),
+        record_length,
         canvas_cfg.alignment_width,
         1.0,
         canvas_cfg.cds_height,
@@ -192,6 +208,7 @@ def _prepare_linear_labels(
         canvas_cfg.track_axis_gap,
         profile,
     )
+    return place_linear_label_row([(record_labels, 0.0)], profile=profile, track_layout=canvas_cfg.track_layout)[0]
 
 
 def _prepare_linear_labels_for_records(
@@ -204,7 +221,9 @@ def _prepare_linear_labels_for_records(
     separate_strands: bool = False,
     track_layout: str = "middle",
     qualifier_priority: tuple[str, str] | None = None,
-) -> list[dict]:
+    all_records: bool = False,
+    label_frames: list[LinearLabelFrame] | None = None,
+) -> list:
     input_dir = Path(__file__).parent / "test_inputs"
     records = [SeqIO.read(str(input_dir / filename), "genbank") for filename in input_filenames]
 
@@ -250,8 +269,9 @@ def _prepare_linear_labels_for_records(
         feature_cfg,
         canvas_cfg,
         render_context=make_linear_record_render_context(profile),
+        label_frames=label_frames,
     )
-    return all_labels_by_record[0]
+    return all_labels_by_record if all_records else all_labels_by_record[0]
 
 
 def _rotated_y_bounds_from_anchor(label: dict) -> tuple[float, float]:
@@ -1013,17 +1033,7 @@ def test_linear_precalculated_labels_match_final_alignment_width_positions() -> 
             float(label["feature_end_x"]),
             float(label["middle_x"]),
         )
-        for label in prepare_label_list_linear(
-            feature_dict,
-            len(record.seq),
-            canvas_cfg.alignment_width,
-            1.0,
-            canvas_cfg.cds_height,
-            canvas_cfg.strandedness,
-            canvas_cfg.track_layout,
-            canvas_cfg.track_axis_gap,
-            profile,
-        )
+        for label in _labels_alone(feature_dict, len(record.seq), canvas_cfg, profile)
         if label["label_text"] == "tRNA-Phe"
     )
 
@@ -1151,3 +1161,160 @@ def test_linear_above_feature_spacing_override_does_not_move_embedded_labels() -
 
     assert [item[0] for item in default_positions] == [item[0] for item in wider_positions]
     assert [item[1] for item in default_positions] == pytest.approx([item[1] for item in wider_positions])
+
+
+_SVG_NS = "{http://www.w3.org/2000/svg}"
+_TRANSLATE = re.compile(r"translate\(\s*([-+0-9.eE]+)(?:[\s,]+([-+0-9.eE]+))?\s*\)")
+
+
+def _painted_feature_label_boxes(svg_path: Path) -> list[tuple[str, tuple[float, float, float, float]]]:
+    """Each drawn feature label's painted box in canvas px: the advance the renderer anchors the text
+    on, by the ink's top and bottom (left, right, top, bottom). Only translations move the labels here."""
+
+    boxes: list[tuple[str, tuple[float, float, float, float]]] = []
+
+    def walk(element: ET.Element, dx: float, dy: float) -> None:
+        transform = element.get("transform", "").strip()
+        if transform:
+            assert _TRANSLATE.sub("", transform).strip() == "", transform
+            for match in _TRANSLATE.finditer(transform):
+                dx += float(match.group(1))
+                dy += float(match.group(2) or 0.0)
+        if element.tag == f"{_SVG_NS}text" and element.get("data-label-feature-id"):
+            text = "".join(element.itertext())
+            family = str(element.get("font-family"))
+            size = float(str(element.get("font-size")))
+            anchor = str(element.get("text-anchor", "start"))
+            ink = text_ink_offsets(
+                text, family, size, dominant_baseline=str(element.get("dominant-baseline")), text_anchor=anchor
+            )
+            assert ink is not None
+            advance, _height = calculate_svg_bbox_dimensions(text, family, size, 96)
+            left = dx + float(str(element.get("x"))) - TEXT_ANCHOR_SHARE[anchor] * advance
+            y = dy + float(str(element.get("y")))
+            boxes.append((text, (left, left + advance, y + ink[2], y + ink[3])))
+        for child in element:
+            walk(child, dx, dy)
+
+    walk(ET.parse(svg_path).getroot(), 0.0, 0.0)
+    return boxes
+
+
+def _painted_overlaps(svg_path: Path) -> list[tuple[str, str]]:
+    boxes = _painted_feature_label_boxes(svg_path)
+    return [
+        (first_text, second_text)
+        for index, (first_text, first) in enumerate(boxes)
+        for second_text, second in boxes[index + 1:]
+        if min(first[1], second[1]) - max(first[0], second[0]) > 1e-6
+        and min(first[3], second[3]) - max(first[2], second[2]) > 1e-6
+    ]
+
+
+def _draw_linear(tmp_path: Path, args: list[str]) -> Path:
+    output = tmp_path / "out"
+    linear_cli_module.linear_main([*args, "-o", str(output), "-f", "svg"])
+    return output.with_suffix(".svg")
+
+
+@pytest.mark.linear
+def test_linear_labels_are_sized_by_their_advance_so_drawn_letters_keep_apart(tmp_path: Path) -> None:
+    """OV-1294: lambda's 24 px labels were sized as 24 pt ink widths, so "CIII anti-termination" and
+    "replication initiation O-like" shared ink in one row while the count reported none."""
+
+    lambda_gbk = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LabelLeadersCrossWarning)
+        svg = _draw_linear(tmp_path, ["--gbk", str(lambda_gbk), "--show_labels"])
+
+    assert _painted_overlaps(svg) == []
+
+
+@pytest.mark.linear
+def test_linear_labels_of_records_in_one_row_keep_apart(tmp_path: Path) -> None:
+    """OV-1188: the labels of two records in one row were packed and counted per record, so labels
+    at the junction overlapped (HmmtDNA twice at 40 pt: 3 pairs)."""
+
+    hmm = str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk")
+    svg = _draw_linear(
+        tmp_path,
+        [
+            "--gbk", hmm, hmm, "--show_labels", "all", "--label_font_size", "40",
+            "--multi_record_position", "#1@1", "--multi_record_position", "#2@1", "--linear_record_gap", "5",
+        ],
+    )
+
+    assert _painted_overlaps(svg) == []
+
+
+def _row_label(start: float, width: float, *, middle_y: float = -30.0) -> dict:
+    return {
+        "label_text": "x",
+        "middle": start + width / 2.0,
+        "middle_x": start + width / 2.0,
+        "middle_y": middle_y,
+        "start": start,
+        "end": start + width,
+        "width_px": width,
+        "height_px": 10.0,
+        "is_embedded": False,
+        "feature_middle_y": 0.0,
+        "rotation_deg": 0.0,
+        "text_anchor": "middle",
+    }
+
+
+@pytest.mark.linear
+def test_linear_label_fit_counts_labels_of_records_in_one_row_together() -> None:
+    """OV-1188: a label of the second record over one of the first, where the row draws them, counts
+    for the second record; the same labels in two rows fit."""
+
+    first = [_row_label(90.0, 20.0)]
+    second = [_row_label(0.0, 20.0)]
+    records = [("first", first), ("second", second)]
+
+    one_row = linear_label_fit(
+        records, 10.0, frames=[LinearLabelFrame(row=1, x=0.0), LinearLabelFrame(row=1, x=95.0)]
+    )
+    two_rows = linear_label_fit(
+        records, 10.0, frames=[LinearLabelFrame(row=1, x=0.0), LinearLabelFrame(row=2, x=95.0)]
+    )
+
+    assert [(record.record_id, record.fit.overlap_pairs) for record in one_row.records] == [("second", 1)]
+    assert two_rows.records == ()
+
+
+@pytest.mark.linear
+def test_linear_labels_of_records_in_one_row_are_packed_together() -> None:
+    """OV-1188: the labels of the second record in a row take the rows the first record's labels leave
+    free where the row draws them; the first record keeps the rows it has alone."""
+
+    alone = _prepare_linear_labels_for_records(
+        input_filenames=("HmmtDNA.gbk", "HmmtDNA.gbk"),
+        show_labels="all",
+        label_placement="auto",
+        label_font_size=40.0,
+        all_records=True,
+    )
+    # The second record starts 5 px after the first one ends, as ``--linear_record_gap 5`` draws it.
+    width = max(float(label["feature_end_x"]) for label in alone[0])
+    frames = [LinearLabelFrame(row=1, x=0.0), LinearLabelFrame(row=1, x=width + 5.0)]
+    packed = _prepare_linear_labels_for_records(
+        input_filenames=("HmmtDNA.gbk", "HmmtDNA.gbk"),
+        show_labels="all",
+        label_placement="auto",
+        label_font_size=40.0,
+        all_records=True,
+        label_frames=frames,
+    )
+
+    assert packed[0] == alone[0]
+    row_labels = [
+        {**label, "middle_x": float(label["middle_x"]) + frame.x}
+        for labels, frame in zip(packed, frames)
+        for label in labels
+    ]
+    _assert_no_label_bounds_overlap(row_labels)
+    assert any(
+        moved["track_id"] != kept["track_id"] for moved, kept in zip(packed[1], alone[1], strict=True)
+    )
