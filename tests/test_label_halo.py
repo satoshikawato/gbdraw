@@ -264,6 +264,65 @@ def test_the_linear_underline_takes_no_room_in_the_label_rows(tmp_path: Path, mo
             assert line_bottom < min(_ink(other)[2] for other in nearer)
 
 
+@pytest.mark.parametrize(
+    ("mode", "argv"),
+    [
+        ("linear", ("--gbk", str(LAMBDA), "--show_labels", "--label_placement", "above_feature", "--label_rotation", "45")),
+        (
+            "linear",
+            (
+                "--gbk", str(LAMBDA), "--show_labels", "all", "--separate_strands",
+                "--label_placement", "above_feature", "--label_rotation", "45",
+            ),
+        ),
+        ("circular", ("--gbk", str(LAMBDA), "--labels", "--label_placement", "radial")),
+    ],
+    ids=["linear", "linear-separate-strands", "circular-radial"],
+)
+def test_a_turned_label_draws_no_underline_and_its_leader_ends_as_without_one(
+    mode: str, argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LP-D112: a feature label drawn turned (not horizontal) gets no underline and no casing, and its leader
+    and its box are where ``--label_line none`` draws them, so the whole figure is the same."""
+
+    under, none = (
+        _svg(tmp_path, monkeypatch, mode, *argv, "--label_line", line) for line in ("under", "none")
+    )
+    root = ET.parse(under).getroot()
+    turned = [text for text in _label_texts(root) if "rotate(" in text.get("transform", "") and _lines_of(root, text.get(FEATURE))]
+    assert len(turned) > 2
+    assert under.read_text(encoding="utf-8") == none.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("--show_labels", "--label_rotation", "45"),
+        ("--show_labels", "all", "--label_rotation", "30", "--separate_strands"),
+        ("--show_labels", "all", "--label_rotation", "-60", "--label_font_size", "24"),
+    ],
+    ids=["45", "all-30-separate-strands", "all-minus-60-large"],
+)
+def test_every_leader_of_a_turned_linear_label_is_vertical_in_the_default_style(
+    argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LP-D112: the leader of a turned Linear label runs straight up or down from its feature to the letters, as
+    a horizontal label's does; no part of it is slanted or bent along the text."""
+
+    root = ET.parse(
+        _svg(tmp_path, monkeypatch, "linear", "--gbk", str(LAMBDA), "--label_placement", "above_feature", *argv)
+    ).getroot()
+    turned = [text for text in _label_texts(root) if "rotate(" in text.get("transform", "")]
+    checked = 0
+    for text in turned:
+        for line in _lines_of(root, text.get(FEATURE)):
+            assert not _is_casing(line), text.text
+            x1, _y1, x2, _y2 = _line_points(line)
+            assert x1 == pytest.approx(x2, abs=1e-9), text.text
+            checked += 1
+    assert checked > 2
+
+
 def _line_points(line: ET.Element) -> tuple[float, float, float, float]:
     return tuple(float(line.get(key, "")) for key in ("x1", "y1", "x2", "y2"))  # type: ignore[return-value]
 

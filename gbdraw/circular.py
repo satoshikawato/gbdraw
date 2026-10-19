@@ -490,7 +490,8 @@ def _get_args(
         type=str)
     parser.add_argument(
         '--label_line',
-        help='Line under each feature label with a leader: "under" draws one that continues the leader; "none" draws none. '
+        help='Line under each horizontal feature label with a leader: "under" draws one that continues the leader '
+        '(a turned label gets none); "none" draws none. '
         f'Default: "{DEFAULT_LABEL_LINE["circular"]}".',
         choices=LABEL_LINES,
         type=str)

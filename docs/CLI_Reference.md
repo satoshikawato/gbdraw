@@ -457,9 +457,10 @@ options:
                         external labels; "external_only" forces labels outside
                         feature bodies. Default: "auto".
   --label_line {none,under}
-                        Line under each feature label with a leader: "under"
-                        draws one that continues the leader; "none" draws
-                        none. Default: "none".
+                        Line under each horizontal feature label with a
+                        leader: "under" draws one that continues the leader (a
+                        turned label gets none); "none" draws none. Default:
+                        "none".
   --label_protection {none,halo,box}
                         What keeps a leader passing behind a feature label off
                         its letters: "halo" (a white outline of the letters),
@@ -1394,9 +1395,10 @@ options:
                         --label_placement above_feature except as "auto".
                         Default: "auto".
   --label_line {none,under}
-                        Line under each feature label with a leader: "under"
-                        draws one that continues the leader; "none" draws
-                        none. Default: "under".
+                        Line under each horizontal feature label with a
+                        leader: "under" draws one that continues the leader (a
+                        turned label gets none); "none" draws none. Default:
+                        "under".
   --label_protection {none,halo,box}
                         What keeps a leader passing behind a feature label off
                         its letters: "halo" (a white outline of the letters),

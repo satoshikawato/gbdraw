@@ -4,8 +4,11 @@ The one owner of the label style values (LP-D98, LP-D100). Each diagram mode
 has a ``FeatureLabelStyle``, read from ``labels.linear`` / ``labels.circular``
 (``line``, ``protection``) by the mode's render profile:
 
-- ``line``: ``under`` draws a line under the letters that continues the
-  leader (``label_ink``); ``none`` draws none.
+- ``line``: ``under`` draws a line under the letters of a horizontal label
+  that continues the leader (``label_ink``); a label drawn turned gets none
+  and its leader ends at its letters, as with ``none`` (Owner, LP-D112).
+  ``FeatureLabelStyle.draws_underline`` is the one decision every drawer and
+  obstacle reads, through the label's ink. ``none`` draws none.
 - ``protection``: ``halo`` draws a white glyph-shaped outline behind the
   letters (``HALO_WIDTH_EM`` wide), so a leader passing behind them is cut
   away; ``box`` draws a white rounded box (``BOX_OPACITY``) behind them;
@@ -62,9 +65,17 @@ class FeatureLabelStyle:
     line: LabelLine
     protection: LabelProtection
 
+    def draws_underline(self, rotation_deg: float) -> bool:
+        """Whether a feature label drawn turned ``rotation_deg`` about its point gets this style's underline:
+        only a horizontal one does (LP-D112)."""
+
+        return self.line == "under" and float(rotation_deg) == 0.0
+
     @property
-    def underline(self) -> bool:
-        return self.line == "under"
+    def draws_from_ink(self) -> bool:
+        """Whether this style draws a part placed from a label's letters (an underline or a box)."""
+
+        return self.line == "under" or self.protection == "box"
 
 
 def leader_width_px(font_size: float) -> float:

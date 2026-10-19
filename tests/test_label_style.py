@@ -141,6 +141,37 @@ def test_each_leader_keeps_its_own_width_clear_in_a_figure_with_two_label_sizes(
     assert _ObstacleIndex(obstacles).conflicts(SimpleNamespace(parts=(square,))) == 1
 
 
+def test_only_a_horizontal_label_gets_the_underline_and_its_obstacles_agree() -> None:
+    """LP-D112: a feature label drawn turned gets no underline; its leader ends at its letters and what the region
+    labels keep off is what ``line = none`` draws. A horizontal label with the same style keeps its underline."""
+
+    from types import SimpleNamespace
+
+    from gbdraw.diagrams.linear.annotation_labels import linear_feature_label_obstacles
+    from gbdraw.labels.label_ink import linear_label_ink
+    from gbdraw.labels.linear import linear_leader_polyline
+    from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
+
+    under, plain = FeatureLabelStyle(line="under", protection="box"), FeatureLabelStyle(line="none", protection="box")
+    assert under.draws_underline(0.0) and not under.draws_underline(-45.0) and not under.draws_underline(45.0)
+    assert not plain.draws_underline(0.0)
+    flat = _linear_label_with_leader(10.0, 0.0, -14.0)
+    turned = {**flat, "rotation_deg": -45.0, "text_anchor": "start"}
+    flat_ink = linear_label_ink(flat, linear_leader_polyline(flat), under)
+    assert flat_ink.underline is not None and flat_ink.underline_box is not None
+    ink = linear_label_ink(turned, leader := linear_leader_polyline(turned), under)
+    assert ink.underline is None and ink.underline_box is None
+    assert ink == linear_label_ink(turned, leader, plain)
+    assert feature_label_drawn_parts(ink, under) == feature_label_drawn_parts(ink, plain)
+    plan = SimpleNamespace(slots=())
+    assert linear_feature_label_obstacles([turned], plan, 0, label_style=under) == linear_feature_label_obstacles(
+        [turned], plan, 0, label_style=plain
+    )
+    assert linear_feature_label_obstacles([flat], plan, 0, label_style=under) != linear_feature_label_obstacles(
+        [flat], plan, 0, label_style=plain
+    )
+
+
 @pytest.mark.parametrize(
     ("options", "path", "value"),
     [

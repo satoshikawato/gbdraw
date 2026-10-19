@@ -17,7 +17,8 @@ write-up of a release.
   `--label_line {none,under}` and `--label_protection {none,halo,box}`
   (config `labels.<mode>.line` and `.protection`; web app **Label Line** and
   **Label Protection** under **Labels**). Linear draws an underline joined to
-  the leader and a white box at 80 % opacity behind the letters by default;
+  the leader (horizontal labels only; a turned label's leader ends at its
+  letters) and a white box at 80 % opacity behind the letters by default;
   Circular draws a white halo around the letters. Leaders and underlines are
   0.07 em wide, at least 1 px, in both modes.
   - In Linear the underline takes no room in its label row, so labels keep
