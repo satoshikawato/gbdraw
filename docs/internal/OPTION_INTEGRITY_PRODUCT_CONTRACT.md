@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `69`
+- Contract revision: `70`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -40,7 +40,7 @@ Status: active Product authority
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
-  `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, and `PD-OI-105`
+  `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, and `PD-OI-106`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -2169,6 +2169,22 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 70 changes: `PD-OI-106` is added
+  (`WEB-UI-LANGUAGE-MANUAL`, concern `product.web-ui-language`). It comes from
+  the Product Decision Owner `satoshikawato`'s answers of `2026-10-19` on the
+  language of the Web UI text (a header Language menu with English, Japanese,
+  Simplified Chinese, and Traditional Chinese). The record serializes the
+  approved receipt without translation or additional terms.
+  - It narrows `PD-OI-093`: where that record limits browser storage to one
+    display choice, storage now holds that choice and the UI language. The
+    `PD-OI-093` record keeps its text and its SHA-256; its stored display
+    choice is preserved.
+  - Names fixed in English by `PD-OI-093` and `PD-OI-105` keep that English in
+    the English UI; the other languages translate them.
+  - Scope: only `PD-OI-106` is added; no other record is amended or retired.
+  - This change is authority only: it adds a stored browser preference and
+    expands authority. The runtime that implements it follows in later pull
+    requests; this record supplies no runtime acceptance evidence.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -7611,6 +7627,74 @@ Decision date: 2026-10-13
   "acceptedResidualRisk": "目盛りは線と小さい数字なので、押せる範囲が狭い。キーボードでは図の要素からは出せない（目次のボタンで同じ section を開ける）。Result いっぱいの輪の track や、上下に popup の入る余白がない横長の要素（図の下の端にある Linear の scale など）を押したとき、およびスマートフォンの幅では、popup が押した要素の一部を覆う。長い section の popup は Result の高さいっぱいになり、図の一部を覆う。popup はドラッグすると Result の外へも動かせる。popup に出ている間、設定ペインはその section のぶん短くなり、ペインのスクロールの位置がずれることがある。アイコンの列で、押した要素の section がすでに横に開いているときは、押しても見た目は変わらない。popup の見出しは、読み上げではボタンと読まれるが、popup の中では畳めない。Custom Track Slots が有効な図では、section の一部の欄が無効になっている。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-13"
+}
+```
+
+### PD-OI-106: Web UI language
+
+- Concern key: `product.web-ui-language`
+- Scenario revision: `1`
+- Supersedes: none. It narrows `PD-OI-093`: that record's limit of browser
+  storage to one display choice no longer holds (see the receipt's May retire);
+  `PD-OI-093` keeps its text and its stored display choice.
+- Status: `ACCEPTED`
+- Selected outcome: `WEB-UI-LANGUAGE-MANUAL`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner answers of `2026-10-19` in the Claude Code
+  session, summarized in the Revision 70 entry above. The Owner approved the
+  receipt text below as written. The receipt reproduces its fields without
+  translation or additional terms. Dependent runtime requires this authority
+  merged into its base, or merged together with it through the reviewed static
+  Product Contract co-change route; this record supplies no runtime acceptance
+  evidence. The JSON `concern` holds the concern key without the receipt's
+  parenthetical description.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `d5d5b516fb6e7f02776262519c0ede07894904326b10c651761864fffdb9d6d1`.
+
+```text
+PRODUCT_DECISION
+Concern: product.web-ui-language (language of the Web UI text)
+Scenario revision: 1
+Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu
+  (English, 日本語, 简体中文, 繁體中文) switches the Web UI text
+  at once, without reload, and without changing the Result,
+  the settings or the History; switching is not a History step.
+  English is shown on a first visit; the browser language never
+  chooses. The chosen language is remembered per browser and is
+  not part of the Session, History or any export. Names fixed in
+  English by PD-OI-093 and PD-OI-105 keep that English in the
+  English UI and are translated in the other languages. ja,
+  zh-Hans and zh-Hant ship together in 0.14.0; the 0.14.0 tag
+  waits for all three. No text states that the translations are
+  reviewed. ja writes Default as 既定; zh reviewers decide the
+  open zh terms.
+Rationale: Let users work in their own language while every
+  scientific output stays identical in all languages.
+Must preserve: the English UI text and accessible names; the
+  figure, every export, the Session, CLI / Source recipe / Exact
+  replay text and diagnostics are identical in every language;
+  the stored settings-pane display choice of PD-OI-093.
+May retire: PD-OI-093's limit of browser storage to one display
+  choice; storage now holds that choice and the UI language.
+Accepted residual risk: Python-produced warnings, Gallery
+  tutorials and the docs stay English inside a translated UI;
+  translated wording may contain errors until corrected.
+Owner: satoshikawato
+Decision date: 2026-10-19
+```
+
+```json
+{
+  "concern": "product.web-ui-language",
+  "scenarioRevision": 1,
+  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, 日本語, 简体中文, 繁體中文) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. ja, zh-Hans and zh-Hant ship together in 0.14.0; the 0.14.0 tag waits for all three. No text states that the translations are reviewed. ja writes Default as 既定; zh reviewers decide the open zh terms.",
+  "rationale": "Let users work in their own language while every scientific output stays identical in all languages.",
+  "mustPreserve": "the English UI text and accessible names; the figure, every export, the Session, CLI / Source recipe / Exact replay text and diagnostics are identical in every language; the stored settings-pane display choice of PD-OI-093.",
+  "mayRetire": "PD-OI-093's limit of browser storage to one display choice; storage now holds that choice and the UI language.",
+  "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-19"
 }
 ```
 
