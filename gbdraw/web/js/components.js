@@ -9,7 +9,7 @@ import {
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
-import { textParts, uiLocale } from './utils/i18n.js';
+import { msg, t, textParts, uiLocale } from './utils/i18n.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
@@ -790,10 +790,10 @@ export const FileUploader = {
     const selectedLabel = computed(() => {
       const items = selectedFiles.value;
       if (items.length === 0) return '';
-      if (items.length === 1) return items[0]?.name || 'Selected file';
-      const firstNames = items.slice(0, 2).map((/** @type {{ name?: string }} */ file) => file?.name || 'file').join(', ');
+      if (items.length === 1) return items[0]?.name || t('Selected file');
+      const firstNames = items.slice(0, 2).map((/** @type {{ name?: string }} */ file) => file?.name || t('file')).join(', ');
       const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
-      return `${items.length} files: ${firstNames}${suffix}`;
+      return t('{count} files: {names}', { count: items.length, names: `${firstNames}${suffix}` });
     });
     const handleFile = (/** @type {{ target: HTMLInputElement }} */ e) => {
       const busy = state.sessionOperationAvailability();
@@ -813,9 +813,9 @@ export const FileUploader = {
         return await props.afterChange?.(nextFiles[0]);
       };
       if (props.artifactHistory) {
-        void history.runUndoableCheckpoint('Change uploaded file', apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
+        void history.runUndoableCheckpoint(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
       } else if (history?.runUndoable) {
-        void history.runUndoable('Change uploaded file', apply);
+        void history.runUndoable(msg('Change uploaded file'), apply);
       } else {
         update();
       }
@@ -837,9 +837,9 @@ export const FileUploader = {
         return await props.afterChange?.(removed);
       };
       if (props.artifactHistory) {
-        void history.runUndoableCheckpoint('Change uploaded file', apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
+        void history.runUndoableCheckpoint(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
       } else if (history?.runUndoable) {
-        void history.runUndoable('Change uploaded file', apply);
+        void history.runUndoable(msg('Change uploaded file'), apply);
       } else {
         emit('update:modelValue', props.multiple ? [] : null);
       }
@@ -926,10 +926,10 @@ export const OperationError = {
       try {
         if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
         await navigator.clipboard.writeText(text);
-        if (props.error === displayed) copyStatus.value = 'Diagnostics copied.';
+        if (props.error === displayed) copyStatus.value = t('Diagnostics copied.');
       } catch (_) {
         if (props.error !== displayed) return;
-        copyStatus.value = 'Clipboard unavailable. Select diagnostics and copy manually.';
+        copyStatus.value = t('Clipboard unavailable. Select diagnostics and copy manually.');
       }
     };
     return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus,

@@ -46,6 +46,7 @@ import {
   getFeatureIdentity,
   normalizeFeatureIdentity
 } from '../../services/feature-dom.js';
+import { t } from '../../utils/i18n.js';
 
 // The hover highlight of a feature or band is written once the pointer has
 // rested on it this long (OV-900, D-01): a pointer passing over bands writes
@@ -426,15 +427,15 @@ export const createFeatureSvgActions = ({
     /** @type {Array<[string, unknown, boolean?]>} */
     const rows = [];
 
-    if (gene && gene !== primaryLabel) rows.push(['Gene', gene]);
-    if (locusTag && locusTag !== primaryLabel) rows.push(['Locus', locusTag]);
-    if (product && product !== primaryLabel) rows.push(['Product', product, true]);
-    if (note && note !== primaryLabel && note !== product) rows.push(['Note', note, true]);
-    rows.push(['Length', formatFeatureLength(feat)]);
-    rows.push(['Location', locationText]);
-    rows.push(['Record', feat?.record_id || '']);
-    if (feat?.orthogroupId) rows.push(['Similarity group', feat.orthogroupId]);
-    if (legendName && legendName !== primaryLabel) rows.push(['Legend', legendName]);
+    if (gene && gene !== primaryLabel) rows.push([t('Gene'), gene]);
+    if (locusTag && locusTag !== primaryLabel) rows.push([t('Locus'), locusTag]);
+    if (product && product !== primaryLabel) rows.push([t('Product'), product, true]);
+    if (note && note !== primaryLabel && note !== product) rows.push([t('Note'), note, true]);
+    rows.push([t('Length'), formatFeatureLength(feat)]);
+    rows.push([t('Location'), locationText]);
+    rows.push([t('Record'), feat?.record_id || '']);
+    if (feat?.orthogroupId) rows.push([t('Similarity group'), feat.orthogroupId]);
+    if (legendName && legendName !== primaryLabel) rows.push([t('Legend'), legendName]);
     return rows;
   };
 
@@ -443,9 +444,9 @@ export const createFeatureSvgActions = ({
   // Similarity group section its group.
   /** @param {FeatureLike} feat */
   const buildDetailRows = (feat) => [
-    { key: 'type', label: 'Feature type', value: feat.type },
-    { key: 'length', label: 'Length', value: formatFeatureLength(feat) },
-    { key: 'protein_id', label: 'Protein ID', value: resolveFeatureProteinId(feat, feat?.orthogroupMember || feat?.orthogroup_member || null) }
+    { key: 'type', label: t('Feature type'), value: feat.type },
+    { key: 'length', label: t('Length'), value: formatFeatureLength(feat) },
+    { key: 'protein_id', label: t('Protein ID'), value: resolveFeatureProteinId(feat, feat?.orthogroupMember || feat?.orthogroup_member || null) }
   ]
     .map((row) => ({ ...row, value: row.value === null || row.value === undefined ? '' : String(row.value) }))
     .filter((row) => row.value !== '');
@@ -632,7 +633,7 @@ export const createFeatureSvgActions = ({
       orthogroupRepresentative: Boolean(feat.orthogroupRepresentative),
       orthogroupMember: feat.orthogroupMember || null,
       hasEditableLabel: false,
-      labelUnavailableReason: 'No editable feature label for this feature in current diagram.'
+      labelUnavailableReason: t('No editable feature label for this feature in current diagram.')
     };
   };
 
@@ -2118,7 +2119,7 @@ export const createFeatureSvgActions = ({
       if (element?.style) element.style.cursor = 'pointer';
       element.setAttribute('role', 'button');
       element.setAttribute('tabindex', '0');
-      element.setAttribute('aria-label', `Pairwise match ${index + 1}`);
+      element.setAttribute('aria-label', t('Pairwise match {n}', { n: index + 1 }));
     });
     delegatedFeatureHandlers.pairwiseAffordancesPrepared = true;
     return true;

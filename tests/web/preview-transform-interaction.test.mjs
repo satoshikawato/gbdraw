@@ -47,6 +47,7 @@ const copyModule = async (source, destination) => {
 };
 
 await copyModule('utils/error-normalization.js', 'utils/error-normalization.js');
+await copyModule('utils/i18n.js', 'utils/i18n.js');
 await copyModule('app/ui.js', 'app/ui.js');
 await copyModule('services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');

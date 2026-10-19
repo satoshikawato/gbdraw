@@ -69,6 +69,7 @@ for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache'
 // track-slot-display.js reads the generated size-class boundaries.
 await copyModule('gbdraw/web/js/mode-profiles.generated.js', 'mode-profiles.generated.js');
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
+await copyModule('gbdraw/web/js/utils/i18n.js', 'utils/i18n.js');
 await copyModule('gbdraw/web/js/utils/download-names.js', 'utils/download-names.js');
 const standaloneSource = await readFile(
   join(repoRoot, 'gbdraw/web/js/services/standalone-interactivity.js'),

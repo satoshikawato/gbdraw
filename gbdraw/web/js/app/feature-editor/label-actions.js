@@ -24,6 +24,7 @@ import {
   ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
   TICK_GROUPS, trackGroupSelector
 } from '../../services/drawn-groups.js';
+import { t } from '../../utils/i18n.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list.
@@ -952,8 +953,8 @@ export const createFeatureLabelActions = ({
     clickedFeature.value.labelUnavailableReason = editable
       ? ''
       : (featureId
-        ? 'Generate the diagram again to edit this feature\'s label.'
-        : 'No editable feature label for this feature in current diagram.');
+        ? t('Generate the diagram again to edit this feature\'s label.')
+        : t('No editable feature label for this feature in current diagram.'));
   };
 
   /**
@@ -1680,6 +1681,7 @@ export const createFeatureLabelActions = ({
       if (input.files?.[0] !== file || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
       if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
       const rows = parseLabelOverrideTsv(text);
+      const loadedRowsText = t('Loaded {count} row(s).', { count: rows.length });
 
       const svg = sourceSvg;
       const labels = svg ? labelImportTargets(drawing, svg) : [];
@@ -1696,17 +1698,17 @@ export const createFeatureLabelActions = ({
       // change. An edit of the label intent stays; it is named first, since
       // it also redraws the diagram and makes the rule preparation stale.
       const changed = labelIntent !== labelIntentSignature(drawing)
-        ? 'a label or feature visibility edit was made while the table loaded. The edit was kept'
+        ? t('Not applied: a label or feature visibility edit was made while the table loaded. The edit was kept. Load the table again.')
         : (svgContainer.value?.querySelector('svg') || null) !== sourceSvg
-          ? 'the displayed diagram changed while the table loaded'
+          ? t('Not applied: the displayed diagram changed while the table loaded. Load the table again.')
           : !rulePreparation.isCurrent(before)
-            ? `${RULE_INPUT_CHANGE_WORDS} changed while the table loaded` : '';
+            ? t('Not applied: {inputs} changed while the table loaded. Load the table again.', { inputs: RULE_INPUT_CHANGE_WORDS }) : '';
       if (changed) {
-        showNotice({ text: `Loaded ${rows.length} row(s). Not applied: ${changed}. Load the table again.`, tone: 'warning' });
+        showNotice({ text: `${loadedRowsText} ${changed}`, tone: 'warning' });
         return;
       }
       if (!svg) {
-        showNotice({ text: `Loaded ${rows.length} row(s). No diagram is shown, so nothing was applied.`, tone: 'warning' });
+        showNotice({ text: `${loadedRowsText} ${t('No diagram is shown, so nothing was applied.')}`, tone: 'warning' });
         return;
       }
       // A `location` or `record_location` row cannot be decided for a label
@@ -1720,10 +1722,8 @@ export const createFeatureLabelActions = ({
         && (row.featureType === '*' || row.featureType === String(/** @type {LabelFeature} */ (feature).type ?? ''))
       ))).length;
       if (undecided > 0) {
-        showNotice({ text: `Loaded ${rows.length} row(s). Not applied.`, items: [
-          `location and record_location rows cannot be matched to ${undecided} label(s) on cropped, `
-            + 'reverse-complemented, or rotated records until the diagram records where it drew them. '
-            + 'Generate the diagram again, then load the table.'
+        showNotice({ text: `${loadedRowsText} ${t('Not applied.')}`, items: [
+          t('location and record_location rows cannot be matched to {count} label(s) on cropped, reverse-complemented, or rotated records until the diagram records where it drew them. Generate the diagram again, then load the table.', { count: undecided })
         ] });
         return;
       }
@@ -1746,10 +1746,10 @@ export const createFeatureLabelActions = ({
         return [{ entry, matchedRow, tracked }];
       });
       if (applicable.length === 0) {
-        showNotice({ text: `Loaded ${rows.length} row(s). Not applied; the existing label edits were kept.`, items: [
+        showNotice({ text: `${loadedRowsText} ${t('Not applied; the existing label edits were kept.')}`, items: [
           skippedNonTrackableCount > 0
-            ? `The ${skippedNonTrackableCount} matched label(s) lacked a feature key.`
-            : 'No row matched a label of the diagram.'
+            ? t('The {count} matched label(s) lacked a feature key.', { count: skippedNonTrackableCount })
+            : t('No row matched a label of the diagram.')
         ] });
         return;
       }
@@ -1768,9 +1768,9 @@ export const createFeatureLabelActions = ({
       closeHiddenLabelTextDialog();
       queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
 
-      const message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
+      const message = `${loadedRowsText} ${t('Applied to {count} label(s).', { count: applicable.length })}`;
       const skipped = skippedNonTrackableCount > 0
-        ? [`${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`]
+        ? [t('{count} match(es) lacked a feature key and were not applied.', { count: skippedNonTrackableCount })]
         : [];
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;
@@ -1801,7 +1801,7 @@ export const createFeatureLabelActions = ({
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
           normalizeTsvCell(drawing.labelTextBulkOverrides[sourceText])}`);
     if (rows.length === 0) {
-      showNotice({ text: 'There are no label rules to export. Export Feature Edits TSV writes per-feature label edits.' });
+      showNotice({ text: `${t('There are no label rules to export.')} ${t('Export Feature Edits TSV writes per-feature label edits.')}` });
       return;
     }
     const selectedIdx = selectedResultIndex.value;

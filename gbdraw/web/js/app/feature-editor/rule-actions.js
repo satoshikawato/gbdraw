@@ -4,6 +4,7 @@
 /** @import { RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
+import { msg, t } from '../../utils/i18n.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { runWhenPrepared } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
@@ -353,7 +354,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * @param {string} [label]
    * @param {CommitSpecificRulesOptions} [options]
    */
-  const commitSpecificRules = (build, label = 'Change specific color rules', options = {}) => {
+  const commitSpecificRules = (build, label = msg('Change specific color rules'), options = {}) => {
     const drawing = options.drawing || state.activeDrawing();
     return queueRuleWrite(() => runSpecificRuleWrite(drawing, build, label, options));
   };
@@ -557,7 +558,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const current = () => patternDrafts.isCurrent(row, token) && isPatternEditAvailable();
       try {
         const applied = await runSpecificRuleWrite(drawing, reviseRow(row, { val: String(value ?? ''), fromFile: false }),
-          'Edit specific color rule', { isCurrent: current });
+          msg('Edit specific color rule'), { isCurrent: current });
         if (applied && patternDrafts.isCurrent(row, token)) patternDrafts.revert(row);
         return applied;
       } catch (cause) {
@@ -592,7 +593,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     if (!current) return;
     if (field === 'val') return applySpecificRulePattern(drawing, current, value);
     const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
-    return commitPrepared(drawing, reviseRow(current, { [field]: nextValue, fromFile: false }), 'Edit specific color rule', () => {}, input).finally(() => {
+    return commitPrepared(drawing, reviseRow(current, { [field]: nextValue, fromFile: false }), msg('Edit specific color rule'), () => {}, input).finally(() => {
       if (input?.isConnected && drawing.manualSpecificRules.includes(current)) input.value = current[field] ?? '';
     });
   };
@@ -610,14 +611,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       rows.splice(from, 1);
       rows.splice(target, 0, row);
       return rows;
-    }, 'Move specific color rule');
+    }, msg('Move specific color rule'));
   };
 
   const downloadSpecificRulesTsv = () => {
     const drawing = state.activeDrawing();
     const text = serializeSpecificRules(drawing.manualSpecificRules);
     if (!text.trim()) {
-      showNotice({ text: 'There are no color rules to export.' });
+      showNotice({ text: t('There are no color rules to export.') });
       return;
     }
     downloadTextFile('gbdraw_specific_rules.tsv', text);
@@ -775,18 +776,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     // One question names every reason the pattern may match slowly.
     const pattern = String(newSpecRule.val);
     const risks = [
-      pattern.length > 50 ? 'It is longer than 50 characters.' : '',
+      pattern.length > 50 ? t('It is longer than 50 characters.') : '',
       /\(.+[\+\*]\)[\+\*]/.test(pattern) || /\(.*\)\+/.test(pattern)
-        ? 'It repeats a group, as in (a+)+, which can make the page stop responding.'
+        ? t('It repeats a group, as in (a+)+, which can make the page stop responding.')
         : ''
     ].filter(Boolean);
     if (risks.length > 0) {
       const choice = await askChoice({
-        title: 'Add this color rule?',
-        description: 'This pattern may make color matching slow:',
+        title: t('Add this color rule?'),
+        description: t('This pattern may make color matching slow:'),
         items: risks,
-        actions: [{ id: 'add', label: 'Add rule', tone: 'primary' }],
-        cancelLabel: 'Edit pattern'
+        actions: [{ id: 'add', label: t('Add rule'), tone: 'primary' }],
+        cancelLabel: t('Edit pattern')
       });
       if (choice !== 'add' || newSpecRule.val !== pattern) return;
       const busy = state.sessionOperationAvailability?.();
@@ -800,7 +801,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       color: String(newSpecRule.color || '#000000'),
       cap: String(newSpecRule.cap || '')
     };
-    return commitPrepared(drawing, (current) => [...current, rule], 'Add specific color rule', () => {
+    return commitPrepared(drawing, (current) => [...current, rule], msg('Add specific color rule'), () => {
       if (newSpecRule.val === rule.val) newSpecRule.val = '';
     }, document.querySelector?.('[data-new-specific-rule-pattern]'));
   };
@@ -815,7 +816,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const importSpecificRules = async (text, { drawing = state.activeDrawing(), isCurrent = () => true } = {}) => {
     const { importedCount } = prepareSpecificColorImport(text);
     const applied = await commitSpecificRules((current) => prepareSpecificColorImport(text, [...current]).nextRules,
-      'Import specific color rules', { drawing, isCurrent });
+      msg('Import specific color rules'), { drawing, isCurrent });
     return applied === true ? importedCount : false;
   };
   // OV-1280 (D-19): Remove on the Specific rules card takes back the rows its
@@ -849,7 +850,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const removeImportedSpecificRules = (drawing) => {
     if (!drawing.manualSpecificRules.some((/** @type {SpecificColorRule} */ rule) => isCardRow(rule, 't_color'))) return Promise.resolve(true);
     if (drawing === state.activeDrawing()) {
-      return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), 'Remove specific rules file', { drawing });
+      return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), msg('Remove specific rules file'), { drawing });
     }
     return queueRuleWrite(async () => {
       takeBackFileRulesOfHiddenDrawing(drawing);
@@ -866,7 +867,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     if (!presetId) return;
     const preset = specificRulePresets.find((/** @type {{ id: string, path: string }} */ entry) => entry.id === presetId);
     if (!preset) {
-      showNotice({ text: 'That rule preset is not available.', tone: 'warning' });
+      showNotice({ text: t('That rule preset is not available.'), tone: 'warning' });
       return;
     }
 
@@ -883,7 +884,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
         const text = await response.text();
         const { rules } = parseSpecificRules(text);
         if (selectedSpecificPreset.value !== presetId || !rulePreparation.isCurrent(presetContext)) return;
-        return await runSpecificRuleWrite(drawing, () => rules, 'Apply specific color preset', {
+        return await runSpecificRuleWrite(drawing, () => rules, msg('Apply specific color preset'), {
           isCurrent: () => selectedSpecificPreset.value === presetId,
           afterCommit: () => {
             if (presetId === 'bakta') {
@@ -1118,7 +1119,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     canEditFeatureColor,
     clearAllSpecificRules: () => {
       const drawing = state.activeDrawing();
-      return commitPrepared(drawing, () => [], 'Clear specific color rules');
+      return commitPrepared(drawing, () => [], msg('Clear specific color rules'));
     },
     commitSpecificRules,
     importSpecificRules,
@@ -1157,7 +1158,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const drawing = state.activeDrawing();
       const row = drawing.manualSpecificRules[index];
       return commitPrepared(drawing, (current) => (current.includes(row) ? current.filter(rule => rule !== row) : null),
-        'Remove specific color rule');
+        msg('Remove specific color rule'));
     },
     setSpecificRuleField
   };

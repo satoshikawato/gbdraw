@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
 /** @import { FileImports, PriorityRuleRow } from './services/file-imports.js' */
-import { msg, t } from './utils/i18n.js';
+import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
 import { DEFAULT_LINEAR_RECORD_GAP_PX } from './services/config-field-readers.js';
@@ -902,12 +902,12 @@ const featureListBottomSpacerPx = computed(
 const featureEditorStatusText = computed(() => {
   const count = Number(featureEditorStatus.summaryCount || extractedFeatures.value.length || 0);
   if (featureEditorStatus.status === 'pending-summary' || featureExtractionPending.value) {
-    return count > 0 ? t('{count} features updating...', { count: count.toLocaleString() }) : t('Preparing features...');
+    return count > 0 ? t('{count} features updating...', { count: count.toLocaleString('en-US') }) : t('Preparing features...');
   }
   if (featureEditorStatus.status === 'failed' || featureExtractionError.value) {
     return t('Feature editor unavailable');
   }
-  if (count > 0) return t('{count} features ready', { count: count.toLocaleString() });
+  if (count > 0) return tn(count, '{count} feature ready', '{count} features ready', { count: count.toLocaleString('en-US') });
   return t('No features ready');
 });
 
