@@ -152,7 +152,14 @@ for (const width of [1440, 390]) {
       await generate(page);
       expect((await inspect(page, mode)).svg).toBe(control.svg);
       // Save an inactive row while keeping the last Result and canonical committed request.
-      await row.getByTitle('Enabled', { exact: true }).uncheck();
+      // Save refuses a stack whose enabled row names a disabled slot, so a row
+      // that extends to or anchors on the GC track (the Circular tint,
+      // `to_slot=gc_content`) is turned off and on with it.
+      const linked = (await inspect(page, mode)).slots.filter(slot => slot.enabled !== false
+        && [slot.params?.to_slot, slot.params?.anchor_slot].includes('gc_content')).map(slot => slot.id);
+      for (const id of [...linked, 'gc_content']) {
+        await page.locator(`[data-capture="${mode}-track-slot-${id}"]`).getByTitle('Enabled', { exact: true }).uncheck();
+      }
       const sessionPath = testInfo.outputPath('pixel.gbdraw-session.json.gz');
       const savedBytes = await download(page, 'Save Session', sessionPath);
       const saved = JSON.parse(gunzipSync(savedBytes));
@@ -171,6 +178,9 @@ for (const width of [1440, 390]) {
       await openStack(restored, mode);
       const restoredRow = restored.locator(`[data-capture="${mode}-track-slot-gc_content"]`);
       await restoredRow.getByTitle('Disabled', { exact: true }).check();
+      for (const id of linked) {
+        await restored.locator(`[data-capture="${mode}-track-slot-${id}"]`).getByTitle('Disabled', { exact: true }).check();
+      }
       await generate(restored);
       expect((await inspect(restored, mode)).svg).toBe(control.svg);
       await fs.writeFile(testInfo.outputPath('pixel-evidence.json'), JSON.stringify({ seed, width, mode, sourceFeatures: source.features, controlRequest: control.request, geometry: control.geometry, savedVersion: saved.version, restoredRunsBeforeGenerate: 0, externalRequests: page.externalRequests }, null, 2));

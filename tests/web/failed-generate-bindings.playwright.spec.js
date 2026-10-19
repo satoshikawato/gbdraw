@@ -66,7 +66,8 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
   });
   const before = await snapshot(page);
   expect(before.positions).toEqual([]);
-  expect(before.annotations).toHaveLength(4);
+  // The four named plastome regions and their four tints.
+  expect(before.annotations).toHaveLength(8);
   expect(before.annotations.every(annotation => annotation.key === null)).toBe(true);
   const beforeFile = info.outputPath('before.gbdraw-session.json.gz');
   const beforeSaved = await save(page, beforeFile);

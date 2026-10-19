@@ -112,11 +112,17 @@ for (const [name, file] of [['tobacco', TOBACCO], ['hepa', HEPA]]) {
   });
 }
 
-// Review F1: the Gallery Session's request has no `configOverrides`; a live
-// value creates them, as a Generate from the same draft sends them.
-test('tobacco: a loaded Session applies a Legend font size with no Generate', async ({ browser }) => {
+// Review F1: a Session whose request has no `configOverrides` (as older CLI
+// Sessions are); a live value creates them, as a Generate from the same draft
+// sends them. The Gallery Session holds its command line's overrides, so the
+// case removes them.
+test('tobacco: a loaded Session applies a Legend font size with no Generate', async ({ browser }, testInfo) => {
   test.setTimeout(600_000);
-  const page = await load(browser, TOBACCO);
+  const session = JSON.parse(readFileSync(TOBACCO, 'utf8'));
+  delete session.renderRequest.diagramOptions.configOverrides;
+  const file = testInfo.outputPath('no-overrides.gbdraw-session.json');
+  writeFileSync(file, JSON.stringify(session));
+  const page = await load(browser, file);
   try {
     await settleLive(page);
     const before = await facts(page);

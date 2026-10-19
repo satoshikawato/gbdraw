@@ -152,7 +152,9 @@ import json,sys,xml.etree.ElementTree as E
 from gbdraw.session import materialize_session,render_session
 with materialize_session(sys.argv[1],output_directory=sys.argv[2]) as session:
  result=render_session(session)
- root=E.fromstring(result.drawing.tostring())
+ # The Gallery Session keeps its command line's grouping: one Circular diagram per record.
+ [drawing]=getattr(result,'drawings',None) or (result.drawing,)
+ root=E.fromstring(drawing.tostring())
  captions={n.get('data-legend-key'):next((p.get('fill') for p in n.iter() if p.tag.endswith('path') and p.get('fill') not in (None,'none')),None) for n in root.iter() if n.get('data-legend-key')}
  print(json.dumps({'captions':captions,'rules':result.request.options.colors.color_table['caption'].tolist()}))
 `,sessionPath,testInfo.outputPath('native')],{encoding:'utf8',maxBuffer:4*1024*1024}));
