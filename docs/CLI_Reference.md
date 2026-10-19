@@ -25,6 +25,14 @@ The current boolean spelling is symmetric in both modes:
 `--depth_track`. Current multiword long options otherwise use the underscore
 spelling shown below.
 
+`--label_blacklist` has no default in either mode: unless you pass keywords,
+the CLI hides no labels by keyword. The Web app also hides none until you
+choose **Blacklist**, whose keyword box starts as
+`hypothetical, uncharacterized, putative, unknown`. The Python API applies
+those keywords by default, from the packaged `config.toml`. Pass
+`--label_blacklist "hypothetical,uncharacterized,putative,unknown"` to apply
+them in the CLI.
+
 For retired options, the two remaining aliases, and how saved Sessions are
 rewritten, see [Retired inputs](./REFERENCE/session-and-request-compatibility.md#retired-inputs).
 
