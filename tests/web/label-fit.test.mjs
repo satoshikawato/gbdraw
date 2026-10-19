@@ -3,6 +3,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { t } from '../../gbdraw/web/js/utils/i18n.js';
+
 globalThis.window = {
   Vue: {
     ref: (value) => ({ value }),
@@ -73,7 +75,7 @@ test('the notice bar shows Python\'s sentences and has no wording of its own', a
   assert.throws(() => normalizeReport({ ...report([]), notice: [5] }), invalid);
   assert.throws(() => normalizeReport({ ...report([]), notice: undefined }), invalid);
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  const bar = html.slice(html.indexOf('data-testid="label-fit-notice"'), html.indexOf('Choose a fix</button>'));
+  const bar = html.slice(html.indexOf('data-testid="label-fit-notice"'), html.indexOf("{{ t('Choose a fix') }}</button>"));
   assert.match(bar, /labelFitNotice\.report\.notice/);
   assert.doesNotMatch(bar, /Leader lines cross|definition text|'pairs'/);
 });
@@ -132,7 +134,7 @@ test('a region label report carries its count, and its notice offers no fix with
   const invalid = (error) => error.code === 'RESULT_INVALID';
   assert.throws(() => normalizeReport({ ...regionReport(), regionOverlaps: -1 }), invalid);
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  assert.match(html, /<button v-if="labelFitNotice\.report\.rows\.length" [^>]*@click="openLabelFitNotice">Choose a fix<\/button>/);
+  assert.match(html, /<button v-if="labelFitNotice\.report\.rows\.length" [^>]*@click="openLabelFitNotice">\{\{ t\('Choose a fix'\) \}\}<\/button>/);
 });
 
 test('a Result\'s report names that Result by index and name', () => {
@@ -344,11 +346,11 @@ const choiceDialogStatus = async () => {
   const template = html.slice(start, html.indexOf('</script>', start));
   const lines = [...template.matchAll(/<p v-if="busy" role="status"[^>]*>\{\{ (.+?) \}\}<\/p>/g)].map((match) => match[1]);
   assert.equal(lines.length, 1, 'the choice dialog has one busy status line');
-  const bindings = new Function('dialogChoicePending', 'labelFitDialog', `return [${busy}, ${busyStatus}];`);
-  const text = new Function('busyStatus', `return ${lines[0]};`);
+  const bindings = new Function('dialogChoicePending', 'labelFitDialog', 't', `return [${busy}, ${busyStatus}];`);
+  const text = new Function('busyStatus', 't', `return ${lines[0]};`);
   return (/** @type {boolean} */ pending, /** @type {object} */ dialog) => {
-    const [isBusy, status] = bindings(pending, dialog);
-    return isBusy ? [text(status)] : [];
+    const [isBusy, status] = bindings(pending, dialog, t);
+    return isBusy ? [text(status, t)] : [];
   };
 };
 

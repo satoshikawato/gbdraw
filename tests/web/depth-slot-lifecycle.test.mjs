@@ -251,7 +251,7 @@ for (const [mode, adapter] of Object.entries(MODES)) {
 test('Depth legend label help says it renames the series and what a blank gives (TK-08)', async () => {
   const { readFile } = await import('node:fs/promises');
   const html = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
-  const tips = [...html.matchAll(/<help-tip :id="`help-(?:circular|linear)-(?:slot-depth-legend-label|depth-legend-title)-\$\{[a-z.]+\}`" text="([^"]*)"/g)]
+  const tips = [...html.matchAll(/<help-tip :id="`help-(?:circular|linear)-(?:slot-depth-legend-label|depth-legend-title)-\$\{[a-z.]+\}`" :text="t\('((?:[^'\\]|\\.)*)'\)"/g)]
     .map((match) => match[1]);
   assert.equal(tips.length, 4);
   for (const text of tips) {

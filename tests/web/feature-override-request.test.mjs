@@ -95,7 +95,7 @@ test('the Labels panel shows priority, text settings, and geometry by that rule,
   const block = html.slice(start, html.indexOf('</details>', start));
   const scope = "(mode === 'linear' ? form.show_labels_linear : form.labels_mode)";
   const sectionTag = (heading) => {
-    const at = block.indexOf(`aria-label="${heading}"`);
+    const at = block.indexOf(`:aria-label="t('${heading}')"`);
     assert.ok(at > 0, heading);
     return block.slice(block.lastIndexOf('<div', at), block.indexOf('>', block.lastIndexOf('<div', at)) + 1);
   };

@@ -1223,7 +1223,7 @@ test('the Custom direction select reads its record by own key (OV-572)', async (
   await startReview(f);
   f.actions.setDirectionMode('custom');
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  const binding = html.match(/:value="([^"]+)"\s+:aria-label="'Direction for ' \+ card\.direction\.label"/)?.[1];
+  const binding = html.match(/:value="([^"]+)"\s+:aria-label="t\('Direction for \{record\}', \{ record: card\.direction\.label \}\)"/)?.[1];
   assert.ok(binding, 'the Custom direction select is found');
   const selectValue = new Function(
     'similarityAlignmentDraft', 'similarityAlignmentCustomDirection', 'card', `return (${binding});`

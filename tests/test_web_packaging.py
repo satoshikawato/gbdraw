@@ -21,6 +21,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+from tests.utils.web_markup import read_english_index
 
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
@@ -362,7 +363,7 @@ def test_web_asset_notices_name_only_files_the_package_ships() -> None:
 
 @pytest.mark.gallery
 def test_index_links_to_hosted_interactive_gallery() -> None:
-    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    index_html = read_english_index(WEB_ROOT / "index.html")
     assert "Interactive Gallery" in index_html
     assert "./gallery/" not in index_html
 

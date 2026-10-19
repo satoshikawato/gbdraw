@@ -9,6 +9,8 @@ import warnings
 from Bio import SeqIO
 import pytest
 
+from tests.utils.web_markup import read_english_index
+
 from gbdraw.api import (
     CircularDiagramOptions,
     CircularDiagramRequest,
@@ -142,7 +144,7 @@ def test_every_control_a_row_names_has_that_accessible_name() -> None:
 
     from gbdraw.web_support import label_fit
 
-    html = (Path(__file__).parents[1] / "gbdraw" / "web" / "index.html").read_text(encoding="utf-8")
+    html = read_english_index(Path(__file__).parents[1] / "gbdraw" / "web" / "index.html")
     names = {name for name, _ in label_fit._SETTING_NAMES.values()}
     names |= {name for name, _ in label_fit._MODE_SETTING_NAMES.values()}
     for name in sorted(names):

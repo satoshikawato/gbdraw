@@ -9,10 +9,12 @@ import {
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
+import { textParts, uiLocale } from './utils/i18n.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
+/** @import { TranslationParams } from './utils/i18n.js' */
 /** @import { SettingApplicationId } from './services/setting-application.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
@@ -107,15 +109,30 @@ const visibleText = (node) => {
 
 // R12 (UI-04): a tip is named after what it explains, "Help: <label>": the
 // author name or visible text of the element that holds it, after the name of
-// the row group it is in. `label` names a tip whose holder has no such text;
+// the row group it is in (this function). The name comes from the page text,
+// so the tip reads it when it mounts and again after a UI locale switch has
+// re-rendered the page. `label` names a tip whose holder has no such text;
 // the layout warning beside Generate is named "Layout warning" (not help).
 /** @param {Element | null} tip */
 const helpTipName = (tip) => {
   const holder = tip?.parentElement;
   const group = holder?.closest('[role="group"][aria-label]')?.getAttribute('aria-label') || '';
   const label = holder?.getAttribute('aria-label') || (holder ? visibleText(holder) : '');
-  const name = `${group} ${label}`.replace(/\s+/g, ' ').trim();
-  return name ? `Help: ${name}` : 'Help';
+  return `${group} ${label}`.replace(/\s+/g, ' ').trim();
+};
+
+// A sentence with elements inside it, kept as one translation key (D-04 of the
+// translation work): `text` is the shown text of the key, `t('…')` without
+// values; a `{name}` placeholder with a slot of that name shows the slot, and
+// `params` fill the others (`textParts`). Registered globally in app.js.
+export const I18nText = {
+  props: { text: { type: String, required: true }, params: { type: Object, default: null } },
+  /**
+   * @param {{ text: string, params: TranslationParams | null }} props
+   * @param {{ slots: Readonly<Record<string, (() => unknown[]) | undefined>> }} context
+   */
+  setup: (props, { slots }) => () => textParts(props.text, Object.keys(slots), props.params ?? undefined)
+    .flatMap((part) => ('slot' in part ? (slots[part.slot]?.() ?? []) : [part.text]))
 };
 
 // Loading indicator (Owner decision 2026-10-11): the logo drawn in one stroke. The markup and the
@@ -147,7 +164,7 @@ export const HelpTip = {
   setup(props) {
     const automaticId = `help-tip-${useId()}`;
     const descriptionId = computed(() => props.id || automaticId);
-    const name = ref('Help');
+    const name = ref('');
     const hovered = ref(false);
     const keyboardFocus = ref(false);
     const pinned = ref(false);
@@ -198,7 +215,9 @@ export const HelpTip = {
       pinned.value = false;
     };
     const toggle = () => { pinned.value = !pinned.value; };
-    onMounted(() => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); });
+    const readName = () => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); };
+    onMounted(readName);
+    watch(uiLocale, () => nextTick(readName));
     return { descriptionId, name, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
   }
 };
@@ -656,12 +675,10 @@ export const DefaultColorScopeLine = {
   props: { line: { type: Object, required: true } },
   template: `
     <span data-default-color-scope-sentence>
-      <template v-if="line.kind === 'replaces'">
-        Replaces your {{ line.type }} default color
-        <span class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span>
-        <span class="font-mono">{{ line.color }}</span>.
-      </template>
-      <template v-else>Sets the {{ line.type }} default color ({{ line.type }} features without their own color or rule, also hidden ones).</template>
+      <i18n-text v-if="line.kind === 'replaces'" :text="t('Replaces your {type} default color {color}.')" :params="{ type: line.type }">
+        <template #color><span class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span><span class="font-mono">{{ line.color }}</span></template>
+      </i18n-text>
+      <template v-else>{{ t('Sets the {type} default color ({type} features without their own color or rule, also hidden ones).', { type: line.type }) }}</template>
     </span>
   `
 };
@@ -671,7 +688,7 @@ export const ColorValueControl = {
     modelValue: { default: null },
     fallback: { type: String, default: '#000000' },
     allowNone: { type: Boolean, default: true },
-    ariaLabel: { type: String, default: 'Color value' },
+    ariaLabel: { type: String, default: '' },
     ariaDescribedby: { type: String, default: null }
   },
   emits: ['update:modelValue'],
@@ -719,12 +736,12 @@ export const ColorValueControl = {
         :disabled="!controlAvailable"
         @change="updateMode"
         class="form-input form-input-compact min-w-0"
-        :aria-label="\`\${ariaLabel} mode\`"
+        :aria-label="t('{name} mode', { name: ariaLabel || t('Color value') })"
         :aria-describedby="ariaDescribedby"
       >
-        <option value="auto">Auto</option>
-        <option v-if="allowNone" value="none">None</option>
-        <option value="color">Color</option>
+        <option value="auto">{{ t('Auto') }}</option>
+        <option v-if="allowNone" value="none">{{ t('None') }}</option>
+        <option value="color">{{ t('Color') }}</option>
       </select>
       <input
         type="color"
@@ -732,7 +749,7 @@ export const ColorValueControl = {
         @input="updateColor"
         :disabled="!controlAvailable || mode !== 'color'"
         class="h-8 w-full p-0 border rounded disabled:opacity-40"
-        :aria-label="ariaLabel"
+        :aria-label="ariaLabel || t('Color value')"
         :aria-describedby="ariaDescribedby"
       >
     </div>
@@ -934,7 +951,7 @@ export const SpecificRuleRows = {
 // field; nothing when the text has no markup.
 export const MarkupPreview = {
   props: ['text'],
-  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">Preview: </span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
+  template: `<p v-if="segments.length" class="markup-preview" :title="segments.map((part) => part.text).join('')" data-markup-preview><span class="sr-only">{{ t('Preview:') + ' ' }}</span><span v-for="(part, index) in segments" :key="index" :class="{ italic: part.italic }">{{ part.text }}</span></p>`,
   /** @param {{ text?: string | null }} props */
   setup(props) {
     return { segments: computed(() => italicSegments(props.text)) };

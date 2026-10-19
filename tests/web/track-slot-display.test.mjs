@@ -575,8 +575,8 @@ test('an empty slot dinucleotide field shows the dinucleotide of the drawing in 
 
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   for (const [label, binding] of [
-    ['`Circular track slot ${entry.slot.id} Track dinucleotide`', 'circularDrawingDinucleotide()'],
-    ['`Linear track slot ${entry.slot.id} Track dinucleotide`', 'linearDrawingDinucleotide()']
+    ["t('Circular track slot {id} Track dinucleotide', { id: entry.slot.id })", 'circularDrawingDinucleotide()'],
+    ["t('Linear track slot {id} Track dinucleotide', { id: entry.slot.id })", 'linearDrawingDinucleotide()']
   ]) {
     const at = html.indexOf(label);
     assert.ok(at > 0, label);

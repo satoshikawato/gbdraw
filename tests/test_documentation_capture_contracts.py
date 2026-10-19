@@ -12,6 +12,7 @@ from PIL import Image
 
 from docs.capture.assertions.svg_semantics import parse_translate_chain
 from docs.capture.config import chapter_for
+from tests.utils.web_markup import read_english_index
 
 pytestmark = pytest.mark.recipe
 
@@ -693,7 +694,7 @@ def test_gui_circular_layout_flow_uses_complete_records_and_public_controls() ->
 def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
     source = GUI_LOSATN_FLOW_PATH.read_text(encoding="utf-8")
     shared_source = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
-    index_source = WEB_INDEX_PATH.read_text(encoding="utf-8")
+    index_source = read_english_index(WEB_INDEX_PATH)
 
     assert 'aria-label="Comparison match height"' in index_source
 
