@@ -3193,14 +3193,15 @@ export const createAppSetup = () => {
   const artifactSlots = { circular: null, linear: null };
   // OV-1280: the kept Results whose drawing changed its rules while it was not
   // shown (a file card's Remove), drawn again when shown. Keyed by the Result,
-  // so a Load or a Generate, which keeps another Result, drops the request.
+  // so a Load or a Generate, which keeps another Result, drops the request; the
+  // raw object, as the slot keeps it (the shown Result is read through Vue).
   /** @type {WeakSet<object>} */
   const keptResultsToRedraw = new WeakSet();
   /** @param {DrawingState} drawing Not shown. */
   const redrawWhenShown = (drawing) => {
     const slot = artifactSlots[drawing === state.drawings.linear ? 'linear' : 'circular'];
     const kept = slot ? slot.values.results[slot.values.selectedResultIndex] : null;
-    if (kept) keptResultsToRedraw.add(kept);
+    if (kept) keptResultsToRedraw.add(toRaw(kept));
   };
   // The Results of both modes. The per-Result caches (Legend inventories,
   // retired Legend entries, projected editor state) keep a stashed Result's
@@ -3361,7 +3362,7 @@ export const createAppSetup = () => {
       // OV-1280: a Result a mode switch shows again is drawn again when its
       // drawing asked for it while it was not shown (`redrawWhenShown`).
       if (context.bindingOptions.modeArrival
-        && keptResultsToRedraw.delete(results.value[Number(selectedResultIndex.value) || 0])) {
+        && keptResultsToRedraw.delete(toRaw(results.value[Number(selectedResultIndex.value) || 0]))) {
         featureActions.requestAutomaticRerender();
       }
       // D-36: a label rerender pays the redraw its drawing owes when, as its
