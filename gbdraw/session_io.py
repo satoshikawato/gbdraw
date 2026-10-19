@@ -9,7 +9,6 @@ import base64
 import binascii
 import copy
 import csv
-import functools
 import gzip
 import hashlib
 import io
@@ -17,7 +16,6 @@ import json
 import math
 import os
 import re
-import sys
 import tempfile
 import zlib
 from dataclasses import dataclass
@@ -48,7 +46,7 @@ from .core.numeric import (
 )
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
-from .io.colors import is_user_color, named_color_hex
+from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import OutputExistsError, commit_staged_output_file
@@ -2990,18 +2988,6 @@ def _normalize_palette_colors(colors: Mapping[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-@functools.cache
-def _color_palettes() -> dict[str, Any]:
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
-    from importlib import resources
-
-    with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as handle:
-        return tomllib.load(handle)
-
-
 def _palette_colors(name: object) -> dict[str, Any]:
     """A palette's normalized colors, or none (``paletteColorsFromDefinitions``).
 
@@ -3011,10 +2997,10 @@ def _palette_colors(name: object) -> dict[str, Any]:
     """
 
     palette = _js_text(name)
-    colors = _color_palettes().get(palette) if palette != "title" else None
-    if not isinstance(colors, Mapping) or not colors:
+    colors = packaged_color_palettes().get(palette)
+    if not colors:
         return {}
-    return _normalize_palette_colors({str(key): str(value) for key, value in colors.items()})
+    return _normalize_palette_colors(dict(colors))
 
 
 def _merges_override_colors(config: object) -> bool:

@@ -102,6 +102,7 @@ from .cli_utils.common import (
     setup_logging,
     validate_input_args,
     validate_label_args,
+    validate_output_choice_args,
     handle_output_formats,
 )
 from .cli_utils.session import (
@@ -856,6 +857,8 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
+    if not _legacy_session:
+        validate_output_choice_args(args)
     if args.records_table:
         for option_name in (
             "record_label",

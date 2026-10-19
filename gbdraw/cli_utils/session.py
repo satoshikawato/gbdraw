@@ -25,6 +25,7 @@ from gbdraw.io.cli_tables import (
 )
 from gbdraw.render.formats import (
     SVG_FORMAT,
+    parse_output_formats,
     resolve_format_output_path,
     resolve_output_paths,
 )
@@ -135,6 +136,12 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _format_override(value: str | None) -> str | None:
+    """Read a ``-f/--format`` override typed with ``--session`` (OV-1244)."""
+
+    return None if value is None else ",".join(parse_output_formats(value))
+
+
 def parse_session_pre_args(
     cmd_args: Sequence[str],
     *,
@@ -180,7 +187,7 @@ def parse_session_pre_args(
     return SessionCliRequest(
         session_path=str(namespace.session),
         output=namespace.output,
-        format=namespace.format,
+        format=_format_override(namespace.format),
         overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
@@ -269,7 +276,7 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
     return SessionCliRequest(
         session_path=str(namespace.session),
         output=namespace.output,
-        format=namespace.format,
+        format=_format_override(namespace.format),
         overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,

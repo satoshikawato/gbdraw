@@ -271,7 +271,12 @@ names keep the given letters in upper case, for example `AU skew`. Font sizes
 must be greater than zero and stroke widths zero or greater; offsets, spacing,
 `track_axis_gap`, and label rotation keep their current ranges. A rejected
 value stops with an `ERROR:` line that names the option or setting instead of
-drawing an empty or flat track or printing a traceback.
+drawing an empty or flat track or printing a traceback. An unknown `-f/--format`
+token or `-p/--palette` name, or a palette name in `FeatureOptions(palette=...)`,
+stops with an error that lists the accepted values; nothing is written. A
+saved Session that stores an unknown palette name still draws with the default
+palette, and a Session 27-30 whose saved arguments hold an unknown format token
+still replays without it.
 
 ## Rotate a plastome and place a multipart feature
 

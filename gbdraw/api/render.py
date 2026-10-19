@@ -19,7 +19,7 @@ from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
     SVG_FORMAT,
     classify_formats,
-    normalize_format_sequence,
+    parse_output_formats,
     normalize_format_token,
     resolve_format_output_path,
     resolve_output_paths,
@@ -56,7 +56,7 @@ def _font_embedding(svg_source: str, embed_fonts: bool) -> FontEmbedding:
 
 
 def _normalize_formats(formats: Sequence[str] | str | None) -> list[str]:
-    return normalize_format_sequence(formats, logger=logger)
+    return [SVG_FORMAT] if formats is None else list(parse_output_formats(formats))
 
 
 def _resolve_base_prefix(canvas: Drawing, output_prefix: str | None, output_dir: str | None) -> str:

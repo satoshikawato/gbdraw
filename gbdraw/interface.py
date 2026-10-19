@@ -85,6 +85,7 @@ from gbdraw.mode_profiles import (
     DEFAULT_FEATURE_TYPES,
     LINEAR_MODE_PROFILE,
 )
+from gbdraw.io.colors import require_palette_name
 from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT, normalize_format_token
 from gbdraw.render.interactive_context import require_interactive_svg_metadata
 from gbdraw.render.interactive_svg import InteractiveSvgContext
@@ -109,6 +110,7 @@ class FeatureOptions:
 
     def __post_init__(self) -> None:
         validate_feature_type_names(self.types, field_name="types")
+        require_palette_name(self.palette)
 
 
 @dataclass(frozen=True)
