@@ -41,7 +41,7 @@ const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'u
 const lineOf = (offset) => html.slice(0, offset).split('\n').length;
 
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-const PRESENTATION_COMPONENTS = new Set(['help-tip', 'settings-section-title', 'setting-note', 'markup-preview']);
+const PRESENTATION_COMPONENTS = new Set(['help-tip', 'settings-section-title', 'setting-note', 'markup-preview', 'i18n-text']);
 
 // The end of an opening tag, skipping '>' inside quoted attribute values.
 const tagEnd = (from) => {

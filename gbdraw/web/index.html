@@ -2004,13 +2004,13 @@
 
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <gbdraw-loader class="w-16 h-16 mb-6"></gbdraw-loader>
-        <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
+        <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ t('Generating Diagram...') }}</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
         <button @click="cancelGeneration"
                 :disabled="generationCancelRequested"
                 class="btn mt-6 px-5 py-2 text-sm bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-wait flex items-center gap-2">
             <gbdraw-loader v-if="generationCancelRequested"></gbdraw-loader><i v-else class="ph ph-x-circle" aria-hidden="true"></i>
-            <span v-text="generationCancelRequested ? 'Canceling...' : 'Cancel'"></span>
+            <span v-text="generationCancelRequested ? t('Canceling...') : t('Cancel')"></span>
         </button>
     </div>
 
@@ -2992,7 +2992,7 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('record-genetic-codes')" class="rounded border border-slate-200 bg-slate-50 p-2 text-[10px] leading-snug text-slate-600">
-                                        Set the translation table for each sequence in its <strong>Record options</strong>. A missing active TLOSATX code is shown on the closed record summary.
+                                        <i18n-text :text="t('Set the translation table for each sequence in its {options}.')"><template #options><strong>{{ t('Record options') }}</strong></template></i18n-text> {{ t('A missing active TLOSATX code is shown on the closed record summary.') }}
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastp-max-hits')">
@@ -5644,7 +5644,7 @@
 
                             <div class="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 leading-relaxed">
                                 <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key" aria-hidden="true"></i> Privacy & Security</strong>
-                                This tool runs <strong>entirely in your browser</strong> using WebAssembly (Pyodide). Uploaded genomic data is processed locally and never leaves your device.
+                                <i18n-text :text="t('This tool runs {where} using WebAssembly (Pyodide).')"><template #where><strong>{{ t('entirely in your browser') }}</strong></template></i18n-text> {{ t('Uploaded genomic data is processed locally and never leaves your device.') }}
                             </div>
                             <!-- GOOGLE_ANALYTICS_NOTICE -->
 
@@ -7561,7 +7561,7 @@
                                 <i class="ph ph-x text-lg" aria-hidden="true"></i>
                             </button>
                         </div>
-                        <p class="alignment-review-lead">Records slide until the chosen genes line up with <b>{{ similarityAlignmentDraft?.reference.name }}</b>.</p>
+                        <p class="alignment-review-lead"><i18n-text :text="t('Records slide until the chosen genes line up with {reference}.')"><template #reference><b>{{ similarityAlignmentDraft?.reference.name }}</b></template></i18n-text></p>
                         <p id="similarity-alignment-dialog-description" data-similarity-alignment-count class="sr-only">Similarity group {{ similarityAlignmentDraft?.response.groupId }}: {{ similarityAlignmentReview?.summary }}</p>
                     </header>
 

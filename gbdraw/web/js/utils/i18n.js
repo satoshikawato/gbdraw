@@ -27,6 +27,11 @@
  * @typedef {Readonly<Record<string, string | number>>} TranslationParams
  */
 /**
+ * A piece of a text shown with elements inside it (`I18nText` in
+ * components.js): plain text, or the slot that a `{name}` placeholder names.
+ * @typedef {{ text: string } | { slot: string }} TextPart
+ */
+/**
  * Loads the catalog module of a locale.
  * @typedef {(locale: UiLocale) => Promise<{ default: TranslationCatalog }>} CatalogLoader
  */
@@ -104,18 +109,58 @@ export const tn = (count, one, other, params) => (
  */
 export const tx = (context, text, params) => substitute(lookup(context + CONTEXT_SEPARATOR + text, text), params);
 
+/**
+ * Splits a shown text at the placeholders that `slots` names. Another
+ * placeholder takes its value from `params`, or stays as written. The values
+ * are filled after the split, so a value never becomes a slot.
+ * @param {string} text the shown text of a key (`t('…')` without values)
+ * @param {readonly string[]} slots
+ * @param {TranslationParams} [params]
+ * @returns {TextPart[]}
+ */
+export const textParts = (text, slots, params) => {
+  /** @type {TextPart[]} */
+  const parts = [];
+  let pending = '';
+  let at = 0;
+  for (const match of text.matchAll(PLACEHOLDER)) {
+    const [whole, name] = match;
+    pending += text.slice(at, match.index);
+    at = (match.index ?? 0) + whole.length;
+    if (slots.includes(name)) {
+      if (pending) parts.push({ text: pending });
+      parts.push({ slot: name });
+      pending = '';
+    } else {
+      pending += params && Object.hasOwn(params, name) ? String(params[name]) : whole;
+    }
+  }
+  pending += text.slice(at);
+  if (pending) parts.push({ text: pending });
+  return parts;
+};
+
 /** @type {CatalogLoader} */
 const importCatalog = (tag) => import(`./i18n-catalogs/${tag}.js`);
 
+// The latest `setUiLocale` call; an earlier call whose catalog arrives later is dropped.
+let latestRequest = 0;
+
 /**
  * Shows the UI in `next`: loads its catalog, then switches. `en` needs no
- * catalog. Nothing in the UI calls it yet (PD-OI-106 decides the menu).
+ * catalog. When calls overlap, only the latest one applies. Nothing in the UI
+ * calls it yet (PD-OI-106 decides the menu).
  * @param {UiLocale} next
  * @param {CatalogLoader} [load] the catalog source; tests pass an in-memory one
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} whether this call switched the locale
  */
 export const setUiLocale = async (next, load = importCatalog) => {
   if (!LOCALE_TAG.test(next)) throw new Error(`Unknown UI locale: ${next}`);
-  catalog = next === SOURCE_LOCALE ? Object.freeze({}) : Object.freeze({ ...(await load(next)).default });
+  latestRequest += 1;
+  const request = latestRequest;
+  const loaded = next === SOURCE_LOCALE ? {} : (await load(next)).default;
+  if (request !== latestRequest) return false;
+  catalog = Object.freeze({ ...loaded });
   locale.value = next;
+  return true;
 };

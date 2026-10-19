@@ -12,7 +12,7 @@ import { join, relative, sep } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-import { CONTEXT_SEPARATOR, SOURCE_LOCALE, setUiLocale, t, tn, tx, uiLocale } from '../../gbdraw/web/js/utils/i18n.js';
+import { CONTEXT_SEPARATOR, SOURCE_LOCALE, setUiLocale, t, textParts, tn, tx, uiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
 const jsRoot = join(webRoot, 'js');
@@ -267,4 +267,51 @@ test('a locale shows its catalog and falls back to English', async () => {
     await setUiLocale(SOURCE_LOCALE);
   }
   assert.equal(t('Save Session'), 'Save Session');
+});
+
+test('a sentence with elements splits at the placeholders that have slots', () => {
+  assert.deepEqual(textParts('Replaces your {type} default color {color}.', ['color'], { type: 'CDS' }), [
+    { text: 'Replaces your CDS default color ' }, { slot: 'color' }, { text: '.' }
+  ]);
+  assert.deepEqual(textParts('{a} and {b}', ['a', 'b']), [{ slot: 'a' }, { text: ' and ' }, { slot: 'b' }]);
+  assert.deepEqual(textParts('Line up with {reference}', ['reference']), [{ text: 'Line up with ' }, { slot: 'reference' }]);
+  assert.deepEqual(textParts('Keep {missing} and {color}', ['color']), [{ text: 'Keep {missing} and ' }, { slot: 'color' }],
+    'a placeholder without a slot or a value stays as written');
+  assert.deepEqual(textParts('{type} is {color}', ['color'], { type: '{color}' }), [{ text: '{color} is ' }, { slot: 'color' }],
+    'a value is filled after the split, so it never becomes a slot');
+  assert.deepEqual(textParts('No placeholders', ['color']), [{ text: 'No placeholders' }]);
+});
+
+test('when setUiLocale calls overlap, only the latest one applies', async () => {
+  /** A loader whose catalogs arrive when the test releases them. */
+  const deferredLoader = () => {
+    const pending = new Map();
+    return {
+      load: (locale) => new Promise((resolve) => pending.set(locale, () => resolve({ default: { 'Save Session': `${locale}: save` } }))),
+      release: (locale) => pending.get(locale)()
+    };
+  };
+  try {
+    // The earlier call's catalog arrives last.
+    let loader = deferredLoader();
+    const first = setUiLocale('ja', loader.load);
+    const second = setUiLocale('zh-Hans', loader.load);
+    loader.release('zh-Hans');
+    assert.equal(await second, true);
+    loader.release('ja');
+    assert.equal(await first, false);
+    assert.equal(uiLocale.value, 'zh-Hans');
+    assert.equal(t('Save Session'), 'zh-Hans: save');
+    // The earlier call's catalog arrives first; English as the latest call needs no catalog.
+    loader = deferredLoader();
+    const third = setUiLocale('ja', loader.load);
+    const fourth = setUiLocale(SOURCE_LOCALE, loader.load);
+    assert.equal(await fourth, true);
+    loader.release('ja');
+    assert.equal(await third, false);
+    assert.equal(uiLocale.value, SOURCE_LOCALE);
+    assert.equal(t('Save Session'), 'Save Session');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });

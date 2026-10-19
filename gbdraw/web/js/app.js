@@ -10,6 +10,7 @@ import {
   ColorValueControl,
   DefaultColorScopeLine,
   HelpTip,
+  I18nText,
   FileUploader,
   GbdrawLoader,
   LinearRecordNames,
@@ -41,6 +42,8 @@ const app = createApp({
 // Every template (the root, the x-templates, the inline component templates)
 // shows UI text through these (utils/i18n.js).
 Object.assign(app.config.globalProperties, { t, tn, tx });
+// A sentence with elements inside it: <i18n-text :text="t('…{name}…')"> with a #name slot.
+app.component('I18nText', I18nText);
 app.directive('dialog-focus', dialogFocus);
 app.directive('settings-section', settingsSection);
 app.directive('preview-transform', previewTransform);

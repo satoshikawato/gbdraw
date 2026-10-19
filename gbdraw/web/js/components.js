@@ -9,10 +9,12 @@ import {
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
+import { textParts } from './utils/i18n.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
+/** @import { TranslationParams } from './utils/i18n.js' */
 /** @import { SettingApplicationId } from './services/setting-application.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
@@ -116,6 +118,20 @@ const helpTipName = (tip) => {
   const group = holder?.closest('[role="group"][aria-label]')?.getAttribute('aria-label') || '';
   const label = holder?.getAttribute('aria-label') || (holder ? visibleText(holder) : '');
   return `${group} ${label}`.replace(/\s+/g, ' ').trim();
+};
+
+// A sentence with elements inside it, kept as one translation key (D-04 of the
+// translation work): `text` is the shown text of the key, `t('…')` without
+// values; a `{name}` placeholder with a slot of that name shows the slot, and
+// `params` fill the others (`textParts`). Registered globally in app.js.
+export const I18nText = {
+  props: { text: { type: String, required: true }, params: { type: Object, default: null } },
+  /**
+   * @param {{ text: string, params: TranslationParams | null }} props
+   * @param {{ slots: Readonly<Record<string, (() => unknown[]) | undefined>> }} context
+   */
+  setup: (props, { slots }) => () => textParts(props.text, Object.keys(slots), props.params ?? undefined)
+    .flatMap((part) => ('slot' in part ? (slots[part.slot]?.() ?? []) : [part.text]))
 };
 
 // Loading indicator (Owner decision 2026-10-11): the logo drawn in one stroke. The markup and the
@@ -656,11 +672,9 @@ export const DefaultColorScopeLine = {
   props: { line: { type: Object, required: true } },
   template: `
     <span data-default-color-scope-sentence>
-      <template v-if="line.kind === 'replaces'">
-        Replaces your {{ line.type }} default color
-        <span class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span>
-        <span class="font-mono">{{ line.color }}</span>.
-      </template>
+      <i18n-text v-if="line.kind === 'replaces'" :text="t('Replaces your {type} default color {color}.')" :params="{ type: line.type }">
+        <template #color><span class="inline-block w-3 h-3 mr-1 align-middle rounded border border-slate-300" :style="{ backgroundColor: line.color }"></span><span class="font-mono">{{ line.color }}</span></template>
+      </i18n-text>
       <template v-else>{{ t('Sets the {type} default color ({type} features without their own color or rule, also hidden ones).', { type: line.type }) }}</template>
     </span>
   `

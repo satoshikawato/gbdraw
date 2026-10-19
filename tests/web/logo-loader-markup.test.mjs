@@ -62,7 +62,7 @@ test('the outlined title logo starts with the loader frame and draws the logo as
 
 test('every loading place renders the loader', () => {
   const places = [
-    /<gbdraw-loader class="w-16 h-16 mb-6"><\/gbdraw-loader>\s*<h3[^>]*>Generating Diagram/,
+    /<gbdraw-loader class="w-16 h-16 mb-6"><\/gbdraw-loader>\s*<h3[^>]*>\{\{ t\('Generating Diagram/,
     /<gbdraw-loader v-if="generationCancelRequested"><\/gbdraw-loader><i v-else class="ph ph-x-circle"/,
     /<gbdraw-loader v-if="sessionSavePending"><\/gbdraw-loader><i v-else class="ph ph-archive" aria-hidden="true"><\/i> \{\{ t\('Save Session'\) \}\}/,
     /<gbdraw-loader v-if="exampleSessionPending"><\/gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"><\/i> \{\{ t\('Load example'\) \}\}/,
