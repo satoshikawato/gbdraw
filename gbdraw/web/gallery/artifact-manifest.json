@@ -13,8 +13,8 @@
   ],
   "files": {
     "gallery/examples.json": {
-      "bytes": 24848,
-      "sha256": "1b82e9d609f94979d7912a3adc9c7a88b57f4dc1ea709715fe56cda51b8cb487"
+      "bytes": 25126,
+      "sha256": "b1673fbb6f987b9505f87b7ed047b8a255d4fa10fab9a0297431bdd23f8419a8"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1334269,
@@ -49,8 +49,8 @@
       "sha256": "6433bc73f61da97c1f38e4beef35c76634e6ed4228d38e5405bb618af4142cc9"
     },
     "gallery/examples/tobacco-chloroplast.svg": {
-      "bytes": 1452368,
-      "sha256": "e97ef655ac77b46cd2628adf16f3edd98e2b0ed4fa46fcb8e76940420ba7bafb"
+      "bytes": 1455272,
+      "sha256": "24db67c4940b17d7b29555124015033dcc588f4e353dd78ddd7e73c5ca0ebaa0"
     },
     "gallery/examples/vibrio-harveyi-group-collinear.svg": {
       "bytes": 14964200,
@@ -89,8 +89,8 @@
       "sha256": "61758695c01f3ab275bf6aabc8af11ef7081aa63361863fdc039b72688c8180b"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
-      "bytes": 1647408,
-      "sha256": "e02b0f97e8950d4ef8a1bb674336d42e788de2df769c46a050c6ea47669e631f"
+      "bytes": 1649952,
+      "sha256": "83ca57a7c4b61b56628060f3c34cc54960c9feb2d71fb2b73dab59b23497bac6"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
       "bytes": 27702895,
@@ -129,8 +129,8 @@
       "sha256": "88aee15e90053852d1ade67552e9d8c48cc1d8a499869178233f825a65c16a3b"
     },
     "gallery/sources/tobacco-chloroplast.svg": {
-      "bytes": 279187,
-      "sha256": "59f9083fcb801efde39e42057862215f66a4d73057a5b0cd2fc233374068754b"
+      "bytes": 281067,
+      "sha256": "c54439995e3e7257e1e17554b2fe272d8e2f7a86f9a21f1a5e056c0cb41877ec"
     },
     "gallery/sources/vibrio-harveyi-group-collinear.svg": {
       "bytes": 5168715,
@@ -169,8 +169,8 @@
       "sha256": "fee59db7aa2d5c00dd1eb4740091f38e0677bee9bb0cbd71d9950897a5ac4962"
     },
     "gallery/thumbnails/tobacco-chloroplast.webp": {
-      "bytes": 19498,
-      "sha256": "588f005248214b48078ba0fa6df159c6b0a79dcb6703642fc98de29f71511457"
+      "bytes": 20336,
+      "sha256": "cef0f1cbdf3c03f23d65b0fb56a8dd0aec81f6a65f1d1a65b92715246cc87809"
     },
     "gallery/thumbnails/vibrio-harveyi-group-collinear.webp": {
       "bytes": 8050,

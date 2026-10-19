@@ -149,18 +149,20 @@ test('tobacco Gallery pairs and precision survive read and real canonical reques
     ['gc_content', 'width', '0.08', 'factor'], ['gc_content', 'radius', '0.56', 'factor']
   ];
   const before = structuredClone(tobacco);
+  // The Circular drawing's slots (Session 46 `modes.circular`); the CLI
+  // command that writes this Session leaves them as the text it read.
+  const stored = (id, field) => tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
+  const requested = (id, field) => tobacco.renderRequest.diagramOptions.tracks.circularTrackSlots.find(slot => slot.id === id)[field];
   for (const [id, field, valueText, selectedUnit] of expected) {
-    // The Circular drawing's slots (Session 46 `modes.circular`).
-    const scalar = tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
-    assert.deepEqual(readCircularMeasure(scalar), { valueText, selectedUnit, isAuto: false, error: null });
+    assert.deepEqual(readCircularMeasure(stored(id, field)), { valueText, selectedUnit, isAuto: false, error: null });
     const draft = writeCircularMeasureValue(valueText, selectedUnit);
-    assert.deepEqual(parseOptionalCircularScalar(draft), scalar);
+    assert.deepEqual(parseOptionalCircularScalar(draft), requested(id, field));
+    assert.deepEqual(parseOptionalCircularScalar(stored(id, field)), requested(id, field));
   }
   const projected = projectCanonicalSessionRequest(tobacco);
   for (const [id, field] of expected) {
-    const raw = tobacco.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
     const draft = projected.config.adv.circular_track_slots.find(slot => slot.id === id)[field];
-    assert.deepEqual(parseOptionalCircularScalar(draft), raw);
+    assert.deepEqual(parseOptionalCircularScalar(draft), requested(id, field));
   }
   assert.deepEqual(tobacco, before, 'request/config/Result read is pure');
 });
@@ -175,6 +177,9 @@ test('current and historical request projection keeps zero pixel gaps separate f
   for (const spacing of [0, '0px', { value: 0, unit: 'px' }, { value: 5, unit: 'px' }]) {
     const historical = structuredClone(tobacco);
     historical.renderRequest.schema = 2;
+    // The schema-2 writer wrote one Circular drawing with one output.
+    historical.renderRequest.grouping = 'single';
+    historical.renderRequest.output = historical.renderRequest.output[0];
     delete historical.renderRequest.diagramOptions.featureOverrides;
     historical.renderRequest.diagramOptions.output.outputPrefix = 'legacy';
     delete historical.renderRequest.diagramOptions.featurePlacements;

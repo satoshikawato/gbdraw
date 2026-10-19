@@ -2511,7 +2511,9 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
 
 // Extend to (to_slot, LP-D17 / LP-D65): the slot editor's select stretches an
 // Overlay annotation from its anchor to a second slot; Undo restores None, and
-// Generate draws the span over both slots' bands.
+// Generate draws the span over both slots' bands. The row's Layer and Extend
+// to are set in the editor only: Underlay gives it the z below its anchor in
+// the same History step, and Generate accepts it (OV-1297).
 for (const mode of ['circular', 'linear']) {
   test(`${mode}: Extend to draws an Overlay annotation from its anchor to the chosen slot`, async ({ page }) => {
     test.setTimeout(300000);
@@ -2540,26 +2542,38 @@ for (const mode of ['circular', 'linear']) {
       slots.splice(0, slots.length,
         row('features', 'features', 'overlay', 0, diagramMode === 'circular' ? { lane_direction: 'split' } : {}),
         row('gc', 'dinucleotide_content', off, 0, { nt: 'GC' }),
-        row('regions', 'annotations', 'overlay', -1,
-          { set_id: set.id, anchor_slot: 'features', layer: 'underlay', padding_px: 0, show_labels: false }));
+        row('regions', 'annotations', 'overlay', 0,
+          { set_id: set.id, anchor_slot: 'features', layer: 'foreground', padding_px: 0, show_labels: false }));
       app.adv[`${diagramMode}_track_slots_axis_index`] = 0;
       app.adv[`${diagramMode}_track_slots_enabled`] = true;
       await window.Vue.nextTick();
     }, { diagramMode: mode, genbankText: readFileSync(hmmtDnaPath, 'utf8') });
     const panelButton = await reveal(page.locator(`button[aria-controls="${mode}-custom-track-slots-panel"]`));
     if (await panelButton.getAttribute('aria-expanded') !== 'true') await panelButton.click();
+    const regionsRow = () => page.evaluate((key) => {
+      const slot = window.__GBDRAW_APP__.adv[key].find((candidate) => candidate.id === 'regions');
+      return { layer: slot.params.layer, z: slot.z };
+    }, `${mode}_track_slots`);
+    const layer = await reveal(page.getByRole('combobox', { name: `${Mode} track slot regions Annotation layer`, exact: true }));
+    await layer.selectOption('underlay');
+    await expect.poll(regionsRow).toEqual({ layer: 'underlay', z: -1 });
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(regionsRow).toEqual({ layer: 'foreground', z: 0 });
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect.poll(regionsRow).toEqual({ layer: 'underlay', z: -1 });
     const extendTo = await reveal(page.getByRole('combobox', { name: `${Mode} track slot regions Extend to`, exact: true }));
     const toSlot = () => page.evaluate((key) => window.__GBDRAW_APP__.adv[key]
       .find((slot) => slot.id === 'regions').params.to_slot ?? null, `${mode}_track_slots`);
     // None stands for an unset to_slot; the anchor is not offered (SAME-REJECT, LP-D21).
     await expect(extendTo.locator('option:checked')).toHaveText('None');
-    expect(await extendTo.locator('option').evaluateAll((options) => options.map((option) => option.value))).toEqual(['None', 'gc']);
+    expect(await extendTo.locator('option').evaluateAll((options) => options.map((option) => option.value))).toEqual(['', 'gc']);
     await extendTo.selectOption('gc');
     await expect.poll(toSlot).toBe('gc');
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect.poll(toSlot).toBe(null);
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
     await expect.poll(toSlot).toBe('gc');
+    expect(await regionsRow()).toEqual({ layer: 'underlay', z: -1 });
 
     await generateAndWaitForResult(page);
     const drawn = await page.evaluate(async (diagramMode) => {

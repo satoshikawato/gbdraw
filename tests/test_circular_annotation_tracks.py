@@ -975,7 +975,7 @@ def test_circular_annotation_labels_of_the_tobacco_gallery_figure_keep_their_lab
     gaps = _circular_label_gaps(drawing)
     assert set(gaps) == {"lsc", "irb", "ssc", "ira"}
     for annotation_id, (side, gap) in gaps.items():
-        # The figure's brackets draw their labels inside with label_offset 7.
+        # The figure's region lines draw their labels inside with label_offset 7.
         assert side == "inside", annotation_id
         assert gap == pytest.approx(7.0, abs=1e-3), annotation_id
 

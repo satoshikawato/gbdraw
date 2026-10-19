@@ -65,12 +65,17 @@ def test_main_web_saved_raw_with_derived_maps_is_dropped_on_load_and_save():
     assert projected == {}
 
 
-def test_tobacco_gallery_full_config_preserves_no_raw_filtering():
-    session = json.loads(
-        (REPO_ROOT / "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json")
-        .read_text(encoding="utf-8")
-    )
-    config = session["renderRequest"]["diagramOptions"]["config"]
+def test_web_full_config_with_derived_maps_preserves_no_raw_filtering():
+    # The derived maps the tobacco Gallery Session held in its full Web config
+    # before it was rebuilt from its CLI command.
+    config = load_default_config()
+    config["labels"]["filtering"] = {
+        "blacklist_keywords": [],
+        "qualifier_priority": {"gene": ["product"], "repeat": ["rpt_family"], "feature": ["note"]},
+        "whitelist_map": None,
+        "priority_map": {"CDS": ["gene", "old_locus_tag"]},
+        "label_override_rules": None,
+    }
     projected = validate_and_project_web_config_overrides(
         mode="circular",
         config=config,

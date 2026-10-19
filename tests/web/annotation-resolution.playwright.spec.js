@@ -41,8 +41,10 @@ for (const width of [1440, 390]) {
       const invalidSets = JSON.parse(JSON.stringify(sets));
       invalidSets[0].annotations[0].target.record = { kind: "recordId", value: "INVALID-RECORD" };
       const invalid = encodeAnnotationTable(invalidSets);
-      sets[0].annotations.forEach((row) => { row.target = { ...featureTarget({ selector: 'gene=PRIVATE-MISSING' }), record }; });
-      return { mixed, invalid, all: encodeAnnotationTable(sets), count: sets[0].annotations.length };
+      // Every row of every set misses (the Gallery Session has a named set and its tint set).
+      const rows = sets.flatMap((set) => set.annotations);
+      rows.forEach((row) => { row.target = { ...featureTarget({ selector: 'gene=PRIVATE-MISSING' }), record }; });
+      return { mixed, invalid, all: encodeAnnotationTable(sets), count: rows.length, setCounts: sets.map((set) => set.annotations.length) };
     });
     await panel(page).locator(':scope > summary').focus();
     await page.keyboard.press('Enter');
@@ -113,7 +115,7 @@ for (const width of [1440, 390]) {
     await (await pendingSession).saveAs(sessionPath);
     const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
     expect(session.runMetadata.annotationWarnings).toEqual(all.warnings);
-    expect(session.modes[session.ui.mode].config.annotationSets[0].annotations).toHaveLength(tables.count);
+    expect(session.modes[session.ui.mode].config.annotationSets.map((set) => set.annotations.length)).toEqual(tables.setCounts);
     const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width, height: 960 } });
     try {
       const fresh = await context.newPage();

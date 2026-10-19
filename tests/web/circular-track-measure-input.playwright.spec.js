@@ -56,7 +56,9 @@ const openPanel = async page => {
   return button;
 };
 const counts = page => page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]);
-const expectCounts = async (page, undo, redo = 0) => expect.poll(() => counts(page)).toEqual([undo, redo]);
+// The first Undo or Redo after a Load can start the diagram Worker to prepare
+// rules (the Load itself may not need it), so a step may take that long.
+const expectCounts = async (page, undo, redo = 0) => expect.poll(() => counts(page), { timeout: 180_000 }).toEqual([undo, redo]);
 const scalar = (page, slot = 'gc_content', field = 'width') => page.evaluate(({ slot, field }) => (
   window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === slot)[field]
 ), { slot, field });
@@ -200,7 +202,8 @@ test('numeric and unit edits each have one History step, no derived status, and 
   const initial = await counts(page);
   await selectUnit(page, 'px');
   await expectCounts(page, initial[0] + 1);
-  expect(await scalar(page)).toEqual({ value: 0.08, unit: 'px' });
+  // The Gallery Session keeps its command line's text ("0.08"); a unit change keeps it.
+  expect(await scalar(page)).toEqual({ value: '0.08', unit: 'px' });
   await expect(page.locator('[data-generation-application-summary]')).toHaveCount(0);
   await edit(page, ' 1. ');
   await expectCounts(page, initial[0] + 2);
@@ -382,11 +385,12 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     expect(restored.resultHashes).toEqual(before.resultHashes);
     await expectCounts(fresh, 0);
     const rejected = structuredClone(saved);
+    const gcIndex = rejected.modes.circular.config.adv.circular_track_slots.findIndex(slot => slot.id === 'gc_content');
     rejected.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
     // A Width Load cannot use is listed before Load changes anything (OV-758);
     // after Cancel the notice of the earlier Load stays and the state is unchanged.
     await load(fresh, { name: 'invalid.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rejected)) }, [
-      'Settings: the value "{"value":"1e","unit":"px"}" (modes.circular.config.adv.circular_track_slots[2].width) cannot be used;'
+      `Settings: the value "{"value":"1e","unit":"px"}" (modes.circular.config.adv.circular_track_slots[${gcIndex}].width) cannot be used;`
         + ' it is left unset.'
     ]);
     expect(await snapshot(fresh)).toEqual(restored);
@@ -478,8 +482,23 @@ test('Generate preserves four canonical pairs and same-value geometry; unit edit
   const a = firstGeometry.records[0];
   const b = changedGeometry.records[0];
   expect(b.axisRadiusPx).toBe(a.axisRadiusPx);
-  for (const slot of a.slots.filter(row => row.slotId !== 'gc_content')) {
+  // The tint row spans from the features to the GC track (`to_slot=gc_content`):
+  // it keeps its outer edge and follows the GC track's inner edge.
+  const followers = new Set(canonicalSlots(same.request).filter(row => row.params?.to_slot === 'gc_content').map(row => row.id));
+  expect([...followers]).toEqual(['plastome_tint']);
+  for (const slot of a.slots.filter(row => row.slotId !== 'gc_content' && !followers.has(row.slotId))) {
     expect(b.slots.find(row => row.slotId === slot.slotId)).toEqual(slot);
+  }
+  const edges = (record, id) => {
+    const slot = record.slots.find(row => row.slotId === id);
+    const centre = slot.radiusFactor * record.axisRadiusPx;
+    return { inner: centre - slot.widthPx / 2, outer: centre + slot.widthPx / 2 };
+  };
+  for (const id of followers) {
+    expect(edges(b, id).outer).toBeCloseTo(edges(a, id).outer, 6);
+    expect(edges(a, id).inner).toBeCloseTo(edges(a, 'gc_content').inner, 6);
+    expect(edges(b, id).inner).toBeCloseTo(edges(b, 'gc_content').inner, 6);
+    expect(edges(b, id).inner).not.toBeCloseTo(edges(a, id).inner, 3);
   }
   expect(b.slots.find(row => row.slotId === 'gc_content').widthPx).toBe(0.08);
   expect(b.slots.find(row => row.slotId === 'gc_content')).toEqual({
@@ -553,8 +572,12 @@ for (const continuation of ['disabled', 'inactive biological']) {
   test(`actual Save and fresh Load preserve ${continuation} Circular scalar drafts`, async ({ page, browser }, testInfo) => {
     await openPanel(page);
     await edit(page, '0.12345678901234567');
+    // Save refuses a stack whose enabled row names a disabled slot, so the tint
+    // row that extends to the GC track (`to_slot=gc_content`) is turned off with it.
     if (continuation === 'disabled') await page.evaluate(() => {
-      window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content').enabled = false;
+      window.__GBDRAW_APP__.adv.circular_track_slots
+        .filter(row => row.id === 'gc_content' || [row.params?.to_slot, row.params?.anchor_slot].includes('gc_content'))
+        .forEach(row => { row.enabled = false; });
     });
     // E1: each mode keeps its own Result. The Circular Result and its committed
     // request stay with Circular; Linear, which has no Result, shows none. The

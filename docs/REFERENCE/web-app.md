@@ -393,6 +393,11 @@ overlay from its anchor to that slot (`to_slot`, see
 [Region annotations](../CLI_Reference.md#region-annotations)), or **None**. The
 list offers the anchor's slots except the anchor itself, and the setting applies
 on Generate. Moving the row off its anchor or changing its renderer clears it.
+The editor has no `z` field: placing the row on its anchor, or changing its
+layer (**Underlay** or **Foreground**), anchor or **Extend to**, gives it a `z`
+one below the lowest (**Underlay**) or one above the highest (**Foreground**)
+`z` of the slots it names, and keeps a `z` that already meets that rule, such as one from a loaded
+Session.
 
 Each Circular row keeps its inner and outer gap in a disclosure under the row;
 for a GC or AT content or skew row it also holds the dinucleotide, the legend
@@ -426,7 +431,10 @@ use, and turning the option off enables those rows again. A row with another
 dinucleotide, such as an AT skew row, is not affected. Rows you disabled yourself stay disabled. A row's resolved
 **(auto)** geometry comes from the last generated diagram and appears only for
 rows it drew; any other row, and every row before the first Generate, shows an
-estimate written as "≈ … (estimate)". A ticks row's **Radius** note is the tick
+estimate written as "≈ … (estimate)". An **Overlay anchor** annotation row
+that no diagram has drawn yet names the rows it follows instead, such as
+"follows features → gc_content" (Circular **Width** and **Radius**, Linear
+height). A ticks row's **Radius** note is the tick
 anchor, the radius that a typed **Radius** pins, not the centre of its band.
 
 ### Follow a Result and its settings draft

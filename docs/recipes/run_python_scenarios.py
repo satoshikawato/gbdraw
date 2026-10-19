@@ -577,7 +577,7 @@ def _validate_annotated_chloroplast_tutorial(
         raise RecipeContractError("T-PY-02 lost its CDS gene-label priority.")
     if not isinstance(options.annotations, AnnotationOptions) or Path(
         str(options.annotations.table_file)
-    ).name != "nicotiana-tabacum-regions.tsv":
+    ).name != "nicotiana-tabacum-regions-span.tsv":
         raise RecipeContractError("T-PY-02 lost its plastome region table.")
     if options.species != "<i>Nicotiana tabacum</i>" or options.legend != "upper_left":
         raise RecipeContractError(
@@ -608,13 +608,24 @@ def _validate_annotated_chloroplast_tutorial(
         (slot.id, slot.renderer, slot.side) for slot in slots
     ] != [
         ("features", "features", "overlay"),
+        ("plastome_tint", "annotations", "overlay"),
         ("plastome_regions", "annotations", "inside"),
         ("gc_content", "dinucleotide_content", "inside"),
     ]:
         raise RecipeContractError("T-PY-02 custom Circular slot order changed.")
-    feature_slot, annotation_slot, gc_slot = slots
+    feature_slot, tint_slot, annotation_slot, gc_slot = slots
     if feature_slot.params != {"lane_direction": "split"}:
         raise RecipeContractError("T-PY-02 must split the two feature strands.")
+    if tint_slot.z != -1 or tint_slot.params != {
+        "set_id": "plastome_tint",
+        "anchor_slot": "features",
+        "layer": "underlay",
+        "to_slot": "gc_content",
+        "marks": ["highlight"],
+        "padding_px": 0,
+        "show_labels": False,
+    }:
+        raise RecipeContractError("T-PY-02 plastome tint span changed.")
     if (
         annotation_slot.radius != ScalarSpec(0.65)
         or annotation_slot.width != ScalarSpec(20, "px")
@@ -688,9 +699,12 @@ def _validate_annotated_chloroplast_tutorial(
             ("ssc", "SSC"),
             ("ira", "IRa"),
         )
+    } | {
+        (f"{key}_tint", "plastome_tint", "plastome_tint", "NC_001879.2", None)
+        for key in ("lsc", "irb", "ssc", "ira")
     }:
         raise RecipeContractError(
-            f"T-PY-02 plastome annotation identities changed: {sorted(annotations)!r}."
+            f"T-PY-02 plastome annotation identities changed: {sorted(annotations, key=str)!r}."
         )
     fills = {element.attrib.get("fill") for element in root.iter()}
     if not {"#00662c", "#328925", "#bd1220", "#e95d0f", "#ffec00"} <= fills:

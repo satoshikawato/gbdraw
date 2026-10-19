@@ -22,6 +22,7 @@ import {
   formatRadiusFactorAuto,
   isManualSlotValue,
   normalizeOptionalText,
+  overlayFollowsNote,
   sizeClassForRecordLengths,
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
@@ -31,9 +32,11 @@ import {
   OVERLAY_ANNOTATION_PARAMS,
   nextCopyId,
   nextNumberedId,
+  overlayAnnotationZ,
   paramsKeptOnRendererChange,
   parseOptionalCircularScalar,
   parseOptionalPixel,
+  setOverlayAnnotationParam,
   trackAddBlockReason,
   validateCustomTrackPlan
 } from '../services/track-slot-validation.js';
@@ -795,15 +798,34 @@ export const createCircularTrackSlotEditor = ({
     return !reference || circularAnnotationAnchorOptions(slot, key).some((option) => option.id === reference);
   };
 
-  /** @param {CircularTrackSlot | null | undefined} slot */
+  /**
+   * A row placed on Overlay keeps a valid anchor or takes the only one offered,
+   * and the z its layer needs (OV-1297).
+   * @param {CircularTrackSlot | null | undefined} slot
+   */
   const bindOnlyCircularAnnotationAnchor = (slot) => {
     if (!slot || slot.renderer !== 'annotations') return;
     slot.params = cloneParams(slot.params);
     const options = circularAnnotationAnchorOptions(slot);
     const current = String(slot.params.anchor_slot || '').trim();
-    if (options.some((option) => option.id === current)) return;
-    if (options.length === 1) slot.params.anchor_slot = options[0].id;
-    else delete slot.params.anchor_slot;
+    if (!options.some((option) => option.id === current)) {
+      if (options.length === 1) slot.params.anchor_slot = options[0].id;
+      else delete slot.params.anchor_slot;
+    }
+    slot.z = overlayAnnotationZ(slot, state.drawings.circular.adv.circular_track_slots);
+  };
+
+  /**
+   * The Layer, anchor and Extend to selects of an Overlay annotation row (OV-1297).
+   * @param {CircularTrackSlot | null | undefined} slot
+   * @param {OverlaySlotReference | 'layer'} key
+   * @param {unknown} value
+   */
+  const setCircularOverlayAnnotationParam = (slot, key, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    if (slot?.renderer !== 'annotations') return;
+    setOverlayAnnotationParam(slot, state.drawings.circular.adv.circular_track_slots, key, value);
   };
 
   /** Why Add track cannot add this renderer, or '' (OV-1254). @param {unknown} renderer */
@@ -1808,6 +1830,8 @@ export const createCircularTrackSlotEditor = ({
     const lookup = circularSlotGeometryLookup(slot?.id);
     const resolved = circularTrackSlotEffectiveEnabled(slot) ? findTrackSlotGeometry(lookup) : null;
     const estimate = !resolved;
+    const follows = estimate && (field === 'width' || field === 'radius') ? overlayFollowsNote(slot) : '';
+    if (follows) return follows;
     const geometry = resolved || estimateCircularSlotGeometry(state.drawings.circular, slot, slotIndex);
     if (field === 'width') return formatPxAuto(geometry.widthPx, { estimate });
     if (field === 'radius') {
@@ -1941,6 +1965,7 @@ export const createCircularTrackSlotEditor = ({
     setCircularAnnotationPadding: (/** @type {CircularTrackSlot | null | undefined} */ slot, /** @type {unknown} */ value) => setCircularAnnotationNumber(slot, 'padding_px', value, 2),
     circularAnnotationCoverAnchor,
     setCircularAnnotationCoverAnchor,
+    setCircularOverlayAnnotationParam,
     supportsCircularTrackSlotPlacement,
     isManagedCircularConservationSlot,
     circularTrackSlots,

@@ -56,7 +56,9 @@ test('History prepares cold rules once, skips warm config preparation, and reche
     expect(await prepareCalls()).toBe(0);
     expect(await visibleRuleColor(page, '#00662c')).toEqual(baseGreen);
     const warm = await getDiagramWorkerActivity(page);
-    expect(warm.constructions).toBe(before.constructions);
+    // The restore's one helper starts the one Worker when the Load did not need it.
+    expect(before.constructions).toBeLessThanOrEqual(1);
+    expect(warm.constructions).toBe(1);
     expect(warm.helpers - before.helpers).toBe(1);
     expect(warm.runs).toBe(before.runs);
     await edit(page, 'Rule color', 'color');

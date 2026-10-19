@@ -104,6 +104,25 @@ const autoNote = (text, unit, estimate) => {
   return estimate ? `≈ ${text} ${unit} (estimate)` : `${text} ${unit} (auto)`;
 };
 
+/**
+ * The size note of an Overlay annotation row that no Generate has drawn yet:
+ * the rows it follows, by slot id (`follows features → gc_content`), because
+ * its size comes from those rows' resolved bands (OV-1300, LP-D99). Empty for
+ * any other row. Circular Width/Radius and Linear height read it.
+ * @param {{ renderer?: unknown, side?: unknown, params?: unknown } | null | undefined} slot
+ * @returns {string}
+ */
+export const overlayFollowsNote = (slot) => {
+  if (!slot || slot.renderer !== 'annotations' || slot.side !== 'overlay') return '';
+  const params = slot.params && typeof slot.params === 'object'
+    ? /** @type {{ anchor_slot?: unknown, to_slot?: unknown }} */ (slot.params)
+    : {};
+  const anchor = normalizeOptionalText(params.anchor_slot);
+  if (!anchor) return '';
+  const target = normalizeOptionalText(params.to_slot);
+  return target ? `follows ${anchor} → ${target}` : `follows ${anchor}`;
+};
+
 /** @param {unknown} value @param {{ estimate?: boolean }} [options] */
 export const formatPxAuto = (value, { estimate = false } = {}) => (
   autoNote(roundDisplayNumber(value, 1), 'px', estimate)

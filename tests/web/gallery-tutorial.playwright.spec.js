@@ -529,6 +529,7 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
   await expect(preview.locator('[data-gbdraw-annotation-id="irb"]')).toHaveCount(1);
   await expect(preview.locator('[data-gbdraw-annotation-id="ssc"]')).toHaveCount(1);
   await expect(preview.locator('[data-gbdraw-annotation-id="ira"]')).toHaveCount(1);
+  await expect(preview.locator('[data-gbdraw-annotation-id="irb_tint"]')).toHaveCount(1);
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
@@ -538,8 +539,13 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
   await expect(tutorialPanel.getByText('Switch to Circular mode', { exact: true })).toBeVisible();
   await expect(tutorialPanel.getByText('Import the four plastome regions', { exact: true })).toBeVisible();
   await expect(tutorialPanel.getByText('Bind the annotation set to the circular track stack', { exact: true })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'LSC 1 86,686 86,686 bp Bracket 0' })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'IRb 86,687 112,029 25,343 bp Bracket 0' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'LSC 1 86,686 86,686 bp Line, label LSC Highlight' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'IRb 86,687 112,029 25,343 bp Line, label IRb Highlight' })).toBeVisible();
+  await expect(
+    tutorialPanel.getByRole('row', {
+      name: 'plastome_tint Annotations Overlay anchor — — Set: plastome_tint; Anchor: features; Underlay; Extend to: gc_content; Marks: Highlight; Labels: off; padding: 0'
+    })
+  ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
       name: 'plastome_regions Annotations Inside 0.65 ×R 20 px Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px'
@@ -563,7 +569,7 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('NC_001879.gbk')).toBeVisible();
-  await expect(filesPanel.getByText('nicotiana-tabacum-regions.tsv')).toBeVisible();
+  await expect(filesPanel.getByText('nicotiana-tabacum-regions-span.tsv')).toBeVisible();
   await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
 
   expect(pageErrors).toEqual([]);

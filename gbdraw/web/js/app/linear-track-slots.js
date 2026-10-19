@@ -11,10 +11,11 @@ import {
   findTrackSlotGeometry,
   formatPxAuto,
   isManualSlotValue,
-  normalizeOptionalText
+  normalizeOptionalText,
+  overlayFollowsNote
 } from '../services/track-slot-display.js';
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
-import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, paramsKeptOnRendererChange, parseOptionalPixel, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -310,15 +311,34 @@ export const createLinearTrackSlotEditor = ({
     return !reference || linearAnnotationAnchorOptions(slot, key).some((/** @type {{ id: string }} */ option) => option.id === reference);
   };
 
-  /** @param {OptionalLinearSlot} slot */
+  /**
+   * A row placed on Overlay keeps a valid anchor or takes the only one offered,
+   * and the z its layer needs (OV-1297).
+   * @param {OptionalLinearSlot} slot
+   */
   const bindOnlyLinearAnnotationAnchor = (slot) => {
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
     slot.params = cloneParams(slot.params);
     const options = linearAnnotationAnchorOptions(slot);
     const current = String(slot.params.anchor_slot || '').trim();
-    if (options.some((/** @type {{ id: string }} */ option) => option.id === current)) return;
-    if (options.length === 1) slot.params.anchor_slot = options[0].id;
-    else delete slot.params.anchor_slot;
+    if (!options.some((/** @type {{ id: string }} */ option) => option.id === current)) {
+      if (options.length === 1) slot.params.anchor_slot = options[0].id;
+      else delete slot.params.anchor_slot;
+    }
+    slot.z = overlayAnnotationZ(slot, state.drawings.linear.adv.linear_track_slots);
+  };
+
+  /**
+   * The Layer, anchor and Extend to selects of an Overlay annotation row (OV-1297).
+   * @param {OptionalLinearSlot} slot
+   * @param {OverlaySlotReference | 'layer'} key
+   * @param {unknown} value
+   */
+  const setLinearOverlayAnnotationParam = (slot, key, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
+    setOverlayAnnotationParam(slot, state.drawings.linear.adv.linear_track_slots, key, value);
   };
 
   /** Why Add track cannot add this renderer, or '' (OV-1254). @param {unknown} renderer */
@@ -1016,11 +1036,10 @@ export const createLinearTrackSlotEditor = ({
   };
 
   // Only a rendered row has resolved geometry; a disabled row shows the estimate.
-  /** @param {DrawingState} drawing @param {OptionalLinearSlot} slot */
-  const linearTrackSlotDisplayGeometry = (drawing, slot) => {
-    const resolved = slot?.enabled !== false ? resolvedLinearSlotGeometry(slot?.id) : null;
-    return resolved || estimateLinearSlotGeometry(drawing, slot);
-  };
+  /** @param {OptionalLinearSlot} slot */
+  const linearResolvedSlotGeometry = (slot) => (
+    slot?.enabled !== false ? resolvedLinearSlotGeometry(slot?.id) : null
+  );
 
   // The row index is part of the shared template call; Linear geometry is
   // found by slot ID alone.
@@ -1028,7 +1047,10 @@ export const createLinearTrackSlotEditor = ({
   const linearTrackSlotGeometryAutoText = (slot, _slotIndex, field) => {
     const drawing = state.drawings.linear;
     if (isManualSlotValue(linearSlotManualValue(slot, field))) return '';
-    const geometry = linearTrackSlotDisplayGeometry(drawing, slot);
+    const resolved = linearResolvedSlotGeometry(slot);
+    const follows = !resolved && field === 'height' ? overlayFollowsNote(slot) : '';
+    if (follows) return follows;
+    const geometry = resolved || estimateLinearSlotGeometry(drawing, slot);
     const value = field === 'height'
       ? geometry.heightPx
       : (field === 'spacing' ? geometry.spacingAfterPx : null);
@@ -1150,6 +1172,7 @@ export const createLinearTrackSlotEditor = ({
     setLinearAnnotationPadding: (/** @type {OptionalLinearSlot} */ slot, /** @type {unknown} */ value) => setLinearAnnotationNumber(slot, 'padding_px', value, 2),
     linearAnnotationCoverAnchor,
     setLinearAnnotationCoverAnchor,
+    setLinearOverlayAnnotationParam,
     linearTrackSlotHeightValue,
     linearTrackSlotGeometryAutoText,
     linearTrackSlotGeometryHasManual,

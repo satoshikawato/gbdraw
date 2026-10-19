@@ -580,3 +580,55 @@ assert.rejects(
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+// A CLI command's annotation slot params are text ("0", "false") and the CLI
+// leaves an Axis index it was not given unstated; the published request compares
+// them as Load reads them (OV-1299). A real difference in either still fails.
+{
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-slots-'));
+  try {
+    const data = 'gbdraw/web/tutorial-data/tobacco-plastome-regions';
+    const file = path.join(directory, 'slots.gbdraw-session.json');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', `${data}/NC_001879.gbk`,
+      '--annotation_table', `${data}/nicotiana-tabacum-regions.tsv`,
+      '--circular_track_slot', 'features:features@side=overlay,lane_direction=split',
+      '--circular_track_slot', 'names:annotations@set_id=plastome_regions,side=inside,r=0.75,w=12px,'
+        + 'padding_px=0,show_labels=false,overflow=compress',
+      '--circular_track_slot', 'regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,'
+        + 'show_labels=true,padding_px=1,overflow=compress',
+      '--circular_track_slot', 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08',
+      '-o', path.join(directory, 'slots'), '-f', 'interactive_svg', '--session_output', file],
+    { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
+    const source = JSON.parse(await readFile(file, 'utf8'));
+    const { tracks } = source.renderRequest.diagramOptions;
+    assert.deepEqual([tracks.circularTrackSlots[1].params.padding_px, tracks.circularTrackSlots[1].params.show_labels,
+      tracks.circularTrackSlots[2].params.padding_px, tracks.circularTrackAxisIndex ?? null], ['0', 'false', '1', null]);
+    const { session, equivalence } = await prepareGallerySessionForPublication(source);
+    assert.deepEqual(equivalence.differences, [], 'CLI slot params');
+    assert.deepEqual(session.renderRequest.diagramOptions.tracks.circularTrackSlots[1].params.padding_px, 0);
+    assert.equal(session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex, 0);
+    // A rebuild that reads a param or the Axis index differently is a difference.
+    for (const [change, at] of [
+      [(rebuilt) => { rebuilt.circularTrackSlots[2].params.padding_px = 3; }, /circularTrackSlots\[2\]\.params\.padding_px/],
+      [(rebuilt) => { rebuilt.circularTrackAxisIndex = 1; }, /circularTrackAxisIndex/]
+    ]) {
+      const tampered = createGallerySessionPublication({
+        promoteSession: promoteGallerySessionToCurrent,
+        assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
+        buildRequest: (input) => {
+          const built = buildCanonicalRenderRequest(input);
+          change(built.renderRequest.diagramOptions.tracks);
+          return built;
+        },
+        buildRequestState: buildCanonicalRequestState,
+        readRequest: readPublishedRenderRequest,
+        projectRequest: projectCanonicalSessionRequest,
+        resolveComparisonPlan: resolveLinearComparisonPlan
+      });
+      await assert.rejects(tampered.prepareGallerySessionForPublication(structuredClone(source)),
+        (error) => at.test(String(error?.message)) && error.comparison?.equivalent === false);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}

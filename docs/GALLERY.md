@@ -32,9 +32,9 @@ The human mitochondrial genome with GC content, GC skew, and AT skew rings insid
 
 ### Quadripartite structure of a chloroplast genome (<i>Nicotiana tabacum</i>)
 
-<a href="https://gbdraw.app/gallery/#tobacco-chloroplast"><img src="../gbdraw/web/gallery/thumbnails/tobacco-chloroplast.webp" alt="Circular tobacco chloroplast map with LSC, SSC, IRa, and IRb region brackets and function-colored genes" width="640"></a>
+<a href="https://gbdraw.app/gallery/#tobacco-chloroplast"><img src="../gbdraw/web/gallery/thumbnails/tobacco-chloroplast.webp" alt="Circular tobacco chloroplast map with tinted LSC, SSC, IRa, and IRb regions named on curved labels, and function-colored genes" width="640"></a>
 
-The 155,943-bp tobacco chloroplast genome with brackets for the large single-copy region (LSC), the small single-copy region (SSC), and the two inverted repeats (IRa and IRb). An annotation table supplies the four region boundaries, and a color table groups genes by function, such as photosystem I, RNA polymerase, and NADH dehydrogenase. Genes in the inverted repeats, such as <i>ycf2</i>, <i>ndhB</i>, and the rRNA genes, appear twice: once in IRa and once in IRb.
+The 155,943-bp tobacco chloroplast genome with its large single-copy region (LSC), small single-copy region (SSC), and two inverted repeats (IRa and IRb) tinted from the gene track through the GC content track and named on curved labels along an inner ring. An annotation table supplies the four region boundaries, and a color table groups genes by function, such as photosystem I, RNA polymerase, and NADH dehydrogenase. Genes in the inverted repeats, such as <i>ycf2</i>, <i>ndhB</i>, and the rRNA genes, appear twice: once in IRa and once in IRb.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#tobacco-chloroplast) | [Tutorial: Make an annotated map of the tobacco chloroplast genome](./TUTORIALS/build-an-annotated-chloroplast-map.md)
 
@@ -95,7 +95,7 @@ Static figures that are not Web Gallery examples. Click a figure to open it at f
     <td width="50%" valign="top">
       <a href="../examples/NC_001879_regions.svg"><img src="../examples/NC_001879_regions.svg" alt="Circular Nicotiana tabacum chloroplast map with LSC, SSC, IRa, and IRb region brackets" width="100%"></a><br>
       <strong>Chloroplast regions from the command line (<em>Nicotiana tabacum</em>)</strong><br>
-      Feature labels, a GC-content track, and LSC, SSC, IRa, and IRb region brackets. Made in the <a href="./TUTORIALS/build-an-annotated-chloroplast-map.md">annotated chloroplast Tutorial</a>.
+      Feature labels, a GC-content track, and LSC, SSC, IRa, and IRb region brackets from <a href="../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv"><code>nicotiana-tabacum-regions.tsv</code></a>. The <a href="./TUTORIALS/build-an-annotated-chloroplast-map.md">annotated chloroplast Tutorial</a> draws the same genome with region tints and curved names.
     </td>
     <td width="50%" valign="top">
       <a href="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg"><img src="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg" alt="Circular human mitochondrial genome with labels placed inside and outside the feature ring" width="100%"></a><br>
