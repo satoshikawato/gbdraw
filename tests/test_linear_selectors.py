@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -308,8 +309,10 @@ def test_reverse_complement_applies_after_region_crop_in_every_spelling() -> Non
     )
     from gbdraw.io.regions import parse_region_spec
 
+    # Not periodic, so reversing before the crop would give another window.
+    rng = random.Random(1279)
     source = SeqRecord(
-        Seq("ACGTTGCAAG" * 6),
+        Seq("".join(rng.choice("ACGT") for _ in range(60))),
         id="RecA",
         annotations={"molecule_type": "DNA"},
     )
@@ -332,8 +335,15 @@ def test_reverse_complement_applies_after_region_crop_in_every_spelling() -> Non
             record_input(presentation=reverse),
             RecordCollectionOptions(regions=(parse_region_spec("#1:11-40"),)),
         ),
+        # D-PYB-1: an rc collection region (the CLI --region) with the
+        # presentation flag reverses once; a record's own region refuses both.
+        "collection region rc + presentation": _resolved_window(
+            record_input(presentation=reverse),
+            RecordCollectionOptions(regions=(parse_region_spec("#1:11-40:rc"),)),
+        ),
     }
     expected = str(source.seq[10:40].reverse_complement())
+    assert expected != str(source.seq.reverse_complement()[10:40])
     for spelling, window in windows.items():
         assert str(window.seq) == expected, spelling
         assert [
@@ -354,6 +364,7 @@ def test_linear_cli_reverse_complement_flag_crops_the_region_first(
     for name, region_args in (
         ("flag", ["--region", "RecA:101-400", "--reverse_complement", "1"]),
         ("suffix", ["--region", "RecA:101-400:rc"]),
+        ("both", ["--region", "#1:101-400:rc", "--reverse_complement", "1"]),  # D-PYB-1: once
     ):
         returncode, output, svg_path = gbdraw_runner.run(
             "linear",
@@ -365,7 +376,39 @@ def test_linear_cli_reverse_complement_flag_crops_the_region_first(
         assert returncode == 0, f"gbdraw failed: {output}"
         svgs.append(svg_path.read_text().replace(f"linear_region_rc_{name}", "OUT"))
     assert "400-101" in svgs[0]
-    assert svgs[0] == svgs[1]
+    assert svgs[0] == svgs[1] == svgs[2]
+
+
+@pytest.mark.parametrize(
+    ("reverse", "comparison", "warned"),
+    [("1", True, True), ("0", True, False), ("1", False, False)],
+)
+def test_legacy_replay_warns_when_a_reversed_region_has_stored_comparisons(
+    reverse: str, comparison: bool, warned: bool, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """N-1: a Session 27-30 replay that crops and reverses a record with comparisons now
+    draws another window (OV-1279), while its stored matches still load."""
+    from types import SimpleNamespace
+
+    from gbdraw.cli_utils.session import SessionCliRequest
+
+    inputs = Path(__file__).resolve().parent / "test_inputs"
+    args = [
+        "--gbk", str(inputs / "AP027078.gb"), str(inputs / "AP027131.gb"),
+        "--region", "#1:1-5000", "--reverse_complement", reverse, "-o", "out",
+    ]
+    if comparison:
+        args += ["-b", str(inputs / "AP027078_AP027131.tblastx.out")]
+    spec = SimpleNamespace(args=args, cli_invocation_args=args, file_bindings=())
+    monkeypatch.setattr(linear_cli_module, "session_to_cli_args", lambda *_, **__: spec)
+    monkeypatch.setattr(linear_cli_module, "run_linear_from_namespace", lambda _: None)
+    monkeypatch.setattr(linear_cli_module, "save_session_sidecar_if_requested", lambda **_: None)
+    request = SessionCliRequest(
+        session_path="stored.gbdraw-session.json", output=None, format=None,
+        overwrite=False, save_session=False, session_output=None,
+    )
+    linear_cli_module.replay_legacy_session(SimpleNamespace(_data={}, drawings=()), request)  # type: ignore[arg-type]
+    assert ("re-run the comparison" in caplog.text) is warned
 
 
 @pytest.mark.linear

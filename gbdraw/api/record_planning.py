@@ -1447,7 +1447,7 @@ def _normalized_cli_values(
     return normalized
 
 
-def _parse_cli_bool(value: object) -> bool:
+def parse_cli_bool(value: object) -> bool:
     if isinstance(value, bool):
         return value
     text = str(value or "").strip().lower()
@@ -1529,7 +1529,7 @@ def record_input_manifest_from_paths(
                 cardinality=cardinality,
                 selector=selector,
                 presentation=RecordPresentation(
-                    reverse_complement=_parse_cli_bool(reverse_values[index]),
+                    reverse_complement=parse_cli_bool(reverse_values[index]),
                 ),
                 record_key=f"record-{index + 1}",
             )
@@ -1836,6 +1836,7 @@ __all__ = [
     "ResolvedRecordCollection",
     "ResolvedRecordProvenance",
     "depth_track_inputs_from_cli",
+    "parse_cli_bool",
     "record_input_manifest_from_paths",
     "record_input_manifest_from_table",
     "resolve_circular_batch_outputs",

@@ -666,7 +666,11 @@ artifacts; use `render_session()` when those artifacts belong in the result.
 `render_request()` accepts current typed requests, not historical session
 envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46–48;
 versions 27–30 have no `renderRequest`: the CLI replays them, and the Web app
-loads them from their saved settings. Request schema 9 keeps schema 7's
+loads them from their saved settings. A Linear replay that combines `--region`,
+`--reverse_complement 1`, and `-b` or `--comparisons_table` now crops before it
+reverse-complements, so it can draw another window than the one its stored
+comparison was searched on; it prints a `WARNING:` line, and the comparison may
+need to be run again. Request schema 9 keeps schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
