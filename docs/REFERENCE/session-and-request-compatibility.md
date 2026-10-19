@@ -286,6 +286,13 @@ instead of refused, and each repair is a row in the dialog:
   saved comparison that the **Comparisons** card keeps read-only or asks
   about keeps its record references, which that card reports.
 
+A Linear Record Labels style size (Name / Species, Subtitle, Replicon,
+Accession, Length / Coordinates) of 0 or less in a Session reads as Auto, with
+the row `Settings: the value "0" (<place>) cannot be used; its default is
+used.` `gbdraw render --session`, `gbdraw linear --session` and the Python API
+read it the same way and print that row as a `WARNING:` line. **Generate**,
+`--definition_line_style` and the Python options still refuse such a size.
+
 When the saved diagram's settings cannot be read at all (for example, their
 `schema` is not an integer), or are missing, the file loads as settings only if it holds the web app's own settings: a Session
 of version 42, 44, 46, 47 or 48 saved by the web app. A row says that the saved

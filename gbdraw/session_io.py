@@ -44,7 +44,7 @@ from .core.numeric import (
     parse_ascii_integer,
     parse_ascii_nonnegative_integer,
 )
-from .definition_line_styles import DEFINITION_LINE_KINDS
+from .definition_line_styles import DEFINITION_LINE_KINDS, read_stored_definition_line_font_size
 from .exceptions import GbdrawError, ValidationError
 from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
@@ -6626,7 +6626,10 @@ def _append_linear_definition_line_style_args(
         if not isinstance(raw_style, Mapping):
             continue
         parts: list[str] = []
-        font_size = raw_style.get("font_size")
+        font_size = read_stored_definition_line_font_size(
+            raw_style.get("font_size"),
+            path=f"config.adv.linear_definition_line_styles.{line_kind}.font_size",
+        )
         if font_size not in (None, "", False):
             parts.append(f"size={font_size}")
         font_weight = str(raw_style.get("font_weight") or "").strip()

@@ -5,10 +5,13 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Iterable, cast
 
 from gbdraw.core.numeric import ascii_float
+
+logger = logging.getLogger(__name__)
 
 DEFINITION_LINE_KINDS: tuple[str, ...] = ("name", "subtitle", "replicon", "accession", "length")
 DEFINITION_LINE_STYLE_PROPERTIES: tuple[str, ...] = ("font_size", "font_weight", "fill")
@@ -72,6 +75,33 @@ def normalize_definition_line_font_size(value: object) -> float | None:
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValueError("definition line font_size must be a positive finite number")
     return parsed
+
+
+def read_stored_definition_line_font_size(value: object, *, path: str) -> object:
+    """A stored Linear definition line font size, read as Auto when it is <= 0.
+
+    PD-OI-081 refuses a size <= 0 where a user enters one, but a Session that
+    stores one loads, as Web Load reads it: Auto, with the Web's lost-value
+    notice (Owner Q-13 a, OV-1282). ``path`` names the value in the Session.
+    Any other value is returned for the usual check.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return value
+    try:
+        number = ascii_float(value)
+    except ValueError:
+        return value
+    if not math.isfinite(number) or number > 0:
+        return value
+    stored = str(int(number)) if isinstance(value, (int, float)) and number.is_integer() else str(value)
+    # The wording of the Web's Load notice (utils/load-repairs.js `setting-replaced`).
+    logger.warning(
+        'WARNING: Settings: the value "%s" (%s) cannot be used; its default is used.',
+        stored,
+        path,
+    )
+    return None
 
 
 def normalize_definition_line_font_weight(value: object) -> str | None:
@@ -197,6 +227,7 @@ __all__ = [
     "DEFINITION_LINE_STYLE_PROPERTIES",
     "normalize_definition_line_fill",
     "normalize_definition_line_font_size",
+    "read_stored_definition_line_font_size",
     "normalize_definition_line_font_weight",
     "normalize_definition_line_key",
     "normalize_definition_line_style_property",
