@@ -330,7 +330,7 @@
           ["Length / Coordinates visibility", "Hide"],
           ["Default font size", "18"],
           ["Legend position", "Right"],
-          ["Legend Font Size", "18"]
+          ["Font size", "18"]
         ]
       },
       "operations": [

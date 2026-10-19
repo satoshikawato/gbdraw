@@ -307,6 +307,8 @@ byte-identical.
 
 ## Next steps
 
+- To reproduce a finished figure, use **Exact replay** from **Run Info**; see
+  the [web app reference](../REFERENCE/web-app.md).
 - [Review session and request compatibility](../REFERENCE/session-and-request-compatibility.md)
 - [Review preview, search, and editor behavior](../REFERENCE/web-app.md#preview-search-and-editor)
 - [Review output formats and export](../REFERENCE/output-formats-and-export.md)

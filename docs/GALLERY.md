@@ -136,14 +136,14 @@ Static figures that are not Web Gallery examples. Click a figure to open it at f
     <td width="50%" valign="top">
       <a href="../examples/tutorial-6-depth-circular.svg"><img src="../examples/tutorial-6-depth-circular.svg" alt="Circular bacterial genome with a blue read-depth track and quantitative tick labels" width="100%"></a><br>
       <strong>Read depth around a bacterial genome</strong><br>
-      A circular depth profile with a quantitative axis. Made in the <a href="./TUTORIALS/build-a-quantitative-genome-map.md">quantitative genome map Tutorial</a>.
+      A circular depth profile with a quantitative axis. Related Tutorial: <a href="./TUTORIALS/build-a-quantitative-genome-map.md">quantitative genome map Tutorial</a>.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <a href="../examples/tutorial-9-feature-shapes.svg"><img src="../examples/tutorial-9-feature-shapes.svg" alt="Human mitochondrial genome with rectangular CDS, rRNA, and tRNA features" width="100%"></a><br>
       <strong>Rectangles instead of arrows (human mitochondrial genome)</strong><br>
-      CDS, rRNA, and tRNA features drawn as rectangles. Made in the <a href="./TUTORIALS/highlight-mitochondrial-features.md">mitochondrial feature Tutorial</a>.
+      CDS, rRNA, and tRNA features drawn as rectangles. Related Tutorial: <a href="./TUTORIALS/highlight-mitochondrial-features.md">mitochondrial feature Tutorial</a>.
     </td>
     <td width="50%" valign="top">
       <a href="https://gbdraw.app/gallery/palettes/"><img src="../examples/AP027078_tuckin_separate_strands_default.svg" alt="Circular genome map in the default gbdraw color palette" width="100%"></a><br>

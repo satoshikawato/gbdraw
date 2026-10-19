@@ -1603,7 +1603,7 @@
             "Ruler (Ticks)"
           ],
           [
-            "Axis & Scale › Scale Font Size (linked to Ruler Label Font Size)",
+            "Axis & Scale › Scale Font Size (Link Scale and Ruler Label Font Sizes on)",
             "20"
           ],
           [
@@ -2048,7 +2048,7 @@
                 "Ruler (Ticks)"
               ],
               [
-                "Axis & Scale › Scale Font Size (linked to Ruler Label Font Size)",
+                "Axis & Scale › Scale Font Size (Link Scale and Ruler Label Font Sizes on)",
                 "20"
               ],
               [

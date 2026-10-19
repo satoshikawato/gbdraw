@@ -117,15 +117,19 @@ accession, such as `VERSION     NC_012920.1`. It must not start with HTML such
 as `<!DOCTYPE`. A successful download alone is not proof: each Tutorial also
 names the expected output and shows a regenerated reference image.
 
-## What the file labels mean
+## What the Tutorial tables list
 
-| Label used in the guides | Meaning |
+Each Tutorial lists files in three columns:
+
+| Column | Meaning |
 | --- | --- |
-| Authoritative download | A versioned sequence record downloaded from NCBI, DDBJ, MIBiG, or another database named by the Tutorial |
-| Support download | A repository-maintained rule, track, annotation, or precomputed result used with the authoritative sequence |
-| Create | A text, TSV, JSON, or Python file whose complete contents appear in the guide |
-| Generated | An output or session created by following the current Tutorial |
-| Reference result | A result used to compare with a new run; do not use it as an input unless the guide explicitly says to |
+| You create | A text, TSV, JSON, or Python file whose complete contents appear in the Tutorial |
+| gbdraw writes | An output or Session that the current Tutorial produces |
+| Compare with | A tracked result to compare with your new run; do not use it as an input unless the Tutorial says so |
+
+Input files that you download, such as NCBI, DDBJ, or MIBiG records and
+repository-maintained rule, track, or precomputed-result files, are named in the
+Tutorial's own file table.
 
 The machine-readable [tutorial-data manifest](../gbdraw/web/tutorial-data/manifest.json)
 records the accession and checksum of the frozen copies used by automated

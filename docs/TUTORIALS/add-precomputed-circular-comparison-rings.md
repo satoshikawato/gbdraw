@@ -44,7 +44,7 @@ Each interface creates these files:
 
 | Interface | You create | gbdraw writes | Compare with |
 | --- | --- | --- | --- |
-| Web app | — | `circular_hsp_spans.fasta`, the reference and comparison intervals exported in Step 5; `precomputed_circular_rings.svg`, saved in Step 5 | The figure above |
+| Web app | — | `circular_hsp_spans.fasta`, the reference and comparison intervals exported in Step 5 and renamed; `precomputed_circular_rings.svg`, saved in Step 5 | The figure above |
 | Command line | — | `precomputed_circular_rings.svg` | [`precomputed_circular_rings.svg`](../images/t-cli-09/precomputed_circular_rings.svg) |
 | Python | `precomputed_circular_rings.py`, the program from Step 2 | `python_precomputed_circular_rings.svg` | [`python_precomputed_circular_rings.svg`](../images/t-py-06/python_precomputed_circular_rings.svg) |
 
@@ -100,6 +100,10 @@ Mode** to **Out** and load `cds_gene_qualifier_priority.tsv` as **Priority File
 `Precomputed TLOSATX rings around Homo sapiens mtDNA`, and the legend to the
 right in the separate Legend section. Set **Plot Title Position** to **Bottom**.
 
+The command line also sets `--definition_font_size 18` and the ring colors
+`#4E79A7`, `#F28E2B`, and `#59A14F`. These web steps leave both at their
+defaults, so the web figure can differ in those two respects.
+
 ![Three TLOSATX tables and companion FASTA files configured as Circular rings](../images/t-gui-06/03-ring-settings.png)
 
 ### Step 4: Generate and read the rings
@@ -113,8 +117,8 @@ around the circle are always coordinates on the human subject record.
 ### Step 5: Inspect an HSP and export its spans
 
 Select a colored HSP. The popup shows its endpoints, identity, alignment
-length, reference side, and source ring. Use **Both spans FASTA** to save the
-reference and comparison intervals as `circular_hsp_spans.fasta`.
+length, reference side, and source ring. In the **Both spans** row, select **FASTA**. The browser saves a file named
+like `<match>_both.fna`; rename it to `circular_hsp_spans.fasta`.
 
 ![Circular HSP popup with reference and comparison span exports](../images/t-gui-06/05-hsp-popup.png)
 
