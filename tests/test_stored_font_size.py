@@ -19,6 +19,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.root import _typed_leaves, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
+from gbdraw.api.session_compat import decode_session_request
 from gbdraw.session_request_codec import CanonicalRequestDecodingError, decode_canonical_request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -130,8 +131,9 @@ def _decoded(fixture: Path, change, tmp_path: Path) -> object:
     change(session["renderRequest"]["diagramOptions"])
     with materialize_session(load_session_document(_session(fixture)), output_directory=tmp_path) as materialized:
         try:
-            options = decode_canonical_request(
-                session["renderRequest"], resource_paths=materialized.resource_paths, output_directory=tmp_path
+            options = decode_session_request(
+                session["version"], session["renderRequest"],
+                resource_paths=materialized.resource_paths, output_directory=tmp_path,
             ).options
             return options.config, options.config_overrides
         except CanonicalRequestDecodingError as error:
@@ -203,3 +205,14 @@ def test_a_legacy_web_draft_font_size_of_zero_or_less_replays_as_auto(
     assert _cli_svg(stored, tmp_path, "stored") == _cli_svg(auto, tmp_path, "auto")
     for key in sizes:
         assert f'Settings: the value "0" (config.adv.{key}) cannot be used' in caplog.text
+
+
+def test_a_fresh_request_still_refuses_a_font_size_of_zero_or_less(tmp_path: Path) -> None:
+    """A Web Generate request is an input, not a stored Session (PD-OI-081)."""
+    session = _session(WEB_OVERRIDES)
+    session["renderRequest"]["diagramOptions"]["configOverrides"]["objects.legends.font_size.long"] = 0
+    with materialize_session(load_session_document(_session(WEB_OVERRIDES)), output_directory=tmp_path) as materialized:
+        with pytest.raises(CanonicalRequestDecodingError, match="font sizes must be finite numbers greater than zero"):
+            decode_canonical_request(
+                session["renderRequest"], resource_paths=materialized.resource_paths, output_directory=tmp_path
+            )

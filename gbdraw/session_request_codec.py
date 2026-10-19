@@ -1929,7 +1929,6 @@ def _decode_diagram_options(
             mode=mode,
             schema=schema,
         )
-    _read_stored_font_sizes(decoded)
     if schema in {1, 2}:
         feature_shapes = dict(decoded.get("feature_shapes") or {})
         for feature_type, shape in LEGACY_FEATURE_SHAPES.items():
@@ -1940,8 +1939,11 @@ def _decode_diagram_options(
     return decoded
 
 
-def _read_stored_font_sizes(decoded: dict[str, Any]) -> None:
-    """Read each stored font size <= 0 as Auto, as Web Load does (Owner Q-13 a, OV-1282).
+def with_stored_font_sizes_as_auto(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a stored request with each font size <= 0 read as Auto, as Web Load does (Owner Q-13 a, OV-1282).
+
+    The Session reader (``decode_session_request``) calls it; a fresh request,
+    such as a Web Generate, keeps refusing such a size (PD-OI-081).
 
     A font size is a ``POSITIVE`` style leaf (``style_leaf_domain``), in
     ``config`` or ``configOverrides``. Auto is the value the request's base
@@ -1972,15 +1974,21 @@ def _read_stored_font_sizes(decoded: dict[str, Any]) -> None:
             return value
         return next((default for base in bases if (default := lookup(base, path)) is not None), None)
 
-    config = decoded.get("config")
+    result = dict(payload)
+    stored = result.get("diagramOptions")
+    if not isinstance(stored, MappingABC):
+        return result
+    options = dict(stored)
+    result["diagramOptions"] = options
+    config = options.get("config")
     if isinstance(config, MappingABC):
-        decoded["config"] = {
+        options["config"] = {
             key: read(child, key, f"renderRequest.diagramOptions.config.{key}", (packaged,))
             for key, child in config.items()
         }
-    overrides = decoded.get("config_overrides")
+    overrides = options.get("configOverrides")
     if isinstance(overrides, MappingABC):
-        bases = (decoded.get("config"), packaged)
+        bases = (options.get("config"), packaged)
         kept: dict[str, Any] = {}
         for key, value in overrides.items():
             where = f'renderRequest.diagramOptions.configOverrides["{key}"]'
@@ -1989,7 +1997,8 @@ def _read_stored_font_sizes(decoded: dict[str, Any]) -> None:
             elif read(value, key, where, ()) is value:
                 kept[key] = value
             # Else dropped, as Web Load drops it: the base value applies.
-        decoded["config_overrides"] = kept
+        options["configOverrides"] = kept
+    return result
 
 
 def with_automatic_scale_interval(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -5571,4 +5580,5 @@ __all__ = [
     "migrate_flat_config_overrides",
     "migrate_legacy_full_config",
     "with_automatic_scale_interval",
+    "with_stored_font_sizes_as_auto",
 ]

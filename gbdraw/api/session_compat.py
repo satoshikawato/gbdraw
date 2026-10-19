@@ -1696,15 +1696,16 @@ def decode_session_request(
 ) -> DiagramRequest:
     """Decode one stored request of a Session of ``session_version``.
 
-    The canonical payload is migrated first; a Linear table of a Session up
+    The canonical payload is migrated first, and a stored font size <= 0 reads
+    as Auto (``with_stored_font_sizes_as_auto``); a Linear table of a Session up
     to 40 without view ID columns is marked ``drawn_feature_ids``, so the
     planner reads its stored IDs as views (OV-1183).
     """
 
-    from gbdraw.session_request_codec import decode_canonical_request
+    from gbdraw.session_request_codec import decode_canonical_request, with_stored_font_sizes_as_auto
 
     request = decode_canonical_request(
-        canonical_payload_for_session_decode(session_version, payload),
+        with_stored_font_sizes_as_auto(canonical_payload_for_session_decode(session_version, payload)),
         resource_paths=resource_paths,
         output_directory=output_directory,
     )
