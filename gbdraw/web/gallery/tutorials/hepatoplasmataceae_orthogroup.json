@@ -406,10 +406,10 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const content = card?.querySelector('details > div'); const track = content?.children?.[0]; const options = content?.children?.[1]; if (!app || !summary || !track || !options) throw new Error('Layout controls are unavailable.'); const matches = app.form?.linear_track_layout === 'middle' && app.form?.align_center === true && app.form?.separate_strands === true && app.form?.show_gc === true && app.form?.show_skew === true && app.adv?.pairwise_match_style === 'curve' && String(app.selectedPalette || '') === 'ajisai'; if (!matches) throw new Error('Restored layout settings do not match the tutorial.'); summary.setAttribute('data-capture-tutorial-layout-summary', 'true'); track.setAttribute('data-capture-tutorial-layout-track', 'true'); options.setAttribute('data-capture-tutorial-layout-options', 'true'); track.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; const section = document.querySelector(\"[data-setting='layout']\"); const summary = section?.querySelector(':scope > details > summary'); const track = section?.querySelector('div:has(> #linear-track-layout)'); const options = section?.querySelector('[data-layout-options]'); if (!app || !summary || !track || !options) throw new Error('Layout controls are unavailable.'); const matches = app.form?.linear_track_layout === 'middle' && app.form?.align_center === true && app.form?.separate_strands === true && app.form?.show_gc === true && app.form?.show_skew === true && app.adv?.pairwise_match_style === 'curve' && String(app.selectedPalette || '') === 'ajisai'; if (!matches) throw new Error('Restored layout settings do not match the tutorial.'); track.scrollIntoView({ block: 'center' });"
               }
             ],
-            "clipSelectors": ["[data-capture-tutorial-layout-summary='true']", "[data-capture-tutorial-layout-track='true']", "[data-capture-tutorial-layout-options='true']"],
+            "clipSelectors": ["[data-setting='layout'] > details > summary", "[data-setting='layout'] div:has(> #linear-track-layout)", "[data-setting='layout'] [data-layout-options]"],
             "cropPadding": 12
           }
         }
