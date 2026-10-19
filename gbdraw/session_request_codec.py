@@ -63,10 +63,10 @@ from gbdraw.analysis.protein_colinearity import (
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
-from gbdraw.definition_line_styles import DEFINITION_LINE_KINDS, read_stored_definition_line_font_size
 from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
@@ -1929,7 +1929,7 @@ def _decode_diagram_options(
             mode=mode,
             schema=schema,
         )
-    _read_stored_definition_line_font_sizes(decoded)
+    _read_stored_font_sizes(decoded)
     if schema in {1, 2}:
         feature_shapes = dict(decoded.get("feature_shapes") or {})
         for feature_type, shape in LEGACY_FEATURE_SHAPES.items():
@@ -1940,40 +1940,56 @@ def _decode_diagram_options(
     return decoded
 
 
-def _read_stored_definition_line_font_sizes(decoded: dict[str, Any]) -> None:
-    """Read each stored Linear definition line font size <= 0 as Auto (OV-1282).
+def _read_stored_font_sizes(decoded: dict[str, Any]) -> None:
+    """Read each stored font size <= 0 as Auto, as Web Load does (Owner Q-13 a, OV-1282).
 
-    ``decoded`` gets its own copies of the containers it changes; the stored
-    request stays as saved.
+    A font size is a ``POSITIVE`` style leaf (``style_leaf_domain``), in
+    ``config`` or ``configOverrides``. Auto is the value the request's base
+    gives that path: an override leaf is dropped, and inside ``config`` (or an
+    override that holds a table) the leaf takes the stored ``config`` value
+    (for an override), else the packaged one, else ``None`` (a Linear
+    definition line style then inherits its size). Changed containers are
+    copies; the stored request stays as saved.
     """
 
-    prefix = "objects.definition.linear.line_styles"
-    stored = decoded.get("config")
-    config: Mapping[str, Any] = stored if isinstance(stored, MappingABC) else {}
-    line_styles: object = config
-    for key in ("objects", "definition", "linear", "line_styles"):
-        line_styles = line_styles.get(key) if isinstance(line_styles, MappingABC) else None
-    copied: dict[str, Any] | None = None
-    for kind in DEFINITION_LINE_KINDS:
-        style = line_styles.get(kind) if isinstance(line_styles, MappingABC) else None
-        if not isinstance(style, MappingABC) or "font_size" not in style:
-            continue
-        value = read_stored_definition_line_font_size(
-            style["font_size"], path=f"renderRequest.diagramOptions.config.{prefix}.{kind}.font_size"
-        )
-        if value is not style["font_size"]:
-            copied = copied if copied is not None else deepcopy(dict(config))
-            copied["objects"]["definition"]["linear"]["line_styles"][kind]["font_size"] = value
-    if copied is not None:
-        decoded["config"] = copied
+    packaged = load_config_toml("gbdraw.data", "config.toml")
+
+    def lookup(tree: object, path: str) -> object:
+        for key in path.split("."):
+            if not isinstance(tree, MappingABC) or key not in tree:
+                return None
+            tree = tree[key]
+        return tree
+
+    def read(value: object, path: str, where: str, bases: tuple[object, ...]) -> object:
+        if isinstance(value, MappingABC):
+            children = {
+                key: read(child, f"{path}.{key}", f"{where}.{key}", bases) for key, child in value.items()
+            }
+            return children if any(children[key] is not value[key] for key in value) else value
+        domain = style_leaf_domain(path)
+        if domain is None or domain[0] != "POSITIVE" or read_stored_font_size(value, path=where) is not None:
+            return value
+        return next((default for base in bases if (default := lookup(base, path)) is not None), None)
+
+    config = decoded.get("config")
+    if isinstance(config, MappingABC):
+        decoded["config"] = {
+            key: read(child, key, f"renderRequest.diagramOptions.config.{key}", (packaged,))
+            for key, child in config.items()
+        }
     overrides = decoded.get("config_overrides")
     if isinstance(overrides, MappingABC):
-        decoded["config_overrides"] = {
-            key: read_stored_definition_line_font_size(value, path=f'renderRequest.diagramOptions.configOverrides["{key}"]')
-            if key in {f"{prefix}.{kind}.font_size" for kind in DEFINITION_LINE_KINDS}
-            else value
-            for key, value in overrides.items()
-        }
+        bases = (decoded.get("config"), packaged)
+        kept: dict[str, Any] = {}
+        for key, value in overrides.items():
+            where = f'renderRequest.diagramOptions.configOverrides["{key}"]'
+            if isinstance(value, MappingABC):
+                kept[key] = read(value, key, where, bases)
+            elif read(value, key, where, ()) is value:
+                kept[key] = value
+            # Else dropped, as Web Load drops it: the base value applies.
+        decoded["config_overrides"] = kept
 
 
 def with_automatic_scale_interval(payload: Mapping[str, Any]) -> dict[str, Any]:

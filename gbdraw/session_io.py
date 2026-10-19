@@ -44,7 +44,8 @@ from .core.numeric import (
     parse_ascii_integer,
     parse_ascii_nonnegative_integer,
 )
-from .definition_line_styles import DEFINITION_LINE_KINDS, read_stored_definition_line_font_size
+from .config.models.root import read_stored_font_size
+from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
@@ -6025,6 +6026,9 @@ def _gui_session_to_cli_args(
     form = form_value if isinstance(form_value, Mapping) else {}
     adv_value = config.get("adv")
     adv = dict(adv_value) if isinstance(adv_value, Mapping) else {}
+    # A stored font size <= 0 replays as Auto (no option), as Web Load reads it (OV-1282).
+    for key in [key for key in adv if str(key).endswith("font_size")]:
+        adv[key] = read_stored_font_size(adv[key], path=f"config.adv.{key}")
     if int(session.get("version", 0)) <= 30:
         effective_features = adv.get("features")
         if not isinstance(effective_features, list):
@@ -6626,7 +6630,7 @@ def _append_linear_definition_line_style_args(
         if not isinstance(raw_style, Mapping):
             continue
         parts: list[str] = []
-        font_size = read_stored_definition_line_font_size(
+        font_size = read_stored_font_size(
             raw_style.get("font_size"),
             path=f"config.adv.linear_definition_line_styles.{line_kind}.font_size",
         )
