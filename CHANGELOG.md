@@ -243,6 +243,14 @@ write-up of a release.
   region tint can span from its anchor slot to a second slot; the editor
   reports the same `to_slot` errors as the CLI before Generate, and Run Info's
   Source recipe includes the key.
+- Web app: an Overlay annotation row made in the Circular or Linear Custom
+  Track Slots editor no longer always fails with "must have z below/above" on
+  Generate. Placing the row on its anchor (**Overlay anchor**, **On axis**), its
+  **Underlay** / **Foreground** layer, the anchor and **Extend to** give the row
+  a `z` one below the lowest (**Underlay**) or one above the highest
+  (**Foreground**) `z` of the slots it names, in the same History step, and
+  keep a `z` that already meets that rule, such as one from a loaded Session
+  (OV-1297).
 - Web app: Generate waits for uploaded rule, priority, color, whitelist and
   blacklist files that are still being applied, so a Priority File uploaded
   just before Generate is no longer left out (OV-1193). A Specific rules file no

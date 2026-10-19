@@ -265,6 +265,63 @@ const OVERLAY_SLOT_REFERENCES = Object.freeze([
 /** The params only an Overlay annotation slot keeps: leaving Overlay drops them. */
 export const OVERLAY_ANNOTATION_PARAMS = Object.freeze(['anchor_slot', 'to_slot', 'cover_anchor']);
 
+/** A row's z as the plan check reads it: a draft that is no integer counts as 0. @param {unknown} value */
+const rowZ = (value) => (Number.isSafeInteger(Number(value)) ? Number(value) : 0);
+
+/**
+ * Whether an Overlay annotation slot's z meets its layer against the z of a
+ * slot it names (Python validate_overlay_annotation_anchors): an Underlay
+ * draws below it, a Foreground above. Another layer is refused on its own.
+ * @param {string} layer @param {number} z @param {number} targetZ
+ */
+const overlayLayerZHolds = (layer, z, targetZ) => (
+  layer === 'underlay' ? z < targetZ : layer !== 'foreground' || z > targetZ
+);
+
+/**
+ * The z an Overlay annotation row needs for its layer (OV-1297, LP-D91). The
+ * GUI has no z control, so both track editors set it when Placement Overlay,
+ * Layer, the anchor or Extend to changes: a z that meets the layer rule
+ * against every slot the row names is kept (a loaded Session keeps its z),
+ * else it is one below the lowest (Underlay) or one above the highest
+ * (Foreground) of their z. A disabled slot counts too, so the row stays valid
+ * when it is enabled again; the plan check refuses a disabled target anyway.
+ * @param {{ z?: unknown, params?: Record<string, unknown> | null }} slot
+ * @param {ReadonlyArray<{ id?: unknown, z?: unknown } | null | undefined>} slots The stack the row is in.
+ * @returns {number}
+ */
+export const overlayAnnotationZ = (slot, slots) => {
+  const params = slot.params || {};
+  const layer = normalizedString(params.layer || 'foreground');
+  const z = rowZ(slot.z);
+  const targetZs = OVERLAY_SLOT_REFERENCES.flatMap(({ key }) => {
+    const targetId = String(params[key] || '').trim();
+    const target = targetId
+      ? slots.find((candidate) => candidate && candidate !== slot && String(candidate.id || '').trim() === targetId)
+      : null;
+    return target ? [rowZ(target.z)] : [];
+  });
+  if (targetZs.every((targetZ) => overlayLayerZHolds(layer, z, targetZ))) return z;
+  return layer === 'underlay' ? Math.min(...targetZs) - 1 : Math.max(...targetZs) + 1;
+};
+
+/**
+ * An edit of an Overlay annotation row's Layer, anchor or Extend to, as both
+ * track editors' selects make it: an empty value (Select anchor, None) unsets
+ * the param, and the row takes the z its layer needs (`overlayAnnotationZ`).
+ * @param {{ z: number, params: Record<string, unknown> }} slot
+ * @param {Parameters<typeof overlayAnnotationZ>[1]} slots The stack the row is in.
+ * @param {OverlaySlotReference | 'layer'} key
+ * @param {unknown} value
+ */
+export const setOverlayAnnotationParam = (slot, slots, key, value) => {
+  const text = String(value ?? '').trim();
+  slot.params = { ...slot.params };
+  if (text) slot.params[key] = text;
+  else delete slot.params[key];
+  slot.z = overlayAnnotationZ(slot, slots);
+};
+
 /**
  * The facts of a drawing that decide whether Add track can add a row.
  * @typedef {object} TrackAddFacts
@@ -632,14 +689,9 @@ export const validateTrackSlotBindingInvariants = (
           `${modeLabel} annotation slot '${slot.id}' ${role} '${target.id}' has no eligible drawable band.`
         );
       }
-      if (layer === 'underlay' && slot.z >= target.z) {
+      if (!overlayLayerZHolds(layer, slot.z, target.z)) {
         throw new Error(
-          `${modeLabel} annotation underlay slot '${slot.id}' must have z less than ${role} '${target.id}'.`
-        );
-      }
-      if (layer === 'foreground' && slot.z <= target.z) {
-        throw new Error(
-          `${modeLabel} annotation foreground slot '${slot.id}' must have z greater than ${role} '${target.id}'.`
+          `${modeLabel} annotation ${layer} slot '${slot.id}' must have z ${layer === 'underlay' ? 'less' : 'greater'} than ${role} '${target.id}'.`
         );
       }
     }
@@ -1442,7 +1494,7 @@ const collectCustomTrackIssues = ({
       renderer,
       enabled: true,
       side,
-      z: Number.isSafeInteger(Number(slot.z)) ? Number(slot.z) : 0,
+      z: rowZ(slot.z),
       params: params || {}
     };
     normalizedEnabled.push(normalizedSlot);
@@ -1506,19 +1558,12 @@ const collectCustomTrackIssues = ({
           slotId: slot.id || null,
           message: `${modeLabel} Annotation track '${slot.id}' ${label} '${targetId}' has no eligible drawable band.`
         };
-      } else if (layer === 'underlay' && slot.z >= target.z) {
+      } else if (!overlayLayerZHolds(layer, slot.z, target.z)) {
         issue = {
-          code: 'annotation_underlay_z',
+          code: `annotation_${layer}_z`,
           field: 'z',
           slotId: slot.id || null,
-          message: `${modeLabel} Annotation underlay '${slot.id}' must have z below ${label} '${targetId}'.`
-        };
-      } else if (layer === 'foreground' && slot.z <= target.z) {
-        issue = {
-          code: 'annotation_foreground_z',
-          field: 'z',
-          slotId: slot.id || null,
-          message: `${modeLabel} Annotation foreground '${slot.id}' must have z above ${label} '${targetId}'.`
+          message: `${modeLabel} Annotation ${layer} '${slot.id}' must have z ${layer === 'underlay' ? 'below' : 'above'} ${label} '${targetId}'.`
         };
       }
       if (issue) {
