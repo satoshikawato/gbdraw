@@ -4437,17 +4437,13 @@ export const createAppSetup = () => {
   const updateLegendEntryColorShown = (index, color) => (
     legendRowHasRules(index) ? updateLegendEntryColor(index, color) : editLegendEntryColor(index, color)
   );
-  const setLegendRowDefaultColorWithHistory = undoableAction('Change legend color', featureActions.setLegendRowDefaultColor);
-  // OV-1281: the Legend item popup's Color. On a row that a type's default
-  // color draws it sets that default color, so the features and the legend
-  // change together (OIC-029); any other row takes the Legend color edit.
+  const setTypeDefaultColorWithHistory = undoableAction('Change legend color', featureActions.setTypeDefaultColor);
+  // OV-1281: the Legend item popup's Color on a row a type's default color draws sets that color (OIC-029).
   /** @param {number} index @param {string} color */
   const updateLegendEntryColorInPopup = async (index, color) => {
     const entry = state.activeDrawing().legendEntries.value[index];
-    if (entry && await featureActions.isLegendRowDefaultColored(legendEntryKey(entry))) {
-      return setLegendRowDefaultColorWithHistory(legendEntryKey(entry), color);
-    }
-    return updateLegendEntryColorShown(index, color);
+    const type = entry && await featureActions.preparedLegendRowDefaultColorType(legendEntryKey(entry));
+    return type ? setTypeDefaultColorWithHistory(type, color) : updateLegendEntryColorShown(index, color);
   };
   const setLegendEntryStrokeColorValueWithHistory = editEditorIntent(
     'Change legend stroke color',

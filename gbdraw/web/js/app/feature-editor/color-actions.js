@@ -176,15 +176,11 @@ import {
  */
 
 /**
- * Why the Legend Name Conflict dialog asks: the one sentence it shows. A
- * Legend row's sentence names the feature type when Merge is not offered; a
- * color rule's names the color, or the feature type when the color is the
- * renamed row's (OV-649, Owner Q-01 a).
+ * The one sentence that says why the Legend Name Conflict dialog asks. A color rule's names the feature
+ * type when its color is the renamed row's (OV-649, Owner Q-01 a); `ruleOnly`: a rule's name no row shows.
  * @param {{ name: string, ruleOnly: boolean, deleted: boolean, mergeAvailable: boolean, sameColor: boolean }} conflict
- *   `name`: the typed name. `ruleOnly`: the name of a color rule that no row shows.
- * @returns {string}
  */
-export const legendNameConflictReason = ({ name, ruleOnly, deleted, mergeAvailable, sameColor }) => {
+const legendNameConflictReason = ({ name, ruleOnly, deleted, mergeAvailable, sameColor }) => {
   const named = `"${name}"`;
   if (ruleOnly) return `${named} is the name of a color rule ${sameColor ? 'for another feature type' : 'with another color'}.`;
   const row = deleted ? 'is a deleted Legend item' : 'already exists';
@@ -1254,24 +1250,12 @@ export const createFeatureColorActions = ({
     if (merged.length && !(await applyColorToLegendSpecificRules(drawing, merged, color))) writeLegendRowColor(merged, color);
   };
 
-  // The feature type whose default color draws the Legend row of `key`: the
-  // row of a type whose features no rule or own color draws (`paletteRowType`),
-  // else null. It reads the rule matches, so call it once they are prepared.
+  // The type whose default color draws the Legend row of `key` (`paletteRowType`), else null; OV-1281:
+  // the Legend item popup's Color sets it. It reads the rule matches, so call it once they are prepared.
   /** @param {DrawingState} drawing @param {string} key */
   const legendRowDefaultColorType = (drawing, key) => {
     const features = getFeaturesForLegendCaption(key);
     return features.length > 0 ? paletteRowType(drawing, key, features) : null;
-  };
-
-  // OV-1281: the Legend item popup's Color on a palette row sets the type's
-  // default color, as the scope dialog's Legend item choice does (OIC-029).
-  // False for any other row, which the Legend owner edits.
-  /** @param {DrawingState} drawing @param {string} key @param {string} color */
-  const setLegendRowDefaultColor = async (drawing, key, color) => {
-    const type = legendRowDefaultColorType(drawing, key);
-    if (!type) return false;
-    await applyDefaultColorToLegendRow(drawing, type, color);
-    return true;
   };
 
   // The rules of the rows of `keys` (a Legend row and the rows merged into it,
@@ -1956,8 +1940,7 @@ export const createFeatureColorActions = ({
     updateClickedFeatureStroke: strokeAction(updateClickedFeatureStroke),
     /** @param {string} key */
     legendRowDefaultColorType: (key) => legendRowDefaultColorType(state.activeDrawing(), key),
-    isLegendRowDefaultColored: colorAction((drawing, /** @type {string} */ key) => legendRowDefaultColorType(drawing, key) !== null,
-      { targetRules: false }),
-    setLegendRowDefaultColor: colorAction(setLegendRowDefaultColor, { targetRules: false })
+    preparedLegendRowDefaultColorType: colorAction(legendRowDefaultColorType, { targetRules: false }),
+    setTypeDefaultColor: colorAction(applyDefaultColorToLegendRow, { targetRules: false })
   };
 };

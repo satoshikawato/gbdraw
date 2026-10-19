@@ -140,13 +140,6 @@ const colorRuleText = (rule) => {
 const TRACK_ROW_SUBTITLE = Object.freeze({ content: 'Content plot', skew: 'Skew plot', depth: 'Depth plot' });
 const TRACK_ROW_COLOR_SOURCE = 'Changes this legend swatch only. The plot keeps the color set in Settings.';
 
-// OV-1281: the Color of a row that a type's default color draws sets that
-// default color, in the words of the scope dialog's Legend item line (OIC-029).
-/** @param {string} type */
-const defaultColorEditText = (type) => (
-  `A change sets the ${type} default color (${type} features without their own color or rule, also hidden ones).`
-);
-
 /**
  * The legend-entry popup view.
  * @param {{ entry: LegendEntry, name: string, index: number, color: string, rules: readonly ColorRuleLike[],
@@ -163,7 +156,9 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
     : ruleLines.length
       ? (ruleLines.length === 1 ? 'From this color rule:' : `From these ${ruleLines.length} color rules:`)
       : featureTypes.has(key)
-        ? `Default color of ${key} features${defaultColorType ? `. ${defaultColorEditText(defaultColorType)}` : ''}`
+        // OV-1281: the scope dialog's words for what its Legend item choice sets (OIC-029).
+        ? `Default color of ${key} features${defaultColorType ? `. A change sets the ${defaultColorType} default color (${
+          defaultColorType} features without their own color or rule, also hidden ones).` : ''}`
         : 'Set on individual features';
   return {
     kind: /** @type {const} */ ('legend-entry'),
