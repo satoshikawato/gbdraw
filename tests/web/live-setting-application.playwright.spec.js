@@ -112,6 +112,31 @@ for (const [name, file] of [['tobacco', TOBACCO], ['hepa', HEPA]]) {
   });
 }
 
+// The Gallery shape: the Session already holds its command line's overrides; a live
+// value adds its key and keeps every other override as it was.
+test('tobacco: a live Legend font size keeps the Gallery Session overrides and adds its key', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await settleLive(page);
+    const before = await facts(page);
+    expect(Object.keys(before.overrides ?? {}).length, 'the Gallery request holds overrides').toBeGreaterThan(10);
+    const size = nextLegendFont(before.legendFontSizes);
+    await commitValue(page, LEGEND_FONT, size);
+    await appliedLegendFont(page, size);
+    const after = await facts(page);
+    expect(after.reflowError).toBeNull();
+    expect(after.generationKey).toBe(before.generationKey);
+    expect(after.overrides[LEGEND_FONT_OVERRIDE]).toBe(size);
+    // The Legend font size writes its short and long keys together; every other override stays.
+    const others = (overrides) => Object.fromEntries(Object.entries(overrides)
+      .filter(([key]) => !key.startsWith('objects.legends.font_size.')));
+    expect(others(after.overrides)).toEqual(others(before.overrides));
+  } finally {
+    await page.context().close();
+  }
+});
+
 // Review F1: a Session whose request has no `configOverrides`; a live value creates them, as a Generate from the same draft
 // sends them. The Gallery Session holds its command line's overrides, so the
 // case removes them.

@@ -334,7 +334,7 @@ assert.throws(
     supportedSides: ['above', 'below', 'overlay'],
     anchorlessRenderers: ['spacer']
   }),
-  /uses anchor_slot without side=overlay/
+  (error) => error.code === 'TRACK_INVALID' && error.context.reason === 'OVERLAY_SIDE' && error.context.field === 'side'
 );
 assert.throws(
   () => validateTrackSlotBindingInvariants([

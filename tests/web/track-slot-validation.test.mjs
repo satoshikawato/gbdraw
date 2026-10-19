@@ -731,6 +731,28 @@ test('an Overlay row naming a disabled or missing slot throws a named diagnostic
   }
 });
 
+// Every other throw of the same binding loop names the row too (OV-1302 channel).
+test('Overlay binding faults other than a missing slot throw a named diagnostic', () => {
+  const cases = [
+    ['anchor required', { params: { anchor_slot: '' } }, 'OVERLAY_ANCHOR', 'anchor_slot'],
+    ['off Overlay', { side: null, params: { to_slot: 'gc' } }, 'OVERLAY_SIDE', 'side'],
+    ['bad layer', { params: { layer: 'middle' } }, 'LAYER', 'layer'],
+    ['anchor ineligible', { params: { anchor_slot: 'space' } }, 'OVERLAY_ANCHOR', 'anchor_slot'],
+    ['to_slot ineligible', { params: { to_slot: 'notes' } }, 'OVERLAY_SPAN', 'to_slot'],
+    ['z order', { params: { to_slot: 'low' } }, 'DRAW_ORDER', 'z']
+  ];
+  for (const mode of ['circular', 'linear']) {
+    for (const [name, overlay, reason, field] of cases) {
+      const side = overlay.side === null ? { side: mode === 'circular' ? 'inside' : 'below' } : {};
+      const slots = spanStack(mode, { ...overlay, ...side });
+      assert.throws(() => validateTrackSlotBindingInvariants(slots, SPAN_BINDING[mode]), (error) => (
+        error.code === 'TRACK_INVALID' && error.context.reason === reason
+        && error.context.field === field && error.context.slotIndex === slots.length - 1
+      ), `${mode} ${name}`);
+    }
+  }
+});
+
 test('Extend to (to_slot) is written to the slot text and the payload, and None writes nothing', () => {
   for (const mode of ['circular', 'linear']) {
     const spec = mode === 'linear' ? buildLinearTrackSlotSpec : buildCircularTrackSlotSpec;

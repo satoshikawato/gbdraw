@@ -627,19 +627,17 @@ export const validateTrackSlotBindingInvariants = (
     if (enabled && renderer === 'annotations') {
       const anchorId = String(params.anchor_slot || '').trim();
       if (side === 'overlay' && !anchorId) {
-        throw new Error(`${modeLabel} annotation slot '${id}' with side=overlay requires anchor_slot.`);
+        throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_ANCHOR', field: 'anchor_slot', slotIndex: index });
       }
       const offOverlay = side === 'overlay'
         ? undefined
         : OVERLAY_SLOT_REFERENCES.find(({ key }) => String(params[key] || '').trim());
       if (offOverlay) {
-        throw new Error(`${modeLabel} annotation slot '${id}' uses ${offOverlay.key} without side=overlay.`);
+        throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_SIDE', field: 'side', slotIndex: index });
       }
       const layer = normalizedOptionalString(params.layer) ?? 'foreground';
       if (!['foreground', 'underlay'].includes(layer)) {
-        throw new Error(
-          `${modeLabel} annotation slot '${id}' layer must be foreground or underlay.`
-        );
+        throw diagnosticError('TRACK_INVALID', { reason: 'LAYER', field: 'layer', slotIndex: index });
       }
       params.layer = layer;
     }
@@ -675,7 +673,7 @@ export const validateTrackSlotBindingInvariants = (
       throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_SPAN', field: 'to_slot', slotIndex });
     }
     const layer = normalizedString(slot.params.layer || 'foreground');
-    for (const { key, role } of OVERLAY_SLOT_REFERENCES) {
+    for (const { key } of OVERLAY_SLOT_REFERENCES) {
       const targetId = String(slot.params[key] || '').trim();
       if (key === 'to_slot' && !targetId) continue;
       const target = enabledById.get(targetId);
@@ -685,14 +683,12 @@ export const validateTrackSlotBindingInvariants = (
         });
       }
       if (target.renderer === 'annotations' || anchorlessSet.has(target.renderer)) {
-        throw new Error(
-          `${modeLabel} annotation slot '${slot.id}' ${role} '${target.id}' has no eligible drawable band.`
-        );
+        throw diagnosticError('TRACK_INVALID', {
+          reason: key === 'to_slot' ? 'OVERLAY_SPAN' : 'OVERLAY_ANCHOR', field: key, slotIndex
+        });
       }
       if (!overlayLayerZHolds(layer, slot.z, target.z)) {
-        throw new Error(
-          `${modeLabel} annotation ${layer} slot '${slot.id}' must have z ${layer === 'underlay' ? 'less' : 'greater'} than ${role} '${target.id}'.`
-        );
+        throw diagnosticError('TRACK_INVALID', { reason: 'DRAW_ORDER', field: 'z', slotIndex });
       }
     }
   });

@@ -158,7 +158,7 @@ test('Save refuses a disabled Extend to slot with a named alert and no download'
   page.on('download', () => { downloaded = true; });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.errorLog?.summary || ''), { timeout: 60_000 })
-    .toMatch(/Track row \d+\./);
+    .toMatch(/Track row 2\./);
   const summary = await page.evaluate(() => window.__GBDRAW_APP__.errorLog.summary);
   expect(summary).toContain('Extend to');
   expect(summary).not.toContain('without recognized diagnostic');
