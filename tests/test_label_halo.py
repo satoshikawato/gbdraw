@@ -1,6 +1,6 @@
-"""How a feature label with a leader is drawn (LP-D98, LP-D100, LP-D103): its halo, its box, its Linear
-underline (trimmed at its ends, on a white casing) and gap-stop, a Circular underline's joint, and the PDF text
-of a figure with halos."""
+"""How a feature label with a leader is drawn (LP-D98, LP-D100, LP-D103, LP-D106): its halo, its box, its
+Linear underline (trimmed at its ends, on a white casing) and gap-stop, a Circular underline's joint, and the PDF
+text of a figure with halos."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import gbdraw.circular as circular_cli
 import gbdraw.linear as linear_cli
 from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink_offsets
 from gbdraw.labels.label_style import (
+    BOX_OPACITY,
     GAP_STOP_EM,
     HALO_COLOR,
     HALO_WIDTH_EM,
@@ -115,8 +116,11 @@ def _is_leader(line: ET.Element) -> bool:
 @pytest.mark.parametrize(
     ("mode", "argv"),
     [
-        ("linear", ("--gbk", str(LAMBDA), "--show_labels")),
-        ("linear", ("--gbk", str(INPUTS / "NC_001416.gb"), str(LAMBDA), "--show_labels", "all", "--separate_strands")),
+        ("linear", ("--gbk", str(LAMBDA), "--show_labels", "--label_protection", "halo")),
+        (
+            "linear",
+            ("--gbk", str(INPUTS / "NC_001416.gb"), str(LAMBDA), "--show_labels", "all", "--separate_strands", "--label_protection", "halo"),
+        ),
         ("circular", ("--gbk", str(LAMBDA), "--labels", "both")),
         ("circular", ("--gbk", str(LAMBDA), str(LAMBDA), "--labels", "--multi_record_canvas")),
     ],
@@ -134,16 +138,30 @@ def test_each_label_with_a_leader_has_one_halo_behind_its_letters(
         assert any(_embedded(text, root) for text in _label_texts(root)), "the case should embed some labels"
 
 
+@pytest.mark.parametrize(
+    ("mode", "argv"),
+    [
+        ("linear", ("--gbk", str(LAMBDA), "--show_labels")),
+        ("circular", ("--gbk", str(LAMBDA), "--labels", "both", "--label_protection", "box")),
+    ],
+    ids=["linear-default", "circular"],
+)
 def test_protection_none_draws_no_halo_and_box_draws_a_box_per_label(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    mode: str, argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    base = ("--gbk", str(LAMBDA), "--show_labels")
-    plain = ET.parse(_svg(tmp_path, monkeypatch, "linear", *base, "--label_protection", "none")).getroot()
+    """Linear draws a box by default (LP-D106): one per label with a leader, white at ``BOX_OPACITY``, bound
+    to its label so that hiding the label hides it, and, like a halo or a casing, taking no pointer events."""
+
+    plain = ET.parse(_svg(tmp_path, monkeypatch, mode, *argv, "--label_protection", "none")).getroot()
     assert not _halos(plain)
-    boxed = ET.parse(_svg(tmp_path, monkeypatch, "linear", *base, "--label_protection", "box")).getroot()
-    boxes = [element for element, _ in _walk(boxed) if element.tag == f"{SVG}rect" and element.get("fill-opacity") == "0.6"]
+    boxed = ET.parse(_svg(tmp_path, monkeypatch, mode, *argv)).getroot()
+    boxes = [element for element, _ in _walk(boxed) if element.tag == f"{SVG}rect" and element.get("fill-opacity") == str(BOX_OPACITY)]
     with_leader = [text for text in _label_texts(boxed) if not _embedded(text, boxed)]
-    assert not _halos(boxed) and len(boxes) == len(with_leader)
+    assert not _halos(boxed) and len(boxes) == len(with_leader) > 0
+    assert sorted(box.get(FEATURE, "") for box in boxes) == sorted(text.get(FEATURE, "") for text in with_leader)
+    assert all(
+        (box.get("fill"), box.get("pointer-events"), box.get("aria-hidden")) == ("#ffffff", "none", "true") for box in boxes
+    )
 
 
 def _embedded(text: ET.Element, root: ET.Element) -> bool:
@@ -385,6 +403,6 @@ def _pdf_text_runs(path: Path) -> int:
 def test_a_cairosvg_pdf_carries_each_haloed_label_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("cairosvg")
     base = ("--gbk", str(LAMBDA), "--show_labels")
-    with_halos = _svg(tmp_path, monkeypatch, "linear", *base, fmt="pdf")
+    with_halos = _svg(tmp_path, monkeypatch, "linear", *base, "--label_protection", "halo", fmt="pdf")
     without = _svg(tmp_path, monkeypatch, "linear", *base, "--label_protection", "none", fmt="pdf")
     assert _pdf_text_runs(with_halos) == _pdf_text_runs(without) > 0

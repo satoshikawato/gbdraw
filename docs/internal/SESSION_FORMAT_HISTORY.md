@@ -110,7 +110,7 @@ diagram mode as `adv.label_line` (`none`, `under`) and `adv.label_protection`
 `labels.<mode>.line` and `labels.<mode>.protection` only when they differ from
 the mode's packaged style, so a request of the default style is the request an
 earlier writer wrote (Gallery publication compares it unchanged). A Session without them
-loads with the packaged defaults of each mode (Linear `under` and `halo`,
+loads with the packaged defaults of each mode (Linear `under` and `box`,
 Circular `none` and `halo`, `gbdraw.labels.label_style`). The config value
 `labels.stroke_width` is removed: a stored config that holds it loads and draws
 the new leader width (0.07 em, at least 1 px); an override of it fails with the

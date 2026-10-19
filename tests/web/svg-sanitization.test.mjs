@@ -130,7 +130,7 @@ const domPurifyAttributeFilter = {
   }
 };
 
-test('label halos and underline casings keep pointer-events none (LP-D105)', () => {
+test('label halos, underline casings and boxes keep pointer-events none (LP-D105, LP-D106)', () => {
   assert.equal(VENDORED_DOMPURIFY.includes('"pointer-events"'), false);
   const rawSvg = [
     '<svg xmlns="http://www.w3.org/2000/svg">',
@@ -138,6 +138,8 @@ test('label halos and underline casings keep pointer-events none (LP-D105)', () 
     'stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" pointer-events="none"/>',
     '<line x1="0" y1="10" x2="40" y2="10" stroke="#ffffff" stroke-width="5.52" ',
     'stroke-linecap="butt" aria-hidden="true" pointer-events="none" data-label-feature-id="f1"/>',
+    '<rect x="-4" y="-6" width="48" height="16" rx="4.32" ry="4.32" fill="#ffffff" fill-opacity="0.8" stroke="none" ',
+    'aria-hidden="true" pointer-events="none" data-label-feature-id="f1"/>',
     '<text id="label-1" x="0" y="8" font-size="24">gene</text>',
     '</svg>'
   ].join('');
@@ -145,4 +147,5 @@ test('label halos and underline casings keep pointer-events none (LP-D105)', () 
 
   assert.match(sanitized, /<use [^>]*pointer-events="none"/);
   assert.match(sanitized, /<line [^>]*pointer-events="none"/);
+  assert.match(sanitized, /<rect [^>]*pointer-events="none"/);
 });

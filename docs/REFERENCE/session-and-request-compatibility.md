@@ -377,7 +377,7 @@ Treat the session as sensitive when its embedded source data is sensitive.
 
 Each diagram mode keeps its own feature label style, **Label Line** and
 **Label Protection** (`--label_line`, `--label_protection`). A Session saved
-before they existed loads with each mode's defaults: Linear Underline and Halo,
+before they existed loads with each mode's defaults: Linear Underline and Box,
 Circular None and Halo.
 
 An embedded resource may declare `checksum`, the SHA-256 digest of its bytes as

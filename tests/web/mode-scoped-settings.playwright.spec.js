@@ -256,8 +256,8 @@ test('OV-159 label_rendering (b): Linear Above Feature does not reset Circular E
 });
 
 // Label Line and Label Protection belong to their mode: the Linear Result
-// draws what they say (a box instead of the halo, no underline), and Save and
-// Load keep each mode's pair.
+// draws what they say (a halo instead of the default box, no underline), and
+// Save and Load keep each mode's pair.
 test('Label Line and Label Protection draw in their mode and survive Save and Load', async ({ page, browser }, testInfo) => {
   test.setTimeout(300_000);
   await openBoth(page);
@@ -270,24 +270,24 @@ test('Label Line and Label Protection draw in their mode and survive Save and Lo
     return {
       halos: [...svg.querySelectorAll('use')].filter((use) => labelIds.has(use.getAttribute('href') || use.getAttribute('xlink:href'))).length,
       underlines: svg.querySelectorAll('line[data-label-feature-id][stroke="#ffffff"]').length,
-      boxes: svg.querySelectorAll('rect[fill-opacity="0.6"]').length
+      boxes: svg.querySelectorAll('rect[data-label-feature-id]').length
     };
   });
   const before = await drawn();
-  expect(before.halos, 'default Linear halos').toBeGreaterThan(0);
+  expect(before.boxes, 'default Linear boxes').toBeGreaterThan(0);
   expect(before.underlines, 'default Linear underline casings').toBeGreaterThan(0);
-  expect(before.boxes).toBe(0);
-  await editStep(page, 'Label style', { 'adv.label_line': 'none', 'adv.label_protection': 'box' });
+  expect(before.halos).toBe(0);
+  await editStep(page, 'Label style', { 'adv.label_line': 'none', 'adv.label_protection': 'halo' });
   await generate(page);
   const after = await drawn();
-  expect({ halos: after.halos, underlines: after.underlines }, 'Linear Box, no line').toEqual({ halos: 0, underlines: 0 });
-  expect(after.boxes, 'Linear boxes').toBeGreaterThan(0);
+  expect({ boxes: after.boxes, underlines: after.underlines }, 'Linear Halo, no line').toEqual({ boxes: 0, underlines: 0 });
+  expect(after.halos, 'Linear halos').toBeGreaterThan(0);
 
   const fields = { line: 'adv.label_line', protection: 'adv.label_protection' };
   const fresh = await saveAndLoadFresh(page, browser, testInfo.outputPath('label-style.gbdraw-session.json'));
   try {
     const loaded = await readDrawings(fresh, fields);
-    expect(loaded.linear, 'Linear after Load').toEqual({ line: 'none', protection: 'box' });
+    expect(loaded.linear, 'Linear after Load').toEqual({ line: 'none', protection: 'halo' });
     expect(loaded.circular, 'Circular after Load').toEqual({ line: 'none', protection: 'halo' });
   } finally {
     await fresh.context().close();

@@ -1886,6 +1886,47 @@ def test_cli_draws_the_hmmtdna_control_region_label_in_front_at_the_default_regi
     assert ys["tRNA-Pro"] < ys["NADH dehydrogenase subunit 6"] < ys["cytochrome b"] < ys["tRNA-Thr"]
 
 
+@pytest.mark.parametrize("font", ["", "20"], ids=["front-region-label", "region-labels-behind"])
+def test_the_default_feature_label_boxes_lie_under_every_label(
+    font: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The default Linear feature label box (LP-D106) is drawn after the leaders and under every feature
+    label's casing, underline and letters, and under every region label drawn in front (backing and letters).
+    A region label drawn behind the record keeps its letters off every box."""
+
+    svg, _err = _hmmtdna_render(tmp_path, monkeypatch, capsys, font)("boxes")
+    root = ElementTree.fromstring(svg)
+    parents = {child: parent for parent in root.iter() for child in parent}
+    order = {id(element): index for index, element in enumerate(root.iter())}
+
+    def tag(element) -> str:
+        return element.tag.rsplit("}", 1)[-1]
+
+    bound = [element for element in root.iter() if element.attrib.get("data-label-feature-id")]
+    boxes = [element for element in bound if tag(element) == "rect"]
+    texts = [element for element in bound if tag(element) == "text"]
+    flat = [element for element in bound if tag(element) == "line" and element.attrib["y1"] == element.attrib["y2"]]
+    assert boxes and texts and flat
+    top_box = max(order[id(box)] for box in boxes)
+    assert top_box < min(order[id(element)] for element in texts + flat)
+    front = [group for group in root.iter() if group.attrib.get("data-gbdraw-region-label-for")]
+    assert bool(front) == (font == "")
+    assert all(top_box < order[id(group)] for group in front)
+    behind = [
+        element
+        for group in root.iter()
+        if group.attrib.get("data-gbdraw-annotation-label")
+        for element in group
+        if tag(element) == "text"
+    ]
+    assert behind
+    for box in boxes:
+        dx, dy = _translation(box, parents)
+        x, y = dx + float(box.attrib["x"]), dy + float(box.attrib["y"])
+        area = (x, y, x + float(box.attrib["width"]), y + float(box.attrib["height"]))
+        assert not [text.text for text in behind if _boxes_overlap(_text_ink_box(text, parents), area)]
+
+
 def test_a_backing_stops_at_its_own_marks_edge() -> None:
     """OV-1290: the backing (0.18 em past the letters) does not cross ``mark_edge``, where the paint of
     the label's mark (or the slot it keeps clear of) begins, ``label_offset`` from the letters, on either

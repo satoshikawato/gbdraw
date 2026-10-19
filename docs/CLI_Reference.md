@@ -1400,7 +1400,7 @@ options:
   --label_protection {none,halo,box}
                         What keeps a leader passing behind a feature label off
                         its letters: "halo" (a white outline of the letters),
-                        "box" (a white box), or "none". Default: "halo".
+                        "box" (a white box), or "none". Default: "box".
   --label_rotation LABEL_ROTATION
                         Linear label rotation in degrees (optional; float;
                         default: 0). In above_feature mode, rotated labels

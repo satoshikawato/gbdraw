@@ -26,6 +26,7 @@ from gbdraw.config.modify import validate_config_overrides
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.labels.label_style import (
+    BOX_OPACITY,
     DEFAULT_LABEL_LINE,
     DEFAULT_LABEL_PROTECTION,
     FeatureLabelStyle,
@@ -60,9 +61,11 @@ def _leader_widths(svg: str) -> set[str]:
 
 
 def test_each_mode_has_its_packaged_label_style() -> None:
+    # Linear: an underline on a white box at 0.8; Circular: a halo (LP-D106).
     config = GbdrawConfig.from_dict(load_default_config())
-    assert LinearRenderProfile(config).label_style == FeatureLabelStyle("under", "halo")
+    assert LinearRenderProfile(config).label_style == FeatureLabelStyle("under", "box")
     assert CircularRenderProfile(config).label_style == FeatureLabelStyle("none", "halo")
+    assert BOX_OPACITY == 0.8
     packaged = load_config_toml("gbdraw.data", "config.toml")["labels"]
     for mode in ("linear", "circular"):
         assert (packaged[mode]["line"], packaged[mode]["protection"]) == (
@@ -129,7 +132,8 @@ def test_a_stored_config_with_the_old_stroke_width_draws_the_new_label_style(tmp
     for svg in svgs:
         widths = _leader_widths(svg)
         assert widths and "0.5" not in widths and "1.5" not in widths, widths
-        assert "<use" in svg
+        # Linear draws its default box, not a halo (LP-D106).
+        assert "<use" not in svg and f'fill-opacity="{BOX_OPACITY}"' in svg
 
 
 def test_the_four_settings_reach_the_drawing_from_cli_and_python(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -141,13 +145,13 @@ def test_the_four_settings_reach_the_drawing_from_cli_and_python(tmp_path: Path,
         ["--gbk", str(LAMBDA), "--labels", "--label_line", "under", "--label_protection", "none", "-o", "c", "-f", "svg"]
     )
     linear, circular = (tmp_path / "l.svg").read_text(), (tmp_path / "c.svg").read_text()
-    assert "<use" not in linear and 'fill-opacity="0.6"' in linear
-    assert "<use" not in circular and 'fill-opacity="0.6"' not in circular
+    assert "<use" not in linear and f'fill-opacity="{BOX_OPACITY}"' in linear
+    assert "<use" not in circular and f'fill-opacity="{BOX_OPACITY}"' not in circular
     cfg = apply_config_overrides(
         GbdrawConfig.from_dict(load_default_config()),
         {"labels.linear.line": "none", "labels.circular.protection": "box"},
     )
-    assert LinearRenderProfile(cfg).label_style == FeatureLabelStyle("none", "halo")
+    assert LinearRenderProfile(cfg).label_style == FeatureLabelStyle("none", "box")
     assert CircularRenderProfile(cfg).label_style == FeatureLabelStyle("none", "box")
 
 
@@ -164,7 +168,8 @@ def test_a_style_change_rebuilds_its_stages_without_an_undeclared_read(
     harness = EquivalenceHarness(mode, tmp_path)
     base = [*argv, "--gbk", str(LAMBDA)]
     harness.warm(base)
-    for extra in (["--label_line", "under" if mode == "circular" else "none"], ["--label_protection", "box"]):
+    other = {"linear": "halo", "circular": "box"}[mode]
+    for extra in (["--label_line", "under" if mode == "circular" else "none"], ["--label_protection", other]):
         warm, _cold = harness.step(base + extra, " ".join(extra))
         assert warm.error is None, warm.error
         assert warm.stages.undeclared_read_total == 0 and warm.stages.uncacheable_total == 0, warm.stages

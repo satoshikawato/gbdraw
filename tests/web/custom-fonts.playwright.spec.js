@@ -381,11 +381,12 @@ test('Choose installed font… lists, searches, and loads an installed family, a
   await expect(select).toHaveValue(`'${INSTALLED}', serif`);
 });
 
-// The PDF draws each label once (its halo stays in the SVG, LP-D102) and a
-// centred or end-anchored text where the SVG draws it: svg2pdf measured the
-// anchor with the browser, which knows the PDF face under no name, and drew
-// long lambda labels up to 30 px right (OV-1303).
-test('PDF export draws each label once, centred on its SVG anchor', async ({ page }, testInfo) => {
+// The PDF draws each label once (a halo stays in the SVG, LP-D102), the
+// default Linear box of each label at its opacity (LP-D106), and a centred or
+// end-anchored text where the SVG draws it: svg2pdf measured the anchor with
+// the browser, which knows the PDF face under no name, and drew long lambda
+// labels up to 30 px right (OV-1303).
+test('PDF export draws each label once on its box, centred on its SVG anchor', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   await openApp(page);
   await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(resolve('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'));
@@ -420,7 +421,12 @@ def left(element):
         element = parents.get(element)
     return x
 texts = [text for text in root.iter("{http://www.w3.org/2000/svg}text") if text.get("data-label-feature-id")]
-halos = {use.get("href", use.get("{http://www.w3.org/1999/xlink}href")) for use in root.iter("{http://www.w3.org/2000/svg}use")}
+boxes = [rect for rect in root.iter("{http://www.w3.org/2000/svg}rect") if rect.get("data-label-feature-id")]
+opacities = sorted({rect.get("fill-opacity") for rect in boxes})
+data = open(pdf, "rb").read().decode("latin1")
+# The graphics states of the box opacity, by resource name, and how often the page sets one of them.
+states = {number for number, body in re.findall(r"(\\d+) 0 obj\\s*<<(.*?)>>", data, re.S) if re.search(r"/ca\\s+" + re.escape(opacities[0]) + r"\\b", body)} if len(opacities) == 1 else set()
+state_names = {name for name, number in re.findall(r"/(\\w+)\\s+(\\d+) 0 R", data) if number in states}
 same = {}
 for text in texts:
     same[text.text] = same.get(text.text, 0) + 1
@@ -431,13 +437,17 @@ for text in texts:
     offsets.append(min((abs(x + share * width * float(text.get("font-size")) - anchor) for x, width in runs.get(text.text, [])), default=None))
 print(json.dumps({
     "labels": len(texts),
-    "haloed": sum(f"#{text.get('id')}" in halos for text in texts),
+    "boxes": len(boxes),
+    "boxOpacities": opacities,
+    "boxStateUses": sum(len(re.findall(r"/" + name + r"\\s+gs", data)) for name in state_names),
     "runsPerLabel": sorted({len(runs.get(text.text, [])) / same[text.text] for text in texts}),
     "maxOffset": max((offset for offset in offsets if offset is not None), default=None),
 }))
 `, svgFile, pdfFile], { cwd: resolve('.'), encoding: 'utf8' }));
   expect(report.labels).toBeGreaterThan(50);
-  expect(report.haloed, 'labels with a halo in the SVG').toBe(report.labels);
+  expect(report.boxes, 'labels with a box in the SVG').toBeGreaterThan(50);
+  expect(report.boxOpacities, 'box opacity in the SVG').toEqual(['0.8']);
+  expect(report.boxStateUses, 'PDF fills at the box opacity').toBeGreaterThanOrEqual(report.boxes);
   expect(report.runsPerLabel, 'PDF text runs per label').toEqual([1]);
   expect(report.maxOffset, 'PDF anchor offset (px)').toBeLessThan(0.05);
 });

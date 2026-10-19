@@ -30,15 +30,16 @@ LabelProtection: TypeAlias = Literal["none", "halo", "box"]
 LABEL_LINES: tuple[LabelLine, ...] = get_args(LabelLine)
 LABEL_PROTECTIONS: tuple[LabelProtection, ...] = get_args(LabelProtection)
 
-# The packaged defaults (config.toml writes the same values; a test compares them).
+# The packaged defaults (config.toml writes the same values; a test compares them): Linear an underline on a
+# box, Circular a halo (LP-D106).
 DEFAULT_LABEL_LINE: Mapping[LabelStyleMode, LabelLine] = {"linear": "under", "circular": "none"}
-DEFAULT_LABEL_PROTECTION: Mapping[LabelStyleMode, LabelProtection] = {"linear": "halo", "circular": "halo"}
+DEFAULT_LABEL_PROTECTION: Mapping[LabelStyleMode, LabelProtection] = {"linear": "box", "circular": "halo"}
 
 # The halo: a white stroke of the letters this many font sizes wide (half of it beyond the glyphs).
 HALO_WIDTH_EM = 0.08
 HALO_COLOR = "#ffffff"
-# The box: the region label backing's white rounded box, at this opacity.
-BOX_OPACITY = 0.6
+# The box: the region label backing's white rounded box, at this opacity (both modes, LP-D106).
+BOX_OPACITY = 0.8
 # The underline lies this many font sizes below the font's descent line, measured to its edge.
 UNDERLINE_GAP_EM = 0.06
 # Each end of the underline stops this many font sizes inside the letters' ink, at most a quarter of the

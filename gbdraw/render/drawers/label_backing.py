@@ -6,7 +6,8 @@ side and as the corner radius, which may stop at an edge on one side (a region
 label's mark, a feature label's own leader end or underline) so it never
 covers what it belongs to. A region label is drawn on it at
 ``BACKING_OPACITY`` (LP-D82 ``RGN-FRONT``); a feature label with
-``protection = box`` at ``label_style.BOX_OPACITY``.
+``protection = box`` at ``label_style.BOX_OPACITY``, bound to its label and
+taking no pointer events.
 
 A halo (``protection = halo``) is a ``<use>`` of the label's text, stroked
 white ``label_style.HALO_WIDTH_EM`` font sizes wide with round joins and no
@@ -172,14 +173,17 @@ def feature_label_backing(label: FeatureLabelInk, leader: Sequence[tuple[float, 
     return backing_box(ink, label.font_size, edge_y=edge)
 
 
-def feature_label_box(label: FeatureLabelInk, leader: Sequence[tuple[float, float]]) -> Rect:
+def feature_label_box(label: FeatureLabelInk, leader: Sequence[tuple[float, float]], feature_id: str | None) -> Rect:
     """The drawn box of a feature label (``protection = box``), turned with its letters; ``leader`` is the
-    leader as drawn."""
+    leader as drawn. Like a halo or a casing it takes no pointer events, and it is bound to its label
+    (``feature_id``, required: ``bind_label_part`` refuses none) so that it is hidden with it."""
 
     rect = backing_rect(feature_label_backing(label, leader), label.font_size, opacity=BOX_OPACITY)
     if label.rotation_deg != 0.0:
         rect.rotate(label.rotation_deg, center=label.center)
-    return rect
+    rect.attribs["aria-hidden"] = "true"
+    rect.attribs["pointer-events"] = "none"
+    return bind_label_part(rect, feature_id)
 
 
 __all__ = [

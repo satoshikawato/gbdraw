@@ -343,10 +343,11 @@ Session whose font is not available.
 feature label with a leader line is drawn, as `--label_line` and
 `--label_protection` do on the
 [command line](command-line.md#tracks-annotations-and-presentation). Circular
-and Linear each have their own pair (Linear **Underline** and **Halo**, Circular
+and Linear each have their own pair (Linear **Underline** and **Box**, Circular
 **None** and **Halo** by default), which applies on Generate and is saved in
-Sessions. The PDF export draws labels without their halos; SVG, Interactive SVG
-and PNG keep them.
+Sessions. **Box** is a white box at 80 % opacity behind the letters. The PDF
+export draws labels without their halos; SVG, Interactive SVG and PNG keep
+them. A box is drawn in every format.
 
 ### Numeric settings
 

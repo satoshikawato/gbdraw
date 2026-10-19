@@ -100,7 +100,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
       },
       "labelStyle": {
         "line": "under",
-        "protection": "halo"
+        "protection": "box"
       },
       "linearAxisColor": "lightgray",
       "linearRulerAxisColor": "dimgray",

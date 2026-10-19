@@ -10,7 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal, Optional, Sequence, cast
 from .config.toml import load_config_toml
-from .labels.label_style import LABEL_LINES, LABEL_PROTECTIONS
+from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LABEL_LINES, LABEL_PROTECTIONS
 from .render.export import parse_formats
 from .api.request_render import (
     CurrentRequestArtifacts,
@@ -700,12 +700,14 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--label_line',
-        help='Line under each feature label with a leader: "under" draws one that continues the leader; "none" draws none. Default: "under".',
+        help='Line under each feature label with a leader: "under" draws one that continues the leader; "none" draws none. '
+        f'Default: "{DEFAULT_LABEL_LINE["linear"]}".',
         choices=LABEL_LINES,
         type=str)
     parser.add_argument(
         '--label_protection',
-        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), "box" (a white box), or "none". Default: "halo".',
+        help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), '
+        f'"box" (a white box), or "none". Default: "{DEFAULT_LABEL_PROTECTION["linear"]}".',
         choices=LABEL_PROTECTIONS,
         type=str)
     parser.add_argument(

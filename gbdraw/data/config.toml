@@ -244,7 +244,7 @@ feature = ["note"]
   placement = "auto"
   rotation = 0.0
   line = "under"        # none | under: a line under the letters that continues the leader
-  protection = "halo"   # none | halo | box: what keeps a leader behind the letters off them
+  protection = "box"    # none | halo | box: what keeps a leader behind the letters off them
 
 [labels.circular]
   scope = "none"
