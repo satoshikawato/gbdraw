@@ -1948,7 +1948,8 @@ def _read_stored_definition_line_font_sizes(decoded: dict[str, Any]) -> None:
     """
 
     prefix = "objects.definition.linear.line_styles"
-    config = decoded.get("config")
+    stored = decoded.get("config")
+    config: Mapping[str, Any] = stored if isinstance(stored, MappingABC) else {}
     line_styles: object = config
     for key in ("objects", "definition", "linear", "line_styles"):
         line_styles = line_styles.get(key) if isinstance(line_styles, MappingABC) else None
