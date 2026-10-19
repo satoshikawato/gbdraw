@@ -107,7 +107,7 @@ same four regions:
 The single-copy regions use blue and the inverted repeats use purple, in both
 sets.
 
-![Annotation table containing LSC, SSC, IRa, and IRb regions](../images/t-gui-05/03-annotation-table.png)
+![Annotation table containing the LSC, IRb, SSC, and IRa lines and their tints](../images/t-gui-05/03-annotation-table.png)
 
 To reuse the current annotation table, select **Download TSV**. The file can
 be imported again through **Import TSV**, including any edits made here.
@@ -116,13 +116,13 @@ be imported again through **Import TSV**, including any edits made here.
 
 Open **Custom Track Slots**, turn on **Use custom stack**, and remove the
 **Ticks** and **GC skew** rows. Configure this exact order. Move a new row
-into place before you set it to **Overlay anchor**; an overlay row has no move
-arrows.
+into place before you set it to **Overlay anchor**; an overlay row's
+**Move outward** and **Move inward** arrows are disabled.
 
 | Slot | Renderer | Position | Radius | Width | Other settings |
 | --- | --- | --- | ---: | ---: | --- |
 | `features` | Features | On axis | Auto | Auto | Feature on axis / split |
-| `plastome_tint` | Annotations | Overlay anchor | — | — | Set `plastome_tint`; anchor `features`; layer Underlay; Extend to `gc_content`; Marks: highlight only; labels off; padding `0` |
+| `plastome_tint` | Annotations | Overlay anchor | — | — | Set `plastome_tint`; anchor `features`; **Underlay**; **Extend to** `gc_content`; **Marks**: **Highlight** only; **Labels** off; **padding** `0` |
 | `plastome_regions` | Annotations | Inside | `0.65 ×R` | `20 px` | Set `plastome_regions`; labels on; compress; inner/outer gap `1`; padding `1` |
 | `gc_content` | Dinucleotide content | Inside | `0.56 ×R` | `0.08 ×R` | GC |
 
@@ -135,7 +135,7 @@ tint. The `plastome_regions` ring sits between the feature ring and GC
 content, and its names curve along the ring. Neither needs a separate legend
 item.
 
-![Circular custom-track controls for features, one plastome-region lane, and GC content](../images/t-gui-05/04-track-settings.png)
+![Circular custom-track controls for features, the region tint underlay, one plastome-region lane, and GC content](../images/t-gui-05/04-track-settings.png)
 
 ### Step 6: Generate and export the finished map
 
@@ -144,7 +144,7 @@ structural labels, radial gene labels inside and outside the feature ring, funct
 profile, and upper-left legend. There should be no coordinate-tick or skew
 track. Select **SVG** to save `annotated_chloroplast_map.svg`.
 
-![Gallery-style tobacco plastome with functional colors, radial labels, structural regions, GC content, and upper-left legend](../images/t-gui-05/05-finished-diagram.png)
+![Gallery-style tobacco plastome with functional colors, radial labels, tinted structural regions with curved names, GC content, and upper-left legend](../images/t-gui-05/05-finished-diagram.png)
 
 ## On the command line
 

@@ -408,7 +408,8 @@ def _add_region_tint_slot(page: Page) -> tuple[dict[str, Any], ...]:
     tint.get_by_label("Circular track slot id annotations", exact=True).fill("plastome_tint")
     tint = page.get_by_role("group", name="Circular track slot plastome_tint", exact=True)
     label = "Circular track slot plastome_tint"
-    # Move the row under the features first: an overlay row has no move arrows.
+    # Move the row under the features first: an overlay row's Move outward and
+    # Move inward arrows are disabled.
     for _ in range(2):
         tint.get_by_title("Move outward", exact=True).click()
     tint.get_by_label(f"{label} Annotation set", exact=True).select_option("plastome_tint")

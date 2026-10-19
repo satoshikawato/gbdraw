@@ -322,12 +322,12 @@
     },
     {
       "title": "Bind the annotation set to the circular track stack",
-      "body": "Open Custom Track Slots in Layout. Keep the feature track on the axis, add plastome_tint as an Underlay on it that extends to GC content, place plastome_regions inside the feature track, and place GC content farther inward. Move a new row into place before you set it to Overlay anchor; an overlay row has no move arrows.",
+      "body": "Open Custom Track Slots in Layout. Keep the feature track on the axis, add plastome_tint as an Underlay on it that extends to GC content, place plastome_regions inside the feature track, and place GC content farther inward. Move a new row into place before you set it to Overlay anchor; an overlay row's Move outward and Move inward arrows are disabled.",
       "table": {
         "columns": ["Slot id", "Renderer", "Position", "Radius", "Width", "Key settings"],
         "rows": [
           ["features", "Features", "On axis", "Auto", "Auto", "Lane direction: split"],
-          ["plastome_tint", "Annotations", "Overlay anchor", "—", "—", "Set: plastome_tint; Anchor: features; Layer: Underlay; Extend to: gc_content; Marks: highlight; Labels: off; padding: 0"],
+          ["plastome_tint", "Annotations", "Overlay anchor", "—", "—", "Set: plastome_tint; Anchor: features; Underlay; Extend to: gc_content; Marks: Highlight; Labels: off; padding: 0"],
           ["plastome_regions", "Annotations", "Inside", "0.65 ×R", "20 px", "Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px"],
           ["gc_content", "Dinucleotide content", "Inside", "0.56 ×R", "0.08 ×R", "Dinucleotide: GC"]
         ]
