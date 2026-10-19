@@ -408,6 +408,9 @@ def _add_region_tint_slot(page: Page) -> tuple[dict[str, Any], ...]:
     tint.get_by_label("Circular track slot id annotations", exact=True).fill("plastome_tint")
     tint = page.get_by_role("group", name="Circular track slot plastome_tint", exact=True)
     label = "Circular track slot plastome_tint"
+    # Move the row under the features first: an overlay row has no move arrows.
+    for _ in range(2):
+        tint.get_by_title("Move outward", exact=True).click()
     tint.get_by_label(f"{label} Annotation set", exact=True).select_option("plastome_tint")
     tint.get_by_label(f"{label} Annotation placement", exact=True).select_option("overlay")
     tint.get_by_label(f"{label} Enabled drawable anchor", exact=True).select_option("features")
@@ -417,10 +420,6 @@ def _add_region_tint_slot(page: Page) -> tuple[dict[str, Any], ...]:
     tint.get_by_label(f"{label} Padding", exact=True).fill("0")
     for mark in ("line", "bracket", "band"):
         tint.get_by_label(f"{label} mark {mark}", exact=True).uncheck()
-    for _ in range(2):
-        page.get_by_role("group", name="Circular track slot plastome_tint", exact=True).get_by_title(
-            "Move outward", exact=True
-        ).click()
 
     slots = _track_slot_snapshot(page)
     enabled = tuple((slot["id"], slot["renderer"]) for slot in slots if slot["enabled"])
@@ -435,6 +434,15 @@ def _add_region_tint_slot(page: Page) -> tuple[dict[str, Any], ...]:
     if z != -1:
         raise AssertionError(f"The plastome_tint Underlay must sit below the features (z {z!r})")
     return slots
+
+
+def _dismiss_history_limit_notice(page: Page) -> None:
+    """Keep the History-limit notice that the long slot edit raises out of the captures."""
+
+    notice = page.locator("[data-app-notice]").filter(has_text="history limit")
+    if notice.count() and notice.first.is_visible():
+        notice.first.get_by_role("button", name="Dismiss notice").click()
+        expect(notice).to_have_count(0)
 
 
 def capture_gui_annotated_chloroplast(
@@ -526,6 +534,7 @@ def capture_gui_annotated_chloroplast(
 
         _configure_gallery_slots(page)
         slots = _add_region_tint_slot(page)
+        _dismiss_history_limit_notice(page)
         page.get_by_role(
             "group", name="Circular track slot plastome_tint", exact=True
         ).scroll_into_view_if_needed()
@@ -544,6 +553,7 @@ def capture_gui_annotated_chloroplast(
             popup.get_by_role(
                 "button", name="Close feature popup", exact=True
             ).click()
+        _dismiss_history_limit_notice(page)
         screenshot_bytes[SCREENSHOT_NAMES[4]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[4]], "Circular"
         )

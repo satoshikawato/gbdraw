@@ -115,7 +115,9 @@ be imported again through **Import TSV**, including any edits made here.
 ### Step 5: Build the four-slot Gallery stack
 
 Open **Custom Track Slots**, turn on **Use custom stack**, and remove the
-**Ticks** and **GC skew** rows. Configure this exact order:
+**Ticks** and **GC skew** rows. Configure this exact order. Move a new row
+into place before you set it to **Overlay anchor**; an overlay row has no move
+arrows.
 
 | Slot | Renderer | Position | Radius | Width | Other settings |
 | --- | --- | --- | ---: | ---: | --- |

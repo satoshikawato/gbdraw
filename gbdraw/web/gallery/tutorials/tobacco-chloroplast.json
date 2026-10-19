@@ -322,7 +322,7 @@
     },
     {
       "title": "Bind the annotation set to the circular track stack",
-      "body": "Open Custom Track Slots in Layout. Keep the feature track on the axis, add plastome_tint as an Underlay on it that extends to GC content, place plastome_regions inside the feature track, and place GC content farther inward.",
+      "body": "Open Custom Track Slots in Layout. Keep the feature track on the axis, add plastome_tint as an Underlay on it that extends to GC content, place plastome_regions inside the feature track, and place GC content farther inward. Move a new row into place before you set it to Overlay anchor; an overlay row has no move arrows.",
       "table": {
         "columns": ["Slot id", "Renderer", "Position", "Radius", "Width", "Key settings"],
         "rows": [
@@ -337,7 +337,7 @@
           "dataDependent": true,
           "media": {
             "src": "./media/tobacco-chloroplast/manual-07-01-custom-track-slots.webp",
-            "alt": "Circular track stack with separate numeric Width/Radius fields and px/×R units for plastome_regions and GC content.",
+            "alt": "Circular track stack with the plastome_tint Underlay on features extending to GC content, and separate numeric Width/Radius fields and px/×R units for plastome_regions and GC content.",
             "caption": "Set plastome_tint as in the table, then the numeric Width/Radius values and px/×R units, with plastome_regions between features and gc_content."
           },
           "capture": {
