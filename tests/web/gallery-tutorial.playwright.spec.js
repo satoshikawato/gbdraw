@@ -722,7 +722,7 @@ test('Gallery renders the Vibrio multi-record tutorial and media', async ({ page
   await expect(tutorialPanel.getByRole('heading', { name: 'Color rule basics' })).toHaveCount(0);
   await expect(tutorialPanel.getByRole('heading', { name: 'Color rules' })).toHaveCount(0);
   await expect(tutorialPanel.getByRole('heading', { name: 'Post-generation edits' })).toHaveCount(0);
-  await expect(tutorialPanel.getByText('Enable Multi-record canvas')).toBeVisible();
+  await expect(tutorialPanel.getByText('Set up the Multi-Record Canvas')).toBeVisible();
   await expect(tutorialPanel.getByText('Upload the GenBank file')).toBeVisible();
   await expect(tutorialPanel.getByText('Set the circular layout')).toBeVisible();
   await expect(

@@ -54,7 +54,7 @@
           "media": {
             "src": "./media/lambda_basic_linear/manual-02-01-genbank-upload.webp",
             "alt": "First Linear input row containing NC_001416.gb.",
-            "caption": "Upload NC_001416.gb in record row 1."
+            "caption": "Upload NC_001416.gb in File 1."
           },
           "capture": {
             "source": "webapp",
@@ -162,7 +162,7 @@
     },
     {
       "title": "Set strands, labels, ruler, and legend",
-      "body": "Apply the four Linear presentation settings below.",
+      "body": "Apply the five Linear presentation settings below.",
       "table": {
         "columns": [
           "Control",

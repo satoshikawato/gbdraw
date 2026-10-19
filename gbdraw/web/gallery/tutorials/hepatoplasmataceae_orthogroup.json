@@ -330,7 +330,9 @@
           ["Scale Style", "Ruler (Ticks)"],
           ["Show GC Content", "On"],
           ["Show GC Skew", "On"],
-          ["Palette", "ajisai"]
+          ["Palette", "ajisai"],
+          ["Legend position", "Right"],
+          ["Lock Definition Column", "Off"]
         ]
       },
       "operations": [

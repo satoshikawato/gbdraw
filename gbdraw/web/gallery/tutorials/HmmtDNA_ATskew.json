@@ -41,9 +41,9 @@
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["Input type", "GenBank"],
-          ["File", "HmmtDNA.gbk"],
-          ["Output prefix", "HmmtDNA_ATskew"],
+          ["Input Genomes", "GenBank"],
+          ["GenBank/DDBJ File", "HmmtDNA.gbk"],
+          ["Output Prefix", "HmmtDNA_ATskew"],
           ["Species", "<i>Homo sapiens</i>"]
         ]
       },
@@ -67,8 +67,8 @@
           ["Legend position", "Left"],
           ["Label Mode", "Out"],
           ["Palette", "ajisai"],
-          ["Definition font size", "28"],
-          ["Label font size", "20"],
+          ["Default font size", "28"],
+          ["Label Font Size", "20"],
           ["Features", "CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"]
         ]
       },
@@ -240,8 +240,8 @@
           ["Dinucleotide", "AT"],
           ["Legend label", "AT skew"],
           ["Width", "0.1"],
-          ["Positive color", "#deaf6e"],
-          ["Negative color", "#7294e3"]
+          ["Positive skew color", "#deaf6e"],
+          ["Negative skew color", "#7294e3"]
         ]
       },
       "operations": [
@@ -373,7 +373,7 @@
         "columns": ["Setting", "Value"],
         "rows": [
           ["Feature type", "CDS"],
-          ["Qualifier order", "gene"]
+          ["Qualifier priority", "gene"]
         ]
       },
       "operations": [

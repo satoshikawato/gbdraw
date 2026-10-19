@@ -23,7 +23,7 @@
 ## Features
 
 - Circular and linear genome diagrams from annotated sequence files
-- Comparative genomics tracks from BLAST outfmt 6 or 7
+- Comparison tracks from LOSAT searches run by gbdraw or from BLAST outfmt 6 or 7 tables
 - Reusable coordinate- and feature-targeted annotation tracks
 - Browser-based GUI at [gbdraw.app](https://gbdraw.app/) and local GUI via `gbdraw gui`
 - Fine-grained control over colors, labels, legends, and track layout

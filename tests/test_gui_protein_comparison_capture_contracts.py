@@ -672,7 +672,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
                 "Axis Stroke Width",
                 "`5`",
                 "40%",
-                "First record",
+                "First Record Only",
                 "`gene`",
             ):
                 assert value in page

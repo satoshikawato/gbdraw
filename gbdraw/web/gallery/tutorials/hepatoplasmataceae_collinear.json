@@ -200,6 +200,8 @@
         "rows": [
           ["LOSAT Mode", "LOSATP"],
           ["LOSATP mode", "Collinear blocks"],
+          ["Max target seqs", "Blank (Unbounded)"],
+          ["Infer orthogroups with self-comparisons", "On"],
           ["Max unit gap", "0"],
           ["Min block genes", "1"],
           ["Color mode", "Orientation + identity"],
@@ -366,7 +368,9 @@
           ["Scale Style", "Ruler (Ticks)"],
           ["Show GC Content", "On"],
           ["Show GC Skew", "On"],
-          ["Palette", "ajisai"]
+          ["Palette", "ajisai"],
+          ["Legend position", "Right"],
+          ["Lock Definition Column", "Off"]
         ]
       },
       "operations": [
