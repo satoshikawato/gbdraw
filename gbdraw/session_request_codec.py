@@ -3471,12 +3471,13 @@ def _encode_track_slot(
                     + ", ".join(sorted(private_keys))
                     + "."
                 )
-            if isinstance(raw.get("style_override"), RegionAnnotationStyle):
-                raw["style_override"] = _encode_annotation_style(raw["style_override"])
             # A spec string keeps `marks=a|b` as text; the Session holds the
-            # mark list the Web reads (OV-1298).
+            # mark list the Web reads (OV-1298). Read before the style
+            # override below becomes its camelCase Session form.
             if isinstance(raw.get("marks"), str):
                 raw["marks"] = list(annotation_track_params_from_mapping(raw).marks or ())
+            if isinstance(raw.get("style_override"), RegionAnnotationStyle):
+                raw["style_override"] = _encode_annotation_style(raw["style_override"])
         result[_camel(item.name)] = _json_value(raw, path=f"trackSlot.{_camel(item.name)}")
     if legacy_spacing is not None:
         assert isinstance(slot, CircularTrackSlot)

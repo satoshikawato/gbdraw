@@ -1652,37 +1652,45 @@ def test_annotation_slot_mark_filter_from_a_spec_is_written_as_a_list(
 
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
     spec = "regions:annotations@set_id=regions,side=overlay,anchor_slot=features,layer=underlay,marks=highlight|Line,z=-1"
-    request: CircularDiagramRequest | LinearDiagramRequest
-    if mode == "circular":
-        request = CircularDiagramRequest(
-            records=(RecordInput(source=InMemoryRecordSource(record)),),
-            options=CircularDiagramOptions(tracks=CircularTrackOptions(circular_track_slots=(
-                CircularTrackSlot(id="features", renderer="features"),
-                parse_circular_track_slot(spec),
-            ))),
-        )
-    else:
-        request = LinearDiagramRequest(
-            records=(RecordInput(source=InMemoryRecordSource(record)),),
-            options=LinearDiagramOptions(tracks=LinearTrackOptions(
-                linear_track_slots=(
-                    LinearTrackSlot(id="features", renderer="features", side="overlay"),
-                    parse_linear_track_slot(spec),
-                ),
-                linear_track_axis_index=0,
-            )),
+    parsed = parse_circular_track_slot(spec) if mode == "circular" else parse_linear_track_slot(spec)
+    # A Python API slot with a text filter and a style override (review F3).
+    styled = replace(parsed, params={
+        **dict(parsed.params or {}), "marks": "line", "style_override": RegionAnnotationStyle(stroke="#000000"),
+    })
+    for index, (slot, marks) in enumerate(((parsed, ["highlight", "line"]), (styled, ["line"]))):
+        request: CircularDiagramRequest | LinearDiagramRequest
+        if mode == "circular":
+            assert isinstance(slot, CircularTrackSlot)
+            request = CircularDiagramRequest(
+                records=(RecordInput(source=InMemoryRecordSource(record)),),
+                options=CircularDiagramOptions(tracks=CircularTrackOptions(circular_track_slots=(
+                    CircularTrackSlot(id="features", renderer="features"),
+                    slot,
+                ))),
+            )
+        else:
+            assert isinstance(slot, LinearTrackSlot)
+            request = LinearDiagramRequest(
+                records=(RecordInput(source=InMemoryRecordSource(record)),),
+                options=LinearDiagramOptions(tracks=LinearTrackOptions(
+                    linear_track_slots=(
+                        LinearTrackSlot(id="features", renderer="features", side="overlay"),
+                        slot,
+                    ),
+                    linear_track_axis_index=0,
+                )),
+            )
+
+        encoded = encode_canonical_request(request)
+        params = encoded.payload["diagramOptions"]["tracks"][f"{mode}TrackSlots"][1]["params"]
+        decoded = decode_canonical_request(
+            encoded.payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / f"marks-{index}"),
+            output_directory=tmp_path / "output",
         )
 
-    encoded = encode_canonical_request(request)
-    params = encoded.payload["diagramOptions"]["tracks"][f"{mode}TrackSlots"][1]["params"]
-    decoded = decode_canonical_request(
-        encoded.payload,
-        resource_paths=_materialize_resources(encoded, tmp_path / "marks"),
-        output_directory=tmp_path / "output",
-    )
-
-    assert params["marks"] == ["highlight", "line"]
-    assert encode_canonical_request(decoded).payload == encoded.payload
+        assert params["marks"] == marks
+        assert encode_canonical_request(decoded).payload == encoded.payload
 
 
 @pytest.mark.parametrize("field", ["width", "radius"])
