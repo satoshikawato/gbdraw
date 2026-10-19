@@ -163,6 +163,10 @@ class CircularResolvedSlot:
     # How far ``reserved_band_px`` reaches past the slot's own reservation, on the label side, for the labels of a
     # span overlay that covers this slot: other slots keep out of it, but it does not move the slot itself.
     span_label_room_px: float = 0.0
+    # A span overlay whose labels the layout keeps a room for past the span's outer edge, where set radii allow: the
+    # room lies past the outermost inside or outside slot it covers, so a span whose outer edge is split feature lanes
+    # (an overlay) keeps none (OV-1360), nor does an overlay that spans nothing (OV-1359).
+    span_keeps_label_room: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "params", freeze_layout_mapping(self.params))
@@ -188,6 +192,16 @@ class CircularResolvedSlot:
     @property
     def reserved_outer_radius_px(self) -> float:
         return float(self.reserved_band_px.outer_px) if self.reserved_band_px is not None else 0.0
+
+    @property
+    def own_reserved_band_px(self) -> RadialBand | None:
+        """The band the slot itself takes: its drawing with its tick or axis labels and its own labels' room, without
+        the room of the span labels past it, which never moves the slot itself."""
+
+        reserved = self.reserved_band_px
+        if reserved is None or self.span_label_room_px <= 0.0:
+            return reserved
+        return RadialBand(reserved.inner_px, float(reserved.outer_px) - self.span_label_room_px)
 
     @property
     def draw_width_px(self) -> float:

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Collection, Literal, Mapping, Sequence, TypedDict
+from typing import Any, Callable, Collection, Literal, Mapping, Protocol, Sequence, TypedDict, TypeVar
 
+from ...annotations.models import AnnotationTrackParams
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasGeometry
 from ...config.models import GbdrawConfig
@@ -709,8 +710,7 @@ def _slot_intents(
 def _span_label_rooms_by_slot(
     intents: Sequence[_RadialSlotIntent], axis: CircularAxisLayout, rooms: Mapping[str, AnnotationLabelRoom]
 ) -> dict[str, list[_SpanLabelRoom]]:
-    """Each span overlay's label room, keyed by the outermost slot it covers (OD-R1174 F1): an ``outside`` slot
-    lies beyond every other, and on one side the slot listed first lies outermost."""
+    """Each span overlay's label room, keyed by the slot that holds it (``_span_room_holder``)."""
 
     by_id = {intent.slot_id: intent for intent in intents}
     span_rooms: dict[str, list[_SpanLabelRoom]] = {}
@@ -719,20 +719,50 @@ def _span_label_rooms_by_slot(
         room = rooms.get(intent.slot_id)
         if intent.renderer != "annotations" or intent.side != "overlay" or annotation is None or room is None:
             continue
-        if annotation.to_slot is None and not annotation.cover_anchor:
+        holder = _span_room_holder(annotation, by_id)
+        if holder is None:
             continue
-        covered = [
-            by_id[slot_id]
-            for slot_id in (annotation.anchor_slot, annotation.to_slot)
-            if slot_id in by_id and by_id[slot_id].side != "overlay"
-        ]
-        if not covered:
-            continue
-        outermost = min(covered, key=lambda item: (item.side != "outside", item.slot_index))
-        span_rooms.setdefault(outermost.slot_id, []).append(
+        span_rooms.setdefault(holder.slot_id, []).append(
             _SpanLabelRoom(_bound_span_label_room(room, axis, intent.slot), whole_band=annotation.to_slot is not None)
         )
     return span_rooms
+
+
+class _SpanCoveredSlot(Protocol):
+    @property
+    def side(self) -> str: ...
+
+    @property
+    def slot_index(self) -> int: ...
+
+
+_SpanCoveredSlotT = TypeVar("_SpanCoveredSlotT", bound=_SpanCoveredSlot)
+
+
+def _span_room_holder(
+    annotation: AnnotationTrackParams, by_id: Mapping[str, _SpanCoveredSlotT]
+) -> _SpanCoveredSlotT | None:
+    """The slot whose reserved band holds a span overlay's labels' room: the outermost slot it covers (OD-R1174 F1).
+    An ``outside`` slot lies beyond every other, and on one side the slot listed first lies outermost. A covered
+    overlay (split feature lanes, a plot overlay) holds none, and an overlay that spans nothing has no room."""
+
+    if annotation.to_slot is None and not annotation.cover_anchor:
+        return None
+    covered = [
+        by_id[slot_id]
+        for slot_id in (annotation.anchor_slot, annotation.to_slot)
+        if slot_id is not None and slot_id in by_id and by_id[slot_id].side != "overlay"
+    ]
+    return min(covered, key=lambda item: (item.side != "outside", item.slot_index)) if covered else None
+
+
+def _span_room_band(resolved: CircularResolvedSlot, whole_band: bool) -> RadialBand | None:
+    """The band of a span's room holder that the room lies past: its whole band for ``to_slot``, its draw band for
+    ``cover_anchor``."""
+
+    if whole_band:
+        return resolved.packing_band_px or resolved.draw_band_px
+    return resolved.draw_band_px or resolved.packing_band_px
 
 
 def _bound_span_label_room(
@@ -752,11 +782,7 @@ def _with_span_label_room(intent: _RadialSlotIntent, resolved: CircularResolvedS
     reserved = resolved.reserved_band_px
     reach = 0.0
     for span in intent.span_label_rooms:
-        band = (
-            resolved.packing_band_px or resolved.draw_band_px
-            if span.whole_band
-            else resolved.draw_band_px or resolved.packing_band_px
-        )
+        band = _span_room_band(resolved, span.whole_band)
         if band is not None:
             reach = max(reach, float(band.outer_px) + span.room(band))
     if reserved is None or reach <= float(reserved.outer_px) + LAYOUT_EPSILON:
@@ -766,15 +792,6 @@ def _with_span_label_room(intent: _RadialSlotIntent, resolved: CircularResolvedS
         reserved_band_px=RadialBand(reserved.inner_px, reach),
         span_label_room_px=reach - float(reserved.outer_px),
     )
-
-
-def _own_reserved_band(resolved: CircularResolvedSlot) -> RadialBand | None:
-    """The slot's reserved band without the room of the span labels past it, which never moves the slot itself."""
-
-    reserved = resolved.reserved_band_px
-    if reserved is None or resolved.span_label_room_px <= 0.0:
-        return reserved
-    return RadialBand(reserved.inner_px, float(reserved.outer_px) - resolved.span_label_room_px)
 
 
 def _bound_label_room(
@@ -1104,7 +1121,7 @@ def _try_measure_inside_interval(
                 depth_config=depth_config,
                 compressed=compressed,
             )
-            bands = [band for band in (resolved.packing_band_px, _own_reserved_band(resolved)) if band is not None]
+            bands = [band for band in (resolved.packing_band_px, resolved.own_reserved_band_px) if band is not None]
             if not bands:
                 return resolved
             min_inner = min(float(band.inner_px) for band in bands)
@@ -1238,7 +1255,7 @@ def _measure_anchored_inside(
         depth_config=depth_config,
         compressed=compressed,
     )
-    bands = [band for band in (resolved.packing_band_px, _own_reserved_band(resolved)) if band is not None]
+    bands = [band for band in (resolved.packing_band_px, resolved.own_reserved_band_px) if band is not None]
     reserved_inner = placement_window.inner_px if placement_window.reserved_inner_px is None else placement_window.reserved_inner_px
     if any(float(band.outer_px) > float(placement_window.outer_px) + LAYOUT_EPSILON for band in bands):
         return None
@@ -2358,7 +2375,7 @@ def _resolve_circular_radial_layout(
             if resolved.reserved_band_px is not None:
                 anchored_blockers.append((intent.slot_id, resolved.reserved_band_px))
             continue
-        pinned_band = resolved.packing_band_px if intent.label_room is not None else _own_reserved_band(resolved)
+        pinned_band = resolved.packing_band_px if intent.label_room is not None else resolved.own_reserved_band_px
         if _slot_reserves(intent) and pinned_band is not None:
             conflict = _reserved_overlap_any(pinned_band, pinned_occupied)
             if conflict is not None:
@@ -2704,6 +2721,10 @@ def _resolve_circular_radial_layout(
                 else max(0.0, float(overlay_resolved.resolved_width_px or intent.width_px))
             )
             draw_band = _band_from_center_width(anchor_radius, width)
+        # The room lies past the holder, so it keeps the labels off other tracks only when the holder sets the span's
+        # outer edge; split feature lanes (an overlay) further out leave it under the letters (OV-1360).
+        holder = _span_room_holder(annotation, by_id)
+        holder_band = None if holder is None else _span_room_band(holder, annotation.to_slot is not None)
         anchored = replace(
             overlay_resolved,
             anchor_radius_px=anchor_radius,
@@ -2713,6 +2734,8 @@ def _resolve_circular_radial_layout(
             draw_band_px=draw_band,
             reserved_band_px=None,
             spans_slots=span_band is not None or (annotation.cover_anchor and anchor_band is not None),
+            span_keeps_label_room=holder_band is not None
+            and float(holder_band.outer_px) >= float(draw_band.outer_px) - LAYOUT_EPSILON,
         )
         resolved_by_index[intent.slot_index] = anchored
         by_id[intent.slot_id] = anchored

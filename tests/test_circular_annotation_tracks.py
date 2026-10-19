@@ -2,6 +2,7 @@ import json
 import math
 import random
 import re
+import warnings
 from pathlib import Path
 from typing import NamedTuple
 
@@ -23,6 +24,7 @@ from gbdraw.api import (
     parse_record_selector,
 )
 import gbdraw.api.render as api_render
+from gbdraw.exceptions import LabelLeadersCrossWarning
 from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
 from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink
 from gbdraw.tracks import (
@@ -868,7 +870,6 @@ def test_circular_annotation_labels_curve_along_the_circle_and_stay_upright(orie
 
 def test_circular_region_label_longer_than_its_circle_is_cut_and_warns() -> None:
     from gbdraw.api.diagram import label_fit_report
-    from gbdraw.exceptions import LabelLeadersCrossWarning
     from gbdraw.labels.fit import label_fit_notice
     from gbdraw.web_support.label_fit import label_fit_report_payload
 
@@ -1447,6 +1448,87 @@ def test_circular_rings_that_cannot_make_one_sides_label_room_keep_the_other_sid
     outside = [(near, far) for near, far in _annotation_letter_radii(drawing) if near > axis]
     assert outside and all(bands["ring"][0] - far >= 4.0 - 1e-3 for _near, far in outside), outside
     assert sum(bands["gc"]) / 2.0 == pytest.approx(0.8 * axis, abs=1e-6)
+
+
+def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
+    # LP-D86 (OV-1208): the GC ring set to r=0.8 leaves the inside slot's labels no room, so they are drawn on it;
+    # the label fit warning counts them, the one report the command line and the Web read, and offers no fix.
+    from gbdraw.api.diagram import label_fit_report
+    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.web_support.label_fit import label_fit_report_payload
+
+    slots = (
+        "ring:dinucleotide_content@side=outside",
+        "out:annotations@side=outside,set_id=regions,w=20px",
+        "features:features",
+        "in:annotations@side=inside,set_id=regions,w=20px",
+        "gc:dinucleotide_content@side=inside,r=0.8",
+    )
+    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
+        drawing = _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
+    gc_inner, gc_outer = _slot_bands(drawing)["gc"]
+    axis = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisRadiusPx"])
+    inside = [(near, far) for near, far in _annotation_letter_radii(drawing) if far < axis]
+    assert len(inside) == 2 and all(far > gc_inner and near < gc_outer for near, far in inside), inside
+    report = label_fit_report(drawing)
+    assert report is not None and report.drawn and report.region_track_overlaps == 2 and report.rows == ()
+    notice = "Region labels lie on other tracks: the set track radii leave them no room (2)."
+    assert label_fit_notice(report) == (notice,)
+    payload = label_fit_report_payload(report, "circular")
+    assert payload["notice"] == [notice]
+    ((record_payload),) = payload["records"]
+    assert record_payload["labelKind"] == "circular_region" and record_payload["labelCount"] == 4
+    assert record_payload["counts"] == "2 region labels on other tracks"
+
+
+@pytest.mark.parametrize(
+    "slots",
+    [
+        # A split features slot is an overlay but takes its band: the span's letters lie on its feature lanes.
+        ("features:features@lane_direction=split", "gc:dinucleotide_content@side=inside,r=0.91,w=18px",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor=true,z=5"),
+        # A ticks slot takes its tick labels' band too: the letters lie on the scale numbers.
+        ("ticks:ticks@side=outside,r=1.14", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
+        # A span to an overlay plot inside it keeps its room past the skew ring, so the set radius takes it.
+        ("features:features", "skew:dinucleotide_skew@side=inside,r=0.86,w=18px",
+         "ov:dinucleotide_content@side=overlay,r=0.6,w=10px",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=skew,to_slot=ov,z=5"),
+    ],
+    ids=["split-features", "tick-labels", "span-to-an-overlay-plot"],
+)
+def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str, ...]) -> None:
+    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
+        _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
+
+
+@pytest.mark.parametrize(
+    "slots",
+    [
+        ("ring:dinucleotide_content@side=outside", "out:annotations@side=outside,set_id=regions,w=20px", "features:features",
+         "in:annotations@side=inside,set_id=regions,w=20px", "gc:dinucleotide_content@side=inside"),
+        ("features:features@lane_direction=split", "gc:dinucleotide_content@side=inside,w=18px",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor=true,z=5"),
+        ("ticks:ticks@side=outside", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
+        ("features:features", "skew:dinucleotide_skew@side=inside,w=18px", "ov:dinucleotide_content@side=overlay,r=0.6,w=10px",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=skew,to_slot=ov,z=5"),
+        # An overlay that spans nothing, or covers split feature lanes, keeps no room; its labels are drawn over the
+        # tracks around it whatever the radii (OV-1359, OV-1360).
+        ("o1:dinucleotide_content@side=outside", "features:features", "gc:dinucleotide_content@side=inside",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=false,z=5"),
+        ("features:features@lane_direction=split",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=true,z=5",
+         "gc:dinucleotide_content@side=outside"),
+        ("o1:dinucleotide_content@side=outside", "features:features@lane_direction=split",
+         "gc:dinucleotide_content@side=inside",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,to_slot=gc,z=5"),
+    ],
+    ids=["automatic-radii", "split-features-automatic", "tick-labels-automatic", "span-to-an-overlay-plot-automatic",
+         "overlay-spanning-nothing", "span-over-split-features", "span-from-split-features"],
+)
+def test_circular_region_labels_with_their_room_do_not_warn(slots: tuple[str, ...]) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LabelLeadersCrossWarning)
+        _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
 
 
 def test_circular_span_label_room_past_the_axis_is_dropped_when_an_outside_row_cannot_make_it() -> None:
