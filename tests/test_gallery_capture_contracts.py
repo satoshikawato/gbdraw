@@ -705,7 +705,7 @@ def test_capture_lets_css_transitions_end_before_the_crop(
     assert waits and waits[-1] < events.index("screenshot")
 
 
-def test_vnig_palette_select_lists_the_real_palettes() -> None:
+def test_vnig_palette_select_reads_the_app_palette_list() -> None:
     tutorial = json.loads(
         (Path(__file__).resolve().parents[1] / "gbdraw/web/gallery/tutorials/Vnig_TUMSAT-TG-2018.json").read_text()
     )
