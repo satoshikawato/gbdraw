@@ -19,6 +19,7 @@ import math
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from ..core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink_offsets
 from ..layout.spatial import Aabb
@@ -28,19 +29,61 @@ from .circular_types import CircularLabel
 
 UNDERLINE_ENV = "GBDRAW_LABEL_UNDERLINE"
 UNDERLINE_GAP_EM = 0.06
+OVERLINE_ENV = "GBDRAW_LABEL_OVERLINE"
+GAP_STOP_EM = 0.20
 
 
-def label_underline_on() -> bool:
-    """The prototype switch (``GBDRAW_LABEL_UNDERLINE``): ``on`` draws and counts the underline,
-    ``draw`` only draws it (the layout and the fit count stay as without one; a study view)."""
-
-    return os.environ.get(UNDERLINE_ENV, "").strip().lower() in {"on", "draw"}
+DiagramMode = Literal["linear", "circular"]
 
 
-def label_underline_counted() -> bool:
+def study_switch(name: str, mode: DiagramMode) -> str:
+    """A study switch's value for one diagram mode: ``<name>_LINEAR`` / ``<name>_CIRCULAR`` when set, else
+    ``<name>``; lower case, "" when unset."""
+
+    return os.environ.get(f"{name}_{mode.upper()}", os.environ.get(name, "")).strip().lower()
+
+
+def label_underline_on(mode: DiagramMode) -> bool:
+    """The prototype switch (``GBDRAW_LABEL_UNDERLINE``): ``on`` draws the underline and counts it as part of
+    the leader, ``box`` draws it and counts it as part of the label's box (Linear: the placer gives the label
+    that room; Circular: drawn only), ``draw`` only draws it (layout and count as without one)."""
+
+    return study_switch(UNDERLINE_ENV, mode) in {"on", "box", "draw"}
+
+
+def label_underline_counted(mode: DiagramMode) -> bool:
     """Whether the fit count (and so the engine that reads it) sees the underline as part of the leader."""
 
-    return os.environ.get(UNDERLINE_ENV, "").strip().lower() == "on"
+    return study_switch(UNDERLINE_ENV, mode) == "on"
+
+
+OverlineMode = Literal["line", "gap", "none"]
+
+
+def label_overline(mode: DiagramMode) -> OverlineMode:
+    """The prototype switch (``GBDRAW_LABEL_OVERLINE``) for a leader that arrives from above (study, experiment 3):
+    ``line`` (default) draws the line over the letters, ``gap`` draws none and stops the leader ``GAP_STOP_EM``
+    above them, ``none`` draws none and keeps today's leader end."""
+
+    value = study_switch(OVERLINE_ENV, mode)
+    return "gap" if value == "gap" else "none" if value == "none" else "line"
+
+
+def label_underline_in_box(mode: DiagramMode) -> bool:
+    """Whether the label's box (placer and fit count) includes the underline (Linear only)."""
+
+    return mode == "linear" and study_switch(UNDERLINE_ENV, mode) == "box"
+
+
+def underline_reach_em(font_family: str, dominant_baseline: str) -> float | None:
+    """How far the underline (or overline) lies from the text's ``y``, in em, the larger side; None without
+    font metrics. With ``central`` both sides are the same: half of ascent + descent, plus the gap."""
+
+    metrics = get_font_vertical_metrics(font_family)
+    shift = None if metrics is None else dominant_baseline_shift_em(dominant_baseline, metrics)
+    if metrics is None or shift is None:
+        return None
+    return max(shift + metrics.descent, metrics.ascent - shift) + UNDERLINE_GAP_EM
 
 
 def segment_through_box(start: Point, end: Point, box: Aabb) -> bool:
@@ -83,6 +126,7 @@ class FeatureLabelInk:
     under_y: float | None = None
     over_y: float | None = None
     join_at_end: bool = False
+    overline: OverlineMode = "line"
 
     def _turned(self, point: Point, degrees: float) -> Point:
         if degrees == 0.0:
@@ -124,6 +168,12 @@ class FeatureLabelInk:
             meet_x = near_x
         # Under the letters, unless the leader would then run through them (it arrives from above): over them.
         y = self.over_y if segment_through_box(previous, (meet_x, self.under_y), self.ink) else self.under_y
+        if y == self.over_y and self.overline == "none":
+            return None
+        if y == self.over_y and self.overline == "gap":
+            # No line over the letters: the leader stops in the gap above them.
+            stop = self.from_label_frame((meet_x, y))
+            return (stop, stop, stop)
         return (
             self.from_label_frame((meet_x, y)),
             self.from_label_frame((near_x, y)),
@@ -142,7 +192,8 @@ class FeatureLabelInk:
         points = [*self.leader[:-1], meet]
         if math.dist(meet, near) > 1e-9:
             points.append(near)
-        points.append(far)
+        if math.dist(points[-1], far) > 1e-9:
+            points.append(far)
         return tuple(points)
 
 
@@ -158,6 +209,7 @@ def feature_label_ink(
     leader: Sequence[Point],
     underline: bool = False,
     join_at_end: bool = False,
+    overline: OverlineMode = "line",
 ) -> FeatureLabelInk:
     """A drawn feature label (``text`` drawn at ``at``, turned ``rotation_deg`` about it)."""
 
@@ -178,6 +230,8 @@ def feature_label_ink(
             over_y = y + (shift - metrics.ascent - UNDERLINE_GAP_EM) * size
         else:
             under_y, over_y = y + bottom + UNDERLINE_GAP_EM * size, y + top - UNDERLINE_GAP_EM * size
+        if overline == "gap":
+            over_y = y + top - GAP_STOP_EM * size
     return FeatureLabelInk(
         ink=Aabb(x + left, y + top, x + right, y + bottom),
         font_size=size,
@@ -187,6 +241,7 @@ def feature_label_ink(
         under_y=under_y,
         over_y=over_y,
         join_at_end=join_at_end,
+        overline=overline,
     )
 
 
@@ -203,6 +258,7 @@ def linear_label_ink(label: Mapping[str, object], leader: Sequence[Point], *, un
         rotation_deg=float(str(label.get("rotation_deg", 0.0))),
         leader=leader,
         underline=underline,
+        overline=label_overline("linear"),
     )
 
 
@@ -223,6 +279,7 @@ def circular_label_ink(
         leader=leader_polyline(label),
         underline=underline,
         join_at_end=True,
+        overline=label_overline("circular"),
     )
 
 
@@ -233,7 +290,15 @@ __all__ = [
     "FeatureLabelInk",
     "circular_label_ink",
     "feature_label_ink",
+    "DiagramMode",
     "label_underline_counted",
+    "label_underline_in_box",
+    "label_overline",
+    "OverlineMode",
+    "GAP_STOP_EM",
+    "OVERLINE_ENV",
+    "study_switch",
+    "underline_reach_em",
     "label_underline_on",
     "linear_label_ink",
 ]

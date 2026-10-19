@@ -16,6 +16,12 @@ from typing import Any
 from svgwrite import container, gradients, masking, path, shapes, text
 
 
+class Use(container.Use):
+    def __init__(self, *args: Any, **extra: Any) -> None:
+        extra.setdefault("debug", False)
+        super().__init__(*args, **extra)
+
+
 class Group(container.Group):
     def __init__(self, *args: Any, **extra: Any) -> None:
         extra.setdefault("debug", False)

@@ -18,8 +18,8 @@ from collections.abc import Sequence
 from typing import Literal, TypeAlias
 
 from gbdraw.layout.spatial import Aabb
-from gbdraw.labels.label_ink import UNDERLINE_GAP_EM, FeatureLabelInk, segment_through_box
-from gbdraw.svg.elements import Rect
+from gbdraw.labels.label_ink import UNDERLINE_GAP_EM, DiagramMode, FeatureLabelInk, segment_through_box, study_switch
+from gbdraw.svg.elements import Rect, Text, Use
 
 BACKING_PADDING_EM = 0.18
 BACKING_FILL = "#ffffff"
@@ -28,6 +28,51 @@ BACKING_OPACITY = 0.7
 FeatureLabelBackingMode: TypeAlias = Literal["off", "through", "all"]
 BACKING_MODE_ENV = "GBDRAW_LABEL_BACKING"
 BACKING_OPACITY_ENV = "GBDRAW_LABEL_BACKING_OPACITY"
+HALO_ENV = "GBDRAW_LABEL_HALO"
+HALO_COLOR = "#ffffff"
+LABEL_FEATURE_ID = "data-label-feature-id"
+
+
+def feature_label_halo_em(mode: DiagramMode) -> float | None:
+    """The prototype halo (``GBDRAW_LABEL_HALO`` or ``..._LINEAR`` / ``..._CIRCULAR``): the stroke width of the
+    white outline behind each feature label's letters, in em (it reaches half of it beyond the glyphs); None
+    when unset, zero or not a number."""
+
+    try:
+        width = float(study_switch(HALO_ENV, mode) or 0.0)
+    except ValueError:
+        return None
+    return width if width > 0.0 else None
+
+
+def label_halos(texts: Sequence[Text], width_em: float) -> list[Use]:
+    """One halo per feature label text: a ``<use>`` of the text, stroked white with round joins, to be drawn
+    behind it. It is a reference, not a second ``<text>``, so the Web label editor (which collects ``text``
+    elements) never sees it, and it follows any edit of its text. CairoSVG has no ``paint-order``, so the
+    halo cannot be a stroke on the text itself. Gives each text an ``id`` when it has none."""
+
+    halos: list[Use] = []
+    seen: dict[str, int] = {}
+    for text in texts:
+        feature_id = text.attribs.get(LABEL_FEATURE_ID)
+        font_size = text.attribs.get("font-size")
+        if not feature_id or font_size is None:
+            continue
+        if "id" not in text.attribs:
+            count = seen.get(str(feature_id), 0)
+            seen[str(feature_id)] = count + 1
+            text.attribs["id"] = f"label_text_{feature_id}" + (f"_{count}" if count else "")
+        halo = Use(
+            href=f"#{text.attribs['id']}",
+            stroke=HALO_COLOR,
+            stroke_width=width_em * float(font_size),
+            stroke_linejoin="round",
+            stroke_linecap="round",
+        )
+        halo.attribs["aria-hidden"] = "true"
+        halo.attribs["pointer-events"] = "none"
+        halos.append(halo)
+    return halos
 
 
 def backing_box(ink: Aabb, font_size: float, *, edge_x: float | None = None, edge_y: float | None = None) -> Aabb:
@@ -75,10 +120,11 @@ def feature_label_backing_opacity() -> float:
         return BACKING_OPACITY
 
 
-def feature_label_backing_mode() -> FeatureLabelBackingMode:
-    """The prototype switch (``GBDRAW_LABEL_BACKING``); ``off`` when unset or unknown."""
+def feature_label_backing_mode(mode: DiagramMode) -> FeatureLabelBackingMode:
+    """The prototype switch (``GBDRAW_LABEL_BACKING``, or ``..._LINEAR`` / ``..._CIRCULAR``); ``off`` when
+    unset or unknown."""
 
-    value = os.environ.get(BACKING_MODE_ENV, "").strip().lower()
+    value = study_switch(BACKING_MODE_ENV, mode)
     if value == "through":
         return "through"
     if value == "all":
@@ -154,6 +200,9 @@ __all__ = [
     "BACKING_OPACITY",
     "BACKING_PADDING_EM",
     "FeatureLabelBackingMode",
+    "HALO_ENV",
+    "feature_label_halo_em",
+    "label_halos",
     "backed_feature_labels",
     "backing_box",
     "backing_rect",

@@ -5,7 +5,19 @@ from __future__ import annotations
 import pytest
 
 from gbdraw.layout.spatial import Aabb
-from gbdraw.labels.label_ink import UNDERLINE_GAP_EM, FeatureLabelInk
+from gbdraw.svg.elements import Text
+from gbdraw.core.text import get_font_vertical_metrics
+from gbdraw.labels.label_ink import (
+    GAP_STOP_EM,
+    UNDERLINE_GAP_EM,
+    FeatureLabelInk,
+    OverlineMode,
+    label_underline_counted,
+    label_underline_in_box,
+    label_underline_on,
+    study_switch,
+    underline_reach_em,
+)
 from gbdraw.render.drawers.label_backing import (
     BACKING_PADDING_EM,
     backed_feature_labels,
@@ -13,6 +25,8 @@ from gbdraw.render.drawers.label_backing import (
     feature_label_backing,
     feature_label_backing_mode,
     feature_label_backing_opacity,
+    feature_label_halo_em,
+    label_halos,
     leaders_through_text,
 )
 
@@ -48,7 +62,7 @@ def test_a_backing_stops_at_its_own_leader_end() -> None:
 @pytest.mark.parametrize(("value", "mode"), [("", "off"), ("through", "through"), ("ALL", "all"), ("x", "off")])
 def test_prototype_switch(monkeypatch: pytest.MonkeyPatch, value: str, mode: str) -> None:
     monkeypatch.setenv("GBDRAW_LABEL_BACKING", value)
-    assert feature_label_backing_mode() == mode
+    assert feature_label_backing_mode("linear") == mode
 
 
 def test_underline_continues_the_leader_and_is_part_of_it() -> None:
@@ -109,3 +123,57 @@ def test_backing_opacity_switch(monkeypatch: pytest.MonkeyPatch) -> None:
     assert feature_label_backing_opacity() == 0.7
     monkeypatch.setenv("GBDRAW_LABEL_BACKING_OPACITY", "0.8")
     assert feature_label_backing_opacity() == 0.8
+
+
+def test_a_study_switch_reads_the_mode_override_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GBDRAW_LABEL_UNDERLINE", "draw")
+    monkeypatch.setenv("GBDRAW_LABEL_UNDERLINE_LINEAR", " Box ")
+    assert study_switch("GBDRAW_LABEL_UNDERLINE", "linear") == "box"
+    assert study_switch("GBDRAW_LABEL_UNDERLINE", "circular") == "draw"
+    assert label_underline_in_box("linear") and not label_underline_counted("linear")
+    assert label_underline_on("circular") and not label_underline_in_box("circular")
+    monkeypatch.setenv("GBDRAW_LABEL_UNDERLINE_CIRCULAR", "box")
+    assert not label_underline_in_box("circular")  # Circular draws a box-mode underline only
+
+
+def test_the_underline_reach_with_a_central_baseline_is_half_the_text_plus_the_gap() -> None:
+    metrics = get_font_vertical_metrics("Arial")
+    reach = underline_reach_em("Arial", "central")
+    assert metrics is not None and reach is not None
+    assert reach == pytest.approx((metrics.ascent + metrics.descent) / 2.0 + UNDERLINE_GAP_EM)
+
+
+def test_a_leader_from_above_gets_an_overline_a_gap_stop_or_its_old_end() -> None:
+    def above(overline: OverlineMode, over_y: float) -> FeatureLabelInk:
+        return FeatureLabelInk(
+            ink=Aabb(0.0, 90.0, 40.0, 100.0), font_size=10.0, rotation_deg=0.0, center=(0.0, 95.0),
+            leader=((20.0, 50.0), (20.0, 89.5)), under_y=103.0, over_y=over_y, overline=overline,
+        )
+
+    assert above("line", 88.0).underline == ((20.0, 88.0), (0.0, 88.0), (40.0, 88.0))
+    # No line: the leader stops in the gap above the letters (over_y is set GAP_STOP_EM above them).
+    gap = above("gap", 90.0 - GAP_STOP_EM * 10.0)
+    assert gap.underline == ((20.0, 88.0), (20.0, 88.0), (20.0, 88.0))
+    assert gap.drawn == ((20.0, 50.0), (20.0, 88.0))
+    # No line and today's end.
+    assert above("none", 88.0).underline is None
+    assert above("none", 88.0).drawn == ((20.0, 50.0), (20.0, 89.5))
+
+
+def test_a_halo_is_a_white_use_of_the_label_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GBDRAW_LABEL_HALO_LINEAR", "0.12")
+    monkeypatch.setenv("GBDRAW_LABEL_HALO", "x")
+    assert feature_label_halo_em("linear") == pytest.approx(0.12)
+    assert feature_label_halo_em("circular") is None
+    label = Text("tail protein", x=[0], y=[0], font_size=24.0)
+    label.attribs["data-label-feature-id"] = "f1"
+    other = Text("no font size")
+    other.attribs["data-label-feature-id"] = "f2"
+    twin = Text("tail protein", x=[0], y=[30], font_size=24.0)
+    twin.attribs["data-label-feature-id"] = "f1"
+    halos = label_halos([label, other, twin], 0.12)
+    assert [label.attribs["id"], twin.attribs["id"]] == ["label_text_f1", "label_text_f1_1"]
+    assert "id" not in other.attribs
+    assert [h.attribs["xlink:href"] for h in halos] == ["#label_text_f1", "#label_text_f1_1"]
+    assert halos[0].attribs["stroke"] == "#ffffff" and float(halos[0].attribs["stroke-width"]) == pytest.approx(2.88)
+    assert "data-label-feature-id" not in halos[0].attribs  # the Web label editor binds labels by this attribute

@@ -7,14 +7,14 @@ from __future__ import annotations
 
 from typing import Literal, Sequence
 
-from gbdraw.svg.elements import Group, Line
+from gbdraw.svg.elements import Group, Line, Text
 
 from ....canvas import CircularCanvasGeometry
 from ....labels.circular_types import CircularLabel
 from ....labels.label_ink import FeatureLabelInk, circular_label_ink, label_underline_on
 from ....layout.circular import CircularRecordRenderContext
 from ...drawers.circular.labels import LabelDrawer
-from ...drawers.label_backing import backing_rects, feature_label_backing_mode
+from ...drawers.label_backing import backing_rects, feature_label_backing_mode, feature_label_halo_em, label_halos
 from ...label_binding import bind_label_part
 
 
@@ -54,8 +54,8 @@ class LabelsGroup:
         label_list = self.precalculated_labels or []
 
         drawer = LabelDrawer(profile=self.render_context.profile)
-        backing_mode = feature_label_backing_mode()
-        underline = label_underline_on()
+        backing_mode = feature_label_backing_mode("circular")
+        underline = label_underline_on("circular")
         if self.phase in {"all", "leaders"} or underline:
             # Only the leaders (and the prototype's underlines) read the stroke, so a stroke change keeps the text.
             cfg = self.render_context.profile.config
@@ -71,6 +71,14 @@ class LabelsGroup:
             inks = [ink_of(label) for label in label_list if not label.get("is_embedded")]
             for rect in backing_rects(inks, backing_mode):
                 group.add(rect)
+
+        def leader_part(start: tuple[float, float], end: tuple[float, float], feature_id: str | None) -> Line:
+            # One straight part of a leader or of its underline: one style for both (LP-D95).
+            part = Line(start=start, end=end, stroke=stroke_color, stroke_width=stroke_width, stroke_linecap="round")
+            bind_label_part(part, feature_id)
+            return part
+
+        halo_at = len(group.elements)
         for label in label_list:
             if label.get("is_embedded"):
                 continue
@@ -81,36 +89,29 @@ class LabelsGroup:
                 # The leader ends on its underline, which continues it (LP-D88); the line is drawn with the
                 # letters, in front of the backings.
                 leader_start_x, leader_start_y = line[0]
-                if self.phase in {"all", "text"}:
-                    underline_path = Line(
-                        start=line[1], end=line[2], stroke=stroke_color, stroke_width=stroke_width, stroke_linecap="round"
-                    )
-                    bind_label_part(underline_path, label["feature_id"])
-                    group.add(underline_path)
+                if self.phase in {"all", "text"} and line[1] != line[2]:
+                    group.add(leader_part(line[1], line[2], label["feature_id"]))
             if self.phase in {"all", "leaders"}:
-                line_path = Line(
-                    start=(label["middle_x"], label["middle_y"]),
-                    end=(leader_start_x, leader_start_y),
-                    stroke=stroke_color,
-                    stroke_width=stroke_width,
-                    stroke_linecap="round",
+                bend = (label["middle_x"], label["middle_y"])
+                group.add(leader_part(bend, (leader_start_x, leader_start_y), label["feature_id"]))
+                group.add(
+                    leader_part(
+                        bend,
+                        (
+                            label.get("feature_anchor_x", label["feature_middle_x"]),
+                            label.get("feature_anchor_y", label["feature_middle_y"]),
+                        ),
+                        label["feature_id"],
+                    )
                 )
-                bind_label_part(line_path, label["feature_id"])
-                group.add(line_path)
-                line_path2 = Line(
-                    start=(label["middle_x"], label["middle_y"]),
-                    end=(
-                        label.get("feature_anchor_x", label["feature_middle_x"]),
-                        label.get("feature_anchor_y", label["feature_middle_y"]),
-                    ),
-                    stroke=stroke_color,
-                    stroke_width=stroke_width,
-                    stroke_linecap="round",
-                )
-                bind_label_part(line_path2, label["feature_id"])
-                group.add(line_path2)
             if self.phase in {"all", "text"}:
                 group = drawer.draw(label, group, record_length, feature_anchor_radius, self.geometry.track_ratio)
+
+        halo_em = feature_label_halo_em("circular")
+        if halo_em is not None and self.phase == "text":
+            # In the text layer, in front of every leader and behind every letter (study, experiment 1).
+            texts = [element for element in group.elements[halo_at:] if isinstance(element, Text)]
+            group.elements[halo_at:halo_at] = label_halos(texts, halo_em)
 
         return group
 

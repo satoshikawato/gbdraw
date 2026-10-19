@@ -11,7 +11,7 @@ from ....auto_sizes import linear_tick_interval
 from ....canvas.linear import LinearCanvasGeometry
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
-from ...drawers.label_backing import backing_rects, feature_label_backing_mode
+from ...drawers.label_backing import backing_rects, feature_label_backing_mode, feature_label_halo_em, label_halos
 from ....labels.label_ink import label_underline_on, linear_label_ink
 from ...drawers.linear.labels import LabelDrawer
 from ....labels.linear import linear_leader_polyline, prepare_label_list_linear
@@ -190,6 +190,13 @@ class SeqRecordGroup:
             tick += tick_interval
         return sorted(coordinates, reverse=(start_coord > end_coord))
 
+    def _leader_part(self, start: tuple[float, float], end: tuple[float, float], feature_id: str) -> Line:
+        """One straight part of a feature label's leader (or of its underline, which shares the leader's style)."""
+
+        part = Line(start=start, end=end, stroke=self.label_stroke_color, stroke_width=self.label_stroke_width)
+        bind_label_part(part, feature_id)
+        return part
+
     def _draw_axis_ruler(self, group: Group, *, bar_length: float, record_length: int) -> None:
         if not self.axis_ruler_enabled or bar_length <= 0 or record_length <= 0:
             return
@@ -288,7 +295,7 @@ class SeqRecordGroup:
         # copy: the prepared labels are this content's arguments.
         underlines: list[Line] = []
         if self.show_labels and self.draw_features_enabled:
-            underline = label_underline_on()
+            underline = label_underline_on("linear")
             bound_labels = []
             for label in label_list:
                 source_feature_index = label.get("source_feature_index")
@@ -304,23 +311,13 @@ class SeqRecordGroup:
                 leader = linear_leader_polyline(label)
                 line = linear_label_ink(label, leader, underline=True).underline if leader and underline else None
                 if line is not None:
-                    # The leader ends on its underline, which continues it (LP-D88).
-                    # It is drawn with the letters, in front of the backings.
+                    # The leader ends on its underline, which continues it (LP-D88) in the same style
+                    # (LP-D95). It is drawn with the letters, in front of the backings.
                     leader = (leader[0], line[0])
-                    underline_path = Line(
-                        start=line[1], end=line[2], stroke=self.label_stroke_color, stroke_width=self.label_stroke_width
-                    )
-                    bind_label_part(underline_path, feature_id)
-                    underlines.append(underline_path)
+                    if line[1] != line[2]:
+                        underlines.append(self._leader_part(line[1], line[2], feature_id))
                 if leader:
-                    line_path = Line(
-                        start=leader[0],
-                        end=leader[1],
-                        stroke=self.label_stroke_color,
-                        stroke_width=self.label_stroke_width,
-                    )
-                    bind_label_part(line_path, feature_id)
-                    feature_group.add(line_path)
+                    feature_group.add(self._leader_part(leader[0], leader[1], feature_id))
             label_list = bound_labels
 
         # Draw features
@@ -358,18 +355,24 @@ class SeqRecordGroup:
 
         # Add labels, on their backings where the prototype switch asks for them (LP-D85).
         if self.show_labels:
-            mode = feature_label_backing_mode()
+            mode = feature_label_backing_mode("linear")
             if mode != "off":
                 inks = [
-                    linear_label_ink(label, linear_leader_polyline(label), underline=label_underline_on())
+                    linear_label_ink(label, linear_leader_polyline(label), underline=label_underline_on("linear"))
                     for label in label_list
                 ]
                 for rect in backing_rects(inks, mode):
                     feature_group.add(rect)
-            for underline_path in underlines:
-                feature_group.add(underline_path)
+            halo_at = len(feature_group.elements)
             for label in label_list:
                 feature_group = LabelDrawer().draw(label, feature_group)
+            halo_em = feature_label_halo_em("linear")
+            texts = [element for element in feature_group.elements[halo_at:] if isinstance(element, Text)]
+            # Behind the letters: the halos, then the underlines, which a halo must not erode (LP-D95 study).
+            feature_group.elements[halo_at:halo_at] = [
+                *(label_halos(texts, halo_em) if halo_em is not None else []),
+                *underlines,
+            ]
 
         if has_feature_shift:
             feature_group.translate(0.0, self.feature_offset_y)

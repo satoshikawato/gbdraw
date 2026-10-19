@@ -17,7 +17,7 @@ from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
 from ..core.record_metadata import _source_feature_index
 from ..core.text import calculate_bbox_dimensions
-from .label_ink import label_underline_counted, linear_label_ink
+from .label_ink import label_underline_counted, label_underline_in_box, linear_label_ink, underline_reach_em
 from ..auto_sizes import determine_length_parameter
 from ..layout.linear_coords import normalize_position_to_linear_track
 from ..layout.linear import (
@@ -596,6 +596,7 @@ def prepare_label_list_linear(
 
     # Second pass: Process labels
     max_bbox_height = 0
+    underline_box_em = underline_reach_em(font_family, "central") if label_underline_in_box("linear") else None
     for feature_id, feature_object in reversed(list(feature_dict.items())):
         overrides_only = labels_overrides_only or not _passes_orthogroup_label_eligibility(
             feature_object,
@@ -615,6 +616,9 @@ def prepare_label_list_linear(
 
         # Calculate label dimensions and positions
         bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
+        if underline_box_em is not None:
+            # The underline belongs to the label's box: the placer leaves it room (LP-D93 study).
+            bbox_height_px = max(bbox_height_px, 2.0 * underline_box_em * float(font_size))
         if bbox_height_px > max_bbox_height:
             max_bbox_height = bbox_height_px
         # Find the longest segment and its middle point
@@ -885,7 +889,7 @@ def linear_leader_polyline(label: dict) -> tuple[Point, ...]:
 def linear_label_shapes(labels: list[dict]) -> list[LabelShape]:
     """One record's drawn Linear labels as the fit count sees them."""
 
-    underline = label_underline_counted()
+    underline = label_underline_counted("linear")
     return [
         LabelShape(
             "linear",
