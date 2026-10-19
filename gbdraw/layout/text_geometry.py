@@ -258,6 +258,61 @@ def segments_intersect(
     )
 
 
+# A curved text's annular sector is counted in parts this wide or narrower (nearly flat).
+SECTOR_PART_DEG = 5.0
+
+
+def annular_sector_parts(
+    inner: float, outer: float, centre_deg: float, half_span_deg: float
+) -> tuple[tuple[Point, Point, Point, Point], ...]:
+    """The annular sector between ``inner`` and ``outer`` radius around the origin, ``half_span_deg`` each way of
+    ``centre_deg`` (clockwise from 3 o'clock, as in SVG), cut into convex parts at most ``SECTOR_PART_DEG`` wide.
+
+    This is the shape of text drawn along a circle (an embedded feature label, a curved region label).
+    """
+
+    steps = max(1, math.ceil(2.0 * half_span_deg / SECTOR_PART_DEG))
+    angles = [
+        math.radians(centre_deg - half_span_deg + 2.0 * half_span_deg * index / steps)
+        for index in range(steps + 1)
+    ]
+    return tuple(
+        (
+            (inner * math.cos(start), inner * math.sin(start)),
+            (outer * math.cos(start), outer * math.sin(start)),
+            (outer * math.cos(end), outer * math.sin(end)),
+            (inner * math.cos(end), inner * math.sin(end)),
+        )
+        for start, end in zip(angles, angles[1:])
+    )
+
+
+def grown_convex_polygon(polygon: Sequence[Point], by: float) -> tuple[Point, ...]:
+    """A convex polygon with every edge moved ``by`` outward, its corners mitred (a rectangle grows by ``by`` on
+    every side; a sector part keeps ``by`` from every edge too).
+
+    A polygon with fewer than three distinct corners grows as its bounding box.
+    """
+
+    points = [point for index, point in enumerate(polygon) if point != polygon[index - 1]]
+    area = sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1]))
+    if len(points) < 3 or abs(area) <= GEOMETRY_EPSILON:
+        left, top, right, bottom = aabb_from_points(polygon)
+        return ((left - by, top - by), (right + by, top - by), (right + by, bottom + by), (left - by, bottom + by))
+    sign = 1.0 if area > 0.0 else -1.0
+    normals: list[Point] = []
+    for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1]):
+        length = math.hypot(x2 - x1, y2 - y1)
+        normals.append((sign * (y2 - y1) / length, -sign * (x2 - x1) / length))
+    grown: list[Point] = []
+    for index, (x, y) in enumerate(points):
+        (px, py), (nx, ny) = normals[index - 1], normals[index]
+        # The corner moves along the bisector of its two edges' normals, so each edge moves ``by``.
+        scale = by / (1.0 + px * nx + py * ny)
+        grown.append((x + scale * (px + nx), y + scale * (py + ny)))
+    return tuple(grown)
+
+
 def segment_intersects_polygon(
     segment: tuple[Point, Point],
     polygon: Sequence[Point],
@@ -284,10 +339,13 @@ __all__ = [
     "GEOMETRY_EPSILON",
     "OrientedTextBox",
     "Point",
+    "SECTOR_PART_DEG",
     "TextAnchor",
     "aabb_from_points",
     "anchor_x_bounds",
+    "annular_sector_parts",
     "convex_polygons_intersect",
+    "grown_convex_polygon",
     "normalize_text_anchor",
     "oriented_boxes_intersect",
     "oriented_text_box",

@@ -44,6 +44,7 @@ from ..svg.arrows import (
     calculate_circular_arrow_length,
     resolve_circular_arrow_head_length_bp,
 )
+from ..layout.text_geometry import annular_sector_parts
 from ..svg.ids import instance_svg_id
 
 # Keep dense large-font labels from being pushed excessively far from features.
@@ -56,8 +57,6 @@ FULL_SCAN_LABEL_LIMIT = 70
 MAX_EXPANDED_SHIFT_DEG = 90.0
 RELAX_CENTER_DELTA_CAP_DEG = 35.0
 LEGACY_PLACEMENT_LABEL_THRESHOLD = 50
-# An embedded label's sector is counted in parts this wide or narrower (nearly flat).
-EMBEDDED_LABEL_PART_DEG = 5.0
 # Smallest row gap of the dense legacy packer: the y margin of the overlap count.
 LEGACY_MIN_ROW_GAP_PX = 0.1
 DenseOuterRows: TypeAlias = Literal["spaced", "legacy"]
@@ -269,21 +268,7 @@ def _embedded_label_parts(label: CircularLabel, total_length: int) -> tuple[Poly
         return ()
     center_deg = 360.0 * (float(label["middle"]) / total_length) - 90.0
     half_span_deg = math.degrees(0.5 * float(label["width_px"]) / radius)
-    steps = max(1, math.ceil(2.0 * half_span_deg / EMBEDDED_LABEL_PART_DEG))
-    angles = [
-        math.radians(center_deg - half_span_deg + 2.0 * half_span_deg * index / steps)
-        for index in range(steps + 1)
-    ]
-    inner, outer = radius - half_height, radius + half_height
-    return tuple(
-        (
-            (inner * math.cos(start), inner * math.sin(start)),
-            (outer * math.cos(start), outer * math.sin(start)),
-            (outer * math.cos(end), outer * math.sin(end)),
-            (inner * math.cos(end), inner * math.sin(end)),
-        )
-        for start, end in zip(angles, angles[1:])
-    )
+    return annular_sector_parts(radius - half_height, radius + half_height, center_deg, half_span_deg)
 
 
 def circular_label_shapes(labels: Sequence[CircularLabel], total_length: int) -> list[LabelShape]:

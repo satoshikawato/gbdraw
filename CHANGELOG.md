@@ -216,6 +216,13 @@ write-up of a release.
   outermost ring stay on the canvas (OV-849, OV-1190, OV-1191). Labels move
   along their region off feature labels and leaders (OV-1173), and span labels
   stay off every covered ring (OV-1189).
+- Circular region labels with `label_orientation` `auto` (the default) or
+  `arc` are drawn along their circle, upright in both halves, instead of
+  straight; `tangent` stays straight, and `radial` and `horizontal` are
+  unchanged. A label longer than its circle allows keeps its start and an
+  ellipsis and warns (`N region label(s) cut` on the command line, "Region
+  labels are cut to fit their circle (N)." in the Web app, no fix offered)
+  (OV-1210).
 - Track slots that are not annotation slots now reject parameters their
   renderer does not read (`to_slot` and `anchor_slot` say they belong to
   annotation slots), from the CLI, Python slot objects and Sessions;

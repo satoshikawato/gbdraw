@@ -2,8 +2,9 @@
 // open the dialog after a Generate that drew nothing; crossing leaders show a
 // notice bar over the drawn figure, and its "Choose a fix" computes the rows
 // Generate did not search. Apply is one History step and Generates; Cancel
-// writes nothing. Linear region labels over other labels (LP-D68) show the
-// notice with no fix (LP-D82).
+// writes nothing. Linear region labels over other labels (LP-D68) and
+// Circular region labels cut to fit their circle (LP-D87) show the notice with
+// no fix (LP-D82).
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { test, expect } = require('@playwright/test');
@@ -204,6 +205,37 @@ test('Linear region labels over other labels: the notice counts them and offers 
     return state.labelFitReports.value[0].report.rows.length;
   })).toBe(0);
   await pageShots(page, 'linear-region-notice');
+});
+
+// LP-D87 (OV-1210): a Circular region label longer than its circle is drawn
+// curved with what fits, its start and an ellipsis; the notice counts the cut
+// label and offers no "Choose a fix".
+test('a Circular region label longer than its circle: the notice counts it as cut and offers no fix', async ({ page }) => {
+  test.setTimeout(600000);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'cut.gb', mimeType: 'text/plain',
+    buffer: Buffer.from(genbank('cut', [['3000..3300', 'photosystem II protein D1']])) });
+  await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 1);
+  await annotationsPanel(page).locator('input[type=file]').setInputFiles({ name: 'regions.tsv',
+    mimeType: 'text/tab-separated-values', buffer: Buffer.from(regionsTsv([['r0', 1000, 1100, 'a long region label '.repeat(40).trim()]])) });
+  await page.waitForFunction(() => window.__GBDRAW_APP__.annotationSets.length === 1);
+  await generateAndWaitForResult(page);
+  const notice = page.getByTestId('label-fit-notice');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('Region labels are cut to fit their circle (1).');
+  await expect(notice.getByRole('button')).toHaveCount(0);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.labelFitReports.value[0].report.rows.length;
+  })).toBe(0);
+  const shown = await page.evaluate(() => {
+    const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml');
+    return svg.querySelector('[data-gbdraw-annotation-id] textPath')?.textContent ?? '';
+  });
+  expect(shown.startsWith('a long region label')).toBe(true);
+  expect(shown.endsWith('\u2026')).toBe(true);
+  await pageShots(page, 'circular-region-cut-notice');
 });
 
 // LP-D82 (e'): on one strand the control region's label meets only the tRNA-Leu leader, so it

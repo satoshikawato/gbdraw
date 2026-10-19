@@ -6,6 +6,7 @@ import hashlib
 import math
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 from gbdraw.annotations import RegionAnnotationStyle, ResolvedRegionAnnotation, is_auto_feature_underlay
 from gbdraw.core.text import TEXT_ANCHOR_SHARE, text_ink_offsets
@@ -98,17 +99,27 @@ def past_span_edge(reach: MarkReach, inset: float) -> float:
     return max(0.0, reach.past_lane_edge - inset)
 
 
-def label_ink_offsets(
-    text: str, font_family: str, font_size: float, anchor: TextAnchor
-) -> tuple[float, float, float, float]:
-    """``text_ink_offsets`` of a central-baseline label, or an em box when the font cannot be read."""
+# The em box a label falls back to when its font cannot be read, above and below each baseline it is drawn on (em).
+_FALLBACK_EM_BOX = {"central": (-0.5, 0.5), "alphabetic": (-0.8, 0.2)}
 
-    offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline="central", text_anchor=anchor)
+
+def label_ink_offsets(
+    text: str,
+    font_family: str,
+    font_size: float,
+    anchor: TextAnchor,
+    baseline: Literal["central", "alphabetic"] = "central",
+) -> tuple[float, float, float, float]:
+    """``text_ink_offsets`` of a label on its ``baseline`` (central for straight text, alphabetic for text along a
+    path), or an em box when the font cannot be read."""
+
+    offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline=baseline, text_anchor=anchor)
     if offsets is None:
         # The fallback width of calculate_bbox_dimensions.
         width = 0.6 * len(text) * font_size
         origin = -TEXT_ANCHOR_SHARE[anchor] * width
-        return origin, origin + width, -0.5 * font_size, 0.5 * font_size
+        top, bottom = _FALLBACK_EM_BOX[baseline]
+        return origin, origin + width, top * font_size, bottom * font_size
     return offsets
 
 

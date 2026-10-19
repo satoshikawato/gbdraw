@@ -548,7 +548,9 @@ def _drawn_label_fonts(
         )
     sizes = {
         text: float(size)
-        for size, text in re.findall(r'<text[^>]*font-size="([^"]+)"[^>]*>([^<]*)<', drawing.tostring())
+        for size, text in re.findall(
+            r'<text[^>]*font-size="([^"]+)"[^>]*>(?:<textPath[^>]*>)?([^<]*)<', drawing.tostring()
+        )
     }
     return sizes["RegionX"], sizes["alpha protein"]
 

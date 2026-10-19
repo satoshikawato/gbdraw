@@ -292,15 +292,16 @@ affected.
   tracks leave, nothing is drawn. The command line prints `ERROR:` with the
   message and exits with status 1. Python raises `LabelsDoNotFitError`, a
   `GbdrawError`.
-- If leader lines cross, labels cover the definition text, or Linear region
-  (annotation) labels overlap other labels or lines, but no labels overlap,
-  the figure is drawn as before. The command line prints the same
+- If leader lines cross, labels cover the definition text, Linear region
+  (annotation) labels overlap other labels or lines, or Circular region labels
+  are cut to fit their circle, but no labels overlap, the figure is drawn as
+  before. The command line prints the same
   message after `WARNING:` and exits with status 0. Python warns with
   `LabelLeadersCrossWarning`, a `UserWarning`.
 
 The message counts the overlapping label pairs, crossing leader pairs,
-labels over the definition text, and region label overlaps of each record and
-side, and lists settings
+labels over the definition text, region label overlaps, and cut region labels
+of each record and side, and lists settings
 that make the labels fit. Each setting changes one thing and is checked by
 drawing the whole figure again. The rows depend on which labels do not fit:
 
@@ -333,7 +334,16 @@ searched; for inner, embedded, or radial labels the switches and then the font
 search share 30 seconds, and a setting is tried only if drawing the figure once
 more ends within that time. Linear feature labels get only the separate
 overlapping features row, because the Linear layout keeps its other labels
-apart. Linear region labels get no row.
+apart. Linear region labels and cut Circular region labels get no row.
+
+A Circular region label with `label_orientation` `auto` or `arc` is drawn
+along its circle and can take just under a whole turn, less 1 em at each
+end. A longer label keeps its start followed by `…`, centred on the same
+place, and
+each such label counts as one cut region label (`1 region label cut`). This
+only warns: the Web app shows "Region labels are cut to fit their circle (N)."
+over the figure, with no **Choose a fix** button. A label that meets another
+label or line in Circular is still drawn without a warning.
 
 A Linear region label moves along its region to a place clear of the feature
 labels, leader lines, record names and definition text, other records of its
