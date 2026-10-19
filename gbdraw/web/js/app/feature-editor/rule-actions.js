@@ -75,10 +75,11 @@ import { legendEntryKey, legendRowTakesPlace, shownLegendKeys, shownPythonLegend
 /**
  * The Legend owner's move of a drawing's Legend records to the re-keyed keys
  * (`moveLegendRecords` in app/legend/entry-actions.js); with `hidden`, for a
- * drawing not shown, it also drops the records of the `removed` keys and
- * writes the drawing's Legend list.
+ * drawing not shown, it also drops the records of the `removed` rows (key to
+ * color; a Legend color that copies the row's color goes too) and writes the
+ * drawing's Legend list.
  * @typedef {(drawing: DrawingState, entries: LegendEntry[], moves: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
- *   hidden?: { removed: ReadonlySet<string> } | null) => unknown} MoveLegendRecordsPort
+ *   hidden?: { removed: ReadonlyMap<string, string> } | null) => unknown} MoveLegendRecordsPort
  */
 
 /**
@@ -834,7 +835,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // records of the rows only the file's rules drew, found by the keys the
   // drawing stores for them (`listedRuleRowRemoval`); a kept rule's row whose
   // key changes moves to it (REVIEW-3 R3-B1). The Legend owner writes the
-  // Legend records (`moveLegendRecords`). So a Save, an Undo or a Redo
+  // Legend records, with the Legend color copies of the removed rows
+  // (`moveLegendRecords`). So a Save, an Undo or a Redo
   // finds the whole change. When it is shown, the display draws its figure
   // again if its Legend cannot show the rules (app-setup.js, the rule table
   // its Result was last shown with).
@@ -847,10 +849,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const [entries, deletedEntries, dormantEntries] = [drawing.legendEntries, drawing.deletedLegendEntries, drawing.dormantLegendEntries]
       .map((list) => list.value || []);
     const { gone, rekeyed } = listedRuleRowRemoval(before, kept, [...entries, ...deletedEntries, ...dormantEntries].map(legendEntryKey));
-    retireSupersededLegendColors(drawing, [], gone);
     drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...kept);
     drawing.fileLegendCaptions.value = specificRulesFileCaptions(kept);
-    moveLegendRecords(drawing, entries, rekeyed, { removed: new Set(gone.map(({ caption }) => caption)) });
+    moveLegendRecords(drawing, entries, rekeyed, { removed: new Map(gone.map(({ caption, color }) => [caption, color])) });
   };
   /** @param {DrawingState} drawing */
   const removeImportedSpecificRules = (drawing) => {

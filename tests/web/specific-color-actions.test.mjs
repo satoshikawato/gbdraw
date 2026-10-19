@@ -76,8 +76,9 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, ...option
       state.results.value=[{name:'figure',content:'after'}];
     } };
   },
-  // The Legend owner's writer, which the take-back of a drawing not shown calls (OV-1280, AUTH-ORIGIN-1).
-  moveLegendRecords: (...args) => createLegendManager({ state: withDrawings(state), commitLegendRowRules: () => true }).moveLegendRecords(...args),
+  // The Legend owner's writer, which the take-back of a drawing not shown calls (OV-1280, AUTH-ORIGIN-1);
+  // `state` already has its drawing store, which a test may have made per mode.
+  moveLegendRecords: (...args) => createLegendManager({ state, commitLegendRowRules: () => true }).moveLegendRecords(...args),
   projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;},isRedrawOwed:()=>false}, nextTick:async()=>{}, watch, ...options});
   return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rekeyed:()=>lastRekeyed, rerenders:()=>rerenders, setRerendering};
 };
@@ -1289,8 +1290,8 @@ test('a mode switch to a drawing whose file rules were removed while it was not 
 // else its caption), never by keys allocated again from the colors the rows
 // list, and a deleted row is one Python draws. So a type row that shares the
 // caption keeps its rename, color, and Delete.
-const hiddenRuleRow = ({ rule, entries, deleted = [], colors = {} }) => {
-  const s = setup();
+const hiddenRuleRow = ({ rule, entries, deleted = [], colors = {}, options = {} }) => {
+  const s = setup(undefined, options);
   s.state.manualSpecificRules.splice(0, Infinity, { ...rule, fromFile: true });
   s.state.legendEntries.value = entries.map(([key, caption, color]) => ({ caption, originalCaption: key, color }));
   s.state.deletedLegendEntries.value = deleted.map(([key, caption, color]) => ({ caption, originalCaption: key, color }));
@@ -1334,6 +1335,25 @@ for (const [variant, colors] of [['recolored in the Legend', { rRNA: '#ff0000' }
       'no rename is left for the row Python no longer draws');
   });
 }
+
+// REVIEW-5 B1: the Legend color copy of a removed file rule row (OV-61) is
+// retired by the Legend owner's writer, not by the rule owner (AUTH-ORIGIN-1).
+test('a hidden Remove retires the Legend color copy of a removed file rule row through the Legend owner (REVIEW-5 B1)', async () => {
+  /** @type {Record<string, string>[]} */
+  const seen = [];
+  let writer = null;
+  const { s } = hiddenRuleRow({
+    rule: { feat: 'CDS', qual: 'gene', val: 'b', color: '#ff0000', cap: 'File' },
+    entries: [['File', 'File', '#ff0000']],
+    colors: { File: '#ff0000' },
+    options: { moveLegendRecords: (...args) => { seen.push({ ...args[0].legendColorOverrides }); return writer(...args); } }
+  });
+  writer = createLegendManager({ state: s.state, commitLegendRowRules: () => true }).moveLegendRecords;
+  assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
+  assert.deepEqual(seen, [{ File: '#ff0000' }], 'the copy is still there when the Legend owner is called');
+  assert.deepEqual({ ...s.state.legendColorOverrides }, {});
+  assert.deepEqual(listedRows(s.state.legendEntries.value), []);
+});
 
 // D-21 (Q-ORIGIN-1 = A): preset rows are the user's, as hand-made rows are:
 // Remove and a new rules file never take them, in any drawing.

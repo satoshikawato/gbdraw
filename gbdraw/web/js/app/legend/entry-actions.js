@@ -411,14 +411,15 @@ export const createLegendEntryActions = ({
   // and the open Stroke options of each re-keyed row to its new key
   // (`rekeyLegendRecords`, OV-660); returns `entries`, the list being
   // written, moved. For a drawing that is not shown (`hidden`: the Specific
-  // rules file card's Remove, OV-1280), the records of the `removed` keys go
-  // too, the moved list is written here, and the inventory, colors, and
-  // Stroke options, which are the shown Result's, stay.
+  // rules file card's Remove, OV-1280), the records of the `removed` rows go
+  // too, with a Legend color that is a copy of a removed row's color (OV-152),
+  // the moved list is written here, and the inventory, colors, and Stroke
+  // options, which are the shown Result's, stay.
   /**
    * @param {DrawingState} drawing
    * @param {EntryRecord[]} entries
    * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} moves
-   * @param {{ removed: ReadonlySet<string> } | null} [hidden]
+   * @param {{ removed: ReadonlyMap<string, string> } | null} [hidden] The removed rows: key to color.
    * @returns {EntryRecord[]}
    */
   const moveLegendRecords = (drawing, entries, moves, hidden = null) => {
@@ -430,7 +431,9 @@ export const createLegendEntryActions = ({
       entries: kept(entries),
       deletedEntries: kept(/** @type {EntryRecord[]} */ (drawing.deletedLegendEntries.value || [])),
       dormantEntries: kept(/** @type {EntryRecord[]} */ (drawing.dormantLegendEntries.value || [])),
-      colorOverrides: { ...drawing.legendColorOverrides },
+      colorOverrides: Object.fromEntries(Object.entries(drawing.legendColorOverrides).filter(([key, color]) => (
+        !hidden?.removed.has(key) || resolveColorToHex(color) !== resolveColorToHex(hidden.removed.get(key))
+      ))),
       strokeOverrides: { ...drawing.legendStrokeOverrides },
       addedCaptions: [...drawing.addedLegendCaptions.value].filter((caption) => !hidden?.removed.has(caption)),
       originalOrder: hidden ? [] : /** @type {string[]} */ (originalLegendOrder.value),
