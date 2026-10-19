@@ -671,8 +671,8 @@ each export format needs.
 - A label whitelist row that the former **Whitelist only** action saved before 0.14.0,
   for a feature without a unique qualifier, names the feature by its old drawn ID.
   On a cropped or reverse-complemented record it no longer matches that feature,
-  and its label is no longer whitelisted. Set **Label visibility** to **On** in
-  the feature popup, or add a row under **Labels** → **LABEL FILTERING** →
-  **Whitelist**, to add a row that matches.
+  and its label is no longer whitelisted. To show the label, set **Label visibility**
+  to **On** in the feature popup, or add a matching row under **Labels** →
+  **LABEL FILTERING** → **Whitelist**.
 
 [Documentation home](./DOCS.md) | [Beta history](./RELEASE_NOTES_0.14.0b0.md)

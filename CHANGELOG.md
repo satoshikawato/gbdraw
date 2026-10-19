@@ -237,7 +237,8 @@ write-up of a release.
   OV-1185).
 - Region annotation labels without `label_font_size` are drawn at the feature
   label font size of the same drawing (by default 14 pt, or 8 pt for long records,
-  in Circular; 24 pt, or 5 pt, in Linear; or `--label_font_size`) instead of a fixed 10 pt.
+  in Circular; 24 pt, or 5 pt, in Linear; or `--label_font_size`) instead of a fixed 10 pt;
+  a `label_font_size` on the row, set, or slot still wins (#1202).
 - Web app: an Overlay annotation slot row in the Circular and Linear Custom
   Track Slots editors has an **Extend to** select that sets `to_slot`, so a
   region tint can span from its anchor slot to a second slot; the editor
@@ -282,7 +283,7 @@ write-up of a release.
   them, and a rules file loaded after a preset adds its rows after the preset
   rows (#1222, OV-1280).
 - Web app: the Legend popup of a row drawn by a feature type's default color
-  no longer says "Default color of <type> features." before the sentence that
+  no longer says "Default color of <type> features" before the sentence that
   says what **Color** sets (OV-1336).
 - Sessions: Session 48 also records what each Web file card loaded: Specific
   rules rows keep their `fromFile` mark, Whitelist and Qualifier priority rows
@@ -2661,10 +2662,6 @@ Retired names and their replacements are listed under
   **Similarity groups** mode, and a Similarity groups Generate draws with the
   value it shows; before, every such Generate drew with 2 whatever was stored
   (OV-1128, #1179).
-- Region labels without their own `label_font_size` are drawn at the feature
-  label font size of their diagram (Circular `[labels.font_size]` for the
-  record's size class, Linear the diagram-wide size), instead of a fixed 10 pt;
-  a `label_font_size` on the row, set, or slot still wins (#1202).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
