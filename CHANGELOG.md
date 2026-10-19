@@ -2634,6 +2634,18 @@ Retired names and their replacements are listed under
   Legend Name Conflict dialog says "is the name of a color rule for another
   feature type" when the typed name is a color rule's in the renamed row's own
   color (OV-649) (#1212).
+- Web app: the Result Preview's **Search features** bar can be hidden with
+  **×** at the end of its row and shown again with **Search** in the bottom
+  toolbar; the query, matches, and highlights stay, and while the bar is hidden
+  during a search the button shows the match count (#1086).
+- Web app, Linear: **Paralog links per group** also shows in LOSATP
+  **Similarity groups** mode, and a Similarity groups Generate draws with the
+  value it shows; before, every such Generate drew with 2 whatever was stored
+  (OV-1128, #1179).
+- Region labels without their own `label_font_size` are drawn at the feature
+  label font size of their diagram (Circular `[labels.font_size]` for the
+  record's size class, Linear the diagram-wide size), instead of a fixed 10 pt;
+  a `label_font_size` on the row, set, or slot still wins (#1202).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
