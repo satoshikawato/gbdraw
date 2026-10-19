@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createResultPaintRecord } from '../../gbdraw/web/js/app/result-paint-record.js';
+import { createResultPaintRecord, paintRuleTable } from '../../gbdraw/web/js/app/result-paint-record.js';
 
 // An editor paint state as app-setup reads it (`currentEditorProjectionState`).
 /** @param {string} step @returns {import('../../gbdraw/web/js/app/result-paint-record.js').EditorPaintState} */
@@ -146,4 +146,21 @@ test('a rerender drew the current paint only while its fills and strokes still m
   assert.equal(drewPaint(started, { ...started, labels: 'labels edited', legendOrder: 'order edited' }), true,
     'labels and the Legend order are projected');
   assert.equal(drewPaint(undefined, started), false, 'a binding that names no drawn paint');
+});
+
+// OV-1280 (REVIEW-4 N-1): a Result a mode switch shows again names the rule
+// table it was last shown with, whatever the drawing did with its rules while
+// it was not shown, so its display can ask Python to draw it again; a Result
+// restored without its paint state names none.
+test('a Result shown again names the rule table it left with, and a restored Result none', () => {
+  const rulesOf = (rules) => ({ ...paint('x'), colors: [{ CDS: null }, JSON.stringify([rules, {}, {}])] });
+  const withFile = [{ feat: 'CDS', qual: 'gene', val: 'b', color: '#123456', cap: 'Imported', fromFile: true }];
+  const record = createResultPaintRecord();
+  record.commit(['circular'], 'circular', rulesOf(withFile));
+  assert.equal(record.depart(rulesOf(withFile)), 'circular');
+  // The file card's Remove while another mode is shown, then the switch back.
+  assert.deepEqual(paintRuleTable(record.display('circular', rulesOf([]))), withFile);
+  record.commit(['batch'], 'batch', rulesOf([]), { restored: true });
+  record.commit(['batch', 'kept'], 'batch', rulesOf([]), { restored: true });
+  assert.equal(paintRuleTable(record.display('kept', rulesOf([]))), null);
 });

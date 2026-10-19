@@ -20,7 +20,8 @@ import {
   recordedLegendOrder,
   rekeyLegendRecords,
   resultLegendRows,
-  shownLegendRowNames
+  shownLegendRowNames,
+  writeDrawingLegendRecords
 } from '../../services/legend-svg.js';
 import { diffLegendIntents, legendRowRules } from '../../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
@@ -431,20 +432,14 @@ export const createLegendEntryActions = ({
       originalColors: /** @type {Record<string, string>} */ (originalLegendColors.value),
       strokeOptionsOpen: [...strokeOptionsOpen]
     }, moves);
-    drawing.deletedLegendEntries.value = moved.deletedEntries;
-    drawing.dormantLegendEntries.value = moved.dormantEntries;
-    for (const [store, records] of /** @type {const} */ ([
-      [drawing.legendColorOverrides, moved.colorOverrides], [drawing.legendStrokeOverrides, moved.strokeOverrides]
-    ])) {
-      Object.keys(store).forEach((key) => { delete store[key]; });
-      Object.assign(store, records);
-    }
-    drawing.addedLegendCaptions.value = new Set(moved.addedCaptions);
+    // The list being written goes back to the caller, which writes it.
+    const { entries: movedEntries, deletedEntries, dormantEntries, colorOverrides, strokeOverrides, addedCaptions } = moved;
+    writeDrawingLegendRecords(drawing, { deletedEntries, dormantEntries, colorOverrides, strokeOverrides, addedCaptions });
     originalLegendOrder.value = moved.originalOrder;
     originalLegendColors.value = moved.originalColors;
     strokeOptionsOpen.clear();
     moved.strokeOptionsOpen.forEach((caption) => strokeOptionsOpen.add(caption));
-    return moved.entries;
+    return movedEntries;
   };
 
   // The drawing's Legend intent that names a Result's rows.

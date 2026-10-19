@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState, LegendEntry } from '../state.js' */
+/** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 import { isLegendOrderEdited, legendEntryKey } from '../services/legend-svg.js';
 import { toRaw } from '../utils/vue-raw.js';
 
@@ -56,6 +57,13 @@ export const editorPaintState = (state, drawing) => ({
     ? JSON.stringify(drawing.legendEntries.value.map(legendEntryKey))
     : ''
 });
+
+// The rule table a paint state shows, or null when it is unknown (a Result
+// restored without the state it shows, `unknownPaint`).
+/** @param {EditorPaintState} paint @returns {SpecificColorRule[] | null} */
+export const paintRuleTable = (paint) => (paint.colors[1]
+  ? /** @type {[SpecificColorRule[], unknown, unknown]} */ (JSON.parse(paint.colors[1]))[0]
+  : null);
 
 // Whether two paint states show the same palette and color edits.
 /** @param {EditorPaintState['colors']} left @param {EditorPaintState['colors']} right */

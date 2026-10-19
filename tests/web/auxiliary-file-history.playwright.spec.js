@@ -187,6 +187,8 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   // The rows and their Legend rows go at once, in the Remove's step (REVIEW-3 R3-B1).
   const removed = { rules: [['cytochrome', false]], legend: ['Hand'] };
   await expect.poll(circular).toEqual(removed);
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const removedAt = await undoCount();
   expect(await linear()).toEqual(linearBefore);
   // One step: Undo brings back the card and the Circular rows.
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -198,6 +200,19 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   await switchMode(page, 'circular');
   await expect.poll(shownLegend, { timeout: 120_000 }).toEqual(['Hand']);
   await expect.poll(circular).toEqual(removed);
+  // REVIEW-4 N-1: back in Linear, Undo of the Remove (after the steps of the
+  // two switches) brings the file's rows back while Circular is not shown;
+  // shown again, its figure, last shown without them, is drawn with them.
+  await switchMode(page, 'linear');
+  for (let step = 0; step < 8 && await undoCount() >= removedAt; step += 1) {
+    const before = await undoCount();
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect.poll(undoCount, { timeout: 60_000 }).toBeLessThan(before);
+  }
+  await expect.poll(circular).toEqual(loaded);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  await switchMode(page, 'circular');
+  await expect.poll(shownLegend, { timeout: 120_000 }).toEqual(['Hand', 'Imported']);
 });
 
 // OV-1267: Reset Settings removes the settings a table loaded, so the card

@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { RulePreparation } from './rule-matching.js' */
-/** @import { PreparedFileLegend, RedrawWhenShownPort, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
+/** @import { PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShowElementSettings, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
 /** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
@@ -74,7 +74,6 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {RevealSetting} revealSetting The root's way to bring a setting of the settings pane into view.
  * @property {ShowElementSettings} showElementSettings The pane's popup of the settings section of a drawn element.
  * @property {() => unknown} closeElementSettings The pane's closing of that popup.
- * @property {RedrawWhenShownPort} [redrawWhenShown]
  */
 
 /** @param {FeatureEditorOptions} options */
@@ -117,8 +116,7 @@ export const createFeatureEditor = ({
   showNotice,
   revealSetting,
   showElementSettings,
-  closeElementSettings,
-  redrawWhenShown = () => {}
+  closeElementSettings
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
   // R13: the label owner's reactions, registered once it exists; the owners
@@ -127,7 +125,7 @@ export const createFeatureEditor = ({
   const ruleActions = createFeatureRuleActions({
     state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
     ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice,
-    revealSetting, redrawWhenShown
+    revealSetting
   });
   const featureSvgActions = createFeatureSvgActions({
     state,

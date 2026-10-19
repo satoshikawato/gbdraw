@@ -3,6 +3,7 @@ import { parseTransform } from './svg-transform.js';
 import { isAutoFeatureUnderlay } from './feature-dom.js';
 import { legendSwatch, sameLegendLine } from './legend-row-names.js';
 /** @import { DrawnLegendName, LegendRowName, LegendSwatchIdentity } from './legend-row-names.js' */
+/** @import { DrawingState } from '../state.js' */
 import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 
 export { parseTransform };
@@ -411,6 +412,35 @@ export const rekeyLegendRecords = (records, rekeyed, dropped = null) => {
   if (records.addedCaptions) next.addedCaptions = keys(records.addedCaptions);
   if (records.strokeOptionsOpen) next.strokeOptionsOpen = keys(records.strokeOptionsOpen);
   return /** @type {Records} */ (next);
+};
+
+/**
+ * A drawing's own Legend records, in the form `rekeyLegendRecords` returns them.
+ * @typedef {Pick<LegendKeyedRecords, 'entries' | 'deletedEntries' | 'dormantEntries' | 'colorOverrides'
+ *   | 'strokeOverrides' | 'addedCaptions'>} DrawingLegendRecords
+ */
+// The one write of a drawing's own Legend records after a re-key (R2): each
+// collection `records` holds replaces the drawing's, the others stay. The
+// rule commit's re-key (`moveLegendRecords` in app/legend/entry-actions.js)
+// and the Specific rules take-back of a drawing not shown (rule-actions.js)
+// write through it. The generated inventory and colors and the open Stroke
+// options are the shown Result's, which the Legend owner writes.
+/**
+ * @param {DrawingState} drawing
+ * @param {DrawingLegendRecords} records
+ */
+export const writeDrawingLegendRecords = (drawing, records) => {
+  if (records.entries) drawing.legendEntries.value = [...records.entries];
+  if (records.deletedEntries) drawing.deletedLegendEntries.value = [...records.deletedEntries];
+  if (records.dormantEntries) drawing.dormantLegendEntries.value = [...records.dormantEntries];
+  for (const [store, kept] of /** @type {const} */ ([
+    [drawing.legendColorOverrides, records.colorOverrides], [drawing.legendStrokeOverrides, records.strokeOverrides]
+  ])) {
+    if (!kept) continue;
+    Object.keys(store).forEach((key) => { delete store[key]; });
+    Object.assign(store, kept);
+  }
+  if (records.addedCaptions) drawing.addedLegendCaptions.value = new Set(records.addedCaptions);
 };
 
 /** @param {Element} row @returns {PythonLegendRow} */
