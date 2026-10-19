@@ -1824,7 +1824,7 @@ export const createRunAnalysis = ({
 
   const downloadCliHelperFiles = async () => {
     if (!latestCliHelperFiles.length) {
-      showNotice({ text: 'The latest run has no reproducibility files to download.' });
+      showNotice({ text: t('The latest run has no reproducibility files to download.') });
       return;
     }
     const materializedFiles = latestCliHelperFiles.map((file) => ({
@@ -1845,8 +1845,8 @@ export const createRunAnalysis = ({
       0
     );
     if (totalChars > 50 * 1024 * 1024 && !await askBeforeLargeDownload(askChoice, {
-      title: 'Download large reproducibility files?',
-      description: `The ZIP holds about ${(totalChars / (1024 * 1024)).toFixed(1)} MB of input and helper files.`
+      title: t('Download large reproducibility files?'),
+      description: t('The ZIP holds about {size} MB of input and helper files.', { size: (totalChars / (1024 * 1024)).toFixed(1) })
     })) return;
     downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
@@ -5582,7 +5582,7 @@ export const createRunAnalysis = ({
       };
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(
-            'Generate diagram',
+            msg('Generate diagram'),
             execute,
             {
               shouldCommit: (result) => result?.status === 'ok',
@@ -5919,7 +5919,7 @@ export const createRunAnalysis = ({
    */
   const runCommittedCanonicalCandidate = async ({
     canonical,
-    label = 'Rotate record to feature',
+    label = msg('Rotate record to feature'),
     captureIntentCheckpoint = null,
     restoreIntentCheckpoint = null,
     commitIntent = null,
@@ -6352,8 +6352,8 @@ export const createRunAnalysis = ({
     );
 
     if (losatExportBytesExceedLimit(totalBytes) && !await askBeforeLargeDownload(askChoice, {
-      title: 'Download large LOSAT tables?',
-      description: `The raw LOSAT TSV files total about ${(totalBytes / (1024 * 1024)).toFixed(1)} MB.`
+      title: t('Download large LOSAT tables?'),
+      description: t('The raw LOSAT TSV files total about {size} MB.', { size: (totalBytes / (1024 * 1024)).toFixed(1) })
     })) return;
 
     for (const { entry, idx, hydrated } of hydratedEntries) {

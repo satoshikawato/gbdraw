@@ -271,7 +271,7 @@ import {
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
-import { msg, t, tm } from '../utils/i18n.js';
+import { msg, t, tm, tn } from '../utils/i18n.js';
 import {
   IMPORTED_COMPARISON_ACTIONS,
   IMPORTED_COMPARISON_DISPOSITIONS,
@@ -835,7 +835,7 @@ export const createAppSetup = () => {
   ));
   const linearSourceRemovalCanDelete = computed(() => linearSourceGroups.value.length > 1);
   /** @param {{ name?: string }} file */
-  const chosenFileName = (file) => String(file.name || 'Unnamed file');
+  const chosenFileName = (file) => String(file.name || t('Unnamed file'));
   /**
    * The file names of a Linear File, as its dialogs name it: every file the
    * row holds, which a removal takes, also one of the other input type.
@@ -843,7 +843,7 @@ export const createAppSetup = () => {
    */
   const linearSourceFileName = (source) => {
     const names = [source.sequence.gb, source.sequence.gff, source.sequence.fasta].filter(Boolean).map(chosenFileName);
-    return names.length ? names.join(' + ') : `File ${linearSourceGroups.value.indexOf(source) + 1}`;
+    return names.length ? names.join(' + ') : t('File {n}', { n: linearSourceGroups.value.indexOf(source) + 1 });
   };
   const LINEAR_FILE_SLOT_NAMES = { gb: 'GenBank', gff: 'GFF3', fasta: 'FASTA' };
   /**
@@ -853,9 +853,9 @@ export const createAppSetup = () => {
    */
   const linearCardFileLine = (source) => {
     const fields = linearCardFileFields(lInputType.value);
-    if (!fields.some((field) => source.sequence[field])) return 'No file';
+    if (!fields.some((field) => source.sequence[field])) return t('No file');
     return fields.map((field) => (
-      source.sequence[field] ? chosenFileName(source.sequence[field]) : `no ${LINEAR_FILE_SLOT_NAMES[field]}`
+      source.sequence[field] ? chosenFileName(source.sequence[field]) : t('no {file}', { file: LINEAR_FILE_SLOT_NAMES[field] })
     )).join(' + ');
   };
   /** @param {LinearSourceGroup} source */
@@ -871,7 +871,7 @@ export const createAppSetup = () => {
   );
   const linearSourceRemovalTargetName = computed(() => {
     const source = linearSourceRemovalTarget.value;
-    return source ? linearSourceFileName(source) : 'Unavailable File';
+    return source ? linearSourceFileName(source) : t('Unavailable File');
   });
   const linearComparisonTimeline = computed(() => {
     const drawing = state.activeDrawing();
@@ -894,12 +894,12 @@ export const createAppSetup = () => {
   // Every panel names a record the same way (OV-436).
   const linearRecordNameMap = computed(() => linearRecordNames(linearSeqs));
   /** @param {string} uid */
-  const linearComparisonRecordLabel = (uid) => linearRecordNameMap.value.get(uid)?.label || 'Record';
+  const linearComparisonRecordLabel = (uid) => linearRecordNameMap.value.get(uid)?.label || t('Record');
   // The parts <record-name> lays out: the name shrinks, the accession stays whole.
   /** @param {string} uid */
   const linearComparisonRecordName = (uid) => {
     const entry = linearRecordNameMap.value.get(uid);
-    return { name: entry?.name || 'Record', detail: entry?.accession || '' };
+    return { name: entry?.name || t('Record'), detail: entry?.accession || '' };
   };
   // The settings pane's display, and the one way to bring a setting into
   // view: every "show this setting" path below ends in `revealSetting`, so a
@@ -2223,7 +2223,7 @@ export const createAppSetup = () => {
   /** @param {DepthFileSlots | DepthFileSlots[]} value */
   const depthTrackCountLabel = (value) => {
     const count = depthFileCount(value);
-    return count === 1 ? '1 TSV' : `${count} TSVs`;
+    return tn(count, '{count} TSV', '{count} TSVs');
   };
   const hasCircularDepthFiles = computed(() => depthFileCount(files.c_depth) > 0);
   const hasAnyLinearDepthFiles = computed(() => (
@@ -2349,8 +2349,8 @@ export const createAppSetup = () => {
   const linearSourceDepthSummary = (source) => {
     const tracks = linearSourceDepthRows(source);
     const attachedCount = tracks.filter((track) => track.status.selectedCount > 0).length;
-    if (attachedCount === 0) return 'No depth track attached';
-    return `${attachedCount} depth track${attachedCount === 1 ? '' : 's'} attached`;
+    if (attachedCount === 0) return t('No depth track attached');
+    return tn(attachedCount, '{count} depth track attached', '{count} depth tracks attached');
   };
   // The problems a File card marks, for the open card and its folded line:
   // a file whose inspection failed, and a record that TLOSATX cannot search
@@ -2373,7 +2373,7 @@ export const createAppSetup = () => {
   const linearDepthTrackCoverageLabel = (trackIndex) => {
     const covered = depthTrackCoverageCount(linearDepthRows(), trackIndex);
     const total = linearSeqs.length;
-    return `${covered}/${total} record${total === 1 ? '' : 's'}`;
+    return tn(total, '{covered}/{count} record', '{covered}/{count} records', { covered });
   };
   const linearDepthTrackIndexOptions = () => {
     const rows = linearDepthRows();
@@ -2386,11 +2386,11 @@ export const createAppSetup = () => {
     }));
   };
   const definitionLineStyleRows = Object.freeze([
-    { key: 'name', label: 'Name / Species' },
-    { key: 'subtitle', label: 'Subtitle' },
-    { key: 'replicon', label: 'Replicon', visibilityKey: 'linear_show_replicon', visibilityType: 'boolean' },
-    { key: 'accession', label: 'Accession', visibilityKey: 'linear_accession_visibility', visibilityType: 'mode' },
-    { key: 'length', label: 'Length / Coordinates', visibilityKey: 'linear_length_visibility', visibilityType: 'mode' }
+    { key: 'name', get label() { return t('Name / Species'); } },
+    { key: 'subtitle', get label() { return t('Subtitle'); } },
+    { key: 'replicon', get label() { return t('Replicon'); }, visibilityKey: 'linear_show_replicon', visibilityType: 'boolean' },
+    { key: 'accession', get label() { return t('Accession'); }, visibilityKey: 'linear_accession_visibility', visibilityType: 'mode' },
+    { key: 'length', get label() { return t('Length / Coordinates'); }, visibilityKey: 'linear_length_visibility', visibilityType: 'mode' }
   ]);
   const linearLabelHasSharedRow = computed(() => {
     const drawing = state.activeDrawing();
@@ -2421,11 +2421,14 @@ export const createAppSetup = () => {
     const applied = getCommittedLinearDefinitionVisibility();
     const effect = linearLabelAutoFields.value
       .every((/** @type {{ visibilityKey: string }} */ row) => applied[row.visibilityKey] === shown)
-      ? `Auto ${shown ? 'shows' : 'hides'} these fields throughout the diagram`
-      : `Auto will ${shown ? 'show' : 'hide'} these fields throughout the diagram on the next successful Generate`;
+      ? (shown ? t('Auto shows these fields throughout the diagram') : t('Auto hides these fields throughout the diagram'))
+      : (shown
+        ? t('Auto will show these fields throughout the diagram on the next successful Generate')
+        : t('Auto will hide these fields throughout the diagram on the next successful Generate'));
     return shown
-      ? `${fields}: ${effect} because no rendered row contains multiple records.`
-      : `${fields}: ${effect} because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
+      ? t('{fields}: {effect} because no rendered row contains multiple records.', { fields, effect })
+      : t('{fields}: {effect} because at least one rendered row contains multiple records.', { fields, effect })
+        + ' ' + t('Choose Show in Record Labels to keep a field visible.');
   });
   /** @param {string} key */
   const focusLinearLabelVisibility = async (key) => {
@@ -2435,16 +2438,16 @@ export const createAppSetup = () => {
   };
   /** @param {unknown} position */
   const legendPositionLabel = (position) => ({
-    right: 'Right',
-    left: 'Left',
-    top: 'Top',
-    bottom: 'Bottom',
-    upper_left: 'Upper Left',
-    upper_right: 'Upper Right',
-    lower_left: 'Lower Left',
-    lower_right: 'Lower Right',
-    none: 'None'
-  })[String(position || '').trim().toLowerCase()] || 'None';
+    right: t('Right'),
+    left: t('Left'),
+    top: t('Top'),
+    bottom: t('Bottom'),
+    upper_left: t('Upper Left'),
+    upper_right: t('Upper Right'),
+    lower_left: t('Lower Left'),
+    lower_right: t('Lower Right'),
+    none: t('None')
+  })[String(position || '').trim().toLowerCase()] || t('None');
   /** @param {DrawingState} drawing @param {string} kind */
   const ensureDefinitionLineStyle = (drawing, kind) => {
     const key = String(kind || '');
@@ -2955,7 +2958,9 @@ export const createAppSetup = () => {
     return (Array.isArray(drawing.circularConservation.series) ? drawing.circularConservation.series : []).map((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => ({
       index,
       filename: String(entry?.fileName || `source_${Number(index) + 1}`).trim(),
-      sourceLabel: `${isCircularConservationUploadSource(drawing) ? 'BLAST' : 'Comparison'} ${Number(index) + 1}`,
+      sourceLabel: isCircularConservationUploadSource(drawing)
+        ? t('BLAST {n}', { n: Number(index) + 1 })
+        : t('Comparison {n}', { n: Number(index) + 1 }),
       sourceIndex: Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index,
       comparisonSequenceFilename: String(
         files.c_conservation_sequence_sources?.[
@@ -4454,7 +4459,7 @@ export const createAppSetup = () => {
   const requestFeatureColorChangeWithHistory = undoableAction(msg('Change feature color'), requestFeatureColorChange);
   const setFeatureColorValueWithHistory = undoableAction(msg('Change feature color'), setFeatureColorValue);
   const updateClickedFeatureColorWithHistory = undoableAction(msg('Change feature color'), updateClickedFeatureColor);
-  const editLegendEntryColor = editEditorIntent('Change legend color', updateLegendEntryColor, { domains: LEGEND_FILL_DOMAINS });
+  const editLegendEntryColor = editEditorIntent(msg('Change legend color'), updateLegendEntryColor, { domains: LEGEND_FILL_DOMAINS });
   /** @param {number} index @param {string} color */
   const updateLegendEntryColorShown = (index, color) => (
     legendRowHasRules(index) ? updateLegendEntryColor(index, color) : editLegendEntryColor(index, color)
@@ -4480,7 +4485,7 @@ export const createAppSetup = () => {
     return type === null ? updateLegendEntryColorShown(index, color) : type;
   };
   const setLegendEntryStrokeColorValueWithHistory = editEditorIntent(
-    'Change legend stroke color',
+    msg('Change legend stroke color'),
     setLegendEntryStrokeColorValue
   );
   // OV-161, D-12: a dialog choice is one History step, Cancel records none, and
@@ -4493,10 +4498,10 @@ export const createAppSetup = () => {
   const scopeChoiceWithHistory = (label, handler, cancel = cancelFeatureStyleScope) => (
     dialogChoice.withHistory(label, handler, cancel)
   );
-  const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleColorScopeChoice);
-  const handleFeatureColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleFeatureStyleScopeChoice);
+  const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => msg('Change feature color'), handleColorScopeChoice);
+  const handleFeatureColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => msg('Change feature color'), handleFeatureStyleScopeChoice);
   const handleFeatureStrokeScopeChoiceWithHistory = scopeChoiceWithHistory(
-    () => 'Change feature stroke',
+    () => msg('Change feature stroke'),
     showingEditorIntent(handleFeatureStyleScopeChoice, STROKE_DOMAINS)
   );
   /** @param {string} choice @param {unknown[]} rest */
@@ -4585,32 +4590,32 @@ export const createAppSetup = () => {
     });
   };
   const handleLegendRenameChoiceWithHistory = scopeChoiceWithHistory(
-    () => 'Rename legend item',
+    () => msg('Rename legend item'),
     chooseLegendRename,
     cancelLegendRename
   );
   // D-15: the palette dialog's choice is one History step too.
   const handlePaletteColorsChoiceWithHistory = scopeChoiceWithHistory(
-    () => 'Change setting',
+    () => msg('Change setting'),
     resultsManager.handlePaletteColorsChoice,
     resultsManager.cancelPaletteColorsDialog
   );
   const handleResetColorChoiceWithHistory = scopeChoiceWithHistory(
-    () => 'Reset feature color',
+    () => msg('Reset feature color'),
     handleResetColorChoice,
     cancelResetColor
   );
   const resetClickedFeatureFillColorWithHistory = undoableAction(msg('Reset feature color'), resetClickedFeatureFillColor);
-  const updateClickedFeatureStrokeWithHistory = editEditorIntent('Change feature stroke', updateClickedFeatureStroke);
+  const updateClickedFeatureStrokeWithHistory = editEditorIntent(msg('Change feature stroke'), updateClickedFeatureStroke);
   const setClickedFeatureStrokeColorValueWithHistory = editEditorIntent(
-    'Change feature stroke',
+    msg('Change feature stroke'),
     setClickedFeatureStrokeColorValue
   );
   const setClickedFeatureStrokeWidthValueWithHistory = editEditorIntent(
-    'Change feature stroke',
+    msg('Change feature stroke'),
     setClickedFeatureStrokeWidthValue
   );
-  const resetClickedFeatureStrokeWithHistory = editEditorIntent('Reset feature stroke', resetClickedFeatureStroke);
+  const resetClickedFeatureStrokeWithHistory = editEditorIntent(msg('Reset feature stroke'), resetClickedFeatureStroke);
   const setFeatureColorWithHistory = undoableAction(msg('Change feature color'), setFeatureColor);
   const selectedFeatureBulkColor = ref('#2563eb');
   const selectedFeatureBulkCaption = ref('Selected features');
@@ -4633,7 +4638,7 @@ export const createAppSetup = () => {
     if (changed) featureSelection.clearFeatureSelection({ clearStatus: true });
     return changed;
   };
-  const editSelectedFeatureStroke = editEditorIntent('Change selected feature stroke', () => applyStrokeToSelectedFeatures(
+  const editSelectedFeatureStroke = editEditorIntent(msg('Change selected feature stroke'), () => applyStrokeToSelectedFeatures(
     selectedFeatures.value,
     selectedFeatureBulkStrokeColor.value,
     selectedFeatureBulkStrokeWidth.value
@@ -4677,15 +4682,17 @@ export const createAppSetup = () => {
     if (!command) return;
     try {
       await copyTextToClipboard(command);
-      status.value = 'Copied';
+      const copied = t('Copied');
+      status.value = copied;
       setTimeout(() => {
-        if (status.value === 'Copied') status.value = '';
+        if (status.value === copied) status.value = '';
       }, 1600);
     } catch (error) {
       console.warn('Failed to copy the requested command.', normalizeUserFacingError(error));
-      status.value = 'Copy failed';
+      const failed = t('Copy failed');
+      status.value = failed;
       setTimeout(() => {
-        if (status.value === 'Copy failed') status.value = '';
+        if (status.value === failed) status.value = '';
       }, 2200);
     }
   };
@@ -4929,7 +4936,7 @@ export const createAppSetup = () => {
   const missingBlastTsvDialog = reactive({ show: false, pairs: [] });
   const closeMissingBlastTsvDialog = () => { missingBlastTsvDialog.show = false; };
   const setMissingBlastTsvPairsToNone = dialogChoice.withHistory(
-    () => 'Set pairs to No comparison',
+    () => msg('Set pairs to No comparison'),
     () => {
       // The pairs as they are now: Undo may have changed them while the dialog was open.
       const drawing = state.drawings.linear;
@@ -5061,7 +5068,7 @@ export const createAppSetup = () => {
   /** @type {HTMLElement | null} */
   let similarityAlignmentReturnFocus = null;
   const similarityAlignmentEditorDisabledReason = computed(() => (
-    similarityAlignmentActions.dialogOpen.value ? 'Finish or cancel alignment review before opening Editor.' : ''
+    similarityAlignmentActions.dialogOpen.value ? t('Finish or cancel alignment review before opening Editor.') : ''
   ));
   similarityAlignmentPorts.editorDisabledReason = () => similarityAlignmentEditorDisabledReason.value;
   // The figure is fitted to the room the docked panel leaves, once the panel is in the page. The
@@ -5702,7 +5709,7 @@ export const createAppSetup = () => {
 
   const sessionTitleLabel = computed(() => {
     const title = normalizeSessionTitle(sessionTitle.value);
-    return title || 'Untitled session';
+    return title || t('Untitled session');
   });
 
   const canUseLinearRulerOnAxis = computed(
@@ -5943,7 +5950,7 @@ export const createAppSetup = () => {
     const records = Array.isArray(circularRecordList.value) ? circularRecordList.value : [];
     const matched = records.find((/** @type {{ selector?: unknown }} */ entry) => String(entry?.selector || '').trim() === normalized);
     if (!matched) return normalized;
-    return `${normalized} (${String(matched.record_id || '').trim() || 'Unknown'})`;
+    return `${normalized} (${String(matched.record_id || '').trim() || t('Unknown')})`;
   };
 
   const circularRecordDiscoveryState = computed(getCircularRecordDiscoveryState);
@@ -5954,7 +5961,7 @@ export const createAppSetup = () => {
     && !state.semanticFileWatchersSuppressed.value);
   const inspectCircularSourceRecords = () => sessionOperationAvailability() || (circularRecordInspectionEnabled.value
     ? refreshCircularRecordOrder()
-    : Promise.resolve({ status: 'unavailable', reason: 'Source inspection is unavailable.' }));
+    : Promise.resolve({ status: 'unavailable', reason: msg('Source inspection is unavailable.') }));
   const circularRecordPresentationEntries = () => buildDisambiguatedRecordEntries(
     circularRecordDiscoveryState.value.records.map(
       (/** @type {SequenceRecordEntry} */ record) => ({
@@ -5978,16 +5985,18 @@ export const createAppSetup = () => {
     const drawnCount = circularDrawnRecordCount.value;
     // OV-379: a source whose records are not read says so, as the Linear select does.
     const automaticLabel = circularRecordDiscoveryState.value.status === 'deferred'
-      ? RECORDS_NOT_INSPECTED_LABEL
+      ? tm(RECORDS_NOT_INSPECTED_LABEL)
       : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
-        ? (drawnCount < entries.length ? `${drawnCount} of ${entries.length} records (separate diagrams)` : 'All records (separate diagrams)')
-        : 'Automatic (only record)';
+        ? (drawnCount < entries.length ? t('{drawn} of {count} records (separate diagrams)', { drawn: drawnCount, count: entries.length }) : t('All records (separate diagrams)'))
+        : t('Automatic (only record)');
     return [
       { value: '', label: automaticLabel, synthetic: false },
       ...(current && selection.status !== 'resolved'
         ? [{
             value: current,
-            label: `${current} (${!inspected ? 'not inspected' : selection.status === 'ambiguous' ? 'ambiguous' : 'not found'})`,
+            label: !inspected ? t('{selector} (not inspected)', { selector: current })
+              : selection.status === 'ambiguous' ? t('{selector} (ambiguous)', { selector: current })
+                : t('{selector} (not found)', { selector: current }),
             synthetic: true
           }]
         : []),
@@ -6008,10 +6017,10 @@ export const createAppSetup = () => {
       current
     );
     if (selection.status === 'ambiguous') {
-      return `Record selector '${current}' is ambiguous in the current input.`;
+      return t('Record selector \'{selector}\' is ambiguous in the current input.', { selector: current });
     }
     if (selection.status === 'missing') {
-      return `Record selector '${current}' was not found in the current input.`;
+      return t('Record selector \'{selector}\' was not found in the current input.', { selector: current });
     }
     return '';
   });
@@ -6629,7 +6638,7 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     return (
       linearSourceMovePlan(drawing, 0, 1).reason === 'custom-layout'
-        ? 'File order is unavailable because Record Layout is custom. Use Advanced comparison and layout → Record Layout to give each File its own consecutive rows.'
+        ? t('File order is unavailable because Record Layout is custom. Use Advanced comparison and layout → Record Layout to give each File its own consecutive rows.')
         : ''
     );
   });
@@ -7526,14 +7535,14 @@ export const createAppSetup = () => {
     shownLegendName: legendActions.shownLegendName,
     shownLegendEntryName: legendActions.shownLegendEntryName,
     legendEntryMerged: legendActions.legendEntryMerged,
-    deleteLegendEntry: editEditorIntent('Delete legend item', deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
+    deleteLegendEntry: editEditorIntent(msg('Delete legend item'), deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.
     deletedLegendEntries: drawingMember('deletedLegendEntries'),
     restoreDeletedLegendEntry: /** @param {number} index */ (index) => restoreLegendItems(
-      'Restore legend item', () => restoreDeletedLegendEntries([index])
+      msg('Restore legend item'), () => restoreDeletedLegendEntries([index])
     ),
-    restoreAllDeletedLegendEntries: () => restoreLegendItems('Restore legend items', () => restoreDeletedLegendEntries(null)),
+    restoreAllDeletedLegendEntries: () => restoreLegendItems(msg('Restore legend items'), () => restoreDeletedLegendEntries(null)),
     moveLegendEntry,
     legendReorder,
     handleLegendReorderKey,
@@ -7549,10 +7558,10 @@ export const createAppSetup = () => {
     isLegendStrokeOptionsOpen,
     toggleLegendStrokeOptions,
     setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
-    updateLegendEntryStrokeColor: editEditorIntent('Change legend stroke color', updateLegendEntryStrokeColor),
-    updateLegendEntryStrokeWidth: editEditorIntent('Change legend stroke width', updateLegendEntryStrokeWidth),
-    resetLegendEntryStroke: editEditorIntent('Reset legend stroke', resetLegendEntryStroke),
-    resetAllStrokes: editEditorIntent('Reset all strokes', resetAllStrokes),
+    updateLegendEntryStrokeColor: editEditorIntent(msg('Change legend stroke color'), updateLegendEntryStrokeColor),
+    updateLegendEntryStrokeWidth: editEditorIntent(msg('Change legend stroke width'), updateLegendEntryStrokeWidth),
+    resetLegendEntryStroke: editEditorIntent(msg('Reset legend stroke'), resetLegendEntryStroke),
+    resetAllStrokes: editEditorIntent(msg('Reset all strokes'), resetAllStrokes),
     resetAllPositions: undoableAction(msg('Reset positions'), resetAllPositions),
     resetLayout: undoableAction(msg('Reset layout'), resetLayout),
     layoutResetAvailable,

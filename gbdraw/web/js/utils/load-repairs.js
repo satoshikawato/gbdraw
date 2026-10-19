@@ -1,6 +1,7 @@
 // @ts-check
 
 import { SESSION_TABLE_LABELS } from './error-normalization.js';
+import { t, tn } from './i18n.js';
 
 /**
  * What Load did with a value it could not restore as stored. `kept`: the
@@ -94,20 +95,20 @@ const UNLISTED_CODES = new Set(/** @type {LoadRepairCode[]} */ ([
 
 /**
  * The content parts of a Session the reader may drop or replace whole
- * (`readSessionDocument`), how the dialog names each, and the verb its name takes.
- * @type {Readonly<Record<string, readonly [name: string, verb: 'is' | 'are']>>}
+ * (`readSessionDocument`), and the sentence the dialog says of each.
+ * @type {Readonly<Record<string, (path: string) => string>>}
  */
-const SESSION_PART_NAMES = Object.freeze({
-  results: ['the saved Results', 'are'],
-  editorState: ['the feature list and the Legend and stroke edits of the saved diagram', 'are'],
-  resources: ['the stored input files', 'are'],
-  otherModeResult: ['the saved diagram of the other mode', 'is'],
-  modes: ['the settings of both drawings', 'are'],
-  'modes.circular': ['the settings of the Circular drawing', 'are'],
-  'modes.linear': ['the settings of the Linear drawing', 'are']
+const SESSION_PART_WORDING = Object.freeze({
+  results: (path) => t('Session file: the saved Results ({path}) could not be read and are left out.', { path }),
+  editorState: (path) => t('Session file: the feature list and the Legend and stroke edits of the saved diagram ({path}) could not be read and are left out.', { path }),
+  resources: (path) => t('Session file: the stored input files ({path}) could not be read and are left out.', { path }),
+  otherModeResult: (path) => t('Session file: the saved diagram of the other mode ({path}) could not be read and is left out.', { path }),
+  modes: (path) => t('Session file: the settings of both drawings ({path}) could not be read and are left out.', { path }),
+  'modes.circular': (path) => t('Session file: the settings of the Circular drawing ({path}) could not be read and are left out.', { path }),
+  'modes.linear': (path) => t('Session file: the settings of the Linear drawing ({path}) could not be read and are left out.', { path })
 });
-/** The paths of `SESSION_PART_NAMES`. @type {readonly string[]} */
-export const SESSION_PART_PATHS = Object.freeze(Object.keys(SESSION_PART_NAMES));
+/** The paths of `SESSION_PART_WORDING`. @type {readonly string[]} */
+export const SESSION_PART_PATHS = Object.freeze(Object.keys(SESSION_PART_WORDING));
 
 /** @param {string} value @param {number} limit */
 const bounded = (value, limit) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
@@ -126,29 +127,40 @@ export const loadRepair = (repair) => ({
 });
 
 /**
- * @param {string} singular
- * @param {string} plural
+ * The first five items, then how many more.
  * @param {readonly unknown[]} items
  */
-const cappedList = (singular, plural, items) => (items.length === 1 ? `${singular} ${items[0]}`
-  : `${plural} ${items.slice(0, 5).join(', ')}${items.length > 5 ? `, and ${items.length - 5} more` : ''}`);
-/** @param {number} count */
-const wasWere = (count) => (count === 1 ? 'was' : 'were');
+const cappedList = (items) => {
+  const head = items.slice(0, 5).join(', ');
+  return items.length > 5 ? t('{list}, and {count} more', { list: head, count: items.length - 5 }) : head;
+};
 /** @param {readonly LoadRepair[]} repairs */
 const total = (repairs) => repairs.reduce((sum, repair) => sum + (repair.count ?? 1), 0);
-/** @type {Readonly<Record<string, string>>} */
-const LEGEND_LIST_MARKS = { entries: '', dormantEntries: ' (not drawn)', deletedEntries: ' (deleted)' };
-/** @param {LoadRepair} repair The list is the last part of the path. */
-const legendListMark = (repair) => LEGEND_LIST_MARKS[repair.path.split('.').pop() || ''] ?? '';
+/**
+ * A Legend list entry as the dialog names it; the list is the last part of the path.
+ * @param {LoadRepair} repair
+ */
+const legendListEntry = (repair) => {
+  const label = repair.label ?? '';
+  const list = repair.path.split('.').pop();
+  if (list === 'dormantEntries') return t('"{label}" (not drawn)', { label });
+  if (list === 'deletedEntries') return t('"{label}" (deleted)', { label });
+  return `"${label}"`;
+};
 
-/** @type {Readonly<Record<string, string>>} */
-const LEGEND_RECORD_KINDS = { colorOverrides: 'color edit', strokeOverrides: 'stroke edit' };
 /** @param {LoadRepair} repair The collection is the last part of the path. */
-const legendRecordKind = (repair) => LEGEND_RECORD_KINDS[repair.path.split('.').pop() || ''] ?? 'entry';
+const legendRecordKind = (repair) => {
+  const collection = repair.path.split('.').pop();
+  return collection === 'colorOverrides' || collection === 'strokeOverrides' ? collection : 'entry';
+};
 /** @param {readonly LoadRepair[]} repairs */
-const overwrittenLegendEdits = (repairs) => repairs.map((repair) => (
-  `Legend: the ${legendRecordKind(repair)} stored under "${repair.label ?? ''}" (${repair.path}) sets the row "${repair.used ?? ''}",`
-  + ` which a later edit also sets; the later edit is used and this one was dropped.`));
+const overwrittenLegendEdits = (repairs) => repairs.map((repair) => {
+  const params = { label: repair.label ?? '', path: repair.path, used: repair.used ?? '' };
+  const kind = legendRecordKind(repair);
+  if (kind === 'colorOverrides') return t('Legend: the color edit stored under "{label}" ({path}) sets the row "{used}", which a later edit also sets; the later edit is used and this one was dropped.', params);
+  if (kind === 'strokeOverrides') return t('Legend: the stroke edit stored under "{label}" ({path}) sets the row "{used}", which a later edit also sets; the later edit is used and this one was dropped.', params);
+  return t('Legend: the entry stored under "{label}" ({path}) sets the row "{used}", which a later edit also sets; the later edit is used and this one was dropped.', params);
+});
 
 /**
  * The lines of one table's records of one code.
@@ -157,7 +169,7 @@ const overwrittenLegendEdits = (repairs) => repairs.map((repair) => (
  */
 const tableLines = (repairs, describe) => [...new Set(repairs.map(({ path }) => path))].map((table) => {
   const lines = repairs.filter((repair) => repair.path === table).map(({ line }) => line);
-  return describe(SESSION_TABLE_LABELS[table] ?? table, cappedList('line', 'lines', lines), lines.length);
+  return describe(SESSION_TABLE_LABELS[table] ?? table, cappedList(lines), lines.length);
 });
 
 /**
@@ -169,98 +181,110 @@ const tableLines = (repairs, describe) => [...new Set(repairs.map(({ path }) => 
 const WORDING = {
   // A stored request (services/session-request.js `readStoredRenderRequest`).
   'request-dropped': (repairs) => repairs.map(({ path }) => (
-    `Saved diagram: the settings of the saved diagram (${path}) could not be read. The file loads as settings only;`
-    + ' the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.')),
+    t('Saved diagram: the settings of the saved diagram ({path}) could not be read. The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.', { path }))),
   // The Session document (services/session-authority.js `readSessionDocument`).
-  'session-part-dropped': (repairs) => repairs.map(({ path }) => {
-    const [name, verb] = SESSION_PART_NAMES[path] ?? [path, 'is'];
-    return `Session file: ${name} (${path}) could not be read and ${verb} left out.`;
-  }),
-  'session-field-dropped': (repairs) => [
-    `Session file: ${cappedList('the field', 'the fields', repairs.map(({ path, label }) => (label === undefined ? path : `${path} (${label})`)))}`
-    + ` could not be read and ${wasWere(repairs.length)} left out.`
-  ],
+  'session-part-dropped': (repairs) => repairs.map(({ path }) => (
+    SESSION_PART_WORDING[path]?.(path)
+    ?? t('Session file: {name} ({path}) could not be read and is left out.', { name: path, path }))),
+  'session-field-dropped': (repairs) => {
+    const items = cappedList(repairs.map(({ path, label }) => (label === undefined ? path : `${path} (${label})`)));
+    return [tn(repairs.length,
+      'Session file: the field {items} could not be read and was left out.',
+      'Session file: the fields {items} could not be read and were left out.', { items })];
+  },
   'other-result-set-dropped': (repairs) => repairs.map(({ path, label }) => (
-    `Saved ${label ?? 'other'} diagram: its settings (${path}) could not be read; that diagram and its Results are left out.`)),
+    t('Saved {label} diagram: its settings ({path}) could not be read; that diagram and its Results are left out.', { label: label ?? t('other'), path }))),
   'request-part-dropped': (repairs) => repairs.map(({ path, label, effect }) => (
-    `Settings: ${label ?? 'a part'} (${path}) could not be read${effect === 'defaulted'
-      ? '; its default is used.' : ' and was left out, with the settings inside it.'}`)),
+    effect === 'defaulted'
+      ? t('Settings: {label} ({path}) could not be read; its default is used.', { label: label ?? t('a part'), path })
+      : t('Settings: {label} ({path}) could not be read and was left out, with the settings inside it.', { label: label ?? t('a part'), path }))),
   'request-reference-dropped': (repairs) => repairs.map(({ path, label }) => (
-    `Settings: ${path} names a file or record this Session does not hold; ${label ?? 'it'} is left out.`)),
+    t('Settings: {path} names a file or record this Session does not hold; {label} is left out.', { path, label: label ?? t('it') }))),
   // Free text is named by its place only (a changed one, such as an ID made
   // unique, names neither value); a value replaced by a list or an object
   // names no value used.
-  'setting-replaced': (repairs) => repairs.map(({ path, stored, used, effect }) => (
-    `Settings: ${stored === undefined ? `the value of ${path}` : `the value "${stored}" (${path})`} cannot be used; `
-    + `${used !== undefined ? `${used} is used` : {
-      defaulted: 'its default is used', changed: 'it is changed', dropped: 'it is left unset', kept: 'the drawing keeps its current value'
-    }[effect]}.`)),
-  'setting-entries-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
-    `Settings: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
-  'file-entry-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
-    `Input files: ${count} ${count === 1 ? 'entry' : 'entries'} of ${path} could not be read and ${wasWere(count)} dropped.`)),
-  'comparison-series-dropped': (repairs) => repairs.map(({ path, label }) => (
-    `Comparison series: the series ${label === undefined ? '' : `"${label}" `}(${path}) has no BLAST table that could be read;`
-    + ' it is left out with its sequence files.')),
+  'setting-replaced': (repairs) => repairs.map(({ path, stored, used, effect }) => {
+    const params = { path, stored: stored ?? '', used: used ?? '' };
+    if (stored === undefined) {
+      if (used !== undefined) return t('Settings: the value of {path} cannot be used; {used} is used.', params);
+      if (effect === 'defaulted') return t('Settings: the value of {path} cannot be used; its default is used.', params);
+      if (effect === 'changed') return t('Settings: the value of {path} cannot be used; it is changed.', params);
+      if (effect === 'dropped') return t('Settings: the value of {path} cannot be used; it is left unset.', params);
+      return t('Settings: the value of {path} cannot be used; the drawing keeps its current value.', params);
+    }
+    if (used !== undefined) return t('Settings: the value "{stored}" ({path}) cannot be used; {used} is used.', params);
+    if (effect === 'defaulted') return t('Settings: the value "{stored}" ({path}) cannot be used; its default is used.', params);
+    if (effect === 'changed') return t('Settings: the value "{stored}" ({path}) cannot be used; it is changed.', params);
+    if (effect === 'dropped') return t('Settings: the value "{stored}" ({path}) cannot be used; it is left unset.', params);
+    return t('Settings: the value "{stored}" ({path}) cannot be used; the drawing keeps its current value.', params);
+  }),
+  'setting-entries-dropped': (repairs) => repairs.map(({ path, count = 1 }) => tn(count,
+    'Settings: {count} entry of {path} could not be read and was dropped.',
+    'Settings: {count} entries of {path} could not be read and were dropped.', { path })),
+  'file-entry-dropped': (repairs) => repairs.map(({ path, count = 1 }) => tn(count,
+    'Input files: {count} entry of {path} could not be read and was dropped.',
+    'Input files: {count} entries of {path} could not be read and were dropped.', { path })),
+  'comparison-series-dropped': (repairs) => repairs.map(({ path, label }) => (label === undefined
+    ? t('Comparison series: the series ({path}) has no BLAST table that could be read; it is left out with its sequence files.', { path })
+    : t('Comparison series: the series "{label}" ({path}) has no BLAST table that could be read; it is left out with its sequence files.', { label, path }))),
   'pending-palette-dropped': (repairs) => repairs.map(({ path, label }) => (
-    `Palette: the palette "${label ?? ''}" (${path}) waits to be applied, but Instant Preview is on, which applies a palette at once;`
-    + ' it was dropped.')),
+    t('Palette: the palette "{label}" ({path}) waits to be applied, but Instant Preview is on, which applies a palette at once; it was dropped.', { label: label ?? '', path }))),
   'depth-row-disabled': (repairs) => repairs.map(({ path, label }) => (
-    `Track stack: the Depth row "${label ?? ''}" (${path}) names a Depth series its drawing does not have;`
-    + ' the row is turned off and no longer names that series.')),
-  'legend-position-defaulted': (repairs) => repairs.map(({ path, stored, used }) => (
-    `Legend: the position "${stored}" (${path}) is not one of its mode's positions; `
-    + `${used === undefined ? 'it is not used' : `${used} is used`}.`)),
+    t('Track stack: the Depth row "{label}" ({path}) names a Depth series its drawing does not have; the row is turned off and no longer names that series.', { label: label ?? '', path }))),
+  'legend-position-defaulted': (repairs) => repairs.map(({ path, stored, used }) => (used === undefined
+    ? t('Legend: the position "{stored}" ({path}) is not one of its mode\'s positions; it is not used.', { stored: stored ?? '', path })
+    : t('Legend: the position "{stored}" ({path}) is not one of its mode\'s positions; {used} is used.', { stored: stored ?? '', path, used }))),
   'legend-side-defaulted': (repairs) => repairs.map(({ path, stored, used }) => (
-    `Legend of a saved Result: the side "${stored}" (${path}) is not one of its mode's positions; `
-    + `the Result is read with ${used}.`)),
+    t('Legend of a saved Result: the side "{stored}" ({path}) is not one of its mode\'s positions; the Result is read with {used}.', { stored: stored ?? '', path, used: used ?? '' }))),
   'legend-color-dropped': (repairs) => {
-    const named = [...new Set(repairs.map((repair) => `"${repair.label ?? ''}"${legendListMark(repair)}`))];
-    return [`Legend: ${cappedList('entry', 'entries', named)} had a color the app does not accept and ${wasWere(named.length)} dropped.`];
+    const named = [...new Set(repairs.map(legendListEntry))];
+    return [tn(named.length,
+      'Legend: entry {items} had a color the app does not accept and was dropped.',
+      'Legend: entries {items} had a color the app does not accept and were dropped.', { items: cappedList(named) })];
   },
   'legend-entry-duplicate': (repairs) => {
-    const named = [...new Set(repairs.map((repair) => `"${repair.label ?? ''}"${legendListMark(repair)}`))];
-    return [`Legend: ${cappedList('entry', 'entries', named)} ${named.length === 1 ? 'repeats an earlier entry of its list and was'
-      : 'repeat an earlier entry of their list and were'} dropped.`];
+    const named = [...new Set(repairs.map(legendListEntry))];
+    return [tn(named.length,
+      'Legend: entry {items} repeats an earlier entry of its list and was dropped.',
+      'Legend: entries {items} repeat an earlier entry of their list and were dropped.', { items: cappedList(named) })];
   },
   'legend-edit-overwritten': overwrittenLegendEdits,
   'legend-edit-overwritten-session46': overwrittenLegendEdits,
   'legend-edit-rekey-dropped': (repairs) => repairs.map((repair) => {
+    const params = { label: repair.label ?? '', path: repair.path, used: repair.used ?? '' };
     const kind = legendRecordKind(repair);
-    return `Legend: the ${kind} stored under "${repair.label ?? ''}" (${repair.path}) moves to the row "${repair.used ?? ''}",`
-      + ` which has ${kind === 'entry' ? 'an entry' : 'an edit'} of its own; that ${kind === 'entry' ? 'entry' : 'edit'} is used and this one was dropped.`;
+    if (kind === 'colorOverrides') return t('Legend: the color edit stored under "{label}" ({path}) moves to the row "{used}", which has an edit of its own; that edit is used and this one was dropped.', params);
+    if (kind === 'strokeOverrides') return t('Legend: the stroke edit stored under "{label}" ({path}) moves to the row "{used}", which has an edit of its own; that edit is used and this one was dropped.', params);
+    return t('Legend: the entry stored under "{label}" ({path}) moves to the row "{used}", which has an entry of its own; that entry is used and this one was dropped.', params);
   }),
   'feature-edit-unmatched': (repairs) => [
-    `${total(repairs)} feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.`
+    t('{count} feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.', { count: total(repairs) })
   ],
   'feature-visibility-narrowed': (repairs) => [
-    `${total(repairs)} Feature visibility edit(s) from an older Session hid every feature with the same hash, such as each copy`
-    + ' of a duplicated record. Each now applies only to the feature that was edited, so the next Generate draws the others.'
+    t('{count} Feature visibility edit(s) from an older Session hid every feature with the same hash, such as each copy of a duplicated record. Each now applies only to the feature that was edited, so the next Generate draws the others.', { count: total(repairs) })
   ],
   'hash-selector-unmapped': (repairs) => [
-    `${total(repairs)} hash= value(s) from an older Session could not be renamed to the hash of a feature in its source record:`
-    + ' the saved diagram drew a cropped or reverse-complemented record, and the value names features of several'
-    + ' source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source'
-    + ' record, so each may now match another feature or none.'
+    t('{count} hash= value(s) from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source record, so each may now match another feature or none.', { count: total(repairs) })
   ],
-  'table-row-joined': (repairs) => tableLines(repairs, (table, lines) => (
-    `${table}: ${lines} had extra cells, joined into the last column with one space.`)),
-  'table-row-dropped': (repairs) => tableLines(repairs, (table, lines, count) => (
-    `${table}: ${lines} lacked a required column and ${wasWere(count)} dropped.`)),
-  'table-row-invalid': (repairs) => tableLines(repairs, (table, lines, count) => (
-    `${table}: ${lines} had a color the table does not accept and ${wasWere(count)} dropped.`)),
-  'orthogroup-edit-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
-    `Similarity groups: ${count} ${path.endsWith('DescriptionOverrides') ? 'description' : 'name'} edit(s) (${path})`
-    + ' name a group the saved Result does not have and were dropped.')),
+  'table-row-joined': (repairs) => tableLines(repairs, (table, lines, count) => tn(count,
+    '{table}: line {lines} had extra cells, joined into the last column with one space.',
+    '{table}: lines {lines} had extra cells, joined into the last column with one space.', { table, lines })),
+  'table-row-dropped': (repairs) => tableLines(repairs, (table, lines, count) => tn(count,
+    '{table}: line {lines} lacked a required column and was dropped.',
+    '{table}: lines {lines} lacked a required column and were dropped.', { table, lines })),
+  'table-row-invalid': (repairs) => tableLines(repairs, (table, lines, count) => tn(count,
+    '{table}: line {lines} had a color the table does not accept and was dropped.',
+    '{table}: lines {lines} had a color the table does not accept and were dropped.', { table, lines })),
+  'orthogroup-edit-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (path.endsWith('DescriptionOverrides')
+    ? t('Similarity groups: {count} description edit(s) ({path}) name a group the saved Result does not have and were dropped.', { count, path })
+    : t('Similarity groups: {count} name edit(s) ({path}) name a group the saved Result does not have and were dropped.', { count, path }))),
   'cache-entry-dropped': (repairs) => repairs.map(({ path, count = 1 }) => (
-    `LOSAT cache: ${count} saved value(s) (${path}) could not be read and were dropped.`)),
+    t('LOSAT cache: {count} saved value(s) ({path}) could not be read and were dropped.', { count, path }))),
   'feature-recovery-failed': () => [
-    'Features: the feature information of the saved diagram could not be restored from this file;'
-    + ' the SVG preview stays, and the next Generate restores it.'
+    t('Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays, and the next Generate restores it.')
   ],
   'match-sequences-unrestored': () => [
-    'Comparisons: the sequences of the saved comparison matches could not be read again from the input files;'
-    + ' the SVG preview stays, and the next Generate reads them.'
+    t('Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.')
   ]
 };
 
@@ -296,12 +320,12 @@ export const describeLoadRepairs = (repairs) => {
       return ofCode.length ? describe(ofCode) : [];
     });
   const items = lines.length > LINE_LIMIT
-    ? [...lines.slice(0, LINE_LIMIT - 1), `and ${lines.length - (LINE_LIMIT - 1)} more`]
+    ? [...lines.slice(0, LINE_LIMIT - 1), t('and {count} more', { count: lines.length - (LINE_LIMIT - 1) })]
     : lines;
   return {
-    title: 'Load this file?',
-    description: 'Some parts of this file cannot be fully restored:',
+    title: t('Load this file?'),
+    description: t('Some parts of this file cannot be fully restored:'),
     items,
-    note: 'Save Session afterwards writes the current format. The file itself is not changed.'
+    note: t('Save Session afterwards writes the current format. The file itself is not changed.')
   };
 };

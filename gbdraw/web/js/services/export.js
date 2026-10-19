@@ -1,4 +1,5 @@
 // @ts-check
+import { t } from '../utils/i18n.js';
 import { setDpiInPng } from '../utils/png.js';
 import {
   ensureSvgDefs,
@@ -148,7 +149,7 @@ const svgFontPort = ({ embedFonts, embedInSvg }) => (embedInSvg && embedFonts ? 
  * @returns {string[]}
  */
 const refusedFontWarnings = (families) => families.map((family) => (
-  `Font ${family} is not embedded: its license (OS/2 fsType) does not allow embedding. The SVG shows it only where ${family} is installed.`
+  t('Font {family} is not embedded: its license (OS/2 fsType) does not allow embedding. The SVG shows it only where {family} is installed.', { family })
 ));
 
 /**
