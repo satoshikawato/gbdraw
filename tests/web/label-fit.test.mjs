@@ -346,10 +346,10 @@ const choiceDialogStatus = async () => {
   const template = html.slice(start, html.indexOf('</script>', start));
   const lines = [...template.matchAll(/<p v-if="busy" role="status"[^>]*>\{\{ (.+?) \}\}<\/p>/g)].map((match) => match[1]);
   assert.equal(lines.length, 1, 'the choice dialog has one busy status line');
-  const bindings = new Function('dialogChoicePending', 'labelFitDialog', `return [${busy}, ${busyStatus}];`);
+  const bindings = new Function('dialogChoicePending', 'labelFitDialog', 't', `return [${busy}, ${busyStatus}];`);
   const text = new Function('busyStatus', 't', `return ${lines[0]};`);
   return (/** @type {boolean} */ pending, /** @type {object} */ dialog) => {
-    const [isBusy, status] = bindings(pending, dialog);
+    const [isBusy, status] = bindings(pending, dialog, t);
     return isBusy ? [text(status, t)] : [];
   };
 };

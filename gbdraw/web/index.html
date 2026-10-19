@@ -7084,9 +7084,9 @@
                     <choice-dialog v-if="featureVisibilityScopeDialog.show" labelledby="feature-visibility-scope-title" describedby="feature-visibility-scope-description"
                          @cancel="handleFeatureVisibilityScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
-                            <h3 id="feature-visibility-scope-title" class="text-lg font-bold text-slate-800 mb-2">Feature Visibility Scope</h3>
+                            <h3 id="feature-visibility-scope-title" class="text-lg font-bold text-slate-800 mb-2">{{ t('Feature Visibility Scope') }}</h3>
                             <p id="feature-visibility-scope-description" class="text-sm text-slate-600 mb-4">
-                                Apply this visibility to:
+                                {{ t('Apply this visibility to:') }}
                             </p>
                             <div class="flex flex-col gap-2">
                                 <button v-for="(scope, index) in featureVisibilityScopeDialog.scopes"
@@ -7104,7 +7104,7 @@
                             <button @click="handleFeatureVisibilityScopeChoice('cancel')"
                                     data-history-managed
                                     class="choice-cancel" :disabled="!semanticMutationAvailable">
-                                Cancel
+                                {{ t('Cancel') }}
                             </button>
                     </choice-dialog>
 
@@ -7112,9 +7112,9 @@
                     <choice-dialog v-if="labelTextScopeDialog.show" labelledby="label-text-scope-title" describedby="label-text-scope-description"
                          @cancel="handleLabelTextScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
-                            <h3 id="label-text-scope-title" class="text-lg font-bold text-slate-800 mb-2">Label Text Scope</h3>
+                            <h3 id="label-text-scope-title" class="text-lg font-bold text-slate-800 mb-2">{{ t('Label Text Scope') }}</h3>
                             <p id="label-text-scope-description" class="text-sm text-slate-600 mb-4">
-                                Change "<span class="font-semibold text-slate-800">{{ labelTextScopeDialog.sourceText }}</span>" to "<span class="font-semibold text-slate-800">{{ labelTextScopeDialog.newText }}</span>"?
+                                <i18n-text :text="t('Change "{from}" to "{to}"?')"><template #from><span class="font-semibold text-slate-800">{{ labelTextScopeDialog.sourceText }}</span></template><template #to><span class="font-semibold text-slate-800">{{ labelTextScopeDialog.newText }}</span></template></i18n-text>
                             </p>
 
                             <div class="flex flex-col gap-2">
@@ -7123,23 +7123,23 @@
                                         :aria-describedby="labelTextScopeDialog.featureId ? null : 'label-text-scope-single-note'"
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-user" aria-hidden="true"></i>
-                                    <span>This label only</span>
+                                    <span>{{ t('This label only') }}</span>
                                 </button>
                                 <p v-if="!labelTextScopeDialog.featureId" id="label-text-scope-single-note" class="choice-option-note">
-                                    Lost when you Generate again.
+                                    {{ t('Lost when you Generate again.') }}
                                 </p>
                                 <button @click="handleLabelTextScopeChoice('all')"
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-users" aria-hidden="true"></i>
-                                    <span>All {{ labelTextScopeDialog.matchingCount }} labels reading "{{ labelTextScopeDialog.sourceText }}"</span>
+                                    <span>{{ t('All {count} labels reading "{text}"', { count: labelTextScopeDialog.matchingCount, text: labelTextScopeDialog.sourceText }) }}</span>
                                 </button>
                             </div>
 
                             <button @click="handleLabelTextScopeChoice('cancel')"
                                     data-history-managed
                                     class="choice-cancel" :disabled="!semanticMutationAvailable">
-                                Cancel
+                                {{ t('Cancel') }}
                             </button>
                     </choice-dialog>
 
@@ -7147,7 +7147,7 @@
                     <choice-dialog v-if="hiddenLabelTextDialog.show" labelledby="hidden-label-text-title" describedby="hidden-label-text-description"
                          @cancel="handleHiddenLabelTextChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center">
-                            <h3 id="hidden-label-text-title" class="text-lg font-bold text-slate-800 mb-2">Label Not Shown</h3>
+                            <h3 id="hidden-label-text-title" class="text-lg font-bold text-slate-800 mb-2">{{ t('Label Not Shown') }}</h3>
                             <p id="hidden-label-text-description" class="text-sm text-slate-600 mb-4">
                                 {{ hiddenLabelTextMessage }}
                             </p>
@@ -7156,19 +7156,19 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-eye" aria-hidden="true"></i>
-                                    <span>Show this label</span>
+                                    <span>{{ t('Show this label') }}</span>
                                 </button>
                                 <button @click="handleHiddenLabelTextChoice('text_only')"
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-eye-slash" aria-hidden="true"></i>
-                                    <span>Keep hidden (apply text only)</span>
+                                    <span>{{ t('Keep hidden (apply text only)') }}</span>
                                 </button>
                             </div>
                             <button @click="handleHiddenLabelTextChoice('cancel')"
                                     data-history-managed
                                     class="choice-cancel" :disabled="!semanticMutationAvailable">
-                                Cancel
+                                {{ t('Cancel') }}
                             </button>
                     </choice-dialog>
 
@@ -7177,12 +7177,12 @@
                          @cancel="handleLabelOnChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center">
                             <h3 id="label-on-dialog-title" class="text-lg font-bold text-slate-800 mb-2">
-                                {{ labelOnDialog.reason === 'hidden' ? 'Feature Is Hidden' : (labelOnDialog.reason === 'underlay' ? 'Label Cannot Be Drawn' : 'Label Does Not Fit') }}
+                                {{ labelOnDialog.reason === 'hidden' ? t('Feature Is Hidden') : (labelOnDialog.reason === 'underlay' ? t('Label Cannot Be Drawn') : t('Label Does Not Fit')) }}
                             </h3>
                             <p id="label-on-dialog-description" class="text-sm text-slate-600 mb-4">
-                                <template v-if="labelOnDialog.reason === 'hidden'">This feature is hidden, so its label cannot be drawn.</template>
-                                <template v-else-if="labelOnDialog.reason === 'underlay'">Labels are not drawn on <span class="font-semibold">{{ labelOnDialog.featureType }}</span> features, because Feature Types draws them as Underlay.</template>
-                                <template v-else>This label does not fit inside its feature, and Label Rendering draws labels only inside features.</template>
+                                <template v-if="labelOnDialog.reason === 'hidden'">{{ t('This feature is hidden, so its label cannot be drawn.') }}</template>
+                                <template v-else-if="labelOnDialog.reason === 'underlay'"><i18n-text :text="t('Labels are not drawn on {type} features, because Feature Types draws them as Underlay.')"><template #type><span class="font-semibold">{{ labelOnDialog.featureType }}</span></template></i18n-text></template>
+                                <template v-else>{{ t('This label does not fit inside its feature, and Label Rendering draws labels only inside features.') }}</template>
                             </p>
                             <div class="flex flex-col gap-2">
                                 <template v-if="labelOnDialog.reason === 'hidden'">
@@ -7190,16 +7190,16 @@
                                             data-history-managed
                                             class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-eye" aria-hidden="true"></i>
-                                        <span>Show feature and label</span>
+                                        <span>{{ t('Show feature and label') }}</span>
                                     </button>
                                     <button @click="handleLabelOnChoice('keep')"
                                             data-history-managed
                                             aria-describedby="label-on-keep-note"
                                             class="choice-option" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-eye-slash" aria-hidden="true"></i>
-                                        <span>Keep feature hidden</span>
+                                        <span>{{ t('Keep feature hidden') }}</span>
                                     </button>
-                                    <p id="label-on-keep-note" class="choice-option-note">Its label shows when you show the feature.</p>
+                                    <p id="label-on-keep-note" class="choice-option-note">{{ t('Its label shows when you show the feature.') }}</p>
                                 </template>
                                 <template v-else>
                                     <button @click="handleLabelOnChoice('keep')"
@@ -7207,17 +7207,17 @@
                                             aria-describedby="label-on-keep-note"
                                             class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-tag" aria-hidden="true"></i>
-                                        <span>Keep Label On</span>
+                                        <span>{{ t('Keep Label On') }}</span>
                                     </button>
                                     <p id="label-on-keep-note" class="choice-option-note">
-                                        {{ labelOnDialog.reason === 'underlay' ? 'The label shows if you draw this feature type another way.' : 'The label shows when it fits.' }}
+                                        {{ labelOnDialog.reason === 'underlay' ? t('The label shows if you draw this feature type another way.') : t('The label shows when it fits.') }}
                                     </p>
                                 </template>
                             </div>
                             <button @click="handleLabelOnChoice('cancel')"
                                     data-history-managed
                                     class="choice-cancel" :disabled="!semanticMutationAvailable">
-                                Cancel
+                                {{ t('Cancel') }}
                             </button>
                     </choice-dialog>
 
@@ -7226,7 +7226,7 @@
                          @cancel="handleFeatureStyleScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="feature-style-scope-title" class="text-lg font-bold text-slate-800 mb-3">
-                                {{ featureStyleScopeDialog.kind === 'stroke' ? 'Stroke Change Scope' : 'Color Change Scope' }}
+                                {{ featureStyleScopeDialog.kind === 'stroke' ? t('Stroke Change Scope') : t('Color Change Scope') }}
                             </h3>
 
                             <div class="flex flex-col gap-2">
@@ -7234,18 +7234,18 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-user" aria-hidden="true"></i>
-                                    <span>This feature only</span>
+                                    <span>{{ t('This feature only') }}</span>
                                 </button>
 
                                 <p v-if="featureStyleScopeDialog.matchingRule || featureStyleScopeDialog.siblingCount > 0 || featureStyleScopeLabelOptions.displayLabel || featureStyleScopeLabelOptions.annotationLabel"
-                                   class="choice-group-label">All features with the same</p>
+                                   class="choice-group-label">{{ t('All features with the same') }}</p>
 
                                 <button v-if="featureStyleScopeDialog.matchingRule"
                                         @click="handleFeatureStyleScopeChoice('rule')"
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-funnel" aria-hidden="true"></i>
-                                    <span>Color rule "{{ featureStyleScopeDialog.matchingRule?.cap || featureStyleScopeDialog.matchingRule?.val }}" ({{ featureStyleScopeDialog.ruleMatchCount }})</span>
+                                    <span>{{ t('Color rule "{name}" ({count})', { name: featureStyleScopeDialog.matchingRule?.cap || featureStyleScopeDialog.matchingRule?.val, count: featureStyleScopeDialog.ruleMatchCount }) }}</span>
                                 </button>
 
                                 <button v-if="featureStyleScopeDialog.siblingCount > 0"
@@ -7254,11 +7254,11 @@
                                         :aria-describedby="featureStyleScopeDialog.defaultColorType ? 'feature-style-scope-default-color' : null"
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-list-bullets" aria-hidden="true"></i>
-                                    <span>Legend item "{{ shownLegendName(featureStyleScopeDialog.legendName) }}" ({{ featureStyleScopeDialog.siblingCount + 1 }})</span>
+                                    <span>{{ t('Legend item "{name}" ({count})', { name: shownLegendName(featureStyleScopeDialog.legendName), count: featureStyleScopeDialog.siblingCount + 1 }) }}</span>
                                 </button>
                                 <p v-if="featureStyleScopeDialog.siblingCount > 0 && featureStyleScopeDialog.defaultColorType" id="feature-style-scope-default-color" data-default-color-scope-line class="choice-option-note">
                                     <default-color-scope-line :line="defaultColorScopeLine(featureStyleScopeDialog.defaultColorType, featureStyleScopeDialog.replacedDefaultColor)"></default-color-scope-line>
-                                    <template v-if="hasPendingPaletteDraft"> Applies now, also over the queued palette.</template>
+                                    <template v-if="hasPendingPaletteDraft"> {{ t('Applies now, also over the queued palette.') }}</template>
                                 </p>
 
                                 <button v-if="featureStyleScopeLabelOptions.displayLabel"
@@ -7266,7 +7266,7 @@
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-tag" aria-hidden="true"></i>
-                                    <span>Label "{{ featureStyleScopeDialog.displayLabel }}" ({{ featureStyleScopeDialog.displayLabelSiblingCount + 1 }})</span>
+                                    <span>{{ t('Label "{name}" ({count})', { name: featureStyleScopeDialog.displayLabel, count: featureStyleScopeDialog.displayLabelSiblingCount + 1 }) }}</span>
                                 </button>
 
                                 <button v-if="featureStyleScopeLabelOptions.annotationLabel"
@@ -7274,17 +7274,17 @@
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-file-text" aria-hidden="true"></i>
-                                    <span>Source label "{{ featureStyleScopeDialog.annotationLabel }}" ({{ featureStyleScopeDialog.annotationLabelSiblingCount + 1 }})</span>
+                                    <span>{{ t('Source label "{name}" ({count})', { name: featureStyleScopeDialog.annotationLabel, count: featureStyleScopeDialog.annotationLabelSiblingCount + 1 }) }}</span>
                                 </button>
 
                                 <template v-if="featureStyleScopeDialog.kind === 'fill' && featureStyleScopeDialog.existingCaptionColor">
-                                    <p class="choice-group-label">Or keep the Legend color</p>
+                                    <p class="choice-group-label">{{ t('Or keep the Legend color') }}</p>
                                     <button @click="handleFeatureStyleScopeChoice('useExisting')"
                                             data-history-managed
                                             class="choice-option" :disabled="!semanticMutationAvailable">
                                         <span class="w-5 h-5 rounded border border-slate-300 shrink-0"
                                               :style="{ backgroundColor: featureStyleScopeDialog.existingCaptionColor }"></span>
-                                        <span>Use the "{{ shownLegendName(featureStyleScopeDialog.legendName) }}" Legend color</span>
+                                        <span>{{ t('Use the "{name}" Legend color', { name: shownLegendName(featureStyleScopeDialog.legendName) }) }}</span>
                                     </button>
                                 </template>
                             </div>
@@ -7292,7 +7292,7 @@
                             <button @click="handleFeatureStyleScopeChoice('cancel')"
                                     data-history-managed
                                     class="choice-cancel" :disabled="!semanticMutationAvailable">
-                                Cancel
+                                {{ t('Cancel') }}
                             </button>
                     </choice-dialog>
 
@@ -7301,15 +7301,15 @@
                          @cancel="handleLegendRenameChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[65] flex items-center justify-center">
                             <h3 id="legend-rename-title" class="text-lg font-bold text-slate-800 mb-2">
-                                {{ legendRenameDialog.mode === 'scope' ? 'Legend Name Scope' : 'Legend Name Conflict' }}
+                                {{ legendRenameDialog.mode === 'scope' ? t('Legend Name Scope') : t('Legend Name Conflict') }}
                             </h3>
                             <p v-if="legendRenameDialog.mode === 'scope'" id="legend-rename-description" class="text-sm text-slate-600 mb-4">
-                                Rename "<span class="font-semibold text-slate-800">{{ shownLegendName(legendRenameDialog.sourceKey) }}</span>" to "<span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span>"?
+                                <i18n-text :text="t('Rename "{from}" to "{to}"?')"><template #from><span class="font-semibold text-slate-800">{{ shownLegendName(legendRenameDialog.sourceKey) }}</span></template><template #to><span class="font-semibold text-slate-800">{{ legendRenameDialog.newCaption }}</span></template></i18n-text>
                             </p>
                             <div v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
                                 <p data-legend-rename-reason>{{ legendRenameDialog.reason }}</p>
                                 <p v-if="legendRenameDialog.targetNameAfter" class="mt-2">
-                                    The existing "{{ shownLegendName(legendRenameDialog.targetKey) }}" becomes "{{ legendRenameDialog.targetNameAfter }}".
+                                    {{ t('The existing "{name}" becomes "{after}".', { name: shownLegendName(legendRenameDialog.targetKey), after: legendRenameDialog.targetNameAfter }) }}
                                 </p>
                                 <ul class="mt-2 space-y-1">
                                     <li class="flex items-center gap-2">
@@ -7319,7 +7319,7 @@
                                     <li class="flex items-center gap-2">
                                         <span class="w-4 h-4 rounded border border-slate-300 inline-block shrink-0" :style="{ backgroundColor: legendRenameDialog.currentColor }"></span>
                                         <span class="font-semibold text-slate-800">{{ shownLegendName(legendRenameDialog.sourceKey) }}</span>
-                                        <span class="text-xs text-slate-500">(the item you renamed)</span>
+                                        <span class="text-xs text-slate-500">{{ t('(the item you renamed)') }}</span>
                                     </li>
                                 </ul>
                             </div>
@@ -7329,13 +7329,13 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-user" aria-hidden="true"></i>
-                                    <span>This feature only</span>
+                                    <span>{{ t('This feature only') }}</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('group')"
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-users-three" aria-hidden="true"></i>
-                                    <span>All {{ legendRenameDialog.siblingCount + 1 }} "{{ shownLegendName(legendRenameDialog.sourceKey) }}" features</span>
+                                    <span>{{ t('All {count} "{name}" features', { count: legendRenameDialog.siblingCount + 1, name: shownLegendName(legendRenameDialog.sourceKey) }) }}</span>
                                 </button>
                             </div>
 
@@ -7345,21 +7345,21 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <span class="w-5 h-5 rounded border border-white/70 shrink-0" :style="{ backgroundColor: legendRenameDialog.targetColor }"></span>
-                                    <span v-if="legendRenameDialog.deletedTargetKey">Restore "{{ legendRenameDialog.targetKey ? shownLegendName(legendRenameDialog.targetKey) : legendRenameDialog.targetCaption }}" and merge into it</span>
-                                    <span v-else>Merge into "{{ legendRenameDialog.targetKey ? shownLegendName(legendRenameDialog.targetKey) : legendRenameDialog.targetCaption }}"</span>
+                                    <span v-if="legendRenameDialog.deletedTargetKey">{{ t('Restore "{name}" and merge into it', { name: legendRenameDialog.targetKey ? shownLegendName(legendRenameDialog.targetKey) : legendRenameDialog.targetCaption }) }}</span>
+                                    <span v-else>{{ t('Merge into "{name}"', { name: legendRenameDialog.targetKey ? shownLegendName(legendRenameDialog.targetKey) : legendRenameDialog.targetCaption }) }}</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('keep-both')"
                                         data-history-managed
                                         :class="['choice-option', { 'is-primary': !legendRenameDialog.mergeAvailable }]" :disabled="!semanticMutationAvailable">
                                     <span class="w-5 h-5 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendRenameDialog.currentColor }"></span>
-                                    <span>Keep both: name it "{{ legendRenameDialog.keepBothName }}"</span>
+                                    <span>{{ t('Keep both: name it "{name}"', { name: legendRenameDialog.keepBothName }) }}</span>
                                 </button>
                             </div>
 
                             <button @click="handleLegendRenameChoice('cancel')"
                                     data-history-managed
                                     class="choice-cancel" :disabled="!semanticMutationAvailable">
-                                Cancel
+                                {{ t('Cancel') }}
                             </button>
                     </choice-dialog>
 
@@ -7368,15 +7368,15 @@
                          @cancel="handlePaletteColorsChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="palette-colors-title" class="text-lg font-bold text-slate-800 mb-2">
-                                {{ paletteColorsDialog.kind === 'reset' ? 'Reset default colors' : `Change palette to "${paletteColorsDialog.toPalette}"` }}
+                                {{ paletteColorsDialog.kind === 'reset' ? t('Reset default colors') : t('Change palette to "{palette}"', { palette: paletteColorsDialog.toPalette }) }}
                             </h3>
                             <p id="palette-colors-description" class="text-sm text-slate-600 mb-4">
                                 <template v-if="paletteColorsDialog.kind === 'reset'">
-                                    Replace your {{ paletteColorsDialog.count }} changed {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} ({{ paletteColorsDialog.keysText }}) with the colors of the "{{ paletteColorsDialog.toPalette }}" palette?
+                                    {{ tn(paletteColorsDialog.count, 'Replace your {count} changed color ({keys}) with the colors of the "{palette}" palette?', 'Replace your {count} changed colors ({keys}) with the colors of the "{palette}" palette?', { keys: paletteColorsDialog.keysText, palette: paletteColorsDialog.toPalette }) }}
                                 </template>
                                 <template v-else>
-                                    Keep your {{ paletteColorsDialog.count }} changed {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }} from the "{{ paletteColorsDialog.fromPalette }}" palette ({{ paletteColorsDialog.keysText }})?
-                                    <template v-if="paletteColorsDialog.droppedPalette">The queued "{{ paletteColorsDialog.droppedPalette }}" palette is dropped and the colors apply now.</template>
+                                    {{ tn(paletteColorsDialog.count, 'Keep your {count} changed color from the "{palette}" palette ({keys})?', 'Keep your {count} changed colors from the "{palette}" palette ({keys})?', { palette: paletteColorsDialog.fromPalette, keys: paletteColorsDialog.keysText }) }}
+                                    <template v-if="paletteColorsDialog.droppedPalette">{{ t('The queued "{palette}" palette is dropped and the colors apply now.', { palette: paletteColorsDialog.droppedPalette }) }}</template>
                                 </template>
                             </p>
 
@@ -7385,7 +7385,7 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
-                                    <span>Use the palette's colors</span>
+                                    <span>{{ t('Use the palette\'s colors') }}</span>
                                 </button>
                             </div>
                             <div v-else class="flex flex-col gap-2">
@@ -7393,20 +7393,20 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-push-pin" aria-hidden="true"></i>
-                                    <span>Keep my {{ paletteColorsDialog.count }} {{ paletteColorsDialog.count === 1 ? 'color' : 'colors' }}</span>
+                                    <span>{{ tn(paletteColorsDialog.count, 'Keep my {count} color', 'Keep my {count} colors') }}</span>
                                 </button>
                                 <button @click="handlePaletteColorsChoice('palette')"
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-palette" aria-hidden="true"></i>
-                                    <span>Use the palette's colors</span>
+                                    <span>{{ t('Use the palette\'s colors') }}</span>
                                 </button>
                             </div>
 
                             <button @click="handlePaletteColorsChoice('cancel')"
                                     data-history-managed
                                     class="choice-cancel" :disabled="!semanticMutationAvailable">
-                                Cancel
+                                {{ t('Cancel') }}
                             </button>
                     </choice-dialog>
 
@@ -7414,10 +7414,10 @@
                     <choice-dialog v-if="resetColorDialog.show" :busy="dialogChoicePending" labelledby="reset-color-title" describedby="reset-color-description"
                          @cancel="handleResetColorChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
-                            <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">Reset Fill Color</h3>
+                            <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">{{ t('Reset Fill Color') }}</h3>
                             <p id="reset-color-description" class="text-sm text-slate-600 mb-4">
-                                There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the legend name "<span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span>".
-                                <br>How do you want to reset the color?
+                                <i18n-text :text="t('There are {count} other features with the legend name "{name}".')"><template #count><span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span></template><template #name><span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span></template></i18n-text>
+                                <br>{{ t('How do you want to reset the color?') }}
                             </p>
 
                             <div class="flex flex-col gap-2">
@@ -7425,25 +7425,25 @@
                                         data-history-managed
                                         class="choice-option is-primary" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-users" aria-hidden="true"></i>
-                                    <span>Reset all "{{ shownLegendName(resetColorDialog.caption) }}" ({{ resetColorDialog.siblingCount + 1 }})</span>
+                                    <span>{{ t('Reset all "{name}" ({count})', { name: shownLegendName(resetColorDialog.caption), count: resetColorDialog.siblingCount + 1 }) }}</span>
                                 </button>
                                 <button @click="handleResetColorChoice('this_with_legend')"
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-user-plus" aria-hidden="true"></i>
-                                    <span>This only + add legend entry</span>
+                                    <span>{{ t('This only + add legend entry') }}</span>
                                 </button>
                                 <button @click="handleResetColorChoice('this')"
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-user" aria-hidden="true"></i>
-                                    <span>This feature only</span>
+                                    <span>{{ t('This feature only') }}</span>
                                 </button>
                             </div>
 
                             <button @click="handleResetColorChoice('cancel')"
                                     class="choice-cancel" :disabled="!semanticMutationAvailable">
-                                Cancel
+                                {{ t('Cancel') }}
                             </button>
                     </choice-dialog>
 
@@ -7454,25 +7454,25 @@
                     <div v-if="lastRunInfo" class="max-w-5xl space-y-4">
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                             <div class="border border-slate-200 rounded p-3">
-                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Mode</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('Mode') }}</div>
                                 <div class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.mode }}</div>
                             </div>
                             <div class="border border-slate-200 rounded p-3">
-                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Run time</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('Run time') }}</div>
                                 <div class="mt-1 font-mono font-semibold text-slate-700">{{ runInfoElapsedText(lastRunInfo) }}</div>
                             </div>
                             <div class="border border-slate-200 rounded p-3">
-                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Results</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('Results') }}</div>
                                 <div class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.resultCount }}</div>
                             </div>
                             <div class="border border-slate-200 rounded p-3">
-                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">CLI rerun</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('CLI rerun') }}</div>
                                 <div class="mt-1 font-semibold text-slate-700">{{ runInfoReproducibilityText(lastRunInfo) }}</div>
                             </div>
                         </div>
 
                         <div v-if="lastRunInfo.losatRuntimes?.length" class="space-y-1" data-run-info-search-runtimes>
-                            <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Search runtime</div>
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ t('Search runtime') }}</div>
                             <ul class="space-y-0.5 text-xs font-mono text-slate-700">
                                 <li v-for="(runtime, idx) in lastRunInfo.losatRuntimes" :key="`run-info-runtime-${idx}`">{{ runtime.text }}</li>
                             </ul>
@@ -7480,33 +7480,33 @@
 
                         <div class="space-y-2">
                             <div class="flex items-center justify-between gap-2">
-                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Source recipe</div>
+                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ t('Source recipe') }}</div>
                                 <button v-if="lastRunInfo.sourceRecipe?.available !== false"
                                         type="button"
                                         @click="copyRunCommand"
                                         class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
-                                        title="Copy command">
+                                        :title="t('Copy command')">
                                     <i class="ph ph-copy" aria-hidden="true"></i>
-                                    <span>{{ runInfoCopyStatus || 'Copy' }}</span>
+                                    <span>{{ runInfoCopyStatus || t('Copy') }}</span>
                                 </button>
                             </div>
                             <pre v-if="lastRunInfo.sourceRecipe?.available !== false"
                                  class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sourceRecipe?.command || lastRunInfo.command }}</pre>
                             <div v-else
                                  class="rounded border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
-                                {{ lastRunInfo.sourceRecipe?.unavailableReason || 'Source recipe unavailable.' }}
+                                {{ lastRunInfo.sourceRecipe?.unavailableReason || t('Source recipe unavailable.') }}
                             </div>
                         </div>
 
                         <div v-if="lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand" class="space-y-2">
                             <div class="flex items-center justify-between gap-2">
-                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Exact replay</div>
+                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ t('Exact replay') }}</div>
                                 <button type="button"
                                         @click="copyExactReplayCommand"
                                         class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
-                                        title="Copy exact replay command">
+                                        :title="t('Copy exact replay command')">
                                     <i class="ph ph-copy" aria-hidden="true"></i>
-                                    <span>{{ exactReplayCopyStatus || 'Copy' }}</span>
+                                    <span>{{ exactReplayCopyStatus || t('Copy') }}</span>
                                 </button>
                             </div>
                             <pre class="overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-50 text-slate-700 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand }}</pre>
@@ -7514,13 +7514,13 @@
 
                         <div v-if="runInfoHasCliHelperFiles" class="space-y-2 rounded border border-emerald-200 bg-emerald-50 p-3">
                             <div class="flex items-center justify-between gap-2">
-                                <div class="text-xs font-bold uppercase tracking-wider text-emerald-800">Reproducibility files</div>
+                                <div class="text-xs font-bold uppercase tracking-wider text-emerald-800">{{ t('Reproducibility files') }}</div>
                                 <button type="button"
                                         @click="downloadCliHelperFiles"
                                         class="px-3 py-1.5 rounded border border-emerald-200 bg-white hover:bg-emerald-100 text-emerald-700 text-xs font-semibold flex items-center gap-1"
-                                        title="Download Source recipe helpers and the Exact replay file">
+                                        :title="t('Download Source recipe helpers and the Exact replay file')">
                                     <i class="ph ph-download-simple" aria-hidden="true"></i>
-                                    <span>Download reproducibility files</span>
+                                    <span>{{ t('Download reproducibility files') }}</span>
                                 </button>
                             </div>
                             <p class="text-xs leading-relaxed text-emerald-800">{{ lastRunInfo.downloadBundle?.description }}</p>
@@ -7531,7 +7531,7 @@
                         </div>
                     </div>
                     <div v-else class="h-full flex items-center justify-center text-slate-500 text-sm">
-                        Run info is available after a successful manual generation.
+                        {{ t('Run info is available after a successful manual generation.') }}
                     </div>
                 </div>
 
@@ -7547,48 +7547,48 @@
                     <header>
                         <div class="alignment-review-title">
                             <h2 id="similarity-alignment-dialog-title" tabindex="-1"
-                                class="focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Review alignment</h2>
+                                class="focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">{{ t('Review alignment') }}</h2>
                             <span class="alignment-review-group" aria-hidden="true">{{ similarityAlignmentDraft?.response.groupId }}</span>
                             <span id="similarity-alignment-application-help" data-alignment-application-help
-                                  class="alignment-review-chip is-apply">Apply required<span class="sr-only">: nothing changes until Apply succeeds. Cancel keeps the current Result.</span></span>
+                                  class="alignment-review-chip is-apply">{{ t('Apply required') }}<span class="sr-only">{{ t(': nothing changes until Apply succeeds. Cancel keeps the current Result.') }}</span></span>
                             <button type="button"
                                     @click="cancelSimilarityAlignmentDialog"
-                                    aria-label="Cancel similarity alignment"
+                                    :aria-label="t('Cancel similarity alignment')"
                                     class="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
                                 <i class="ph ph-x text-lg" aria-hidden="true"></i>
                             </button>
                         </div>
                         <p class="alignment-review-lead"><i18n-text :text="t('Records slide until the chosen genes line up with {reference}.')"><template #reference><b>{{ similarityAlignmentDraft?.reference.name }}</b></template></i18n-text></p>
-                        <p id="similarity-alignment-dialog-description" data-similarity-alignment-count class="sr-only">Similarity group {{ similarityAlignmentDraft?.response.groupId }}: {{ similarityAlignmentReview?.summary }}</p>
+                        <p id="similarity-alignment-dialog-description" data-similarity-alignment-count class="sr-only">{{ t('Similarity group {id}: {summary}', { id: similarityAlignmentDraft?.response.groupId, summary: similarityAlignmentReview?.summary }) }}</p>
                     </header>
 
                     <div class="alignment-review-body custom-scrollbar">
                         <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery"
                            tabindex="-1" class="mb-2 text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
                            data-similarity-alignment-error>
-                            <p class="mt-2">Keep these choices and retry Apply below, or edit the choices before applying.</p>
+                            <p class="mt-2">{{ t('Keep these choices and retry Apply below, or edit the choices before applying.') }}</p>
                         </operation-error>
                         <template v-if="similarityAlignmentReview">
                             <!-- The strips are a picture of the rows below them; the rows carry everything they show. -->
                             <div v-if="similarityAlignmentReview.lineX !== null" class="alignment-review-caption" aria-hidden="true">
-                                <span>After Apply</span>
-                                <span class="alignment-review-key"><i class="is-chosen"></i>chosen<i class="is-other"></i>other candidate<i class="is-line"></i>reference line</span>
+                                <span>{{ t('After Apply') }}</span>
+                                <span class="alignment-review-key"><i class="is-chosen"></i>{{ t('chosen') }}<i class="is-other"></i>{{ t('other candidate') }}<i class="is-line"></i>{{ t('reference line') }}</span>
                             </div>
                             <template v-for="group in similarityAlignmentReview.groups" :key="group.id">
                                 <h3 v-if="group.title" class="alignment-review-section" :class="{ 'is-need': group.cards.some((card) => card.needsChoice) }"
-                                    :data-alignment-section="group.id">{{ group.title }}<span class="count" aria-hidden="true">{{ group.cards.length }}</span><span class="sr-only"> ({{ group.cards.length }} {{ group.cards.length === 1 ? 'record' : 'records' }})</span></h3>
+                                    :data-alignment-section="group.id">{{ group.title }}<span class="count" aria-hidden="true">{{ group.cards.length }}</span><span class="sr-only"> {{ tn(group.cards.length, '({count} record)', '({count} records)') }}</span></h3>
                                 <template v-for="card in group.cards" :key="card.recordKey">
                                 <component :is="card.kind === 'reference' ? 'section' : 'fieldset'"
                                            v-for="record in [card.row || similarityAlignmentDraft.reference]"
                                            :key="card.recordKey"
                                            :data-alignment-record-key="card.kind === 'reference' ? null : card.recordKey"
                                            :data-similarity-alignment-reference="card.kind === 'reference' ? '' : null"
-                                           :aria-label="card.kind === 'reference' ? 'Exact alignment reference' : null"
+                                           :aria-label="card.kind === 'reference' ? t('Exact alignment reference') : null"
                                            class="alignment-review-card"
                                            :class="{ 'is-reference': card.kind === 'reference', 'is-need': card.needsChoice, 'is-skipped': card.skipped }">
                                     <legend v-if="card.kind !== 'reference'" class="sr-only">{{ record.recordLabel }}</legend>
                                     <div class="alignment-review-head">
-                                        <span v-if="card.kind === 'reference'" class="alignment-review-chip is-reference">Reference</span>
+                                        <span v-if="card.kind === 'reference'" class="alignment-review-chip is-reference">{{ t('Reference') }}</span>
                                         <span class="alignment-review-record">{{ record.recordName }}</span>
                                         <span v-if="record.recordDetail" class="alignment-review-detail">{{ record.recordDetail }}</span>
                                         <span class="alignment-review-direction" data-similarity-alignment-direction>
@@ -7596,17 +7596,17 @@
                                             <span v-if="card.direction.reversed" aria-hidden="true" class="flex items-center gap-1">
                                                 <span class="alignment-review-arrow line-through decoration-slate-300">{{ card.direction.beforeArrow === 1 ? '→' : card.direction.beforeArrow === -1 ? '←' : '?' }}</span>
                                                 <span class="alignment-review-arrow font-bold text-amber-700">{{ card.direction.afterArrow === 1 ? '→' : card.direction.afterArrow === -1 ? '←' : '?' }}</span>
-                                                <span class="alignment-review-chip is-reversed">reversed</span>
+                                                <span class="alignment-review-chip is-reversed">{{ t('reversed') }}</span>
                                             </span>
                                             <span v-else-if="card.direction.afterArrow !== null" aria-hidden="true" class="alignment-review-arrow">{{ card.direction.afterArrow === 1 ? '→' : '←' }}</span>
                                             <select v-if="similarityAlignmentDraft.intent.mode === 'custom'"
                                                     :value="similarityAlignmentCustomDirection(card.recordKey)"
-                                                    :aria-label="'Direction for ' + card.direction.label"
+                                                    :aria-label="t('Direction for {record}', { record: card.direction.label })"
                                                     :aria-describedby="'alignment-direction-' + card.recordKey"
                                                     :disabled="!semanticMutationAvailable || similarityAlignmentBusy || Boolean(card.direction.exclusion)"
                                                     @change="setSimilarityAlignmentCustomDirection(card.recordKey, $event.target.value)"
                                                     class="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-700 disabled:opacity-50">
-                                                <option value="keep">Keep</option><option value="right">Right →</option><option value="left">Left ←</option>
+                                                <option value="keep">{{ t('Keep') }}</option><option value="right">{{ t('Right →') }}</option><option value="left">{{ t('Left ←') }}</option>
                                             </select>
                                         </span>
                                     </div>
@@ -7639,23 +7639,23 @@
                                         <code v-if="card.candidates[0].ids">{{ card.candidates[0].ids }}</code>
                                         <span class="alignment-review-place">{{ card.candidates[0].coordinates }} ({{ card.candidates[0].displayedStrand }})</span>
                                         <span class="alignment-review-evidence">
-                                            <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.join(', ') || 'no direct hit' }}</span>
-                                            <span v-if="card.candidates[0].representative" class="alignment-review-chip is-evidence">group representative</span>
+                                            <span class="alignment-review-chip is-evidence">{{ card.candidates[0].evidence.join(', ') || t('no direct hit') }}</span>
+                                            <span v-if="card.candidates[0].representative" class="alignment-review-chip is-evidence">{{ t('group representative') }}</span>
                                             <label class="alignment-review-skip">
                                                 <input type="checkbox" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
                                                        :checked="card.skipped"
                                                        :disabled="similarityAlignmentBusy"
-                                                       :aria-label="'Skip ' + record.recordLabel"
+                                                       :aria-label="t('Skip {record}', { record: record.recordLabel })"
                                                        @change="$event.target.checked ? skipSimilarityAlignmentRecord(card.recordKey) : selectSimilarityAlignmentCandidate(card.recordKey, card.candidates[0].anchor)">
-                                                Skip
+                                                {{ t('Skip') }}
                                             </label>
                                         </span>
                                     </div>
                                     <template v-else-if="card.kind === 'several'">
                                         <!-- One line: what to do in a record that still needs a choice, and why a candidate is recommended. -->
                                         <p v-if="card.needsChoice || record.recommendedKey" class="alignment-review-note" data-similarity-alignment-reason>
-                                            <b v-if="card.needsChoice">Choose the gene to line up, or skip this record. </b>
-                                            <template v-if="record.recommendedKey">Recommended: {{ record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name }}, {{ record.recommendationReasonLabel }}.</template>
+                                            <b v-if="card.needsChoice">{{ t('Choose the gene to line up, or skip this record.') }} </b>
+                                            <template v-if="record.recommendedKey">{{ t('Recommended: {name}, {reason}.', { name: record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name, reason: record.recommendationReasonLabel }) }}</template>
                                         </p>
                                         <div class="alignment-review-candidates">
                                             <label v-for="candidate in card.candidates"
@@ -7673,13 +7673,13 @@
                                                        :checked="card.chosenKey === candidate.key"
                                                        :disabled="similarityAlignmentBusy"
                                                        @change="selectSimilarityAlignmentCandidate(card.recordKey, candidate.anchor)"
-                                                       :aria-label="'Select ' + candidate.label + ', ' + candidate.coordinates + ', strand ' + candidate.displayedStrand + ' for ' + record.recordLabel">
+                                                       :aria-label="t('Select {label}, {coordinates}, strand {strand} for {record}', { label: candidate.label, coordinates: candidate.coordinates, strand: candidate.displayedStrand, record: record.recordLabel })">
                                                 <span class="min-w-0 flex-1">
                                                     <span class="alignment-review-name">
                                                         <b>{{ candidate.name }}</b>
-                                                        <span v-if="record.recommendedKey === candidate.key" class="alignment-review-chip is-recommended">Recommended</span>
+                                                        <span v-if="record.recommendedKey === candidate.key" class="alignment-review-chip is-recommended">{{ t('Recommended') }}</span>
                                                     </span>
-                                                    <span class="alignment-review-facts">{{ candidate.evidence.join(', ') || 'no direct hit' }}{{ candidate.representative ? ' · group representative' : '' }}<template v-if="candidate.ids"> · <code>{{ candidate.ids }}</code></template> · {{ candidate.coordinates }} ({{ candidate.displayedStrand }})</span>
+                                                    <span class="alignment-review-facts">{{ candidate.evidence.join(', ') || t('no direct hit') }}{{ candidate.representative ? ' · ' + t('group representative') : '' }}<template v-if="candidate.ids"> · <code>{{ candidate.ids }}</code></template> · {{ candidate.coordinates }} ({{ candidate.displayedStrand }})</span>
                                                 </span>
                                             </label>
                                             <label class="alignment-review-candidate is-skip" :class="{ 'is-chosen': card.skipped, 'is-busy': similarityAlignmentBusy }">
@@ -7688,8 +7688,8 @@
                                                        :checked="card.skipped"
                                                        :disabled="similarityAlignmentBusy"
                                                        @change="skipSimilarityAlignmentRecord(card.recordKey)"
-                                                       :aria-label="'Skip ' + record.recordLabel">
-                                                Skip this record
+                                                       :aria-label="t('Skip {record}', { record: record.recordLabel })">
+                                                {{ t('Skip this record') }}
                                             </label>
                                         </div>
                                     </template>
@@ -7701,9 +7701,9 @@
                             </template>
                         </template>
                         <fieldset class="alignment-review-directions" data-similarity-alignment-direction-mode aria-describedby="alignment-direction-scope">
-                            <legend class="text-[12px] font-semibold text-slate-700">Arrow direction</legend>
+                            <legend class="text-[12px] font-semibold text-slate-700">{{ t('Arrow direction') }}</legend>
                             <div class="mt-1.5 flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
-                                <label v-for="option in [{value:'keep',label:'Keep as is'},{value:'right',label:'All right',arrow:'→'},{value:'left',label:'All left',arrow:'←'},{value:'custom',label:'Custom'}]" :key="option.value"
+                                <label v-for="option in [{value:'keep',label:t('Keep as is')},{value:'right',label:t('All right'),arrow:'→'},{value:'left',label:t('All left'),arrow:'←'},{value:'custom',label:t('Custom')}]" :key="option.value"
                                        :class="[
                                          'relative flex flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-md px-1.5 py-1 text-[12px] font-semibold focus-within:ring-2 focus-within:ring-blue-600',
                                          similarityAlignmentDraft?.intent.mode === option.value ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-300' : 'text-slate-600 hover:text-slate-800'
@@ -7720,31 +7720,31 @@
                             </p>
                         </fieldset>
                         <details class="mt-3 rounded-lg border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
-                            <summary class="cursor-pointer font-semibold text-slate-700">How alignment works</summary>
+                            <summary class="cursor-pointer font-semibold text-slate-700">{{ t('How alignment works') }}</summary>
                             <ul class="mt-1.5 list-disc space-y-1 pl-4">
-                                <li>Nothing changes until Apply. Cancel keeps the current diagram.</li>
-                                <li>The reference feature keeps its place; each record moves so its chosen feature lines up with it.</li>
-                                <li>Reversing flips a whole record with its labels and ribbons. Strands in the data (+/−) do not change.</li>
-                                <li>The direction choice covers the reference and every chosen feature with a known direction. Skipped records and records without a usable candidate stay where they are.</li>
-                                <li>Reciprocal best hit: the two proteins are each other's best match.</li>
-                                <li>Automatic diagram fitting and zoom may move records on screen.</li>
+                                <li>{{ t('Nothing changes until Apply. Cancel keeps the current diagram.') }}</li>
+                                <li>{{ t('The reference feature keeps its place; each record moves so its chosen feature lines up with it.') }}</li>
+                                <li>{{ t('Reversing flips a whole record with its labels and ribbons. Strands in the data (+/−) do not change.') }}</li>
+                                <li>{{ t('The direction choice covers the reference and every chosen feature with a known direction. Skipped records and records without a usable candidate stay where they are.') }}</li>
+                                <li>{{ t('Reciprocal best hit: the two proteins are each other\'s best match.') }}</li>
+                                <li>{{ t('Automatic diagram fitting and zoom may move records on screen.') }}</li>
                             </ul>
                         </details>
                     </div>
                     <footer>
                         <p id="similarity-alignment-apply-reason" :class="{ 'is-need': !canApplySimilarityAlignment }">
-                            {{ canApplySimilarityAlignment ? 'Nothing changes until Apply.' : similarityAlignmentApplyDisabledReason }}
+                            {{ canApplySimilarityAlignment ? t('Nothing changes until Apply.') : similarityAlignmentApplyDisabledReason }}
                         </p>
                         <button type="button"
                                 @click="cancelSimilarityAlignmentDialog"
-                                class="btn btn-secondary py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Cancel</button>
+                                class="btn btn-secondary py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">{{ t('Cancel') }}</button>
                         <button type="button"
                                 @click="applySimilarityAlignmentDraft"
                                 :disabled="!semanticMutationAvailable || (!canApplySimilarityAlignment)"
                                 aria-describedby="similarity-alignment-apply-reason"
                                 class="btn btn-primary py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                            <span v-if="similarityAlignmentStatus === 'applying'">Applying…</span>
-                            <span v-else>Apply</span>
+                            <span v-if="similarityAlignmentStatus === 'applying'">{{ t('Applying…') }}</span>
+                            <span v-else>{{ t('Apply') }}</span>
                         </button>
                     </footer>
                 </section>
@@ -7755,9 +7755,9 @@
                         class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-40 transition-all"
                         :aria-expanded="showRightDrawer"
                         :disabled="Boolean(similarityAlignmentEditorDisabledReason)"
-                        aria-label="Editor"
+                        :aria-label="t('Editor')"
                         :aria-description="similarityAlignmentEditorDisabledReason || null"
-                        :title="similarityAlignmentEditorDisabledReason || (showRightDrawer ? 'Close editor' : 'Open editor')">
+                        :title="similarityAlignmentEditorDisabledReason || (showRightDrawer ? t('Close editor') : t('Open editor'))">
                     <i class="ph ph-sidebar-simple text-lg" aria-hidden="true"></i>
                 </button>
 
@@ -7767,9 +7767,9 @@
                     <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
                         <div class="flex items-center gap-2">
                             <i class="ph ph-sliders-horizontal text-slate-600" aria-hidden="true"></i>
-                            <span class="font-bold text-slate-700">Editor</span>
+                            <span class="font-bold text-slate-700">{{ t('Editor') }}</span>
                         </div>
-                        <button @click="closeRightDrawer" data-history-ignore class="text-slate-500 hover:text-slate-600" aria-label="Close editor">
+                        <button @click="closeRightDrawer" data-history-ignore class="text-slate-500 hover:text-slate-600" :aria-label="t('Close editor')">
                             <i class="ph ph-x text-lg" aria-hidden="true"></i>
                         </button>
                     </div>
@@ -7781,7 +7781,7 @@
                                   rightDrawerTab === 'legend' ? 'bg-purple-100 text-purple-700 font-semibold' : 'text-slate-500 hover:bg-slate-100'
                                 ]">
                             <i class="ph ph-list-bullets" aria-hidden="true"></i>
-                            <span>Legend</span>
+                            <span>{{ t('Legend') }}</span>
                         </button>
                         <button @click="openRightDrawerTab('features')" data-history-ignore :aria-pressed="rightDrawerTab === 'features'" aria-controls="right-drawer-panel-features"
                                 :class="[
@@ -7789,40 +7789,40 @@
                                   rightDrawerTab === 'features' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-slate-500 hover:bg-slate-100'
                                 ]">
                             <i class="ph ph-paint-brush" aria-hidden="true"></i>
-                            <span>Features</span>
+                            <span>{{ t('Features') }}</span>
                         </button>
                         <!-- The title is the tooltip and the accessible description of the disabled tab. -->
                         <button @click="openRightDrawerTab('orthogroups')" data-history-ignore :aria-pressed="rightDrawerTab === 'orthogroups'" aria-controls="right-drawer-panel-orthogroups"
                                 :disabled="!isRightDrawerTabAvailable('orthogroups')"
-                                :title="isRightDrawerTabAvailable('orthogroups') ? null : 'Similarity groups appear after a Linear comparison with Similarity groups turned on.'"
+                                :title="isRightDrawerTabAvailable('orthogroups') ? null : t('Similarity groups appear after a Linear comparison with Similarity groups turned on.')"
                                 :class="[
                                   'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
                                   rightDrawerTab === 'orthogroups' ? 'bg-emerald-100 text-emerald-700 font-semibold' : 'text-slate-500',
                                   isRightDrawerTabAvailable('orthogroups') ? (rightDrawerTab === 'orthogroups' ? '' : 'hover:bg-slate-100') : 'opacity-40 cursor-not-allowed hover:bg-transparent'
                                 ]">
                             <i class="ph ph-tree-structure" aria-hidden="true"></i>
-                            <span>Similarity groups</span>
+                            <span>{{ t('Similarity groups') }}</span>
                         </button>
                     </div>
 
                     <div v-show="rightDrawerTab === 'legend'" id="right-drawer-panel-legend" class="flex-1 min-h-0 flex flex-col">
                         <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0 flex items-center gap-1" data-legend-tab-toolbar data-setting="legend-editor">
-                            <help-tip id="legend-tab-help" label="About the Legend tab" :text="settingApplicationNote('legend-editor').text + ' To reorder, drag a row by its grip, or focus the grip and press the Up or Down arrow.'"></help-tip>
-                            <button aria-label="Sort A-Z" @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort A-Z" :disabled="!semanticMutationAvailable">
+                            <help-tip id="legend-tab-help" :label="t('About the Legend tab')" :text="settingApplicationNote('legend-editor').text + ' ' + t('To reorder, drag a row by its grip, or focus the grip and press the Up or Down arrow.')"></help-tip>
+                            <button :aria-label="t('Sort A-Z')" @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" :title="t('Sort A-Z')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-sort-ascending" aria-hidden="true"></i>
                             </button>
-                            <button aria-label="Sort Z-A" @click="sortLegendEntries('desc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort Z-A" :disabled="!semanticMutationAvailable">
+                            <button :aria-label="t('Sort Z-A')" @click="sortLegendEntries('desc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" :title="t('Sort Z-A')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-sort-descending" aria-hidden="true"></i>
                             </button>
-                            <button aria-label="Sort by default" @click="sortLegendEntriesByDefault" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort by default" :disabled="!semanticMutationAvailable">
+                            <button :aria-label="t('Sort by default')" @click="sortLegendEntriesByDefault" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" :title="t('Sort by default')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-list-numbers" aria-hidden="true"></i>
                             </button>
                             <span class="flex-1"></span>
-                            <button @click="resetLegendPosition" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="layoutRepositionMode ? 'Reset the legend position. Drag the legend in the preview to move it.' : 'Reset the legend position. To move the legend, turn on Layout edit and drag it in the preview.'" :disabled="!semanticMutationAvailable">
-                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Reset position
+                            <button @click="resetLegendPosition" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="layoutRepositionMode ? t('Reset the legend position. Drag the legend in the preview to move it.') : t('Reset the legend position. To move the legend, turn on Layout edit and drag it in the preview.')" :disabled="!semanticMutationAvailable">
+                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Reset position') }}
                             </button>
-                            <button @click="resetAllStrokes" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" title="Reset all stroke colors and widths to default" :disabled="!semanticMutationAvailable">
-                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Reset strokes
+                            <button @click="resetAllStrokes" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap" :title="t('Reset all stroke colors and widths to default')" :disabled="!semanticMutationAvailable">
+                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Reset strokes') }}
                             </button>
                         </div>
 
@@ -7834,53 +7834,53 @@
                                  @dragover="overLegendReorder($event, idx)" @drop="dropLegendReorder($event, idx)">
                                 <div class="flex items-center gap-1.5">
                                     <button type="button" :data-legend-reorder-handle="idx" data-history-managed
-                                            :aria-label="`Reorder ${shownLegendEntryName(entry)}`"
+                                            :aria-label="t('Reorder {name}', { name: shownLegendEntryName(entry) })"
                                             aria-describedby="legend-tab-help"
                                             :draggable="semanticMutationAvailable ? 'true' : 'false'"
                                             :disabled="!semanticMutationAvailable || legendEntries.length < 2"
                                             @keydown="handleLegendReorderKey($event, idx)"
                                             @dragstart="startLegendReorder($event, idx)" @dragend="endLegendReorder"
                                             class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 cursor-grab shrink-0 p-0.5 leading-none rounded"
-                                            title="Drag to reorder, or press the Up or Down arrow">
+                                            :title="t('Drag to reorder, or press the Up or Down arrow')">
                                         <i class="ph ph-dots-six-vertical text-sm" aria-hidden="true"></i>
                                     </button>
                                     <div class="w-5 h-5 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: legendEntryColor(entry) }" :title="legendEntryColor(entry)"></div>
-                                    <input type="text" :value="shownLegendEntryName(entry)" :aria-label="`Legend entry ${shownLegendEntryName(entry)} name`" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0 bg-white" :disabled="!semanticMutationAvailable">
-                                    <button :aria-label="`Stroke options for ${shownLegendEntryName(entry)}`" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry) ? 'Hide stroke options' : 'Show stroke options'">
+                                    <input type="text" :value="shownLegendEntryName(entry)" :aria-label="t('Legend entry {name} name', { name: shownLegendEntryName(entry) })" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0 bg-white" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="t('Stroke options for {name}', { name: shownLegendEntryName(entry) })" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry) ? t('Hide stroke options') : t('Show stroke options')">
                                         <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
-                                    <button :aria-label="`Remove ${shownLegendEntryName(entry)}`" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove from legend" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="t('Remove {name}', { name: shownLegendEntryName(entry) })" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" :title="t('Remove from legend')" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-trash text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             <div v-if="isLegendStrokeOptionsOpen(entry)" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
-                                    <span class="text-slate-500 shrink-0">Stroke:</span>
+                                    <span class="text-slate-500 shrink-0">{{ t('Stroke:') }}</span>
                                     <color-value-control
                                         :model-value="getLegendEntryStrokeColor(idx)"
                                         fallback="#000000"
                                         @update:model-value="setLegendEntryStrokeColorValue(idx, $event)"
-                                        :aria-label="`Legend stroke color for ${shownLegendEntryName(entry)}`"
+                                        :aria-label="t('Legend stroke color for {name}', { name: shownLegendEntryName(entry) })"
                                         class="w-28 shrink-0">
                                     </color-value-control>
-                                    <input type="number" :aria-label="`Legend stroke width for ${shownLegendEntryName(entry)}`" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :disabled="!semanticMutationAvailable">
-                                    <button :aria-label="`Reset stroke of ${shownLegendEntryName(entry)} to default`" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
+                                    <input type="number" :aria-label="t('Legend stroke width for {name}', { name: shownLegendEntryName(entry) })" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" :placeholder="t('Width')" step="0.5" min="0" :title="t('Stroke width')" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="t('Reset stroke of {name} to default', { name: shownLegendEntryName(entry) })" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" :title="t('Reset stroke to default')" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-arrow-counter-clockwise text-xs" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             </div>
-                            <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">No legend entries found</div>
+                            <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">{{ t('No legend entries found') }}</div>
                             <div v-if="deletedLegendEntries.length > 0" class="pt-2 border-t border-slate-200">
                                 <div class="flex items-center justify-between mb-1">
-                                    <span id="deleted-legend-items-label" class="text-[10px] font-bold text-slate-500 uppercase">Deleted items</span>
-                                    <button @click="restoreAllDeletedLegendEntries" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50" title="Restore all deleted items" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Restore all
+                                    <span id="deleted-legend-items-label" class="text-[10px] font-bold text-slate-500 uppercase">{{ t('Deleted items') }}</span>
+                                    <button @click="restoreAllDeletedLegendEntries" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50" :title="t('Restore all deleted items')" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> {{ t('Restore all') }}
                                     </button>
                                 </div>
                                 <ul aria-labelledby="deleted-legend-items-label" class="space-y-1">
                                     <li v-for="(entry, idx) in deletedLegendEntries" :key="`deleted-${idx}-${entry.caption}`" class="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
                                         <div class="w-4 h-4 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: deletedLegendEntryColor(entry) }" :title="deletedLegendEntryColor(entry)"></div>
                                         <span class="flex-1 text-xs text-slate-500 truncate min-w-0">{{ shownLegendEntryName(entry) }}</span>
-                                        <button :aria-label="`Restore ${shownLegendEntryName(entry)}`" @click="restoreDeletedLegendEntry(idx)" class="text-[10px] text-blue-600 hover:text-blue-800 shrink-0 px-1" title="Restore this item" :disabled="!semanticMutationAvailable">Restore</button>
+                                        <button :aria-label="t('Restore {name}', { name: shownLegendEntryName(entry) })" @click="restoreDeletedLegendEntry(idx)" class="text-[10px] text-blue-600 hover:text-blue-800 shrink-0 px-1" :title="t('Restore this item')" :disabled="!semanticMutationAvailable">{{ t('Restore') }}</button>
                                     </li>
                                 </ul>
                             </div>
@@ -7890,21 +7890,21 @@
                     <div v-if="isFeatureDrawerMounted" id="right-drawer-panel-features" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
-                                <p class="text-xs font-semibold text-slate-600 flex items-center gap-1" data-setting="features-editor"><span>Features ({{ filteredFeatures.length }})</span><help-tip id="features-tab-help" label="About the Features tab" :text="settingApplicationNote('features-editor').text + ' Select a row to edit its label or open its details.'"></help-tip></p>
+                                <p class="text-xs font-semibold text-slate-600 flex items-center gap-1" data-setting="features-editor"><span>{{ t('Features ({count})', { count: filteredFeatures.length }) }}</span><help-tip id="features-tab-help" :label="t('About the Features tab')" :text="settingApplicationNote('features-editor').text + ' ' + t('Select a row to edit its label or open its details.')"></help-tip></p>
                                 <span class="text-[10px] text-slate-500 truncate" :title="featureEditorStatus.error || featureEditorStatusText">{{ featureEditorStatusText }}</span>
                             </div>
                         </div>
                         <div v-if="featureRecordPickerVisible" class="px-4 py-2 border-b border-slate-100 shrink-0">
-                            <select v-model="selectedFeatureRecordIdx" aria-label="Feature list record" class="form-select text-xs w-full">
+                            <select v-model="selectedFeatureRecordIdx" :aria-label="t('Feature list record')" class="form-select text-xs w-full">
                                 <option v-for="(rid, idx) in featureRecordIds" :key="idx" :value="idx">{{ rid }}</option>
                             </select>
                         </div>
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0">
-                            <input v-model="featureSearchInput" data-history-ignore placeholder="Search by feature or annotation..." aria-label="Search by feature or annotation" class="form-input text-xs w-full">
+                            <input v-model="featureSearchInput" data-history-ignore :placeholder="t('Search by feature or annotation...')" :aria-label="t('Search by feature or annotation')" class="form-input text-xs w-full">
                         </div>
                         <div ref="featureListScrollRef" class="flex-grow min-h-[64px] overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
                             <div v-if="featureExtractionPending && extractedFeatures.length === 0" class="p-4 text-center text-slate-500 text-xs">
-                                <gbdraw-loader></gbdraw-loader> Preparing features...
+                                <gbdraw-loader></gbdraw-loader> {{ t('Preparing features...') }}
                             </div>
                             <div v-if="featureListTopSpacerPx > 0" :style="{ height: `${featureListTopSpacerPx}px` }" aria-hidden="true"></div>
                             <div v-for="feat in visibleFeatureRows" :key="feat.id" data-feature-list-row
@@ -7915,30 +7915,30 @@
                                            :value="getFeatureColor(feat)"
                                            @change="requestFeatureColorChange(feat, $event.target.value)"
                                            :disabled="!semanticMutationAvailable || (!canEditFeatureColor(feat))"
-                                           :title="canEditFeatureColor(feat) ? 'Change fill color' : 'No stable identifier available'"
-                                           :aria-label="`Fill color for ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
+                                           :title="canEditFeatureColor(feat) ? t('Change fill color') : t('No stable identifier available')"
+                                           :aria-label="t('Fill color for {name}', { name: feat.product || feat.gene || feat.locus_tag || feat.type })"
                                            :class="['w-5 h-5 rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
                                     <button type="button" data-history-ignore
                                             class="flex-1 min-w-0 flex items-center gap-1.5 text-left text-slate-700 rounded hover:text-blue-700"
                                             :aria-expanded="featureListExpandedId === feat.id ? 'true' : 'false'"
-                                            :title="featureListExpandedId === feat.id ? 'Hide the label editor' : 'Show the label editor'"
+                                            :title="featureListExpandedId === feat.id ? t('Hide the label editor') : t('Show the label editor')"
                                             @click="featureListExpandedId = featureListExpandedId === feat.id ? null : feat.id">
                                         <span v-if="getEditableLabelByFeatureId(featureListState(feat).renderedId)?.text" class="max-w-[5rem] truncate shrink-0 font-semibold text-slate-800">{{ getEditableLabelByFeatureId(featureListState(feat).renderedId).text }}</span>
                                         <span class="truncate">{{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}</span>
                                     </button>
                                     <span class="max-w-[7rem] font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="formatFeatureLocation(feat)">{{ formatFeatureLocation(feat) }}</span>
-                                    <label class="flex items-center gap-0.5 shrink-0 text-slate-500 cursor-pointer" title="Show on the diagram">
+                                    <label class="flex items-center gap-0.5 shrink-0 text-slate-500 cursor-pointer" :title="t('Show on the diagram')">
                                         <input type="checkbox"
                                                data-history-managed
                                                :checked="featureListState(feat).drawn"
                                                @change="setFeatureVisibility(feat, $event.target.checked ? 'on' : 'off')"
                                                :disabled="!semanticMutationAvailable"
-                                               :aria-label="`Visibility of ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
+                                               :aria-label="t('Visibility of {name}', { name: feat.product || feat.gene || feat.locus_tag || feat.type })"
                                                class="w-3 h-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
                                         <i :class="['ph text-sm', featureListState(feat).drawn ? 'ph-eye' : 'ph-eye-slash text-slate-300']" aria-hidden="true"></i>
                                     </label>
-                                    <button type="button" data-history-ignore aria-label="Edit" @click.stop="openFeatureEditorFromList(feat, $event)"
-                                            class="shrink-0 p-0.5 rounded text-slate-500 hover:text-blue-700 hover:bg-white" title="Open feature details">
+                                    <button type="button" data-history-ignore :aria-label="t('Edit')" @click.stop="openFeatureEditorFromList(feat, $event)"
+                                            class="shrink-0 p-0.5 rounded text-slate-500 hover:text-blue-700 hover:bg-white" :title="t('Open feature details')">
                                         <i class="ph ph-pencil-simple text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -7946,60 +7946,60 @@
                                     <span class="font-mono text-[10px] text-slate-500 shrink-0">{{ feat.type }}</span>
                                     <template v-if="getEditableLabelByFeatureId(featureListState(feat).renderedId)">
                                         <label class="flex-1 min-w-0 flex items-center gap-1 text-[10px] text-slate-500">
-                                            <span class="shrink-0">Label</span>
+                                            <span class="shrink-0">{{ t('Label') }}</span>
                                             <input type="text" data-history-managed
                                                    :value="getEditableLabelByFeatureId(featureListState(feat).renderedId).text"
                                                    @change="requestLabelTextChangeByFeatureId(featureListState(feat).renderedId, $event.target.value)"
                                                    :disabled="!semanticMutationAvailable"
-                                                   :aria-label="`Label of ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
+                                                   :aria-label="t('Label of {name}', { name: feat.product || feat.gene || feat.locus_tag || feat.type })"
                                                    class="flex-1 min-w-0 text-xs border border-slate-200 rounded px-2 py-1 bg-white">
                                         </label>
                                     </template>
-                                    <span v-else class="flex-1 min-w-0 truncate text-[10px] text-slate-500">No label on the diagram</span>
+                                    <span v-else class="flex-1 min-w-0 truncate text-[10px] text-slate-500">{{ t('No label on the diagram') }}</span>
                                 </div>
                             </div>
                             <div v-if="featureListBottomSpacerPx > 0" :style="{ height: `${featureListBottomSpacerPx}px` }" aria-hidden="true"></div>
-                            <div v-if="!featureExtractionPending && filteredFeatures.length === 0" class="p-4 text-center text-slate-500 text-xs">No features found</div>
+                            <div v-if="!featureExtractionPending && filteredFeatures.length === 0" class="p-4 text-center text-slate-500 text-xs">{{ t('No features found') }}</div>
                         </div>
                         <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50 space-y-2">
                             <input data-history-managed type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadLabelOverrideTable" :disabled="!semanticMutationAvailable">
                             <input data-history-managed type="file" ref="featureEditTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadFeatureEditTable" :disabled="!semanticMutationAvailable">
                             <div class="flex items-start justify-between gap-2">
-                                <action-menu label="Import / export" icon="ph-file-arrow-down" title="Export or load label and feature-edit tables"
+                                <action-menu :label="t('Import / export')" icon="ph-file-arrow-down" :title="t('Export or load label and feature-edit tables')"
                                              :items="[
-                                               { section: 'Labels', help: 'Label TSV value patterns use case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH).', helpLabel: 'Help: Label TSV' },
-                                               { label: 'Export Label TSV', icon: 'ph-download-simple', run: downloadLabelOverrideTable },
-                                               { label: 'Load Label TSV', icon: 'ph-upload-simple', disabled: !semanticMutationAvailable, run: () => $refs.labelTableInput.click() },
-                                               { label: 'Reset Label Edits', icon: 'ph-arrow-counter-clockwise', disabled: !semanticMutationAvailable, run: resetAllLabelTextOverrides },
-                                               { section: 'Features', help: 'Per-feature Feature visibility, Label visibility, and label text edits of this diagram\'s records, in the --feature_override_table format of the CLI and Python API. Load replaces those edits; rows that name no record or feature here are counted and not applied.', helpLabel: 'Help: Feature Edits TSV', helpId: 'help-feature-edits-tsv' },
-                                               { label: 'Export Feature Edits TSV', icon: 'ph-download-simple', describedby: 'help-feature-edits-tsv', run: downloadFeatureEditTable },
-                                               { label: 'Load Feature Edits TSV', icon: 'ph-upload-simple', describedby: 'help-feature-edits-tsv', disabled: !semanticMutationAvailable, run: () => $refs.featureEditTableInput.click() }
+                                               { section: t('Labels'), help: t('Label TSV value patterns use case-insensitive Python regex. Examples: (?i)NADH and (?P<name>NADH).'), helpLabel: t('Help: Label TSV') },
+                                               { label: t('Export Label TSV'), icon: 'ph-download-simple', run: downloadLabelOverrideTable },
+                                               { label: t('Load Label TSV'), icon: 'ph-upload-simple', disabled: !semanticMutationAvailable, run: () => $refs.labelTableInput.click() },
+                                               { label: t('Reset Label Edits'), icon: 'ph-arrow-counter-clockwise', disabled: !semanticMutationAvailable, run: resetAllLabelTextOverrides },
+                                               { section: t('Features'), help: t('Per-feature Feature visibility, Label visibility, and label text edits of this diagram\'s records, in the --feature_override_table format of the CLI and Python API. Load replaces those edits; rows that name no record or feature here are counted and not applied.'), helpLabel: t('Help: Feature Edits TSV'), helpId: 'help-feature-edits-tsv' },
+                                               { label: t('Export Feature Edits TSV'), icon: 'ph-download-simple', describedby: 'help-feature-edits-tsv', run: downloadFeatureEditTable },
+                                               { label: t('Load Feature Edits TSV'), icon: 'ph-upload-simple', describedby: 'help-feature-edits-tsv', disabled: !semanticMutationAvailable, run: () => $refs.featureEditTableInput.click() }
                                              ]"></action-menu>
                                 <label class="inline-flex items-center gap-2 text-[10px] text-slate-600 select-none cursor-pointer">
                                     <input type="checkbox" v-model="autoLabelReflowEnabled" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable">
-                                    <span>Auto Reflow</span>
+                                    <span>{{ t('Auto Reflow') }}</span>
                                 </label>
                                 <span v-if="labelReflowProcessing" class="text-[10px] text-blue-600 flex items-center gap-1" aria-live="polite">
                                     <gbdraw-loader></gbdraw-loader>
-                                    Reflowing label placement...
+                                    {{ t('Reflowing label placement...') }}
                                 </span>
                             </div>
                             <p v-if="labelReflowLastError" class="text-[10px] text-amber-700" :title="labelReflowLastError.summary">
-                                <i class="ph ph-warning" aria-hidden="true"></i> Auto Reflow failed. Current diagram is kept.
+                                <i class="ph ph-warning" aria-hidden="true"></i> {{ t('Auto Reflow failed. Current diagram is kept.') }}
                             </p>
                         </div>
                     </div>
 
                     <div v-show="rightDrawerTab === 'orthogroups'" id="right-drawer-panel-orthogroups" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <div class="px-3 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
-                            <div class="text-xs font-semibold text-slate-600">{{ orthogroupCount }} similarity groups</div>
+                            <div class="text-xs font-semibold text-slate-600">{{ t('{count} similarity groups', { count: orthogroupCount }) }}</div>
                             <div class="grid grid-cols-[1fr_9rem] gap-2">
-                                <input v-model="orthogroupSearch" data-history-ignore placeholder="Search similarity groups..." aria-label="Search similarity groups" class="form-input text-xs w-full">
-                                <select v-model="orthogroupSortMode" data-history-ignore aria-label="Sort similarity groups" class="form-select text-xs w-full">
-                                    <option value="id">Sort by ID</option>
-                                    <option value="name">Sort by name</option>
-                                    <option value="member_count">Most genes first</option>
-                                    <option value="record_coverage">Most records first</option>
+                                <input v-model="orthogroupSearch" data-history-ignore :placeholder="t('Search similarity groups...')" :aria-label="t('Search similarity groups')" class="form-input text-xs w-full">
+                                <select v-model="orthogroupSortMode" data-history-ignore :aria-label="t('Sort similarity groups')" class="form-select text-xs w-full">
+                                    <option value="id">{{ t('Sort by ID') }}</option>
+                                    <option value="name">{{ t('Sort by name') }}</option>
+                                    <option value="member_count">{{ t('Most genes first') }}</option>
+                                    <option value="record_coverage">{{ t('Most records first') }}</option>
                                 </select>
                             </div>
                             <!-- The active plan is one line; its reference and records open on demand. -->
@@ -8012,9 +8012,9 @@
                                     </summary>
                                     <div class="space-y-2 border-t border-blue-100 px-2 py-2 text-[11px] text-slate-600">
                                         <div>
-                                            <span class="font-semibold text-slate-700">Exact reference:</span> <span class="break-words">{{ similarityAlignmentPlanInspector.reference.recordLabel }} · {{ similarityAlignmentPlanInspector.reference.label }}</span>
+                                            <span class="font-semibold text-slate-700">{{ t('Exact reference:') }}</span> <span class="break-words">{{ similarityAlignmentPlanInspector.reference.recordLabel }} · {{ similarityAlignmentPlanInspector.reference.label }}</span>
                                         </div>
-                                        <ul aria-label="Aligned records" class="divide-y divide-slate-100 rounded border border-blue-100 bg-white">
+                                        <ul :aria-label="t('Aligned records')" class="divide-y divide-slate-100 rounded border border-blue-100 bg-white">
                                             <li v-for="record in similarityAlignmentPlanInspector.records"
                                                 :key="`alignment-plan-${record.recordKey}`"
                                                 :data-alignment-record-key="record.recordKey"
@@ -8025,7 +8025,7 @@
                                                 </div>
                                                 <span v-if="record.reversedFromSource"
                                                       class="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 font-bold text-indigo-700"
-                                                      :aria-label="`${record.recordLabel} reversed relative to source`">rev</span>
+                                                      :aria-label="t('{record} reversed relative to source', { record: record.recordLabel })">{{ t('rev') }}</span>
                                             </li>
                                         </ul>
                                     </div>
@@ -8036,34 +8036,34 @@
                                         @click="openSimilarityAlignmentReset"
                                         :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
                                         class="btn btn-secondary absolute right-1 top-1 px-2 py-0.5 text-[11px]">
-                                    Reset alignment…
+                                    {{ t('Reset alignment…') }}
                                 </button>
                             </div>
                             <div v-if="similarityAlignmentRepair"
                                  data-similarity-alignment-repair
                                  role="alert"
                                  class="rounded border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900">
-                                <p class="font-semibold">Saved alignment needs repair.</p>
+                                <p class="font-semibold">{{ t('Saved alignment needs repair.') }}</p>
                                 <p class="mt-1">{{ similarityAlignmentRepair.reason }}</p>
                                 <div v-if="similarityAlignmentRepair.kind === 'reference'" class="mt-2 flex gap-2">
                                     <button type="button"
                                             @click="reselectSimilarityAlignmentReference"
                                             class="btn btn-secondary px-2 py-1 text-[10px]">
-                                        Reselect reference
+                                        {{ t('Reselect reference') }}
                                     </button>
                                     <button type="button"
                                             data-history-managed
                                             @click="openSimilarityAlignmentReset"
                                             class="btn btn-secondary px-2 py-1 text-[10px]">
-                                        Clear alignment
+                                        {{ t('Clear alignment') }}
                                     </button>
                                 </div>
                             </div>
                         </div>
 
                         <div v-if="orthogroupDormantNames.length" class="flex items-start justify-between gap-2 px-3 py-1.5 text-[11px] text-slate-600 border-b border-slate-100" role="status">
-                            <span class="min-w-0">Saved names waiting for their original members: {{ orthogroupDormantNames.join(', ') }}</span>
-                            <button type="button" @click="clearOrthogroupDormantOverrides" class="btn btn-secondary px-2 py-1 text-[10px]" :disabled="!semanticMutationAvailable">Clear</button>
+                            <span class="min-w-0">{{ t('Saved names waiting for their original members: {names}', { names: orthogroupDormantNames.join(', ') }) }}</span>
+                            <button type="button" @click="clearOrthogroupDormantOverrides" class="btn btn-secondary px-2 py-1 text-[10px]" :disabled="!semanticMutationAvailable">{{ t('Clear') }}</button>
                         </div>
                         <!-- The list and the selected group's detail share the free height; each scrolls on its own. -->
                         <div data-similarity-group-list class="flex-[2_1_0%] min-h-[6rem] overflow-y-auto border-b border-slate-200 custom-scrollbar">
@@ -8080,11 +8080,11 @@
                                 <div class="flex items-center gap-2">
                                     <span class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700" :title="row.name">{{ row.name }}</span>
                                     <span v-if="row.name !== row.id" class="shrink-0 font-mono text-[10px] text-slate-500">{{ row.id }}</span>
-                                    <span v-if="row.renamed" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">Edited</span>
+                                    <span v-if="row.renamed" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">{{ t('Edited') }}</span>
                                 </div>
                                 <div class="truncate text-[11px] text-slate-500">{{ row.countsLabel }}<template v-if="row.scopeLabel"> · {{ row.scopeLabel }}</template></div>
                             </button>
-                            <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-500 text-xs">No similarity groups found</div>
+                            <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-500 text-xs">{{ t('No similarity groups found') }}</div>
                         </div>
 
                         <div v-if="selectedOrthogroup" data-similarity-group-detail class="flex-[3_1_0%] min-h-[9rem] overflow-y-auto p-3 space-y-4 custom-scrollbar">
@@ -8092,38 +8092,38 @@
                                 <div class="flex items-center gap-2">
                                     <span class="shrink-0 font-mono text-[11px] text-slate-500">{{ selectedOrthogroup.id }}</span>
                                     <span v-if="orthogroupScope(selectedOrthogroup) !== 'global'" class="min-w-0 truncate text-[11px] text-slate-500" :title="orthogroupScopeLabel(selectedOrthogroup)">{{ orthogroupScopeLabel(selectedOrthogroup) }}</span>
-                                    <span v-if="isOrthogroupRenamed(selectedOrthogroup)" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">Edited</span>
+                                    <span v-if="isOrthogroupRenamed(selectedOrthogroup)" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">{{ t('Edited') }}</span>
                                     <button type="button"
                                             @click="resetOrthogroupRename(selectedOrthogroup.id)"
                                             :disabled="!semanticMutationAvailable || !isOrthogroupRenamed(selectedOrthogroup)"
-                                            title="Restore the group's original name and description"
+                                            :title="t('Restore the group\'s original name and description')"
                                             class="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px] text-blue-700 hover:bg-blue-50 disabled:text-slate-400 disabled:hover:bg-transparent">
-                                        Reset name
+                                        {{ t('Reset name') }}
                                     </button>
                                 </div>
                                 <div>
-                                    <label for="similarity-group-display-name" class="text-xs font-medium text-slate-500 block mb-1">Display name</label>
+                                    <label for="similarity-group-display-name" class="text-xs font-medium text-slate-500 block mb-1">{{ t('Display name') }}</label>
                                     <input id="similarity-group-display-name"
                                            type="text"
                                            :value="resolveOrthogroupName(selectedOrthogroup)"
                                            @input="setOrthogroupNameOverride(selectedOrthogroup.id, $event.target.value)"
-                                           placeholder="Rename this similarity group"
+                                           :placeholder="t('Rename this similarity group')"
                                            class="form-input text-sm w-full">
                                 </div>
                                 <div>
-                                    <label for="similarity-group-description" class="text-xs font-medium text-slate-500 block mb-1">Description</label>
+                                    <label for="similarity-group-description" class="text-xs font-medium text-slate-500 block mb-1">{{ t('Description') }}</label>
                                     <textarea id="similarity-group-description"
                                               :value="orthogroupDescriptionFieldText(selectedOrthogroup)"
                                               @input="setOrthogroupDescriptionOverride(selectedOrthogroup.id, $event.target.value)"
-                                              placeholder="Describe this similarity group"
+                                              :placeholder="t('Describe this similarity group')"
                                               rows="2"
                                               class="form-input text-xs w-full resize-none"></textarea>
                                 </div>
                             </div>
 
-                            <section class="rounded border border-blue-100 bg-blue-50 p-3 space-y-2" aria-label="Align records to this group">
+                            <section class="rounded border border-blue-100 bg-blue-50 p-3 space-y-2" :aria-label="t('Align records to this group')">
                                 <label for="similarity-alignment-reference" class="block text-xs font-semibold text-slate-700">
-                                    Exact reference record and feature
+                                    {{ t('Exact reference record and feature') }}
                                 </label>
                                 <select id="similarity-alignment-reference"
                                         data-history-scope="transient"
@@ -8132,7 +8132,7 @@
                                         :disabled="!semanticMutationAvailable || (similarityAlignmentDrawer.options.length === 0)"
                                         aria-describedby="similarity-alignment-drawer-reason"
                                         class="form-select text-xs w-full disabled:cursor-not-allowed disabled:opacity-50">
-                                    <option value="" :selected="!similarityAlignmentDrawerReferenceKey">Select exact reference…</option>
+                                    <option value="" :selected="!similarityAlignmentDrawerReferenceKey">{{ t('Select exact reference…') }}</option>
                                     <!-- Each option states its own selection, so a preselected reference (OV-381) survives option re-renders. -->
                                     <option v-for="option in similarityAlignmentDrawer.options"
                                             :key="option.key"
@@ -8140,7 +8140,7 @@
                                             :selected="option.key === similarityAlignmentDrawerReferenceKey">{{ option.label }}</option>
                                 </select>
                                 <p id="similarity-alignment-drawer-reason" class="ui-hint">
-                                    {{ similarityAlignmentDrawer.disabledReason || 'The selected exact feature will remain fixed as the reference.' }}
+                                    {{ similarityAlignmentDrawer.disabledReason || t('The selected exact feature will remain fixed as the reference.') }}
                                 </p>
                                 <div class="grid grid-cols-2 gap-2">
                                     <button type="button"
@@ -8149,7 +8149,7 @@
                                             :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="similarity-alignment-drawer-reason"
-                                            title="Align to the selected exact feature"
+                                            :title="t('Align to the selected exact feature')"
                                             class="min-w-0 text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
                                         <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
                                         {{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}
@@ -8161,13 +8161,13 @@
                                             :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="similarity-alignment-drawer-reason"
-                                            title="Review alignment options for the selected exact feature"
-                                            class="min-w-0 text-xs leading-tight px-2 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 disabled:text-slate-400 disabled:cursor-not-allowed">Review alignment options…</button>
+                                            :title="t('Review alignment options for the selected exact feature')"
+                                            class="min-w-0 text-xs leading-tight px-2 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 disabled:text-slate-400 disabled:cursor-not-allowed">{{ t('Review alignment options…') }}</button>
                                 </div>
                             </section>
 
                             <details>
-                                <summary class="text-xs !text-slate-600">Name suggestions ({{ (selectedOrthogroup.nameCandidates || []).length }})</summary>
+                                <summary class="text-xs !text-slate-600">{{ t('Name suggestions ({count})', { count: (selectedOrthogroup.nameCandidates || []).length }) }}</summary>
                                 <div class="space-y-1">
                                     <!-- The computed description says where the suggestions come from; a written one is the Description field's value. -->
                                     <p v-if="selectedOrthogroup.description" class="text-[11px] text-slate-500" data-similarity-group-computed-description>{{ selectedOrthogroup.description }}</p>
@@ -8179,27 +8179,27 @@
                                             <span class="text-[10px] text-slate-500">{{ candidate.source }}</span>
                                         </div>
                                         <div class="text-[10px] text-slate-500">
-                                            {{ candidate.memberCount }} {{ Number(candidate.memberCount) === 1 ? 'gene' : 'genes' }} · {{ candidate.recordCoverageCount }} {{ Number(candidate.recordCoverageCount) === 1 ? 'record' : 'records' }} · score {{ Number(candidate.score || 0).toFixed(1) }}
+                                            {{ t('{genes} · {records} · score {score}', { genes: tn(Number(candidate.memberCount), '{count} gene', '{count} genes'), records: tn(Number(candidate.recordCoverageCount), '{count} record', '{count} records'), score: Number(candidate.score || 0).toFixed(1) }) }}
                                         </div>
                                     </div>
-                                    <div v-if="!(selectedOrthogroup.nameCandidates || []).length" class="text-xs text-slate-500">No suggestions</div>
+                                    <div v-if="!(selectedOrthogroup.nameCandidates || []).length" class="text-xs text-slate-500">{{ t('No suggestions') }}</div>
                                 </div>
                             </details>
 
                             <div>
                                 <!-- One copy menu for the group and one FASTA menu per member, as in the popups. -->
                                 <div class="mb-2 flex items-start justify-between gap-2">
-                                    <div class="pt-1 text-xs font-semibold text-slate-600">Members</div>
-                                    <action-menu label="Copy" icon="ph-copy" title="Copy or download the members"
+                                    <div class="pt-1 text-xs font-semibold text-slate-600">{{ t('Members') }}</div>
+                                    <action-menu :label="t('Copy')" icon="ph-copy" :title="t('Copy or download the members')"
                                                  :items="[
-                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', 'Copy nt'), title: 'Copy all member nucleotide FASTA', icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasSequence.nt, run: () => copyOrthogroupSequences(selectedOrthogroup, 'nt') },
-                                                   { label: 'Download nt', title: 'Download all member nucleotide FASTA', icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasSequence.nt, run: () => downloadOrthogroupSequences(selectedOrthogroup, 'nt') },
-                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', 'Copy aa'), title: 'Copy all member amino-acid FASTA', icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasSequence.aa, run: () => copyOrthogroupSequences(selectedOrthogroup, 'aa') },
-                                                   { label: 'Download aa', title: 'Download all member amino-acid FASTA', icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasSequence.aa, run: () => downloadOrthogroupSequences(selectedOrthogroup, 'aa') }
+                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', t('Copy nt')), title: t('Copy all member nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasSequence.nt, run: () => copyOrthogroupSequences(selectedOrthogroup, 'nt') },
+                                                   { label: t('Download nt'), title: t('Download all member nucleotide FASTA'), icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasSequence.nt, run: () => downloadOrthogroupSequences(selectedOrthogroup, 'nt') },
+                                                   { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', t('Copy aa')), title: t('Copy all member amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasSequence.aa, run: () => copyOrthogroupSequences(selectedOrthogroup, 'aa') },
+                                                   { label: t('Download aa'), title: t('Download all member amino-acid FASTA'), icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasSequence.aa, run: () => downloadOrthogroupSequences(selectedOrthogroup, 'aa') }
                                                  ]"></action-menu>
                                 </div>
                                 <!-- One block per member, so the drawer needs no horizontal scroll. -->
-                                <ul aria-label="Members" class="divide-y divide-slate-100 rounded border border-slate-100 text-[11px] text-slate-600">
+                                <ul :aria-label="t('Members')" class="divide-y divide-slate-100 rounded border border-slate-100 text-[11px] text-slate-600">
                                     <template v-for="recordGroup in selectedOrthogroupDetail.membersByRecord"
                                               :key="`${selectedOrthogroup.id}-${recordGroup.recordIndex}`">
                                         <li v-for="member in recordGroup.members"
@@ -8211,12 +8211,12 @@
                                                     <span class="font-mono">{{ orthogroupMemberRangeText(member, 'en-US') }}<template v-if="member.strand"> ({{ member.strand }})</template></span><template v-if="member.displayProteinId"> · <span class="font-mono">{{ member.displayProteinId }}</span></template><template v-if="member.product || member.note"> · {{ member.product || member.note }}</template>
                                                 </div>
                                             </div>
-                                            <action-menu class="shrink-0" label="FASTA" :title="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`" :aria-label="`FASTA of ${member.displayProteinId || member.recordId || 'this member'}`"
+                                            <action-menu class="shrink-0" label="FASTA" :title="t('FASTA of {member}', { member: member.displayProteinId || member.recordId || t('this member') })" :aria-label="t('FASTA of {member}', { member: member.displayProteinId || member.recordId || t('this member') })"
                                                          :items="[
-                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', 'Copy nt', member), title: 'Copy nucleotide FASTA', icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'nt'), run: () => copyOrthogroupMemberSequence(member, 'nt', selectedOrthogroup) },
-                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', 'Copy aa', member), title: 'Copy amino-acid FASTA', icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'aa'), run: () => copyOrthogroupMemberSequence(member, 'aa', selectedOrthogroup) },
-                                                           { label: 'Download nt', title: 'Download nucleotide FASTA', icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'nt'), run: () => downloadOrthogroupMemberSequence(member, 'nt', selectedOrthogroup) },
-                                                           { label: 'Download aa', title: 'Download amino-acid FASTA', icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'aa'), run: () => downloadOrthogroupMemberSequence(member, 'aa', selectedOrthogroup) }
+                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', t('Copy nt'), member), title: t('Copy nucleotide FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'nt'), run: () => copyOrthogroupMemberSequence(member, 'nt', selectedOrthogroup) },
+                                                           { label: orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', t('Copy aa'), member), title: t('Copy amino-acid FASTA'), icon: 'ph-copy', live: true, disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'aa'), run: () => copyOrthogroupMemberSequence(member, 'aa', selectedOrthogroup) },
+                                                           { label: t('Download nt'), title: t('Download nucleotide FASTA'), icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'nt'), run: () => downloadOrthogroupMemberSequence(member, 'nt', selectedOrthogroup) },
+                                                           { label: t('Download aa'), title: t('Download amino-acid FASTA'), icon: 'ph-download-simple', disabled: !selectedOrthogroupDetail.hasMemberSequence(member, 'aa'), run: () => downloadOrthogroupMemberSequence(member, 'aa', selectedOrthogroup) }
                                                          ]"></action-menu>
                                         </li>
                                     </template>
@@ -8225,13 +8225,13 @@
                         </div>
 
                         <div v-if="selectedOrthogroup" data-similarity-group-actions class="px-3 py-2 border-t border-slate-200 bg-slate-50 shrink-0">
-                            <div class="mb-1.5 truncate text-[11px] text-slate-500">Selected group: <span class="font-semibold text-slate-700">{{ resolveOrthogroupName(selectedOrthogroup) }}</span></div>
+                            <div class="mb-1.5 truncate text-[11px] text-slate-500">{{ t('Selected group:') }} <span class="font-semibold text-slate-700">{{ resolveOrthogroupName(selectedOrthogroup) }}</span></div>
                             <div class="grid grid-cols-2 gap-2">
                                 <button @click="highlightOrthogroupById(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
-                                    <i class="ph ph-target" aria-hidden="true"></i> Highlight
+                                    <i class="ph ph-target" aria-hidden="true"></i> {{ t('Highlight') }}
                                 </button>
                                 <button @click="clearOrthogroupHighlight" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
-                                    <i class="ph ph-eraser" aria-hidden="true"></i> Clear
+                                    <i class="ph ph-eraser" aria-hidden="true"></i> {{ t('Clear') }}
                                 </button>
                             </div>
                         </div>
@@ -8242,29 +8242,29 @@
                         <!-- Reset preview layout button -->
                         <button v-if="svgContent" @click="resetLayout"
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
-                                :title="layoutResetAvailable ? 'Return moved elements, canvas padding, pan, and zoom to their defaults' : 'Nothing moved yet'"
-                                aria-label="Reset layout" :disabled="!semanticMutationAvailable || !layoutResetAvailable">
+                                :title="layoutResetAvailable ? t('Return moved elements, canvas padding, pan, and zoom to their defaults') : t('Nothing moved yet')"
+                                :aria-label="t('Reset layout')" :disabled="!semanticMutationAvailable || !layoutResetAvailable">
                             <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
-                            <span>Reset Layout</span>
+                            <span>{{ t('Reset Layout') }}</span>
                         </button>
                         <!-- Layout reposition mode toggle -->
                         <button v-if="svgContent" @click="layoutRepositionMode = !layoutRepositionMode" data-history-ignore
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
-                                :title="layoutRepositionMode ? 'Layout edit is on: drag a legend, title, or Linear scale to move it. Turn off to pan.' : 'Turn on to move a legend, title, or Linear scale. While off, dragging pans the view.'"
+                                :title="layoutRepositionMode ? t('Layout edit is on: drag a legend, title, or Linear scale to move it. Turn off to pan.') : t('Turn on to move a legend, title, or Linear scale. While off, dragging pans the view.')"
                                 :aria-pressed="layoutRepositionMode"
-                                aria-label="Toggle layout edit mode"
+                                :aria-label="t('Toggle layout edit mode')"
                                 aria-describedby="preview-layout-help">
                             <i class="ph ph-arrows-out-cardinal" aria-hidden="true"></i>
-                            <span>Layout edit</span>
+                            <span>{{ t('Layout edit') }}</span>
                         </button>
                         <!-- Canvas size toggle -->
                         <button v-if="svgContent" @click="showCanvasControls = !showCanvasControls"
                                 class="flex items-center gap-2 px-3 py-2 shadow rounded-lg border hover:bg-slate-100 text-slate-600 text-sm"
                                 :class="showCanvasControls ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'"
-                                title="Canvas padding controls"
-                                aria-label="Toggle canvas padding controls">
+                                :title="t('Canvas padding controls')"
+                                :aria-label="t('Toggle canvas padding controls')">
                             <i class="ph ph-frame-corners" aria-hidden="true"></i>
-                            <span>Canvas padding</span>
+                            <span>{{ t('Canvas padding') }}</span>
                         </button>
                         <!-- Feature search bar toggle; the count names the matches of a hidden active search, 0 included. -->
                         <button v-if="svgContent" type="button" @click="togglePreviewFeatureSearchBar"
@@ -8272,19 +8272,19 @@
                                 data-preview-search-toggle
                                 class="flex items-center gap-2 px-3 py-2 shadow rounded-lg border hover:bg-slate-100 text-slate-600 text-sm"
                                 :class="previewFeatureSearchVisible ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'"
-                                title="Show or hide the feature search bar"
+                                :title="t('Show or hide the feature search bar')"
                                 :aria-pressed="previewFeatureSearchVisible"
-                                aria-label="Toggle feature search">
+                                :aria-label="t('Toggle feature search')">
                             <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
-                            <span>Search</span>
+                            <span>{{ t('Search') }}</span>
                             <span v-if="previewFeatureSearchHiddenMatchCount !== null" class="preview-search-count">· {{ previewFeatureSearchHiddenMatchCount }}</span>
                         </button>
                         <!-- Zoom controls -->
                         <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
-                            <button @click="zoom = Math.min(5, Math.round((zoom + 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom in"><i class="ph ph-plus" aria-hidden="true"></i></button>
-                            <button @click="zoom = 1.0" class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" aria-label="Reset zoom"><preview-zoom-percent></preview-zoom-percent></button>
-                            <button @click="zoom = Math.max(0.1, Math.round((zoom - 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom out"><i class="ph ph-minus" aria-hidden="true"></i></button>
-                            <button @click="fitPreviewToViewport" class="h-10 px-2 flex items-center justify-center gap-1 hover:bg-slate-100 text-slate-600 text-sm rounded" aria-label="Fit to preview" title="Fit to preview"><i class="ph ph-corners-in text-lg" aria-hidden="true"></i><span>Fit</span></button>
+                            <button @click="zoom = Math.min(5, Math.round((zoom + 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom in')"><i class="ph ph-plus" aria-hidden="true"></i></button>
+                            <button @click="zoom = 1.0" class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" :aria-label="t('Reset zoom')"><preview-zoom-percent></preview-zoom-percent></button>
+                            <button @click="zoom = Math.max(0.1, Math.round((zoom - 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom out')"><i class="ph ph-minus" aria-hidden="true"></i></button>
+                            <button @click="fitPreviewToViewport" class="h-10 px-2 flex items-center justify-center gap-1 hover:bg-slate-100 text-slate-600 text-sm rounded" :aria-label="t('Fit to preview')" :title="t('Fit to preview')"><i class="ph ph-corners-in text-lg" aria-hidden="true"></i><span>{{ t('Fit') }}</span></button>
                         </div>
                     </div>
 
@@ -8293,13 +8293,13 @@
 
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200" aria-hidden="true"></i>
-                <p class="font-medium text-slate-400">No {{ mode === 'linear' ? 'Linear' : 'Circular' }} Result yet. Configure settings and click Generate.</p>
+                <p class="font-medium text-slate-400">{{ t('No {mode} Result yet. Configure settings and click Generate.', { mode: mode === 'linear' ? t('Linear') : t('Circular') }) }}</p>
                 <template v-if="galleryExamples.length">
                     <button type="button" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending"
                             class="btn btn-secondary btn-sm mt-4" aria-haspopup="dialog" aria-describedby="example-session-help">
-                        <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> Load an example
+                        <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> {{ t('Load an example') }}
                     </button>
-                    <p id="example-session-help" class="ui-hint mt-2">Opens a finished Gallery example as a Session.</p>
+                    <p id="example-session-help" class="ui-hint mt-2">{{ t('Opens a finished Gallery example as a Session.') }}</p>
                 </template>
             </div>
         </div>
@@ -8307,22 +8307,22 @@
 
     <!-- The settings section of a clicked drawn element is moved here, beside the Result (js/app/settings-pane.js).
          The host stays inside the app root: History listens for its inputs there. -->
-    <div id="settings-popup" v-show="settingsPane.floating" class="settings-popup" role="dialog" aria-label="Settings of the clicked element"
+    <div id="settings-popup" v-show="settingsPane.floating" class="settings-popup" role="dialog" :aria-label="t('Settings of the clicked element')"
          :style="settingsPopupStyle" @mousedown="startSettingsPopupDrag" @click.capture="keepSettingsPopupSectionOpen">
-        <button type="button" class="settings-dock-close" data-history-ignore aria-label="Close section" title="Close section" @click="closeSettingsPopup">
+        <button type="button" class="settings-dock-close" data-history-ignore :aria-label="t('Close section')" :title="t('Close section')" @click="closeSettingsPopup">
             <i class="ph ph-x" aria-hidden="true"></i>
         </button>
     </div>
 
     <footer data-app-footer class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-sm text-slate-500 flex items-center justify-center gap-6 shrink-0 h-8">
         <span>
-            <strong>Disclaimer:</strong> This tool is provided "as is" without warranty of any kind.
+            <strong>{{ t('Disclaimer:') }}</strong> {{ t('This tool is provided "as is" without warranty of any kind.') }}
         </span>
         <span>
-            License: <a href="./open-source-notices.html" class="hover:underline hover:text-slate-700">Open Source Notices</a> |
-            <a href="https://gbdraw.app/gallery/" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">Interactive Gallery</a> |
-            <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">MIT on GitHub</a> |
-            Author: <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">Satoshi Kawato</a>
+            {{ t('License:') }} <a href="./open-source-notices.html" class="hover:underline hover:text-slate-700">{{ t('Open Source Notices') }}</a> |
+            <a href="https://gbdraw.app/gallery/" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">{{ t('Interactive Gallery') }}</a> |
+            <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">{{ t('MIT on GitHub') }}</a> |
+            {{ t('Author:') }} <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">{{ t('Satoshi Kawato') }}</a>
         </span>
         <!-- GBDRAW_HOSTED_BUILD_LABEL -->
     </footer>
@@ -8337,15 +8337,15 @@
                  @keydown.esc.prevent.stop="cancelSimilarityAlignmentReset"
                  class="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
             <header class="shrink-0 border-b border-slate-200 p-4">
-                <h2 id="similarity-alignment-reset-title" tabindex="-1" class="font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Reset alignment</h2>
-                <p id="alignment-reset-description" class="mt-1 text-sm text-slate-600">Undo the latest Align.</p>
+                <h2 id="similarity-alignment-reset-title" tabindex="-1" class="font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">{{ t('Reset alignment') }}</h2>
+                <p id="alignment-reset-description" class="mt-1 text-sm text-slate-600">{{ t('Undo the latest Align.') }}</p>
             </header>
             <div class="min-h-0 flex-1 overflow-y-auto p-4 text-sm custom-scrollbar">
                 <fieldset class="space-y-2">
-                    <legend class="sr-only">Reset scope</legend>
+                    <legend class="sr-only">{{ t('Reset scope') }}</legend>
                     <div class="flex items-start gap-2 rounded-lg border border-slate-200 p-3">
                         <input id="alignment-reset-positions" type="radio" name="alignment-reset-scope" v-model="similarityAlignmentResetScope" value="positions" :disabled="similarityAlignmentBusy" class="mt-0.5">
-                        <label for="alignment-reset-positions" class="font-semibold text-slate-800">Positions only</label>
+                        <label for="alignment-reset-positions" class="font-semibold text-slate-800">{{ t('Positions only') }}</label>
                     </div>
                     <div class="rounded-lg border border-slate-200 p-3" :class="similarityAlignmentResetPreview.disabledReason ? 'bg-slate-50' : ''">
                         <div class="flex items-start gap-2">
@@ -8358,14 +8358,14 @@
                         <!-- The reason sits under the radio it disables (PD-OI-029: an explicit reason, never a guess). -->
                         <p v-if="similarityAlignmentResetPreview.disabledReason" id="alignment-reset-direction-reason" class="mt-1 pl-6 text-xs text-amber-800">{{ similarityAlignmentResetPreview.disabledReason }}</p>
                         <div v-else-if="similarityAlignmentResetScope === 'positions-and-directions'" class="mt-2 pl-6 text-xs">
-                            <p class="text-slate-500">Record direction, current → restored (relative to the source file)</p>
-                            <ul aria-label="Alignment direction restoration targets" class="mt-1 space-y-0.5">
+                            <p class="text-slate-500">{{ t('Record direction, current → restored (relative to the source file)') }}</p>
+                            <ul :aria-label="t('Alignment direction restoration targets')" class="mt-1 space-y-0.5">
                                 <li v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="flex items-baseline gap-2 text-slate-800">
                                     <strong class="min-w-0 truncate" :title="target.label">{{ target.name }}:</strong>
-                                    <span class="shrink-0">{{ target.current ? 'reverse' : 'forward' }} → {{ target.restored ? 'reverse' : 'forward' }}<span v-if="target.laterManualEdit" class="text-amber-800"> · changed after Align</span></span>
+                                    <span class="shrink-0">{{ target.current ? 'reverse' : 'forward' }} → {{ target.restored ? 'reverse' : 'forward' }}<span v-if="target.laterManualEdit" class="text-amber-800"> {{ t('· changed after Align') }}</span></span>
                                 </li>
                             </ul>
-                            <p class="mt-2 text-slate-600">Direction changes you made after Align on these records are replaced.</p>
+                            <p class="mt-2 text-slate-600">{{ t('Direction changes you made after Align on these records are replaced.') }}</p>
                         </div>
                     </div>
                 </fieldset>
@@ -8373,8 +8373,8 @@
             <footer class="shrink-0 border-t border-slate-200 bg-slate-50 p-4">
                 <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery" tabindex="-1" data-similarity-alignment-reset-error class="mb-2 text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"></operation-error>
                 <div class="flex justify-end gap-2">
-                    <button type="button" @click="cancelSimilarityAlignmentReset" :disabled="similarityAlignmentBusy" class="btn btn-secondary">Cancel</button>
-                    <button type="button" @click="applySimilarityAlignmentReset" :disabled="!semanticMutationAvailable || (similarityAlignmentBusy)" class="btn btn-primary">{{ similarityAlignmentBusy ? 'Resetting…' : similarityAlignmentResetScope === 'positions-and-directions' ? 'Reset positions and directions' : 'Reset positions' }}</button>
+                    <button type="button" @click="cancelSimilarityAlignmentReset" :disabled="similarityAlignmentBusy" class="btn btn-secondary">{{ t('Cancel') }}</button>
+                    <button type="button" @click="applySimilarityAlignmentReset" :disabled="!semanticMutationAvailable || (similarityAlignmentBusy)" class="btn btn-primary">{{ similarityAlignmentBusy ? t('Resetting…') : similarityAlignmentResetScope === 'positions-and-directions' ? t('Reset positions and directions') : t('Reset positions') }}</button>
                 </div>
             </footer>
         </section>
@@ -8394,18 +8394,18 @@
                 data-linear-source-removal-dialog
                 class="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-2xl"
             >
-                <h2 id="linear-source-removal-title" class="break-all text-base font-bold text-slate-800">Remove {{ linearSourceRemovalTargetName }}?</h2>
+                <h2 id="linear-source-removal-title" class="break-all text-base font-bold text-slate-800">{{ t('Remove {name}?', { name: linearSourceRemovalTargetName }) }}</h2>
                 <p id="linear-source-removal-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                    It contains {{ linearSourceRemovalTarget?.records?.length || 0 }} record{{ (linearSourceRemovalTarget?.records?.length || 0) === 1 ? '' : 's' }}.
+                    {{ tn(linearSourceRemovalTarget?.records?.length || 0, 'It contains {count} record.', 'It contains {count} records.') }}
                 </p>
                 <p v-if="linearSourceRemovalTarget?.records?.some((record) => hasLinearDepthFiles(record.sequence))" data-setting="depth-sources" class="mt-2">
                     <setting-note setting="depth-sources"></setting-note>
                 </p>
                 <p v-if="!linearSourceRemovalTarget" class="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                    This File is no longer available. Cancel and try again.
+                    {{ t('This File is no longer available. Cancel and try again.') }}
                 </p>
                 <div class="mt-4 flex min-w-0 flex-wrap justify-end gap-2">
-                    <button type="button" @click="cancelLinearSourceRemoval" class="btn btn-secondary min-w-0 px-3 py-2 text-xs font-bold">Cancel</button>
+                    <button type="button" @click="cancelLinearSourceRemoval" class="btn btn-secondary min-w-0 px-3 py-2 text-xs font-bold">{{ t('Cancel') }}</button>
                     <button
                         v-if="linearSourceRemovalDialog.origin === 'card'"
                         type="button"
@@ -8413,17 +8413,17 @@
                         :disabled="!semanticMutationAvailable || (!linearSourceRemovalTarget)"
                         @click="applyLinearSourceRemoval('clear')"
                         class="btn btn-secondary min-w-0 px-3 py-2 text-xs font-bold"
-                    >Empty this slot</button>
+                    >{{ t('Empty this slot') }}</button>
                     <button
                         type="button"
                         :data-linear-source-removal-primary="linearSourceRemovalDialog.origin === 'global' ? '' : undefined"
                         :disabled="!semanticMutationAvailable || (!linearSourceRemovalTarget || !linearSourceRemovalCanDelete)"
                         @click="applyLinearSourceRemoval('delete')"
                         class="btn min-w-0 border border-red-600 bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
-                    >Remove file</button>
+                    >{{ t('Remove file') }}</button>
                 </div>
                 <p v-if="linearSourceRemovalDialog.origin === 'card' && !linearSourceRemovalCanDelete" class="ui-hint mt-2">
-                    The only File cannot be removed. Empty this slot to keep one input.
+                    {{ t('The only File cannot be removed. Empty this slot to keep one input.') }}
                 </p>
             </section>
         </div>
@@ -8431,43 +8431,43 @@
         <choice-dialog v-if="missingBlastTsvDialog.show" :busy="dialogChoicePending" labelledby="missing-blast-tsv-title" describedby="missing-blast-tsv-description"
              @cancel="resolveMissingBlastTsv('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="missing-blast-tsv-title" class="text-base font-bold text-slate-800">BLAST TSV missing</h2>
-            <p id="missing-blast-tsv-description" class="mt-2 text-sm leading-relaxed text-slate-600">Choose a BLAST TSV for each pair, or skip these comparisons.</p>
+            <h2 id="missing-blast-tsv-title" class="text-base font-bold text-slate-800">{{ t('BLAST TSV missing') }}</h2>
+            <p id="missing-blast-tsv-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ t('Choose a BLAST TSV for each pair, or skip these comparisons.') }}</p>
             <ul class="mt-3 divide-y divide-slate-200 rounded border border-slate-200" data-missing-blast-tsv-rows>
                 <li v-for="row in missingBlastTsvRows" :key="row.edgeKey" :data-missing-blast-tsv-row="row.edgeKey" class="flex min-w-0 items-center gap-2 px-2 py-1.5 text-sm">
                     <span class="min-w-0 flex-1">
                         <span class="block font-semibold text-slate-800">{{ row.label }}</span>
                         <span v-if="row.queryUid" class="block min-w-0 text-xs text-slate-500"><record-name :prefix="`#${row.queryIndex + 1}`" v-bind="linearComparisonRecordName(row.queryUid)"></record-name></span>
                         <span v-if="row.subjectUid" class="block min-w-0 text-xs text-slate-500"><record-name :prefix="`→ #${row.subjectIndex + 1}`" v-bind="linearComparisonRecordName(row.subjectUid)"></record-name></span>
-                        <span class="block truncate text-xs" :class="row.missing ? 'text-red-700' : 'text-green-700'">{{ row.missing ? 'No file' : row.fileName }}</span>
+                        <span class="block truncate text-xs" :class="row.missing ? 'text-red-700' : 'text-green-700'">{{ row.missing ? t('No file') : row.fileName }}</span>
                     </span>
-                    <button type="button" data-history-ignore :disabled="!semanticMutationAvailable" @click="chooseLinearComparisonPairFile(row.edgeKey)" :aria-label="`Choose BLAST TSV for ${row.label}`" class="btn btn-secondary btn-sm shrink-0">{{ row.missing ? 'Choose file…' : 'Change…' }}</button>
+                    <button type="button" data-history-ignore :disabled="!semanticMutationAvailable" @click="chooseLinearComparisonPairFile(row.edgeKey)" :aria-label="t('Choose BLAST TSV for {name}', { name: row.label })" class="btn btn-secondary btn-sm shrink-0">{{ row.missing ? t('Choose file…') : t('Change…') }}</button>
                 </li>
             </ul>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
-                <button type="button" data-history-ignore @click="resolveMissingBlastTsv('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
-                <button v-if="missingBlastTsvRows.some((row) => row.missing)" type="button" data-history-managed :disabled="!semanticMutationAvailable" @click="resolveMissingBlastTsv('none')" class="btn btn-secondary btn-sm">Skip these comparisons and Generate</button>
-                <button v-else type="button" data-history-ignore :disabled="processing" @click="resolveMissingBlastTsv('generate')" class="btn btn-primary btn-sm">Generate</button>
+                <button type="button" data-history-ignore @click="resolveMissingBlastTsv('cancel')" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
+                <button v-if="missingBlastTsvRows.some((row) => row.missing)" type="button" data-history-managed :disabled="!semanticMutationAvailable" @click="resolveMissingBlastTsv('none')" class="btn btn-secondary btn-sm">{{ t('Skip these comparisons and Generate') }}</button>
+                <button v-else type="button" data-history-ignore :disabled="processing" @click="resolveMissingBlastTsv('generate')" class="btn btn-primary btn-sm">{{ t('Generate') }}</button>
             </div>
         </choice-dialog>
         <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order -->
         <choice-dialog v-if="labelFitDialog.show" :busy="dialogChoicePending || labelFitDialog.finishing"
-             :busy-status="labelFitDialog.finishing ? 'Finishing the choice being computed…' : null" labelledby="label-fit-title" describedby="label-fit-description"
+             :busy-status="labelFitDialog.finishing ? t('Finishing the choice being computed…') : null" labelledby="label-fit-title" describedby="label-fit-description"
              data-label-fit-dialog
              @cancel="resolveLabelFitChoice('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="label-fit-title" class="text-base font-bold text-slate-800">Labels do not fit</h2>
+            <h2 id="label-fit-title" class="text-base font-bold text-slate-800">{{ t('Labels do not fit') }}</h2>
             <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ labelFitDialog.drawn
-                ? 'The figure is drawn. Choose a fix to Generate again, or Cancel to keep it.'
-                : 'Nothing was drawn. Choose a fix to Generate again.' }}</p>
+                ? t('The figure is drawn. Choose a fix to Generate again, or Cancel to keep it.')
+                : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordId}:${record.labelKindTitle}`">
-                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})
+                    <i18n-text :text="t('{record}: {count} {kind} at {size} pt ({counts})')" :params="{ count: record.labelCount, kind: record.labelKindTitle, size: record.fontSize, counts: record.counts }"><template #record><span class="font-semibold text-slate-700">{{ record.recordId }}</span></template></i18n-text>
                 </li>
             </ul>
-            <p v-if="!labelFitDialog.rows.length" class="mt-3 text-sm text-slate-600">No setting in this dialog makes these labels fit.</p>
+            <p v-if="!labelFitDialog.rows.length" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
             <fieldset v-else class="mt-3">
-                <legend class="sr-only">Fix</legend>
+                <legend class="sr-only">{{ t('Fix') }}</legend>
                 <ul class="divide-y divide-slate-200 rounded border border-slate-200" data-label-fit-rows>
                     <li v-for="row in labelFitDialog.rows" :key="row.kind" :data-label-fit-row="row.kind" :data-label-fit-status="row.status"
                         class="px-2 py-1.5 text-sm" :class="row.offered ? '' : 'text-slate-400'">
@@ -8482,16 +8482,16 @@
                                     <template v-if="row.canvasSize"> · {{ Math.round(row.canvasSize.width) }} × {{ Math.round(row.canvasSize.height) }} px</template>
                                     <span v-if="row.note" class="block text-amber-800" data-label-fit-note>{{ row.note }}</span>
                                 </span>
-                                <span v-else-if="row.status === 'computing'" class="block text-xs" role="status">Computing…</span>
-                                <span v-else class="block text-xs">{{ row.reason || 'Not computed.' }}</span>
+                                <span v-else-if="row.status === 'computing'" class="block text-xs" role="status">{{ t('Computing…') }}</span>
+                                <span v-else class="block text-xs">{{ row.reason || t('Not computed.') }}</span>
                             </span>
                         </label>
                     </li>
                 </ul>
             </fieldset>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
-                <button type="button" data-history-ignore @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
-                <button type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">Apply and Generate</button>
+                <button type="button" data-history-ignore @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
+                <button type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">{{ t('Apply and Generate') }}</button>
             </div>
         </choice-dialog>
         <!-- Record selection (D-02, D-10): the records of one file, drawn or left out -->
@@ -8499,32 +8499,32 @@
              data-record-list-dialog
              @cancel="recordSelection.closeRecordList()" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="record-list-title" class="text-base font-bold text-slate-800">Choose records</h2>
+            <h2 id="record-list-title" class="text-base font-bold text-slate-800">{{ t('Choose records') }}</h2>
             <p id="record-list-description" class="mt-1 text-sm leading-relaxed text-slate-600">
                 <strong class="break-all text-slate-800">{{ recordSelection.recordListView.value.name }}</strong>:
-                <span data-record-list-count>{{ recordSelection.recordListView.value.drawn }} of {{ recordSelection.recordListView.value.total }} records drawn</span>. {{ settingApplicationSentence('inputs') }}
+                <span data-record-list-count>{{ t('{drawn} of {total} records drawn', { drawn: recordSelection.recordListView.value.drawn, total: recordSelection.recordListView.value.total }) }}</span>. {{ settingApplicationSentence('inputs') }}
             </p>
             <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label class="text-xs font-semibold text-slate-600">Search record IDs
+                <label class="text-xs font-semibold text-slate-600">{{ t('Search record IDs') }}
                     <input type="search" data-history-ignore data-record-list-search
                            :value="recordSelection.recordList.query" @input="recordSelection.setRecordListQuery($event.target.value)"
                            class="form-input mt-1 px-2 py-1 text-xs font-normal">
                 </label>
-                <label class="text-xs font-semibold text-slate-600">Sort
+                <label class="text-xs font-semibold text-slate-600">{{ t('Sort') }}
                     <select data-history-ignore data-record-list-sort
                             :value="recordSelection.recordList.sort" @change="recordSelection.setRecordListSort($event.target.value)"
                             class="form-select mt-1 px-2 py-1 text-xs font-normal">
-                        <option value="file">File order</option>
-                        <option value="id-asc">Record ID A to Z</option>
-                        <option value="id-desc">Record ID Z to A</option>
-                        <option value="length-desc">Longest first</option>
-                        <option value="length-asc">Shortest first</option>
+                        <option value="file">{{ t('File order') }}</option>
+                        <option value="id-asc">{{ t('Record ID A to Z') }}</option>
+                        <option value="id-desc">{{ t('Record ID Z to A') }}</option>
+                        <option value="length-desc">{{ t('Longest first') }}</option>
+                        <option value="length-asc">{{ t('Shortest first') }}</option>
                     </select>
                 </label>
             </div>
             <div class="mt-2 flex flex-wrap gap-2">
-                <button type="button" data-history-managed data-record-list-select="all" @click="recordSelection.selectShown(true)" class="btn btn-secondary btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.rows.length">Select all</button>
-                <button type="button" data-history-managed data-record-list-select="none" @click="recordSelection.selectShown(false)" class="btn btn-secondary btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.rows.length">Select none</button>
+                <button type="button" data-history-managed data-record-list-select="all" @click="recordSelection.selectShown(true)" class="btn btn-secondary btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.rows.length">{{ t('Select all') }}</button>
+                <button type="button" data-history-managed data-record-list-select="none" @click="recordSelection.selectShown(false)" class="btn btn-secondary btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.rows.length">{{ t('Select none') }}</button>
             </div>
             <ul data-record-list-rows class="mt-2 max-h-[50vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
                 <li v-for="row in recordSelection.recordListView.value.rows" :key="row.key" class="flex items-center gap-2 px-2 py-1 text-xs" :class="{ 'text-slate-400': !row.drawn }">
@@ -8534,14 +8534,14 @@
                                @change="recordSelection.toggleRecord(recordSelection.recordListView.value.mode, recordSelection.recordListView.value.sourceKey, row.key, $event)">
                         <span class="min-w-0 truncate" :title="row.recordId">{{ row.recordId }}</span>
                     </label>
-                    <span v-if="row.hasSettings" data-record-list-settings class="shrink-0 rounded bg-blue-50 px-1 text-[10px] text-blue-700">settings</span>
+                    <span v-if="row.hasSettings" data-record-list-settings class="shrink-0 rounded bg-blue-50 px-1 text-[10px] text-blue-700">{{ t('settings') }}</span>
                     <span class="shrink-0 tabular-nums text-slate-500">{{ formatRecordLength(row.length) }}</span>
                 </li>
-                <li v-if="!recordSelection.recordListView.value.rows.length" class="px-2 py-2 text-xs text-slate-500">No record ID matches the search.</li>
+                <li v-if="!recordSelection.recordListView.value.rows.length" class="px-2 py-2 text-xs text-slate-500">{{ t('No record ID matches the search.') }}</li>
             </ul>
             <div class="mt-3 flex flex-wrap justify-between gap-2">
-                <button type="button" data-history-managed data-record-list-delete-settings @click="recordSelection.deleteShownOffSettings()" class="btn btn-danger btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.offWithSettings.length">Delete settings of OFF records</button>
-                <button type="button" data-history-ignore data-record-list-close @click="recordSelection.closeRecordList()" class="btn btn-primary btn-sm">Close</button>
+                <button type="button" data-history-managed data-record-list-delete-settings @click="recordSelection.deleteShownOffSettings()" class="btn btn-danger btn-sm" :disabled="!semanticMutationAvailable || !recordSelection.recordListView.value.offWithSettings.length">{{ t('Delete settings of OFF records') }}</button>
+                <button type="button" data-history-ignore data-record-list-close @click="recordSelection.closeRecordList()" class="btn btn-primary btn-sm">{{ t('Close') }}</button>
             </div>
         </choice-dialog>
         <!-- D-06: turning off the last drawn record of a file asks to remove the file -->
@@ -8549,22 +8549,22 @@
              data-record-remove-file-dialog
              @cancel="recordSelection.resolveRemoveFile('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="record-remove-file-title" class="text-base font-bold text-slate-800">Remove the whole file?</h2>
+            <h2 id="record-remove-file-title" class="text-base font-bold text-slate-800">{{ t('Remove the whole file?') }}</h2>
             <p id="record-remove-file-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                <strong class="break-all text-slate-800">{{ recordSelection.removeFileDialog.name }}</strong>: every record of this file would be OFF. Remove the file instead?
+                <i18n-text :text="t('{name}: every record of this file would be OFF. Remove the file instead?')"><template #name><strong class="break-all text-slate-800">{{ recordSelection.removeFileDialog.name }}</strong></template></i18n-text>
             </p>
             <div class="mt-4 flex justify-end gap-2">
-                <button type="button" data-history-ignore @click="recordSelection.resolveRemoveFile('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
-                <button type="button" data-history-managed data-record-remove-file @click="recordSelection.resolveRemoveFile('remove')" class="btn btn-danger btn-sm" :disabled="!semanticMutationAvailable">Remove File</button>
+                <button type="button" data-history-ignore @click="recordSelection.resolveRemoveFile('cancel')" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
+                <button type="button" data-history-managed data-record-remove-file @click="recordSelection.resolveRemoveFile('remove')" class="btn btn-danger btn-sm" :disabled="!semanticMutationAvailable">{{ t('Remove File') }}</button>
             </div>
         </choice-dialog>
         <!-- UJ-06: the Gallery examples this origin serves -->
         <choice-dialog v-if="exampleChooserOpen" labelledby="example-chooser-title" describedby="example-chooser-description"
              @cancel="closeExampleChooser" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="example-chooser-title" class="text-base font-bold text-slate-800">Choose an example</h2>
+            <h2 id="example-chooser-title" class="text-base font-bold text-slate-800">{{ t('Choose an example') }}</h2>
             <p id="example-chooser-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                Each example opens its Gallery Session: the inputs, settings, and Result.
+                {{ t('Each example opens its Gallery Session: the inputs, settings, and Result.') }}
             </p>
             <ul class="mt-3 max-h-[60vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
                 <li v-for="example in galleryExamples" :key="example.id">
@@ -8580,27 +8580,27 @@
                 </li>
             </ul>
             <div class="mt-4 flex justify-end">
-                <button type="button" data-history-ignore @click="closeExampleChooser" class="btn btn-secondary btn-sm">Cancel</button>
+                <button type="button" data-history-ignore @click="closeExampleChooser" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
             </div>
         </choice-dialog>
         <!-- Q3: a layout edit that would leave lane Feature placements undrawable -->
         <choice-dialog v-if="featurePlacementActions.layoutChange.open" labelledby="placement-layout-change-title" describedby="placement-layout-change-description"
              @cancel="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="placement-layout-change-title" class="text-base font-bold text-slate-800">Reset Feature placements?</h2>
+            <h2 id="placement-layout-change-title" class="text-base font-bold text-slate-800">{{ t('Reset Feature placements?') }}</h2>
             <p id="placement-layout-change-description" class="mt-2 mb-4 text-sm leading-relaxed text-slate-600">
-                <template v-if="featurePlacementActions.layoutChange.value">Changing {{ featurePlacementActions.layoutChange.setting }} to {{ featurePlacementActions.layoutChange.value }}</template><template v-else>{{ featurePlacementActions.layoutChange.setting }}</template>
-                removes the lane for {{ featurePlacementActions.layoutChange.count }} feature{{ featurePlacementActions.layoutChange.count === 1 ? '' : 's' }} you placed manually.
+                {{ featurePlacementActions.layoutChange.value ? tn(featurePlacementActions.layoutChange.count, 'Changing {setting} to {value} removes the lane for {count} feature you placed manually.', 'Changing {setting} to {value} removes the lane for {count} features you placed manually.', { setting: featurePlacementActions.layoutChange.setting, value: featurePlacementActions.layoutChange.value })
+                : tn(featurePlacementActions.layoutChange.count, '{setting} removes the lane for {count} feature you placed manually.', '{setting} removes the lane for {count} features you placed manually.', { setting: featurePlacementActions.layoutChange.setting }) }}
             </p>
             <div class="flex flex-col gap-2">
                 <button type="button" data-history-managed data-placement-layout-primary :disabled="!semanticMutationAvailable" @click="featurePlacementActions.resolveLayoutChange('reset')"
                         class="choice-option is-primary">
                     <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
-                    <span>Reset {{ featurePlacementActions.layoutChange.count }} placement{{ featurePlacementActions.layoutChange.count === 1 ? '' : 's' }} to Auto</span>
+                    <span>{{ tn(featurePlacementActions.layoutChange.count, 'Reset {count} placement to Auto', 'Reset {count} placements to Auto') }}</span>
                 </button>
                 <button type="button" data-history-managed @click="featurePlacementActions.resolveLayoutChange('cancel')" class="choice-option">
                     <i class="ph ph-push-pin" aria-hidden="true"></i>
-                    <span>Keep current layout</span>
+                    <span>{{ t('Keep current layout') }}</span>
                 </button>
             </div>
         </choice-dialog>
@@ -8609,12 +8609,12 @@
              data-font-installed-picker
              @cancel="fontSettings.closeInstalledFonts()" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="installed-font-picker-title" class="text-base font-bold text-slate-800">Choose installed font</h2>
+            <h2 id="installed-font-picker-title" class="text-base font-bold text-slate-800">{{ t('Choose installed font') }}</h2>
             <div class="mt-2 space-y-2">
                 <p v-if="fontSettings.installedPicker.error" class="text-sm text-red-600" role="alert">{{ fontSettings.installedPicker.error }}</p>
                 <template v-else>
-                    <input type="search" v-model="fontSettings.installedPicker.query" class="form-input form-input-compact" aria-label="Search installed fonts" placeholder="Search installed fonts" data-history-ignore>
-                    <ul class="max-h-64 overflow-y-auto text-xs" aria-label="Installed font families">
+                    <input type="search" v-model="fontSettings.installedPicker.query" class="form-input form-input-compact" :aria-label="t('Search installed fonts')" :placeholder="t('Search installed fonts')" data-history-ignore>
+                    <ul class="max-h-64 overflow-y-auto text-xs" :aria-label="t('Installed font families')">
                         <li v-for="entry in fontSettings.filteredInstalledFamilies.value" :key="entry.family">
                             <button type="button" class="w-full text-left px-1 py-0.5 hover:bg-slate-100" :style="{ fontFamily: JSON.stringify(entry.family) }" data-history-managed @click="fontSettings.chooseInstalledFamily(entry.family)">{{ entry.family }} <span class="text-slate-400">({{ entry.faces.length }})</span></button>
                         </li>
@@ -8622,7 +8622,7 @@
                 </template>
             </div>
             <div class="mt-4 flex justify-end">
-                <button type="button" class="btn btn-secondary btn-sm" data-history-ignore @click="fontSettings.closeInstalledFonts()">Cancel</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-history-ignore @click="fontSettings.closeInstalledFonts()">{{ t('Cancel') }}</button>
             </div>
         </choice-dialog>
         <!-- The notice banner's live region: always rendered, so a screen reader announces each new notice. -->
