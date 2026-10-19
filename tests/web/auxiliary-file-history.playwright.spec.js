@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { load, generate, switchMode } = require('./helpers/mode-transition.cjs');
@@ -74,7 +74,7 @@ for (const sample of removeCases) {
       return { file: a.files[key]?.name || null, value: values[key]() };
     }, sample.key);
     // A hand edit before the load.
-    await page.evaluate(async (key) => {
+    await evaluateWithRetainedPromise(page, async (key) => {
       const a = window.__GBDRAW_APP__;
       a.form.labels_mode = 'out';
       if (key === 'd_color') a.currentColors.CDS = '#111111';
@@ -154,7 +154,7 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
     const root = state.svgContainer.value?.querySelector('svg');
     return [...(root?.querySelectorAll('text') ?? [])].map((node) => node.textContent).filter((text) => ['Hand', 'Imported'].includes(text));
   });
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'cytochrome', color: '#445566', cap: 'Hand' });
     await a.addSpecificRule();

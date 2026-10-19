@@ -16,7 +16,7 @@ export const DRAWING_EDITOR_KEYS = Object.freeze([
   'featureOverrides', 'featurePlacementOverrides', 'featureColorOverrides', 'featureStrokeOverrides',
   'featureVisibilityManualRules', 'labelTextBulkOverrides', 'canonicalLabelOverrideRows', 'legendEntries',
   'deletedLegendEntries', 'dormantLegendEntries', 'legendColorOverrides', 'legendStrokeOverrides', 'addedLegendCaptions',
-  'fileLegendCaptions', 'manualSpecificRules', 'manualPriorityRules', 'filterMode', 'manualBlacklist',
+  'fileLegendCaptions', 'manualSpecificRules', 'manualPriorityRules', 'fileImports', 'filterMode', 'manualBlacklist',
   'manualWhitelist', 'selectedPalette', 'currentColors', 'pendingPaletteName', 'pendingPaletteColors',
   'annotationSets', 'orthogroupNameOverrides', 'orthogroupDescriptionOverrides', 'orthogroupDormantOverrides',
   'canvasPadding'

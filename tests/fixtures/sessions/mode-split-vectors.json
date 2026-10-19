@@ -4723,7 +4723,8 @@
                   "kind": "main"
                 }
               }
-            }
+            },
+            "fileImports": {}
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -5049,7 +5050,8 @@
                   "kind": "main"
                 }
               }
-            }
+            },
+            "fileImports": {}
           },
           "features": {
             "featureOverrides": {
@@ -5650,7 +5652,8 @@
             "unmanagedConfigOverrides": {},
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {}
+            "featurePlacementOverrides": {},
+            "fileImports": {}
           },
           "features": {
             "featureOverrides": {},
@@ -5971,7 +5974,8 @@
             },
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {}
+            "featurePlacementOverrides": {},
+            "fileImports": {}
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -6365,7 +6369,8 @@
             "unmanagedConfigOverrides": {},
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {}
+            "featurePlacementOverrides": {},
+            "fileImports": {}
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -6623,7 +6628,8 @@
             },
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {}
+            "featurePlacementOverrides": {},
+            "fileImports": {}
           },
           "features": {
             "featureOverrides": {},
@@ -7102,7 +7108,8 @@
                   "kind": "main"
                 }
               }
-            }
+            },
+            "fileImports": {}
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -7389,7 +7396,8 @@
                   "kind": "main"
                 }
               }
-            }
+            },
+            "fileImports": {}
           },
           "features": {
             "featureOverrides": {},
@@ -7853,7 +7861,8 @@
                   "kind": "main"
                 }
               }
-            }
+            },
+            "fileImports": {}
           },
           "features": {
             "featureOverrides": {},
@@ -8190,7 +8199,8 @@
                   "kind": "main"
                 }
               }
-            }
+            },
+            "fileImports": {}
           },
           "features": {
             "featureVisibilityManualRules": [],
@@ -9886,7 +9896,8 @@
             },
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {}
+            "featurePlacementOverrides": {},
+            "fileImports": {}
           },
           "features": {
             "featureOverrides": {}
@@ -10045,7 +10056,8 @@
             },
             "annotationSets": [],
             "recordDisplayDrafts": [],
-            "featurePlacementOverrides": {}
+            "featurePlacementOverrides": {},
+            "fileImports": {}
           },
           "ui": {
             "canvasPadding": {
