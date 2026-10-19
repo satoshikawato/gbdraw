@@ -175,11 +175,8 @@ import {
  * @typedef {() => readonly DrawnTrack[]} ReadDrawnTracksPort
  */
 
-/**
- * The one sentence that says why the Legend Name Conflict dialog asks. A color rule's names the feature
- * type when its color is the renamed row's (OV-649, Owner Q-01 a); `ruleOnly`: a rule's name no row shows.
- * @param {{ name: string, ruleOnly: boolean, deleted: boolean, mergeAvailable: boolean, sameColor: boolean }} conflict
- */
+// Why the Legend Name Conflict dialog asks; a rule's name in the row's own color: its type (OV-649).
+/** @param {{ name: string, ruleOnly: boolean, deleted: boolean, mergeAvailable: boolean, sameColor: boolean }} conflict */
 const legendNameConflictReason = ({ name, ruleOnly, deleted, mergeAvailable, sameColor }) => {
   const named = `"${name}"`;
   if (ruleOnly) return `${named} is the name of a color rule ${sameColor ? 'for another feature type' : 'with another color'}.`;
@@ -687,8 +684,7 @@ export const createFeatureColorActions = ({
     return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), color));
   };
 
-  // The feature popup shows the fill an edit gave its feature. A scope
-  // dialog's choice or Cancel leaves the popup that opened it open (OV-1278).
+  // The popup shows the fill an edit gave its feature; scope dialogs leave it open (OV-1278).
   /** @param {ColorFeature | null | undefined} feat @param {string} color */
   const showClickedFeatureColor = (feat, color) => {
     if (feat && clickedFeature.value?.svg_id === feat.svg_id) clickedFeature.value.color = color;
@@ -1013,10 +1009,8 @@ export const createFeatureColorActions = ({
     legendRenameDialog.siblingCount = request.siblingCount || 0;
     legendRenameDialog.mergeAvailable = mergeAvailable;
     legendRenameDialog.deletedTargetKey = deletedTargetKey;
-    legendRenameDialog.reason = legendNameConflictReason({
-      name: request.newCaption, ruleOnly: target.ruleOnly, deleted: deletedTargetKey !== '', mergeAvailable,
-      sameColor: colorsMatch(target.color, request.currentColor)
-    });
+    legendRenameDialog.reason = legendNameConflictReason({ name: request.newCaption, ruleOnly: target.ruleOnly,
+      deleted: deletedTargetKey !== '', mergeAvailable, sameColor: colorsMatch(target.color, request.currentColor) });
     legendRenameDialog.keepBothName = keepBoth.keepBothName;
     legendRenameDialog.targetNameAfter = keepBoth.targetNameAfter ?? '';
     legendRenameDialog.keepBothRestores = keepBoth.keepBothRestores;
@@ -1238,9 +1232,7 @@ export const createFeatureColorActions = ({
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
   };
 
-  // OIC-029: a palette row's color is its type's default color. The row's
-  // swatch follows the default color again (svg-styles.js); the rows merged
-  // into it (D-35) take the color through their rules or as their Legend color.
+  // OIC-029: a palette row's color is its type's default color; the rows merged into it (D-35) follow.
   /** @param {DrawingState} drawing @param {string} type @param {string} color */
   const applyDefaultColorToLegendRow = async (drawing, type, color) => {
     const keys = legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (type));
@@ -1250,8 +1242,7 @@ export const createFeatureColorActions = ({
     if (merged.length && !(await applyColorToLegendSpecificRules(drawing, merged, color))) writeLegendRowColor(merged, color);
   };
 
-  // The type whose default color draws the Legend row of `key` (`paletteRowType`), else null; OV-1281:
-  // the Legend item popup's Color sets it. It reads the rule matches, so call it once they are prepared.
+  // OV-1281: the type whose default color draws the row of `key`, else null (reads prepared rule matches).
   /** @param {DrawingState} drawing @param {string} key */
   const legendRowDefaultColorType = (drawing, key) => {
     const features = getFeaturesForLegendCaption(key);

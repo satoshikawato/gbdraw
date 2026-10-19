@@ -75,8 +75,7 @@ import {
  * @property {(entry: LegendEntry) => DrawnTrack['kind'] | null} readLegendTrackKind
  *   The kind of the track whose row this is in the displayed Result (`trackLegendRows`); null: a feature row.
  * @property {(entry: LegendEntry) => string | null} readLegendRowDefaultColorType
- *   The feature type whose default color draws the row, which the row's Color sets (OV-1281); null for
- *   any other row. It reads the rule matches: the popup asks once they are prepared.
+ *   The type whose default color draws the row and its Color sets (OV-1281), once the matches are ready.
  * @property {() => { records?: readonly RequestRecordLike[] } | null} getCommittedRequest
  *   The request of the displayed Result.
  * @property {() => { records?: readonly AlignmentDecisionLike[] } | null} readAlignmentInspector
@@ -146,7 +145,6 @@ const TRACK_ROW_COLOR_SOURCE = 'Changes this legend swatch only. The plot keeps 
  *   featureCount: number | null, featureTypes: ReadonlySet<string>, trackKind: DrawnTrack['kind'] | null,
  *   defaultColorType: string | null }} input
  *   `name`: the name the Legend draws. `trackKind`: the kind of the track whose row it is; null: a feature row.
- *   `defaultColorType`: the type whose default color the row's Color sets; null: none, or not known yet.
  */
 const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, featureTypes, trackKind, defaultColorType }) => {
   const key = text(legendEntryKey(entry));
@@ -314,10 +312,7 @@ export const createPreviewItemPopup = ({
     if (!trackKind) {
       try {
         rules = readLegendRowRules(entry);
-        if (matchesReady) {
-          featureCount = countLegendCaptionFeatures(text(legendEntryKey(entry)));
-          defaultColorType = readLegendRowDefaultColorType(entry);
-        }
+        if (matchesReady) [featureCount, defaultColorType] = [countLegendCaptionFeatures(text(legendEntryKey(entry))), readLegendRowDefaultColorType(entry)];
       } catch {
         // The rule matches are still preparing: the popup shows the color alone.
       }

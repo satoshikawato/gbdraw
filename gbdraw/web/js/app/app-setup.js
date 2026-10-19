@@ -4442,8 +4442,8 @@ export const createAppSetup = () => {
   /** @param {number} index @param {string} color */
   const updateLegendEntryColorInPopup = async (index, color) => {
     const entry = state.activeDrawing().legendEntries.value[index];
-    const type = entry && await featureActions.preparedLegendRowDefaultColorType(legendEntryKey(entry));
-    return type ? setTypeDefaultColorWithHistory(type, color) : updateLegendEntryColorShown(index, color);
+    const type = entry ? await featureActions.preparedLegendRowDefaultColorType(legendEntryKey(entry)) : null;
+    return typeof type === 'string' ? setTypeDefaultColorWithHistory(type, color) : updateLegendEntryColorShown(index, color);
   };
   const setLegendEntryStrokeColorValueWithHistory = editEditorIntent(
     'Change legend stroke color',
