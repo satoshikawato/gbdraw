@@ -110,7 +110,9 @@ test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration,
   try {
     await generate(page);
     await page.evaluate(() => window.__GBDRAW_APP__.syncLabelEditor());
-    const target = await findCurrentLabelTarget(page, { leaderCount: 1 });
+    // A Linear label with a leader draws four bound lines: its leader, the leader's tail over the underline's
+    // casing, the casing and the underline.
+    const target = await findCurrentLabelTarget(page, { leaderCount: 4 });
     expect(target).not.toBeNull();
     await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
 
@@ -123,7 +125,7 @@ test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration,
       };
     });
     await setVisibility(page, target.featureId, 'off');
-    expectUnitHidden(await inspectUnit(page, target.featureId), 1);
+    expectUnitHidden(await inspectUnit(page, target.featureId), 4);
     expect(await labelGeometry(page)).toEqual(geometryBefore);
     expect(await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
@@ -137,10 +139,10 @@ test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration,
     await download(page, 'Save Session', saved);
     fresh = await load(browser, saved);
     await fresh.evaluate(() => window.__GBDRAW_APP__.syncLabelEditor());
-    expectUnitHidden(await inspectUnit(fresh, target.featureId), 1);
+    expectUnitHidden(await inspectUnit(fresh, target.featureId), 4);
     await fresh.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
     await setVisibility(fresh, target.featureId, 'default');
-    expectUnitVisible(await inspectUnit(fresh, target.featureId), 1);
+    expectUnitVisible(await inspectUnit(fresh, target.featureId), 4);
     await setVisibility(fresh, target.featureId, 'off');
     await generate(fresh);
     const regenerated = await inspectUnit(fresh, target.featureId);
@@ -174,7 +176,7 @@ test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration,
 
     await setVisibility(page, target.featureId, 'default');
     const restored = await inspectUnit(page, target.featureId);
-    expectUnitVisible(restored, 1);
+    expectUnitVisible(restored, 4);
     expect(restored.override).toBeUndefined();
 
     const autoCounters = await page.evaluate(async () => {
@@ -186,7 +188,7 @@ test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration,
       };
     });
     await setVisibility(page, target.featureId, 'off');
-    expectUnitHidden(await inspectUnit(page, target.featureId), 1);
+    expectUnitHidden(await inspectUnit(page, target.featureId), 4);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(true);
     await expect.poll(() => page.evaluate(() => ({
       processing: window.__GBDRAW_APP__.labelReflowProcessing,
@@ -456,10 +458,11 @@ test('same label text in two Linear records changes only the selected exact iden
     expect(targets).toHaveLength(2);
     expect(new Set(targets.map(({ featureId }) => featureId)).size).toBe(2);
     expect(new Set(targets.map(({ text }) => text)).size).toBe(1);
-    expect(targets.map(({ leaderCount }) => leaderCount)).toEqual([1, 1]);
+    // Leader, its tail over the underline's casing, the casing and the underline.
+    expect(targets.map(({ leaderCount }) => leaderCount)).toEqual([4, 4]);
     await setVisibility(page, targets[0].featureId, 'off');
-    expectUnitHidden(await inspectUnit(page, targets[0].featureId), 1);
-    expectUnitVisible(await inspectUnit(page, targets[1].featureId), 1);
+    expectUnitHidden(await inspectUnit(page, targets[0].featureId), 4);
+    expectUnitVisible(await inspectUnit(page, targets[1].featureId), 4);
     const embedded = await findCurrentLabelTarget(page, { leaderCount: 0 });
     expect(embedded).not.toBeNull();
     await setVisibility(page, embedded.featureId, 'off');

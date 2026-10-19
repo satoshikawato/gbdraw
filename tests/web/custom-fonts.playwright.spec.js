@@ -380,3 +380,64 @@ test('Choose installed font… lists, searches, and loads an installed family, a
   await expect(picker).toHaveCount(0);
   await expect(select).toHaveValue(`'${INSTALLED}', serif`);
 });
+
+// The PDF draws each label once (its halo stays in the SVG, LP-D102) and a
+// centred or end-anchored text where the SVG draws it: svg2pdf measured the
+// anchor with the browser, which knows the PDF face under no name, and drew
+// long lambda labels up to 30 px right (OV-1303).
+test('PDF export draws each label once, centred on its SVG anchor', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  await openApp(page);
+  await page.locator('input[type="file"][accept^=".json,"]').setInputFiles(resolve('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'));
+  await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
+  await generateAndWaitForResult(page);
+  const svgFile = testInfo.outputPath('lambda.svg');
+  writeFileSync(svgFile, await page.evaluate(() => String(window.__GBDRAW_APP__.results[0].content)));
+  const pdf = await exported(page, 'downloadPDF');
+  const pdfFile = testInfo.outputPath('lambda.pdf');
+  writeFileSync(pdfFile, pdf.bytes);
+  // Per anchored SVG text: the PDF runs of its characters, and the distance (px) between the PDF run's
+  // anchor point (its left x plus its share of its width in the PDF face) and the SVG anchor x.
+  const report = JSON.parse(execFileSync('python', ['-c', `
+import json, re, sys, xml.etree.ElementTree as ET
+from fontTools.ttLib import TTFont
+svg, pdf = sys.argv[1:3]
+font = TTFont("gbdraw/data/LiberationSans-Regular.ttf")
+order, units, advance = font.getGlyphOrder(), font["head"].unitsPerEm, font["hmtx"]
+by_glyph = {}
+for code, name in font.getBestCmap().items():
+    by_glyph.setdefault(name, chr(code))
+runs = {}
+for x, glyphs in re.findall(r"[-\\d.]+ [-\\d.]+ [-\\d.]+ [-\\d.]+ ([-\\d.]+) [-\\d.]+ Tm\\n<([0-9a-f]*)> Tj", open(pdf, "rb").read().decode("latin1")):
+    names = [order[int(glyphs[i:i + 4], 16)] for i in range(0, len(glyphs), 4)]
+    runs.setdefault("".join(by_glyph.get(name, "?") for name in names), []).append((float(x) / 0.75, sum(advance[name][0] for name in names) / units))
+root = ET.parse(svg).getroot()
+parents = {child: parent for parent in root.iter() for child in parent}
+def left(element):
+    x = 0.0
+    while element is not None:
+        x += sum(float(dx) for dx, _ in re.findall(r"translate\\(([^,)\\s]+)[,\\s]+([^)]+)\\)", element.get("transform", "")))
+        element = parents.get(element)
+    return x
+texts = [text for text in root.iter("{http://www.w3.org/2000/svg}text") if text.get("data-label-feature-id")]
+halos = {use.get("href", use.get("{http://www.w3.org/1999/xlink}href")) for use in root.iter("{http://www.w3.org/2000/svg}use")}
+same = {}
+for text in texts:
+    same[text.text] = same.get(text.text, 0) + 1
+offsets = []
+for text in texts:
+    share = {"start": 0.0, "middle": 0.5, "end": 1.0}[text.get("text-anchor", "start")]
+    anchor = left(text) + float(text.get("x", "0"))
+    offsets.append(min((abs(x + share * width * float(text.get("font-size")) - anchor) for x, width in runs.get(text.text, [])), default=None))
+print(json.dumps({
+    "labels": len(texts),
+    "haloed": sum(f"#{text.get('id')}" in halos for text in texts),
+    "runsPerLabel": sorted({len(runs.get(text.text, [])) / same[text.text] for text in texts}),
+    "maxOffset": max((offset for offset in offsets if offset is not None), default=None),
+}))
+`, svgFile, pdfFile], { cwd: resolve('.'), encoding: 'utf8' }));
+  expect(report.labels).toBeGreaterThan(50);
+  expect(report.haloed, 'labels with a halo in the SVG').toBe(report.labels);
+  expect(report.runsPerLabel, 'PDF text runs per label').toEqual([1]);
+  expect(report.maxOffset, 'PDF anchor offset (px)').toBeLessThan(0.05);
+});

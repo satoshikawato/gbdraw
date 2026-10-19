@@ -1,5 +1,6 @@
 // @ts-check
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
+import { LABEL_STYLE_CHOICES } from '../mode-profiles.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
@@ -547,6 +548,9 @@ const readLinearLabelVisibility = textChoice(LINEAR_LABEL_VISIBILITY_MODES, 'aut
 /** `adv`, in the order the rows depend on each other. @type {readonly FieldRow[]} */
 const ADV_ROWS = Object.freeze([
   row('label_rendering', normalizeLabelRendering),
+  // A value of no style reads as no line and a halo, and is reported (labels.<mode>.line, .protection).
+  row('label_line', textChoice(LABEL_STYLE_CHOICES.line, 'none')),
+  row('label_protection', textChoice(LABEL_STYLE_CHOICES.protection, 'halo')),
   row('label_placement', textChoice(LINEAR_LABEL_PLACEMENTS, 'auto', { aliases: LINEAR_LABEL_PLACEMENT_ALIASES })),
   row('multi_record_size_mode', textChoice(CIRCULAR_MULTI_RECORD_SIZE_MODES, 'auto', { aliases: CIRCULAR_MULTI_RECORD_SIZE_MODE_ALIASES })),
   row('circular_label_placement', textChoice(['radial', 'horizontal'], 'horizontal')),

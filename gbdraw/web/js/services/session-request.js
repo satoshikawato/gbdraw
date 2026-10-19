@@ -119,6 +119,7 @@ import {
   comparisonFiltersForMode,
   effectiveLinearAxisColor,
   isModeProfileDefault,
+  labelStyleForMode,
   linearAxisRulerApplies,
   MODE_DEFAULT_FEATURE_TYPES,
   modeProfile,
@@ -691,6 +692,11 @@ const MODE_LABEL_SCOPE_PATHS = Object.freeze({
   circular: 'labels.circular.scope',
   linear: 'labels.linear.scope'
 });
+// The feature label style of a drawing's mode: its `adv` field and config path.
+const MODE_LABEL_STYLE_PATHS = Object.freeze({
+  circular: Object.freeze({ label_line: 'labels.circular.line', label_protection: 'labels.circular.protection' }),
+  linear: Object.freeze({ label_line: 'labels.linear.line', label_protection: 'labels.linear.protection' })
+});
 
 /** @type {Readonly<Record<string, string>>} */
 const CIRCULAR_LABEL_SCOPES = Object.freeze({ none: 'none', out: 'outer', both: 'both' });
@@ -783,6 +789,7 @@ export const managedConfigOverridePathsForMode = (mode) => {
     Object.values(CONFIG_OVERRIDE_PATHS).filter((path) => !excluded.has(path))
   );
   paths.add(MODE_LABEL_SCOPE_PATHS[mode]);
+  Object.values(MODE_LABEL_STYLE_PATHS[mode]).forEach((path) => paths.add(path));
   for (const path of [
     SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth,
     SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth,
@@ -1719,6 +1726,11 @@ const buildConfigOverrides = (
       : Boolean(form.show_skew),
     [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(depthRequested),
     [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
+    // The mode's packaged style is left unstated, as a request that predates the setting leaves it.
+    [MODE_LABEL_STYLE_PATHS[state.mode.value].label_line]:
+      adv.label_line === labelStyleForMode(state.mode.value).label_line ? null : adv.label_line,
+    [MODE_LABEL_STYLE_PATHS[state.mode.value].label_protection]:
+      adv.label_protection === labelStyleForMode(state.mode.value).label_protection ? null : adv.label_protection,
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: leaf(CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp, adv.feature_overlap_tolerance_bp),
@@ -4348,6 +4360,7 @@ const projectFullConfigOverrides = (config, mode) => {
   const paths = new Set(Object.values(CONFIG_OVERRIDE_PATHS));
   const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
   paths.add(labelScopePath);
+  Object.values(MODE_LABEL_STYLE_PATHS[mode]).forEach((path) => paths.add(path));
   Object.values(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS).forEach((path) => {
     paths.add(`${path}.short`);
     paths.add(`${path}.long`);
@@ -4406,6 +4419,9 @@ const projectCanonicalConfigOverrides = (overrides, mode) => {
   const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
   if (Object.prototype.hasOwnProperty.call(overrides, labelScopePath)) {
     projected.label_scope = overrides[labelScopePath];
+  }
+  for (const [field, path] of Object.entries(MODE_LABEL_STYLE_PATHS[mode])) {
+    if (Object.prototype.hasOwnProperty.call(overrides, path)) projected[field] = overrides[path];
   }
   for (const [semanticName, path] of Object.entries(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS)) {
     const value = sharedLengthOverrideValue(overrides, path);
@@ -5535,6 +5551,9 @@ export const projectCanonicalSessionRequest = ({
     window_size: options.window ?? null,
     step_size: options.step ?? null,
     label_rendering: overrides.label_rendering || 'auto',
+    // A request without a label style drew its mode's default, which Load gives a missing field.
+    ...(Object.hasOwn(overrides, 'label_line') ? { label_line: overrides.label_line } : {}),
+    ...(Object.hasOwn(overrides, 'label_protection') ? { label_protection: overrides.label_protection } : {}),
     circular_label_placement: renderRequest.mode === 'circular'
       ? (overrides.circular_label_placement || 'horizontal')
       : 'horizontal',

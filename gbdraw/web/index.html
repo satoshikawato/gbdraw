@@ -5152,6 +5152,27 @@
                                                 <option value="external_only">External Only</option>
                                             </select>
                                         </div>
+                                        <div>
+                                            <span class="input-label text-[10px] mb-0">
+                                                Label Line
+                                                <help-tip id="help-label-label-line" text="Underline draws a line under each label with a leader, joined to its leader. None draws no line."></help-tip>
+                                            </span>
+                                            <select v-model="adv.label_line" aria-label="Label Line" aria-describedby="help-label-label-line" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                                <option value="none">None</option>
+                                                <option value="under">Underline</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <span class="input-label text-[10px] mb-0">
+                                                Label Protection
+                                                <help-tip id="help-label-label-protection" text="Halo draws a white outline around the letters of each label with a leader, so leaders behind them are cut away. Box draws a white box behind the letters. None draws neither."></help-tip>
+                                            </span>
+                                            <select v-model="adv.label_protection" aria-label="Label Protection" aria-describedby="help-label-label-protection" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                                <option value="none">None</option>
+                                                <option value="halo">Halo</option>
+                                                <option value="box">Box</option>
+                                            </select>
+                                        </div>
                                         <template v-if="mode === 'circular'">
                                             <div>
                                                 <span class="input-label text-[10px] mb-0">
