@@ -1484,13 +1484,32 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
 @pytest.mark.parametrize(
     "slots",
     [
+        # A split features slot is an overlay but takes its band: the span's letters lie on its feature lanes.
+        ("features:features@lane_direction=split", "gc:dinucleotide_content@side=inside,r=0.91,w=18px",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor=true,z=5"),
+        # A ticks slot takes its tick labels' band too: the letters lie on the scale numbers.
+        ("ticks:ticks@side=outside,r=1.14", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
+    ],
+    ids=["split-features", "tick-labels"],
+)
+def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str, ...]) -> None:
+    with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
+        _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
+
+
+@pytest.mark.parametrize(
+    "slots",
+    [
         ("ring:dinucleotide_content@side=outside", "out:annotations@side=outside,set_id=regions,w=20px", "features:features",
          "in:annotations@side=inside,set_id=regions,w=20px", "gc:dinucleotide_content@side=inside"),
+        ("features:features@lane_direction=split", "gc:dinucleotide_content@side=inside,w=18px",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor=true,z=5"),
+        ("ticks:ticks@side=outside", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
         # An overlay that spans nothing keeps no room; its labels are drawn over the tracks around it (OV-1359).
         ("o1:dinucleotide_content@side=outside", "features:features", "gc:dinucleotide_content@side=inside",
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,cover_anchor=false,z=5"),
     ],
-    ids=["automatic-radii", "overlay-spanning-nothing"],
+    ids=["automatic-radii", "split-features-automatic", "tick-labels-automatic", "overlay-spanning-nothing"],
 )
 def test_circular_region_labels_with_their_room_do_not_warn(slots: tuple[str, ...]) -> None:
     with warnings.catch_warnings():

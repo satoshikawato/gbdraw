@@ -190,6 +190,16 @@ class CircularResolvedSlot:
         return float(self.reserved_band_px.outer_px) if self.reserved_band_px is not None else 0.0
 
     @property
+    def own_reserved_band_px(self) -> RadialBand | None:
+        """The band the slot itself takes: its drawing with its tick or axis labels and its own labels' room, without
+        the room of the span labels past it, which never moves the slot itself."""
+
+        reserved = self.reserved_band_px
+        if reserved is None or self.span_label_room_px <= 0.0:
+            return reserved
+        return RadialBand(reserved.inner_px, float(reserved.outer_px) - self.span_label_room_px)
+
+    @property
     def draw_width_px(self) -> float:
         return float(self.draw_band_px.width_px) if self.draw_band_px is not None else 0.0
 

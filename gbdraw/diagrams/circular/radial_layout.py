@@ -768,15 +768,6 @@ def _with_span_label_room(intent: _RadialSlotIntent, resolved: CircularResolvedS
     )
 
 
-def _own_reserved_band(resolved: CircularResolvedSlot) -> RadialBand | None:
-    """The slot's reserved band without the room of the span labels past it, which never moves the slot itself."""
-
-    reserved = resolved.reserved_band_px
-    if reserved is None or resolved.span_label_room_px <= 0.0:
-        return reserved
-    return RadialBand(reserved.inner_px, float(reserved.outer_px) - resolved.span_label_room_px)
-
-
 def _bound_label_room(
     room: AnnotationLabelRoom | None, axis: CircularAxisLayout, slot: NormalizedCircularTrackSlot
 ) -> Callable[[RadialBand], float] | None:
@@ -1104,7 +1095,7 @@ def _try_measure_inside_interval(
                 depth_config=depth_config,
                 compressed=compressed,
             )
-            bands = [band for band in (resolved.packing_band_px, _own_reserved_band(resolved)) if band is not None]
+            bands = [band for band in (resolved.packing_band_px, resolved.own_reserved_band_px) if band is not None]
             if not bands:
                 return resolved
             min_inner = min(float(band.inner_px) for band in bands)
@@ -1238,7 +1229,7 @@ def _measure_anchored_inside(
         depth_config=depth_config,
         compressed=compressed,
     )
-    bands = [band for band in (resolved.packing_band_px, _own_reserved_band(resolved)) if band is not None]
+    bands = [band for band in (resolved.packing_band_px, resolved.own_reserved_band_px) if band is not None]
     reserved_inner = placement_window.inner_px if placement_window.reserved_inner_px is None else placement_window.reserved_inner_px
     if any(float(band.outer_px) > float(placement_window.outer_px) + LAYOUT_EPSILON for band in bands):
         return None
@@ -2358,7 +2349,7 @@ def _resolve_circular_radial_layout(
             if resolved.reserved_band_px is not None:
                 anchored_blockers.append((intent.slot_id, resolved.reserved_band_px))
             continue
-        pinned_band = resolved.packing_band_px if intent.label_room is not None else _own_reserved_band(resolved)
+        pinned_band = resolved.packing_band_px if intent.label_room is not None else resolved.own_reserved_band_px
         if _slot_reserves(intent) and pinned_band is not None:
             conflict = _reserved_overlap_any(pinned_band, pinned_occupied)
             if conflict is not None:

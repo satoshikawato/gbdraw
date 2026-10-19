@@ -361,12 +361,14 @@ label or line in Circular is still drawn without a warning.
 Circular keeps room for region labels beyond their annotation slot, or beyond
 the slots a span covers, and places the other tracks outside that room. A
 track with a set radius (`r=`) keeps it, so where set radii leave no room the
-labels are drawn on the track. Each label whose letters lie on another track's
-band counts as one region label on another track (`1 region label on another
-track`). This only warns: the Web app shows "Region labels lie on other
-tracks: the set track radii leave them no room (N)." over the figure, with no
-**Choose a fix** button. An overlay that spans nothing keeps no room, and its
-labels are not counted.
+labels are drawn on the track. Each label whose letters reach more than 0.5 px
+into the band another track takes (its drawing, with its tick or axis labels
+and its own labels' room) counts as one region label on another track
+(`1 region label on another track`). This only warns: the Web app shows
+"Region labels lie on other tracks: the set track radii leave them no room
+(N)." over the figure, with no **Choose a fix** button. Annotation overlays
+take no band, and an overlay that spans nothing keeps no room, so its labels
+are not counted.
 
 A Linear region label moves along its region to a place clear of the feature
 labels, leader lines, record names and definition text, other records of its

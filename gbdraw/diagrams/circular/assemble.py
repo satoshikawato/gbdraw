@@ -731,25 +731,34 @@ REGION_TRACK_MIN_OVERLAP_PX = 0.5
 def _region_labels_on_other_tracks(
     radial_layout: CircularRadialLayout, labels: Mapping[str, Sequence[CircularAnnotationLabel]]
 ) -> int:
-    """How many annotation labels' letters lie on the drawn band of a track their slot is not drawn on.
+    """How many annotation labels' letters lie on the band another track takes.
 
     The layout keeps a room for these letters beyond an inside or outside
     annotation slot and beyond a span overlay (OV-1192), so they lie on a
     track only where set radii leave no room (OV-1207); the figure is then
-    drawn and warns (LP-D86). An overlay that spans nothing has no room: its
-    labels are drawn over the tracks around it.
+    drawn and warns (LP-D86). A track takes the band the layout keeps for it
+    (``own_reserved_band_px``): its drawing with its tick or axis labels and
+    its own labels' room. Annotation overlays draw over other tracks and take
+    none, and an overlay that spans nothing has no room: its labels are drawn
+    over the tracks around it.
     """
 
     def overlaps(inner: float, outer: float, band: RadialBand) -> bool:
         return min(outer - band.inner_px, band.outer_px - inner) > REGION_TRACK_MIN_OVERLAP_PX
 
-    tracks = [slot.draw_band_px for slot in radial_layout.slots if slot.side != "overlay" and slot.draw_band_px is not None]
+    tracks = [
+        (slot, band)
+        for slot in radial_layout.slots
+        if slot.draw_band_px is not None
+        and not (slot.renderer == "annotations" and slot.side == "overlay")
+        and (band := slot.own_reserved_band_px) is not None
+    ]
     count = 0
     for slot in radial_layout.slots:
         own = slot.draw_band_px
         if own is None or (slot.side == "overlay" and not slot.spans_slots):
             continue
-        others = [band for band in tracks if band is not own and not overlaps(own.inner_px, own.outer_px, band)]
+        others = [band for track, band in tracks if track is not slot and not overlaps(own.inner_px, own.outer_px, band)]
         count += sum(
             1 for label in labels.get(slot.id, ()) if any(overlaps(*label.ink_radii, band) for band in others)
         )
