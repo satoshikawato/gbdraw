@@ -219,9 +219,10 @@ is drawn in three cases: the feature is hidden, the feature is drawn as
 `underlay`, or, with `labels.rendering = "embedded_only"`, the label does not
 fit inside its feature. Such a row shows a label only once one of these
 changes. The Web
-feature popup writes these rows for **Label visibility** **On** and **Off**. A
-label text edit uses `locus_tag`, `gene`, or `record_location` when one of them
-identifies the feature, and falls back to `hash` only when none does.
+feature popup's **Label visibility** and label text are feature overrides, not
+label-override rows; see [Feature override
+table](input-formats-and-tsv-schemas.md#feature-override-table). **Export Feature
+Edits TSV** writes them as `--feature_override_table` rows.
 
 Feature visibility actions are `show`, `off`, and `exclude_matching`.
 `exclude_matching` keeps the feature visible but removes it from protein-search

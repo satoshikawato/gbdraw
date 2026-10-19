@@ -122,7 +122,7 @@ Use `render_session()` for a supported saved session and
 | `build_session_document()` | resolve one request, or several drawings, and embed their resources in a session document |
 | `save_session_document()` | build and write the document |
 | `load_session_document()` | parse and validate a saved document |
-| `upgrade_session_document()` | return a Session 31–44 in the current version without rendering it, with a warning for each dropped Result |
+| `upgrade_session_document()` | return a Session 31–44, 46, or 47 in the current version without rendering it, with a warning for each dropped Result |
 | `materialize_session()` | expose embedded resources as temporary paths |
 | `session_to_request()` | convert one drawing of a materialized session to a typed request |
 | `with_request_output()` | replace output settings without mutating the request |
@@ -226,7 +226,8 @@ Results are dropped until the next render. A drawing whose Results are dropped
 gets one line in `warnings` that names each dropped Result, and the line is
 logged as a warning. Render the drawing and save the Session to write new
 Results. Sessions 27–30 have no canonical request and raise
-`SessionVersionError`.
+`SessionVersionError`. A Session 46 or 47 keeps its drawings and is written as
+Session 48 ([compatibility](session-and-request-compatibility.md)).
 
 Request schemas 6 and 7 record each input's runtime cardinality. This lets a
 selectorless source retain `RecordCardinality.ALL` until record planning expands

@@ -59,7 +59,7 @@ gbdraw -h
 The source conda recipe declares native `losat ==0.1.0` as a runtime
 dependency. A gbdraw package built from that recipe installs lowercase
 `bin/losat` into the same environment on `linux-64`, `osx-64`, and
-`osx-arm64`; protein comparisons select that executable automatically without
+`osx-arm64`; `--losat` comparisons select that executable automatically without
 running `gbdraw setup-losat`. Check the published package metadata because the
 recipe in this repository does not establish which gbdraw build is available
 on the channel.
@@ -85,8 +85,9 @@ python -m pip install gbdraw
 gbdraw -h
 ```
 
-The PyPI package does not declare or bundle native LOSAT. Protein comparisons
-are optional; install the pinned native release only when they are needed:
+The PyPI package does not declare or bundle native LOSAT. Any `--losat` run on
+the command line or in Python needs native LOSAT or NCBI BLAST+ on `PATH`;
+install the pinned native release when you need it:
 
 ```bash
 gbdraw setup-losat

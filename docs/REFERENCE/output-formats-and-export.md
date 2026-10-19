@@ -15,8 +15,9 @@
 
 SVG is the base render. Static SVG uses `<prefix>.svg`; Interactive SVG uses
 `<prefix>.interactive.svg`. A session uses `.gbdraw-session.json` or
-`.gbdraw-session.json.gz`. The command line writes raw protein-search rows to
-`losatp.raw.tsv` inside the directory supplied to `--losat_output_dir`.
+`.gbdraw-session.json.gz`. The command line writes the raw LOSAT rows of a run inside the
+directory supplied to `--losat_output_dir`: `losatp.raw.tsv` for LOSATP, or one
+TSV per record pair and `comparisons.tsv` for LOSATN and TLOSATX.
 
 Command-line `-f` or `--format` and Python format arguments use `svg`,
 `interactive_svg`, `png`, `pdf`, `eps`, or `ps`.

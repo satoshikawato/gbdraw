@@ -436,16 +436,14 @@ For a small Linear comparison, download the complete GenBank records
 and [DE3 (NC_042057.1)](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_042057.1&rettype=gbwithparts&retmode=text).
 Save them as `NC_001416.1.gb` and `NC_042057.1.gb`. Check the VERSION lines and
 complete lengths, 48,502 and 42,925 bp, before uploading them to two Linear File
-cards. A sequence version does not freeze its annotation table; the capture's
-exact source retrieval and hashes are recorded in the
-[reproduction receipt](../capture/linear-live-edit-source-verification.json).
+cards. A sequence version does not freeze its annotation table.
 
-1. Open **Advanced comparison and layout**, enable **Arrange in rows**, and put
+1. Open **Advanced comparison and layout**, check that **Arrange in rows** is on, and put
    both records in row 1. The Auto explanation describes hiding Accession and
    Length throughout the next generated diagram. Follow **Record Labels:
    Accession** to its unchanged Auto selection. Choose Show for both fields,
    then put DE3 in row 2 to return to a stacked comparison.
-2. In **Linear Layout**, turn **Lock Definition Column** OFF and back ON.
+2. In **Layout**, turn **Lock Definition Column** OFF and back ON.
    Choose **Run LOSAT**, keep LOSATN, and enable all labels under **Labels**.
    To reproduce the figure, set **Label Font Size** and Record Labels' **Default
    font size** to `24`, and upload `cds_gene_qualifier_priority.tsv` as the
@@ -473,8 +471,8 @@ CDS	gene
 
 The figure uses a gene-label priority rule and uses larger label fonts for
 readability. Use preview zoom and pan to inspect individual features. The
-[documentation capture instructions](../capture/README.md#linear-result-and-draft-checkpoints)
-regenerate the image and verify all checkpoints through the UI.
+documentation capture instructions regenerate the image and verify all
+checkpoints through the UI.
 
 ## Circular source records and one-record settings
 
@@ -624,7 +622,7 @@ When every record is off, **Generate Diagram** shows "Turn on at least one
 record to draw." LOSAT keeps the whole subject File as its E-value database and
 runs pairs only between records that are on.
 
-Turn on **Arrange in rows** to assign records to rows. Record-card order is the
+**Arrange in rows** is on by default; with it on, you assign records to rows. Record-card order is the
 left-to-right order within a row, and **Record gap (px)** separates records in
 that row. Records that share a row use one bp-per-pixel scale. Row placement is
 independent of the comparison plan: **No comparison** draws the records without
@@ -653,7 +651,7 @@ Loading a session preserves its saved ON or OFF selection and its saved Result.
 Supported older sessions that omitted the setting keep their former OFF meaning.
 The CLI and Python API still default to OFF when the option is omitted.
 
-**Show Replicon** controls one automatic name per record, taking the first available
+The **Show** box of the **Replicon** row under **Titles & Record Labels → Record Labels** controls one automatic name per record, taking the first available
 source qualifier in the order chromosome, plasmid, organelle. It is off by default.
 Automatic names use the **Replicon** line style; explicit subtitles use **Subtitle**
 and stay visible independently, even when their text matches the automatic name.
@@ -668,7 +666,7 @@ the entire diagram. Turning **Arrange in rows** off ignores dormant shared-row
 assignments. Changing the layout recalculates Auto but never rewrites an explicit
 Show or Hide selection. **Replicon** stays a separate checkbox.
 
-The Auto explanation in **Linear Layout** and **Record Labels** names the affected
+The Auto explanation in **Layout** and **Record Labels** names the affected
 fields. It describes the current Result when that Result already shows or hides
 them as Auto now would, and otherwise the next successful Generate. Select **Record Labels: Accession** or **Record Labels: Length /
 Coordinates** beside that explanation to open the label controls and focus the
@@ -699,6 +697,7 @@ definitions, and legends do not change biological coordinates.
 | Comparison | No rings until configured | No comparison until a command creates a plan |
 | Pairwise match style | Ribbon | Curve |
 | Accession / Length visibility | Not applicable | Auto · Shown |
+| Arrange in rows | Not applicable | On |
 | Lock Definition Column | Not applicable | On |
 
 Loading a session restores its saved values instead of applying these
@@ -1249,6 +1248,7 @@ changes. They also stay when crop, reverse complement, record order, or a second
 copy of the record changes how the feature is drawn. Every drawn copy of the
 feature shows the edit. Hiding a feature hides its label in the current Result, as Generate does;
 with **Auto Reflow** on, the remaining labels are placed again.
+**Auto Reflow** (Editor) places the labels again after each later label, visibility, or color edit. Turning it on does not move the labels already drawn; they are placed again at the next such edit or **Generate Diagram**.
 
 The Features list and **Search features** list the displayed Result's features
 of the types selected in **Features** at the last Generate, every feature the
@@ -1510,8 +1510,8 @@ in the page reading order. Each tip adds one tab stop.
 
 The Linear comparison command group is named **Set all adjacent comparisons**.
 Its buttons are named **Set no comparison**, **Run LOSAT for all adjacent
-pairs**, and **Use uploaded BLAST TSV for all adjacent pairs**. The buttons do
-not expose pressed state because they are commands. The separate current-plan
+pairs**, and **Use uploaded BLAST TSV for all adjacent pairs**. The button
+that matches the current plan has `aria-pressed="true"`. The separate current-plan
 status, native disclosure summaries, record uploaders, and pair actions stay keyboard reachable.
 
 ### Color and Label patterns
