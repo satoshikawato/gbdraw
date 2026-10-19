@@ -12,7 +12,7 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 48 stores protein results in the search frame and what each file card loaded
+## Unreleased: Session 48 stores protein results in the search frame, what each file card loaded, and the feature label style
 
 Session version 48 stores the protein results of a reverse-complemented Linear
 record in the record's search frame (the selected and cropped record on its
@@ -101,6 +101,20 @@ request as that card's rows (`FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION` in
 `file-card-imports-circular.v48.gbdraw-session.json.gz` (the Web writer after
 all five cards and hand edits, D-ORIGIN-2) is the positive fixture. No other
 field changed.
+
+Session 48 (no new version: the Web app of `main` drops the two settings as
+unknown and draws its own label style) stores the feature label style of each
+diagram mode as `adv.label_line` (`none`, `under`) and `adv.label_protection`
+(`none`, `halo`, `box`) in each mode's slice (`modes.<m>.config.adv`), the
+`copy` row of the mode-scoped registry. The canonical request carries them as
+`labels.<mode>.line` and `labels.<mode>.protection` only when they differ from
+the mode's packaged style, so a request of the default style is the request an
+earlier writer wrote (Gallery publication compares it unchanged). A Session without them
+loads with the packaged defaults of each mode (Linear `under` and `halo`,
+Circular `none` and `halo`, `gbdraw.labels.label_style`). The config value
+`labels.stroke_width` is removed: a stored config that holds it loads and draws
+the new leader width (0.07 em, at least 1 px); an override of it fails with the
+unknown-path error.
 
 ## Unreleased: Session 47 keys the Legend edits by the row key
 

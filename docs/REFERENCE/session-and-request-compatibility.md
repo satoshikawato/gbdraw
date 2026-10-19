@@ -375,6 +375,11 @@ committed render request and generated Result of each diagram mode, and
 supported editor and comparison state. Replay does not depend on the original file path remaining valid.
 Treat the session as sensitive when its embedded source data is sensitive.
 
+Each diagram mode keeps its own feature label style, **Label Line** and
+**Label Protection** (`--label_line`, `--label_protection`). A Session saved
+before they existed loads with each mode's defaults: Linear Underline and Halo,
+Circular None and Halo.
+
 An embedded resource may declare `checksum`, the SHA-256 digest of its bytes as
 `sha256:<hex>` or as bare hex. gbdraw does not add one. The web app keeps it
 when it saves the session again, and gbdraw rejects a resource whose bytes do
@@ -849,6 +854,12 @@ no alias. Field names stored inside a Session file do not change.
 | Circular `--conservation_fasta` | `--conservation_sequence` (FASTA, GenBank, or DDBJ); recorded invocations are rewritten |
 | Circular `--conservation_table` column `comparison_fasta` | `comparison_sequence`; Sessions store the resolved table, so they need no rewrite |
 | `CircularDiagramOptions(conservation_fasta_files=...)` | `conservation_sequence_files`; the Session field stays `conservationFastaFiles` |
+
+The config value `labels.stroke_width` (the leader line width) is removed:
+leaders and underlines are 0.07 em of the label font size wide, at least 1 px.
+A `config_overrides` entry or `--config_override` for it fails with the
+unknown-path error. A Session or stored config that still holds it loads, and
+its diagram draws the new width.
 
 Long options of more than one word use underscores, with two aliases that still
 work: `--annotation-table` for `--annotation_table`, and

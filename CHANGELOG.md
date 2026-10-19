@@ -12,6 +12,30 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Feature label style (CLI, Python, web app): a feature label with a leader
+  line has a line setting and a protection setting per diagram mode,
+  `--label_line {none,under}` and `--label_protection {none,halo,box}`
+  (config `labels.<mode>.line` and `.protection`; web app **Label Line** and
+  **Label Protection** under **Labels**). Linear draws an underline joined to
+  the leader and a white halo around the letters by default; Circular draws a
+  halo. Leaders and underlines are 0.07 em wide, at least 1 px, in both modes.
+  - In Linear the underline takes no room in its label row, so labels keep
+    their rows and the figure its size. Region labels keep off underlines as
+    off the letters; a region label that meets one moves the feature label to
+    another row, or is drawn and warned about.
+  - Each Linear underline lies on a white casing that cuts other labels'
+    leaders where they cross it, and stops 0.12 em inside the letters at each
+    end, so neighbouring underlines stay apart.
+  - Neighbouring Linear feature labels in one label row keep at least 0.25 em
+    apart, so two names no longer read as one word; a label that would come
+    closer takes another row at the same position.
+  - The web app's PDF export draws labels without their halos, so each label
+    is drawn and extracted once, and draws centred and end-aligned text where
+    the SVG draws it (it was shifted right).
+  - `labels.stroke_width` is removed. An override of it fails with the
+    unknown-path error. A saved Session keeps its saved diagram until the next
+    Generate, which draws the new style.
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.
