@@ -40,6 +40,10 @@ await Promise.all([
     join(tempRoot, 'js', 'utils', 'optional-positive-number.js')
   ),
   cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'i18n.js'),
+    join(tempRoot, 'js', 'utils', 'i18n.js')
+  ),
+  cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'download-names.js'),
     join(tempRoot, 'js', 'utils', 'download-names.js')
   )

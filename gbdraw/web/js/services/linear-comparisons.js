@@ -1,5 +1,6 @@
 // @ts-check
 import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
+import { msg } from '../utils/i18n.js';
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 /** @typedef {(leaf: FieldLeaf) => void} PlanLossCollector Told each stored value the plan does not use as stored. */
 /**
@@ -434,30 +435,30 @@ export const validateLinearComparisonEdges = ({
   (Array.isArray(edges) ? edges : []).forEach((edge) => {
     const edgeKey = linearComparisonEdgeKey(edge?.queryUid, edge?.subjectUid);
     if (seen.has(edgeKey)) {
-      issues.push(validationIssue('duplicate', 'Selected comparisons cannot contain the same directed pair more than once.', edge));
+      issues.push(validationIssue('duplicate', msg('Selected comparisons cannot contain the same directed pair more than once.'), edge));
     }
     seen.add(edgeKey);
 
     const queryUid = cleanUid(edge?.queryUid);
     const subjectUid = cleanUid(edge?.subjectUid);
     if (!validUids.has(queryUid) || !validUids.has(subjectUid)) {
-      issues.push(validationIssue('missing-uid', 'A selected comparison references a record that is no longer available.', edge));
+      issues.push(validationIssue('missing-uid', msg('A selected comparison references a record that is no longer available.'), edge));
       return;
     }
     if (queryUid === subjectUid) {
-      issues.push(validationIssue('self', 'A comparison cannot connect a record to itself.', edge));
+      issues.push(validationIssue('self', msg('A comparison cannot connect a record to itself.'), edge));
       return;
     }
     // Both uids are valid here, and every valid uid has a row (linearComparisonRowTopology).
     const queryRow = /** @type {number} */ (rowByUid.get(queryUid));
     const subjectRow = /** @type {number} */ (rowByUid.get(subjectUid));
     if (queryRow === subjectRow) {
-      issues.push(validationIssue('same-row', 'Comparisons must connect records in different rows.', edge));
+      issues.push(validationIssue('same-row', msg('Comparisons must connect records in different rows.'), edge));
     } else if (
       // Every valid uid has a row and every row has a position (linearComparisonRowTopology).
       Math.abs(/** @type {number} */ (rowPositionByNumber.get(queryRow)) - /** @type {number} */ (rowPositionByNumber.get(subjectRow))) !== 1
     ) {
-      issues.push(validationIssue('non-adjacent', 'Comparisons must connect adjacent rows.', edge));
+      issues.push(validationIssue('non-adjacent', msg('Comparisons must connect adjacent rows.'), edge));
     }
     if (
       normalizeSource(edge?.source, LINEAR_COMPARISON_SOURCES.UPLOAD) === LINEAR_COMPARISON_SOURCES.UPLOAD &&
@@ -465,7 +466,7 @@ export const validateLinearComparisonEdges = ({
     ) {
       issues.push(validationIssue(
         'missing-upload',
-        'Every selected uploaded comparison requires an active BLAST TSV file.',
+        msg('Every selected uploaded comparison requires an active BLAST TSV file.'),
         edge
       ));
     }
@@ -589,7 +590,7 @@ export const resolveLinearComparisonPlan = ({
   if (selectedHasLosat && normalizedProgram === 'blastp' && normalizedBlastpMode !== 'pairwise') {
     issues.push(validationIssue(
       'selected-losat-requires-pairwise',
-      'Selected LOSAT comparisons require LOSATP Pairwise mode. Similarity groups and Collinear blocks use All adjacent LOSAT.',
+      msg('Selected LOSAT comparisons require LOSATP Pairwise mode. Similarity groups and Collinear blocks use All adjacent LOSAT.'),
       null
     ));
   }
@@ -898,7 +899,7 @@ export const buildLinearComparisonTimeline = ({
       const fallbackIssues = [
         validationIssue(
           'duplicate',
-          'Selected comparisons cannot contain the same directed pair more than once.',
+          msg('Selected comparisons cannot contain the same directed pair more than once.'),
           draft
         ),
         ...issues
@@ -909,7 +910,7 @@ export const buildLinearComparisonTimeline = ({
     if (issues.length > 0 || !boundary) {
       const fallbackIssues = issues.length > 0 ? issues : [validationIssue(
         'non-adjacent',
-        'Comparisons must connect adjacent rows.',
+        msg('Comparisons must connect adjacent rows.'),
         draft
       )];
       unplacedDrafts.push({ draft, issues: fallbackIssues });

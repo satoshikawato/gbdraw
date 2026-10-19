@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-linear-comparisons-'));
 // The modules keep their js/ layout, so their relative imports resolve.
-for (const path of ['services/linear-comparisons.js', 'services/record-draw-selection.js', 'utils/download-names.js']) {
+for (const path of ['services/linear-comparisons.js', 'services/record-draw-selection.js', 'utils/download-names.js', 'utils/i18n.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', path), join(tempRoot, path));
 }
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');

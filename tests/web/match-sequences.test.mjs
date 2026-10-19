@@ -20,6 +20,11 @@ await writeFile(
   'utf8'
 );
 await writeFile(
+  join(tempDir, 'utils', 'i18n.js'),
+  await readFile('gbdraw/web/js/utils/i18n.js', 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'utils', 'color-utils.js'),
   await readFile('gbdraw/web/js/utils/color-utils.js', 'utf8'),
   'utf8'

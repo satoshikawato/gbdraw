@@ -35,7 +35,8 @@ const modulePaths = [
   'gbdraw/web/js/contracts/schema.generated.js',
   'gbdraw/web/js/services/feature-identity.js',
   'gbdraw/web/js/services/orthogroup-feature-metadata.js',
-  'gbdraw/web/js/services/runtime-test-hooks.js'
+  'gbdraw/web/js/services/runtime-test-hooks.js',
+  'gbdraw/web/js/utils/i18n.js'
 ];
 
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
