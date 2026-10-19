@@ -1489,8 +1489,12 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor=true,z=5"),
         # A ticks slot takes its tick labels' band too: the letters lie on the scale numbers.
         ("ticks:ticks@side=outside,r=1.14", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
+        # A span to an overlay plot inside it keeps its room past the skew ring, so the set radius takes it.
+        ("features:features", "skew:dinucleotide_skew@side=inside,r=0.86,w=18px",
+         "ov:dinucleotide_content@side=overlay,r=0.6,w=10px",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=skew,to_slot=ov,z=5"),
     ],
-    ids=["split-features", "tick-labels"],
+    ids=["split-features", "tick-labels", "span-to-an-overlay-plot"],
 )
 def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str, ...]) -> None:
     with pytest.warns(LabelLeadersCrossWarning, match=r"\(2 region labels on other tracks\)\. Drawn anyway\."):
@@ -1505,6 +1509,8 @@ def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str,
         ("features:features@lane_direction=split", "gc:dinucleotide_content@side=inside,w=18px",
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor=true,z=5"),
         ("ticks:ticks@side=outside", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
+        ("features:features", "skew:dinucleotide_skew@side=inside,w=18px", "ov:dinucleotide_content@side=overlay,r=0.6,w=10px",
+         "regions:annotations@side=overlay,set_id=regions,anchor_slot=skew,to_slot=ov,z=5"),
         # An overlay that spans nothing, or covers split feature lanes, keeps no room; its labels are drawn over the
         # tracks around it whatever the radii (OV-1359, OV-1360).
         ("o1:dinucleotide_content@side=outside", "features:features", "gc:dinucleotide_content@side=inside",
@@ -1516,8 +1522,8 @@ def test_circular_region_labels_on_the_band_a_track_takes_warn(slots: tuple[str,
          "gc:dinucleotide_content@side=inside",
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,to_slot=gc,z=5"),
     ],
-    ids=["automatic-radii", "split-features-automatic", "tick-labels-automatic", "overlay-spanning-nothing",
-         "span-over-split-features", "span-from-split-features"],
+    ids=["automatic-radii", "split-features-automatic", "tick-labels-automatic", "span-to-an-overlay-plot-automatic",
+         "overlay-spanning-nothing", "span-over-split-features", "span-from-split-features"],
 )
 def test_circular_region_labels_with_their_room_do_not_warn(slots: tuple[str, ...]) -> None:
     with warnings.catch_warnings():

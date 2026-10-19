@@ -740,8 +740,9 @@ def _region_labels_on_other_tracks(
     (``own_reserved_band_px``): its drawing with its tick or axis labels and
     its own labels' room. Annotation overlays draw over other tracks and take
     none. An overlay the layout keeps no room for (``span_keeps_label_room``:
-    one that spans nothing or covers another overlay) has its labels drawn
-    over the tracks around it whatever the radii, so they are not counted.
+    one that spans nothing, or a span whose outer edge is split feature lanes)
+    has its labels drawn over the tracks around it whatever the radii, so they
+    are not counted.
     """
 
     def overlaps(inner: float, outer: float, band: RadialBand) -> bool:
