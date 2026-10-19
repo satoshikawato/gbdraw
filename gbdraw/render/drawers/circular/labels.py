@@ -13,7 +13,9 @@ from ....layout.common import calculate_cds_ratio
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
 from ....core.text import calculate_bbox_dimensions
-from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment
+from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment, leader_polyline
+from ....layout.text_geometry import Point, normalize_text_anchor
+from ..label_backing import FeatureLabelInk, feature_label_ink
 from ....labels.circular_types import CircularLabel
 from ...label_binding import bind_label_part
 
@@ -161,34 +163,11 @@ class LabelDrawer:
         return group
 
     def add_label_on_the_rim(self, group, label: CircularLabel, radius, record_length):
-        if label.get("placement") == "radial":
-            start_x = float(label.get("text_x", label["start_x"]))
-            start_y = float(label.get("text_y", label["start_y"]))
-            label_path = generate_text_path(
-                label["label_text"],
-                start_x,
-                start_y,
-                interval=0,
-                font_size=self.font_size,
-                font_weight="normal",
-                font=self.font_family,
-                dominant_baseline=str(label.get("dominant_baseline", "middle")),
-                text_anchor=str(label.get("text_anchor", "middle")),
-            )
-            rotation_deg = float(label.get("rotation_deg", 0.0))
-            label_path.rotate(rotation_deg, center=(start_x, start_y))
-            group.add(label_path)
-            return group
-
-        anchor_value, baseline_value = self.set_feature_label_anchor_value(
-            record_length, label["middle"], label["start_x"], label.get("is_inner", False)
-        )
-        start_x_1 = label["start_x"]
-        start_y_1 = label["start_y"]
+        (x, y), anchor_value, baseline_value, rotation_deg = rim_text_placement(label, record_length)
         label_path = generate_text_path(
             label["label_text"],
-            start_x_1,
-            start_y_1,
+            x,
+            y,
             interval=0,
             font_size=self.font_size,
             font_weight="normal",
@@ -196,8 +175,20 @@ class LabelDrawer:
             dominant_baseline=baseline_value,
             text_anchor=anchor_value,
         )
+        if label.get("placement") == "radial":
+            label_path.rotate(rotation_deg, center=(x, y))
         group.add(label_path)
         return group
+
+    def label_font(self, label: CircularLabel, record_length: int) -> tuple[float, str]:
+        """The font size (as drawn) and family of a label."""
+
+        cfg = self._cfg
+        length_param = determine_length_parameter(record_length, cfg.labels.length_threshold.circular)
+        return (
+            label.get("font_size", cfg.labels.font_size.for_length_param(length_param)),
+            str(label.get("font_family", cfg.objects.text.font_family)),
+        )
 
     def draw(
         self,
@@ -210,11 +201,7 @@ class LabelDrawer:
         track_preset: str | None = None,
     ):
         cfg = self._cfg
-        length_threshold = cfg.labels.length_threshold.circular
-        length_param = determine_length_parameter(record_length, length_threshold)
-        fallback_font_size = cfg.labels.font_size.for_length_param(length_param)
-        self.font_size = label.get("font_size", fallback_font_size)
-        self.font_family = label.get("font_family", cfg.objects.text.font_family)
+        self.font_size, self.font_family = self.label_font(label, record_length)
         self.track_type = str(track_preset or label.get("track_preset") or cfg.canvas.circular.track_type)
         self.strandedness = self._profile.strandedness
         if label["is_embedded"] is True:
@@ -235,6 +222,39 @@ class LabelDrawer:
         return group
 
 
-__all__ = ["LabelDrawer"]
+def rim_text_placement(label: CircularLabel, record_length: int) -> tuple[Point, str, str, float]:
+    """Where an outer or inner label's text is drawn: its point, anchor, baseline and turn (radial labels)."""
+
+    if label.get("placement") == "radial":
+        return (
+            (float(label.get("text_x", label["start_x"])), float(label.get("text_y", label["start_y"]))),
+            str(label.get("text_anchor", "middle")),
+            str(label.get("dominant_baseline", "middle")),
+            float(label.get("rotation_deg", 0.0)),
+        )
+    anchor_value, baseline_value = horizontal_label_alignment(
+        record_length, label["middle"], label["start_x"], is_inner=label.get("is_inner", False)
+    )
+    return (float(label["start_x"]), float(label["start_y"])), anchor_value, baseline_value, 0.0
+
+
+def circular_label_ink(label: CircularLabel, drawer: LabelDrawer, record_length: int) -> FeatureLabelInk:
+    """An outer or inner label as its backing sees it (LP-D85)."""
+
+    (x, y), anchor, baseline, rotation_deg = rim_text_placement(label, record_length)
+    font_size, font_family = drawer.label_font(label, record_length)
+    return feature_label_ink(
+        str(label["label_text"]),
+        font_family,
+        float(font_size),
+        at=(x, y),
+        anchor=normalize_text_anchor(anchor),
+        dominant_baseline=baseline,
+        rotation_deg=rotation_deg,
+        leader=leader_polyline(label),
+    )
+
+
+__all__ = ["LabelDrawer", "circular_label_ink", "rim_text_placement"]
 
 

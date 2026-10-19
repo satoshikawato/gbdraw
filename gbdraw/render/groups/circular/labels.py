@@ -12,7 +12,8 @@ from gbdraw.svg.elements import Group, Line
 from ....canvas import CircularCanvasGeometry
 from ....labels.circular_types import CircularLabel
 from ....layout.circular import CircularRecordRenderContext
-from ...drawers.circular.labels import LabelDrawer
+from ...drawers.circular.labels import LabelDrawer, circular_label_ink
+from ...drawers.label_backing import backing_rects, feature_label_backing_mode
 from ...label_binding import bind_label_part
 
 
@@ -57,6 +58,16 @@ class LabelsGroup:
             cfg = self.render_context.profile.config
             stroke_width = cfg.labels.stroke_width.for_length_param(self.geometry.length_param)
             stroke_color = cfg.labels.stroke_color.label_stroke_color
+        backing_mode = feature_label_backing_mode()
+        if self.phase in {"all", "text"} and backing_mode != "off":
+            # The text layer is in front of every leader: backings go under all of its letters (LP-D85).
+            inks = [
+                circular_label_ink(label, drawer, record_length)
+                for label in label_list
+                if not label.get("is_embedded")
+            ]
+            for rect in backing_rects(inks, backing_mode):
+                group.add(rect)
         for label in label_list:
             if label.get("is_embedded"):
                 continue

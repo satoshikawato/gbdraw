@@ -32,16 +32,11 @@ from gbdraw.render.drawers.annotation_marks import (
     mark_reach,
     past_span_edge,
 )
+from gbdraw.render.drawers.label_backing import backing_box, backing_rect
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
 
-
-# A backed region label (LP-D82 ``RGN-FRONT``): a white box with rounded corners at 70 %
-# opacity, this many font sizes beyond the letters on every side and as the corner radius.
-BACKING_PADDING_EM = 0.18
-BACKING_FILL = "#ffffff"
-BACKING_OPACITY = 0.7
 
 
 @dataclass(frozen=True)
@@ -78,10 +73,7 @@ class LinearAnnotationLabel:
         stops at ``mark_edge``, so its padding never reaches past ``label_offset`` into its own
         mark or the feature glyphs under it."""
 
-        box = self.ink.expanded(BACKING_PADDING_EM * self.font_size)
-        if self.ink.max_y <= self.mark_edge:
-            return Aabb(box.min_x, box.min_y, box.max_x, min(box.max_y, self.mark_edge))
-        return Aabb(box.min_x, max(box.min_y, self.mark_edge), box.max_x, box.max_y)
+        return backing_box(self.ink, self.font_size, edge_y=self.mark_edge)
 
     @property
     def footprint(self) -> Aabb:
@@ -518,28 +510,13 @@ def linear_region_label_front_content(
             set_id=track.set_id,
             annotation_id=label.annotation_id,
         )
-        box = label.backing
-        radius = BACKING_PADDING_EM * label.font_size
-        item.add(
-            Rect(
-                insert=(box.min_x, box.min_y),
-                size=(box.width, box.height),
-                rx=radius,
-                ry=radius,
-                fill=BACKING_FILL,
-                fill_opacity=BACKING_OPACITY,
-                stroke="none",
-            )
-        )
+        item.add(backing_rect(label.backing, label.font_size))
         item.add(_label_text(label, font_family))
         group.add(item)
     return GroupContent.of(group)
 
 
 __all__ = [
-    "BACKING_FILL",
-    "BACKING_OPACITY",
-    "BACKING_PADDING_EM",
     "LinearAnnotationLabel",
     "linear_annotation_label_room",
     "linear_annotation_labels",

@@ -11,7 +11,9 @@ from ....auto_sizes import linear_tick_interval
 from ....canvas.linear import LinearCanvasGeometry
 from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
+from ...drawers.label_backing import backing_rects, feature_label_backing_mode, feature_label_ink
 from ...drawers.linear.labels import LabelDrawer
+from ....layout.text_geometry import normalize_text_anchor
 from ....labels.linear import linear_leader_polyline, prepare_label_list_linear
 from ....config.models.render_profiles import LinearRenderProfile
 from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
@@ -342,8 +344,25 @@ class SeqRecordGroup:
                     ),
                 )
 
-        # Add labels
+        # Add labels, on their backings where the prototype switch asks for them (LP-D85).
         if self.show_labels:
+            mode = feature_label_backing_mode()
+            if mode != "off":
+                inks = [
+                    feature_label_ink(
+                        str(label["label_text"]),
+                        str(label["font_family"]),
+                        float(label["font_size"]),
+                        at=(float(label["middle_x"]), float(label["middle_y"])),
+                        anchor=normalize_text_anchor(label.get("text_anchor", "middle")),
+                        dominant_baseline="central",
+                        rotation_deg=float(label.get("rotation_deg", 0.0)),
+                        leader=linear_leader_polyline(label),
+                    )
+                    for label in label_list
+                ]
+                for rect in backing_rects(inks, mode):
+                    feature_group.add(rect)
             for label in label_list:
                 feature_group = LabelDrawer().draw(label, feature_group)
 

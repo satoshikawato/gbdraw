@@ -99,11 +99,12 @@ def past_span_edge(reach: MarkReach, inset: float) -> float:
 
 
 def label_ink_offsets(
-    text: str, font_family: str, font_size: float, anchor: TextAnchor
+    text: str, font_family: str, font_size: float, anchor: TextAnchor, *, dominant_baseline: str = "central"
 ) -> tuple[float, float, float, float]:
-    """``text_ink_offsets`` of a central-baseline label, or an em box when the font cannot be read."""
+    """``text_ink_offsets`` of a label (central baseline unless named), or an em box about its point
+    when the font cannot be read."""
 
-    offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline="central", text_anchor=anchor)
+    offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline=dominant_baseline, text_anchor=anchor)
     if offsets is None:
         # The fallback width of calculate_bbox_dimensions.
         width = 0.6 * len(text) * font_size
