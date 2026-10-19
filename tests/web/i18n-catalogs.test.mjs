@@ -328,6 +328,29 @@ test('a v-memo that shows UI text lists uiLocale.value in its dependencies', () 
   ]);
 });
 
+/**
+ * Vue drops a whitespace-only text node that is the first or last child of an
+ * element, so a space written before a leading `{{` or after a trailing `}}`
+ * would vanish from the page (the English it replaced showed it). Write
+ * `{{ ' ' }}` there.
+ * @returns {string[]} one `file:line: ...` problem per place
+ */
+const edgeSpaceProblems = (html, file) => {
+  const problems = [];
+  const edges = /<([A-Za-z][\w-]*)(?:"[^"]*"|'[^']*'|[^'">])*(?<!\/)>[ \t]+\{\{|\}\}[ \t]+<\//g;
+  for (const match of html.matchAll(edges)) {
+    if (match[1] && VOID_TAGS.has(match[1].toLowerCase())) continue;
+    problems.push(`${file}:${html.slice(0, match.index).split('\n').length}: a space at the start or end of an element beside {{ }} is dropped; write {{ ' ' }}`);
+  }
+  return problems;
+};
+
+test('a space at the edge of an element beside a mustache is written as {{ \' \' }}', () => {
+  const html = '<span> {{ t(\'A\') }}</span><i></i> {{ t(\'B\') }}<input> {{ t(\'C\') }}<b>{{ t(\'D\') }} </b>';
+  assert.deepEqual(edgeSpaceProblems(html, 'sample').map((problem) => problem.slice(0, 9)), ['sample:1:', 'sample:1:']);
+  assert.deepEqual(edgeSpaceProblems(readFileSync(join(webRoot, 'index.html'), 'utf8'), 'index.html'), []);
+});
+
 test('every v-memo in the Web UI that shows UI text lists uiLocale.value', () => {
   const problems = sourceFiles().flatMap((path) => vMemoProblems(readFileSync(path, 'utf8'), relative(webRoot, path).split(sep).join('/')));
   assert.deepEqual(problems, []);

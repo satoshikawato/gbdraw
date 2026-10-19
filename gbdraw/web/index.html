@@ -4353,7 +4353,7 @@
                                                         </div>
                                                     </div>
                                                     <details class="track-slot-more" :data-track-slot-more="entry.slot.id" :open="circularTrackSlotOptionsOpen(entry.slot)" @toggle="setCircularTrackSlotOptionsOpen(entry.slot, $event)">
-                                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span class="sr-only">{{ t('Circular track slot {id}', { id: entry.slot.id }) }} </span><span>{{ circularTrackSlotOptionsSummary(entry.slot) }}<span v-if="entry.slot.inner_gap_px || entry.slot.outer_gap_px" class="text-slate-700"> {{ t('· gaps set') }}</span><span v-if="entry.slot.renderer === 'dinucleotide_skew' && (circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') || circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))" class="text-slate-700"> {{ t('· custom colors') }}</span></span></summary>
+                                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span class="sr-only">{{ t('Circular track slot {id}', { id: entry.slot.id }) }}{{ ' ' }}</span><span>{{ circularTrackSlotOptionsSummary(entry.slot) }}<span v-if="entry.slot.inner_gap_px || entry.slot.outer_gap_px" class="text-slate-700">{{ ' ' }}{{ t('· gaps set') }}</span><span v-if="entry.slot.renderer === 'dinucleotide_skew' && (circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') || circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))" class="text-slate-700">{{ ' ' }}{{ t('· custom colors') }}</span></span></summary>
                                                         <div class="mt-1 space-y-1">
                                                             <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                                 <div class="track-slot-field">
@@ -4627,7 +4627,7 @@
                                             </select>
                                         </div>
                                         <details class="mt-1" :data-definition-line-style="row.key">
-                                            <summary :aria-label="t('{label} style', { label: row.label })" class="text-[10px]">{{ t('Style') }}<span v-if="isDefinitionLineStyleMuted(row)" class="ui-hint" :title="t('Its style applies when the line is shown.')"> {{ t('(line hidden)') }}</span></summary>
+                                            <summary :aria-label="t('{label} style', { label: row.label })" class="text-[10px]">{{ t('Style') }}<span v-if="isDefinitionLineStyleMuted(row)" class="ui-hint" :title="t('Its style applies when the line is shown.')">{{ ' ' }}{{ t('(line hidden)') }}</span></summary>
                                             <div class="grid grid-cols-[4rem_auto_minmax(0,1fr)] items-end gap-1.5 pt-1.5">
                                                 <label class="input-label !block text-[9px]">{{ t('Size') }}
                                                     <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} style size', { label: row.label })" :disabled="!semanticMutationAvailable">
@@ -4713,7 +4713,7 @@
                                         <span v-else>{{ t('Apply') }}</span>
                                     </button>
                                 </div>
-                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules; the palette is unchanged.') }}<template v-if="selectedSpecificPreset === 'bakta'"> {{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</template></p>
+                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules; the palette is unchanged.') }}<template v-if="selectedSpecificPreset === 'bakta'">{{ ' ' }}{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</template></p>
                             </div>
 
                             <div>
@@ -7260,7 +7260,7 @@
                                 </button>
                                 <p v-if="featureStyleScopeDialog.siblingCount > 0 && featureStyleScopeDialog.defaultColorType" id="feature-style-scope-default-color" data-default-color-scope-line class="choice-option-note">
                                     <default-color-scope-line :line="defaultColorScopeLine(featureStyleScopeDialog.defaultColorType, featureStyleScopeDialog.replacedDefaultColor)"></default-color-scope-line>
-                                    <template v-if="hasPendingPaletteDraft"> {{ t('Applies now, also over the queued palette.') }}</template>
+                                    <template v-if="hasPendingPaletteDraft">{{ ' ' }}{{ t('Applies now, also over the queued palette.') }}</template>
                                 </p>
 
                                 <button v-if="featureStyleScopeLabelOptions.displayLabel"
@@ -7578,7 +7578,7 @@
                             </div>
                             <template v-for="group in similarityAlignmentReview.groups" :key="group.id">
                                 <h3 v-if="group.title" class="alignment-review-section" :class="{ 'is-need': group.cards.some((card) => card.needsChoice) }"
-                                    :data-alignment-section="group.id">{{ group.title }}<span class="count" aria-hidden="true">{{ group.cards.length }}</span><span class="sr-only"> {{ tn(group.cards.length, '({count} record)', '({count} records)') }}</span></h3>
+                                    :data-alignment-section="group.id">{{ group.title }}<span class="count" aria-hidden="true">{{ group.cards.length }}</span><span class="sr-only">{{ ' ' }}{{ tn(group.cards.length, '({count} record)', '({count} records)') }}</span></h3>
                                 <template v-for="card in group.cards" :key="card.recordKey">
                                 <component :is="card.kind === 'reference' ? 'section' : 'fieldset'"
                                            v-for="record in [card.row || similarityAlignmentDraft.reference]"
@@ -7656,7 +7656,7 @@
                                     <template v-else-if="card.kind === 'several'">
                                         <!-- One line: what to do in a record that still needs a choice, and why a candidate is recommended. -->
                                         <p v-if="card.needsChoice || record.recommendedKey" class="alignment-review-note" data-similarity-alignment-reason>
-                                            <b v-if="card.needsChoice">{{ t('Choose the gene to line up, or skip this record.') }} </b>
+                                            <b v-if="card.needsChoice">{{ t('Choose the gene to line up, or skip this record.') }}{{ ' ' }}</b>
                                             <template v-if="record.recommendedKey">{{ t('Recommended: {name}, {reason}.', { name: record.candidates.find(candidate => candidate.key === record.recommendedKey)?.name, reason: record.recommendationReasonLabel }) }}</template>
                                         </p>
                                         <div class="alignment-review-candidates">
@@ -8364,7 +8364,7 @@
                             <ul :aria-label="t('Alignment direction restoration targets')" class="mt-1 space-y-0.5">
                                 <li v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="flex items-baseline gap-2 text-slate-800">
                                     <strong class="min-w-0 truncate" :title="target.label">{{ target.name }}:</strong>
-                                    <span class="shrink-0">{{ target.current ? 'reverse' : 'forward' }} → {{ target.restored ? 'reverse' : 'forward' }}<span v-if="target.laterManualEdit" class="text-amber-800"> {{ t('· changed after Align') }}</span></span>
+                                    <span class="shrink-0">{{ target.current ? 'reverse' : 'forward' }} → {{ target.restored ? 'reverse' : 'forward' }}<span v-if="target.laterManualEdit" class="text-amber-800">{{ ' ' }}{{ t('· changed after Align') }}</span></span>
                                 </li>
                             </ul>
                             <p class="mt-2 text-slate-600">{{ t('Direction changes you made after Align on these records are replaced.') }}</p>
