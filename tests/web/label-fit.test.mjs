@@ -75,7 +75,7 @@ test('the notice bar shows Python\'s sentences and has no wording of its own', a
   assert.throws(() => normalizeReport({ ...report([]), notice: [5] }), invalid);
   assert.throws(() => normalizeReport({ ...report([]), notice: undefined }), invalid);
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  const bar = html.slice(html.indexOf('data-testid="label-fit-notice"'), html.indexOf('Choose a fix</button>'));
+  const bar = html.slice(html.indexOf('data-testid="label-fit-notice"'), html.indexOf("{{ t('Choose a fix') }}</button>"));
   assert.match(bar, /labelFitNotice\.report\.notice/);
   assert.doesNotMatch(bar, /Leader lines cross|definition text|'pairs'/);
 });
@@ -134,7 +134,7 @@ test('a region label report carries its count, and its notice offers no fix with
   const invalid = (error) => error.code === 'RESULT_INVALID';
   assert.throws(() => normalizeReport({ ...regionReport(), regionOverlaps: -1 }), invalid);
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  assert.match(html, /<button v-if="labelFitNotice\.report\.rows\.length" [^>]*@click="openLabelFitNotice">Choose a fix<\/button>/);
+  assert.match(html, /<button v-if="labelFitNotice\.report\.rows\.length" [^>]*@click="openLabelFitNotice">\{\{ t\('Choose a fix'\) \}\}<\/button>/);
 });
 
 test('a Result\'s report names that Result by index and name', () => {
