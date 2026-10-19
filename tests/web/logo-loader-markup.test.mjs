@@ -67,7 +67,7 @@ test('every loading place renders the loader', () => {
     /<gbdraw-loader v-if="sessionSavePending"><\/gbdraw-loader><i v-else class="ph ph-archive" aria-hidden="true"><\/i> \{\{ t\('Save Session'\) \}\}/,
     /<gbdraw-loader v-if="exampleSessionPending"><\/gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"><\/i> \{\{ t\('Load example'\) \}\}/,
     /<gbdraw-loader v-if="exampleSessionPending"><\/gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"><\/i> Load an example/,
-    /<gbdraw-loader class="gbdraw-loader-on-fill text-xl"><\/gbdraw-loader> <span class="generate-bar-long">\{\{ generationCancelRequested \? 'Canceling\.\.\.' : 'Processing\.\.\.' \}\}/,
+    /<gbdraw-loader class="gbdraw-loader-on-fill text-xl"><\/gbdraw-loader> <span class="generate-bar-long">\{\{ generationCancelRequested \? t\('Canceling\.\.\.'\) : t\('Processing\.\.\.'\) \}\}/,
     /<gbdraw-loader><\/gbdraw-loader> Preparing features\.\.\./,
     /<gbdraw-loader><\/gbdraw-loader>\s*Reflowing label placement\.\.\./
   ];

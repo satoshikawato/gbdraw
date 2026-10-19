@@ -4841,11 +4841,11 @@
 
                 <div v-settings-section="'features'" data-setting="features" class="card">
                     <details>
-                        <summary aria-label="Features"><settings-section-title section="features"></settings-section-title> <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
+                        <summary :aria-label="t('Features')"><settings-section-title section="features"></settings-section-title> <help-tip :text="t('Choose each feature type\'s rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features.')"></help-tip></summary>
                         <setting-note setting="features" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
-                                <span class="input-label">Feature Types <help-tip id="help-feature-feature-types" text="Select which feature types to draw."></help-tip></span>
+                                <span class="input-label">{{ t('Feature Types') }} <help-tip id="help-feature-feature-types" :text="t('Select which feature types to draw.')"></help-tip></span>
                                 <div class="flex flex-wrap gap-1.5 mb-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 min-h-[30px]">
                                     <span v-for="f in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
                                         <span class="font-medium">{{ f }}</span>
@@ -4853,54 +4853,54 @@
                                             :value="getFeatureShape(f)"
                                             @change="setFeatureShape(f, $event.target.value)"
                                             class="border border-blue-200 rounded px-1 py-0 text-[9px] bg-white text-slate-700"
-                                            title="Feature rendering"
-                                            :aria-label="`Rendering for ${f}`"
+                                            :title="t('Feature rendering')"
+                                            :aria-label="t('Rendering for {feature}', { feature: f })"
                                          :disabled="!semanticMutationAvailable">
-                                            <option value="arrow">Arrow</option>
-                                            <option value="rectangle">Rectangle</option>
-                                            <option value="underlay">Underlay</option>
+                                            <option value="arrow">{{ t('Arrow') }}</option>
+                                            <option value="rectangle">{{ t('Rectangle') }}</option>
+                                            <option value="underlay">{{ t('Underlay') }}</option>
                                         </select>
-                                        <button :aria-label="`Remove ${f}`" @click="removeFeature(f)" class="text-slate-500 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors" :disabled="!semanticMutationAvailable">
+                                        <button :aria-label="t('Remove {feature}', { feature: f })" @click="removeFeature(f)" class="text-slate-500 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors" :disabled="!semanticMutationAvailable">
                                             <i class="ph ph-x" aria-hidden="true"></i>
                                         </button>
                                     </span>
-                                    <span v-if="adv.features.length === 0" class="ui-hint italic py-1">No features selected</span>
+                                    <span v-if="adv.features.length === 0" class="ui-hint italic py-1">{{ t('No features selected') }}</span>
                                 </div>
                                 <div class="flex gap-2">
-                                    <select v-model="newFeatureToAdd" aria-label="Feature type to add" aria-describedby="help-feature-feature-types" class="form-input text-xs py-0.5 px-2 h-7" :disabled="!semanticMutationAvailable">
+                                    <select v-model="newFeatureToAdd" :aria-label="t('Feature type to add')" aria-describedby="help-feature-feature-types" class="form-input text-xs py-0.5 px-2 h-7" :disabled="!semanticMutationAvailable">
                                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                     </select>
                                     <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-7 shrink-0" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-plus" aria-hidden="true"></i> Add
+                                        <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add') }}
                                     </button>
                                 </div>
                             </div>
 
                             <div class="bg-slate-50 p-2 rounded border border-slate-200">
-                                <span class="input-label">Arrow Geometry <help-tip id="help-feature-arrow-geometry" text="Head length and shaft width apply to Arrow features and remain available even when no feature currently uses that rendering."></help-tip></span>
+                                <span class="input-label">{{ t('Arrow Geometry') }} <help-tip id="help-feature-arrow-geometry" :text="t('Head length and shaft width apply to Arrow features and remain available even when no feature currently uses that rendering.')"></help-tip></span>
                                 <div class="grid grid-cols-2 gap-2">
                                     <div>
-                                        <span class="input-label text-[10px]">Head Length Ratio <help-tip id="help-feature-head-length-ratio" text="Head length divided by the full rendered feature thickness. Leave blank for Auto. Auto starts from the mode-specific default and lengthens the head as the shaft narrows."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Head Length Ratio') }} <help-tip id="help-feature-head-length-ratio" :text="t('Head length divided by the full rendered feature thickness. Leave blank for Auto. Auto starts from the mode-specific default and lengthens the head as the shaft narrows.')"></help-tip></span>
                                         <input
                                             type="number"
                                             min="0.05"
                                             step="0.05"
                                             v-model.number="adv.arrow_head_length_ratio"
-                                            placeholder="Auto"
-                                            aria-label="Arrow head length ratio"
+                                            :placeholder="t('Auto')"
+                                            :aria-label="t('Arrow head length ratio')"
                                             aria-describedby="help-feature-head-length-ratio"
                                             class="form-input form-input-compact auto-value-input"
                                          :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]">Shaft Width Ratio <help-tip id="help-feature-shaft-width-ratio" text="Shaft thickness divided by the full rendered feature thickness. Enter a value greater than 0 and at most 1: 1 keeps a full-width body, while smaller values narrow the shaft. Short arrows may render as triangles."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Shaft Width Ratio') }} <help-tip id="help-feature-shaft-width-ratio" :text="t('Shaft thickness divided by the full rendered feature thickness. Enter a value greater than 0 and at most 1: 1 keeps a full-width body, while smaller values narrow the shaft. Short arrows may render as triangles.')"></help-tip></span>
                                         <input
                                             type="number"
                                             min="0.05"
                                             max="1"
                                             step="0.05"
                                             v-model.number="adv.arrow_shaft_width_ratio"
-                                            aria-label="Arrow shaft width ratio"
+                                            :aria-label="t('Arrow shaft width ratio')"
                                             aria-describedby="help-feature-shaft-width-ratio"
                                             class="form-input form-input-compact"
                                          :disabled="!semanticMutationAvailable">
@@ -4910,18 +4910,18 @@
 
                             <div data-setting="feature-visibility">
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <span class="input-label mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and leaves it out of protein search; Leave out of protein search keeps its visibility and leaves it out of protein search."></help-tip></span>
+                                    <span class="input-label mb-0">{{ t('Feature Visibility') }} <help-tip id="help-feature-feature-visibility" :text="t('Rules are evaluated from top to bottom. Off hides the feature and leaves it out of protein search; Leave out of protein search keeps its visibility and leaves it out of protein search.')"></help-tip></span>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
                                             type="button"
                                             @click="downloadFeatureVisibilityRulesTsv"
                                             class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"
-                                            title="Download TSV"
+                                            :title="t('Download TSV')"
                                         >
                                             <i class="ph ph-download-simple" aria-hidden="true"></i> TSV
                                         </button>
-                                        <button type="button" @click="addFeatureVisibilityRule" aria-label="Add feature visibility rule" class="btn btn-secondary text-xs h-7 px-2" :disabled="!semanticMutationAvailable">
+                                        <button type="button" @click="addFeatureVisibilityRule" :aria-label="t('Add feature visibility rule')" class="btn btn-secondary text-xs h-7 px-2" :disabled="!semanticMutationAvailable">
                                             <i class="ph ph-plus" aria-hidden="true"></i>
                                         </button>
                                     </div>
@@ -4944,57 +4944,57 @@
                                                 </span>
                                             </div>
                                             <div class="flex items-center justify-end gap-0.5">
-                                                <button aria-label="Move rule up" type="button" @click="moveFeatureVisibilityRuleUp(i)" :disabled="!semanticMutationAvailable || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
-                                                <button aria-label="Move rule down" type="button" @click="moveFeatureVisibilityRuleDown(i)" :disabled="!semanticMutationAvailable || (i === featureVisibilityManualRules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
-                                                <button aria-label="Delete rule" type="button" @click="removeFeatureVisibilityRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                                                <button :aria-label="t('Move rule up')" type="button" @click="moveFeatureVisibilityRuleUp(i)" :disabled="!semanticMutationAvailable || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move rule up')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                                <button :aria-label="t('Move rule down')" type="button" @click="moveFeatureVisibilityRuleDown(i)" :disabled="!semanticMutationAvailable || (i === featureVisibilityManualRules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move rule down')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                                <button :aria-label="t('Delete rule')" type="button" @click="removeFeatureVisibilityRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" :title="t('Delete rule')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1 px-1 text-[9px] font-semibold uppercase text-slate-500">
-                                            <span class="col-span-4">Record ID</span>
-                                            <span class="col-span-4">Feature Type</span>
-                                            <span class="col-span-4">Qualifier</span>
+                                            <span class="col-span-4">{{ t('Record ID') }}</span>
+                                            <span class="col-span-4">{{ t('Feature Type') }}</span>
+                                            <span class="col-span-4">{{ t('Qualifier') }}</span>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="`Visibility rule ${i + 1} record ID`" placeholder="record_id" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
-                                            <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" :aria-label="`Visibility rule ${i + 1} feature type`" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
+                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="t('Visibility rule {n} record ID', { n: i + 1 })" placeholder="record_id" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
+                                            <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" :aria-label="t('Visibility rule {n} feature type', { n: i + 1 })" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                                 <option v-if="rule.featureType && !featureVisibilityFeatureSuggestions.includes(rule.featureType)" :value="rule.featureType">{{ rule.featureType }}</option>
                                                 <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fv-type-${value}`" :value="value">{{ value }}</option>
                                             </select>
-                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" :aria-label="`Visibility rule ${i + 1} qualifier`" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
+                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" :aria-label="t('Visibility rule {n} qualifier', { n: i + 1 })" list="feature-visibility-qualifier-options" :placeholder="t('qualifier')" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
-                                            <label class="block px-1 text-[9px] font-semibold uppercase text-slate-500">Value regex</label>
-                                            <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" :aria-label="`Visibility rule ${i + 1} value regex`" placeholder="value regex" class="form-input form-input-compact w-full font-mono" :disabled="!semanticMutationAvailable">
+                                            <label class="block px-1 text-[9px] font-semibold uppercase text-slate-500">{{ t('Value regex') }}</label>
+                                            <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" :aria-label="t('Visibility rule {n} value regex', { n: i + 1 })" :placeholder="t('value regex')" class="form-input form-input-compact w-full font-mono" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <!-- The action has its own line: its longest text does not fit a quarter of the row. -->
                                         <div>
-                                            <span class="block px-1 text-[9px] font-semibold uppercase text-slate-500">Action</span>
-                                            <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" :aria-label="`Visibility rule ${i + 1} action`" class="form-input form-input-compact w-full" :disabled="!semanticMutationAvailable">
-                                                <option value="show">Show</option>
-                                                <option value="off">Off</option>
-                                                <option value="exclude_matching">Leave out of protein search</option>
+                                            <span class="block px-1 text-[9px] font-semibold uppercase text-slate-500">{{ t('Action') }}</span>
+                                            <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" :aria-label="t('Visibility rule {n} action', { n: i + 1 })" class="form-input form-input-compact w-full" :disabled="!semanticMutationAvailable">
+                                                <option value="show">{{ t('Show') }}</option>
+                                                <option value="off">{{ t('Off') }}</option>
+                                                <option value="exclude_matching">{{ t('Leave out of protein search') }}</option>
                                             </select>
                                         </div>
                                     </div>
-                                    <div v-if="featureVisibilityManualRules.length === 0" class="ui-hint italic text-center py-2">No manual visibility rules</div>
+                                    <div v-if="featureVisibilityManualRules.length === 0" class="ui-hint italic text-center py-2">{{ t('No manual visibility rules') }}</div>
                                 </div>
                             </div>
 
                             <div>
-                                <span class="input-label">Feature Appearance <help-tip id="help-feature-feature-appearance" text="Adjust feature dimensions and the stroke color and width for feature blocks and intron lines."></help-tip></span>
+                                <span class="input-label">{{ t('Feature Appearance') }} <help-tip id="help-feature-feature-appearance" :text="t('Adjust feature dimensions and the stroke color and width for feature blocks and intron lines.')"></help-tip></span>
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div v-if="mode === 'linear'" class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <span class="input-label text-[10px]">Feature Height <help-tip id="help-feature-feature-height" text="Height of the feature blocks."></help-tip></span>
+                                            <span class="input-label text-[10px]">{{ t('Feature Height') }} <help-tip id="help-feature-feature-height" :text="t('Height of the feature blocks.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.feature_height, 'linearFeatureHeight')" :text="autoValueText('linearFeatureHeight')">
-                                                <input type="number" v-model.number="adv.feature_height" aria-label="Feature Height" aria-describedby="help-feature-feature-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" v-model.number="adv.feature_height" :aria-label="t('Feature Height')" aria-describedby="help-feature-feature-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <span class="input-label text-[10px]">Axis Gap <help-tip id="help-feature-axis-gap" text="Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height."></help-tip></span>
+                                            <span class="input-label text-[10px]">{{ t('Axis Gap') }} <help-tip id="help-feature-axis-gap" :text="t('Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.track_axis_gap, 'linearAxisGap')" :text="autoValueText('linearAxisGap')">
                                                 <input
-                                                    aria-label="Axis Gap"
+                                                    :aria-label="t('Axis Gap')"
                                                     aria-describedby="help-feature-axis-gap"
                                                     type="number"
                                                     min="0"
@@ -5006,44 +5006,44 @@
                                         </div>
                                     </div>
                                     <div v-if="mode === 'circular'">
-                                        <span class="input-label text-[10px]">Feature Track Width <help-tip id="help-feature-feature-track-width" text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Feature Track Width') }} <help-tip id="help-feature-feature-track-width" :text="t('Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.feature_width_circular, 'circularFeatureWidth')" :text="autoValueText('circularFeatureWidth')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.' : ''" aria-label="Feature Track Width" aria-describedby="help-feature-feature-track-width" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('Feature Track Width')" aria-describedby="help-feature-feature-track-width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                     <div data-setting="stroke" class="space-y-2">
                                         <setting-note setting="stroke"></setting-note>
                                         <div class="grid grid-cols-2 gap-1.5">
                                             <div>
-                                                <span class="input-label text-[10px]">Block Stroke Color <help-tip id="help-feature-block-stroke-color" text="Use Auto for the configured default, None for no outline, or Color for an explicit value."></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Block Stroke Color') }} <help-tip id="help-feature-block-stroke-color" :text="t('Use Auto for the configured default, None for no outline, or Color for an explicit value.')"></help-tip></span>
                                                 <color-value-control
                                                     v-model="adv.block_stroke_color"
                                                     fallback="#000000"
-                                                    aria-label="Block stroke color"
+                                                    :aria-label="t('Block stroke color')"
                                                     aria-describedby="help-feature-block-stroke-color">
                                                 </color-value-control>
                                             </div>
                                             <div>
-                                                <span class="input-label text-[10px]">Block Stroke Width <help-tip id="help-feature-block-stroke-width" text="Width of the outline for feature blocks."></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Block Stroke Width') }} <help-tip id="help-feature-block-stroke-width" :text="t('Width of the outline for feature blocks.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(adv.block_stroke_width, 'blockStrokeWidth')" :text="autoValueText('blockStrokeWidth')">
-                                                    <input type="number" v-model.number="adv.block_stroke_width" aria-label="Block Stroke Width" aria-describedby="help-feature-block-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" v-model.number="adv.block_stroke_width" :aria-label="t('Block Stroke Width')" aria-describedby="help-feature-block-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-2 gap-1.5">
                                             <div>
-                                                <span class="input-label text-[10px]">Line Stroke Color <help-tip id="help-feature-line-stroke-color" text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Line Stroke Color') }} <help-tip id="help-feature-line-stroke-color" :text="t('Use Auto for the configured default, None to hide the line, or Color for an explicit value.')"></help-tip></span>
                                                 <color-value-control
                                                     v-model="adv.line_stroke_color"
                                                     fallback="#000000"
-                                                    aria-label="Line stroke color"
+                                                    :aria-label="t('Line stroke color')"
                                                     aria-describedby="help-feature-line-stroke-color">
                                                 </color-value-control>
                                             </div>
                                             <div>
-                                                <span class="input-label text-[10px]">Line Stroke Width <help-tip id="help-feature-line-stroke-width" text="Width of the lines representing introns."></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Line Stroke Width') }} <help-tip id="help-feature-line-stroke-width" :text="t('Width of the lines representing introns.')"></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(adv.line_stroke_width, 'lineStrokeWidth')" :text="autoValueText('lineStrokeWidth')">
-                                                    <input type="number" v-model.number="adv.line_stroke_width" aria-label="Line Stroke Width" aria-describedby="help-feature-line-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" v-model.number="adv.line_stroke_width" :aria-label="t('Line Stroke Width')" aria-describedby="help-feature-line-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </div>
@@ -5056,140 +5056,140 @@
 
                 <div v-settings-section="'labels'" data-setting="labels" class="card">
                     <details>
-                        <summary aria-label="Labels"><settings-section-title section="labels"></settings-section-title> <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
+                        <summary :aria-label="t('Labels')"><settings-section-title section="labels"></settings-section-title> <help-tip :text="t('Control label visibility, filtering, text settings, and circular label geometry.')"></help-tip></summary>
                         <setting-note setting="labels" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
-                                <span class="input-label text-[10px] mb-1"><label for="linear-show-labels">Show Labels</label> <help-tip id="help-label-show-labels" text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></span>
+                                <span class="input-label text-[10px] mb-1"><label for="linear-show-labels">{{ t('Show Labels') }}</label> <help-tip id="help-label-show-labels" :text="t('Display feature labels on the map. \'First\' shows labels only for the top track. \'Top Similarity Group Record\' requires LOSATP similarity-group or collinear mode.')"></help-tip></span>
                                 <select id="linear-show-labels" v-model="form.show_labels_linear" aria-describedby="help-label-show-labels" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
-                                    <option value="none">None</option>
-                                    <option value="all">All Records</option>
-                                    <option value="first">First Record Only</option>
-                                    <option value="orthogroup_top" :disabled="!(hasActiveLinearLosatIntent && linearComparisonResolution.valid && linearComparisonResolution.mode === 'adjacent' && losatProgram === 'blastp' && (losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear')) && form.show_labels_linear !== 'orthogroup_top'">Top Similarity Group Record</option>
+                                    <option value="none">{{ t('None') }}</option>
+                                    <option value="all">{{ t('All Records') }}</option>
+                                    <option value="first">{{ t('First Record Only') }}</option>
+                                    <option value="orthogroup_top" :disabled="!(hasActiveLinearLosatIntent && linearComparisonResolution.valid && linearComparisonResolution.mode === 'adjacent' && losatProgram === 'blastp' && (losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear')) && form.show_labels_linear !== 'orthogroup_top'">{{ t('Top Similarity Group Record') }}</option>
                                 </select>
                             </div>
                             <div v-else>
-                                <span class="input-label text-[10px] mb-1"><label for="circular-label-mode">Label Mode</label> <help-tip id="help-label-label-mode" text="Set circular label placement. 'Out' places labels outside; 'Both' places labels outside and inside. With horizontal inner labels, implicit GC content and GC skew tracks are hidden to avoid overlap."></help-tip></span>
+                                <span class="input-label text-[10px] mb-1"><label for="circular-label-mode">{{ t('Label Mode') }}</label> <help-tip id="help-label-label-mode" :text="t('Set circular label placement. \'Out\' places labels outside; \'Both\' places labels outside and inside. With horizontal inner labels, implicit GC content and GC skew tracks are hidden to avoid overlap.')"></help-tip></span>
                                 <select id="circular-label-mode" v-model="form.labels_mode" aria-describedby="help-label-label-mode" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
-                                    <option value="none">None</option>
-                                    <option value="out">Out</option>
-                                    <option value="both">Both (Out + Inner)</option>
+                                    <option value="none">{{ t('None') }}</option>
+                                    <option value="out">{{ t('Out') }}</option>
+                                    <option value="both">{{ t('Both (Out + Inner)') }}</option>
                                 </select>
                             </div>
 
                             <div v-if="labelSettingsShown" class="space-y-3">
                                 <div v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) !== 'none'">
-                                    <h4 class="group-heading mb-2" aria-label="LABEL FILTERING">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist. Whitelist patterns use case-insensitive Python regex search, matching the -t color table semantics."></help-tip></h4>
+                                    <h4 class="group-heading mb-2" :aria-label="t('LABEL FILTERING')">{{ t('LABEL FILTERING') }} <help-tip :text="t('Control which feature labels are displayed using Blacklist or Whitelist. Whitelist patterns use case-insensitive Python regex search, matching the -t color table semantics.')"></help-tip></h4>
                                     <div class="flex gap-2 mb-2">
                                         <button v-for="m in ['None', 'Blacklist', 'Whitelist']" @click="setLabelFilterMode(m)" :disabled="!semanticMutationAvailable" :class="filterMode===m ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border'" class="flex-1 py-1 rounded text-xs font-bold transition-colors">{{m}}</button>
                                     </div>
 
                                     <div v-if="filterMode === 'Blacklist'" class="space-y-2 bg-white p-2 rounded border">
-                                        <p class="ui-hint">Exclude labels containing these keywords.</p>
-                                        <textarea v-model="manualBlacklist" class="form-input h-20" placeholder="hypothetical, unknown" :disabled="!semanticMutationAvailable"></textarea>
-                                        <div class="ui-hint text-center">- OR -</div>
-                                        <file-uploader label="Blacklist File" v-model="files.blacklist" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
+                                        <p class="ui-hint">{{ t('Exclude labels containing these keywords.') }}</p>
+                                        <textarea v-model="manualBlacklist" class="form-input h-20" :placeholder="t('hypothetical, unknown')" :disabled="!semanticMutationAvailable"></textarea>
+                                        <div class="ui-hint text-center">{{ t('- OR -') }}</div>
+                                        <file-uploader :label="t('Blacklist File')" v-model="files.blacklist" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
                                     </div>
 
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
-                                        <p class="ui-hint">Only show labels matching case-insensitive Python regex. Examples: <span class="font-mono">(?i)NADH</span> and <span class="font-mono">(?P&lt;name&gt;NADH)</span>. Use <span class="font-mono">^...$</span> for exact matches.</p>
+                                        <p class="ui-hint"><i18n-text :text="t('Only show labels matching case-insensitive Python regex. Examples: {first} and {second}. Use {exact} for exact matches.')"><template #first><span class="font-mono">(?i)NADH</span></template><template #second><span class="font-mono">(?P&lt;name&gt;NADH)</span></template><template #exact><span class="font-mono">^...$</span></template></i18n-text></p>
                                         <div v-for="(row, i) in manualWhitelist" :key="i" class="flex gap-1 mb-1">
-                                            <input :value="row.feat" @input="editWhitelistRule(i, 'feat', $event.target.value)" placeholder="Feat" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
-                                            <input :value="row.qual" @input="editWhitelistRule(i, 'qual', $event.target.value)" placeholder="Qual" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
-                                            <input :value="row.key" @input="editWhitelistRule(i, 'key', $event.target.value)" placeholder="Pattern" class="form-input px-1 py-1 text-xs w-1/3" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.feat" @input="editWhitelistRule(i, 'feat', $event.target.value)" :placeholder="t('Feat')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.qual" @input="editWhitelistRule(i, 'qual', $event.target.value)" :placeholder="t('Qual')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.key" @input="editWhitelistRule(i, 'key', $event.target.value)" :placeholder="t('Pattern')" class="form-input px-1 py-1 text-xs w-1/3" :disabled="!semanticMutationAvailable">
                                             <button @click="removeWhitelistRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1">×</button>
                                         </div>
-                                        <button @click="addWhitelistRule" :disabled="!semanticMutationAvailable" class="text-xs text-blue-600 font-bold">+ Add Rule</button>
-                                        <div class="ui-hint text-center mt-2">- OR -</div>
-                                        <file-uploader label="Whitelist File" v-model="files.whitelist" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                        <button @click="addWhitelistRule" :disabled="!semanticMutationAvailable" class="text-xs text-blue-600 font-bold">{{ t('+ Add Rule') }}</button>
+                                        <div class="ui-hint text-center mt-2">{{ t('- OR -') }}</div>
+                                        <file-uploader :label="t('Whitelist File')" v-model="files.whitelist" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     </div>
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">
-                                    <h4 class="group-heading mb-2" aria-label="QUALIFIER PRIORITY">QUALIFIER PRIORITY <help-tip text="Define label priority order (e.g. CDS -> product,gene,locus_tag)."></help-tip></h4>
+                                    <h4 class="group-heading mb-2" :aria-label="t('QUALIFIER PRIORITY')">{{ t('QUALIFIER PRIORITY') }} <help-tip :text="t('Define label priority order (e.g. CDS -> product,gene,locus_tag).')"></help-tip></h4>
 
                                     <div class="space-y-1 mb-3">
                                         <div v-for="(rule, i) in manualPriorityRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
                                             <span class="w-16 font-bold truncate shrink-0" :title="rule.feat">{{rule.feat}}</span>
                                             <span class="flex-grow text-slate-600 truncate font-mono" :title="rule.order">{{rule.order}}</span>
-                                            <button aria-label="Remove priority rule" @click="removePriorityRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                                            <button :aria-label="t('Remove priority rule')" @click="removePriorityRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                         </div>
-                                        <div v-if="manualPriorityRules.length === 0" class="ui-hint italic text-center py-2">No priority rules defined</div>
+                                        <div v-if="manualPriorityRules.length === 0" class="ui-hint italic text-center py-2">{{ t('No priority rules defined') }}</div>
                                     </div>
 
                                     <div class="bg-slate-50 p-2 rounded border border-slate-200 mb-2">
                                         <div class="flex gap-1 mb-1">
-                                            <select v-model="newPriorityRule.feat" aria-label="New priority rule feature type" class="form-input text-xs p-1 h-7 w-24 shrink-0" :disabled="!semanticMutationAvailable">
+                                            <select v-model="newPriorityRule.feat" :aria-label="t('New priority rule feature type')" class="form-input text-xs p-1 h-7 w-24 shrink-0" :disabled="!semanticMutationAvailable">
                                                 <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                             </select>
-                                            <input v-model="newPriorityRule.order" aria-label="New priority rule qualifier order" placeholder="product,gene,locus_tag" class="form-input text-xs p-1 h-7 flex-grow" :disabled="!semanticMutationAvailable">
-                                            <button aria-label="Add priority rule" @click="addPriorityRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i></button>
+                                            <input v-model="newPriorityRule.order" :aria-label="t('New priority rule qualifier order')" placeholder="product,gene,locus_tag" class="form-input text-xs p-1 h-7 flex-grow" :disabled="!semanticMutationAvailable">
+                                            <button :aria-label="t('Add priority rule')" @click="addPriorityRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i></button>
                                         </div>
                                     </div>
 
-                                    <div class="ui-hint text-center mb-1">- OR UPLOAD FILE -</div>
-                                    <file-uploader label="Priority File (TSV)" v-model="files.qualifier_priority" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <div class="ui-hint text-center mb-1">{{ t('- OR UPLOAD FILE -') }}</div>
+                                    <file-uploader :label="t('Priority File (TSV)')" v-model="files.qualifier_priority" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <span class="input-label text-[10px] mb-0">Label Font Size <help-tip id="help-label-label-font-size" text="Font size for feature labels."></help-tip></span>
+                                            <span class="input-label text-[10px] mb-0">{{ t('Label Font Size') }} <help-tip id="help-label-label-font-size" :text="t('Font size for feature labels.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.label_font_size, 'labelFontSize')" :text="autoValueText('labelFontSize')">
-                                                <input type="number" v-model.number="adv.label_font_size" aria-label="Label Font Size" aria-describedby="help-label-label-font-size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" v-model.number="adv.label_font_size" :aria-label="t('Label Font Size')" aria-describedby="help-label-label-font-size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div v-if="!(mode === 'linear' && adv.label_placement === 'above_feature')">
                                             <span class="input-label text-[10px] mb-0">
-                                                Label Rendering
-                                                <help-tip id="help-label-label-rendering" text="Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies."></help-tip>
+                                                {{ t('Label Rendering') }}
+                                                <help-tip id="help-label-label-rendering" :text="t('Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.')"></help-tip>
                                             </span>
-                                            <select v-model="adv.label_rendering" aria-label="Label Rendering" aria-describedby="help-label-label-rendering" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
-                                                <option value="auto">Auto ({{ autoValueText('labelRendering') }})</option>
-                                                <option value="embedded_only">Embedded Only</option>
-                                                <option value="external_only">External Only</option>
+                                            <select v-model="adv.label_rendering" :aria-label="t('Label Rendering')" aria-describedby="help-label-label-rendering" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                                <option value="auto">{{ t('Auto ({value})', { value: autoValueText('labelRendering') }) }}</option>
+                                                <option value="embedded_only">{{ t('Embedded Only') }}</option>
+                                                <option value="external_only">{{ t('External Only') }}</option>
                                             </select>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px] mb-0">
-                                                Label Line
-                                                <help-tip id="help-label-label-line" text="Underline draws a line under each label with a leader, joined to its leader. None draws no line."></help-tip>
+                                                {{ t('Label Line') }}
+                                                <help-tip id="help-label-label-line" :text="t('Underline draws a line under each label with a leader, joined to its leader. None draws no line.')"></help-tip>
                                             </span>
-                                            <select v-model="adv.label_line" aria-label="Label Line" aria-describedby="help-label-label-line" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
-                                                <option value="none">None</option>
-                                                <option value="under">Underline</option>
+                                            <select v-model="adv.label_line" :aria-label="t('Label Line')" aria-describedby="help-label-label-line" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                                <option value="none">{{ t('None') }}</option>
+                                                <option value="under">{{ t('Underline') }}</option>
                                             </select>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px] mb-0">
-                                                Label Protection
-                                                <help-tip id="help-label-label-protection" text="Halo draws a white outline around the letters of each label with a leader, so leaders behind them are cut away. Box draws a white box behind the letters. None draws neither."></help-tip>
+                                                {{ t('Label Protection') }}
+                                                <help-tip id="help-label-label-protection" :text="t('Halo draws a white outline around the letters of each label with a leader, so leaders behind them are cut away. Box draws a white box behind the letters. None draws neither.')"></help-tip>
                                             </span>
-                                            <select v-model="adv.label_protection" aria-label="Label Protection" aria-describedby="help-label-label-protection" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
-                                                <option value="none">None</option>
-                                                <option value="halo">Halo</option>
-                                                <option value="box">Box</option>
+                                            <select v-model="adv.label_protection" :aria-label="t('Label Protection')" aria-describedby="help-label-label-protection" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                                <option value="none">{{ t('None') }}</option>
+                                                <option value="halo">{{ t('Halo') }}</option>
+                                                <option value="box">{{ t('Box') }}</option>
                                             </select>
                                         </div>
                                         <template v-if="mode === 'circular'">
                                             <div>
                                                 <span class="input-label text-[10px] mb-0">
-                                                    Circular Label Placement
-                                                    <help-tip id="help-label-circular-label-placement" text="Horizontal keeps external labels level; Radial aligns them with the circle radius."></help-tip>
+                                                    {{ t('Circular Label Placement') }}
+                                                    <help-tip id="help-label-circular-label-placement" :text="t('Horizontal keeps external labels level; Radial aligns them with the circle radius.')"></help-tip>
                                                 </span>
-                                                <select v-model="adv.circular_label_placement" aria-label="Circular Label Placement" aria-describedby="help-label-circular-label-placement" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
-                                                    <option value="horizontal">Horizontal</option>
-                                                    <option value="radial">Radial</option>
+                                                <select v-model="adv.circular_label_placement" :aria-label="t('Circular Label Placement')" aria-describedby="help-label-circular-label-placement" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                                    <option value="horizontal">{{ t('Horizontal') }}</option>
+                                                    <option value="radial">{{ t('Radial') }}</option>
                                                 </select>
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px] mb-0">
-                                                    Circular Label Spacing
-                                                    <help-tip id="help-label-circular-label-spacing" text="Minimum label-to-label vertical spacing for circular layouts in px."></help-tip>
+                                                    {{ t('Circular Label Spacing') }}
+                                                    <help-tip id="help-label-circular-label-spacing" :text="t('Minimum label-to-label vertical spacing for circular layouts in px.')"></help-tip>
                                                 </span>
                                                 <auto-value-field :visible="autoValueVisible(adv.circular_label_spacing, 'circularLabelSpacing')" :text="autoValueText('circularLabelSpacing')">
                                                     <input
-                                                        aria-label="Circular Label Spacing"
+                                                        :aria-label="t('Circular Label Spacing')"
                                                         aria-describedby="help-label-circular-label-spacing"
                                                         type="number"
                                                         min="0.01"
@@ -5205,30 +5205,30 @@
                                         <template v-if="mode === 'linear'">
                                             <div>
                                                 <span class="input-label text-[10px] mb-0">
-                                                    Label Placement
-                                                    <help-tip id="help-label-label-placement" text="Auto follows track direction (Above/Middle: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on)."></help-tip>
+                                                    {{ t('Label Placement') }}
+                                                    <help-tip id="help-label-label-placement" :text="t('Auto follows track direction (Above/Middle: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).')"></help-tip>
                                                 </span>
                                                 <select
                                                     v-model="adv.label_placement"
                                                     @change="adv.label_placement === 'above_feature' && (adv.label_rendering = 'auto')"
-                                                    aria-label="Label Placement"
+                                                    :aria-label="t('Label Placement')"
                                                     aria-describedby="help-label-label-placement"
                                                     class="form-input form-input-compact"
                                                  :disabled="!semanticMutationAvailable">
-                                                    <option value="auto">Auto ({{ autoValueText('linearLabelPlacement') }})</option>
-                                                    <option value="above_feature">Above Feature</option>
+                                                    <option value="auto">{{ t('Auto ({value})', { value: autoValueText('linearLabelPlacement') }) }}</option>
+                                                    <option value="above_feature">{{ t('Above Feature') }}</option>
                                                 </select>
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px] mb-0">
-                                                    Label Rotation
-                                                    <help-tip id="help-label-label-rotation" text="Rotate linear labels in degrees (e.g., 45). In Above Feature mode, rotated labels start from each feature midpoint."></help-tip>
+                                                    {{ t('Label Rotation') }}
+                                                    <help-tip id="help-label-label-rotation" :text="t('Rotate linear labels in degrees (e.g., 45). In Above Feature mode, rotated labels start from each feature midpoint.')"></help-tip>
                                                 </span>
                                                 <input
                                                     type="number"
                                                     :value="adv.label_rotation ?? ''"
                                                     @input="setOptionalNumberInputValue(adv, 'label_rotation', $event.target.value, true)" :disabled="!semanticMutationAvailable"
-                                                    aria-label="Label Rotation"
+                                                    :aria-label="t('Label Rotation')"
                                                     aria-describedby="help-label-label-rotation"
                                                     class="form-input form-input-compact"
                                                     placeholder="0"
@@ -5236,12 +5236,12 @@
                                             </div>
                                             <div>
                                                 <span class="input-label text-[10px] mb-0">
-                                                    Linear Label Spacing
-                                                    <help-tip id="help-label-linear-label-spacing" text="Extra vertical spacing between stacked external labels in linear layouts, in px."></help-tip>
+                                                    {{ t('Linear Label Spacing') }}
+                                                    <help-tip id="help-label-linear-label-spacing" :text="t('Extra vertical spacing between stacked external labels in linear layouts, in px.')"></help-tip>
                                                 </span>
                                                 <auto-value-field :visible="autoValueVisible(adv.linear_label_spacing, 'linearLabelSpacing')" :text="autoValueText('linearLabelSpacing')">
                                                     <input
-                                                        aria-label="Linear Label Spacing"
+                                                        :aria-label="t('Linear Label Spacing')"
                                                         aria-describedby="help-label-linear-label-spacing"
                                                         type="number"
                                                         min="0.01"
@@ -5258,31 +5258,31 @@
                                 </div>
 
                                 <div v-if="mode === 'circular' && adv.circular_label_placement !== 'radial'" class="pt-3 border-t border-slate-100">
-                                    <h4 class="group-heading mb-2" aria-label="LABEL GEOMETRY">LABEL GEOMETRY <help-tip text="Adjust radius offset factors for circular labels."></help-tip></h4>
+                                    <h4 class="group-heading mb-2" :aria-label="t('LABEL GEOMETRY')">{{ t('LABEL GEOMETRY') }} <help-tip :text="t('Adjust radius offset factors for circular labels.')"></help-tip></h4>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Outer X Offset</label>
+                                            <label class="input-label text-[10px]">{{ t('Outer X Offset') }}</label>
                                             <auto-value-field :visible="autoValueVisible(adv.outer_label_x_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" aria-label="Outer X Offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" :aria-label="t('Outer X Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">Outer Y Offset</label>
+                                            <label class="input-label text-[10px]">{{ t('Outer Y Offset') }}</label>
                                             <auto-value-field :visible="autoValueVisible(adv.outer_label_y_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" aria-label="Outer Y Offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" :aria-label="t('Outer Y Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <template v-if="form.labels_mode === 'both'">
                                             <div>
-                                                <label class="input-label text-[10px]">Inner X Offset</label>
+                                                <label class="input-label text-[10px]">{{ t('Inner X Offset') }}</label>
                                                 <auto-value-field :visible="autoValueVisible(adv.inner_label_x_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" aria-label="Inner X Offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" :aria-label="t('Inner X Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                             <div>
-                                                <label class="input-label text-[10px]">Inner Y Offset</label>
+                                                <label class="input-label text-[10px]">{{ t('Inner Y Offset') }}</label>
                                                 <auto-value-field :visible="autoValueVisible(adv.inner_label_y_offset, 'labelRadiusOffset')" :text="autoValueText('labelRadiusOffset')">
-                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" aria-label="Inner Y Offset" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" :aria-label="t('Inner Y Offset')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </template>
@@ -5291,7 +5291,7 @@
                             </div>
 
                             <p v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) === 'none'" class="ui-hint bg-slate-50 border border-slate-200 rounded p-2">
-                                Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry. While a feature's Label visibility is On, all of these except filtering show; filters do not apply to that label.
+                                {{ t('Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry. While a feature\'s Label visibility is On, all of these except filtering show; filters do not apply to that label.') }}
                             </p>
                         </div>
                     </details>
@@ -5300,7 +5300,7 @@
                 <teleport v-if="mode === 'linear'" to="#settings-popup" defer :disabled="settingsPane.floating !== 'linear-axis'">
                 <div v-settings-section="'linear-axis'" data-setting="axis-scale" class="card">
                     <details>
-                        <summary aria-label="Axis &amp; Scale"><settings-section-title section="linear-axis"></settings-section-title> <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
+                        <summary :aria-label="t('Axis & Scale')"><settings-section-title section="linear-axis"></settings-section-title> <help-tip :text="t('Adjust axis stroke settings plus the linear scale bar or ruler style.')"></help-tip></summary>
                         <setting-note setting="axis-scale" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
@@ -5310,26 +5310,26 @@
                                         aria-describedby="help-linear-axis-show-coordinate-scale"
                                         v-model="form.show_scale"
                                         class="form-checkbox"
-                                        aria-label="Show Coordinate Scale (Linear)" :disabled="!semanticMutationAvailable">
-                                    <span>Show Coordinate Scale</span>
+                                        :aria-label="t('Show Coordinate Scale (Linear)')" :disabled="!semanticMutationAvailable">
+                                    <span>{{ t('Show Coordinate Scale') }}</span>
                                 </label>
-                                <help-tip id="help-linear-axis-show-coordinate-scale" text="Show the bottom scale bar or ruler and any coordinate ticks and labels drawn on record axes. Main record axes remain visible when this is off."></help-tip>
+                                <help-tip id="help-linear-axis-show-coordinate-scale" :text="t('Show the bottom scale bar or ruler and any coordinate ticks and labels drawn on record axes. Main record axes remain visible when this is off.')"></help-tip>
                             </div>
 
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <span class="input-label text-[10px]">Axis Stroke Color <help-tip id="help-linear-axis-axis-stroke-color" text="Use Auto for the configured default, None to hide the axis, or Color for an explicit value."></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Axis Stroke Color') }} <help-tip id="help-linear-axis-axis-stroke-color" :text="t('Use Auto for the configured default, None to hide the axis, or Color for an explicit value.')"></help-tip></span>
                                     <color-value-control
                                         v-model="adv.axis_stroke_color"
                                         fallback="#000000"
-                                        aria-label="Axis stroke color"
+                                        :aria-label="t('Axis stroke color')"
                                         aria-describedby="help-linear-axis-axis-stroke-color">
                                     </color-value-control>
                                 </div>
                                 <div>
-                                    <span class="input-label text-[10px]">Axis Stroke Width <help-tip id="help-linear-axis-axis-stroke-width" text="Width of the main axis line."></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Axis Stroke Width') }} <help-tip id="help-linear-axis-axis-stroke-width" :text="t('Width of the main axis line.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" :text="autoValueText('axisStrokeWidth')">
-                                        <input type="number" v-model.number="adv.axis_stroke_width" aria-label="Axis Stroke Width" aria-describedby="help-linear-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.axis_stroke_width" :aria-label="t('Axis Stroke Width')" aria-describedby="help-linear-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                             </div>
@@ -5339,25 +5339,25 @@
                                 :class="form.show_scale === false ? 'opacity-50' : ''"
                                 class="space-y-3 min-w-0">
                                 <div>
-                                    <span class="input-label text-[10px] mb-1">Scale Style <help-tip id="help-linear-axis-scale-style" text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></span>
-                                    <select v-model="form.scale_style" class="form-input text-xs py-1" aria-label="Linear scale style" aria-describedby="help-linear-axis-scale-style" :disabled="!semanticMutationAvailable">
-                                        <option value="bar">Bar (Simple)</option>
-                                        <option value="ruler">Ruler (Ticks)</option>
+                                    <span class="input-label text-[10px] mb-1">{{ t('Scale Style') }} <help-tip id="help-linear-axis-scale-style" :text="t('\'Bar\' draws a simple line, \'Ruler\' draws a ruler with ticks and labels.')"></help-tip></span>
+                                    <select v-model="form.scale_style" class="form-input text-xs py-1" :aria-label="t('Linear scale style')" aria-describedby="help-linear-axis-scale-style" :disabled="!semanticMutationAvailable">
+                                        <option value="bar">{{ t('Bar (Simple)') }}</option>
+                                        <option value="ruler">{{ t('Ruler (Ticks)') }}</option>
                                     </select>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <span class="input-label text-[10px]">Line Width <help-tip id="help-linear-axis-line-width" text="Line width of the scale bar or ruler."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Line Width') }} <help-tip id="help-linear-axis-line-width" :text="t('Line width of the scale bar or ruler.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_stroke_width, 'scaleStrokeWidth')" :text="autoValueText('scaleStrokeWidth')">
-                                            <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact auto-value-input" aria-label="Linear scale line width" aria-describedby="help-linear-axis-line-width" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact auto-value-input" :aria-label="t('Linear scale line width')" aria-describedby="help-linear-axis-line-width" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]">Scale Line Color <help-tip id="help-linear-axis-scale-line-color" text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Scale Line Color') }} <help-tip id="help-linear-axis-scale-line-color" :text="t('Use Auto for the configured default, None to hide the line, or Color for an explicit value.')"></help-tip></span>
                                         <color-value-control
                                             v-model="adv.scale_stroke_color"
                                             fallback="#000000"
-                                            aria-label="Scale line color"
+                                            :aria-label="t('Scale line color')"
                                             aria-describedby="help-linear-axis-scale-line-color">
                                         </color-value-control>
                                     </div>
@@ -5375,9 +5375,9 @@
                                             class="form-checkbox"
                                             :disabled="!semanticMutationAvailable || (!canUseLinearRulerOnAxis)"
                                             :class="canUseLinearRulerOnAxis ? '' : 'opacity-50'">
-                                        <span>Ruler on Axis</span>
+                                        <span>{{ t('Ruler on Axis') }}</span>
                                     </label>
-                                    <help-tip id="help-linear-axis-ruler-on-axis" text="Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler."></help-tip>
+                                    <help-tip id="help-linear-axis-ruler-on-axis" :text="t('Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler.')"></help-tip>
                                 </div>
                                 <div class="space-y-1">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -5386,27 +5386,27 @@
                                             :checked="linearTypographyLinked"
                                             @change="setLinearTypographyLinked($event.target.checked)"
                                             class="form-checkbox"
-                                            aria-label="Link Linear scale and ruler label font sizes" :disabled="!semanticMutationAvailable">
-                                        <span>Link Scale and Ruler Label Font Sizes</span>
+                                            :aria-label="t('Link Linear scale and ruler label font sizes')" :disabled="!semanticMutationAvailable">
+                                        <span>{{ t('Link Scale and Ruler Label Font Sizes') }}</span>
                                     </label>
                                     <p class="ui-hint">
-                                        Relinking copies the current Scale Font Size to Ruler Label Font Size once.
+                                        {{ t('Relinking copies the current Scale Font Size to Ruler Label Font Size once.') }}
                                     </p>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <span class="input-label text-[10px]">Scale Font Size <help-tip id="help-linear-axis-scale-font-size" text="Font size for the simple bar scale label."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Scale Font Size') }} <help-tip id="help-linear-axis-scale-font-size" :text="t('Font size for the simple bar scale label.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_font_size, 'scaleFontSize')" :text="autoValueText('scaleFontSize')">
                                             <input
                                                 type="number"
                                                 :value="optionalNumberInputValue(adv.scale_font_size)"
                                                 @input="setLinearScaleFontSize($event.target.value)"
                                                 class="form-input form-input-compact auto-value-input"
-                                                aria-label="Linear scale font size" aria-describedby="help-linear-axis-scale-font-size" :disabled="!semanticMutationAvailable">
+                                                :aria-label="t('Linear scale font size')" aria-describedby="help-linear-axis-scale-font-size" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]">Ruler Label Font Size <help-tip id="help-linear-axis-ruler-label-font-size" text="Font size for ruler tick labels, including rulers drawn on record axes."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Ruler Label Font Size') }} <help-tip id="help-linear-axis-ruler-label-font-size" :text="t('Font size for ruler tick labels, including rulers drawn on record axes.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.ruler_label_font_size, 'rulerLabelFontSize')" :text="autoValueText('rulerLabelFontSize')">
                                             <input
                                                 type="number"
@@ -5414,21 +5414,21 @@
                                                 @input="setLinearRulerLabelFontSize($event.target.value)"
                                                 :disabled="!semanticMutationAvailable || (linearTypographyLinked)"
                                                 class="form-input form-input-compact auto-value-input disabled:opacity-50 disabled:cursor-not-allowed"
-                                                aria-label="Linear ruler label font size" aria-describedby="help-linear-axis-ruler-label-font-size">
+                                                :aria-label="t('Linear ruler label font size')" aria-describedby="help-linear-axis-ruler-label-font-size">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
-                                        <span class="input-label text-[10px]">Interval <help-tip id="help-linear-axis-interval" text="Manual tick interval for Ruler scale style in bp (must be > 0). Leave blank to calculate automatically."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Interval') }} <help-tip id="help-linear-axis-interval" :text="t('Manual tick interval for Ruler scale style in bp (must be > 0). Leave blank to calculate automatically.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Linear ruler interval" aria-describedby="help-linear-axis-interval" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" :aria-label="t('Linear ruler interval')" aria-describedby="help-linear-axis-interval" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
-                                        <span class="input-label text-[10px]">Ruler Label Color <help-tip id="help-linear-axis-ruler-label-color" text="Color of ruler tick labels."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Ruler Label Color') }} <help-tip id="help-linear-axis-ruler-label-color" :text="t('Color of ruler tick labels.')"></help-tip></span>
                                         <color-value-control
                                             v-model="adv.ruler_label_color"
                                             fallback="#000000"
-                                            aria-label="Ruler label color"
+                                            :aria-label="t('Ruler label color')"
                                             aria-describedby="help-linear-axis-ruler-label-color">
                                         </color-value-control>
                                     </div>
@@ -5442,7 +5442,7 @@
                 <teleport v-if="mode === 'circular'" to="#settings-popup" defer :disabled="settingsPane.floating !== 'circular-axis'">
                 <div v-settings-section="'circular-axis'" data-setting="axis-scale" class="card">
                     <details>
-                        <summary aria-label="Axis &amp; Scale"><settings-section-title section="circular-axis"></settings-section-title> <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
+                        <summary :aria-label="t('Axis & Scale')"><settings-section-title section="circular-axis"></settings-section-title> <help-tip :text="t('Adjust axis stroke settings and the circular scale interval.')"></help-tip></summary>
                         <setting-note setting="axis-scale" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
@@ -5458,32 +5458,32 @@
                                         :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
                                         :class="adv.circular_track_slots_enabled ? 'opacity-50' : ''"
                                         class="form-checkbox"
-                                        aria-label="Show Coordinate Scale (Circular)">
-                                    <span>Show Coordinate Scale</span>
+                                        :aria-label="t('Show Coordinate Scale (Circular)')">
+                                    <span>{{ t('Show Coordinate Scale') }}</span>
                                 </label>
-                                <help-tip id="help-circular-axis-show-coordinate-scale" text="Show primary coordinate ticks and labels in simple mode. The circular genome axis remains visible when this is off."></help-tip>
+                                <help-tip id="help-circular-axis-show-coordinate-scale" :text="t('Show primary coordinate ticks and labels in simple mode. The circular genome axis remains visible when this is off.')"></help-tip>
                             </div>
                             <p
                                 v-if="adv.circular_track_slots_enabled"
                                 class="rounded border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] text-sky-800"
                                 data-scale-visibility-note>
-                                Custom Track Slots are active. Use an enabled Ticks slot to control coordinate-scale visibility.
+                                {{ t('Custom Track Slots are active. Use an enabled Ticks slot to control coordinate-scale visibility.') }}
                             </p>
                             <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <span class="input-label text-[10px]">Axis Stroke Color <help-tip id="help-circular-axis-axis-stroke-color" text="Use Auto for the configured default, None to hide the axis, or Color for an explicit value."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Axis Stroke Color') }} <help-tip id="help-circular-axis-axis-stroke-color" :text="t('Use Auto for the configured default, None to hide the axis, or Color for an explicit value.')"></help-tip></span>
                                         <color-value-control
                                             v-model="adv.axis_stroke_color"
                                             fallback="#000000"
-                                            aria-label="Axis stroke color"
+                                            :aria-label="t('Axis stroke color')"
                                             aria-describedby="help-circular-axis-axis-stroke-color">
                                         </color-value-control>
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]">Axis Stroke Width <help-tip id="help-circular-axis-axis-stroke-width" text="Width of the main axis line."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Axis Stroke Width') }} <help-tip id="help-circular-axis-axis-stroke-width" :text="t('Width of the main axis line.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" :text="autoValueText('axisStrokeWidth')">
-                                            <input type="number" v-model.number="adv.axis_stroke_width" aria-label="Axis Stroke Width" aria-describedby="help-circular-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.axis_stroke_width" :aria-label="t('Axis Stroke Width')" aria-describedby="help-circular-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -5492,15 +5492,15 @@
                                     :class="canUseCircularScaleStyling ? '' : 'opacity-50'"
                                     class="grid grid-cols-2 gap-1.5 min-w-0">
                                     <div>
-                                        <span class="input-label text-[10px]">Scale Interval <help-tip id="help-circular-axis-scale-interval" text="Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Scale Interval') }} <help-tip id="help-circular-axis-scale-interval" :text="t('Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Circular scale interval" aria-describedby="help-circular-axis-scale-interval" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" step="1" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" :aria-label="t('Circular scale interval')" aria-describedby="help-circular-axis-scale-interval" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]">Tick Label Font Size <help-tip id="help-circular-axis-tick-label-font-size" text="Font size for circular tick labels. Leave blank to use the default size."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Tick Label Font Size') }} <help-tip id="help-circular-axis-tick-label-font-size" :text="t('Font size for circular tick labels. Leave blank to use the default size.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.tick_label_font_size, 'tickLabelFontSize')" :text="autoValueText('tickLabelFontSize')">
-                                            <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact auto-value-input" aria-label="Circular tick label font size" aria-describedby="help-circular-axis-tick-label-font-size" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact auto-value-input" :aria-label="t('Circular tick label font size')" aria-describedby="help-circular-axis-tick-label-font-size" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </fieldset>
@@ -5513,76 +5513,76 @@
                 <teleport to="#settings-popup" defer :disabled="settingsPane.floating !== 'dinucleotide'">
                 <div v-settings-section="'dinucleotide'" data-setting="dinucleotide" class="card">
                     <details>
-                        <summary aria-label="Dinucleotide content/skew"><settings-section-title section="dinucleotide"></settings-section-title> <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
+                        <summary :aria-label="t('Dinucleotide content/skew')"><settings-section-title section="dinucleotide"></settings-section-title> <help-tip :text="t('Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing.')"></help-tip></summary>
                         <setting-note setting="dinucleotide" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div>
-                                    <span class="input-label text-[10px]">Window <help-tip id="help-gc-window" text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Window') }} <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
-                                        <input type="number" min="1" step="1" v-model.number="adv.window_size" aria-label="Window" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="adv.window_size" :aria-label="t('Window')" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
-                                    <span class="input-label text-[10px]">Step <help-tip id="help-gc-step" text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Step') }} <help-tip id="help-gc-step" :text="t('Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.step_size, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
-                                        <input type="number" min="1" step="1" v-model.number="adv.step_size" aria-label="Step" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="adv.step_size" :aria-label="t('Step')" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
-                                    <span class="input-label text-[10px]">Dinucleotide <help-tip id="help-gc-dinucleotide" text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></span>
-                                    <input type="text" :value="adv.nt" @input="mode === 'circular' ? setCircularDinucleotide($event.target.value) : (adv.nt = $event.target.value)" aria-label="Dinucleotide" aria-describedby="help-gc-dinucleotide" class="form-input form-input-compact w-full" placeholder="GC" :disabled="!semanticMutationAvailable">
+                                    <span class="input-label text-[10px]">{{ t('Dinucleotide') }} <help-tip id="help-gc-dinucleotide" :text="t('Dinucleotide to use (e.g., \'GC\'). Default is \'GC\'.')"></help-tip></span>
+                                    <input type="text" :value="adv.nt" @input="mode === 'circular' ? setCircularDinucleotide($event.target.value) : (adv.nt = $event.target.value)" :aria-label="t('Dinucleotide')" aria-describedby="help-gc-dinucleotide" class="form-input form-input-compact w-full" placeholder="GC" :disabled="!semanticMutationAvailable">
                                 </div>
                             </div>
 
                             <div>
-                                <span class="input-label text-[10px]">GC Content Mode <help-tip id="help-gc-gc-content-mode" text="Deviation centers the track around the window mean. Percent draws absolute GC percentage from a baseline."></help-tip></span>
-                                <select v-model="adv.gc_content_mode" aria-label="GC Content Mode" aria-describedby="help-gc-gc-content-mode" class="form-select form-input-compact" :disabled="!semanticMutationAvailable">
-                                    <option value="deviation">Deviation</option>
-                                    <option value="percent">Percent</option>
+                                <span class="input-label text-[10px]">{{ t('GC Content Mode') }} <help-tip id="help-gc-gc-content-mode" :text="t('Deviation centers the track around the window mean. Percent draws absolute GC percentage from a baseline.')"></help-tip></span>
+                                <select v-model="adv.gc_content_mode" :aria-label="t('GC Content Mode')" aria-describedby="help-gc-gc-content-mode" class="form-select form-input-compact" :disabled="!semanticMutationAvailable">
+                                    <option value="deviation">{{ t('Deviation') }}</option>
+                                    <option value="percent">{{ t('Percent') }}</option>
                                 </select>
                             </div>
 
                             <div v-if="adv.gc_content_mode === 'percent'" class="space-y-2">
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <span class="input-label text-[10px]">GC Min % <help-tip id="help-gc-gc-min-percent" text="Minimum GC percentage for percent-mode clipping and axis scaling."></help-tip></span>
-                                        <input type="number" step="0.1" v-model.number="adv.gc_content_min_percent" aria-label="GC Min %" aria-describedby="help-gc-gc-min-percent" class="form-input form-input-compact" placeholder="0" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px]">{{ t('GC Min %') }} <help-tip id="help-gc-gc-min-percent" :text="t('Minimum GC percentage for percent-mode clipping and axis scaling.')"></help-tip></span>
+                                        <input type="number" step="0.1" v-model.number="adv.gc_content_min_percent" :aria-label="t('GC Min %')" aria-describedby="help-gc-gc-min-percent" class="form-input form-input-compact" placeholder="0" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]">GC Max % <help-tip id="help-gc-gc-max-percent" text="Maximum GC percentage for percent-mode clipping and axis scaling."></help-tip></span>
-                                        <input type="number" step="0.1" v-model.number="adv.gc_content_max_percent" aria-label="GC Max %" aria-describedby="help-gc-gc-max-percent" class="form-input form-input-compact" placeholder="100" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px]">{{ t('GC Max %') }} <help-tip id="help-gc-gc-max-percent" :text="t('Maximum GC percentage for percent-mode clipping and axis scaling.')"></help-tip></span>
+                                        <input type="number" step="0.1" v-model.number="adv.gc_content_max_percent" :aria-label="t('GC Max %')" aria-describedby="help-gc-gc-max-percent" class="form-input form-input-compact" placeholder="100" :disabled="!semanticMutationAvailable">
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div class="flex items-center text-xs">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                             <input type="checkbox" v-model="adv.gc_content_show_axis" aria-describedby="help-gc-percent-axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span>Percent Axis</span>
+                                            <span>{{ t('Percent Axis') }}</span>
                                         </label>
-                                        <help-tip id="help-gc-percent-axis" text="Show the GC content percent axis line. Hiding the axis also hides percent tick marks and labels."></help-tip>
+                                        <help-tip id="help-gc-percent-axis" :text="t('Show the GC content percent axis line. Hiding the axis also hides percent tick marks and labels.')"></help-tip>
                                     </div>
                                     <div class="flex items-center text-xs">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                             <input type="checkbox" v-model="adv.gc_content_show_ticks" aria-describedby="help-gc-percent-ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span>Percent Ticks</span>
+                                            <span>{{ t('Percent Ticks') }}</span>
                                         </label>
-                                        <help-tip id="help-gc-percent-ticks" text="Show GC content percent-axis tick marks and labels."></help-tip>
+                                        <help-tip id="help-gc-percent-ticks" :text="t('Show GC content percent-axis tick marks and labels.')"></help-tip>
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-3 gap-1.5">
                                     <div>
-                                        <span class="input-label text-[10px]">Large Tick <help-tip id="help-gc-large-tick" text="GC content percent-mode large tick interval."></help-tip></span>
-                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_tick_interval" aria-label="Large Tick" aria-describedby="help-gc-large-tick" class="form-input form-input-compact" placeholder="20" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px]">{{ t('Large Tick') }} <help-tip id="help-gc-large-tick" :text="t('GC content percent-mode large tick interval.')"></help-tip></span>
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_tick_interval" :aria-label="t('Large Tick')" aria-describedby="help-gc-large-tick" class="form-input form-input-compact" placeholder="20" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]">Small Tick <help-tip id="help-gc-small-tick" text="GC content percent-mode small tick interval. Leave blank to hide small ticks."></help-tip></span>
-                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_small_tick_interval" aria-label="Small Tick" aria-describedby="help-gc-small-tick" class="form-input form-input-compact" placeholder="None" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px]">{{ t('Small Tick') }} <help-tip id="help-gc-small-tick" :text="t('GC content percent-mode small tick interval. Leave blank to hide small ticks.')"></help-tip></span>
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_small_tick_interval" :aria-label="t('Small Tick')" aria-describedby="help-gc-small-tick" class="form-input form-input-compact" :placeholder="t('None')" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]">Tick Font <help-tip id="help-gc-tick-font" text="Font size for GC content percent tick labels. Leave blank for auto."></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Tick Font') }} <help-tip id="help-gc-tick-font" :text="t('Font size for GC content percent tick labels. Leave blank for auto.')"></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.gc_content_tick_font_size, 'gcTickFont')" :text="autoValueText('gcTickFont')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" aria-label="Tick Font" aria-describedby="help-gc-tick-font" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" :aria-label="t('Tick Font')" aria-describedby="help-gc-tick-font" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -5590,9 +5590,9 @@
 
                             <template v-if="mode === 'linear'">
                                 <div>
-                                    <span class="input-label text-[10px]">GC Height <help-tip id="help-gc-gc-height" text="Height of the linear GC content and GC skew tracks. Applies to whichever of those tracks are enabled when the diagram is generated."></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('GC Height') }} <help-tip id="help-gc-gc-height" :text="t('Height of the linear GC content and GC skew tracks. Applies to whichever of those tracks are enabled when the diagram is generated.')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.gc_height, 'linearGcHeight')" :text="autoValueText('linearGcHeight')">
-                                        <input type="number" v-model.number="adv.gc_height" aria-label="GC Height" aria-describedby="help-gc-gc-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.gc_height" :aria-label="t('GC Height')" aria-describedby="help-gc-gc-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                             </template>
@@ -5601,29 +5601,29 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <template v-if="!form.suppress_gc">
                                         <div>
-                                            <span class="input-label text-[10px]">GC Content Width <help-tip id="help-gc-gc-content-width" text="GC content track width in px."></help-tip></span>
+                                            <span class="input-label text-[10px]">{{ t('GC Content Width') }} <help-tip id="help-gc-gc-content-width" :text="t('GC content track width in px.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_width_circular, 'circularGcWidth')" :text="autoValueText('circularGcWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC content row width, or Reset to copy this value into the stack.' : ''" aria-label="GC Content Width" aria-describedby="help-gc-gc-content-width" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the GC content row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Width')" aria-describedby="help-gc-gc-content-width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <span class="input-label text-[10px]">GC Content Radius <help-tip id="help-gc-gc-content-radius" text="GC content center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></span>
+                                            <span class="input-label text-[10px]">{{ t('GC Content Radius') }} <help-tip id="help-gc-gc-content-radius" :text="t('GC content center radius as a ratio of the base circular radius (1.0 = base radius).')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_radius_circular, 'circularGcRadius')" :text="autoValueText('circularGcRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC content row radius, or Reset to copy this value into the stack.' : ''" aria-label="GC Content Radius" aria-describedby="help-gc-gc-content-radius" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the GC content row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Content Radius')" aria-describedby="help-gc-gc-content-radius" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
                                     <template v-if="!form.suppress_skew">
                                         <div>
-                                            <span class="input-label text-[10px]">GC Skew Width <help-tip id="help-gc-gc-skew-width" text="GC skew track width in px."></help-tip></span>
+                                            <span class="input-label text-[10px]">{{ t('GC Skew Width') }} <help-tip id="help-gc-gc-skew-width" :text="t('GC skew track width in px.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_width_circular, 'circularSkewWidth')" :text="autoValueText('circularSkewWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC skew row width, or Reset to copy this value into the stack.' : ''" aria-label="GC Skew Width" aria-describedby="help-gc-gc-skew-width" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the GC skew row width, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Width')" aria-describedby="help-gc-gc-skew-width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <span class="input-label text-[10px]">GC Skew Radius <help-tip id="help-gc-gc-skew-radius" text="GC skew center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></span>
+                                            <span class="input-label text-[10px]">{{ t('GC Skew Radius') }} <help-tip id="help-gc-gc-skew-radius" :text="t('GC skew center radius as a ratio of the base circular radius (1.0 = base radius).')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_radius_circular, 'circularSkewRadius')" :text="autoValueText('circularSkewRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC skew row radius, or Reset to copy this value into the stack.' : ''" aria-label="GC Skew Radius" aria-describedby="help-gc-gc-skew-radius" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? t('Custom stack geometry is active. Use the GC skew row radius, or Reset to copy this value into the stack.') : ''" :aria-label="t('GC Skew Radius')" aria-describedby="help-gc-gc-skew-radius" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
@@ -5641,14 +5641,14 @@
                         <div class="mt-4 space-y-4 pt-4 border-t border-slate-200 text-xs text-slate-600">
 
                             <div class="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 leading-relaxed">
-                                <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key" aria-hidden="true"></i> Privacy & Security</strong>
+                                <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key" aria-hidden="true"></i> {{ t('Privacy & Security') }}</strong>
                                 <i18n-text :text="t('This tool runs {where} using WebAssembly (Pyodide).')"><template #where><strong>{{ t('entirely in your browser') }}</strong></template></i18n-text> {{ t('Uploaded genomic data is processed locally and never leaves your device.') }}
                             </div>
                             <!-- GOOGLE_ANALYTICS_NOTICE -->
 
                             <div>
-                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-quotes" aria-hidden="true"></i> How to cite</strong>
-                                <p class="mb-1.5 text-[11px]">If you use gbdraw in your research, please cite the preprint:</p>
+                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-quotes" aria-hidden="true"></i> {{ t('How to cite') }}</strong>
+                                <p class="mb-1.5 text-[11px]">{{ t('If you use gbdraw in your research, please cite the preprint:') }}</p>
                                 <div class="bg-white p-2 rounded border border-slate-200 font-mono text-[10px] select-all text-slate-500 break-all">
                                     Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. https://doi.org/10.64898/2026.04.07.716863
                                 </div>
@@ -5659,32 +5659,31 @@
                                     </a>
                                 </p>
                                 <p class="mt-1 text-[11px] text-slate-500">
-                                    Source code: <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:text-blue-800 underline">https://github.com/satoshikawato/gbdraw</a>
+                                    {{ t('Source code:') }} <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:text-blue-800 underline">https://github.com/satoshikawato/gbdraw</a>
                                 </p>
                             </div>
 
                             <div>
-                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-scroll" aria-hidden="true"></i> License & Notices</strong>
+                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-scroll" aria-hidden="true"></i> {{ t('License & Notices') }}</strong>
                                 <p class="mb-2 text-[11px]">
-                                    gbdraw is released under the MIT License. Open source notices for the hosted app,
-                                    vendored browser assets, and bundled fonts are available on a local static page.
+                                    {{ t('gbdraw is released under the MIT License. Open source notices for the hosted app, vendored browser assets, and bundled fonts are available on a local static page.') }}
                                 </p>
                                 <div class="flex gap-2">
                                     <a href="./open-source-notices.html" class="btn btn-secondary btn-sm justify-center flex-1">
-                                        <i class="ph ph-book-open-text text-lg" aria-hidden="true"></i> Open Source Notices
+                                        <i class="ph ph-book-open-text text-lg" aria-hidden="true"></i> {{ t('Open Source Notices') }}
                                     </a>
                                     <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
-                                        <i class="ph ph-file-text text-lg" aria-hidden="true"></i> MIT on GitHub
+                                        <i class="ph ph-file-text text-lg" aria-hidden="true"></i> {{ t('MIT on GitHub') }}
                                     </a>
                                 </div>
                             </div>
 
                             <div class="flex gap-2">
                                 <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
-                                    <i class="ph ph-github-logo text-lg" aria-hidden="true"></i> GitHub
+                                    <i class="ph ph-github-logo text-lg" aria-hidden="true"></i> {{ t('GitHub') }}
                                 </a>
                                 <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
-                                    <i class="ph ph-bug text-lg" aria-hidden="true"></i> Issues
+                                    <i class="ph ph-bug text-lg" aria-hidden="true"></i> {{ t('Issues') }}
                                 </a>
                             </div>
                         </div>
@@ -5703,13 +5702,13 @@
                     <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
                     <span>{{ circularConservationLayoutWarning }}</span>
                 </div>
-                <help-tip id="generate-layout-warning" label="Layout warning" :text="circularConservationLayoutWarning"><i class="ph ph-warning-circle" aria-hidden="true"></i></help-tip>
+                <help-tip id="generate-layout-warning" :label="t('Layout warning')" :text="circularConservationLayoutWarning"><i class="ph ph-warning-circle" aria-hidden="true"></i></help-tip>
             </template>
-            <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
+            <button data-history-managed type="button" :aria-label="t('Generate Diagram')" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
                 :aria-describedby="circularConservationLayoutWarning ? 'generate-layout-warning' : null"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
-                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> <span>Generate<span class="generate-bar-long"> Diagram</span></span></span>
-                <span v-else class="flex items-center justify-center gap-2"><gbdraw-loader class="gbdraw-loader-on-fill text-xl"></gbdraw-loader> <span class="generate-bar-long">{{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span></span>
+                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> <span>{{ t('Generate') }}<span class="generate-bar-long"> {{ t('Diagram') }}</span></span></span>
+                <span v-else class="flex items-center justify-center gap-2"><gbdraw-loader class="gbdraw-loader-on-fill text-xl"></gbdraw-loader> <span class="generate-bar-long">{{ generationCancelRequested ? t('Canceling...') : t('Processing...') }}</span></span>
             </button>
             </div>
 
@@ -5719,7 +5718,7 @@
         <!-- Resize Handle -->
         <div class="resize-handle w-1 bg-slate-200 hover:bg-blue-400 cursor-col-resize transition-colors shrink-0 mx-2"
              @mousedown.prevent="startResizing"
-             title="Drag to resize"></div>
+             :title="t('Drag to resize')"></div>
 
         <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0 focus:outline-none" tabindex="-1">
             <!-- The outcome of Load Session, Save Session, or a table import or export; warnings as a list -->
@@ -5732,48 +5731,48 @@
                         <li v-for="(item, index) in notice.items" :key="index">{{ item }}</li>
                     </ul>
                 </div>
-                <button type="button" data-history-ignore @click="$event.currentTarget.closest('.result-pane')?.focus({ preventScroll: true }); dismissNotice()" class="app-notice-dismiss" title="Dismiss" aria-label="Dismiss notice">
+                <button type="button" data-history-ignore @click="$event.currentTarget.closest('.result-pane')?.focus({ preventScroll: true }); dismissNotice()" class="app-notice-dismiss" :title="t('Dismiss')" :aria-label="t('Dismiss notice')">
                     <i class="ph ph-x" aria-hidden="true"></i>
                 </button>
             </div>
-            <p v-if="labelReflowProcessing || labelReflowLastError" data-live-application-feedback role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">{{ labelReflowProcessing ? 'Live edit applying: geometry is being updated. Direct edits already applied are kept.' : labelReflowLastError.note }}</p>
+            <p v-if="labelReflowProcessing || labelReflowLastError" data-live-application-feedback role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">{{ labelReflowProcessing ? t('Live edit applying: geometry is being updated. Direct edits already applied are kept.') : labelReflowLastError.note }}</p>
 
-            <p v-if="sessionSaveNeedsGenerate && !processing" data-session-save-needs-generate role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">This Result comes from a Session saved by an older gbdraw. Generate once before Save Session.</p>
+            <p v-if="sessionSaveNeedsGenerate && !processing" data-session-save-needs-generate role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">{{ t('This Result comes from a Session saved by an older gbdraw. Generate once before Save Session.') }}</p>
 
             <operation-error v-if="errorDisplay && !(errorDisplay.operation === 'align' && (similarityAlignmentDialogOpen || similarityAlignmentResetDialogOpen))"
                 :error="errorLog" :recovery="errorDisplay.operation === 'generate' || errorDisplay.operation === 'align' ? generationFailureRecovery : null"
                 class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="mt-2 flex flex-wrap gap-2">
-                    <button v-if="mode === 'linear' && errorDisplay.actions.includes('edit-comparison')" type="button" data-history-ignore @click="showLinearComparisonCause" class="btn btn-secondary btn-sm">Show in Comparison</button>
-                    <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn btn-secondary btn-sm">Retry Generate</button>
-                    <button v-if="canRetryAuxiliaryImportFailure" type="button" @click="retryAuxiliaryImportFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">Retry table import</button>
-                    <button v-if="canRetryLabelImportFailure" type="button" @click="retryLabelImportFailure" class="btn btn-secondary btn-sm">Retry Label TSV import</button>
-                    <button v-if="canRetryLabelImportFailure" type="button" @click="editLabelImportFailure" class="btn btn-secondary btn-sm">Reselect Label TSV</button>
-                    <button v-if="canRetryFeatureEditTableImport" type="button" @click="retryFeatureEditTableImport" class="btn btn-secondary btn-sm">Retry Feature Edits TSV import</button>
-                    <button v-if="canRetryFeatureEditTableImport" type="button" @click="reselectFeatureEditTable" class="btn btn-secondary btn-sm">Reselect Feature Edits TSV</button>
-                    <button v-if="canRetrySpecificRuleFailure" type="button" @click="retrySpecificRuleFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">Retry rule operation</button>
-                    <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn btn-secondary btn-sm">Edit pattern</button>
-                    <button v-if="errorDisplay.actions.includes('generate') && errorDisplay.operation !== 'generate'" type="button" @click="generateFromError" :disabled="processing" class="btn btn-secondary btn-sm">Generate</button>
-                    <button v-if="(errorDisplay.actions.includes('save-session') && errorDisplay.operation !== 'session-save') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn btn-secondary btn-sm">Save Session</button>
-                    <button v-if="generationFailureRecovery === 'restore-failed' || errorDisplay.actions.includes('reload')" type="button" @click="reloadAfterOperationError" class="btn btn-secondary btn-sm">Reload</button>
-                    <button v-if="errorDisplay.operation.startsWith('export-') && errorDisplay.actions.includes('use-svg')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">Use SVG</button>
-                    <button v-if="errorDisplay.operation === 'export-svg' && !canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">Retry SVG export</button>
-                    <button v-if="canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadInteractiveSVG" class="btn btn-secondary btn-sm">Retry Interactive SVG export</button>
-                    <button v-if="errorDisplay.operation === 'export-png' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPNG" class="btn btn-secondary btn-sm">Retry PNG export</button>
-                    <button v-if="errorDisplay.operation === 'export-pdf' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPDF" class="btn btn-secondary btn-sm">Retry PDF export</button>
+                    <button v-if="mode === 'linear' && errorDisplay.actions.includes('edit-comparison')" type="button" data-history-ignore @click="showLinearComparisonCause" class="btn btn-secondary btn-sm">{{ t('Show in Comparison') }}</button>
+                    <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn btn-secondary btn-sm">{{ t('Retry Generate') }}</button>
+                    <button v-if="canRetryAuxiliaryImportFailure" type="button" @click="retryAuxiliaryImportFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">{{ t('Retry table import') }}</button>
+                    <button v-if="canRetryLabelImportFailure" type="button" @click="retryLabelImportFailure" class="btn btn-secondary btn-sm">{{ t('Retry Label TSV import') }}</button>
+                    <button v-if="canRetryLabelImportFailure" type="button" @click="editLabelImportFailure" class="btn btn-secondary btn-sm">{{ t('Reselect Label TSV') }}</button>
+                    <button v-if="canRetryFeatureEditTableImport" type="button" @click="retryFeatureEditTableImport" class="btn btn-secondary btn-sm">{{ t('Retry Feature Edits TSV import') }}</button>
+                    <button v-if="canRetryFeatureEditTableImport" type="button" @click="reselectFeatureEditTable" class="btn btn-secondary btn-sm">{{ t('Reselect Feature Edits TSV') }}</button>
+                    <button v-if="canRetrySpecificRuleFailure" type="button" @click="retrySpecificRuleFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">{{ t('Retry rule operation') }}</button>
+                    <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn btn-secondary btn-sm">{{ t('Edit pattern') }}</button>
+                    <button v-if="errorDisplay.actions.includes('generate') && errorDisplay.operation !== 'generate'" type="button" @click="generateFromError" :disabled="processing" class="btn btn-secondary btn-sm">{{ t('Generate') }}</button>
+                    <button v-if="(errorDisplay.actions.includes('save-session') && errorDisplay.operation !== 'session-save') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn btn-secondary btn-sm">{{ t('Save Session') }}</button>
+                    <button v-if="generationFailureRecovery === 'restore-failed' || errorDisplay.actions.includes('reload')" type="button" @click="reloadAfterOperationError" class="btn btn-secondary btn-sm">{{ t('Reload') }}</button>
+                    <button v-if="errorDisplay.operation.startsWith('export-') && errorDisplay.actions.includes('use-svg')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">{{ t('Use SVG') }}</button>
+                    <button v-if="errorDisplay.operation === 'export-svg' && !canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">{{ t('Retry SVG export') }}</button>
+                    <button v-if="canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadInteractiveSVG" class="btn btn-secondary btn-sm">{{ t('Retry Interactive SVG export') }}</button>
+                    <button v-if="errorDisplay.operation === 'export-png' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPNG" class="btn btn-secondary btn-sm">{{ t('Retry PNG export') }}</button>
+                    <button v-if="errorDisplay.operation === 'export-pdf' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPDF" class="btn btn-secondary btn-sm">{{ t('Retry PDF export') }}</button>
                 </div>
             </operation-error>
 
-            <div v-if="results.length > 0" role="region" aria-label="Result Preview" class="card p-0 flex flex-col flex-grow overflow-clip relative">
+            <div v-if="results.length > 0" role="region" :aria-label="t('Result Preview')" class="card p-0 flex flex-col flex-grow overflow-clip relative">
                 <div class="card-header mb-0 py-2 pl-5 pr-6 border-b border-slate-200 flex justify-between items-center shrink-0 flex-wrap gap-x-2 gap-y-1">
                     <div class="flex items-center gap-3 flex-wrap min-w-0">
                         <h2 class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 min-w-0">
                             <i class="ph ph-check-circle text-xl text-green-600 shrink-0" aria-hidden="true"></i>
-                            <span v-if="failedGeneratePreservedResult">Last Successful Result</span>
-                            <span v-else-if="results.length === 1">Result Preview</span>
+                            <span v-if="failedGeneratePreservedResult">{{ t('Last Successful Result') }}</span>
+                            <span v-else-if="results.length === 1">{{ t('Result Preview') }}</span>
                             <span v-else>
-                                <select data-history-ignore :disabled="!semanticMutationAvailable" :value="selectedResultIndex" @change="selectResult($event.target.value)" aria-label="Displayed Result" class="bg-white border border-slate-300 text-slate-800 text-sm font-semibold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-blue-500 max-w-full">
-                                    <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
+                                <select data-history-ignore :disabled="!semanticMutationAvailable" :value="selectedResultIndex" @change="selectResult($event.target.value)" :aria-label="t('Displayed Result')" class="bg-white border border-slate-300 text-slate-800 text-sm font-semibold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-blue-500 max-w-full">
+                                    <option v-for="(res, idx) in results" :key="idx" :value="idx">{{ t('Preview: {name}', { name: res.name }) }}</option>
                                 </select>
                             </span>
                         </h2>
@@ -5786,7 +5785,7 @@
                                     ]"
                                     :aria-pressed="resultPanelTab === 'preview'">
                                 <i class="ph ph-image" aria-hidden="true"></i>
-                                <span>Preview</span>
+                                <span>{{ t('Preview') }}</span>
                             </button>
                             <button type="button"
                                     @click="resultPanelTab = 'run-info'"
