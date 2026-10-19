@@ -20,7 +20,10 @@ import { readFileText } from '../../services/file-content-cache.js';
 import { ownEntry } from '../../utils/own-entry.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
-import { LENGTH_BAR_ID, TICK_GROUPS, trackGroupSelector } from '../../services/drawn-groups.js';
+import {
+  ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
+  TICK_GROUPS, trackGroupSelector
+} from '../../services/drawn-groups.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list.
@@ -47,6 +50,10 @@ import { LENGTH_BAR_ID, TICK_GROUPS, trackGroupSelector } from '../../services/d
  * @typedef {{ files: ArrayLike<File> | null, value: string }} LabelTableInput
  */
 
+// The groups whose text is never a feature label. A Linear Result draws a
+// feature label with the central baseline, and so does it draw a region label
+// (in its annotation's group, and its copy in front of the leader lines, which
+// names that group) and the depth and GC content axis ticks (OV-1291).
 export const EXCLUDED_GROUP_SELECTOR = [
   '#legend',
   '#feature_legend',
@@ -54,7 +61,11 @@ export const EXCLUDED_GROUP_SELECTOR = [
   '#horizontal_legend',
   '#vertical_legend',
   `#${LENGTH_BAR_ID}`,
-  trackGroupSelector(TICK_GROUPS)
+  trackGroupSelector(TICK_GROUPS),
+  ANNOTATION_SELECTOR,
+  REGION_LABEL_FRONT_SELECTOR,
+  trackGroupSelector(DEPTH_GROUPS),
+  trackGroupSelector(DINUCLEOTIDE_CONTENT_GROUPS)
 ].join(', ');
 const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
 const LABEL_BINDING_SCHEMA_ATTRIBUTE = 'data-gbdraw-label-binding-schema';

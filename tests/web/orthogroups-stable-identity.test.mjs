@@ -59,6 +59,8 @@ await copyModule('gbdraw/web/js/contracts/schema.generated.js', 'contracts/schem
 await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
 await copyModule('gbdraw/web/js/services/record-draw-selection.js', 'services/record-draw-selection.js');
+// It finds the annotation groups by the drawn-group owner's marks.
+await copyModule('gbdraw/web/js/services/drawn-groups.js', 'services/drawn-groups.js');
 // The member tables name records through the Linear record label owners (OV-369).
 for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache', 'session-resource-backing',
   'byte-utils', 'depth-file-codec', 'depth-track-state', 'track-slot-display', 'record-options']) {
