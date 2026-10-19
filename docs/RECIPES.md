@@ -178,7 +178,7 @@ gbdraw linear --gbk genome.gb -o output -f svg --show_labels all
 gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg --show_labels first
 ```
 
-When genomes with many labelled features stop with "Linear labels do not fit", see [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
+If the run stops with "Linear labels do not fit", run it again with an option the message lists; see [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
 ### Put tracks below the axis
 
@@ -347,7 +347,7 @@ gbdraw linear \
   -f svg
 ```
 
-If the run stops with "Linear labels do not fit", see [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
+If the run stops with "Linear labels do not fit", run it again with an option the message lists; see [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-do-not-fit).
 
 Use `--losatp_mode pairwise`, `similarity_groups`, or `collinear`. The
 `similarity_groups` mode creates gbdraw similarity groups for visualization; it does
