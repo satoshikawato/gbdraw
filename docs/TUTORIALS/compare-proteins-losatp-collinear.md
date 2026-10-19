@@ -107,8 +107,8 @@ Open **Settings** and choose the **LOSATP** button in **LOSAT Mode**. Choose
 hides the control. Then choose **Collinear blocks** from the **LOSATP mode**
 menu, select **Infer orthogroups with self-comparisons**, clear **Max target
 seqs** so it shows **Unbounded**, and set the remaining block, Performance, and
-result-filter values. Scroll to **Advanced
-comparison and layout**, and set the advanced Collinear values.
+result-filter values. Then open **Advanced
+comparison and layout** and set the advanced Collinear values.
 
 Fresh Web Collinear settings leave **Infer orthogroups with self-comparisons**
 off and set **Max target seqs** to `5`. The Gallery figure and the
