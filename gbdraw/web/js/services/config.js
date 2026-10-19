@@ -1,6 +1,7 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { describeLoadRepairs, distinctLoadRepairs, loadRepair } from '../utils/load-repairs.js';
+import { t, tm } from '../utils/i18n.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { specificRulesFileCaptions } from './file-imports.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
@@ -5075,7 +5076,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
     setFeatureEditorStatusData({
       status: 'summary-ready',
       generationId,
-      error: plan.warning || null,
+      error: plan.warning ? tm(plan.warning) : null,
       // The cast: `Array.isArray` on the line above; the elements stay unvalidated.
       summaryCount: Array.isArray(plan.recoveredFeatureState?.extractedFeatures)
         ? /** @type {unknown[]} */ (plan.recoveredFeatureState.extractedFeatures).length
@@ -5085,7 +5086,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
   }
 
   if (plan?.status === 'unrecoverable' || plan?.status === 'failed') {
-    const warning = plan.warning || 'Feature metadata recovery failed. The SVG preview remains available.';
+    const warning = plan.warning ? tm(plan.warning) : t('Feature metadata recovery failed. The SVG preview remains available.');
     state.featureExtractionError.value = { summary: warning, details: [] };
     setFeatureEditorStatusData({
       status: 'failed',
@@ -5304,9 +5305,9 @@ const exportSessionDocument = async (
   const sessionFilename = buildSessionFilename(resolvedTitle);
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
     const choice = await askChoice({
-      title: 'Download the Session again?',
-      description: `"${sessionFilename}" was already downloaded. Your browser may replace that file or save this one under a new name.`,
-      actions: [{ id: 'download', label: 'Download again', tone: 'primary' }]
+      title: t('Download the Session again?'),
+      description: t('"{file}" was already downloaded. Your browser may replace that file or save this one under a new name.', { file: sessionFilename }),
+      actions: [{ id: 'download', label: t('Download again'), tone: 'primary' }]
     });
     if (choice !== 'download' || !isCurrent()) {
       recordSessionLifecycleEvent('session-save-download-canceled', {
@@ -5469,8 +5470,8 @@ const exportSessionDocument = async (
   if (!isCurrent()) return { status: 'canceled' };
   const largeMegabytes = largeSessionDownloadMegabytes(compressed);
   if (largeMegabytes !== null && !await askBeforeLargeDownload(askChoice, {
-    title: 'Download a large Session?',
-    description: `The Session file is ${largeMegabytes.toFixed(1)} MB.`
+    title: t('Download a large Session?'),
+    description: t('The Session file is {size} MB.', { size: largeMegabytes.toFixed(1) })
   })) {
     recordSessionLifecycleEvent('session-save-download-canceled', {
       reason: 'large-download',

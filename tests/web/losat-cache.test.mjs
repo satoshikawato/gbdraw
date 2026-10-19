@@ -1029,7 +1029,7 @@ await exercisePairLoop(); // Retry must acquire a new index.
     }))
   };
   const registrationStart = runSource.indexOf('            const convertedPairs = Array.isArray(convertedPayload.pairs)');
-  const registrationEnd = runSource.indexOf("            setProcessingStatus('Preparing nucleotide comparison results...');", registrationStart);
+  const registrationEnd = runSource.indexOf("            setProcessingStatus(t('Preparing nucleotide comparison results...'));", registrationStart);
   assert.ok(registrationStart > 0 && registrationEnd > registrationStart);
   const generatedFiles = new Map();
   const registration = {

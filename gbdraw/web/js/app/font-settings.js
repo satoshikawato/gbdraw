@@ -13,6 +13,7 @@ import {
 } from '../services/font-families.js';
 import { SESSION_FONT_ACTIONS, missingSessionFonts, sessionFontQuestion } from '../services/session-fonts.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { msg, t } from '../utils/i18n.js';
 
 const { ref, reactive, computed } = window.Vue;
 
@@ -131,14 +132,14 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
     const resolution = resolveWebFontFamily(fontFamily, loadedFamilies());
     const requested = resolution.replaced[0] || parseFontFamilyList(fontFamily)[0] || fontFamily;
     const nearest = parseFontFamilyList(resolution.effective).find((family) => !isGenericFamily(family)) || resolution.effective;
-    return `${requested} — not available, drawn in ${nearest}`;
+    return t('{requested} — not available, drawn in {nearest}', { requested, nearest });
   };
 
   const choices = computed(() => {
     /** @type {FontChoice[]} */
     const list = BUNDLED_CHOICES.map((choice) => ({
       value: choice.fontFamily === null ? DEFAULT_FONT_CHOICE : choice.fontFamily,
-      label: choice.fontFamily === null ? `${choice.family} (default)` : choice.family,
+      label: choice.fontFamily === null ? t('{family} (default)', { family: choice.family }) : choice.family,
       kind: /** @type {const} */ ('bundled')
     }));
     webFontFamilies(loadedFonts()).forEach((entry) => {
@@ -148,8 +149,8 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
     if (!list.some((choice) => choice.value === current)) {
       list.push({ value: current, label: unavailableLabel(current), kind: 'unavailable' });
     }
-    list.push({ value: LOAD_FONT_FILE_CHOICE, label: 'Load font file…', kind: 'action' });
-    if (localFontsSupported) list.push({ value: INSTALLED_FONT_CHOICE, label: 'Choose installed font…', kind: 'action' });
+    list.push({ value: LOAD_FONT_FILE_CHOICE, label: t('Load font file…'), kind: 'action' });
+    if (localFontsSupported) list.push({ value: INSTALLED_FONT_CHOICE, label: t('Choose installed font…'), kind: 'action' });
     return list;
   });
 
@@ -208,7 +209,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
 
   /** @param {unknown} error A caught failure: a diagnostic or a Worker error. */
   const loadErrorSummary = (error) => normalizeUserFacingError(/** @type {Record<string, unknown>} */ (error), { code: 'INPUT_INVALID', operation: 'registerFonts' })?.summary
-    || 'The font could not be loaded.';
+    || t('The font could not be loaded.');
 
   /**
    * Read and load fonts, then select the family of the first one as one
@@ -222,7 +223,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
       const sources = await readSources(read);
       if (sources.length === 0) return;
       const drawing = state.activeDrawing();
-      await runUndoable('Change font', async () => {
+      await runUndoable(msg('Change font'), async () => {
         const [first] = await loadSources(sources);
         drawing.adv.font_family = first.fontFamily;
       });
@@ -293,7 +294,7 @@ export const createFontSettings = ({ state, runUndoable, registerFontsInWorker, 
         .sort((left, right) => left.family.localeCompare(right.family));
     } catch (_error) {
       installedPicker.families = [];
-      installedPicker.error = 'Installed fonts are not available: the browser did not allow access to local fonts.';
+      installedPicker.error = t('Installed fonts are not available: the browser did not allow access to local fonts.');
     }
     installedPicker.open = true;
     return new Promise((resolve) => { answerInstalledPicker = resolve; });

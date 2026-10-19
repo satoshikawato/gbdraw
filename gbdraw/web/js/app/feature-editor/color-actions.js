@@ -25,6 +25,7 @@ import {
   featureOverrideKey,
   getFeatureOverride
 } from '../../services/feature-override-identity.js';
+import { msg } from '../../utils/i18n.js';
 
 /**
  * The rule owner's actions this owner reads (a whole-object port, R13).
@@ -955,7 +956,7 @@ export const createFeatureColorActions = ({
         : (current) => featureRuleCandidate(current, features, color, caption);
       const retireOld = features.length > 0 && takesWholeRow(request.sourceKey, features);
       const oldEntry = drawing.legendEntries.value.find((/** @type {LegendEntry} */ entry) => legendEntryKey(entry) === request.sourceKey);
-      return commitRuleWrite(rules, 'Rename legend item', {
+      return commitRuleWrite(rules, msg('Rename legend item'), {
         drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: oldEntry.color }] : [],
         // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
@@ -1198,7 +1199,7 @@ export const createFeatureColorActions = ({
     const replacesExistingGroup = existingEntry && contributors.length > 0
       && features.every(feature => captionsMatch(captionOf(feature), caption))
       && contributors.every(feature => selectedIds.has(feature.svg_id));
-    return commitRuleWrite((current) => featureRuleCandidate(current, features, color, normalizeCaption(caption), options), 'Change feature color', {
+    return commitRuleWrite((current) => featureRuleCandidate(current, features, color, normalizeCaption(caption), options), msg('Change feature color'), {
       drawing,
       previousLegendIntents: replacesExistingGroup
         ? [{ caption: legendEntryKey(existingEntry), color: existingEntry.color }] : [],
@@ -1265,7 +1266,7 @@ export const createFeatureColorActions = ({
     );
     const rowRuleSet = new Set(rowRules);
     return commitRuleWrite((current, revise) => current.filter(rule => !(rowRuleSet.has(rule) && coveredExactly(rule)))
-      .map(rule => (rowRuleSet.has(rule) ? revise(rule, { color }) : rule)), 'Change legend color',
+      .map(rule => (rowRuleSet.has(rule) ? revise(rule, { color }) : rule)), msg('Change legend color'),
     { drawing, afterCommit: () => { if (legendOnly.length) writeLegendRowColor(legendOnly, color); } });
   };
 
@@ -1464,7 +1465,7 @@ export const createFeatureColorActions = ({
 
     if (choice === 'rule') {
       if (matchingRule) await commitRuleWrite((current, revise) => current.map(rule => (rule === matchingRule
-        ? revise(rule, { color }) : rule)), 'Change specific color rule', { drawing, afterCommit: () => showClickedFeatureColor(feat, color) });
+        ? revise(rule, { color }) : rule)), msg('Change specific color rule'), { drawing, afterCommit: () => showClickedFeatureColor(feat, color) });
     } else if (choice === 'caption') {
       const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
       if (!targetLegendName) {
@@ -1733,7 +1734,7 @@ export const createFeatureColorActions = ({
       }
       return rules;
     };
-    const applied = await commitRuleWrite(reset, 'Reset feature color', { drawing });
+    const applied = await commitRuleWrite(reset, msg('Reset feature color'), { drawing });
     if (applied) clickedFeature.value = null;
     return applied;
   };
@@ -1892,7 +1893,7 @@ export const createFeatureColorActions = ({
     if (sessionBusy) return sessionBusy;
     if (!feature) return false;
     if (value === null) {
-      return commitRuleWrite((current) => current.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color', { drawing });
+      return commitRuleWrite((current) => current.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), msg('Reset feature color'), { drawing });
     }
     if (String(value).trim().toLowerCase() === 'none') {
       return applyColorToFeatureGroup(drawing, [feature], legendRowName(normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type)), 'none');

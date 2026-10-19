@@ -28,6 +28,7 @@ import {
 } from '../services/track-slot-display.js';
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
 import { ownEntry } from '../utils/own-entry.js';
+import { msg, t, tm, tn } from '../utils/i18n.js';
 import {
   OVERLAY_ANNOTATION_PARAMS,
   nextCopyId,
@@ -96,14 +97,14 @@ const UI_RENDERERS = SUPPORTED_RENDERERS.filter(
 
 /** @type {Record<string, string>} */
 const RENDERER_LABELS = {
-  features: 'Features',
-  ticks: 'Ticks',
-  dinucleotide_content: 'Dinucleotide content',
-  dinucleotide_skew: 'Dinucleotide skew',
-  depth: 'Depth',
-  sequence_conservation: 'Pairwise comparison',
-  annotations: 'Annotations',
-  spacer: 'Spacer'
+  features: msg('Features'),
+  ticks: msg('Ticks'),
+  dinucleotide_content: msg('Dinucleotide content'),
+  dinucleotide_skew: msg('Dinucleotide skew'),
+  depth: msg('Depth'),
+  sequence_conservation: msg('Pairwise comparison'),
+  annotations: msg('Annotations'),
+  spacer: msg('Spacer')
 };
 
 const STACK_ENTRY_AXIS = 'axis';
@@ -126,20 +127,20 @@ const SUPPRESS_FORM_KEY_BY_RENDERER = {
 };
 /** @type {Record<string, string>} */
 const SUPPRESS_TRACK_LABEL_BY_RENDERER = {
-  dinucleotide_content: 'GC content',
-  dinucleotide_skew: 'GC skew'
+  dinucleotide_content: msg('GC content'),
+  dinucleotide_skew: msg('GC skew')
 };
 /** @type {Record<string, string>} */
 const SUPPRESS_CONTROL_LABEL_BY_RENDERER = {
-  dinucleotide_content: 'Hide GC Content',
-  dinucleotide_skew: 'Hide GC Skew'
+  dinucleotide_content: msg('Hide GC Content'),
+  dinucleotide_skew: msg('Hide GC Skew')
 };
 
 /** @type {Record<string, string>} */
 const PRESET_LABELS = {
-  tuckin: 'Tuckin',
-  middle: 'Middle',
-  spreadout: 'Spreadout'
+  tuckin: msg('Tuckin'),
+  middle: msg('Middle'),
+  spreadout: msg('Spreadout')
 };
 const PREVIEW_RADIUS_PX = 390;
 const PREVIEW_TRACK_RATIO = 0.19;
@@ -169,14 +170,14 @@ const ANNOTATION_MARK_OPTIONS = Object.freeze([
 ]);
 
 /** @param {unknown} preset */
-const formatPresetName = (preset) => PRESET_LABELS[normalizeCircularTrackPreset(preset)] || PRESET_LABELS.tuckin;
+const formatPresetName = (preset) => tm(PRESET_LABELS[normalizeCircularTrackPreset(preset)] || PRESET_LABELS.tuckin);
 
 /** @param {unknown} laneDirection */
 const laneDirectionLabel = (laneDirection) => {
   const lane = normalizeLaneDirection(laneDirection);
-  if (lane === 'outside') return 'Features outside axis';
-  if (lane === 'split') return 'Features centered on axis';
-  return 'Features inside axis';
+  if (lane === 'outside') return t('Features outside axis');
+  if (lane === 'split') return t('Features centered on axis');
+  return t('Features inside axis');
 };
 
 /** @param {string} renderer @param {string} lengthParam */
@@ -569,10 +570,10 @@ export const estimateCircularConservationLayoutWarning = (state, drawing, record
     (showSkew ? 12 + 1 : 0);
 
   if (compressedStackPx > availableInsidePx) {
-    return `There are ${entries.length} inside pairwise comparison ring(s) plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.`;
+    return t('There are {count} inside pairwise comparison ring(s) plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.', { count: entries.length });
   }
   if (requestedStackPx > availableInsidePx * 0.9 || (entries.length >= 5 && (showGc || showSkew || showDepth))) {
-    return `There are ${entries.length} inside pairwise comparison ring(s); gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.`;
+    return t('There are {count} inside pairwise comparison ring(s); gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.', { count: entries.length });
   }
   return '';
 };
@@ -692,9 +693,11 @@ export const createCircularTrackSlotEditor = ({
   // What the closed disclosure holds; a GC or AT track names its dinucleotide.
   /** @param {{ renderer?: unknown, params?: { nt?: unknown } } | null | undefined} slot */
   const circularTrackSlotOptionsSummary = (slot) => {
-    if (slot?.renderer !== 'dinucleotide_content' && slot?.renderer !== 'dinucleotide_skew') return 'Gaps';
+    if (slot?.renderer !== 'dinucleotide_content' && slot?.renderer !== 'dinucleotide_skew') return t('Gaps');
     const nt = normalizeNt(slot?.params?.nt, circularDrawingDinucleotide());
-    return `${nt} · legend label, gaps${slot.renderer === 'dinucleotide_skew' ? ', colors' : ''}`;
+    return slot.renderer === 'dinucleotide_skew'
+      ? t('{nt} · legend label, gaps, colors', { nt })
+      : t('{nt} · legend label, gaps', { nt });
   };
   let nextEditorKey = 1;
   /** @param {CircularTrackSlot | null | undefined} slot */
@@ -788,7 +791,7 @@ export const createCircularTrackSlotEditor = ({
       ))
       .map((/** @type {CircularTrackSlot} */ candidate) => ({
         id: String(candidate.id).trim(),
-        label: `${String(candidate.id).trim()} · ${circularTrackRendererLabel(candidate.renderer)}`
+        label: t('{id} · {renderer}', { id: String(candidate.id).trim(), renderer: circularTrackRendererLabel(candidate.renderer) })
       }))
   );
 
@@ -1476,14 +1479,18 @@ export const createCircularTrackSlotEditor = ({
     if (!drawing.adv.circular_track_slots_enabled) return null;
     const count = activeCircularTrackSlotsForRenderer(drawing, renderer).length;
     if (count === 0) return null;
-    const trackLabel = ownEntry(SUPPRESS_TRACK_LABEL_BY_RENDERER, renderer) || 'this track';
+    // The Hide control of GC content or GC skew; the track name is the renderer's label.
+    const trackLabel = tm(ownEntry(SUPPRESS_TRACK_LABEL_BY_RENDERER, renderer) || msg('this track'));
     return askChoice({
-      title: `Hide ${trackLabel}?`,
-      description: count === 1
-        ? `Your custom track stack has 1 ${trackLabel} track. Hiding ${trackLabel} turns that track off.`
-        : `Your custom track stack has ${count} ${trackLabel} tracks. Hiding ${trackLabel} turns those tracks off.`,
-      actions: [{ id: 'hide', label: `Hide ${trackLabel}`, tone: 'primary' }],
-      cancelLabel: `Keep ${trackLabel}`
+      title: t('Hide {track}?', { track: trackLabel }),
+      description: tn(
+        count,
+        'Your custom track stack has {count} {track} track. Hiding {track} turns that track off.',
+        'Your custom track stack has {count} {track} tracks. Hiding {track} turns those tracks off.',
+        { track: trackLabel }
+      ),
+      actions: [{ id: 'hide', label: t('Hide {track}', { track: trackLabel }), tone: 'primary' }],
+      cancelLabel: t('Keep {track}', { track: trackLabel })
     });
   };
 
@@ -1520,7 +1527,7 @@ export const createCircularTrackSlotEditor = ({
       if (event?.target) event.target.checked = previousChecked;
       return asked.then((choice) => (
         choice === 'hide' && !state.sessionOperationAvailability?.() && Boolean(drawing.form[formKey]) === previousChecked
-          ? runUndoable(ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || 'Hide track', apply)
+          ? runUndoable(ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || msg('Hide track'), apply)
           : false
       ));
     }
@@ -1604,8 +1611,8 @@ export const createCircularTrackSlotEditor = ({
   const circularTrackSlotSuppressMessage = (slot) => {
     if (!circularTrackSlotHiddenBySuppress(slot)) return '';
     const renderer = String(slot?.renderer || '').trim();
-    const controlLabel = ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || 'Layout';
-    return `Hidden by ${controlLabel}.`;
+    const controlLabel = tm(ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || msg('Layout'));
+    return t('Hidden by {control}.', { control: controlLabel });
   };
 
   // A placement select (the Annotations row's) moves the row across the Axis
@@ -1648,7 +1655,7 @@ export const createCircularTrackSlotEditor = ({
   };
 
   /** @param {string} renderer */
-  const circularTrackRendererLabel = (renderer) => ownEntry(RENDERER_LABELS, renderer) || renderer;
+  const circularTrackRendererLabel = (renderer) => tm(ownEntry(RENDERER_LABELS, renderer) || renderer);
   /** @param {string} renderer */
   const supportsCircularTrackSlotPlacement = (renderer) => SUPPORTED_RENDERERS.includes(renderer);
   /** @param {CircularTrackSlot | null | undefined} slot */
@@ -1656,7 +1663,7 @@ export const createCircularTrackSlotEditor = ({
   /** @param {CircularTrackSlot | null | undefined} slot */
   const circularTrackSlotDisplayLabel = (slot) => {
     if (isManagedConservationSlot(slot)) {
-      return String(slot?.params?.label || slot?.params?.fileName || slot?.id || 'Conservation').trim();
+      return String(slot?.params?.label || slot?.params?.fileName || slot?.id || t('Conservation')).trim();
     }
     return circularTrackRendererLabel(/** @type {string} */ (slot?.renderer)); // no slot: no label, as the unkeyed label table gives none
   };
@@ -1674,8 +1681,8 @@ export const createCircularTrackSlotEditor = ({
       const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, circularDrawingDinucleotide());
       return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
     }
-    if (renderer === 'depth') return 'Depth';
-    return 'Legend label';
+    if (renderer === 'depth') return 'Depth'; // the default legend text of the figure: stays English
+    return t('Legend label');
   };
   /** @param {CircularTrackSlot | null | undefined} slot */
   const circularTrackSlotColor = (slot) => {
@@ -1890,7 +1897,7 @@ export const createCircularTrackSlotEditor = ({
     }
     return {
       label: formatPresetName(preset),
-      detail: [laneDirectionLabel(lane), inside.length ? `${inside.join(', ')} inside` : '', outside.length ? `${outside.join(', ')} outside` : '']
+      detail: [laneDirectionLabel(lane), inside.length ? t('{tracks} inside', { tracks: inside.join(', ') }) : '', outside.length ? t('{tracks} outside', { tracks: outside.join(', ') }) : '']
         .filter(Boolean).join(' · ')
     };
   };

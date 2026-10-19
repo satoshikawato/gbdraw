@@ -16,6 +16,7 @@ import {
 import { legendRowRules } from '../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../services/feature-visibility.js';
 import { registeredLegendFaces } from '../services/font-store.js';
+import { msg } from '../utils/i18n.js';
 
 /**
  * @typedef {object} LegendManagerOptions
@@ -94,7 +95,7 @@ export const createLegendManager = ({
       const rowRules = rows.flatMap((row) => row.rules);
       if (rowRules.length) {
         const legendOnly = rows.filter((row) => row.rules.length === 0).map((row) => row.key);
-        return commitLegendRowRules((current, revise) => current.map(rule => (rowRules.includes(rule) ? revise(rule, { color }) : rule)), 'Change legend color',
+        return commitLegendRowRules((current, revise) => current.map(rule => (rowRules.includes(rule) ? revise(rule, { color }) : rule)), msg('Change legend color'),
           { afterCommit: () => entryActions.writeLegendRowColor(legendOnly, color) });
       }
       return entryActions.updateLegendEntryColor(index, color);

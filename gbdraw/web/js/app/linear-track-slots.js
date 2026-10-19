@@ -15,6 +15,7 @@ import {
   overlayFollowsNote
 } from '../services/track-slot-display.js';
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
+import { msg, t, tm } from '../utils/i18n.js';
 import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
@@ -57,12 +58,12 @@ const UI_RENDERERS = SUPPORTED_RENDERERS.slice();
 
 /** @type {Record<string, string>} */
 const RENDERER_LABELS = {
-  features: 'Features',
-  dinucleotide_content: 'Dinucleotide content',
-  dinucleotide_skew: 'Dinucleotide skew',
-  depth: 'Depth',
-  annotations: 'Annotations',
-  spacer: 'Spacer'
+  features: msg('Features'),
+  dinucleotide_content: msg('Dinucleotide content'),
+  dinucleotide_skew: msg('Dinucleotide skew'),
+  depth: msg('Depth'),
+  annotations: msg('Annotations'),
+  spacer: msg('Spacer')
 };
 
 const STACK_ENTRY_AXIS = 'axis';
@@ -244,7 +245,7 @@ export const createLinearTrackSlotEditor = ({
 
   const linearTrackRenderers = UI_RENDERERS.slice();
   /** @param {unknown} renderer */
-  const linearTrackRendererLabel = (renderer) => RENDERER_LABELS[normalizeRenderer(renderer)] || String(renderer || '');
+  const linearTrackRendererLabel = (renderer) => tm(RENDERER_LABELS[normalizeRenderer(renderer)] || String(renderer || ''));
   /** @param {DrawingState} drawing */
   const annotationSetIds = (drawing) => (
     (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : [])
@@ -897,8 +898,8 @@ export const createLinearTrackSlotEditor = ({
   /** @param {OptionalLinearSlot} slot */
   const linearTrackSlotPlacementLabel = (slot) => {
     const placement = effectiveLinearSlotPlacement(slot);
-    if (placement === 'overlay') return 'On Axis';
-    return placement === 'above' ? 'Above Axis' : 'Below Axis';
+    if (placement === 'overlay') return t('On Axis');
+    return placement === 'above' ? t('Above Axis') : t('Below Axis');
   };
 
   /** @param {OptionalLinearSlot} slot */
@@ -908,8 +909,8 @@ export const createLinearTrackSlotEditor = ({
       const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, linearDrawingDinucleotide());
       return renderer === 'dinucleotide_content' ? `${nt} content` : `${nt} skew`;
     }
-    if (renderer === 'depth') return 'Depth';
-    return 'Legend label';
+    if (renderer === 'depth') return 'Depth'; // the default legend text of the figure: stays English
+    return t('Legend label');
   };
 
   /** @param {LinearTrackSlotInput | null | undefined} slot */
@@ -1054,12 +1055,9 @@ export const createLinearTrackSlotEditor = ({
     const value = field === 'height'
       ? geometry.heightPx
       : (field === 'spacing' ? geometry.spacingAfterPx : null);
-    const autoText = formatPxAuto(value);
-    if (normalizeRenderer(slot?.renderer) === 'features') {
-      return autoText
-        ? autoText.replace('(auto)', '(auto; varies by record)')
-        : 'record-specific (auto)';
-    }
+    const variesByRecord = normalizeRenderer(slot?.renderer) === 'features';
+    const autoText = formatPxAuto(value, { variesByRecord });
+    if (variesByRecord) return autoText || t('record-specific (auto)');
     if (field === 'height' || field === 'spacing') return autoText;
     return '';
   };

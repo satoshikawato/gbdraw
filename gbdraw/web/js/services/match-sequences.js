@@ -8,6 +8,7 @@ import {
 import { readFileText } from './file-content-cache.js';
 import { genbankHeaderIds } from './genbank-header.js';
 import { linearCardRegion } from './record-options.js';
+import { t } from '../utils/i18n.js';
 
 /** @import { FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
 /** @import { FileLike } from './session-resource-backing.js' */
@@ -215,16 +216,16 @@ export const validateMatchCoordinates = (startRaw, endRaw, sequenceLength) => {
   const end = Number(endRaw);
   const length = Number(sequenceLength);
   if (!Number.isInteger(start) || !Number.isInteger(end)) {
-    return { valid: false, reason: 'Coordinates must be whole 1-based values.' };
+    return { valid: false, reason: t('Coordinates must be whole 1-based values.') };
   }
   if (start < 1 || end < 1) {
-    return { valid: false, reason: 'Coordinates must be greater than or equal to 1.' };
+    return { valid: false, reason: t('Coordinates must be greater than or equal to 1.') };
   }
   if (!Number.isInteger(length) || length < 1) {
-    return { valid: false, reason: 'The sequence source is empty.' };
+    return { valid: false, reason: t('The sequence source is empty.') };
   }
   if (start > length || end > length) {
-    return { valid: false, reason: `Coordinates exceed the sequence length (${length.toLocaleString()} bp).` };
+    return { valid: false, reason: t('Coordinates exceed the sequence length ({length} bp).', { length: length.toLocaleString() }) };
   }
   return { valid: true, start, end, orientation: start <= end ? '+' : '-' };
 };
@@ -355,7 +356,7 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     const expectedSourceIndex = optionalNonnegativeIntegerStatus(context.sourceIndex);
     const expectedRecordIndex = optionalNonnegativeIntegerStatus(context.recordIndex);
     if (!expectedSourceIndex.valid || !expectedRecordIndex.valid) {
-      return { source: null, reason: 'The sequence source identity for this match is invalid.' };
+      return { source: null, reason: t('The sequence source identity for this match is invalid.') };
     }
     const expectedOrigin = text(context.origin);
     const wanted = text(recordId);
@@ -369,15 +370,15 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     const explicitKey = text(sourceKey);
     if (explicitKey) {
       if (owner.ambiguousKeys.has(explicitKey)) {
-        return { source: null, reason: 'The sequence source key for this match is ambiguous.' };
+        return { source: null, reason: t('The sequence source key for this match is ambiguous.') };
       }
       const direct = owner.sources.get(explicitKey);
       if (!direct) {
-        return { source: null, reason: 'The sequence source for this match is unavailable.' };
+        return { source: null, reason: t('The sequence source for this match is unavailable.') };
       }
       return agrees(direct)
         ? { source: direct, reason: '' }
-        : { source: null, reason: 'The sequence source key conflicts with the match identity.' };
+        : { source: null, reason: t('The sequence source key conflicts with the match identity.') };
     }
 
     let candidates = Array.from(owner.sources.values()).filter((source) => {
@@ -390,18 +391,18 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     if (expectedRecordIndex.supplied && candidates.length === 1 && !wanted) {
       return { source: candidates[0], reason: '' };
     }
-    if (!wanted) return { source: null, reason: 'The match does not identify a sequence record.' };
+    if (!wanted) return { source: null, reason: t('The match does not identify a sequence record.') };
     const exact = candidates.filter((source) => source.recordId === wanted);
     if (exact.length === 1) return { source: exact[0], reason: '' };
     if (exact.length > 1) {
-      return { source: null, reason: `Record ID “${wanted}” is ambiguous in the available sequence sources.` };
+      return { source: null, reason: t('Record ID “{id}” is ambiguous in the available sequence sources.', { id: wanted }) };
     }
     const alias = candidates.filter((source) => aliasesForSource(source).has(wanted));
     if (alias.length === 1) return { source: alias[0], reason: '' };
     if (alias.length > 1) {
-      return { source: null, reason: `Record alias “${wanted}” is ambiguous in the available sequence sources.` };
+      return { source: null, reason: t('Record alias “{id}” is ambiguous in the available sequence sources.', { id: wanted }) };
     }
-    return { source: null, reason: `No sequence source matched record “${wanted}”.` };
+    return { source: null, reason: t('No sequence source matched record “{id}”.', { id: wanted }) };
   };
 
   owner = buildOwner(initialSources);
@@ -748,14 +749,14 @@ export const analyzeCatalogSequenceSourceCoverage = ({
         optionalUnavailableReasons.set(key, new Set());
       }
       /** @type {Set<string>} */ (optionalUnavailableReasons.get(key)).add(
-        text(resolution.reason) || 'The optional comparison FASTA was never supplied.'
+        text(resolution.reason) || t('The optional comparison FASTA was never supplied.')
       );
       return;
     }
     failedRequirementKeys.add(key);
     if (!failureReasons.has(key)) failureReasons.set(key, new Set());
     /** @type {Set<string>} */ (failureReasons.get(key)).add(
-      text(resolution?.reason) || 'The required sequence source is unavailable.'
+      text(resolution?.reason) || t('The required sequence source is unavailable.')
     );
   };
 
@@ -891,7 +892,7 @@ export const analyzeCatalogSequenceSourceCoverage = ({
                 resolution = {
                   source: null,
                   optionalUnavailable: true,
-                  reason: 'The optional comparison FASTA was never supplied.'
+                  reason: t('The optional comparison FASTA was never supplied.')
                 };
               }
             }
@@ -978,7 +979,7 @@ export const buildMatchSequenceEntry = (
     start: span?.start,
     end: span?.end,
     molecule: 'nucleotide',
-    displayRole: text(span?.displayRole) || (text(span?.role) === 'subject' ? 'Subject' : 'Query')
+    displayRole: text(span?.displayRole) || (text(span?.role) === 'subject' ? t('Subject') : t('Query'))
   };
   /** @param {string} [reason] */
   const unavailable = (reason) => ({
@@ -988,7 +989,7 @@ export const buildMatchSequenceEntry = (
     fasta: '',
     filename: '',
     available: false,
-    unavailableReason: reason || unavailableReason || 'Sequence is unavailable.'
+    unavailableReason: reason || unavailableReason || t('Sequence is unavailable.')
   });
   if (unavailableReason) return unavailable(unavailableReason);
   if (typeof resolveSequenceSource !== 'function') return unavailable('Sequence source resolver is unavailable.');

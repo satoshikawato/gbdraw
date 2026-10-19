@@ -8,6 +8,7 @@
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
+import { msg, t, tm } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
@@ -227,19 +228,21 @@ const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
 );
 
 const DIAGRAM_PROGRESS_MESSAGES = Object.freeze({
-  'preparing-runtime': 'Preparing diagram runtime (first use)...',
-  'preparing-resources': 'Preparing diagram input resources...',
-  rendering: 'Rendering diagram...',
-  finalizing: 'Finalizing diagram results...'
+  'preparing-runtime': msg('Preparing diagram runtime (first use)...'),
+  'preparing-resources': msg('Preparing diagram input resources...'),
+  rendering: msg('Rendering diagram...'),
+  finalizing: msg('Finalizing diagram results...')
 });
-// The status line of a diagram Worker stage. The first-use runtime preparation
-// names its real step: "step 2 of 5, loading the package installer".
+// The status line of a diagram Worker stage, shown in the processing overlay
+// while it runs. The first-use runtime preparation names its real step:
+// "step 2 of 5, loading the package installer" (the Worker marks the step
+// names with `msg`).
 /** @param {{ stage?: string, step?: number, total?: number, label?: string }} progress */
 const diagramProgressMessage = ({ stage = '', step, total, label } = {}) => {
   const message = DIAGRAM_PROGRESS_MESSAGES[/** @type {keyof typeof DIAGRAM_PROGRESS_MESSAGES} */ (stage)] || '';
   return stage === 'preparing-runtime' && step && total && label
-    ? `Preparing diagram runtime (first use): step ${step} of ${total}, ${label}...`
-    : message;
+    ? t('Preparing diagram runtime (first use): step {step} of {total}, {label}...', { step, total, label: tm(label) })
+    : tm(message);
 };
 
 export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
@@ -1821,7 +1824,7 @@ export const createRunAnalysis = ({
 
   const downloadCliHelperFiles = async () => {
     if (!latestCliHelperFiles.length) {
-      showNotice({ text: 'The latest run has no reproducibility files to download.' });
+      showNotice({ text: t('The latest run has no reproducibility files to download.') });
       return;
     }
     const materializedFiles = latestCliHelperFiles.map((file) => ({
@@ -1842,8 +1845,8 @@ export const createRunAnalysis = ({
       0
     );
     if (totalChars > 50 * 1024 * 1024 && !await askBeforeLargeDownload(askChoice, {
-      title: 'Download large reproducibility files?',
-      description: `The ZIP holds about ${(totalChars / (1024 * 1024)).toFixed(1)} MB of input and helper files.`
+      title: t('Download large reproducibility files?'),
+      description: t('The ZIP holds about {size} MB of input and helper files.', { size: (totalChars / (1024 * 1024)).toFixed(1) })
     })) return;
     downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
@@ -2629,7 +2632,7 @@ export const createRunAnalysis = ({
       await restoreCommittedArtifact();
       if (!isCurrentOperation()) return { status: 'stale' };
       if (isCurrentAlert()) errorLog.value = null;
-      processingStatus.value = 'Canceled.';
+      processingStatus.value = t('Canceled.');
       generationCancelRequested.value = false;
       return { status: 'canceled' };
     };
@@ -2653,7 +2656,7 @@ export const createRunAnalysis = ({
     generationAbortSignal = generationAbortController?.signal || null;
     activeLosatAbortController = generationAbortController;
     if (mode.value === 'linear' && typeof prepareLinearRecordCatalog === 'function') {
-      processingStatus.value = 'Reading input records...';
+      processingStatus.value = t('Reading input records...');
       let prepared;
       try {
         prepared = await prepareLinearRecordCatalog();
@@ -2664,7 +2667,7 @@ export const createRunAnalysis = ({
         };
       } finally {
         if (generationToken === latestGenerationToken) {
-          processingStatus.value = 'Preparing input files...';
+          processingStatus.value = t('Preparing input files...');
         }
       }
       if (generationToken !== latestGenerationToken) {
@@ -2694,12 +2697,12 @@ export const createRunAnalysis = ({
         hasCompleteInput &&
         !circularDiscoveryMatchesCurrentInput()
       ) {
-        processingStatus.value = 'Reading input records...';
+        processingStatus.value = t('Reading input records...');
         try {
           await refreshCircularRecordOrder({ reuseFinalError: true });
         } finally {
           if (generationToken === latestGenerationToken) {
-            processingStatus.value = 'Preparing input files...';
+            processingStatus.value = t('Preparing input files...');
           }
         }
         if (generationToken !== latestGenerationToken) {
@@ -2745,7 +2748,7 @@ export const createRunAnalysis = ({
     let pendingLosatCacheCommit = null;
 
     featureExtractionRequestId += 1;
-    processingStatus.value = 'Preparing input files...';
+    processingStatus.value = t('Preparing input files...');
     resultPanelTab.value = 'preview';
     if (isCurrentAlert()) errorLog.value = null;
     skipCaptureBaseConfig.value = false;
@@ -3257,7 +3260,7 @@ export const createRunAnalysis = ({
         drawing.circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
 
         if (shouldDrawCircularPairwiseComparisons) {
-          setProcessingStatus('Preparing conservation comparisons...');
+          setProcessingStatus(t('Preparing conservation comparisons...'));
           // Thresholds are evaluated before conservation work; the request
           // projects the same resolution, and the draft keeps what was typed.
           resolveComparisonThresholds(drawing.adv, 'circular');
@@ -3360,7 +3363,7 @@ export const createRunAnalysis = ({
             }
 
             if (losatJobs.length > 0) {
-              setProcessingStatus('Preparing comparison search runtime...');
+              setProcessingStatus(t('Preparing comparison search runtime...'));
               const runtime = await prepareLosatRuntime({ includeThreaded: executionMode !== 'serial' }).catch((error) => {
                 console.warn('LOSAT runtime warmup failed; execution will report the error.', formatError(error));
                 return null;
@@ -3369,7 +3372,7 @@ export const createRunAnalysis = ({
                 const { wasmModule: _wasmModule, ...threadedStatus } = runtime.threaded;
                 losatThreadingStatus.value = threadedStatus;
               }
-              setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: 0/${losatJobs.length} jobs complete`);
+              setProcessingStatus(t('Running {program} conservation: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed: 0, total: losatJobs.length }));
               const losatResults = await executeLosatJobs(losatJobs, {
                 concurrency: getLosatParallelWorkers(),
                 executionMode,
@@ -3382,7 +3385,7 @@ export const createRunAnalysis = ({
                 },
                 onProgress: ({ completed, total }) => {
                   if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                  setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: ${completed}/${total} jobs complete`);
+                  setProcessingStatus(t('Running {program} conservation: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed, total }));
                 }
               });
               losatResults.forEach((result) => {
@@ -3402,7 +3405,7 @@ export const createRunAnalysis = ({
                 });
               });
             } else {
-              setProcessingStatus('Using cached LOSAT conservation results...');
+              setProcessingStatus(t('Using cached LOSAT conservation results...'));
             }
             throwIfGenerationCanceled();
             retainCompletedLosatSearch(cacheMap, losatPairs);
@@ -3523,7 +3526,7 @@ export const createRunAnalysis = ({
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         if (hasComparisonIntent) {
-          setProcessingStatus('Preparing comparisons...');
+          setProcessingStatus(t('Preparing comparisons...'));
           drawing.adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
             drawing.adv.pairwise_match_style,
             'ribbon'
@@ -4293,7 +4296,7 @@ export const createRunAnalysis = ({
 
         // `losatTiming` is built exactly when `useLosat` holds; the second test narrows it for this block.
         if (useLosat && losatTiming) {
-          setProcessingStatus('Preparing LOSAT jobs...');
+          setProcessingStatus(t('Preparing LOSAT jobs...'));
           const losatPairs = [];
           /** @type {LosatLinearJob[]} */
           const losatJobs = [];
@@ -4562,12 +4565,12 @@ export const createRunAnalysis = ({
           if (sourceJobs.length > 0) {
             // A failure while searching is reported as a LOSAT failure (CO-01).
             failureStage = 'losat';
-            setProcessingStatus('Preparing comparison search runtime...');
+            setProcessingStatus(t('Preparing comparison search runtime...'));
             const runtimeWaitStartedAt = getNow();
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
             throwIfGenerationCanceled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
-            setProcessingStatus(`Running LOSAT: 0/${sourceJobs.length} source jobs complete`);
+            setProcessingStatus(t('Running LOSAT: {completed}/{total} source jobs complete', { completed: 0, total: sourceJobs.length }));
             const executionStartedAt = getNow();
             const sourceResults = await executeLosatJobs(sourceJobs.map(({ members, batch, ...job }) => job), {
               concurrency: getLosatParallelWorkers(),
@@ -4581,7 +4584,7 @@ export const createRunAnalysis = ({
               },
               onProgress: ({ completed, total }) => {
                 if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                setProcessingStatus(`Running LOSAT: ${completed}/${total} source jobs complete`);
+                setProcessingStatus(t('Running LOSAT: {completed}/{total} source jobs complete', { completed, total }));
               }
             });
             throwIfGenerationCanceled();
@@ -4629,7 +4632,7 @@ export const createRunAnalysis = ({
               cacheMap.set(result.cacheKey, rawEntry);
             });
           } else {
-            setProcessingStatus('Using cached LOSAT results...');
+            setProcessingStatus(t('Using cached LOSAT results...'));
           }
           throwIfGenerationCanceled();
           // Legacy promotions must repeat their transaction until a Result commits.
@@ -4681,8 +4684,8 @@ export const createRunAnalysis = ({
             losatTiming.rawTsvLargestEntryBytes = rawTsvLargestEntryBytes;
             setProcessingStatus(
               useCollinearBlastp
-                ? 'Converting LOSAT protein links to collinear ribbons...'
-                : 'Converting LOSAT protein hits...'
+                ? t('Converting LOSAT protein links to collinear ribbons...')
+                : t('Converting LOSAT protein hits...')
             );
             /** @type {Record<string, any> | null} */
             let convertedPayload = null;
@@ -4815,7 +4818,7 @@ export const createRunAnalysis = ({
               }
             }
           } else {
-            setProcessingStatus('Preparing nucleotide comparison results...');
+            setProcessingStatus(t('Preparing nucleotide comparison results...'));
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
@@ -5003,7 +5006,7 @@ export const createRunAnalysis = ({
       }
 
       throwIfGenerationCanceled();
-      setProcessingStatus('Preparing render inputs and session...');
+      setProcessingStatus(t('Preparing render inputs and session...'));
       await nextTick();
       await yieldToTask();
       throwIfGenerationCanceled();
@@ -5160,7 +5163,7 @@ export const createRunAnalysis = ({
         timingEntries: postGbdrawTimingEntries
       });
       console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(canonicalExecution.elapsedMs)}.`);
-      setProcessingStatus('Preparing preview...');
+      setProcessingStatus(t('Preparing preview...'));
       await nextTick();
       await yieldToTask();
       throwIfGenerationCanceled();
@@ -5523,7 +5526,7 @@ export const createRunAnalysis = ({
     };
     let runDraftIsShown = false;
     processing.value = true;
-    processingStatus.value = 'Preparing input files...';
+    processingStatus.value = t('Preparing input files...');
     generationCancelRequested.value = false;
     recordSessionLifecycleEvent('generate.processing-published');
     try {
@@ -5540,7 +5543,7 @@ export const createRunAnalysis = ({
       // Cancel is honored before rendering, including during preparation.
       const cancelBeforeRender = () => {
         if (!generationCancelRequested.value) return null;
-        processingStatus.value = 'Canceled.';
+        processingStatus.value = t('Canceled.');
         outcome = { status: 'canceled' };
         preserveCanceledResult(readRunDraftIsShown());
         return outcome;
@@ -5579,7 +5582,7 @@ export const createRunAnalysis = ({
       };
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(
-            'Generate diagram',
+            msg('Generate diagram'),
             execute,
             {
               shouldCommit: (result) => result?.status === 'ok',
@@ -5720,7 +5723,7 @@ export const createRunAnalysis = ({
       await restoreCommittedArtifact();
       if (!isCurrentOperation()) return { status: 'stale' };
       if (isCurrentAlert()) errorLog.value = null;
-      processingStatus.value = 'Canceled.';
+      processingStatus.value = t('Canceled.');
       return { status: 'canceled' };
     };
     try {
@@ -5774,7 +5777,7 @@ export const createRunAnalysis = ({
         return failure.status === 'error' && execution.labelFit
           ? { ...failure, labelFit: execution.labelFit } : failure;
       }
-      processingStatus.value = 'Preparing preview...';
+      processingStatus.value = t('Preparing preview...');
       const candidateCommit = execution.commit;
       const candidateCatalogAdmission = execution.catalogAdmission;
       const candidateCatalog = execution.catalog;
@@ -5916,7 +5919,7 @@ export const createRunAnalysis = ({
    */
   const runCommittedCanonicalCandidate = async ({
     canonical,
-    label = 'Rotate record to feature',
+    label = msg('Rotate record to feature'),
     captureIntentCheckpoint = null,
     restoreIntentCheckpoint = null,
     commitIntent = null,
@@ -5940,7 +5943,7 @@ export const createRunAnalysis = ({
     /** @type {string | null} */
     let historyRecovery = null;
     processing.value = true;
-    processingStatus.value = 'Preparing target record...';
+    processingStatus.value = t('Preparing target record...');
     generationCancelRequested.value = false;
     try {
       const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
@@ -6014,7 +6017,7 @@ export const createRunAnalysis = ({
       activeLosatAbortController.abort(new DiagramGenerationCanceledError());
     }
     if (processing.value) {
-      processingStatus.value = 'Canceling generation...';
+      processingStatus.value = t('Canceling generation...');
     }
     return cancelDiagramGeneration();
   };
@@ -6349,8 +6352,8 @@ export const createRunAnalysis = ({
     );
 
     if (losatExportBytesExceedLimit(totalBytes) && !await askBeforeLargeDownload(askChoice, {
-      title: 'Download large LOSAT tables?',
-      description: `The raw LOSAT TSV files total about ${(totalBytes / (1024 * 1024)).toFixed(1)} MB.`
+      title: t('Download large LOSAT tables?'),
+      description: t('The raw LOSAT TSV files total about {size} MB.', { size: (totalBytes / (1024 * 1024)).toFixed(1) })
     })) return;
 
     for (const { entry, idx, hydrated } of hydratedEntries) {

@@ -1,5 +1,6 @@
 // @ts-check
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
+import { msg } from '../utils/i18n.js';
 
 /**
  * Whether and how a Session's saved comparison can be edited, as the Imported comparison state holds it.
@@ -140,22 +141,22 @@ export const serializeImportedComparisonResolution = (intent) => ({
 const comparisonResourceIssue = (comparison, resources) => {
   const resourceId = String(comparison?.resourceId || '').trim();
   if (!resourceId || !isObject(resources?.[resourceId])) {
-    return 'The saved comparison is missing a required resource.';
+    return msg('The saved comparison is missing a required resource.');
   }
   if (resources[resourceId].kind !== RESOURCE_KIND_BY_COMPARISON_KIND[/** @type {string} */ (comparison.kind)]) {
-    return 'The saved comparison resource has an incompatible kind.';
+    return msg('The saved comparison resource has an incompatible kind.');
   }
   if (
     comparison.kind === 'precomputedProteinComparison'
     && comparison.encoding !== 'canonicalTsv'
   ) {
-    return 'The saved protein comparison uses an unsupported encoding.';
+    return msg('The saved protein comparison uses an unsupported encoding.');
   }
   if (
     comparison.kind === 'orthogroupResult'
     && comparison.encoding !== 'canonicalJson'
   ) {
-    return 'The saved Similarity Group result uses an unsupported encoding.';
+    return msg('The saved Similarity Group result uses an unsupported encoding.');
   }
   if (
     comparison.kind === 'collinearityResult'
@@ -164,7 +165,7 @@ const comparisonResourceIssue = (comparison, resources) => {
       || !(/** @type {(string | undefined)[]} */ (['result', 'blocks'])).includes(comparison.valueKind)
     )
   ) {
-    return 'The saved Collinear result uses an unsupported representation.';
+    return msg('The saved Collinear result uses an unsupported representation.');
   }
   return '';
 };
@@ -185,7 +186,7 @@ const endpointIssue = (comparison, recordCount) => {
     || subject >= recordCount
     || query === subject
   ) {
-    return 'The saved comparison does not identify two available records.';
+    return msg('The saved comparison does not identify two available records.');
   }
   return '';
 };
@@ -201,7 +202,7 @@ const pipelineIssue = (comparison, recordCount, requestSchema) => {
     || !isObject(comparison?.settings)
     || !Array.isArray(comparison?.pairs)
   ) {
-    return 'The saved protein comparison pipeline is incomplete or unsupported.';
+    return msg('The saved protein comparison pipeline is incomplete or unsupported.');
   }
   const acceptedFields = requestSchema >= 8
     ? CURRENT_PIPELINE_SETTING_FIELDS
@@ -211,7 +212,7 @@ const pipelineIssue = (comparison, recordCount, requestSchema) => {
     settingKeys.length !== acceptedFields.size - (Object.prototype.hasOwnProperty.call(comparison.settings, 'collinearInferOrthogroups') ? 0 : 1)
     || settingKeys.some((key) => !acceptedFields.has(key))
   ) {
-    return 'The saved protein comparison pipeline is incomplete or unsupported.';
+    return msg('The saved protein comparison pipeline is incomplete or unsupported.');
   }
   const collinearity = comparison.settings.collinearityParams;
   if (collinearity !== null) {
@@ -222,7 +223,7 @@ const pipelineIssue = (comparison, recordCount, requestSchema) => {
       || !(/** @type {unknown[]} */ (['lossless', 'standard'])).includes(collinearity.kind)
       || parameterKeys.length === 0
     ) {
-      return 'The saved Collinear parameters are incomplete or unsupported.';
+      return msg('The saved Collinear parameters are incomplete or unsupported.');
     }
   }
   for (const pair of comparison.pairs) {
@@ -335,25 +336,25 @@ export const classifyImportedComparisonIntent = ({
 
   if (!hasCommittedComparison) return editable();
   if (!['circular', 'linear'].includes(mode)) {
-    return decision('The saved comparison has no supported diagram mode.');
+    return decision(msg('The saved comparison has no supported diagram mode.'));
   }
 
   if (mode === 'circular') {
     if (comparisons.length > 0) {
-      return decision('A Circular session contains unsupported Linear comparison data.');
+      return decision(msg('A Circular session contains unsupported Linear comparison data.'));
     }
     for (const reference of conservation) {
       const resourceId = String(reference?.resourceId || '').trim();
       if (!resourceId || !isObject(resources?.[resourceId])) {
-        return decision('The saved Circular comparison is missing a required resource.');
+        return decision(msg('The saved Circular comparison is missing a required resource.'));
       }
     }
-    return editable('The saved Circular comparison is represented by the current controls.');
+    return editable(msg('The saved Circular comparison is represented by the current controls.'));
   }
 
   const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
   if (records.length === 0) {
-    return decision('The saved comparison has no available records.');
+    return decision(msg('The saved comparison has no available records.'));
   }
 
   /** @type {SavedPipeline | null} */
@@ -368,7 +369,7 @@ export const classifyImportedComparisonIntent = ({
     } else if (kind === 'generatedProteinComparison') {
       const issue = pipelineIssue(comparison, records.length, Number(renderRequest?.schema));
       if (issue) return decision(issue);
-      if (pipeline) return decision('The saved comparison contains more than one protein pipeline.');
+      if (pipeline) return decision(msg('The saved comparison contains more than one protein pipeline.'));
       // `pipelineIssue` returned no issue, so the settings and pairs are present.
       pipeline = /** @type {SavedPipeline} */ (comparison);
     } else {
@@ -392,13 +393,13 @@ export const classifyImportedComparisonIntent = ({
     : endpoints;
   if (!rowsAreEditable(records, executableEndpoints)) {
     return decision(
-      'The saved comparison endpoints are not executable in the supported adjacent-row layout.'
+      msg('The saved comparison endpoints are not executable in the supported adjacent-row layout.')
     );
   }
   const duplicateEndpoints = endpointKeys(records, endpoints);
   if (new Set(duplicateEndpoints).size !== duplicateEndpoints.length) {
     return preserved(
-      'The saved comparison contains repeated record pairs that current controls cannot represent losslessly.'
+      msg('The saved comparison contains repeated record pairs that current controls cannot represent losslessly.')
     );
   }
   const hasDirectProteinInput = comparisons.some((comparison) => (
@@ -407,16 +408,16 @@ export const classifyImportedComparisonIntent = ({
   ));
   if (hasDirectProteinInput && !pipeline) {
     return preserved(
-      'The saved comparison is executable, but current controls cannot edit this canonical protein input.'
+      msg('The saved comparison is executable, but current controls cannot edit this canonical protein input.')
     );
   }
   if (pipeline && !generatedPipelineIsProjectable({ records, comparisons, pipeline })) {
     return preserved(
-      'The saved protein comparison is executable, but current controls cannot represent it losslessly.'
+      msg('The saved protein comparison is executable, but current controls cannot represent it losslessly.')
     );
   }
 
-  return editable('The saved comparison is represented by the current controls.');
+  return editable(msg('The saved comparison is represented by the current controls.'));
 };
 
 /**

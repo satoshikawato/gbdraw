@@ -7,6 +7,7 @@ import {
   sizeClassForRecordLengths
 } from '../services/track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
+import { t } from '../utils/i18n.js';
 
 const DEFAULTS = Object.freeze({
   circular: {
@@ -125,7 +126,7 @@ const formatFactor = (value) => {
 };
 
 /** @param {unknown} text */
-const withAuto = (text) => (String(text || '').trim() ? `${text} (auto)` : '');
+const withAuto = (text) => (String(text || '').trim() ? t('{value} (auto)', { value: String(text) }) : '');
 
 // An Auto value that depends on genome size shows the value for the
 // current genome; before its length is known, it says so instead of listing
@@ -154,7 +155,7 @@ const formatShortLong = (values, formatter, activeLength = null) => {
   const longText = formatter(values.long);
   if (!shortText || !longText) return '';
   if (shortText === longText) return withAuto(shortText);
-  return 'Auto (by genome size)';
+  return t('Auto (by genome size)');
 };
 
 /**
@@ -441,7 +442,7 @@ const dinucleotideWindowText = (state, drawing, field) => {
 
   const preset = sharedLengthValue(state, slidingWindowForLength);
   if (preset) return withAuto(formatBp(preset[field]));
-  return 'Auto (by genome size)';
+  return t('Auto (by genome size)');
 };
 
 /**
@@ -464,7 +465,7 @@ const depthWindowText = (state, drawing, field) => {
     const minValue = field === 'window' ? 100 : 1;
     return withAuto(formatBp(Math.max(minValue, source / 10)));
   }
-  return 'Auto (by genome size)';
+  return t('Auto (by genome size)');
 };
 
 /** @param {RecordLengthState} state @param {DrawingState} drawing */
@@ -496,7 +497,7 @@ const scaleIntervalText = (state) => {
     state,
     shownMode(state) === 'circular' ? autoCircularTickInterval : autoLinearTickInterval
   );
-  return interval ? withAuto(formatBp(interval)) : 'by record length (auto)';
+  return interval ? withAuto(formatBp(interval)) : t('by record length (auto)');
 };
 
 // Linear labels take the size class of the records in the label scope, which
@@ -522,7 +523,7 @@ const plotTitleText = (state, drawing) => {
   const pieces = [drawing?.form?.species, drawing?.form?.strain]
     .map((value) => String(value || '').trim())
     .filter(Boolean);
-  return pieces.length ? `${pieces.join(' ')} (auto)` : 'species + strain (auto)';
+  return pieces.length ? t('{value} (auto)', { value: pieces.join(' ') }) : t('species + strain (auto)');
 };
 
 /**
@@ -535,14 +536,14 @@ const autoTextByKey = (state, drawing, key, context = null) => {
   switch (key) {
     case 'depthWindow': return depthWindowText(state, drawing, 'window');
     case 'depthStep': return depthWindowText(state, drawing, 'step');
-    case 'depthMin': return '0 (auto)';
-    case 'depthMax': return 'from depth data (auto)';
+    case 'depthMin': return t('0 (auto)');
+    case 'depthMax': return t('from depth data (auto)');
     case 'circularDepthWidth': return circularWidthText(state, drawing, 'depth');
     case 'linearDepthHeight': return withAuto(formatPx(DEFAULTS.linear.depthHeightPx));
     case 'linearDepthTrackHeight': return withAuto(formatPx(parsePositiveNumber(drawing?.adv?.depth_height) ?? DEFAULTS.linear.depthHeightPx));
     case 'depthLargeTick': return 'endpoints only';
     case 'depthTickFont': return withAuto(formatPx(depthTickFontSize(state, drawing, context)));
-    case 'conservationReference': return drawing?.circularConservation?.source === 'losat' ? 'subject (auto)' : 'detect side (auto)';
+    case 'conservationReference': return drawing?.circularConservation?.source === 'losat' ? t('subject (auto)') : t('detect side (auto)');
     case 'conservationRingWidth': return circularWidthText(state, drawing, 'sequence_conservation');
     case 'conservationRingGap': return withAuto(formatPx(previewSpacingPx()));
     case 'plotTitle': return plotTitleText(state, drawing);

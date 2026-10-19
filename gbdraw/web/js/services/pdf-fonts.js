@@ -1,4 +1,5 @@
 // @ts-check
+import { t } from '../utils/i18n.js';
 /** @typedef {'normal' | 'bold' | 'italic' | 'bolditalic'} PdfFontStyle */
 
 /**
@@ -110,8 +111,8 @@ const anchorTextsAtStart = (doc, svg, drawnWith) => {
  * @returns {string}
  */
 const substitutionWarning = ({ family, substitute, reason }) => (reason === 'license'
-  ? `Font ${family} is not embedded in the PDF: its license (OS/2 fsType) does not allow embedding. Its text is drawn in ${substitute}.`
-  : `Font ${family} could not be prepared for the PDF. Its text is drawn in ${substitute}.`);
+  ? t('Font {family} is not embedded in the PDF: its license (OS/2 fsType) does not allow embedding. Its text is drawn in {substitute}.', { family, substitute })
+  : t('Font {family} could not be prepared for the PDF. Its text is drawn in {substitute}.', { family, substitute }));
 
 // jsPDF's built-in PDF fonts use WinAnsi. Register the Unicode TrueType face
 // each text was measured with (a Liberation font, or a custom font loaded in

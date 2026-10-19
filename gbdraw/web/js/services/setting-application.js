@@ -3,7 +3,9 @@
 // owner of the timing notes. index.html marks a row's scope with
 // `data-setting="<id>"`, a control belongs to the row of its nearest scope, and
 // `<setting-note>` (components.js) renders the row's note. A state-free leaf, so
-// the page reads it without importing the request owner.
+// the page reads it without importing the request owner. The notes are English
+// marked with `msg`; the functions that return a shown text translate them.
+import { msg, t, tm } from '../utils/i18n.js';
 
 /**
  * `live`: an editor edit or an automatic rerender; `generate`: the next
@@ -33,7 +35,7 @@
 
 /** @param {SettingApplicationClass} application @param {SettingApplicationId[]} ids @returns {SettingApplicationRow[]} */
 const rows = (application, ids) => ids.map((id) => ({ id, application }));
-const CANVAS_CHANGE_NOTE = 'Live edit; the position applies on Generate after the Multi-Record Canvas change';
+const CANVAS_CHANGE_NOTE = msg('Live edit; the position applies on Generate after the Multi-Record Canvas change');
 
 /** @type {readonly Readonly<SettingApplicationRow>[]} */
 export const SETTING_APPLICATION = Object.freeze([
@@ -78,7 +80,7 @@ export const SETTING_APPLICATION = Object.freeze([
   // OV-1036: `applyTrackVisibility` (app/svg-styles.js) hides or shows a drawn
   // group at once; a track the Result lacks and the layout wait for Generate.
   { id: 'track-visibility', application: /** @type {const} */ ('generate'),
-    note: 'Hiding or showing a drawn track applies at once; a new track and the layout apply on Generate' },
+    note: msg('Hiding or showing a drawn track applies at once; a new track and the layout apply on Generate') },
   // Show Depth follows the Depth files: adding one, or a series while one is
   // loaded (`addCircularDepthTrack`, `addLinearDepthTrack`), turns it on;
   // removing the last one, also with its Linear File, turns it off (OV-82,
@@ -86,25 +88,25 @@ export const SETTING_APPLICATION = Object.freeze([
   // once. A Legend title change retires the old caption, which clears a Legend
   // tab rename of it at once (`buildLegendStyleRetirement`, OV-1043).
   { id: 'depth-sources', application: /** @type {const} */ ('generate'),
-    note: 'Adding a Depth file, or a series while one is loaded, turns Show Depth on, and removing the last Depth file or the File that holds it turns it off; the drawn Depth track shows or hides at once. A changed Legend title clears a Legend tab rename of the old title at once. The rest applies on Generate' },
+    note: msg('Adding a Depth file, or a series while one is loaded, turns Show Depth on, and removing the last Depth file or the File that holds it turns it off; the drawn Depth track shows or hides at once. A changed Legend title clears a Legend tab rename of the old title at once. The rest applies on Generate') },
   ...rows('live', ['colors']),
   // Editor intent the Result shows at once (the Legend and Features tabs of
   // the editor, the feature popup's Appearance).
   { id: 'legend-editor', application: /** @type {const} */ ('live'),
-    note: 'Live edit: legend text, order, stroke, and removal update the current Result.' },
+    note: msg('Live edit: legend text, order, stroke, and removal update the current Result.') },
   { id: 'features-editor', application: /** @type {const} */ ('live'),
-    note: 'Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically.' },
-  { id: 'feature-appearance', application: /** @type {const} */ ('live'), note: 'Updates the current Result' },
+    note: msg('Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically.') },
+  { id: 'feature-appearance', application: /** @type {const} */ ('live'), note: msg('Updates the current Result') },
   // Show and Off redraw at once; matching reads the rules at Generate
   // (`should_include_feature_in_analysis`).
   { id: 'feature-visibility', application: /** @type {const} */ ('live'),
-    note: 'Showing and hiding apply at once; leaving a feature out of protein search applies on Generate' },
+    note: msg('Showing and hiding apply at once; leaving a feature out of protein search applies on Generate') },
   { id: 'font-embedding', application: /** @type {const} */ ('export'),
-    note: 'Applies to SVG and Interactive SVG exports, not to Generate.' }
+    note: msg('Applies to SVG and Interactive SVG exports, not to Generate.') }
 ].map((row) => Object.freeze(row.requestPaths ? { ...row, requestPaths: Object.freeze({ ...row.requestPaths }) } : row)));
 
 /** @type {Readonly<Record<SettingApplicationClass, string>>} */
-const TEXT = Object.freeze({ live: 'Live edit', generate: 'Applies on Generate', apply: '', export: '' });
+const TEXT = Object.freeze({ live: msg('Live edit'), generate: msg('Applies on Generate'), apply: '', export: '' });
 
 /** @param {SettingApplicationId} id */
 const rowOf = (id) => {
@@ -135,18 +137,18 @@ export const settingApplicationNote = (id, applies = () => true) => {
   const paths = [...new Set(Object.values(row.requestPaths || {}))];
   const drawn = paths.filter((path) => applies(path)).length;
   if (drawn === paths.length) {
-    return { application: row.application, text: row.note || TEXT[row.application], qualified: Boolean(row.note) };
+    return { application: row.application, text: tm(row.note || TEXT[row.application]), qualified: Boolean(row.note) };
   }
   return drawn > 0 && row.partialNote
-    ? { application: row.application, text: row.partialNote, qualified: true }
-    : { application: 'generate', text: TEXT.generate, qualified: false };
+    ? { application: row.application, text: tm(row.partialNote), qualified: true }
+    : { application: 'generate', text: tm(TEXT.generate), qualified: false };
 };
 
 /** The text of a note whose class follows state (Palette Instant Preview). @param {SettingApplicationClass} application */
-export const settingApplicationText = (application) => TEXT[application];
+export const settingApplicationText = (application) => tm(TEXT[application]);
 
 /** The row's timing inside a help text or a dialog description. @param {SettingApplicationId} id */
-export const settingApplicationSentence = (id) => (rowOf(id).application === 'generate' ? 'Changes apply on Generate.' : '');
+export const settingApplicationSentence = (id) => (rowOf(id).application === 'generate' ? t('Changes apply on Generate.') : '');
 
 /**
  * The request paths of the live setting rows that a History step changed:

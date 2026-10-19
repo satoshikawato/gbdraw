@@ -3,12 +3,15 @@
 // OV-420 (a pairwise match with no similarity group showed a "Similarity
 // group" section holding the query product).
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
   buildMatchPopupPayload,
+  buildPairwiseMatchHoverRows,
   groupCountText
 } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 
 const elementFrom = (attributes) => ({
   style: { fill: '' },
@@ -204,4 +207,47 @@ test('OV-526: a similarity group ID that names an inherited member has no overri
   }), { orthogroupNameOverrides: { og_1: 'rsmA' }, orthogroupDescriptionOverrides: new Map([['og_1', 'A note']]) });
   assert.equal(named.group.displayName, 'rsmA');
   assert.equal(named.group.description, 'A note');
+});
+
+test('a popup built before a language switch keeps its hover rows: sections and rows are found by identity', async () => {
+  const element = elementFrom({
+    'data-gbdraw-pairwise-match-id': 'comparison1_match1',
+    'data-match-kind': 'pairwise',
+    'data-query-record-id': 'record_a',
+    'data-subject-record-id': 'record_b',
+    'data-qstart': '100',
+    'data-qend': '400',
+    'data-sstart': '200',
+    'data-send': '500',
+    'data-identity': '91.2',
+    ...featureAttributes
+  });
+  const options = { featureLookup: featurePair('record_a', 'record_b') };
+  const catalog = Object.freeze({
+    Summary: 'S-ja', Alignment: 'A-ja', Identity: 'I-ja', 'Query interval': 'QI-ja',
+    'Subject interval': 'SI-ja', Kind: 'K-ja', Query: 'Q-ja', Subject: 'Sub-ja'
+  });
+  const english = buildMatchPopupPayload(element, options);
+  try {
+    await setUiLocale('ja', async () => ({ default: catalog }));
+    const japanese = buildMatchPopupPayload(element, options);
+    assert.deepEqual(japanese.sections.slice(0, 2).map((entry) => [entry.id, entry.title]), [['Summary', 'S-ja'], ['Alignment', 'A-ja']]);
+    const expected = [['Kind', 'K-ja', 'pairwise'], ['Identity', 'I-ja', '91.2'], ['Query', 'Q-ja', '100..400'], ['Subject', 'Sub-ja', '200..500']];
+    const rowsOf = (payload) => buildPairwiseMatchHoverRows(payload).map((row) => [row.id, row.label, row.value]);
+    assert.deepEqual(rowsOf(english), expected, 'an English payload shown after the switch');
+    assert.deepEqual(rowsOf(japanese), expected);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+  assert.deepEqual(
+    buildPairwiseMatchHoverRows(english).map((row) => [row.label, row.value]),
+    [['Kind', 'pairwise'], ['Identity', '91.2'], ['Query', '100..400'], ['Subject', '200..500']]
+  );
+});
+
+test('the collinear block summary shows "vs" in the muted style before the subject record', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const summary = html.slice(html.indexOf('data-collinear-summary'));
+  const subjectLine = summary.split('\n').find((line) => line.includes('block.subject.recordId'));
+  assert.match(subjectLine, /<span class="match-muted">\{\{ t\('vs'\) \}\}\{\{ ' ' \}\}<\/span><span class="font-semibold">\{\{ clickedPairwiseMatch\.block\.subject\.recordId \}\}<\/span>/);
 });

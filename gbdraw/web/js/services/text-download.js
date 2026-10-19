@@ -1,4 +1,6 @@
 // @ts-check
+import { t } from '../utils/i18n.js';
+
 /**
  * @param {Blob} blob
  * @param {string} filename
@@ -46,5 +48,5 @@ export const downloadTextFile = (
  * @returns {Promise<boolean>} Whether to download.
  */
 export const askBeforeLargeDownload = async (ask, { title, description }) => (await ask({
-  title, description, actions: [{ id: 'download', label: 'Download', tone: 'primary' }]
+  title, description, actions: [{ id: 'download', label: t('Download'), tone: 'primary' }]
 })) === 'download';

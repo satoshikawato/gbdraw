@@ -8,6 +8,7 @@
 // entry of its own (Basic, the preserved-settings notice) names the entry that
 // docks it in the rail. The list of drawn elements below names, for each
 // element of the Result that has a section, the section a click on it opens.
+import { msg } from '../utils/i18n.js';
 import {
   DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, LENGTH_BAR_ID, PLOT_TITLE_ID, TICK_GROUPS, trackGroupSelector
 } from './drawn-groups.js';
@@ -21,9 +22,10 @@ import {
  * @template {string} Key
  * @typedef {object} SettingsEntryOf
  * @property {Key} key Identity of the section; the value of `data-settings-section`.
- * @property {string} title The heading text; the entry is named "Go to <title>".
+ * @property {string} title The heading text; the entry is named "Go to <title>". English, marked
+ *   with `msg`: the rail matches the sections of two modes by it; show it with `tm`.
  * @property {string} icon Phosphor icon class of the heading and of the entry.
- * @property {string} short The name under the icon of the rail entry.
+ * @property {string} short The name under the icon of the rail entry (English, marked; shown with `tm`).
  * @property {SettingsSectionModes} modes
  * @property {true} [input] An entry that chooses what is drawn; the rail sets these apart from the rest.
  * @property {true} [railOnly] An entry of the rail alone; the stacked row leaves it out.
@@ -48,25 +50,25 @@ const catalog = (sections) => Object.freeze(sections.map((section) => Object.fre
 const BOTH_MODES = ['circular', 'linear'];
 
 export const SETTINGS_SECTIONS = catalog([
-  { key: 'input-genomes', title: 'Input Genomes', icon: 'ph-folder-open', short: 'Input', modes: BOTH_MODES, input: true },
-  { key: 'comparison', title: 'Comparison', icon: 'ph-arrows-left-right', short: 'Compare', modes: ['linear'], input: true },
+  { key: 'input-genomes', title: msg('Input Genomes'), icon: 'ph-folder-open', short: msg('Input'), modes: BOTH_MODES, input: true },
+  { key: 'comparison', title: msg('Comparison'), icon: 'ph-arrows-left-right', short: msg('Compare'), modes: ['linear'], input: true },
   { key: 'basic', dock: 'input-genomes', modes: BOTH_MODES },
-  { key: 'advanced-comparison', title: 'Advanced comparison and layout', icon: 'ph-gear-six', short: 'Advanced', modes: ['linear'] },
-  { key: 'region-annotations', title: 'Region Annotations', icon: 'ph-brackets-curly', short: 'Regions', modes: BOTH_MODES },
-  { key: 'pairwise-comparisons', title: 'Pairwise Comparisons', icon: 'ph-arrows-left-right', short: 'Compare', modes: ['circular'] },
+  { key: 'advanced-comparison', title: msg('Advanced comparison and layout'), icon: 'ph-gear-six', short: msg('Advanced'), modes: ['linear'] },
+  { key: 'region-annotations', title: msg('Region Annotations'), icon: 'ph-brackets-curly', short: msg('Regions'), modes: BOTH_MODES },
+  { key: 'pairwise-comparisons', title: msg('Pairwise Comparisons'), icon: 'ph-arrows-left-right', short: msg('Compare'), modes: ['circular'] },
   { key: 'preserved-settings', dock: 'input-genomes', modes: BOTH_MODES },
-  { key: 'layout', title: 'Layout', icon: 'ph-layout', short: 'Layout', modes: BOTH_MODES },
-  { key: 'font', title: 'Font', icon: 'ph-text-aa', short: 'Font', modes: BOTH_MODES },
-  { key: 'titles', title: 'Titles & Record Labels', icon: 'ph-textbox', short: 'Titles', modes: BOTH_MODES },
-  { key: 'legend', title: 'Legend', icon: 'ph-list-bullets', short: 'Legend', modes: BOTH_MODES },
-  { key: 'colors', title: 'Colors', icon: 'ph-palette', short: 'Colors', modes: BOTH_MODES },
-  { key: 'features', title: 'Features', icon: 'ph-shapes', short: 'Features', modes: BOTH_MODES },
-  { key: 'labels', title: 'Labels', icon: 'ph-text-t', short: 'Labels', modes: BOTH_MODES },
+  { key: 'layout', title: msg('Layout'), icon: 'ph-layout', short: msg('Layout'), modes: BOTH_MODES },
+  { key: 'font', title: msg('Font'), icon: 'ph-text-aa', short: msg('Font'), modes: BOTH_MODES },
+  { key: 'titles', title: msg('Titles & Record Labels'), icon: 'ph-textbox', short: msg('Titles'), modes: BOTH_MODES },
+  { key: 'legend', title: msg('Legend'), icon: 'ph-list-bullets', short: msg('Legend'), modes: BOTH_MODES },
+  { key: 'colors', title: msg('Colors'), icon: 'ph-palette', short: msg('Colors'), modes: BOTH_MODES },
+  { key: 'features', title: msg('Features'), icon: 'ph-shapes', short: msg('Features'), modes: BOTH_MODES },
+  { key: 'labels', title: msg('Labels'), icon: 'ph-text-t', short: msg('Labels'), modes: BOTH_MODES },
   // Axis & Scale is one card per mode, each with its own icon.
-  { key: 'linear-axis', title: 'Axis & Scale', icon: 'ph-ruler', short: 'Axis', modes: ['linear'] },
-  { key: 'circular-axis', title: 'Axis & Scale', icon: 'ph-paint-brush', short: 'Axis', modes: ['circular'] },
-  { key: 'dinucleotide', title: 'Dinucleotide content/skew', icon: 'ph-dna', short: 'GC / skew', modes: BOTH_MODES },
-  { key: 'about', title: 'About & Citation', icon: 'ph-info', short: 'About', modes: BOTH_MODES, railOnly: true }
+  { key: 'linear-axis', title: msg('Axis & Scale'), icon: 'ph-ruler', short: msg('Axis'), modes: ['linear'] },
+  { key: 'circular-axis', title: msg('Axis & Scale'), icon: 'ph-paint-brush', short: msg('Axis'), modes: ['circular'] },
+  { key: 'dinucleotide', title: msg('Dinucleotide content/skew'), icon: 'ph-dna', short: msg('GC / skew'), modes: BOTH_MODES },
+  { key: 'about', title: msg('About & Citation'), icon: 'ph-info', short: msg('About'), modes: BOTH_MODES, railOnly: true }
 ]);
 
 /** @typedef {(typeof SETTINGS_SECTIONS)[number]} SettingsSection */

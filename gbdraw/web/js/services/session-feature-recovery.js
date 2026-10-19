@@ -63,14 +63,18 @@ export { normalizeRenderedFeatureId } from './session-feature-metadata.js';
  * @property {RecoveryEditorState} [editorState]
  * @property {OrthogroupFeatureIndex | null} [orthogroupIndex]
  */
+// Texts shown later (a Session Load's feature status): this module is copied alone by a
+// test, so it declares the key marker of utils/i18n.js itself; the shower translates with `tm`.
+/** @param {string} text @returns {string} */
+const msg = (text) => text;
 const MISSING_INPUTS_WARNING =
-  'Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.';
+  msg('Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.');
 const UNSUPPORTED_INPUT_WARNING =
-  'Feature metadata recovery currently supports GenBank-backed sessions only. Generate the diagram again to enable feature editing.';
+  msg('Feature metadata recovery currently supports GenBank-backed sessions only. Generate the diagram again to enable feature editing.');
 const EXTRACTION_FAILED_WARNING =
-  'Feature metadata recovery failed. The SVG preview and pairwise popups remain available.';
+  msg('Feature metadata recovery failed. The SVG preview and pairwise popups remain available.');
 const MIGRATION_SKIPPED_WARNING =
-  'Feature metadata was recovered, but some old feature edits could not be matched to recovered feature IDs.';
+  msg('Feature metadata was recovered, but some old feature edits could not be matched to recovered feature IDs.');
 
 /** @param {unknown} value */
 const normalizeKey = (value) => String(value || '').trim();

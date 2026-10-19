@@ -27,6 +27,7 @@ await copyModule('gbdraw/web/js/services/feature-sequence-fasta.js', 'services/f
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
 // losat-normalization.js reads the comparison settings from the generated request description.
 await copyModule('gbdraw/web/js/contracts/request-shape.generated.js', 'contracts/request-shape.generated.js');
+await copyModule('gbdraw/web/js/utils/i18n.js', 'utils/i18n.js');
 await copyModule('gbdraw/web/js/utils/contract-shape.js', 'utils/contract-shape.js');
 await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js');
 // session-resource-backing.js raises its refusals as typed diagnostics.
@@ -69,6 +70,7 @@ for (const name of ['linear-comparisons', 'linear-sources', 'file-content-cache'
 // track-slot-display.js reads the generated size-class boundaries.
 await copyModule('gbdraw/web/js/mode-profiles.generated.js', 'mode-profiles.generated.js');
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
+await copyModule('gbdraw/web/js/utils/i18n.js', 'utils/i18n.js');
 await copyModule('gbdraw/web/js/utils/download-names.js', 'utils/download-names.js');
 const standaloneSource = await readFile(
   join(repoRoot, 'gbdraw/web/js/services/standalone-interactivity.js'),

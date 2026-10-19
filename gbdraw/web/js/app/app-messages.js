@@ -1,4 +1,10 @@
 // @ts-check
+import { t } from '../utils/i18n.js';
+
+// The texts of a question and of a notice are shown as given: the caller words
+// them with `t` or `tn` where it asks (utils/i18n.js). The choice dialog is
+// modal, so the UI language cannot change while it shows; a notice keeps the
+// language it was shown in until it is replaced or dismissed.
 
 /**
  * The style of a choice button: one primary choice, secondary choices, or a
@@ -68,7 +74,7 @@ export const createChoicePrompt = ({ reactive }) => {
     items: /** @type {string[]} */ ([]),
     note: '',
     actions: /** @type {ChoiceAction[]} */ ([]),
-    cancelLabel: 'Cancel',
+    cancelLabel: '',
     field: /** @type {TextField | null} */ (null)
   });
   /** @type {((choice: string) => void) | null} */
@@ -89,7 +95,7 @@ export const createChoicePrompt = ({ reactive }) => {
       items: [...(request.items || [])],
       note: request.note || '',
       actions: request.actions.map((action) => ({ tone: 'secondary', ...action })),
-      cancelLabel: request.cancelLabel || 'Cancel',
+      cancelLabel: request.cancelLabel || t('Cancel'),
       field: null,
       show: true
     });

@@ -2,6 +2,7 @@
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { t } from '../utils/i18n.js';
 
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 
@@ -338,10 +339,10 @@ export const setOverlayAnnotationParam = (slot, slots, key, value) => {
  * @returns {string}
  */
 export const trackAddBlockReason = (renderer, { supported, annotationSetCount, depthSeriesCount, featuresRowEnabled = false }) => {
-  if (!supported) return 'Choose a track type this diagram can draw';
-  if (renderer === 'annotations' && annotationSetCount <= 0) return 'Import or add a Region annotation set in Region Annotations first';
-  if (renderer === 'depth' && depthSeriesCount <= 0) return 'Load a Depth TSV first';
-  if (renderer === 'features' && featuresRowEnabled) return 'The stack already has an enabled Features row; disable or delete it first';
+  if (!supported) return t('Choose a track type this diagram can draw');
+  if (renderer === 'annotations' && annotationSetCount <= 0) return t('Import or add a Region annotation set in Region Annotations first');
+  if (renderer === 'depth' && depthSeriesCount <= 0) return t('Load a Depth TSV first');
+  if (renderer === 'features' && featuresRowEnabled) return t('The stack already has an enabled Features row; disable or delete it first');
   return '';
 };
 

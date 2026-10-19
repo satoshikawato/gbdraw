@@ -13,6 +13,7 @@ import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } from '../services/linear-sources.js';
+import { msg, t, tn, tm } from '../utils/i18n.js';
 
 /**
  * The item a preview popup is about: a Legend row by its key, or the
@@ -128,18 +129,18 @@ export const previewItemTarget = (target, svg) => {
 
 /** @param {ColorRuleLike} rule */
 const colorRuleText = (rule) => {
-  const feature = text(rule?.feat) || 'Any feature';
+  const feature = text(rule?.feat) || t('Any feature');
   const qualifier = text(rule?.qual);
   const pattern = text(rule?.val);
-  if (!qualifier && !pattern) return `${feature} color rule`;
-  return `${feature} where ${qualifier || 'a qualifier'} matches “${pattern}”`;
+  if (!qualifier && !pattern) return t('{feature} color rule', { feature });
+  return t('{feature} where {qualifier} matches “{pattern}”', { feature, qualifier: qualifier || t('a qualifier'), pattern });
 };
 
 // OV-1272: a track row names its plot; it lists no features, and its Color
 // edits only the swatch (the plot's color is a Settings value).
 /** @type {Readonly<Record<DrawnTrack['kind'], string>>} */
-const TRACK_ROW_SUBTITLE = Object.freeze({ content: 'Content plot', skew: 'Skew plot', depth: 'Depth plot' });
-const TRACK_ROW_COLOR_SOURCE = 'Changes this legend swatch only. The plot keeps the color set in Settings.';
+const TRACK_ROW_SUBTITLE = Object.freeze({ content: msg('Content plot'), skew: msg('Skew plot'), depth: msg('Depth plot') });
+const TRACK_ROW_COLOR_SOURCE = msg('Changes this legend swatch only. The plot keeps the color set in Settings.');
 
 /**
  * OIC-029: what the Legend item choice of the scope dialog and the Legend popup's Color do to a type's default
@@ -168,25 +169,25 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
   const colorSource = defaultColorLine
     ? null
     : trackKind
-      ? TRACK_ROW_COLOR_SOURCE
+      ? tm(TRACK_ROW_COLOR_SOURCE)
       : ruleLines.length
-        ? (ruleLines.length === 1 ? 'From this color rule:' : `From these ${ruleLines.length} color rules:`)
+        ? tn(ruleLines.length, 'From this color rule:', 'From these {count} color rules:')
         : featureTypes.has(key)
-          ? `Default color of ${key} features`
-          : 'Set on individual features';
+          ? t('Default color of {type} features', { type: key })
+          : t('Set on individual features');
   return {
     kind: /** @type {const} */ ('legend-entry'),
     identity: `legend:${key}`,
-    dialogLabel: `Legend item: ${name}`,
+    dialogLabel: t('Legend item: {name}', { name }),
     index,
     name,
     color,
     title: name,
     subtitle: trackKind
-      ? TRACK_ROW_SUBTITLE[trackKind]
+      ? tm(TRACK_ROW_SUBTITLE[trackKind])
       : featureCount == null
-        ? 'Counting features…'
-        : `${NUMBER.format(featureCount)} feature${featureCount === 1 ? '' : 's'}`,
+        ? t('Counting features…')
+        : tn(featureCount, '{count} feature', '{count} features', { count: NUMBER.format(featureCount) }),
     colorSource,
     defaultColorLine,
     ruleLines
@@ -197,16 +198,16 @@ const buildLegendEntryView = ({ entry, name, index, color, rules, featureCount, 
 const regionText = (region) => {
   const start = positive(region?.start);
   const end = positive(region?.end);
-  if (start == null && end == null) return 'Whole record';
+  if (start == null && end == null) return t('Whole record');
   return `${start == null ? '1' : NUMBER.format(start)}..${end == null ? 'end' : NUMBER.format(end)}`;
 };
 
 /** @param {AlignmentDecisionLike | null | undefined} decision */
 const alignmentText = (decision) => {
-  if (!decision) return 'Not aligned';
-  if (decision.status === 'reference') return `Reference (${text(decision.anchorLabel)})`;
-  if (decision.status === 'aligned') return `Aligned on ${text(decision.anchorLabel)}`;
-  return `Not moved (${text(decision.rationaleLabel).toLowerCase() || 'skipped'})`;
+  if (!decision) return t('Not aligned');
+  if (decision.status === 'reference') return t('Reference ({anchor})', { anchor: text(decision.anchorLabel) });
+  if (decision.status === 'aligned') return t('Aligned on {anchor}', { anchor: text(decision.anchorLabel) });
+  return t('Not moved ({reason})', { reason: text(decision.rationaleLabel).toLowerCase() || t('skipped') });
 };
 
 /**
@@ -231,21 +232,21 @@ const buildRecordDefinitionView = ({
   const start = positive(record?.display?.startCoordinate);
   /** @type {PreviewItemFact[]} */
   const facts = [
-    { label: 'Accession', value: accession || '—' },
+    { label: t('Accession'), value: accession || '—' },
     // OV-502: only a Linear definition marks which line is the record's name.
     // A Circular definition's name lines may be an organism, a strain, a
     // replicon or a Record label, wrapped or not: they are the heading only.
-    ...(scope === 'linear' && named ? [{ label: 'Organism', value: name }] : []),
-    { label: 'Length', value: text(drawn.length) || '—' },
-    { label: 'Reverse complement', value: reversed ? 'Yes' : 'No' },
-    { label: 'Display start', value: start == null ? 'Record start' : NUMBER.format(start) },
-    { label: 'Region', value: regionText(record?.region) }
+    ...(scope === 'linear' && named ? [{ label: t('Organism'), value: name }] : []),
+    { label: t('Length'), value: text(drawn.length) || '—' },
+    { label: t('Reverse complement'), value: reversed ? t('Yes') : t('No') },
+    { label: t('Display start'), value: start == null ? t('Record start') : NUMBER.format(start) },
+    { label: t('Region'), value: regionText(record?.region) }
   ];
-  if (alignmentShown) facts.push({ label: 'Alignment', value: alignmentText(alignment) });
+  if (alignmentShown) facts.push({ label: t('Alignment'), value: alignmentText(alignment) });
   return {
     kind: /** @type {const} */ ('record-definition'),
     identity: `record:${scope}:${recordIndex}:${recordId}`,
-    dialogLabel: `Record ${accession}`,
+    dialogLabel: t('Record {accession}', { accession }),
     scope,
     recordIndex,
     title: name || accession,
@@ -286,20 +287,20 @@ const readDrawnDefinitionLines = (group, recordId) => {
 const LINEAR_FIELDS = { name: 'definition', subtitle: 'record_subtitle', reverse: 'region_reverse' };
 const CIRCULAR_RECORD = {
   fields: { name: 'circular_record_label', subtitle: 'circular_record_subtitle', reverse: 'circular_reverse' },
-  nameLabel: 'Record label', subtitleLabel: 'Subtitle',
+  nameLabel: msg('Record label'), subtitleLabel: msg('Subtitle'),
   settingsSelector: '[data-circular-record-presentation] input[type="text"]'
 };
 const CIRCULAR_DRAWING = {
   fields: { name: 'species', subtitle: 'strain', reverse: 'circular_reverse' },
-  nameLabel: 'Species', subtitleLabel: 'Strain', settingsSelector: '#circular-species'
+  nameLabel: msg('Species'), subtitleLabel: msg('Strain'), settingsSelector: '#circular-species'
 };
 // What a popup without edit fields says instead. A Circular record's sentence
 // names the cause; the second and third are the sidebar's for the same cause.
-const LINEAR_EDIT_HINT = 'Edit this record in its File card in the sidebar.';
+const LINEAR_EDIT_HINT = msg('Edit this record in its File card in the sidebar.');
 const CIRCULAR_EDIT_HINTS = {
-  'not-inspected': 'Inspect source records in the sidebar to edit this record\'s label.',
-  'multi-record-canvas': 'Multi-Record Canvas uses a grid. Turn it off to select one record.',
-  'no-single-record': 'Select one record to edit crop, orientation, and title lines.'
+  'not-inspected': msg('Inspect source records in the sidebar to edit this record\'s label.'),
+  'multi-record-canvas': msg('Multi-Record Canvas uses a grid. Turn it off to select one record.'),
+  'no-single-record': msg('Select one record to edit crop, orientation, and title lines.')
 };
 /** @typedef {keyof typeof CIRCULAR_EDIT_HINTS} CircularOwnRecordBlock */
 
@@ -350,8 +351,8 @@ export const createPreviewItemPopup = ({
     subtitle: text(resolveLinearRecordEffectiveSubtitle(sequence)),
     reverse: Boolean(sequence.region_reverse),
     reverseAvailable: true,
-    nameLabel: 'Organism / strain',
-    subtitleLabel: 'Subtitle',
+    nameLabel: t('Organism / strain'),
+    subtitleLabel: t('Subtitle'),
     sequenceUid: sequence.uid,
     fields: LINEAR_FIELDS,
     // The record's own name fields, on its File card or in its Record options.
@@ -368,6 +369,8 @@ export const createPreviewItemPopup = ({
     if (!ownRecord && (text(form.circular_record_label) || text(form.circular_record_subtitle))) return null;
     return {
       ...target,
+      nameLabel: tm(target.nameLabel),
+      subtitleLabel: tm(target.subtitleLabel),
       name: text(form[target.fields.name]),
       subtitle: text(form[target.fields.subtitle]),
       reverse: Boolean(form.circular_reverse),
@@ -410,7 +413,7 @@ export const createPreviewItemPopup = ({
       drawn: readDrawnDefinitionLines(group, recordId),
       record,
       draft: scope === 'linear' ? linearDraft(sequence) : circularDraft(!circularBlock),
-      editHint: scope === 'linear' ? LINEAR_EDIT_HINT : (circularBlock && CIRCULAR_EDIT_HINTS[circularBlock]),
+      editHint: scope === 'linear' ? tm(LINEAR_EDIT_HINT) : (circularBlock && tm(CIRCULAR_EDIT_HINTS[circularBlock])),
       alignment: scope === 'linear'
         ? readAlignmentInspector()?.records?.find((decision) => decision.recordKey === record?.recordKey) || null
         : null,
@@ -441,7 +444,7 @@ export const createPreviewItemPopup = ({
     if (!key) return null;
     const next = field === 'reverse' ? Boolean(value) : String(value ?? '');
     if (target[key] === next) return null;
-    return runUndoable(field === 'reverse' ? 'Change Reverse complement' : 'Edit record definition', () => {
+    return runUndoable(field === 'reverse' ? msg('Change Reverse complement') : msg('Edit record definition'), () => {
       target[key] = next;
     });
   };

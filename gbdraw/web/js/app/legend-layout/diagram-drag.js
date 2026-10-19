@@ -8,6 +8,7 @@ import {
 import { closestRecordGroup, isMultiRecordCanvasSvg } from '../record-groups.js';
 import { setClassToken } from '../../services/svg-serialization.js';
 import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
+import { msg } from '../../utils/i18n.js';
 
 /**
  * @typedef {object} DiagramDragActionsOptions
@@ -338,7 +339,7 @@ export const createDiagramDragActions = ({
     e.preventDefault();
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
-    beginDragTransaction('Move length bar');
+    beginDragTransaction(msg('Move length bar'));
     lengthBarElement.value = group;
     diagramDragging.value = true;
     plotTitleDragging.value = false;
@@ -362,7 +363,7 @@ export const createDiagramDragActions = ({
     e.preventDefault();
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
-    beginDragTransaction('Move plot title');
+    beginDragTransaction(msg('Move plot title'));
     assignPlotTitleElement(group);
     diagramDragging.value = true;
     plotTitleDragging.value = true;
@@ -407,7 +408,7 @@ export const createDiagramDragActions = ({
     e.preventDefault();
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
-    beginDragTransaction(activeDragMode === 'record' ? 'Move record' : 'Move diagram');
+    beginDragTransaction(activeDragMode === 'record' ? msg('Move record') : msg('Move diagram'));
     if (activeDragMode === 'record') {
       similarityAlignmentLifecycle?.beforeRecordDrag?.();
     }

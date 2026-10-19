@@ -3,6 +3,7 @@
 // features and its candidates lie once the chosen genes are lined up) and the cards in their
 // sections. Pure; the figure geometry is measured by the preview's owner
 // (`app/feature-editor/svg-actions.js`) and the choices come from the alignment draft.
+import { msg, t, tm, tn } from '../utils/i18n.js';
 
 /**
  * A horizontal span in figure units (SVG user units of the mounted Result,
@@ -131,10 +132,10 @@ export const ALIGNMENT_REFERENCE_KEY = 'reference';
 /** @type {readonly { id: AlignmentReviewGroupId, title: string, count: (records: number) => string }[]} */
 const GROUPS = Object.freeze([
   { id: 'reference', title: '', count: () => '' },
-  { id: 'choose', title: 'Choose a gene', count: (n) => `${n} ${n === 1 ? 'needs' : 'need'} a choice` },
-  { id: 'several', title: 'Several candidates', count: (n) => `${n} with several candidates` },
-  { id: 'single', title: 'One candidate', count: (n) => `${n} with one candidate` },
-  { id: 'none', title: 'No usable candidate', count: (n) => `${n} without a usable candidate` }
+  { id: 'choose', title: msg('Choose a gene'), count: (n) => tn(n, '{count} needs a choice', '{count} need a choice') },
+  { id: 'several', title: msg('Several candidates'), count: (n) => t('{count} with several candidates', { count: n }) },
+  { id: 'single', title: msg('One candidate'), count: (n) => t('{count} with one candidate', { count: n }) },
+  { id: 'none', title: msg('No usable candidate'), count: (n) => t('{count} without a usable candidate', { count: n }) }
 ]);
 
 /**
@@ -182,7 +183,7 @@ export const alignmentOverlayRecords = (rows) => rows.map((row) => ({
   needsChoice: needsChoice(row),
   skipped: row.choice?.kind === 'skip',
   candidates: row.candidates.map(({ key, anchor, name, label, coordinates }) => ({
-    key, anchor, name, accessibleName: `Select ${label}, ${coordinates} for ${row.recordLabel}`
+    key, anchor, name, accessibleName: t('Select {label}, {coordinates} for {record}', { label, coordinates, record: row.recordLabel })
   }))
 }));
 
@@ -289,8 +290,9 @@ export const buildAlignmentReviewView = ({ rows, directions, geometry, openedWit
   return {
     stripWidth: width,
     lineX: layout?.lineX ?? null,
-    groups: groups.map(({ id, title, cards }) => ({ id, title, cards })),
-    summary: `${placed.length} record${placed.length === 1 ? '' : 's'}`
+    groups: groups.map(({ id, title, cards }) => ({ id, title: tm(title), cards })),
+    // The list join stays English: it needs a locale list pattern.
+    summary: tn(placed.length, '{count} record', '{count} records')
       + groups.filter(({ title }) => title).map(({ count, cards }) => `, ${count(cards.length)}`).join('') + '.'
   };
 };

@@ -32,6 +32,7 @@ import {
   textAliasStatus,
   uniqueOrthogroupEntries
 } from '../services/feature-identity.js';
+import { msg, t, tm } from '../utils/i18n.js';
 
 /** @import { FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureSvgRoot } from '../services/feature-dom.js' */
@@ -59,8 +60,8 @@ const COPY_FEEDBACK_DURATION_MS = 1500;
 // stores; a missing status reads undefined.
 /** @type {Readonly<Record<string, string | undefined>>} */
 const COPY_FEEDBACK_LABELS = Object.freeze({
-  success: 'Copied!',
-  failure: 'Copy failed'
+  success: msg('Copied!'),
+  failure: msg('Copy failed')
 });
 
 /** @param {unknown} value */
@@ -465,7 +466,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   ) => {
     const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context);
     const status = copyFeedbackByKey[key]?.status;
-    return (status && COPY_FEEDBACK_LABELS[status]) || String(originalLabel || 'Copy');
+    return (status && tm(COPY_FEEDBACK_LABELS[status] ?? '')) || String(originalLabel || t('Copy'));
   };
 
   if (typeof watch === 'function') {
@@ -735,8 +736,8 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
         recordIndex,
         // The record as every panel names it (OV-369, OV-436).
         recordLabel: recordIndex >= 0
-          ? names.get(String(cardOf(recordIndex)?.uid ?? ''))?.label || `Record ${recordIndex + 1}`
-          : 'Record',
+          ? names.get(String(cardOf(recordIndex)?.uid ?? ''))?.label || t('Record {n}', { n: recordIndex + 1 })
+          : t('Record'),
         members
       }));
   };

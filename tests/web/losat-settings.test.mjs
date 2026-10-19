@@ -42,6 +42,7 @@ await writeFile(
     .replace("../services/record-draw-selection.js", new URL("../services/record-draw-selection.js", sourceRoot).href)
     .replace("../services/losat-thread-plan.js", new URL("../services/losat-thread-plan.js", sourceRoot).href)
     .replace("../services/losat.js", new URL("../services/losat.js", sourceRoot).href)
+    .replace("../utils/i18n.js", new URL("../utils/i18n.js", sourceRoot).href)
 );
 await writeFile(
   tempNormalizationPath,

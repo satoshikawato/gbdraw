@@ -5,12 +5,17 @@ import {
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 
+// tests/web/history-inputs.test.mjs loads this module with its own imports
+// only, so it declares the key marker of utils/i18n.js itself.
+/** @param {string} text @returns {string} */
+const msg = (text) => text;
+
 const DEFAULT_MAX_ACTIONS = 30;
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024;
 // The Session availability wording for an edit still being applied.
 const HISTORY_EDIT_BUSY = Object.freeze({
   status: 'busy',
-  reason: 'Applying an edit. Retry after the edit finishes.'
+  reason: msg('Applying an edit. Retry after the edit finishes.')
 });
 
 /**
@@ -304,8 +309,9 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {number} [maxActions] Undo entries kept.
  * @property {number} [maxBytes] Retained bytes allowed before the oldest entries drop.
  * @property {(message: string) => void} [onHistoryLimit]
- *   Told when the byte limit dropped steps, with the sentence that says so; the
- *   step-count window (`maxActions`) drops its oldest step silently.
+ *   Told when the byte limit dropped steps, with the sentence that says so
+ *   (English, marked with `msg`); the step-count window (`maxActions`) drops
+ *   its oldest step silently.
  * @property {<T>(value: T) => { value: T }} [makeRef]
  *   Creates a reactive box (Vue `ref` in the app); a plain box by default.
  * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
@@ -708,10 +714,12 @@ export const createHistoryManager = ({
       redoStack.splice(0, redoStack.length, ...keptRedo);
     }
 
-    // Every byte-limit drop is announced through the one notice path.
-    const dropped = undoDropped && redoDropped ? 'Older undo history and the redo history were'
-      : undoDropped ? 'Older undo history was' : redoDropped ? 'Redo history was' : '';
-    if (dropped) onHistoryLimit(`${dropped} discarded to stay within the history limit.`);
+    // Every byte-limit drop is announced through the one notice path, in
+    // English marked with `msg`: the notice translates it where it shows it.
+    const dropped = undoDropped && redoDropped ? msg('Older undo history and the redo history were discarded to stay within the history limit.')
+      : undoDropped ? msg('Older undo history was discarded to stay within the history limit.')
+        : redoDropped ? msg('Redo history was discarded to stay within the history limit.') : '';
+    if (dropped) onHistoryLimit(dropped);
     releaseUnreferencedFiles();
   };
 

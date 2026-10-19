@@ -7,6 +7,7 @@ import {
   compositionUserDeltas
 } from '../legend-layout/composition-actions.js';
 import { releasePressedTransform, replaceLeadingTranslate } from '../../services/svg-transform.js';
+import { msg } from '../../utils/i18n.js';
 
 /**
  * @typedef {object} LegendDragActionsOptions
@@ -114,7 +115,7 @@ export const createLegendDragActions = ({
     legendDragContext = { binding, svg, pressedTransform };
     // The drag gesture owns its transaction and settles a focused control's (N-18).
     legendDragTxPromise = beginHistoryTransaction
-      ? beginHistoryTransaction('Move legend', { source: 'legend-drag', owner: Symbol('Move legend') })
+      ? beginHistoryTransaction(msg('Move legend'), { source: 'legend-drag', owner: Symbol('Move legend') })
       : null;
     legendDragging.value = true;
     legendDragStart.x = e.clientX;
